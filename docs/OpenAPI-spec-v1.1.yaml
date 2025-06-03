@@ -1,0 +1,1016 @@
+openapi: 3.0.3
+info:
+  title: AIChat Desktop App Internal API (V1.1)
+  description: >
+    API specification for the internal HTTP communication between the Frontend
+    API Client (app module) and the Embedded Ktor Server (server module)
+    within the AIChat Desktop application for Version 1.1 features.
+
+    This API facilitates the core application features: chat interaction,
+    session management (including grouping), and model configuration.
+  version: 1.1.0
+
+servers:
+  - url: http://localhost:{port}
+    description: Embedded Ktor server running within the desktop application process.
+    variables:
+      port:
+        enum:
+          - '8080' # Common default port
+          - '0'    # Indicates a dynamically assigned port (discovery mechanism required)
+        default: '8080'
+        description: The port the embedded server is listening on. The frontend must discover or be configured with this port.
+
+tags:
+  - name: sessions
+    description: Operations related to managing chat sessions.
+  - name: messages
+    description: Operations related to managing individual chat messages.
+  - name: models
+    description: Operations related to managing LLM model configurations.
+  - name: settings
+    description: Operations related to managing LLM model settings profiles.
+  - name: groups
+    description: Operations related to managing chat session groups.
+
+paths:
+
+  /api/v1/sessions:
+    get:
+      tags:
+        - sessions
+      summary: Get all chat session summaries
+      operationId: getAllSessions
+      description: Retrieves a list of all chat sessions, including their group affiliation, for display in the session list.
+      responses:
+        '200':
+          description: A list of chat session summaries.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChatSessionSummary'
+        '500':
+          description: Internal server error.
+
+    post:
+      tags:
+        - sessions
+      summary: Create a new chat session
+      operationId: createSession
+      description: Creates a brand new, empty chat session.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionRequest'
+      responses:
+        '201':
+          description: The newly created chat session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatSession'
+        '400':
+          description: Invalid request body (e.g., empty name if required by backend logic).
+        '500':
+          description: Internal server error.
+
+  /api/v1/sessions/{sessionId}:
+    parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: ID of the chat session to retrieve or modify.
+    get:
+      tags:
+        - sessions
+      summary: Get a specific chat session with all messages
+      operationId: getSessionDetails
+      description: Retrieves the full details of a specific chat session, including all its messages, necessary for displaying the conversation history and threads.
+      responses:
+        '200':
+          description: The requested chat session with all messages.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatSession'
+        '404':
+          description: Session not found.
+        '500':
+          description: Internal server error.
+
+    put:
+      tags:
+        - sessions
+      summary: Update chat session details
+      operationId: updateSessionDetails
+      description: Updates details for a specific chat session, such as its name or selected model/settings. This endpoint can be used for general session property updates, but group assignment has a dedicated endpoint for clarity.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSessionRequest' # Use a specific request schema or ChatSession? Let's use UpdateSessionRequest to only require fields being updated.
+      responses:
+        '200':
+          description: The updated chat session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatSession'
+        '400':
+          description: Invalid request body or session ID.
+        '404':
+          description: Session not found.
+        '500':
+          description: Internal server error.
+
+    delete:
+      tags:
+        - sessions
+      summary: Delete a chat session
+      operationId: deleteSession
+      description: Deletes a chat session and all its associated messages.
+      responses:
+        '204':
+          description: Session deleted successfully.
+        '404':
+          description: Session not found.
+        '500':
+          description: Internal server error.
+
+  /api/v1/sessions/{sessionId}/group:
+    parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: ID of the chat session to assign to a group.
+    put:
+      tags:
+        - sessions
+        - groups
+      summary: Assign a chat session to a group
+      operationId: assignSessionToGroup
+      description: Assigns a specific chat session to a chat group, or ungroups it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignSessionToGroupRequest'
+      responses:
+        '200':
+          description: The updated session summary.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatSessionSummary'
+        '400':
+          description: Invalid request body or session ID.
+        '404':
+          description: Session or Group (if provided) not found.
+        '500':
+          description: Internal server error.
+
+  /api/v1/sessions/{sessionId}/messages:
+    parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: ID of the chat session to add messages to.
+    post:
+      tags:
+        - messages
+        - sessions
+      summary: Send a new message (user prompt) and get the assistant response
+      operationId: processNewMessage
+      description: >
+        Sends a user message to the specified session. The backend will
+        process this message, determine the appropriate context (considering
+        threading and session state), call the LLM API, and generate/save
+        the assistant response. Returns the newly created user and assistant messages.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProcessNewMessageRequest'
+      responses:
+        '200':
+          description: Returns a list containing the newly created user and assistant messages.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChatMessage'
+                minItems: 2
+                maxItems: 2 # User message and Assistant message
+        '400':
+          description: Invalid request body or session ID, or issues with LLM config.
+        '404':
+          description: Session or associated Model/Settings not found.
+        '500':
+          description: Internal server error or LLM API error (see E1.S6).
+
+  /api/v1/messages/{messageId}:
+    parameters:
+      - name: messageId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: ID of the chat message to modify or delete.
+    put:
+      tags:
+        - messages
+      summary: Update message content
+      operationId: updateMessageContent
+      description: Updates the text content of an existing message.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMessageRequest'
+      responses:
+        '200':
+          description: The updated message object.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatMessage'
+        '400':
+          description: Invalid request body (e.g., empty content).
+        '404':
+          description: Message not found.
+        '500':
+          description: Internal server error.
+
+    delete:
+      tags:
+        - messages
+      summary: Delete a specific message
+      operationId: deleteMessage
+      description: Deletes a specific message and handles its impact on thread relationships (e.g., recursively deleting children).
+      responses:
+        '204':
+          description: Message deleted successfully.
+        '404':
+          description: Message not found.
+        '500':
+          description: Internal server error.
+
+  /api/v1/models:
+    get:
+      tags:
+        - models
+      summary: Get all LLM model configurations
+      operationId: getAllModels
+      description: Retrieves a list of all configured LLM models.
+      responses:
+        '200':
+          description: A list of LLM model configurations.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LLMModel'
+        '500':
+          description: Internal server error.
+
+    post:
+      tags:
+        - models
+      summary: Add a new LLM model configuration
+      operationId: addModel
+      description: Adds a new LLM model configuration. Securely stores the API key if provided.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddModelRequest'
+      responses:
+        '201':
+          description: The newly created LLM model configuration (without raw API key).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LLMModel'
+        '400':
+          description: Invalid request body (e.g., missing required fields).
+        '500':
+          description: Internal server error, or failure in secure key storage.
+
+  /api/v1/models/{modelId}:
+    parameters:
+      - name: modelId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: ID of the LLM model to retrieve, update, or delete.
+    put:
+      tags:
+        - models
+      summary: Update LLM model configuration
+      operationId: updateModel
+      description: Updates details for a specific LLM model configuration. Can be used to update the API key.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateModelRequest' # Use a specific request schema or LLMModel? UpdateModelRequest allows optional fields.
+      responses:
+        '200':
+          description: The updated LLM model configuration (without raw API key).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LLMModel'
+        '400':
+          description: Invalid request body.
+        '404':
+          description: Model not found.
+        '500':
+          description: Internal server error, or failure in secure key storage.
+
+    delete:
+      tags:
+        - models
+      summary: Delete an LLM model configuration
+      operationId: deleteModel
+      description: Deletes an LLM model configuration, including associated settings and its API key from secure storage.
+      responses:
+        '204':
+          description: Model deleted successfully.
+        '404':
+          description: Model not found.
+        '500':
+          description: Internal server error or failure in secure key deletion.
+
+  /api/v1/models/{modelId}/apikey/status:
+    parameters:
+      - name: modelId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: ID of the LLM model to check API key status for.
+    get:
+      tags:
+        - models
+      summary: Check API key configuration status for a model
+      operationId: getModelApiKeyStatus
+      description: Checks if an API key has been securely configured for a specific LLM model without exposing the key itself.
+      responses:
+        '200':
+          description: API key status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyStatusResponse'
+        '404':
+          description: Model not found.
+        '500':
+          description: Internal server error.
+
+  /api/v1/models/{modelId}/settings:
+    parameters:
+      - name: modelId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: ID of the LLM model to add settings for.
+    post:
+      tags:
+        - settings
+        - models
+      summary: Add a new settings profile for a model
+      operationId: addModelSettings
+      description: Creates a new settings profile associated with a specific LLM model.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddModelSettingsRequest'
+      responses:
+        '201':
+          description: The newly created settings profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelSettings'
+        '400':
+          description: Invalid request body or model ID.
+        '404':
+          description: Model not found.
+        '500':
+          description: Internal server error.
+
+  /api/v1/settings/{settingsId}:
+    parameters:
+      - name: settingsId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: ID of the settings profile to retrieve, update, or delete.
+    get:
+      tags:
+        - settings
+      summary: Get a specific settings profile
+      operationId: getSettingsById
+      description: Retrieves details for a specific settings profile.
+      responses:
+        '200':
+          description: The requested settings profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelSettings'
+        '404':
+          description: Settings profile not found.
+        '500':
+          description: Internal server error.
+
+    put:
+      tags:
+        - settings
+      summary: Update settings profile details
+      operationId: updateSettings
+      description: Updates the parameters of a specific settings profile.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSettingsRequest' # Use a specific request schema or ModelSettings? UpdateSettingsRequest allows partial updates.
+      responses:
+        '200':
+          description: The updated settings profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelSettings'
+        '400':
+          description: Invalid request body or settings ID.
+        '404':
+          description: Settings profile not found.
+        '500':
+          description: Internal server error.
+
+    delete:
+      tags:
+        - settings
+      summary: Delete a settings profile
+      operationId: deleteSettings
+      description: Deletes a specific settings profile.
+      responses:
+        '204':
+          description: Settings profile deleted successfully.
+        '404':
+          description: Settings profile not found.
+        '500':
+          description: Internal server error.
+
+  /api/v1/groups:
+    get:
+      tags:
+        - groups
+      summary: Get all chat session groups
+      operationId: getAllGroups
+      description: Retrieves a list of all defined chat session groups.
+      responses:
+        '200':
+          description: A list of chat groups.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChatGroup'
+        '500':
+          description: Internal server error.
+
+    post:
+      tags:
+        - groups
+      summary: Create a new chat session group
+      operationId: createGroup
+      description: Creates a new named group for organizing sessions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGroupRequest'
+      responses:
+        '201':
+          description: The newly created chat group.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatGroup'
+        '400':
+          description: Invalid request body (e.g., empty name).
+        '500':
+          description: Internal server error.
+
+  /api/v1/groups/{groupId}:
+    parameters:
+      - name: groupId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: ID of the chat group to retrieve, update, or delete.
+    put:
+      tags:
+        - groups
+      summary: Rename a chat session group
+      operationId: renameGroup
+      description: Updates the name of a specific chat session group.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenameGroupRequest'
+      responses:
+        '200':
+          description: The updated chat group.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatGroup'
+        '400':
+          description: Invalid request body (e.g., empty name).
+        '404':
+          description: Group not found.
+        '500':
+          description: Internal server error.
+
+    delete:
+      tags:
+        - groups
+      summary: Delete a chat session group
+      operationId: deleteGroup
+      description: Deletes a specific chat session group. Sessions previously assigned to this group will become ungrouped.
+      responses:
+        '204':
+          description: Group deleted successfully.
+        '404':
+          description: Group not found.
+        '500':
+          description: Internal server error.
+
+
+components:
+  schemas:
+    # --- Common Models (from common module) ---
+    ChatSession:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Unique identifier for the session.
+        name:
+          type: string
+          description: The name or title of the session.
+        createdAt:
+          type: string
+          format: date-time
+          description: Timestamp when the session was created.
+        updatedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the session was last updated.
+        groupId:
+          type: integer
+          format: int64
+          nullable: true
+          description: Optional ID referencing a parent group (null if ungrouped).
+        currentModelId:
+          type: integer
+          format: int64
+          nullable: true
+          description: Optional ID of the currently selected LLM model for this session.
+        currentSettingsId:
+          type: integer
+          format: int64
+          nullable: true
+          description: Optional ID of the currently selected settings profile for this session.
+        currentLeafMessageId:
+          type: integer
+          format: int64
+          nullable: true
+          description: ID of the current leaf message in the session's active branch (null only when no messages exist).
+        messages:
+          type: array
+          description: List of all messages within this session. Populated when loading full details.
+          items:
+            $ref: '#/components/schemas/ChatMessage'
+      required:
+        - id
+        - name
+        - createdAt
+        - updatedAt
+        - messages
+
+    ChatSessionSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Unique identifier for the session.
+        name:
+          type: string
+          description: The name or title of the session.
+        createdAt:
+          type: string
+          format: date-time
+          description: Timestamp when the session was created.
+        updatedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the session was last updated.
+        groupId:
+          type: integer
+          format: int64
+          nullable: true
+          description: Optional ID referencing a parent group (null if ungrouped).
+        groupName:
+          type: string
+          nullable: true
+          description: Name of the referenced group (null if ungrouped), included for convenience.
+      required:
+        - id
+        - name
+        - createdAt
+        - updatedAt
+
+    ChatMessage:
+      oneOf:
+        - $ref: '#/components/schemas/UserMessage'
+        - $ref: '#/components/schemas/AssistantMessage'
+      discriminator:
+        propertyName: role # Matches the 'role' property in the child schemas
+        mapping:
+          user: '#/components/schemas/UserMessage'
+          assistant: '#/components/schemas/AssistantMessage'
+      description: Represents a single message within a chat session, including threading information.
+
+    UserMessage:
+      allOf:
+        - $ref: '#/components/schemas/BaseMessage'
+        - type: object
+          properties:
+            role:
+              type: string
+              enum: [user] # Specific role value
+              description: The role of the message sender (always 'user').
+          required:
+            - role
+
+    AssistantMessage:
+      allOf:
+        - $ref: '#/components/schemas/BaseMessage'
+        - type: object
+          properties:
+            role:
+              type: string
+              enum: [assistant] # Specific role value
+              description: The role of the message sender (always 'assistant').
+            modelId:
+              type: integer
+              format: int64
+              nullable: true
+              description: ID of the LLM model used to generate this message.
+            settingsId:
+              type: integer
+              format: int64
+              nullable: true
+              description: ID of the settings profile used to generate this message.
+          required:
+            - role
+
+    BaseMessage: # Common fields for ChatMessage subtypes
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Unique identifier for the message.
+        sessionId:
+          type: integer
+          format: int64
+          description: ID of the session this message belongs to.
+        content:
+          type: string
+          description: The content of the message.
+        createdAt:
+          type: string
+          format: date-time
+          description: Timestamp when the message was created.
+        updatedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the message was last updated.
+        parentMessageId:
+          type: integer
+          format: int64
+          nullable: true
+          description: Optional ID of the parent message. Null for root messages.
+        childrenMessageIds:
+          type: array
+          description: List of child message IDs. Empty for leaf messages. Stored and managed by backend.
+          items:
+            type: integer
+            format: int64
+      required:
+        - id
+        - sessionId
+        - content
+        - createdAt
+        - updatedAt
+        - childrenMessageIds # Assuming this list is always present, even if empty
+
+    LLMModel:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        baseUrl:
+          type: string
+          format: url # Hint that this is a URL
+        apiKeyId:
+          type: string
+          nullable: true
+          description: Reference ID to the secure API key storage (raw key is NOT exposed).
+        type:
+          type: string
+          description: Type of LLM provider (e.g., "openai", "openrouter", "custom").
+      required:
+        - id
+        - name
+        - baseUrl
+        - type
+
+    ModelSettings:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        modelId:
+          type: integer
+          format: int64
+          description: Foreign key to the LLMModel.id.
+        name:
+          type: string
+        systemMessage:
+          type: string
+          nullable: true
+        temperature:
+          type: number
+          format: float
+          nullable: true
+        maxTokens:
+          type: integer
+          nullable: true
+        customParamsJson:
+          type: string
+          nullable: true
+          description: Arbitrary model-specific parameters stored as a JSON string.
+      required:
+        - id
+        - modelId
+        - name
+
+    ChatGroup:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - createdAt
+
+    # --- Request/Response Specific Schemas ---
+    CreateSessionRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          nullable: true # Name is optional, backend can generate default
+          description: Optional name for the new session.
+      # required: [] # No required fields as name is optional
+
+    UpdateSessionRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          nullable: true
+          description: New name for the session (optional field, only include if updating).
+        currentModelId:
+          type: integer
+          format: int64
+          nullable: true
+          description: New selected model ID for the session (optional field, only include if updating).
+        currentSettingsId:
+          type: integer
+          format: int64
+          nullable: true
+          description: New selected settings ID for the session (optional field, only include if updating).
+        # Note: groupId updates use a dedicated endpoint (/sessions/{id}/group)
+      # required: [] # Allows partial updates
+
+    AssignSessionToGroupRequest:
+      type: object
+      properties:
+        groupId:
+          type: integer
+          format: int64
+          nullable: true
+          description: The ID of the group to assign the session to, or null to ungroup the session.
+      required:
+        - groupId # The field itself is required, its *value* can be null
+
+    ProcessNewMessageRequest:
+      type: object
+      properties:
+        content:
+          type: string
+          description: The user's message content.
+        parentMessageId:
+          type: integer
+          format: int64
+          nullable: true
+          description: The ID of the message this is a reply to (null for initial messages or if replying to the root).
+      required:
+        - content # Content should not be empty for a message
+
+    UpdateMessageRequest:
+      type: object
+      properties:
+        content:
+          type: string
+          description: The new text content for the message.
+      required:
+        - content # Content should not be empty after editing
+
+    AddModelRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        baseUrl:
+          type: string
+          format: url
+        type:
+          type: string
+        apiKey:
+          type: string
+          nullable: true
+          description: The raw API key provided by the user. Passed once for secure storage.
+      required:
+        - name
+        - baseUrl
+        - type
+
+    UpdateModelRequest:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: The ID of the model being updated.
+        name:
+          type: string
+          nullable: true
+        baseUrl:
+          type: string
+          format: url
+          nullable: true
+        type:
+          type: string
+          nullable: true
+        apiKey:
+          type: string
+          nullable: true
+          description: Provide a new raw API key string here to update the stored key. Omit or send null/empty string to keep the existing key.
+      required:
+        - id
+
+    ApiKeyStatusResponse:
+      type: object
+      properties:
+        isConfigured:
+          type: boolean
+          description: True if an API key is securely stored for this model, false otherwise.
+      required:
+        - isConfigured
+
+    AddModelSettingsRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        systemMessage:
+          type: string
+          nullable: true
+        temperature:
+          type: number
+          format: float
+          nullable: true
+        maxTokens:
+          type: integer
+          nullable: true
+        customParamsJson:
+          type: string
+          nullable: true
+          description: Arbitrary model-specific parameters as a JSON string.
+      required:
+        - name
+
+    UpdateSettingsRequest:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: The ID of the settings profile being updated.
+        name:
+          type: string
+          nullable: true
+        systemMessage:
+          type: string
+          nullable: true
+        temperature:
+          type: number
+          format: float
+          nullable: true
+        maxTokens:
+          type: integer
+          nullable: true
+        customParamsJson:
+          type: string
+          nullable: true
+          description: Arbitrary model-specific parameters as a JSON string.
+      required:
+        - id
+
+    CreateGroupRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: The name for the new group.
+      required:
+        - name
+
+    RenameGroupRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: The new name for the group.
+      required:
+        - name
