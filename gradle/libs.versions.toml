@@ -1,0 +1,154 @@
+[versions]
+javaVersion = "21"           # Java version
+kotlin = "2.1.0"             # Kotlin version
+ktor = "3.1.0"               # Ktor version
+exposed = "0.58.0"           # Exposed ORM version
+sqlite = "3.49.0.0"          # SQLite JDBC driver version
+coroutines = "1.10.1"        # Kotlin Coroutines version
+serialization = "1.8.0"      # Kotlin Serialization version
+datetime = "0.6.2"           # Kotlin DateTime version
+log4j = "2.21.0"             # Log4j version
+jbcrypt = "0.4"              # JBCrypt version
+bouncycastle = "1.80"        # BouncyCastle version
+koin = "4.0.2"               # Koin version
+typesafe-config = "1.4.3"    # Typesafe Config version
+mockk = "1.13.17"            # MockK version
+compose = "1.8.1"            # Compose Multiplatform version
+kotlin-buildlogic = "1.9.24" # Kotlin version for build-logic compatibility
+
+[libraries]
+# Kotlin
+kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
+kotlin-gradle-plugin-buildlogic = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin-buildlogic" }
+
+# KotlinX
+serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
+coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
+kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "datetime" }
+
+# Typesafe Config
+typesafe-config = { module = "com.typesafe:config", version.ref = "typesafe-config" }
+
+# Logging
+log4j-api = { module = "org.apache.logging.log4j:log4j-api", version.ref = "log4j" }
+log4j-core = { module = "org.apache.logging.log4j:log4j-core", version.ref = "log4j" }
+log4j-slf4j2 = { module = "org.apache.logging.log4j:log4j-slf4j2-impl", version.ref = "log4j" }
+
+# Ktor Server
+ktor-server-core = { module = "io.ktor:ktor-server-core", version.ref = "ktor" }
+ktor-server-netty = { module = "io.ktor:ktor-server-netty", version.ref = "ktor" }
+ktor-server-auth = { module = "io.ktor:ktor-server-auth", version.ref = "ktor" }
+ktor-server-auth-jwt = { module = "io.ktor:ktor-server-auth-jwt", version.ref = "ktor" }
+ktor-server-status-pages = { module = "io.ktor:ktor-server-status-pages", version.ref = "ktor" }
+ktor-server-content-negotiation = { module = "io.ktor:ktor-server-content-negotiation", version.ref = "ktor" }
+ktor-server-call-logging = { module = "io.ktor:ktor-server-call-logging", version.ref = "ktor" }
+ktor-server-double-receive = { module = "io.ktor:ktor-server-double-receive", version.ref = "ktor" }
+
+# Ktor Client (For client-service & standalone)
+ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
+ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
+ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
+ktor-client-auth = { module = "io.ktor:ktor-client-auth", version.ref = "ktor" }
+ktor-client-serialization = { module = "io.ktor:ktor-client-serialization", version.ref = "ktor" }
+
+# Ktor Serialization
+ktor-serialization-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
+
+# Exposed ORM
+exposed-core = { module = "org.jetbrains.exposed:exposed-core", version.ref = "exposed" }
+exposed-dao = { module = "org.jetbrains.exposed:exposed-dao", version.ref = "exposed" }
+exposed-jdbc = { module = "org.jetbrains.exposed:exposed-jdbc", version.ref = "exposed" }
+
+# Database & Security
+sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite" }
+jbcrypt = { module = "org.mindrot:jbcrypt", version.ref = "jbcrypt" }
+bouncycastle-prov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
+bouncycastle-pkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = "bouncycastle" }
+
+# Koin (Dependency Injection)
+koin-core = { module = "io.insert-koin:koin-core", version.ref = "koin" }
+koin-ktor = { module = "io.insert-koin:koin-ktor", version.ref = "koin" }
+koin-logger-slf4j = { module = "io.insert-koin:koin-logger-slf4j", version.ref = "koin" }
+koin-test = { module = "io.insert-koin:koin-test", version.ref = "koin" } # Add Koin Test
+koin-test-junit5 = { module = "io.insert-koin:koin-test-junit5", version.ref = "koin" }
+
+# Testing
+kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
+ktor-server-test-host = { module = "io.ktor:ktor-server-test-host", version.ref = "ktor" }
+commons-codec = { module = "commons-codec:commons-codec", version = "1.15" } # Security patch WS-2019-0379
+mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
+
+[bundles]
+# Ktor Server: Includes all necessary dependencies for a Ktor backend
+ktor-server = [
+    "ktor-server-core",
+    "ktor-server-netty",
+    "ktor-server-auth",
+    "ktor-server-auth-jwt",
+    "ktor-server-status-pages",
+    "ktor-server-content-negotiation",
+    "ktor-server-call-logging",
+    "ktor-server-double-receive"
+]
+
+ktor-server-test = [
+    "ktor-server-test-host",
+    "commons-codec"
+]
+
+# Ktor Client: Includes dependencies needed for HTTP communication
+ktor-client = [
+    "ktor-client-core",
+    "ktor-client-cio",
+    "ktor-client-content-negotiation",
+    "ktor-client-auth",
+    "ktor-client-serialization"
+]
+
+# Exposed ORM: Includes core, DAO, and JDBC support
+exposed = [
+    "exposed-core",
+    "exposed-dao",
+    "exposed-jdbc"
+]
+
+# Log4j Logging: Includes Log4j API, Core, and SLF4J bridge
+log4j = [
+    "log4j-api",
+    "log4j-core",
+    "log4j-slf4j2"
+]
+
+# Koin DI: Includes core, Ktor integration, and SLF4J logging support
+koin = [
+    "koin-core",
+    "koin-ktor",
+    "koin-logger-slf4j"
+]
+
+koin-test = [
+    "koin-test",
+    "koin-test-junit5"
+]
+
+# Bouncy Castle bundle: Includes Bouncy Castle security provider and PKIX libraries
+bouncycastle = [
+    "bouncycastle-prov",
+    "bouncycastle-pkix"
+]
+
+[plugins]
+# Kotlin JVM Gradle Plugin: Compiles Kotlin code to Java bytecode for JVM applications and libraries.
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-jvm-buildlogic = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin-buildlogic" }
+
+# Kotlin Serialization Gradle Plugin: Generates serialization code for Kotlin classes.
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+
+# Ktor Gradle Plugin: Adds Ktor-specific tasks to the Gradle build.
+ktor = { id = "io.ktor.plugin", version.ref = "ktor" }
+
+# Compose Multiplatform Gradle Plugin: Adds Compose-specific tasks to the Gradle build.
+compose = { id = "org.jetbrains.compose", version.ref = "compose" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
