@@ -308,18 +308,22 @@
 
 #### Epic 5: Secure API Key Handling
 
-*   **E5.S1 - Implement Secure API Key Storage via OS Credential Manager (Estimate: L)**
-  *   **Description:** As a developer, I need to implement the core logic for securely storing and managing sensitive API keys outside the main database file using the operating system's credential management capabilities (specifically Windows Credential Manager for V1.1), so that user keys are protected locally.
+*   **E5.S1 - Implement Secure API Key Storage (Database-Backed Encryption)**
+  *   **Description:** As a developer, I need to implement the core logic for securely storing and managing sensitive API keys by utilizing **custom envelope encryption** and storing the resulting encrypted data in a **dedicated database table** (`api_secrets`), so that user keys are protected locally without relying on OS-specific credential managers.
+  *   **Estimate:** L
   *   **Acceptance Criteria:**
-    *   A backend `CredentialManager` interface is defined in the `server` module's `external.security` package.
-    *   A concrete implementation (`WinCredentialManager`) is created in `server.external.security.windows` that uses appropriate Kotlin/Java libraries or native calls to interface with the Windows Credential Manager API.
-    *   The `WinCredentialManager` can accept an API key string and an alias/ID, securely store the key in the Windows Credential Manager, and return the reference ID used for storage.
-    *   The `WinCredentialManager` can retrieve a securely stored key given its reference ID.
-    *   The `WinCredentialManager` can delete a securely stored key given its reference ID.
-    *   The `LLMModel` database schema (E7.S4) includes an `apiKeyId` field (String) to store the reference ID, *not* the raw key.
-    *   This secure storage mechanism is integrated into the backend services that add/update LLM models (parts of E4.S1, E4.S3). The raw API key is passed to the service, which uses the `CredentialManager` to store it and saves the returned ID in the database.
-    *   Raw API keys are only held in application memory within the backend service when actively needed for storage, retrieval for an API call, or deletion.
-    *   **(Cross-cutting Requirement E7.S6):** Interactions with the OS Credential Manager (if they are blocking or require specific threads) are performed asynchronously using Coroutines.
+    *   A backend `CredentialManager` interface is implemented by `DbEncryptedCredentialManager`.
+    *   The implementation uses **custom envelope encryption** via an `EncryptionService` and `CryptoProvider` (handling DEK/KEK), with KEK configuration managed by `EncryptionConfig`.
+    *   Persistence uses an `ApiSecretDao` to interact with a dedicated `api_secrets` database table (E7.S4).
+    *   The `api_secrets` table stores the encrypted API key (`encrypted_credential`), the wrapped Data Encryption Key (`wrapped_dek`), and the KEK version, uniquely identified by a generated UUID `alias`.
+    *   The `DbEncryptedCredentialManager`'s `storeCredential` method encrypts the raw key, generates a UUID `alias`, and saves the encrypted data (with the `alias`) to the `api_secrets` table via `ApiSecretDao`, returning the `alias`.
+    *   The `DbEncryptedCredentialManager`'s `getCredential` method retrieves the encrypted data by `alias` from `api_secrets` via `ApiSecretDao`, unwraps the DEK, decrypts the key, and returns the raw key string.
+    *   The `DbEncryptedCredentialManager`'s `deleteCredential` method deletes the record matching the `alias` from the `api_secrets` table via `ApiSecretDao`.
+    *   The `LLMModel` database schema (E7.S4) includes an `apiKeyId` field (String, nullable) that stores the UUID `alias` referencing the `api_secrets` table record, *not* the raw key.
+    *   Backend services for model management (E4.S1, E4.S3) use the `CredentialManager` to store keys securely, saving the returned `alias` in the corresponding `LLMModel` record.
+    *   Raw API keys are only held in application memory temporarily when actively needed for storage, retrieval, or deletion.
+    *   **(Cross-cutting Requirement E2.S2):** All database operations on the `api_secrets` table are persisted.
+    *   **(Cross-cutting Requirement E7.S6):** Database interactions via `ApiSecretDao` and encryption/decryption operations are performed asynchronously using Coroutines.
 
 *   **E5.S2 - Securely Retrieve API Key for LLM API Calls (Estimate: S)**
   *   **Description:** As the application backend, I need to use the secure storage mechanism (E5.S1) to retrieve the actual API key from the OS Credential Manager just before making an external LLM API call, ensuring the key is not sitting in memory unnecessarily.

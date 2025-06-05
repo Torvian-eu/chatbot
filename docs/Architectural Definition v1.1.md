@@ -36,31 +36,36 @@ This clarifies that the UI talks to an _HTTP client_, which talks to the _server
     *   **Interaction:** Called by the **Application/Service Layer Implementations**. Depends on the Exposed Table definitions (`eu.torvian.chatbot.server.data.models/`).
 
 *   **External Services Layer (`eu.torvian.chatbot.server.external/`):**
-    *   **Responsibility:** Encapsulates interactions with anything outside the main application logic: the LLM APIs (via Ktor Client) and the OS Credential Manager.
+    *   **Responsibility:** Encapsulates interactions with anything outside the main application logic: the LLM APIs (via Ktor Client).
     *   **Interaction:** Called by the **Application/Service Layer Implementations**. The LLM interaction logic within this layer accepts context built by the Service Layer that reflects message threading.
 
-## 2. Revised Project and Package Structure
-The project consists of three top-level Gradle modules: `common`, `server`, and `app`. The structure supports the defined layers and entities for V1.1.
+## 2. Project and Package Structure
+The project consists of three top-level Gradle modules: `common`, `server`, and `app`.
 
 ```
 <project_root>/
 ├── build.gradle.kts      <- Root project build file
 ├── settings.gradle.kts   <- Defines modules: include("common", "server", "app")
-├── common/               <- Gradle Module: Shared Data Models
+│
+├── common/               <- Gradle Module: Shared Data Models, DI Components
 │   └── src/main/kotlin/eu/torvian/chatbot/common/
-│       └── models/        <- Common Data Models (DTOs), including threading and grouping fields
-│           ├── ChatSession.kt
-│           ├── ChatMessage.kt
-│           ├── LLMModel.kt
-│           └── ModelSettings.kt
-│           └── ChatGroup.kt   <- Model for groups
-│           └── ... summaries, request/response DTOs for API, etc. ...
+│       ├── models/        <- Common Data Models (DTOs), including threading and grouping fields
+│       │   ├── ChatSession.kt
+│       │   ├── ChatMessage.kt
+│       │   ├── LLMModel.kt
+│       │   ├── ModelSettings.kt
+│       │   ├── ChatGroup.kt   <- Model for groups
+│       │   └── ... summaries, request/response DTOs for API, etc. ...
+│       └── misc/          <- Miscellaneous shared components
+│           └── di/          <- Dependency Injection (Koin) related components
+│               ├── DIContainer.kt <- Framework-agnostic DI container interface
+│               └── KoinDIContainer.kt <- Generic DI container wrapper (inferred from test code)
 │
 ├── server/               <- Gradle Module: Backend Logic (Embedded Ktor Server, Services, Data, External)
-│   └── src/main/kotlin/eu/torvian/chatbot/server/
+│   └── src/main/kotlin/eu/torvian.chatbot.server/
 │       ├── api/server/    <- Embedded Ktor Server Layer
 │       │   ├── ApiRoutes.kt <- Defines Ktor routing handlers (Calls eu.torvian.chatbot.server.service interfaces)
-│       │   └── Serialization.kt <- Ktor JSON setup
+│       │   ├── Serialization.kt <- Ktor JSON setup
 │       │   └── ... other server setup ...
 │       ├── service/       <- Application/Service Layer - Implementations handle threading and grouping logic
 │       │   ├── ChatService.kt   <- Interface (Consumed by api/server/ApiRoutes)
@@ -68,58 +73,101 @@ The project consists of three top-level Gradle modules: `common`, `server`, and 
 │       │   ├── ModelService.kt  <- Interface (Consumed by api/server/ApiRoutes)
 │       │   ├── ModelServiceImpl.kt <- Implementation (Calls data/dao and external)
 │       │   ├── GroupService.kt  <- Interface (Consumed by api/server/ApiRoutes)
-│       │   └── GroupServiceImpl.kt <- Implementation (Calls data/dao, handles group CRUD and session ungrouping)
+│       │   ├── GroupServiceImpl.kt <- Implementation (Calls data/dao, handles group CRUD and session ungrouping)
+│       │   ├── security/    <- Credential Management using Database-backed Encryption
+│       │   │   ├── CredentialManager.kt <- Interface (E5.S1 contract)
+│       │   │   ├── CryptoProvider.kt <- Interface for encryption ops (Part of envelope encryption)
+│       │   │   ├── AESCryptoProvider.kt <- Impl for CryptoProvider (Uses AES for encryption)
+│       │   │   ├── EncryptionService.kt <- Service orchestrating envelope encryption (Uses CryptoProvider)
+│       │   │   └── DbEncryptedCredentialManager.kt <- Impl for CredentialManager (Uses EncryptionService and ApiSecretDao)
 │       │   └── ... other service interfaces/impls ...
-│       ├── data/          <- Data Access Layer (DAL) - Implementations persist/retrieve threading and grouping info
+│       ├── data/          <- Data Access Layer (DAL) - Implementations persist/retrieve threading and grouping info, and encrypted secrets
 │       │   ├── dao/         <- Data Access Object interfaces (Consumed by service impls)
 │       │   │   ├── SessionDao.kt
 │       │   │   ├── MessageDao.kt
 │       │   │   ├── ModelDao.kt
-│       │   │   └── SettingsDao.kt
-│       │   │   └── GroupDao.kt   <- DAO interface for groups
+│       │   │   ├── SettingsDao.kt
+│       │   │   ├── GroupDao.kt   <- DAO interface for groups
+│       │   │   └── ApiSecretDao.kt <- DAO interface for encrypted secrets storage
 │       │   ├── exposed/      <- Exposed implementation of DAOs
 │       │   │   ├── Database.kt  <- Exposed connection/setup (E7.S4)
 │       │   │   ├── SessionDaoExposed.kt
 │       │   │   ├── MessageDaoExposed.kt
 │       │   │   ├── ModelDaoExposed.kt
-│       │   │   └── SettingsDaoExposed.kt
-│       │   │   └── GroupDaoExposed.kt   <- Exposed implementation for Group DAO
-│       │   └── models/      <- Database Schema Definitions (Exposed Tables) - Schema supports threading and grouping fields
+│       │   │   ├── SettingsDaoExposed.kt
+│       │   │   ├── GroupDaoExposed.kt   <- Exposed implementation for Group DAO
+│       │   │   └── ApiSecretDaoExposed.kt <- Exposed implementation for secrets DAO
+│       │   └── models/      <- Database Schema Definitions (Exposed Tables) and Entity Mappings
 │       │       ├── ChatSessions.kt    <- Exposed Table object (includes groupId FK)
 │       │       ├── ChatMessages.kt <-- Exposed Table object (includes parent/children columns)
-│       │       ├── LLMModels.kt
-│       │       └── ModelSettings.kt
-│       │       └── ChatGroups.kt    <- Exposed Table object for groups
-│       └── external/      <- External Services Layer
-│           ├── llm/         <- LLM Interaction (Ktor Client) - LLMClient accepts thread context
-│           │   ├── LLMApiClient.kt <- Interface (Consumed by service impls)
-│           │   └── LLMApiClientKtor.kt <- Implementation (uses Ktor Client)
-│           ├── security/    <- Credential Management
-│           │   ├── CredentialManager.kt <- Interface (E5.S1)
-│           │   └── windows/     <- OS-specific implementations
-│           │       └── WinCredentialManager.kt <- Windows Impl (E5.S1 details)
-│           └── models/      <- DTOs for external APIs (OpenAI, etc.)
-│               └── OpenAiApiModels.kt <- Data classes for Ktor serialization
+│       │       ├── LLMModels.kt   <- Includes apiKeyId column (String reference/alias)
+│       │       ├── ModelSettings.kt
+│       │       ├── ChatGroups.kt    <- Exposed Table object for groups
+│       │       ├── ApiSecretsTable.kt <- Exposed Table object for encrypted secrets
+│       │       └── ApiSecretEntity.kt <- Data class mapping a row from ApiSecretsTable
+│       ├── domain/  <- Domain Models (Core business concepts and data structures)
+│       │   ├── config/      <- Configuration models
+│       │   │   └── DatabaseConfig.kt <- Database connection configuration (New)
+│       │   └── security/ <- Domain models specific to security (like encryption details)
+│       │       ├── EncryptionConfig.kt <- Configuration for the encryption provider
+│       │       └── EncryptedSecret.kt <- Data class holding encrypted secret parts (encrypted data, wrapped DEK, key version)
+│       ├── external/      <- External Services Layer
+│       │   ├── llm/         <- LLM Interaction (Ktor Client) - LLMClient accepts thread context
+│       │   │   ├── LLMApiClient.kt <- Interface (Consumed by service impls)
+│       │   │   └── LLMApiClientKtor.kt <- Implementation (uses Ktor Client)
+│       │   └── models/      <- DTOs for external APIs (OpenAI, etc.)
+│       │       └── OpenAiApiModels.kt <- Data classes for Ktor serialization
+│       ├── koin/          <- Dependency Injection (Koin) Modules (New)
+│       │   ├── configModule.kt <- Koin module for config objects (New)
+│       │   ├── daoModule.kt   <- Koin module for DAO implementations (New)
+│       │   ├── databaseModule.kt <- Koin module for Exposed Database instance (New)
+│       │   └── miscModule.kt  <- Koin module for miscellaneous deps like TransactionScope (New)
+│       └── utils/         <- General utilities (New)
+│           └── transactions/<- Transaction handling utilities (New)
+│               ├── TransactionScope.kt <- Interface for transaction execution (Inferred, Used by ExposedTestDataManager)
+│               └── ExposedTransactionScope.kt <- Exposed implementation (Inferred, Used by miscModule)
+│
+│   └── src/test/kotlin/eu/torvian.chatbot.server/
+│       ├── data/
+│       │   └── exposed/
+│       │       └── ApiSecretDaoExposedTest.kt <- Tests for ApiSecretDaoExposed
+│       ├── service/
+│       │   └── security/
+│       │       ├── AESCryptoProviderTest.kt <- Tests for AESCryptoProvider
+│       │       ├── DbEncryptedCredentialManagerTest.kt <- Unit tests for DbEncryptedCredentialManager (using mocks)
+│       │       └── EncryptionServiceTest.kt <- Unit tests for EncryptionService (using mocks)
+│       └── testutils/     <- Server-side test utilities
+│           ├── data/        <- Test data management utilities
+│           │   ├── Table.kt          <- Enum representing database tables
+│           │   ├── TestDataSet.kt    <- Container for test data
+│           │   ├── TestDefaults.kt   <- Predefined test data values
+│           │   ├── TestDataManager.kt <- Interface for managing test data
+│           │   └── ExposedTestDataManager.kt <- Exposed implementation
+│           └── koin/        <- Test-specific Koin configuration
+│               ├── defaultTestContainer.kt <- Sets up a default test Koin container
+│               ├── defaultTestConfigModule.kt <- Provides default test configs via Koin
+│               └── testSetupModule.kt  <- Koin module for test utilities
 │
 └── app/                  <- Gradle Module: Desktop Application (UI, Frontend API Client)
     └── src/main/kotlin/eu/torvian.chatbot.app/
         ├── App.kt        <- Application entry point, setup (Ktor Server start, UI launch, DI)
-            ├── ui/            <- UI Layer (Compose for Desktop) - Renders threads and grouped sessions
-            │   ├── AppLayout.kt
-            │   ├── ChatArea.kt
-            │   ├── SessionListPanel.kt
-            │   ├── InputArea.kt
-            │   ├── SettingsScreen.kt
-            │   ├── ... other UI components ...
-            │   └── state/           <- UI State Management (e.g., ChatState, SessionListState ViewModel) - Handles threaded and grouped data for display
-            │       ├── ChatState.kt <- Depends on eu.torvian.chatbot.app.api.client.ChatApi
-            │       └── SessionListState.kt <- Depends on eu.torvian.chatbot.app.api.client.ChatApi, eu.torvian.chatbot.app.api.client.GroupApi
-            └── api/
-                └── client/        <- Frontend API Client Layer - Translates UI actions to API calls for chat, models, settings, and groups
-                    ├── ChatApi.kt <- Interface (Consumed by eu.torvian.chatbot.app.ui.state.ChatState/SessionListState)
-                    ├── GroupApi.kt <- Interface (Consumed by eu.torvian.chatbot.app.ui.state.SessionListState or similar)
-                    ├── KtorChatApiClient.kt <- Implementation (Uses Ktor Client to talk to localhost)
-                    └── KtorGroupApiClient.kt <- Implementation (Uses Ktor Client to talk to localhost)
+        │
+        ├── ui/            <- UI Layer (Compose for Desktop) - Renders threads and grouped sessions
+        │   ├── AppLayout.kt
+        │   ├── ChatArea.kt
+        │   ├── SessionListPanel.kt
+        │   ├── InputArea.kt
+        │   ├── SettingsScreen.kt
+        │   ├── ... other UI components ...
+        │   └── state/           <- UI State Management (e.g., ChatState, SessionListState ViewModel) - Handles threaded and grouped data for display
+        │       ├── ChatState.kt <- Depends on eu.torvian.chatbot.app.api.client.ChatApi
+        │       └── SessionListState.kt <- Depends on eu.torvian.chatbot.app.api.client.ChatApi, eu.torvian.chatbot.app.api.client.GroupApi
+        └── api/
+            └── client/        <- Frontend API Client Layer - Translates UI actions to API calls for chat, models, settings, and groups
+                ├── ChatApi.kt <- Interface (Consumed by eu.torvian.chatbot.app.ui.state.ChatState/SessionListState)
+                ├── GroupApi.kt <- Interface (Consumed by eu.torvian.chatbot.app.ui.state.SessionListState or similar)
+                ├── KtorChatApiClient.kt <- Implementation (Uses Ktor Client to talk to localhost)
+                └── KtorGroupApiClient.kt <- Implementation (Uses Ktor Client to talk to localhost)
 ```
 
 ## 3. Key Interface Definitions (Module-Specific & ID Types)
@@ -728,15 +776,15 @@ F --> G["Application/Service Layer<br>Impl<br>(ChatServiceImpl/<br>ModelServiceI
 
 G -- calls DAO<br>(SessionDao /<br>MessageDao /<br>ModelDao /<br>SettingsDao /<br>GroupDao) --> H["Data Access Layer<br>Interfaces<br>(server module)"]
 
-G -- calls External<br>(LLMApiClient /<br>CredentialManager) --> I["External Services Layer<br>Interfaces<br>(server module)"]
+G -- calls External<br>(LLMApiClient) --> I["External Services Layer<br>Interfaces<br>(server module)"]
 
 H --> J["Data Access Layer<br>Impl<br>(Exposed DAOs)<br>(server module)"]
 
-I --> K["External Services Layer<br>Impl<br>(Ktor LLM Client/<br>OS Credential Manager)<br>(server module)"]
+I --> K["External Services Layer<br>Impl<br>(Ktor LLM Client)<br>(server module)"]
 
 J --> L["SQLite Database<br>(ChatSessions, ChatMessages,<br>LLMModels, ModelSettings, ChatGroups)"]
 
-K --> M["LLM API / OS Credential Manager"]
+K --> M["LLM API"]
 
 G -- returns data/result --> F
 F --> E -- HTTP Response<br>(data/result) --> D

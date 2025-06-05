@@ -8,51 +8,30 @@ The application supports **message threading**, allowing users to create nested 
 * * *
 ## 2. Key Functional Features (V1.1 Requirements)
 The AIChat Desktop App V1.1 includes the following core functional features:
-
 *   **Core Chat Interface:** Send user messages, receive and display assistant responses.
-
 *   **Message Threading:** Users can reply to individual messages to create nested conversation threads within a session. The UI visualizes these threads by displaying one branch of the conversation tree at a time, allowing users to navigate between branches.
-
 *   **API Key & Endpoint Configuration:** Securely configure and use personal API keys and custom endpoint URLs for OpenAI-compatible LLMs.
-
 *   **Persistent Chat History:** All chat sessions and their messages are automatically saved locally and persist across application restarts. The history includes threading information.
-
 *   **Chat Session Grouping & Organization:** Users can create named groups and assign chat sessions to these groups for organization and navigation in the session list. Sessions can be moved between groups or made ungrouped. Groups can be added, renamed, and deleted.
-
 *   **Message Editing:** Edit the text content of any message (user or assistant) within a session, including messages within threads, with changes saved persistently.
-
 *   **Message Removal:** Delete individual messages from a session, including messages within threads, with persistent removal. The backend handles how deletion affects child messages (e.g., making them orphaned or deleting recursively).
-
 *   **Copy Message Content:** Copy the raw text of a single message (including messages in threads) to the clipboard.
-
 *   **Copy Visible Thread Branch:** Copy the text content of the currently displayed thread branch to the clipboard.
-
 *   **Model Selection:** Choose a specific LLM model and its settings profile for generating the next assistant response within a session or a thread.
-
 *   **Editable Model Settings:** Configure and save multiple named settings profiles (e.g., system message, temperature, max tokens) for each LLM model.
-
 * * *
 ## 3. Non-Functional Aspects
 *   **Performance:** Responsive UI (including rendering potentially complex thread structures and grouped session lists), fast session loading and switching, non-blocking LLM API calls.
-
-*   **Security:** **Critical emphasis on secure API key storage** (via OS credential manager). Chat history relies on OS file permissions. Data model features like message threading and session grouping leverage the underlying secure persistence mechanism.
-
+*   **Security:** **Critical emphasis on secure API key storage** (via credential manager). Chat history relies on OS file permissions. Data model features like message threading and session grouping leverage the underlying secure persistence mechanism.
 *   **Usability:** Intuitive UI for core features (new chat, session switching, message management, settings), enhanced by visualizing and interacting with threads and the grouped session list.
-
 *   **Reliability:** Graceful handling of network issues, API errors, and database failures, ensuring data integrity is maintained during persistence operations.
-
 *   **Maintainability:** Layered architecture (UI, business logic, data access, external comms), Kotlin best practices, clear separation of concerns. Logic for message threading and session grouping is encapsulated within the appropriate layers.
-
 *   **Scalability (Data):** Designed to handle hundreds of sessions with up to 200 messages each (total messages including threads) and a reasonable number of groups without significant performance degradation.
-
 *   **Technical Stack Adherence:** Strict adherence to Kotlin, Compose for Desktop, Ktor, and SQLite (via Exposed).
-
 *   **Architectural Flexibility:** Backend logic is structured for potential future extraction into a separate REST API service, including the threading and grouping API endpoints.
-
 * * *
 ## 4. Technology Stack & Architecture
 The application is built as an **integrated desktop monolith**, where the UI and backend logic reside in the same process. The architecture follows a Layered Architecture pattern, structured across `common`, `server`, and `app` Gradle modules.
-
 *   **Core Technologies:**
   *   **Frontend:** Compose for Desktop (Kotlin) for cross-platform UI.
   *   **Backend/Application Logic:** Kotlin, organized into distinct layers (Service, Data Access, External Services). This logic manages application features including message threading and session grouping.
@@ -61,7 +40,6 @@ The application is built as an **integrated desktop monolith**, where the UI and
   *   **Database ORM:** Exposed (for fluent, type-safe SQL access in Kotlin). The database schema supports threading and grouping.
   *   **Dependency Management:** Gradle.
   *   **Dependency Injection:** Lightweight framework (Koin/manual) for modularity.
-
 *   **Architectural Layers:**
   *   **User Interface (UI):** Compose for Desktop components handle rendering and user input. Manages UI state (`ChatState`, potentially also `SessionListState`). The UI layer and state holder are responsible for receiving message data and presenting it in a threaded view by displaying only a single branch, and for displaying and managing the grouped list of sessions.
   *   **Application Logic (Service Layer):** Contains the core business rules, orchestrating operations like message processing, LLM interaction, session management, and group management. This layer is critical for managing thread relationships (`parentMessageId`, `childrenMessageIds`) and session-to-group assignments via the Data Access Layer, and constructing LLM context based on the thread structure.
@@ -71,16 +49,11 @@ The application is built as an **integrated desktop monolith**, where the UI and
 * * *
 ## 5. Data Model Highlights (SQLite via Exposed)
 The application's persistent data is stored in a local SQLite database, managed by Exposed. Key entities include:
-
-`ChatSession`: Stores chat metadata (ID, name, timestamps, optional reference to a ChatGroup (groupId: Long?), current model/settings ID, current leaf message ID). Contains the list of all messages belonging to the session.
-
-`ChatMessage`: Stores individual messages (ID, session ID, role, content, timestamps). Includes `parentMessageId` (Long, nullable) to reference the message it's a direct reply to, and `childrenMessageIds` (List) to list the IDs of messages that are replies to this message.
-
-`LLMModel`: Stores LLM provider configurations (ID, name, base URL, type, reference to secure API key storage).
-
-`ModelSettings`: Stores specific settings profiles for models (ID, model ID, name, system message, temperature, max tokens, custom parameters as JSON).
-
-`ChatGroups`: Stores metadata for user-defined groups used to organize sessions (ID, name). ChatSessions reference ChatGroups via the `groupId`.
+* `ChatSession`: Stores chat metadata (ID, name, timestamps, optional reference to a ChatGroup (groupId: Long?), current model/settings ID, current leaf message ID). Contains the list of all messages belonging to the session.
+* `ChatMessage`: Stores individual messages (ID, session ID, role, content, timestamps). Includes `parentMessageId` (Long, nullable) to reference the message it's a direct reply to, and `childrenMessageIds` (List) to list the IDs of messages that are replies to this message.
+* `LLMModel`: Stores LLM provider configurations (ID, name, base URL, type, reference to secure API key storage).
+* `ModelSettings`: Stores specific settings profiles for models (ID, model ID, name, system message, temperature, max tokens, custom parameters as JSON).
+* `ChatGroups`: Stores metadata for user-defined groups used to organize sessions (ID, name). ChatSessions reference ChatGroups via the `groupId`.
 
 * * *
 ## 6. Core Application Flows
