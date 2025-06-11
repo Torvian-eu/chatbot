@@ -14,6 +14,7 @@ koin = "4.0.2"               # Koin version
 typesafe-config = "1.4.3"    # Typesafe Config version
 mockk = "1.13.17"            # MockK version
 compose = "1.8.1"            # Compose Multiplatform version
+arrow = "2.1.2"              # Arrow version
 kotlin-buildlogic = "1.9.24" # Kotlin version for build-logic compatibility
 
 [libraries]
@@ -71,6 +72,9 @@ koin-ktor = { module = "io.insert-koin:koin-ktor", version.ref = "koin" }
 koin-logger-slf4j = { module = "io.insert-koin:koin-logger-slf4j", version.ref = "koin" }
 koin-test = { module = "io.insert-koin:koin-test", version.ref = "koin" } # Add Koin Test
 koin-test-junit5 = { module = "io.insert-koin:koin-test-junit5", version.ref = "koin" }
+
+# Arrow (FP library)
+arrow-core = { module = "io.arrow-kt:arrow-core", version.ref = "arrow" }
 
 # Testing
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }

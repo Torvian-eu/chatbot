@@ -1,6 +1,8 @@
 package eu.torvian.chatbot.server.data.dao
 
-import eu.torvian.chatbot.server.data.models.ApiSecretEntity
+import arrow.core.Either
+import eu.torvian.chatbot.server.data.dao.error.ApiSecretError
+import eu.torvian.chatbot.server.domain.security.EncryptedSecret
 
 /**
  * Repository interface for managing encrypted API secrets in the database.
@@ -9,28 +11,33 @@ import eu.torvian.chatbot.server.data.models.ApiSecretEntity
  * stored in the dedicated `api_secrets` table.
  */
 interface ApiSecretDao {
-
     /**
      * Saves an encrypted secret to the database.
-     * If a secret with the given alias already exists, it should be overwritten (upsert logic).
      *
-     * @param apiSecretEntity The encrypted secret data to save.
+     * @param alias The unique identifier (UUID) for the secret.
+     * @param encryptedSecret The encrypted secret data to save.
+     *
+     * @return Either a [ApiSecretError.SecretAlreadyExists] if a secret with the same alias already exists,
+     *         or [Unit] on success.
      */
-    suspend fun saveSecret(apiSecretEntity: ApiSecretEntity)
+    suspend fun saveSecret(
+        alias: String,
+        encryptedSecret: EncryptedSecret
+    ): Either<ApiSecretError.SecretAlreadyExists, Unit>
 
     /**
-     * Finds an encrypted secret by its alias.
+     * Retrieves an encrypted secret by its alias.
      *
      * @param alias The unique identifier (UUID) of the secret to find.
-     * @return The encrypted secret data if found, null otherwise.
+     * @return Either a [ApiSecretError.SecretNotFound] if the secret doesn't exist, or the [EncryptedSecret].
      */
-    suspend fun findSecret(alias: String): ApiSecretEntity?
+    suspend fun getSecret(alias: String): Either<ApiSecretError.SecretNotFound, EncryptedSecret>
 
     /**
      * Deletes an encrypted secret by its alias.
      *
      * @param alias The unique identifier (UUID) of the secret to delete.
-     * @return True if the secret was deleted successfully (or didn't exist), false otherwise.
+     * @return Either a [ApiSecretError.SecretNotFound] if the secret doesn't exist, or [Unit] on success.
      */
-    suspend fun deleteSecret(alias: String): Boolean
+    suspend fun deleteSecret(alias: String): Either<ApiSecretError.SecretNotFound, Unit>
 }

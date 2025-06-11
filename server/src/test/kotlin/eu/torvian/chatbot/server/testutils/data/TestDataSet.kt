@@ -1,6 +1,12 @@
 package eu.torvian.chatbot.server.testutils.data
 
-import eu.torvian.chatbot.server.data.models.ApiSecretEntity
+import eu.torvian.chatbot.common.models.ChatGroup
+import eu.torvian.chatbot.common.models.ChatMessage
+import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.common.models.ModelSettings
+import eu.torvian.chatbot.server.data.entities.ApiSecretEntity
+import eu.torvian.chatbot.server.data.entities.ChatSessionEntity
+import eu.torvian.chatbot.server.data.entities.SessionCurrentLeafEntity
 
 /**
  * A declarative container for domain objects to be inserted into the chatbot test database.
@@ -21,8 +27,19 @@ import eu.torvian.chatbot.server.data.models.ApiSecretEntity
  * ```
  *
  * @property apiSecrets List of API secret entries to insert into the `api_secrets` table.
+ * @property chatGroups List of chat group entries to insert into the `chat_groups` table.
+ * @property chatSessions List of chat session entries to insert into the `chat_sessions` table.
+ * @property chatMessages List of chat message entries to insert into the `chat_messages` table.
+ * @property llmModels List of LLM model entries to insert into the `llm_models` table.
+ * @property modelSettings List of model settings entries to insert into the `model_settings` table.
+ * @property sessionCurrentLeaves List of session current leaf entries to insert into the `session_current_leaf` table.
  */
 data class TestDataSet(
     val apiSecrets: List<ApiSecretEntity> = emptyList(),
-    // Add other lists for different domain objects/tables as your chatbot project grows
+    val chatGroups: List<ChatGroup> = emptyList(),
+    val chatSessions: List<ChatSessionEntity> = emptyList(),
+    val chatMessages: List<ChatMessage> = emptyList(),
+    val llmModels: List<LLMModel> = emptyList(),
+    val modelSettings: List<ModelSettings> = emptyList(),
+    val sessionCurrentLeaves: List<SessionCurrentLeafEntity> = emptyList()
 )

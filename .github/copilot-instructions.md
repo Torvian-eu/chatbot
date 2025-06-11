@@ -11,6 +11,4 @@
 
 ## Guidelines
 - Use kotlinx.datetime instead of java.time.
-
-## Tips
-- JUnit 5 parallel testing can make console output hard to follow. For failed tests, run them individually to view output in order.
+- Error return types in Arrow should be logical errors, not technical errors.

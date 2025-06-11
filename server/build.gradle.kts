@@ -30,6 +30,7 @@ dependencies {
     implementation(libs.sqlite.jdbc)                  // SQLite JDBC Driver
     implementation(libs.jbcrypt)                      // Password hashing library
     implementation(libs.typesafe.config)              // Typesafe Config for configuration
+    implementation(libs.arrow.core)                   // Arrow Core for functional programming
 
     // Testing dependencies
     testImplementation(libs.bundles.ktor.server.test)  // Ktor server testing
