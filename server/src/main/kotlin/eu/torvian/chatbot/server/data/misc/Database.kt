@@ -1,13 +1,15 @@
-package eu.torvian.chatbot.server.data.exposed
+package eu.torvian.chatbot.server.data.misc
 
-import eu.torvian.chatbot.server.data.models.*
-import eu.torvian.chatbot.server.utils.transactions.TransactionScope
-import eu.torvian.chatbot.server.utils.transactions.ExposedTransactionScope
+import eu.torvian.chatbot.server.data.tables.ChatGroupTable
+import eu.torvian.chatbot.server.data.tables.ChatMessageTable
+import eu.torvian.chatbot.server.data.tables.ChatSessionTable
+import eu.torvian.chatbot.server.data.tables.LLMModelTable
+import eu.torvian.chatbot.server.data.tables.ModelSettingsTable
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.transactions.transaction
-import java.nio.file.Paths
 import java.io.File
+import java.nio.file.Paths
 
 /**
  * Manages the SQLite database connection and schema creation/migration.
@@ -32,7 +34,7 @@ class Database {
         val dbFile = File(dbDir, "chat.db")
         val dbUrl = "jdbc:sqlite:${dbFile.absolutePath}"
 
-        database = Database.connect(dbUrl, driver = "org.sqlite.JDBC")
+        database = Database.Companion.connect(dbUrl, driver = "org.sqlite.JDBC")
 
         // Optional: Add logger to see SQL queries (useful for debugging)
         // transaction {
@@ -49,18 +51,18 @@ class Database {
     fun createSchema() {
         transaction(database) { // Use standard blocking transaction for schema creation
             SchemaUtils.create(
-                ChatSessions,
-                ChatMessages,
-                LLMModels,
-                ModelSettings,
-                ChatGroups
+                ChatSessionTable,
+                ChatMessageTable,
+                LLMModelTable,
+                ModelSettingsTable,
+                ChatGroupTable
             )
         }
     }
 
      /**
-      * Provides access to the underlying Exposed Database instance for the [TransactionScope].
-      * This is needed by the [ExposedTransactionScope] implementation.
+      * Provides access to the underlying Exposed Database instance for the [eu.torvian.chatbot.server.utils.transactions.TransactionScope].
+      * This is needed by the [eu.torvian.chatbot.server.utils.transactions.ExposedTransactionScope] implementation.
       * @return The Exposed [Database] instance.
       */
     fun getExposedDatabase(): Database = database

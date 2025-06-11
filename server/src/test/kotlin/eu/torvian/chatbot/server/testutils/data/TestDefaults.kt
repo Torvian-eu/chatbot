@@ -1,6 +1,12 @@
 package eu.torvian.chatbot.server.testutils.data
 
-import eu.torvian.chatbot.server.data.models.ApiSecretEntity
+import eu.torvian.chatbot.common.models.ChatGroup
+import eu.torvian.chatbot.common.models.ChatMessage
+import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.common.models.ModelSettings
+import eu.torvian.chatbot.server.data.entities.ApiSecretEntity
+import eu.torvian.chatbot.server.data.entities.ChatSessionEntity
+import eu.torvian.chatbot.server.data.entities.SessionCurrentLeafEntity
 import eu.torvian.chatbot.server.domain.config.DatabaseConfig
 import eu.torvian.chatbot.server.domain.security.EncryptedSecret
 import eu.torvian.chatbot.server.domain.security.EncryptionConfig
@@ -55,4 +61,125 @@ object TestDefaults {
         updatedAt = DEFAULT_INSTANT_MILLIS
     )
 
+    val chatGroup1 = ChatGroup(
+        id = 1L,
+        name = "Test Group 1",
+        createdAt = DEFAULT_INSTANT
+    )
+
+    val chatGroup2 = ChatGroup(
+        id = 2L,
+        name = "Test Group 2",
+        createdAt = DEFAULT_INSTANT
+    )
+
+    val llmModel1 = LLMModel(
+        id = 1L,
+        name = "GPT-4",
+        baseUrl = "https://api.openai.com/v1",
+        apiKeyId = "openai-key",
+        type = "openai"
+    )
+
+    val llmModel2 = LLMModel(
+        id = 2L,
+        name = "Claude-3",
+        baseUrl = "https://api.anthropic.com/v1",
+        apiKeyId = "anthropic-key",
+        type = "anthropic"
+    )
+
+    val modelSettings1 = ModelSettings(
+        id = 1L,
+        modelId = llmModel1.id,
+        name = "Default GPT-4 Settings",
+        systemMessage = "You are a helpful assistant.",
+        temperature = 0.7f,
+        maxTokens = 1000,
+        customParamsJson = """{"top_p": 0.9, "frequency_penalty": 0.1}"""
+    )
+
+    val modelSettings2 = ModelSettings(
+        id = 2L,
+        modelId = llmModel2.id,
+        name = "Default Claude-3 Settings",
+        systemMessage = "You are Claude, a helpful AI assistant.",
+        temperature = 0.8f,
+        maxTokens = 2000,
+        customParamsJson = null
+    )
+
+    val chatSession1 = ChatSessionEntity(
+        id = 1L,
+        name = "First Chat Session",
+        createdAt = DEFAULT_INSTANT,
+        updatedAt = DEFAULT_INSTANT,
+        groupId = chatGroup1.id,
+        currentModelId = llmModel1.id,
+        currentSettingsId = modelSettings1.id
+    )
+
+    val chatSession2 = ChatSessionEntity(
+        id = 2L,
+        name = "Second Chat Session",
+        createdAt = DEFAULT_INSTANT,
+        updatedAt = DEFAULT_INSTANT,
+        groupId = chatGroup2.id,
+        currentModelId = llmModel2.id,
+        currentSettingsId = modelSettings2.id
+    )
+
+    val sessionCurrentLeaf1 = SessionCurrentLeafEntity(
+        sessionId = chatSession1.id,
+        messageId = 2L
+    )
+
+    val sessionCurrentLeaf2 = SessionCurrentLeafEntity(
+        sessionId = chatSession2.id,
+        messageId = 4L
+    )
+
+    val chatMessage1 = ChatMessage.UserMessage(
+        id = 1L,
+        sessionId = chatSession1.id,
+        content = "Hello, what can you help me with today?",
+        createdAt = DEFAULT_INSTANT,
+        updatedAt = DEFAULT_INSTANT,
+        parentMessageId = null,
+        childrenMessageIds = listOf(2L)
+    )
+
+    val chatMessage2 = ChatMessage.AssistantMessage(
+        id = 2L,
+        sessionId = chatSession1.id,
+        content = "I'm here to help with your questions and tasks. What would you like to know about?",
+        createdAt = DEFAULT_INSTANT,
+        updatedAt = DEFAULT_INSTANT,
+        parentMessageId = 1L,
+        childrenMessageIds = emptyList(),
+        modelId = llmModel1.id,
+        settingsId = modelSettings1.id
+    )
+
+    val chatMessage3 = ChatMessage.UserMessage(
+        id = 3L,
+        sessionId = chatSession2.id,
+        content = "Can you explain how machine learning works?",
+        createdAt = DEFAULT_INSTANT,
+        updatedAt = DEFAULT_INSTANT,
+        parentMessageId = null,
+        childrenMessageIds = listOf(4L),
+    )
+
+    val chatMessage4 = ChatMessage.AssistantMessage(
+        id = 4L,
+        sessionId = chatSession2.id,
+        content = "Machine learning is a branch of artificial intelligence...",
+        createdAt = DEFAULT_INSTANT,
+        updatedAt = DEFAULT_INSTANT,
+        parentMessageId = 3L,
+        childrenMessageIds = emptyList(),
+        modelId = llmModel2.id,
+        settingsId = modelSettings2.id
+    )
 }

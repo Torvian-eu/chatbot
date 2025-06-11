@@ -1,7 +1,12 @@
 package eu.torvian.chatbot.server.koin
 
 import eu.torvian.chatbot.server.data.dao.*
-import eu.torvian.chatbot.server.data.exposed.*
+import eu.torvian.chatbot.server.data.dao.exposed.ApiSecretDaoExposed
+import eu.torvian.chatbot.server.data.dao.exposed.GroupDaoExposed
+import eu.torvian.chatbot.server.data.dao.exposed.MessageDaoExposed
+import eu.torvian.chatbot.server.data.dao.exposed.ModelDaoExposed
+import eu.torvian.chatbot.server.data.dao.exposed.SessionDaoExposed
+import eu.torvian.chatbot.server.data.dao.exposed.SettingsDaoExposed
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
 import org.koin.dsl.module
 
@@ -14,4 +19,9 @@ import org.koin.dsl.module
  */
 fun daoModule() = module {
     single<ApiSecretDao> { ApiSecretDaoExposed(get()) }
+    single<GroupDao> { GroupDaoExposed(get()) }
+    single<SessionDao> { SessionDaoExposed(get(), get()) }
+    single<MessageDao> { MessageDaoExposed(get()) }
+    single<ModelDao> { ModelDaoExposed(get()) }
+    single<SettingsDao> { SettingsDaoExposed(get()) }
 }
