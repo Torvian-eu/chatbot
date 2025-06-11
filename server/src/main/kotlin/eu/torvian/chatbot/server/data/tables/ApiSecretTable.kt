@@ -1,4 +1,4 @@
-package eu.torvian.chatbot.server.data.models
+package eu.torvian.chatbot.server.data.tables
 
 import org.jetbrains.exposed.sql.Column
 import org.jetbrains.exposed.sql.Table
@@ -9,14 +9,14 @@ import org.jetbrains.exposed.sql.Table
  * This table holds the encrypted credential, the wrapped Data Encryption Key (DEK),
  * and the Key Encryption Key (KEK) version used for envelope encryption.
  *
- * @property alias The unique identifier (UUID) for the secret, used as the primary key and reference from other tables (like LLMModels).
+ * @property alias The unique identifier (UUID) for the secret, used as the primary key and reference from other tables (like LLMModelTable).
  * @property encrypted_credential The API key (or other sensitive data) encrypted with a DEK, Base64 encoded.
  * @property wrapped_dek The Data Encryption Key (DEK) encrypted with the Key Encryption Key (KEK), Base64 encoded.
  * @property key_version The version of the Key Encryption Key (KEK) used for encryption.
  * @property created_at Timestamp when the secret was created.
  * @property updated_at Timestamp when the secret was last updated.
  */
-object ApiSecretsTable : Table("api_secrets") {
+object ApiSecretTable : Table("api_secrets") {
     // The alias (UUID) is the primary key, used to reference this secret from other tables.
     // VARCHAR(36) is standard for UUID string representation.
     val alias: Column<String> = varchar("alias", 36)
