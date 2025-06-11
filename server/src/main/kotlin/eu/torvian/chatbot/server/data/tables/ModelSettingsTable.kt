@@ -1,12 +1,12 @@
-package eu.torvian.chatbot.server.data.models
+package eu.torvian.chatbot.server.data.tables
 
-import eu.torvian.chatbot.common.models.ModelSettings as CommonModelSettings
+import eu.torvian.chatbot.common.models.ModelSettings
 import org.jetbrains.exposed.dao.id.LongIdTable
 import org.jetbrains.exposed.sql.ReferenceOption
 
 /**
  * Exposed table definition for LLM model settings profiles.
- * Corresponds to the [CommonModelSettings] entity.
+ * Corresponds to the [ModelSettings] DTO.
  *
  * @property modelId Reference to the parent LLM model
  * @property name The name of the settings profile (e.g., "Default", "Creative", "Strict")
@@ -15,8 +15,8 @@ import org.jetbrains.exposed.sql.ReferenceOption
  * @property maxTokens The maximum number of tokens to generate
  * @property customParamsJson Arbitrary JSON for extra model-specific parameters
  */
-object ModelSettings : LongIdTable("model_settings") {
-    val modelId = reference("model_id", LLMModels, onDelete = ReferenceOption.CASCADE)
+object ModelSettingsTable : LongIdTable("model_settings") {
+    val modelId = reference("model_id", LLMModelTable, onDelete = ReferenceOption.CASCADE)
     val name = varchar("name", 255)
     val systemMessage = text("system_message").nullable()
     val temperature = float("temperature").nullable()
