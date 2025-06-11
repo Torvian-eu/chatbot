@@ -50,19 +50,24 @@
 
 *   **Assignee:** Alex
 *   **Reviewer:** Eric
-  *   **Description:** Implement the secure storage mechanism for API keys using custom envelope encryption with secrets stored in a dedicated database table (`api_secrets`). This replaces the direct OS Credential Manager integration and introduces the `CredentialManager` interface implementation, alongside necessary encryption logic and database repository components. The `LLMModel` entity will now store a reference ID (alias) to the `api_secrets` table instead of relying on OS-specific storage.
-  *   **Stories Addressed:** E5.S1 (full implementation - utilizing a database-backed encrypted approach), E7.S6 (coroutines in external/data services), E5.S2, E5.S3 (covered by the new implementation).
-  *   **Key Files:**
-  *   `server/src/main/kotlin/eu/torvian/chatbot/server/service.security/CredentialManager.kt`
-  *   `server/src/main/kotlin/eu/torvian.chatbot.server.domain.security/EncryptionConfig.kt` (New data class)
-  *   `server/src/main/kotlin/eu.torvian.chatbot.server.domain.security/EncryptedSecret.kt` (Data class)
-  *   `server/src/main/kotlin/eu/torvian.chatbot.server.service.security/CryptoProvider.kt`
-  *   `server/src/main/kotlin/eu.torvian.chatbot.server.service.security/AESCryptoProvider.kt`
-  *   `server/src/main/kotlin/eu.torvian.chatbot/server/service.security/EncryptionService.kt`
-  *   `server/src/main/kotlin/eu/torvian.chatbot.server.data.models/ApiSecretsTable.kt` (New Exposed Table definition)
-  *   `server/src/main/kotlin/eu.torvian.chatbot.server.data.dao/ApiSecretDao.kt` (New DAO interface)
-  *   `server/src/main/kotlin/eu.torvian.chatbot.server.data.exposed/ApiSecretDaoExposed.kt` (Exposed implementation for secrets DAO)
-  *   `server/src/main/kotlin/eu.torvian.chatbot.server.service.security/DbEncryptedCredentialManager.kt` (New CredentialManager implementation using EncryptionService and ApiSecretDao)
+*   **Description:** Implement secure credential storage for API keys using **AES envelope encryption** with a database-backed approach. This involves generating a unique Data Encryption Key (DEK) for each secret, encrypting the secret with the DEK, and then encrypting (wrapping) the DEK with a Key Encryption Key (KEK). The encrypted secret, the wrapped DEK, and the KEK version are stored together in the `api_secrets` database table, represented by the new `ApiSecretEntity` data class. The `DbEncryptedCredentialManager` implements the `CredentialManager` interface, leveraging the `EncryptionService` and `ApiSecretDao` to manage the lifecycle (store, retrieve, delete) of these secrets. Instead of direct OS integration, main application entities (like `LLMModel`) will now store the generated UUID alias which acts as a reference to the secret in the `api_secrets` table.
+*   **Stories Addressed:** E5.S1 (full implementation - utilizing a database-backed encrypted approach), E7.S6 (coroutines in external/data services - DAO and Manager are suspend), E5.S2 (Securely Retrieve), E5.S3 (Securely Delete).
+*   **Key Files:**
+*   `server/src/main/kotlin/eu/torvian/chatbot/server/service/security/CredentialManager.kt`
+*   `server/src/main/kotlin/eu/torvian/chatbot/server/domain/security/EncryptionConfig.kt`
+*   `server/src/main/kotlin/eu/torvian/chatbot/server/domain/security/EncryptedSecret.kt`
+*   `server/src/main/kotlin/eu/torvian/chatbot/server/service/security/CryptoProvider.kt`
+*   `server/src/main/kotlin/eu/torvian/chatbot/server/service/security/AESCryptoProvider.kt`
+*   `server/src/main/kotlin/eu/torvian/chatbot/server/service/security/EncryptionService.kt`
+*   `server/src/main/kotlin/eu/torvian/chatbot/server/data/models/ApiSecretsTable.kt`
+*   `server/src/main/kotlin/eu/torvian/chatbot/server/data/models/ApiSecretEntity.kt`
+*   `server/src/main/kotlin/eu/torvian/chatbot/server/data/dao/ApiSecretDao.kt`
+*   `server/src/main/kotlin/eu/torvian/chatbot/server/data/exposed/ApiSecretDaoExposed.kt`
+*   `server/src/main/kotlin/eu/torvian/chatbot/server/service/security/DbEncryptedCredentialManager.kt`
+*   `server/src/test/kotlin/eu/torvian/chatbot/server/data/exposed/ApiSecretDaoExposedTest.kt`
+*   `server/src/test/kotlin/eu/torvian/chatbot/server/service/security/AESCryptoProviderTest.kt`
+*   `server/src/test/kotlin/eu/torvian/chatbot/server/service/security/DbEncryptedCredentialManagerTest.kt`
+*   `server/src/test/kotlin/eu/torvian/chatbot/server/service/security/EncryptionServiceTest.kt`
 
 ---
 
@@ -70,15 +75,19 @@
 
 *   **Assignee:** Alex
 *   **Reviewer:** Eric
-*   **Description:** Implement the basic Create, Read (list/by ID), Delete (for Session/Group, Message basic delete stub) operations in the Exposed DAOs for Sessions, Messages, and Groups. These implementations should use suspend functions and expect to be called within a `TransactionScope`. Include mappings from Exposed `ResultRow` to common DTOs. Implement `addChildToMessage` in MessageDao.
-*   **Stories Addressed:** E2.S1 (Session insert), E2.S3 (Session list), E2.S4 (Session by ID, Messages by Session ID), E6.S3 (Group insert), E6.S4 (Group list), Partial E3.S4 (Message delete placeholder), Partial E1.S4 (Message insert, addChildToMessage). Uses E7.S4 schema and E7.S6/TransactionScope.
+*   **Description:** Implement the basic Create, Read (list/by ID), Update, and Delete operations in the Exposed DAOs for Sessions, Messages, and Groups. These implementations should use suspend functions and expect to be called within a `TransactionScope`. Include mappings from Exposed `ResultRow` to common DTOs. This PR includes the logic for handling message threading (`parentMessageId`, `childrenMessageIds` serialization/deserialization, `addChildToMessage`, `removeChildFromMessage`, and recursive `deleteMessage`) and session grouping (`groupId` updates, `ungroupSessions`).
+*   **Stories Addressed:** E2.S1 (Session insert), E2.S3 (Session list), E2.S4 (Session by ID, Messages by Session ID), E2.S5 (Session update), E2.S6 (Session delete), E3.S3 (Message update), E3.S4 (Message delete logic), E1.S4 (Message insert, addChildToMessage), E1.S7 (addChildToMessage), E6.S1 (Session update for groupId), E6.S3 (Group insert), E6.S4 (Group list), E6.S5 (Group update), E6.S6 (Group delete logic - handled in Service using DAO methods), Partial Epic 4/5 (Model/Settings DAO interfaces/placeholders). Uses E7.S4 schema and E7.S6/TransactionScope (implicitly).
 *   **Key Files:**
-  *   `server/src/main/kotlin/eu/torvian/chatbot/server/data/dao/SessionDao.kt` (interface)
-  *   `server/src/main/kotlin/eu/torvian/chatbot/server/data/exposed/SessionDaoExposed.kt` (basic impl: getAll, getById, insert, basic update, delete - relying on CASCADE)
-  *   `server/src/main/kotlin/eu/torvian/chatbot/server/data/dao/MessageDao.kt` (interface)
-  *   `server/src/main/kotlin/eu/torvian/chatbot/server/data/exposed/MessageDaoExposed.kt` (basic impl: getBySessionId, insert, addChildToMessage, basic delete stub)
-  *   `server/src/main/kotlin/eu.torvian/chatbot/server/data/dao/GroupDao.kt` (interface)
-  *   `server/src/main/kotlin/eu/torvian/chatbot/server/data/exposed/GroupDaoExposed.kt` (basic impl: getAll, insert)
+  *   `server/src/main/kotlin/eu/torvian/chatbot/server/data/dao/SessionDao.kt`
+  *   `server/src/main/kotlin/eu/torvian/chatbot/server/data/dao/exposed/SessionDaoExposed.kt`
+  *   `server/src/main/kotlin/eu/torvian/chatbot/server/data/dao/MessageDao.kt`
+  *   `server/src/main/kotlin/eu/torvian/chatbot/server/data/dao/exposed/MessageDaoExposed.kt`
+  *   `server/src/main/kotlin/eu.torvian/chatbot/server/data/dao/GroupDao.kt`
+  *   `server/src/main/kotlin/eu/torvian/chatbot/server/data/dao/exposed/GroupDaoExposed.kt`
+  *   `server/src/main/kotlin/eu/torvian/chatbot/server/data/dao/ModelDao.kt`
+  *   `server/src/main/kotlin/eu/torvian/chatbot/server/data/dao/exposed/ModelDaoExposed.kt`
+  *   `server/src/main/kotlin/eu/torvian/chatbot/server/data/dao/SettingsDao.kt`
+  *   `server/src/main/kotlin/eu/torvian/chatbot/server/data/dao/exposed/SettingsDaoExposed.kt`
 
 ---
 
