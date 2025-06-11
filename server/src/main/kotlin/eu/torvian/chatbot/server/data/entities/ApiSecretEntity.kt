@@ -1,6 +1,4 @@
-package eu.torvian.chatbot.server.data.models
-
-import org.jetbrains.exposed.sql.ResultRow
+package eu.torvian.chatbot.server.data.entities
 
 /**
  * Represents a row from the 'api_secrets' database table.
@@ -21,17 +19,3 @@ data class ApiSecretEntity(
     val createdAt: Long,
     val updatedAt: Long
 )
-
-/**
- * Extension function to map an Exposed [ResultRow] to an [ApiSecretEntity].
- */
-fun ResultRow.toApiSecretEntity(): ApiSecretEntity {
-    return ApiSecretEntity(
-        alias = this[ApiSecretsTable.alias],
-        encryptedCredential = this[ApiSecretsTable.encrypted_credential],
-        wrappedDek = this[ApiSecretsTable.wrapped_dek],
-        keyVersion = this[ApiSecretsTable.key_version],
-        createdAt = this[ApiSecretsTable.created_at],
-        updatedAt = this[ApiSecretsTable.updated_at]
-    )
-}
