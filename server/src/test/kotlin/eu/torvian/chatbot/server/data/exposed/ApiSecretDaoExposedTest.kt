@@ -3,7 +3,10 @@ package eu.torvian.chatbot.server.data.exposed
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.server.data.dao.ApiSecretDao
-import eu.torvian.chatbot.server.data.models.ApiSecretEntity
+import eu.torvian.chatbot.server.data.dao.exposed.ApiSecretDaoExposed
+import eu.torvian.chatbot.server.data.dao.error.ApiSecretError
+import eu.torvian.chatbot.server.data.entities.ApiSecretEntity
+import eu.torvian.chatbot.server.domain.security.EncryptedSecret
 import eu.torvian.chatbot.server.testutils.data.Table
 import eu.torvian.chatbot.server.testutils.data.TestDataSet
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
@@ -41,6 +44,12 @@ class ApiSecretDaoExposedTest {
         updatedAt = TestDefaults.DEFAULT_INSTANT_MILLIS
     )
 
+    private val encryptedSecret1 = EncryptedSecret(
+        encryptedSecret = apiSecret1.encryptedCredential,
+        encryptedDEK = apiSecret1.wrappedDek,
+        keyVersion = apiSecret1.keyVersion
+    )
+
     @BeforeEach
     fun setUp() = runTest {
         container = defaultTestContainer()
@@ -59,96 +68,114 @@ class ApiSecretDaoExposedTest {
 
     @Test
     fun `saveSecret should insert a new secret if alias does not exist`() = runTest {
-        val secretToSave = apiSecret1
-        apiSecretDao.saveSecret(secretToSave)
+        // Act: Save a new secret
+        val result = apiSecretDao.saveSecret(apiSecret1.alias, encryptedSecret1)
 
-        val foundSecret = apiSecretDao.findSecret(apiSecret1.alias)
-        assertNotNull(foundSecret, "Secret should be found after insertion")
-        assertEquals(secretToSave, foundSecret)
+        // Assert: Should be successful (Right)
+        assertTrue(result.isRight())
+
+        // Verify the secret was saved correctly
+        val foundSecret = apiSecretDao.getSecret(apiSecret1.alias)
+        assertTrue(foundSecret.isRight(), "Secret should be found after insertion")
+        assertEquals(encryptedSecret1, foundSecret.getOrNull(), "Retrieved secret should match saved secret")
     }
 
     @Test
-    fun `saveSecret should update an existing secret if alias already exists`() = runTest {
+    fun `saveSecret should fail if alias already exists`() = runTest {
         // Arrange: Insert an initial secret
-        val initialEntry = apiSecret1
-        testDataManager.insertApiSecret(initialEntry)
+        testDataManager.insertApiSecret(apiSecret1)
 
-        // Act: Save a different secret with the *same* alias
-        val updatedSecretData = initialEntry.copy(
-            encryptedCredential = "updated_secret",
-            wrappedDek = "updated_dek",
-            keyVersion = 2,
-            updatedAt = initialEntry.updatedAt + 60000L
+        // Act: Try to save a secret with the same alias
+        val updatedSecret = EncryptedSecret(
+            encryptedSecret = "updated_secret",
+            encryptedDEK = "updated_dek",
+            keyVersion = 2
         )
-        apiSecretDao.saveSecret(updatedSecretData)
+        val result = apiSecretDao.saveSecret(apiSecret1.alias, updatedSecret)
 
-        // Assert: Find the secret and verify it's the updated version
-        val foundSecret = apiSecretDao.findSecret(initialEntry.alias)
-        assertNotNull(foundSecret, "Secret should still be found after update")
-        assertEquals(updatedSecretData, foundSecret, "Found secret data should be the updated data")
-
+        // Assert
+        assertTrue(result.isLeft(), "Should return Left for existing alias")
+        assertTrue(result.leftOrNull() is ApiSecretError.SecretAlreadyExists,
+                "Error should be SecretAlreadyExists")
+        assertEquals(apiSecret1.alias, (result.leftOrNull() as ApiSecretError.SecretAlreadyExists).alias,
+                "Error should contain the correct alias")
     }
 
-     @Test
-     fun `findSecret should return the correct secret for a given alias`() = runTest {
-         // Arrange: Insert multiple secrets
-         val entry1 = apiSecret1
-         val entry2 = apiSecret1.copy(alias = "alias2")
-         testDataManager.setup(TestDataSet(apiSecrets = listOf(entry1, entry2)))
+    @Test
+    fun `getSecret should return the correct secret for a given alias`() = runTest {
+        // Arrange: Insert multiple secrets
+        val entry1 = apiSecret1
+        val entry2 = apiSecret1.copy(alias = "alias2", encryptedCredential = "encrypted_secret2", wrappedDek = "encrypted_dek2")
+        testDataManager.setup(TestDataSet(apiSecrets = listOf(entry1, entry2)))
 
-         // Act & Assert: Find each secret
-         val found1 = apiSecretDao.findSecret(entry1.alias)
-         assertNotNull(found1)
-         assertEquals(entry1, found1)
+        // Create encrypted secret objects
+        val encryptedSecret1 = EncryptedSecret(
+            encryptedSecret = entry1.encryptedCredential,
+            encryptedDEK = entry1.wrappedDek,
+            keyVersion = entry1.keyVersion
+        )
+        val encryptedSecret2 = EncryptedSecret(
+            encryptedSecret = entry2.encryptedCredential,
+            encryptedDEK = entry2.wrappedDek,
+            keyVersion = entry2.keyVersion
+        )
 
-         val found2 = apiSecretDao.findSecret(entry2.alias)
-         assertNotNull(found2)
-         assertEquals(entry2, found2)
-     }
+        // Act & Assert: Find each secret
+        val found1 = apiSecretDao.getSecret(entry1.alias)
+        assertTrue(found1.isRight(), "Should return Right for existing secret")
+        assertEquals(encryptedSecret1, found1.getOrNull())
 
-     @Test
-     fun `findSecret should return null if alias does not exist`() = runTest {
-         // Arrange:
-         val entry1 = apiSecret1
-         testDataManager.insertApiSecret(entry1)
-
-         // Act
-         val foundSecret = apiSecretDao.findSecret("non-existent-alias")
-
-         // Assert
-         assertNull(foundSecret, "Finding a non-existent alias should return null")
-     }
-
-     @Test
-     fun `deleteSecret should remove the secret with the given alias`() = runTest {
-         // Arrange: Insert a secret
-         val entryToDelete = apiSecret1
-         testDataManager.insertApiSecret(entryToDelete)
-
-         // Verify it exists initially
-         assertNotNull(apiSecretDao.findSecret(entryToDelete.alias), "Secret should exist before deletion")
-
-         // Act
-         val isDeleted = apiSecretDao.deleteSecret(entryToDelete.alias)
-
-         // Assert
-         assertTrue(isDeleted, "deleteSecret should return true on success")
-         assertNull(apiSecretDao.findSecret(entryToDelete.alias), "Secret should not be found after deletion")
-     }
+        val found2 = apiSecretDao.getSecret(entry2.alias)
+        assertTrue(found2.isRight(), "Should return Right for existing secret")
+        assertEquals(encryptedSecret2, found2.getOrNull())
+    }
 
     @Test
-    fun `deleteSecret should return true if alias does not exist`() = runTest {
+    fun `getSecret should return SecretNotFound if alias does not exist`() = runTest {
         // Arrange:
         val entry1 = apiSecret1
         testDataManager.insertApiSecret(entry1)
 
         // Act
-        val isDeleted = apiSecretDao.deleteSecret("non-existent-alias")
+        val result = apiSecretDao.getSecret("non-existent-alias")
 
         // Assert
-        // The DAO implementation returns true even if no rows were deleted, as the state matches the requested outcome (secret is gone).
-        assertTrue(isDeleted, "deleteSecret should return true even if the secret did not exist")
+        assertTrue(result.isLeft(), "Finding a non-existent alias should return Left")
+        assertTrue(result.leftOrNull() is ApiSecretError.SecretNotFound,
+                "Error should be SecretNotFound")
+        assertEquals("non-existent-alias", (result.leftOrNull() as ApiSecretError.SecretNotFound).alias,
+                "Error should contain the queried alias")
     }
 
-    // Add more test cases here for edge cases, concurrency (if applicable), etc.
+    @Test
+    fun `deleteSecret should remove the secret with the given alias`() = runTest {
+        // Arrange: Insert a secret
+        val entryToDelete = apiSecret1
+        testDataManager.insertApiSecret(entryToDelete)
+
+        // Verify it exists initially
+        val initialCheck = apiSecretDao.getSecret(entryToDelete.alias)
+        assertTrue(initialCheck.isRight(), "Secret should exist before deletion")
+
+        // Act
+        val deleteResult = apiSecretDao.deleteSecret(entryToDelete.alias)
+
+        // Assert
+        assertTrue(deleteResult.isRight(), "Deletion should succeed and return Right")
+
+        // Verify the secret no longer exists
+        val afterDeletion = apiSecretDao.getSecret(entryToDelete.alias)
+        assertTrue(afterDeletion.isLeft(), "Secret should not be found after deletion")
+    }
+
+    @Test
+    fun `deleteSecret should return SecretNotFound for non-existent alias`() = runTest {
+        // Act: Try to delete a non-existent secret
+        val result = apiSecretDao.deleteSecret("non-existent-alias")
+
+        // Assert
+        assertTrue(result.isLeft(), "Deleting a non-existent alias should return Left")
+        assertTrue(result.leftOrNull() is ApiSecretError.SecretNotFound,
+                "Error should be SecretNotFound")
+    }
 }
