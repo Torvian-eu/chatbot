@@ -5,6 +5,8 @@ import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.error.MessageError
+import eu.torvian.chatbot.server.data.dao.error.MessageAddChildError
+import eu.torvian.chatbot.server.data.dao.error.MessageRemoveChildError
 import eu.torvian.chatbot.server.testutils.data.Table
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
 import eu.torvian.chatbot.server.testutils.data.TestDataSet
@@ -514,8 +516,8 @@ class MessageDaoExposedTest {
         assertTrue(result.isLeft(), "Expected Left result for child already exists")
         val error = result.leftOrNull()
         assertNotNull(error, "Expected non-null error")
-        assertTrue(error is MessageError.ChildAlreadyExists, "Expected ChildAlreadyExists error")
-        if (error is MessageError.ChildAlreadyExists) {
+        assertTrue(error is MessageAddChildError.ChildAlreadyExists, "Expected ChildAlreadyExists error")
+        if (error is MessageAddChildError.ChildAlreadyExists) {
             assertEquals(testUserMessage1.id, error.parentId, "Expected correct parent ID in error")
             assertEquals(testAssistantMessage1.id, error.childId, "Expected correct child ID in error")
         }
@@ -573,8 +575,8 @@ class MessageDaoExposedTest {
         assertTrue(result.isLeft(), "Expected Left result for child not found")
         val error = result.leftOrNull()
         assertNotNull(error, "Expected non-null error")
-        assertTrue(error is MessageError.ChildNotFound, "Expected ChildNotFound error")
-        if (error is MessageError.ChildNotFound) {
+        assertTrue(error is MessageRemoveChildError.ChildNotFound, "Expected ChildNotFound error")
+        if (error is MessageRemoveChildError.ChildNotFound) {
             assertEquals(userMessage.id, error.parentId, "Expected correct parent ID in error")
             assertEquals(999L, error.childId, "Expected correct child ID in error")
         }

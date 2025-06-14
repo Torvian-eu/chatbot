@@ -1,7 +1,8 @@
 package eu.torvian.chatbot.server.data.dao.error
 
 /**
- * Represents possible domain-specific errors that can occur during ChatMessage data operations.
+ * Represents possible domain-specific errors that can occur during ChatMessage data operations,
+ * specifically those common to multiple operations.
  */
 sealed interface MessageError {
     /**
@@ -10,18 +11,8 @@ sealed interface MessageError {
     data class MessageNotFound(val id: Long) : MessageError
 
     /**
-     * Indicates that a foreign key constraint was violated. This is a generic error
-     * that can occur when trying to use a non-existent ID for a related entity.
+     * Indicates that a foreign key constraint was violated during an insert or update.
+     * This is a generic error for such constraint failures.
      */
     data class ForeignKeyViolation(val message: String) : MessageError
-
-    /**
-     * Indicates that a child message already exists for the parent message.
-     */
-    data class ChildAlreadyExists(val parentId: Long, val childId: Long) : MessageError
-
-    /**
-     * Indicates that a child message was not found for the parent message.
-     */
-    data class ChildNotFound(val parentId: Long, val childId: Long) : MessageError
 }

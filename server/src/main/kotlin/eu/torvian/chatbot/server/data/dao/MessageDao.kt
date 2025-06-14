@@ -3,6 +3,8 @@ package eu.torvian.chatbot.server.data.dao
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.server.data.dao.error.MessageError
+import eu.torvian.chatbot.server.data.dao.error.MessageAddChildError
+import eu.torvian.chatbot.server.data.dao.error.MessageRemoveChildError
 
 /**
  * Data Access Object for ChatMessage entities.
@@ -82,9 +84,9 @@ interface MessageDao {
      * Used when a new message is inserted as a reply.
      * @param parentId The ID of the parent message.
      * @param childId The ID of the new child message to add to the parent's list.
-     * @return Either a [MessageError] or Unit if successful.
+     * @return Either a [MessageAddChildError] or Unit if successful.
      */
-    suspend fun addChildToMessage(parentId: Long, childId: Long): Either<MessageError, Unit>
+    suspend fun addChildToMessage(parentId: Long, childId: Long): Either<MessageAddChildError, Unit>
     
     /**
      * Removes a child message ID from the `childrenMessageIds` list of the parent message record.
@@ -92,7 +94,7 @@ interface MessageDao {
      * Used when a child message is deleted.
      * @param parentId The ID of the parent message.
      * @param childId The ID of the child message to remove from the parent's list.
-     * @return Either a [MessageError] or Unit if successful.
+     * @return Either a [MessageRemoveChildError] or Unit if successful.
      */
-    suspend fun removeChildFromMessage(parentId: Long, childId: Long): Either<MessageError, Unit>
+    suspend fun removeChildFromMessage(parentId: Long, childId: Long): Either<MessageRemoveChildError, Unit>
 }

@@ -5,6 +5,8 @@ import arrow.core.raise.*
 import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.error.MessageError
+import eu.torvian.chatbot.server.data.dao.error.MessageAddChildError
+import eu.torvian.chatbot.server.data.dao.error.MessageRemoveChildError
 import eu.torvian.chatbot.server.data.tables.AssistantMessageTable
 import eu.torvian.chatbot.server.data.tables.ChatMessageTable
 import eu.torvian.chatbot.server.data.tables.mappers.toAssistantMessage
@@ -208,16 +210,18 @@ class MessageDaoExposed(
             }
         }
 
-    override suspend fun addChildToMessage(parentId: Long, childId: Long): Either<MessageError, Unit> =
+    override suspend fun addChildToMessage(parentId: Long, childId: Long): Either<MessageAddChildError, Unit> =
         transactionScope.transaction {
             either {
                 logger.debug("DAO: Adding child message ID $childId to parent ID $parentId")
                 // Get the parent message
-                val parentMessage = getMessageById(parentId).bind()
+                val parentMessage = getMessageById(parentId).mapLeft {
+                    MessageAddChildError.ParentNotFound(parentId)
+                }.bind()
 
                 // Check if child already exists
                 ensure(childId !in parentMessage.childrenMessageIds) {
-                    MessageError.ChildAlreadyExists(parentId, childId)
+                    MessageAddChildError.ChildAlreadyExists(parentId, childId)
                 }
 
                 // Update the parent's children list
@@ -232,16 +236,18 @@ class MessageDaoExposed(
             }
         }
 
-    override suspend fun removeChildFromMessage(parentId: Long, childId: Long) =
+    override suspend fun removeChildFromMessage(parentId: Long, childId: Long): Either<MessageRemoveChildError, Unit> =
         transactionScope.transaction {
             either {
                 logger.debug("DAO: Removing child message ID $childId from parent ID $parentId")
                 // Get the parent message
-                val parentMessage = getMessageById(parentId).bind()
+                val parentMessage = getMessageById(parentId).mapLeft {
+                    MessageRemoveChildError.ParentNotFound(parentId)
+                }.bind()
 
                 // Check if child exists
                 ensure(childId in parentMessage.childrenMessageIds) {
-                    MessageError.ChildNotFound(parentId, childId)
+                    MessageRemoveChildError.ChildNotFound(parentId, childId)
                 }
 
                 // Update the parent's children list
