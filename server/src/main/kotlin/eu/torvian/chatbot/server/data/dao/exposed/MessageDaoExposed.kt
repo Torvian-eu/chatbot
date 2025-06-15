@@ -1,12 +1,16 @@
 package eu.torvian.chatbot.server.data.dao.exposed
 
-import arrow.core.*
-import arrow.core.raise.*
+import arrow.core.Either
+import arrow.core.getOrElse
+import arrow.core.raise.Raise
+import arrow.core.raise.catch
+import arrow.core.raise.either
+import arrow.core.raise.ensure
 import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.server.data.dao.MessageDao
-import eu.torvian.chatbot.server.data.dao.error.MessageError
+import eu.torvian.chatbot.server.data.dao.error.InsertMessageError
 import eu.torvian.chatbot.server.data.dao.error.MessageAddChildError
-import eu.torvian.chatbot.server.data.dao.error.MessageRemoveChildError
+import eu.torvian.chatbot.server.data.dao.error.MessageError
 import eu.torvian.chatbot.server.data.tables.AssistantMessageTable
 import eu.torvian.chatbot.server.data.tables.ChatMessageTable
 import eu.torvian.chatbot.server.data.tables.mappers.toAssistantMessage
@@ -72,9 +76,12 @@ class MessageDaoExposed(
         sessionId: Long,
         content: String,
         parentMessageId: Long?
-    ): Either<MessageError.ForeignKeyViolation, ChatMessage> =
+    ): Either<InsertMessageError, ChatMessage> =
         transactionScope.transaction {
             either {
+                if (parentMessageId != null) {
+                    verifyParentInSession(parentMessageId, sessionId)
+                }
                 catch({
                     val now = System.currentTimeMillis()
                     val insertStatement = ChatMessageTable.insert {
@@ -89,9 +96,10 @@ class MessageDaoExposed(
                     insertStatement.resultedValues?.first()?.toUserMessage()
                         ?: throw IllegalStateException("Failed to retrieve newly inserted user message")
                 }) { e: ExposedSQLException ->
-                    val message = "Failed to insert user message for session $sessionId and parent $parentMessageId"
-                    logger.error(message, e)
-                    ensure(!e.isForeignKeyViolation()) { MessageError.ForeignKeyViolation(message) }
+                    logger.error(
+                        "Failed to insert user message for session $sessionId and parent $parentMessageId", e
+                    )
+                    ensure(!e.isForeignKeyViolation()) { InsertMessageError.SessionNotFound(sessionId) }
                     throw e
                 }
             }
@@ -103,9 +111,12 @@ class MessageDaoExposed(
         parentMessageId: Long?,
         modelId: Long?,
         settingsId: Long?
-    ): Either<MessageError.ForeignKeyViolation, ChatMessage> =
+    ): Either<InsertMessageError, ChatMessage> =
         transactionScope.transaction {
             either {
+                if (parentMessageId != null) {
+                    verifyParentInSession(parentMessageId, sessionId)
+                }
                 catch({
                     val now = System.currentTimeMillis()
                     val insertStatement = ChatMessageTable.insert {
@@ -140,10 +151,10 @@ class MessageDaoExposed(
                         settingsId = settingsId
                     )
                 }) { e: ExposedSQLException ->
-                    val message =
-                        "Failed to insert assistant message for session $sessionId and parent $parentMessageId"
-                    logger.error(message, e)
-                    ensure(!e.isForeignKeyViolation()) { MessageError.ForeignKeyViolation(message) }
+                    logger.error(
+                        "Failed to insert assistant message for session $sessionId and parent $parentMessageId", e
+                    )
+                    ensure(!e.isForeignKeyViolation()) { InsertMessageError.SessionNotFound(sessionId) }
                     throw e
                 }
             }
@@ -214,14 +225,34 @@ class MessageDaoExposed(
         transactionScope.transaction {
             either {
                 logger.debug("DAO: Adding child message ID $childId to parent ID $parentId")
+                // Check if child is the parent itself
+                ensure(parentId != childId) {
+                    MessageAddChildError.ChildIsParent(parentId, childId)
+                }
+
                 // Get the parent message
                 val parentMessage = getMessageById(parentId).mapLeft {
                     MessageAddChildError.ParentNotFound(parentId)
                 }.bind()
 
-                // Check if child already exists
+                // Get the child message
+                val childMessage = getMessageById(childId).mapLeft {
+                    MessageAddChildError.ChildNotFound(childId)
+                }.bind()
+
+                // Check if child already has a parent
+                ensure(childMessage.parentMessageId == null) {
+                    MessageAddChildError.ChildAlreadyHasParent(childId, childMessage.parentMessageId!!)
+                }
+
+                // Check if child already exists in parent's children list
                 ensure(childId !in parentMessage.childrenMessageIds) {
                     MessageAddChildError.ChildAlreadyExists(parentId, childId)
+                }
+
+                // Check if child and parent are in the same session
+                ensure(parentMessage.sessionId == childMessage.sessionId) {
+                    MessageAddChildError.ChildNotInSession(childId, parentId, parentMessage.sessionId)
                 }
 
                 // Update the parent's children list
@@ -233,34 +264,6 @@ class MessageDaoExposed(
                     throw IllegalStateException("Failed to update parent message with ID $parentId when adding child $childId")
                 }
                 logger.debug("DAO: Successfully added child ID $childId to parent ID $parentId")
-            }
-        }
-
-    override suspend fun removeChildFromMessage(parentId: Long, childId: Long): Either<MessageRemoveChildError, Unit> =
-        transactionScope.transaction {
-            either {
-                logger.debug("DAO: Removing child message ID $childId from parent ID $parentId")
-                // Get the parent message
-                val parentMessage = getMessageById(parentId).mapLeft {
-                    MessageRemoveChildError.ParentNotFound(parentId)
-                }.bind()
-
-                // Check if child exists
-                ensure(childId in parentMessage.childrenMessageIds) {
-                    MessageRemoveChildError.ChildNotFound(parentId, childId)
-                }
-
-                // Update the parent's children list
-                val updatedRowCount = ChatMessageTable.update({ ChatMessageTable.id eq parentId }) {
-                    it[ChatMessageTable.childrenMessageIds] =
-                        Json.encodeToString(parentMessage.childrenMessageIds - childId)
-                }
-                if (updatedRowCount == 0) {
-                    throw IllegalStateException(
-                        "Failed to update parent message with ID $parentId when removing child $childId"
-                    )
-                }
-                logger.debug("DAO: Successfully removed child ID $childId from parent ID $parentId")
             }
         }
 
@@ -281,6 +284,15 @@ class MessageDaoExposed(
         val deletedCount = ChatMessageTable.deleteWhere { ChatMessageTable.id eq messageId }
         if (deletedCount == 0) {
             throw IllegalStateException("Failed to delete message with ID $messageId")
+        }
+    }
+
+    private fun Raise<InsertMessageError>.verifyParentInSession(parentId: Long, sessionId: Long) {
+        val parentSessionId = ChatMessageTable
+            .selectAll().where { ChatMessageTable.id eq parentId }
+            .singleOrNull()?.get(ChatMessageTable.sessionId)?.value
+        ensure(parentSessionId == sessionId) {
+            InsertMessageError.ParentNotInSession(parentId, sessionId)
         }
     }
 }

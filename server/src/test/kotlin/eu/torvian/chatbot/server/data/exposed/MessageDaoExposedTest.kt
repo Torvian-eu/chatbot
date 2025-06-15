@@ -6,7 +6,7 @@ import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.error.MessageError
 import eu.torvian.chatbot.server.data.dao.error.MessageAddChildError
-import eu.torvian.chatbot.server.data.dao.error.MessageRemoveChildError
+import eu.torvian.chatbot.server.data.dao.error.InsertMessageError
 import eu.torvian.chatbot.server.testutils.data.Table
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
 import eu.torvian.chatbot.server.testutils.data.TestDataSet
@@ -170,10 +170,8 @@ class MessageDaoExposedTest {
         assertEquals(testAssistantMessage1.content, assistantMessage.content, "Expected matching content")
         assertEquals(ChatMessage.Role.ASSISTANT, assistantMessage.role, "Expected ASSISTANT role")
         assertTrue(assistantMessage is ChatMessage.AssistantMessage, "Expected AssistantMessage type")
-        if (assistantMessage is ChatMessage.AssistantMessage) {
-            assertEquals(testAssistantMessage1.modelId, assistantMessage.modelId, "Expected matching modelId")
-            assertEquals(testAssistantMessage1.settingsId, assistantMessage.settingsId, "Expected matching settingsId")
-        }
+        assertEquals(testAssistantMessage1.modelId, assistantMessage.modelId, "Expected matching modelId")
+        assertEquals(testAssistantMessage1.settingsId, assistantMessage.settingsId, "Expected matching settingsId")
     }
 
     @Test
@@ -221,10 +219,8 @@ class MessageDaoExposedTest {
         assertEquals(ChatMessage.Role.USER, message.role, "Expected USER role")
 
         // Verify message was actually inserted in the database
-        val retrievedResult = messageDao.getMessageById(message.id)
-        assertTrue(retrievedResult.isRight(), "Expected to find the newly inserted message")
-        val retrievedMessage = retrievedResult.getOrNull()
-        assertNotNull(retrievedMessage, "Expected non-null retrieved message")
+        val retrievedMessage = testDataManager.getChatMessage(message.id)
+        assertNotNull(retrievedMessage, "Expected to find the newly inserted message")
         assertEquals(message.id, retrievedMessage.id, "Expected matching ID")
     }
 
@@ -256,10 +252,8 @@ class MessageDaoExposedTest {
         assertEquals(testUserMessage1.id, message.parentMessageId, "Expected correct parentMessageId")
 
         // Verify parent-child relationship was established
-        val parentResult = messageDao.getMessageById(testUserMessage1.id)
-        assertTrue(parentResult.isRight(), "Expected to find the parent message")
-        val parentMessage = parentResult.getOrNull()
-        assertNotNull(parentMessage, "Expected non-null parent message")
+        val parentMessage = testDataManager.getChatMessage(testUserMessage1.id)
+        assertNotNull(parentMessage, "Expected to find the parent message")
         assertTrue(
             parentMessage.childrenMessageIds.contains(message.id),
             "Expected child ID in parent's childrenMessageIds"
@@ -267,7 +261,7 @@ class MessageDaoExposedTest {
     }
 
     @Test
-    fun `insertUserMessage should return ForeignKeyViolation for non-existent session`() = runTest {
+    fun `insertUserMessage should return SessionNotFound for non-existent session`() = runTest {
         // Try to insert message with non-existent session
         val result = messageDao.insertUserMessage(
             sessionId = 999,
@@ -279,7 +273,37 @@ class MessageDaoExposedTest {
         assertTrue(result.isLeft(), "Expected Left result for non-existent session")
         val error = result.leftOrNull()
         assertNotNull(error, "Expected non-null error")
-        assertTrue(error is MessageError.ForeignKeyViolation, "Expected ForeignKeyViolation error")
+        assertTrue(error is InsertMessageError.SessionNotFound, "Expected SessionNotFound error")
+        assertEquals(999, (error as InsertMessageError.SessionNotFound).sessionId, "Expected error with correct session ID")
+    }
+
+    @Test
+    fun `insertUserMessage should return ParentNotInSession for parent in different session`() = runTest {
+        // Setup two sessions with messages
+        testDataManager.setup(
+            TestDataSet(
+                chatGroups = listOf(testGroup1, testGroup2),
+                llmModels = listOf(testModel1, testModel2),
+                modelSettings = listOf(testSettings1, testSettings2),
+                chatSessions = listOf(testSession1, testSession2),
+                chatMessages = listOf(testUserMessage1, testUserMessage2) // testUserMessage1 is in session1, testUserMessage2 is in session2
+            )
+        )
+
+        // Try to insert message in session1 with parent from session2
+        val result = messageDao.insertUserMessage(
+            sessionId = testSession1.id,
+            content = "This parent is in a different session",
+            parentMessageId = testUserMessage2.id // This message belongs to testSession2
+        )
+
+        // Verify
+        assertTrue(result.isLeft(), "Expected Left result for parent in different session")
+        val error = result.leftOrNull()
+        assertNotNull(error, "Expected non-null error")
+        assertTrue(error is InsertMessageError.ParentNotInSession, "Expected ParentNotInSession error")
+        assertEquals(testUserMessage2.id, error.parentId, "Expected correct parent ID in error")
+        assertEquals(testSession1.id, error.sessionId, "Expected correct session ID in error")
     }
 
     @Test
@@ -320,14 +344,62 @@ class MessageDaoExposedTest {
 
 
         // Verify parent-child relationship was established
-        val parentResult = messageDao.getMessageById(testUserMessage1.id)
-        assertTrue(parentResult.isRight(), "Expected to find the parent message")
-        val parentMessage = parentResult.getOrNull()
-        assertNotNull(parentMessage, "Expected non-null parent message")
+        val parentMessage = testDataManager.getChatMessage(testUserMessage1.id)
+        assertNotNull(parentMessage, "Expected to find the parent message")
         assertTrue(
             parentMessage.childrenMessageIds.contains(message.id),
             "Expected child ID in parent's childrenMessageIds"
         )
+    }
+
+    @Test
+    fun `insertAssistantMessage should return ParentNotInSession for parent in different session`() = runTest {
+        // Setup two sessions with messages
+        testDataManager.setup(
+            TestDataSet(
+                chatGroups = listOf(testGroup1, testGroup2),
+                llmModels = listOf(testModel1, testModel2),
+                modelSettings = listOf(testSettings1, testSettings2),
+                chatSessions = listOf(testSession1, testSession2),
+                chatMessages = listOf(testUserMessage1, testUserMessage2) // testUserMessage1 is in session1, testUserMessage2 is in session2
+            )
+        )
+
+        // Try to insert assistant message in session1 with parent from session2
+        val result = messageDao.insertAssistantMessage(
+            sessionId = testSession1.id,
+            content = "This parent is in a different session",
+            parentMessageId = testUserMessage2.id, // This message belongs to testSession2
+            modelId = testModel1.id,
+            settingsId = testSettings1.id
+        )
+
+        // Verify
+        assertTrue(result.isLeft(), "Expected Left result for parent in different session")
+        val error = result.leftOrNull()
+        assertNotNull(error, "Expected non-null error")
+        assertTrue(error is InsertMessageError.ParentNotInSession, "Expected ParentNotInSession error")
+        assertEquals(testUserMessage2.id, error.parentId, "Expected correct parent ID in error")
+        assertEquals(testSession1.id, error.sessionId, "Expected correct session ID in error")
+    }
+
+    @Test
+    fun `insertAssistantMessage should return SessionNotFound for non-existent session`() = runTest {
+        // Try to insert assistant message with non-existent session
+        val result = messageDao.insertAssistantMessage(
+            sessionId = 999,
+            content = "This session doesn't exist",
+            parentMessageId = null,
+            modelId = testModel1.id,
+            settingsId = testSettings1.id
+        )
+
+        // Verify
+        assertTrue(result.isLeft(), "Expected Left result for non-existent session")
+        val error = result.leftOrNull()
+        assertNotNull(error, "Expected non-null error")
+        assertTrue(error is InsertMessageError.SessionNotFound, "Expected SessionNotFound error")
+        assertEquals(999, (error as InsertMessageError.SessionNotFound).sessionId, "Expected error with correct session ID")
     }
 
     @Test
@@ -354,10 +426,8 @@ class MessageDaoExposedTest {
         assertEquals(updatedContent, updatedMessage.content, "Expected content to be updated")
 
         // Verify the message was actually updated in the database
-        val retrievedResult = messageDao.getMessageById(testUserMessage1.id)
-        assertTrue(retrievedResult.isRight(), "Expected to find the updated message")
-        val retrievedMessage = retrievedResult.getOrNull()
-        assertNotNull(retrievedMessage, "Expected non-null message")
+        val retrievedMessage = testDataManager.getChatMessage(testUserMessage1.id)
+        assertNotNull(retrievedMessage, "Expected to find the updated message")
         assertEquals(updatedContent, retrievedMessage.content, "Expected retrieved message to have updated content")
     }
 
@@ -394,11 +464,8 @@ class MessageDaoExposedTest {
         assertTrue(result.isRight(), "Expected Right result for successful deletion")
 
         // Verify the message was actually deleted
-        val retrievedResult = messageDao.getMessageById(testAssistantMessage1.id)
-        assertTrue(retrievedResult.isLeft(), "Expected Left result for deleted message")
-        val error = retrievedResult.leftOrNull()
-        assertNotNull(error, "Expected non-null error")
-        assertTrue(error is MessageError.MessageNotFound, "Expected MessageNotFound error")
+        val retrievedMessage = testDataManager.getChatMessage(testAssistantMessage1.id)
+        assertNull(retrievedMessage, "Expected message to be deleted")
     }
 
     @Test
@@ -421,12 +488,12 @@ class MessageDaoExposedTest {
         assertTrue(result.isRight(), "Expected Right result for successful deletion")
 
         // Verify the parent message was deleted
-        val parentResult = messageDao.getMessageById(testUserMessage1.id)
-        assertTrue(parentResult.isLeft(), "Expected Left result for deleted parent message")
+        val parentMessage = testDataManager.getChatMessage(testUserMessage1.id)
+        assertNull(parentMessage, "Expected parent message to be deleted")
 
         // Verify the child message was also deleted
-        val childResult = messageDao.getMessageById(testAssistantMessage1.id)
-        assertTrue(childResult.isLeft(), "Expected Left result for deleted child message")
+        val childMessage = testDataManager.getChatMessage(testAssistantMessage1.id)
+        assertNull(childMessage, "Expected child message to be deleted")
     }
 
     @Test
@@ -449,14 +516,12 @@ class MessageDaoExposedTest {
         assertTrue(result.isRight(), "Expected Right result for successful deletion")
 
         // Verify the child message was deleted
-        val childResult = messageDao.getMessageById(testAssistantMessage1.id)
-        assertTrue(childResult.isLeft(), "Expected Left result for deleted child message")
+        val childMessage = testDataManager.getChatMessage(testAssistantMessage1.id)
+        assertNull(childMessage, "Expected child message to be deleted")
 
         // Verify the parent message no longer references the deleted child
-        val parentResult = messageDao.getMessageById(testUserMessage1.id)
-        assertTrue(parentResult.isRight(), "Expected Right result for existing parent message")
-        val parentMessage = parentResult.getOrNull()
-        assertNotNull(parentMessage, "Expected non-null parent message")
+        val parentMessage = testDataManager.getChatMessage(testUserMessage1.id)
+        assertNotNull(parentMessage, "Expected parent message to still exist")
         assertFalse(
             parentMessage.childrenMessageIds.contains(testAssistantMessage1.id),
             "Expected parent's childrenMessageIds to no longer contain deleted child ID"
@@ -486,10 +551,8 @@ class MessageDaoExposedTest {
         assertTrue(result.isRight(), "Expected Right result for successful operation")
 
         // Verify parent now has child in its children list
-        val parentResult = messageDao.getMessageById(userMessage.id)
-        assertTrue(parentResult.isRight(), "Expected Right result for existing parent message")
-        val parentMessage = parentResult.getOrNull()
-        assertNotNull(parentMessage, "Expected non-null parent message")
+        val parentMessage = testDataManager.getChatMessage(userMessage.id)
+        assertNotNull(parentMessage, "Expected to find parent message")
         assertTrue(
             parentMessage.childrenMessageIds.contains(assistantMessage.id),
             "Expected parent's childrenMessageIds to contain added child ID"
@@ -497,7 +560,7 @@ class MessageDaoExposedTest {
     }
 
     @Test
-    fun `addChildToMessage should return ChildAlreadyExists when child already exists`() = runTest {
+    fun `addChildToMessage should return ChildAlreadyHasParent when child already has a parent`() = runTest {
         // Setup test data with parent-child relationship already established
         testDataManager.setup(
             TestDataSet(
@@ -513,72 +576,39 @@ class MessageDaoExposedTest {
         val result = messageDao.addChildToMessage(testUserMessage1.id, testAssistantMessage1.id)
 
         // Verify
+        assertTrue(result.isLeft(), "Expected Left result for child already has parent")
+        val error = result.leftOrNull()
+        assertNotNull(error, "Expected non-null error")
+        assertTrue(error is MessageAddChildError.ChildAlreadyHasParent, "Expected ChildAlreadyHasParent error")
+        assertEquals(testAssistantMessage1.id, error.childId, "Expected correct child ID in error")
+        assertEquals(testUserMessage1.id, error.currentParentId, "Expected correct current parent ID in error")
+    }
+
+    @Test
+    fun `addChildToMessage should return ChildAlreadyExists when child is in parent's children list but has no parent`() = runTest {
+        // Setup test data with child in parent's children list but child has no parent (inconsistent state for testing)
+        val userMessage = testUserMessage1.copy(childrenMessageIds = listOf(testAssistantMessage1.id))
+        val assistantMessage = testAssistantMessage1.copy(parentMessageId = null)
+
+        testDataManager.setup(
+            TestDataSet(
+                chatGroups = listOf(testGroup1),
+                llmModels = listOf(testModel1),
+                modelSettings = listOf(testSettings1),
+                chatSessions = listOf(testSession1),
+                chatMessages = listOf(userMessage, assistantMessage)
+            )
+        )
+
+        // Try to add the child again
+        val result = messageDao.addChildToMessage(userMessage.id, assistantMessage.id)
+
+        // Verify
         assertTrue(result.isLeft(), "Expected Left result for child already exists")
         val error = result.leftOrNull()
         assertNotNull(error, "Expected non-null error")
         assertTrue(error is MessageAddChildError.ChildAlreadyExists, "Expected ChildAlreadyExists error")
-        if (error is MessageAddChildError.ChildAlreadyExists) {
-            assertEquals(testUserMessage1.id, error.parentId, "Expected correct parent ID in error")
-            assertEquals(testAssistantMessage1.id, error.childId, "Expected correct child ID in error")
-        }
-    }
-
-    @Test
-    fun `removeChildFromMessage should remove child from parent's children list`() = runTest {
-        // Setup test data with parent-child relationship
-        testDataManager.setup(
-            TestDataSet(
-                chatGroups = listOf(testGroup1),
-                llmModels = listOf(testModel1),
-                modelSettings = listOf(testSettings1),
-                chatSessions = listOf(testSession1),
-                chatMessages = listOf(testUserMessage1, testAssistantMessage1)
-            )
-        )
-
-        // Remove child from parent
-        val result = messageDao.removeChildFromMessage(testUserMessage1.id, testAssistantMessage1.id)
-
-        // Verify operation was successful
-        assertTrue(result.isRight(), "Expected Right result for successful operation")
-
-        // Verify parent no longer has child in its children list
-        val parentResult = messageDao.getMessageById(testUserMessage1.id)
-        assertTrue(parentResult.isRight(), "Expected Right result for existing parent message")
-        val parentMessage = parentResult.getOrNull()
-        assertNotNull(parentMessage, "Expected non-null parent message")
-        assertFalse(
-            parentMessage.childrenMessageIds.contains(testAssistantMessage1.id),
-            "Expected parent's childrenMessageIds to no longer contain removed child ID"
-        )
-    }
-
-    @Test
-    fun `removeChildFromMessage should return ChildNotFound when child doesn't exist in parent`() = runTest {
-        // Setup test data with parent but no children
-        val userMessage = testUserMessage1.copy(childrenMessageIds = emptyList())
-
-        testDataManager.setup(
-            TestDataSet(
-                chatGroups = listOf(testGroup1),
-                llmModels = listOf(testModel1),
-                modelSettings = listOf(testSettings1),
-                chatSessions = listOf(testSession1),
-                chatMessages = listOf(userMessage)
-            )
-        )
-
-        // Try to remove non-existent child
-        val result = messageDao.removeChildFromMessage(userMessage.id, 999)
-
-        // Verify
-        assertTrue(result.isLeft(), "Expected Left result for child not found")
-        val error = result.leftOrNull()
-        assertNotNull(error, "Expected non-null error")
-        assertTrue(error is MessageRemoveChildError.ChildNotFound, "Expected ChildNotFound error")
-        if (error is MessageRemoveChildError.ChildNotFound) {
-            assertEquals(userMessage.id, error.parentId, "Expected correct parent ID in error")
-            assertEquals(999L, error.childId, "Expected correct child ID in error")
-        }
+        assertEquals(userMessage.id, error.parentId, "Expected correct parent ID in error")
+        assertEquals(assistantMessage.id, error.childId, "Expected correct child ID in error")
     }
 }
