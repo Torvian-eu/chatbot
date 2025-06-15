@@ -42,7 +42,7 @@ class GroupDaoExposed(
                 ?: throw IllegalStateException("Failed to retrieve newly inserted group after insertion.")
         }
 
-    override suspend fun renameGroup(id: Long, newName: String): Either<GroupError, Unit> =
+    override suspend fun renameGroup(id: Long, newName: String): Either<GroupError.GroupNotFound, Unit> =
         transactionScope.transaction {
             either {
                 val updatedRowCount = ChatGroupTable.update({ ChatGroupTable.id eq id }) {
