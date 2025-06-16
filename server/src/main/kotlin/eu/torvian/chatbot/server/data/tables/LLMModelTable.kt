@@ -15,6 +15,6 @@ import org.jetbrains.exposed.dao.id.LongIdTable
 object LLMModelTable : LongIdTable("llm_models") {
     val name = varchar("name", 255).uniqueIndex()
     val baseUrl = varchar("base_url", 512)
-    val apiKeyId = varchar("api_key_id", 255).nullable().uniqueIndex()
+    val apiKeyId = varchar("api_key_id", 255).nullable()
     val type = varchar("type", 50)
 }
