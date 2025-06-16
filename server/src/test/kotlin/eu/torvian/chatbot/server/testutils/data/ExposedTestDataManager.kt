@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.testutils.data
 import eu.torvian.chatbot.common.models.ChatGroup
 import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.common.models.LLMProvider
 import eu.torvian.chatbot.common.models.ModelSettings
 import eu.torvian.chatbot.server.data.entities.ApiSecretEntity
 import eu.torvian.chatbot.server.data.entities.ChatSessionEntity
@@ -42,6 +43,7 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
          */
         private val tableMappings = listOf(
             Table.API_SECRETS to ApiSecretTable,
+            Table.LLM_PROVIDERS to LLMProviderTable,
             Table.LLM_MODELS to LLMModelTable,
             Table.MODEL_SETTINGS to ModelSettingsTable,
             Table.CHAT_GROUPS to ChatGroupTable,
@@ -62,6 +64,7 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
         createTables(requiredTables)
 
         dataSet.apiSecrets.forEach { insertApiSecret(it) }
+        dataSet.llmProviders.forEach { insertLLMProvider(it) }
         dataSet.llmModels.forEach { insertLLMModel(it) }
         dataSet.modelSettings.forEach { insertModelSettings(it) }
         dataSet.chatGroups.forEach { insertChatGroup(it) }
@@ -151,6 +154,28 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
             ensureTableCreated(Table.API_SECRETS)
             ApiSecretTable.selectAll().where { ApiSecretTable.alias eq alias }
                 .map { it.toApiSecretEntity() }
+                .singleOrNull()
+        }
+
+    override suspend fun insertLLMProvider(provider: LLMProvider) =
+        transactionScope.transaction {
+            ensureTableCreated(Table.LLM_PROVIDERS)
+            LLMProviderTable.insert {
+                it[id] = provider.id
+                it[apiKeyId] = provider.apiKeyId
+                it[name] = provider.name
+                it[description] = provider.description
+                it[baseUrl] = provider.baseUrl
+                it[type] = provider.type
+            }
+            return@transaction
+        }
+
+    override suspend fun getLLMProvider(id: Long): LLMProvider? =
+        transactionScope.transaction {
+            ensureTableCreated(Table.LLM_PROVIDERS)
+            LLMProviderTable.selectAll().where { LLMProviderTable.id eq id }
+                .map { it.toLLMProvider() }
                 .singleOrNull()
         }
 
@@ -264,9 +289,9 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
             LLMModelTable.insert {
                 it[id] = llmModel.id
                 it[name] = llmModel.name
-                it[baseUrl] = llmModel.baseUrl
-                it[apiKeyId] = llmModel.apiKeyId
-                it[type] = llmModel.type
+                it[providerId] = llmModel.providerId
+                it[active] = llmModel.active
+                it[displayName] = llmModel.displayName
             }
             return@transaction
         }
@@ -321,6 +346,7 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
     private fun inferTablesFromDataSet(data: TestDataSet): Set<Table> {
         val required = mutableSetOf<Table>()
         if (data.apiSecrets.isNotEmpty()) required += Table.API_SECRETS
+        if (data.llmProviders.isNotEmpty()) required += Table.LLM_PROVIDERS
         if (data.chatGroups.isNotEmpty()) required += Table.CHAT_GROUPS
         if (data.chatSessions.isNotEmpty()) required += Table.CHAT_SESSIONS
         if (data.chatMessages.isNotEmpty()) required += Table.CHAT_MESSAGES

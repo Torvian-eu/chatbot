@@ -58,6 +58,7 @@ class SessionDaoExposedTest {
             TestDataSet(
                 chatGroups = listOf(TestDefaults.chatGroup1, TestDefaults.chatGroup2),
                 llmModels = listOf(TestDefaults.llmModel1, TestDefaults.llmModel2),
+                llmProviders = listOf(TestDefaults.llmProvider1, TestDefaults.llmProvider2),
                 modelSettings = listOf(TestDefaults.modelSettings1, TestDefaults.modelSettings2),
             )
         )

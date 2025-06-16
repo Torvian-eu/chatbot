@@ -43,6 +43,8 @@ class SettingsDaoExposedTest {
     private val testSettings2 = TestDefaults.modelSettings2
     private val testModel1 = TestDefaults.llmModel1
     private val testModel2 = TestDefaults.llmModel2
+    private val llmProvider1 = TestDefaults.llmProvider1
+    private val llmProvider2 = TestDefaults.llmProvider2
 
     @BeforeEach
     fun setUp() = runTest {
@@ -52,7 +54,7 @@ class SettingsDaoExposedTest {
         testDataManager = container.get()
 
         // Need to create both tables as settings reference the models table via foreign key
-        testDataManager.createTables(setOf(Table.LLM_MODELS, Table.MODEL_SETTINGS))
+        testDataManager.createTables(setOf(Table.LLM_MODELS, Table.LLM_PROVIDERS, Table.MODEL_SETTINGS))
     }
 
     @AfterEach
@@ -67,6 +69,7 @@ class SettingsDaoExposedTest {
         testDataManager.setup(
             TestDataSet(
                 llmModels = listOf(testModel1),
+                llmProviders = listOf(llmProvider1),
                 modelSettings = listOf(testSettings1)
             )
         )
@@ -115,6 +118,7 @@ class SettingsDaoExposedTest {
         testDataManager.setup(
             TestDataSet(
                 llmModels = listOf(testModel1, testModel2),
+                llmProviders = listOf(llmProvider1, llmProvider2),
                 modelSettings = listOf(testSettings1, testSettings2)
             )
         )
@@ -143,7 +147,8 @@ class SettingsDaoExposedTest {
         // Setup test data with model but no settings
         testDataManager.setup(
             TestDataSet(
-                llmModels = listOf(testModel1)
+                llmModels = listOf(testModel1),
+                llmProviders = listOf(llmProvider1)
             )
         )
 
@@ -160,6 +165,7 @@ class SettingsDaoExposedTest {
         testDataManager.setup(
             TestDataSet(
                 llmModels = listOf(testModel1, testModel2),
+                llmProviders = listOf(llmProvider1, llmProvider2),
                 modelSettings = listOf(testSettings1, testSettings2)
             )
         )
@@ -184,7 +190,8 @@ class SettingsDaoExposedTest {
         // Setup test data with model only
         testDataManager.setup(
             TestDataSet(
-                llmModels = listOf(testModel1)
+                llmModels = listOf(testModel1),
+                llmProviders = listOf(llmProvider1)
             )
         )
 
@@ -241,6 +248,7 @@ class SettingsDaoExposedTest {
         testDataManager.setup(
             TestDataSet(
                 llmModels = listOf(testModel1),
+                llmProviders = listOf(llmProvider1),
                 modelSettings = listOf(testSettings1)
             )
         )
@@ -280,7 +288,8 @@ class SettingsDaoExposedTest {
         // Setup test data
         testDataManager.setup(
             TestDataSet(
-                llmModels = listOf(testModel1)
+                llmModels = listOf(testModel1),
+                llmProviders = listOf(llmProvider1)
             )
         )
 
@@ -311,6 +320,7 @@ class SettingsDaoExposedTest {
         testDataManager.setup(
             TestDataSet(
                 llmModels = listOf(testModel1),
+                llmProviders = listOf(llmProvider1),
                 modelSettings = listOf(testSettings1)
             )
         )
@@ -336,6 +346,7 @@ class SettingsDaoExposedTest {
         testDataManager.setup(
             TestDataSet(
                 llmModels = listOf(testModel1),
+                llmProviders = listOf(llmProvider1),
                 modelSettings = listOf(testSettings1)
             )
         )

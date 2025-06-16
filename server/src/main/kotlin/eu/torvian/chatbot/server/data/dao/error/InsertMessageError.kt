@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.server.data.dao.error
 
 /**
- * Represents errors specific to the addMessage operation in MessageDao.
+ * Represents errors specific to the insertMessage operation in MessageDao.
  */
 sealed interface InsertMessageError {
     /**
@@ -13,6 +13,4 @@ sealed interface InsertMessageError {
      * Indicates that the parent message ID does not belong to the specified session.
      */
     data class ParentNotInSession(val parentId: Long, val sessionId: Long) : InsertMessageError
-
-
 }

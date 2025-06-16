@@ -10,7 +10,7 @@ import org.jetbrains.exposed.sql.ResultRow
 fun ResultRow.toLLMModel() = LLMModel(
     id = this[LLMModelTable.id].value,
     name = this[LLMModelTable.name],
-    baseUrl = this[LLMModelTable.baseUrl],
-    apiKeyId = this[LLMModelTable.apiKeyId],
-    type = this[LLMModelTable.type]
+    providerId = this[LLMModelTable.providerId].value,
+    active = this[LLMModelTable.active],
+    displayName = this[LLMModelTable.displayName]
 )

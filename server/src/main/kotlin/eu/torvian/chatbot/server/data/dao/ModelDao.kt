@@ -2,7 +2,9 @@ package eu.torvian.chatbot.server.data.dao
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.server.data.dao.error.InsertModelError
 import eu.torvian.chatbot.server.data.dao.error.ModelError
+import eu.torvian.chatbot.server.data.dao.error.UpdateModelError
 
 /**
  * Data Access Object for LLMModel entities.
@@ -29,41 +31,38 @@ interface ModelDao {
     suspend fun getModelById(id: Long): Either<ModelError.ModelNotFound, LLMModel>
 
     /**
-     * Retrieves a single LLM model by its associated API key identifier.
-     * 
-     * This method is useful for lookup operations when an API key reference is available
-     * but the model ID is not known.
-     * 
-     * @param apiKeyId The API key reference ID associated with the model.
-     * @return The matching LLMModel if found, or null if no model exists with the given API key ID.
+     * Retrieves all LLM models associated with a specific provider.
+     *
+     * @param providerId The ID of the provider to get models for.
+     * @return A list of LLMModel entities associated with the provider.
      */
-    suspend fun getModelByApiKeyId(apiKeyId: String): LLMModel?
+    suspend fun getModelsByProviderId(providerId: Long): List<LLMModel>
 
     /**
      * Creates a new LLM model in the database.
-     * 
-     * @param name The display name for the model.
-     * @param baseUrl The base URL for the LLM API endpoint.
-     * @param type The type of LLM provider (e.g., "openai", "openrouter", "custom").
-     * @param apiKeyId Optional reference ID to the securely stored API key.
-     * @return The newly created LLMModel with its assigned ID.
+     *
+     * @param name The unique identifier for the model (e.g., "gpt-3.5-turbo").
+     * @param providerId The ID of the provider that hosts this model.
+     * @param active Whether the model is currently active and available for use.
+     * @param displayName Optional display name for UI purposes.
+     * @return Either an [InsertModelError] or the newly created LLMModel with its assigned ID.
      */
-    suspend fun insertModel(name: String, baseUrl: String, type: String, apiKeyId: String?): LLMModel
+    suspend fun insertModel(name: String, providerId: Long, active: Boolean = true, displayName: String? = null): Either<InsertModelError, LLMModel>
 
     /**
      * Updates an existing LLM model in the database.
-     * 
+     *
      * All properties of the provided model will be updated, including the name,
-     * baseUrl, type, and apiKeyId.
-     * 
+     * providerId, and active status.
+     *
      * @param model The LLMModel containing the updated values.
-     * @return [Either] a [ModelError.ModelNotFound] if the model doesn't exist, or [Unit] on success.
+     * @return [Either] an [UpdateModelError] or [Unit] on success.
      */
-    suspend fun updateModel(model: LLMModel): Either<ModelError.ModelNotFound, Unit>
+    suspend fun updateModel(model: LLMModel): Either<UpdateModelError, Unit>
 
     /**
-     * Deletes an LLM model from the database.
-     * 
+     * Deletes an LLM model from the database. Also deletes associated settings.
+     *
      * @param id The unique identifier of the LLM model to delete.
      * @return [Either] a [ModelError.ModelNotFound] if the model doesn't exist, or [Unit] on success.
      */

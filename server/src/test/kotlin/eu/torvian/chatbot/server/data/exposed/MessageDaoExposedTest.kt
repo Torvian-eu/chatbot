@@ -46,6 +46,8 @@ class MessageDaoExposedTest {
     private val testAssistantMessage2 = TestDefaults.chatMessage4
     private val testModel1 = TestDefaults.llmModel1
     private val testModel2 = TestDefaults.llmModel2
+    private val testProvider1 = TestDefaults.llmProvider1
+    private val testProvider2 = TestDefaults.llmProvider2
     private val testSettings1 = TestDefaults.modelSettings1
     private val testSettings2 = TestDefaults.modelSettings2
     private val testGroup1 = TestDefaults.chatGroup1
@@ -63,6 +65,7 @@ class MessageDaoExposedTest {
             setOf(
                 Table.CHAT_GROUPS,
                 Table.LLM_MODELS,
+                Table.LLM_PROVIDERS,
                 Table.MODEL_SETTINGS,
                 Table.CHAT_SESSIONS,
                 Table.CHAT_MESSAGES,
@@ -84,6 +87,7 @@ class MessageDaoExposedTest {
             TestDataSet(
                 chatGroups = listOf(testGroup1),
                 llmModels = listOf(testModel1),
+                llmProviders = listOf(testProvider1),
                 modelSettings = listOf(testSettings1),
                 chatSessions = listOf(testSession1)
             )
@@ -103,6 +107,7 @@ class MessageDaoExposedTest {
             TestDataSet(
                 chatGroups = listOf(testGroup1, testGroup2),
                 llmModels = listOf(testModel1, testModel2),
+                llmProviders = listOf(testProvider1, testProvider2),
                 modelSettings = listOf(testSettings1, testSettings2),
                 chatSessions = listOf(testSession1, testSession2),
                 chatMessages = listOf(testUserMessage1, testAssistantMessage1, testUserMessage2, testAssistantMessage2)
@@ -139,6 +144,7 @@ class MessageDaoExposedTest {
             TestDataSet(
                 chatGroups = listOf(testGroup1),
                 llmModels = listOf(testModel1),
+                llmProviders = listOf(testProvider1),
                 modelSettings = listOf(testSettings1),
                 chatSessions = listOf(testSession1),
                 chatMessages = listOf(testUserMessage1, testAssistantMessage1)
@@ -194,6 +200,7 @@ class MessageDaoExposedTest {
             TestDataSet(
                 chatGroups = listOf(testGroup1),
                 llmModels = listOf(testModel1),
+                llmProviders = listOf(testProvider1),
                 modelSettings = listOf(testSettings1),
                 chatSessions = listOf(testSession1)
             )
@@ -231,6 +238,7 @@ class MessageDaoExposedTest {
             TestDataSet(
                 chatGroups = listOf(testGroup1),
                 llmModels = listOf(testModel1),
+                llmProviders = listOf(testProvider1),
                 modelSettings = listOf(testSettings1),
                 chatSessions = listOf(testSession1),
                 chatMessages = listOf(testUserMessage1)
@@ -284,6 +292,7 @@ class MessageDaoExposedTest {
             TestDataSet(
                 chatGroups = listOf(testGroup1, testGroup2),
                 llmModels = listOf(testModel1, testModel2),
+                llmProviders = listOf(testProvider1, testProvider2),
                 modelSettings = listOf(testSettings1, testSettings2),
                 chatSessions = listOf(testSession1, testSession2),
                 chatMessages = listOf(testUserMessage1, testUserMessage2) // testUserMessage1 is in session1, testUserMessage2 is in session2
@@ -313,6 +322,7 @@ class MessageDaoExposedTest {
             TestDataSet(
                 chatGroups = listOf(testGroup1),
                 llmModels = listOf(testModel1),
+                llmProviders = listOf(testProvider1),
                 modelSettings = listOf(testSettings1),
                 chatSessions = listOf(testSession1),
                 chatMessages = listOf(testUserMessage1)
@@ -359,6 +369,7 @@ class MessageDaoExposedTest {
             TestDataSet(
                 chatGroups = listOf(testGroup1, testGroup2),
                 llmModels = listOf(testModel1, testModel2),
+                llmProviders = listOf(testProvider1, testProvider2),
                 modelSettings = listOf(testSettings1, testSettings2),
                 chatSessions = listOf(testSession1, testSession2),
                 chatMessages = listOf(testUserMessage1, testUserMessage2) // testUserMessage1 is in session1, testUserMessage2 is in session2
@@ -409,6 +420,7 @@ class MessageDaoExposedTest {
             TestDataSet(
                 chatGroups = listOf(testGroup1),
                 llmModels = listOf(testModel1),
+                llmProviders = listOf(testProvider1),
                 modelSettings = listOf(testSettings1),
                 chatSessions = listOf(testSession1),
                 chatMessages = listOf(testUserMessage1)
@@ -451,6 +463,7 @@ class MessageDaoExposedTest {
             TestDataSet(
                 chatGroups = listOf(testGroup1),
                 llmModels = listOf(testModel1),
+                llmProviders = listOf(testProvider1),
                 modelSettings = listOf(testSettings1),
                 chatSessions = listOf(testSession1),
                 chatMessages = listOf(testUserMessage1, testAssistantMessage1)
@@ -475,6 +488,7 @@ class MessageDaoExposedTest {
             TestDataSet(
                 chatGroups = listOf(testGroup1),
                 llmModels = listOf(testModel1),
+                llmProviders = listOf(testProvider1),
                 modelSettings = listOf(testSettings1),
                 chatSessions = listOf(testSession1),
                 chatMessages = listOf(testUserMessage1, testAssistantMessage1)
@@ -503,6 +517,7 @@ class MessageDaoExposedTest {
             TestDataSet(
                 chatGroups = listOf(testGroup1),
                 llmModels = listOf(testModel1),
+                llmProviders = listOf(testProvider1),
                 modelSettings = listOf(testSettings1),
                 chatSessions = listOf(testSession1),
                 chatMessages = listOf(testUserMessage1, testAssistantMessage1)
@@ -538,6 +553,7 @@ class MessageDaoExposedTest {
             TestDataSet(
                 chatGroups = listOf(testGroup1),
                 llmModels = listOf(testModel1),
+                llmProviders = listOf(testProvider1),
                 modelSettings = listOf(testSettings1),
                 chatSessions = listOf(testSession1),
                 chatMessages = listOf(userMessage, assistantMessage)
@@ -566,6 +582,7 @@ class MessageDaoExposedTest {
             TestDataSet(
                 chatGroups = listOf(testGroup1),
                 llmModels = listOf(testModel1),
+                llmProviders = listOf(testProvider1),
                 modelSettings = listOf(testSettings1),
                 chatSessions = listOf(testSession1),
                 chatMessages = listOf(testUserMessage1, testAssistantMessage1)
@@ -594,6 +611,7 @@ class MessageDaoExposedTest {
             TestDataSet(
                 chatGroups = listOf(testGroup1),
                 llmModels = listOf(testModel1),
+                llmProviders = listOf(testProvider1),
                 modelSettings = listOf(testSettings1),
                 chatSessions = listOf(testSession1),
                 chatMessages = listOf(userMessage, assistantMessage)

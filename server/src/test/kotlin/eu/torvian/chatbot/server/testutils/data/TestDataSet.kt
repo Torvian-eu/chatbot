@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.testutils.data
 import eu.torvian.chatbot.common.models.ChatGroup
 import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.common.models.LLMProvider
 import eu.torvian.chatbot.common.models.ModelSettings
 import eu.torvian.chatbot.server.data.entities.ApiSecretEntity
 import eu.torvian.chatbot.server.data.entities.ChatSessionEntity
@@ -27,6 +28,7 @@ import eu.torvian.chatbot.server.data.entities.SessionCurrentLeafEntity
  * ```
  *
  * @property apiSecrets List of API secret entries to insert into the `api_secrets` table.
+ * @property llmProviders List of LLM provider entries to insert into the `llm_providers` table.
  * @property chatGroups List of chat group entries to insert into the `chat_groups` table.
  * @property chatSessions List of chat session entries to insert into the `chat_sessions` table.
  * @property chatMessages List of chat message entries to insert into the `chat_messages` table.
@@ -36,6 +38,7 @@ import eu.torvian.chatbot.server.data.entities.SessionCurrentLeafEntity
  */
 data class TestDataSet(
     val apiSecrets: List<ApiSecretEntity> = emptyList(),
+    val llmProviders: List<LLMProvider> = emptyList(),
     val chatGroups: List<ChatGroup> = emptyList(),
     val chatSessions: List<ChatSessionEntity> = emptyList(),
     val chatMessages: List<ChatMessage> = emptyList(),
