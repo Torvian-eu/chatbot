@@ -1,4 +1,4 @@
-package eu.torvian.chatbot.server.data.exposed
+package eu.torvian.chatbot.server.data.dao.exposed
 
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
@@ -21,7 +21,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Tests for [eu.torvian.chatbot.server.data.dao.exposed.SessionDaoExposed].
+ * Tests for [SessionDaoExposed].
  *
  * This test suite verifies the core functionality of the Exposed-based implementation of [SessionDao]:
  * - Getting all sessions

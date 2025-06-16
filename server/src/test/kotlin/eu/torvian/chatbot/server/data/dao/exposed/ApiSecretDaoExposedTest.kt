@@ -1,9 +1,8 @@
-package eu.torvian.chatbot.server.data.exposed
+package eu.torvian.chatbot.server.data.dao.exposed
 
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.server.data.dao.ApiSecretDao
-import eu.torvian.chatbot.server.data.dao.exposed.ApiSecretDaoExposed
 import eu.torvian.chatbot.server.data.dao.error.ApiSecretError
 import eu.torvian.chatbot.server.data.entities.ApiSecretEntity
 import eu.torvian.chatbot.server.domain.security.EncryptedSecret

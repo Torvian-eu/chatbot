@@ -1,4 +1,4 @@
-package eu.torvian.chatbot.server.data.exposed
+package eu.torvian.chatbot.server.data.dao.exposed
 
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
@@ -19,7 +19,7 @@ import org.junit.jupiter.api.Test
 import kotlin.test.*
 
 /**
- * Tests for [eu.torvian.chatbot.server.data.dao.exposed.MessageDaoExposed].
+ * Tests for [MessageDaoExposed].
  *
  * This test suite verifies the core functionality of the Exposed-based implementation of [MessageDao]:
  * - Getting messages by session ID
