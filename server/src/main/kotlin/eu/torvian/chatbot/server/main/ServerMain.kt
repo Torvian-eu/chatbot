@@ -10,6 +10,7 @@ import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.server.plugins.contentnegotiation.*
+import io.ktor.server.resources.Resources
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import org.apache.logging.log4j.Level
@@ -23,30 +24,49 @@ import org.koin.ktor.plugin.Koin
 private val logger: Logger = LogManager.getLogger("ServerMain")
 
 /**
- * Main entry point for the server application.
- * Sets up dependency injection, database, and starts the Ktor server.
+ * Main entry point for the chatbot server application.
+ * Sets up Koin dependency injection, configures the database,
+ * installs necessary plugins, and starts the Ktor server.
  */
 fun main() {
+    // Configure logging level
     Configurator.setRootLevel(Level.DEBUG)
     logger.info("Starting Chatbot Server...")
 
-    // Start Ktor server
+    // Start Ktor embedded server
     embeddedServer(Netty, port = 8080, host = "localhost") {
+        // Configure Koin DI FIRST, as plugins and routing will depend on it
         configureKoin()
+
+        // Install the ContentNegotiation plugin for JSON serialization
+        install(ContentNegotiation) {
+            json(Json {
+                ignoreUnknownKeys = true
+                isLenient = true
+                prettyPrint = false
+            })
+        }
+
+        // Install Resources plugin for type-safe routing
+        install(Resources)
+
+        // Configure the database schema (usually blocking)
         configureDatabase()
-        configureSerialization()
+
+        // Configure routing using the ApiRoutes implementation from Koin
         configureRouting()
 
+        // Log successful startup information
         logger.info("Server started successfully on http://localhost:8080")
         logger.info("API endpoints available at http://localhost:8080/api/v1/")
-    }.start(wait = true)
+    }.start(wait = true) // Start the server and wait until it's stopped
 }
 
 /**
- * Configures Koin for dependency injection.
+ * Configures Koin for dependency injection within the Application.
  */
 fun Application.configureKoin() {
-    // Configuration
+    // Configuration values (e.g., database credentials, encryption keys)
     val databaseConfig = DatabaseConfig(
         vendor = "sqlite",
         type = "file", // Use file-based SQLite for persistence
@@ -55,13 +75,12 @@ fun Application.configureKoin() {
         user = null,
         password = null
     )
-
     val encryptionConfig = EncryptionConfig(
         keyVersion = 1,
-        masterKey = "default-master-key-change-in-production"
+        masterKey = "default-master-key-change-in-production" // **IMPORTANT:** Change this in production!
     )
 
-    // Initialize Koin
+    // Initialize Koin plugin with defined modules
     install(Koin) {
         modules(
             configModule(databaseConfig, encryptionConfig),
@@ -73,17 +92,18 @@ fun Application.configureKoin() {
         )
     }
 
-    // Store the DI container in the application attributes for later use
+    // Store the DI container in the application attributes for later manual access if needed
     val container = KoinDIContainer(getKoin())
     attributes.put(DIContainerKey, container)
 }
 
 /**
- * Configures the database schema.
+ * Configures the database schema for the application.
  */
 fun Application.configureDatabase() {
     runBlocking {
         val dataManager: DataManager = get()
+        // Drop and create tables - adjust as needed for production (migrations!)
         dataManager.dropTables()
         dataManager.createTables()
         logger.info("Database initialized successfully")
@@ -91,20 +111,9 @@ fun Application.configureDatabase() {
 }
 
 /**
- * Configures JSON serialization for the Ktor application.
- */
-fun Application.configureSerialization() {
-    install(ContentNegotiation) {
-        json(Json {
-            ignoreUnknownKeys = true
-            isLenient = true
-            prettyPrint = false
-        })
-    }
-}
-
-/**
- * Configures routing for the Ktor application.
+ * Configures routing for the Ktor application using the ApiRoutes interface.
+ * This function gets the ApiRoutes implementation from Koin and delegates routing setup to it.
+ * Keeps the original structure as requested.
  */
 fun Application.configureRouting() {
     val apiRoutes: ApiRoutes = get()

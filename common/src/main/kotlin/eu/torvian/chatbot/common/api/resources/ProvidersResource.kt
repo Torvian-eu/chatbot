@@ -1,0 +1,28 @@
+package eu.torvian.chatbot.common.api.resources
+
+import io.ktor.resources.*
+
+/**
+ * Resource definitions for the /api/v1/providers endpoints.
+ */
+@Resource("providers")
+class ProvidersResource(val parent: Api = Api()) {
+    /**
+     * Resource for a specific provider by ID: /api/v1/providers/{providerId}
+     */
+    @Resource("{providerId}")
+    class ById(val parent: ProvidersResource = ProvidersResource(), val providerId: Long) {
+        /**
+         * Resource for updating a provider's credential: /api/v1/providers/{providerId}/credential
+         */
+        @Resource("credential")
+        class Credential(val parent: ById)
+
+        /**
+         * Resource for getting models for a provider: /api/v1/providers/{providerId}/models
+         */
+        @Resource("models")
+        class Models(val parent: ById)
+    }
+}
+
