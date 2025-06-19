@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.common.misc.di
 
+import org.koin.core.Koin
 import org.koin.core.KoinApplication
 import kotlin.reflect.KClass
 import org.koin.core.module.Module
@@ -10,10 +11,10 @@ import org.koin.core.module.Module
  * This class provides a bridge between the framework-agnostic DIContainer
  * and the Koin dependency injection framework.
  *
- * @param koinApp The KoinApplication instance to use for dependency resolution.
+ * @param koin The underlying Koin instance.
  */
-class KoinDIContainer(val koinApp: KoinApplication) : DIContainer {
-    private val koin = koinApp.koin
+class KoinDIContainer(private val koin: Koin) : DIContainer {
+    constructor(koinApplication: KoinApplication) : this(koinApplication.koin)
 
     override fun <T: Any> get(clazz: KClass<T>): T = koin.get(clazz)
 
@@ -24,9 +25,9 @@ class KoinDIContainer(val koinApp: KoinApplication) : DIContainer {
      * This should be called when the container is no longer needed,
      * especially in test scenarios to ensure proper cleanup.
      */
-    override fun close() = koinApp.close()
+    override fun close() = koin.close()
 
     fun addModule(module: Module) {
-        koinApp.modules(module)
+        koin.loadModules(listOf(module))
     }
 }
