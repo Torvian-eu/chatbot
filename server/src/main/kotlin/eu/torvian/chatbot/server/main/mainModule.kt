@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.server.main
 
+import eu.torvian.chatbot.server.ktor.routes.ApiRoutesKtor
 import io.ktor.server.application.Application
 import org.koin.dsl.module
 
@@ -10,5 +11,5 @@ import org.koin.dsl.module
 fun mainModule(application: Application) = module {
     single { application }
     single<DataManager> { ExposedDataManager(get()) } // Assuming ExposedDataManager is a dependency
-    single<ApiRoutes> { ApiRoutesKtor(get(), get(), get(), get(), get(), get(), get()) }
+    single { ApiRoutesKtor( get(), get(), get(), get(), get(), get()) }
 }

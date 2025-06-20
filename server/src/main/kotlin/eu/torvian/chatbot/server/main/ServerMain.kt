@@ -5,12 +5,14 @@ import eu.torvian.chatbot.common.misc.di.KoinDIContainer
 import eu.torvian.chatbot.server.domain.config.DatabaseConfig
 import eu.torvian.chatbot.server.domain.security.EncryptionConfig
 import eu.torvian.chatbot.server.koin.*
+import eu.torvian.chatbot.server.ktor.routes.ApiRoutesKtor
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.resources.Resources
+import io.ktor.server.routing.routing
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import org.apache.logging.log4j.Level
@@ -53,7 +55,7 @@ fun main() {
         // Configure the database schema (usually blocking)
         configureDatabase()
 
-        // Configure routing using the ApiRoutes implementation from Koin
+        // Configure routing
         configureRouting()
 
         // Log successful startup information
@@ -111,11 +113,11 @@ fun Application.configureDatabase() {
 }
 
 /**
- * Configures routing for the Ktor application using the ApiRoutes interface.
- * This function gets the ApiRoutes implementation from Koin and delegates routing setup to it.
- * Keeps the original structure as requested.
+ * Configures routing for the Ktor application.
  */
 fun Application.configureRouting() {
-    val apiRoutes: ApiRoutes = get()
-    apiRoutes.configureRouting()
+    val apiRoutesKtor: ApiRoutesKtor = get()
+    routing {
+        apiRoutesKtor.configureAllRoutes(this)
+    }
 }
