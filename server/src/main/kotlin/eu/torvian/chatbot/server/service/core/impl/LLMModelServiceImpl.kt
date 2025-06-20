@@ -29,7 +29,7 @@ class LLMModelServiceImpl(
         }
     }
 
-    override suspend fun getModelById(id: Long): Either<GetModelError.ModelNotFound, LLMModel> =
+    override suspend fun getModelById(id: Long): Either<GetModelError, LLMModel> =
         transactionScope.transaction {
             either {
                 withError({ daoError: ModelError.ModelNotFound ->

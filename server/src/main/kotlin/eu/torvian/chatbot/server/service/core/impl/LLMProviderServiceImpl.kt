@@ -30,7 +30,7 @@ class LLMProviderServiceImpl(
         }
     }
 
-    override suspend fun getProviderById(id: Long): Either<GetProviderError.ProviderNotFound, LLMProvider> =
+    override suspend fun getProviderById(id: Long): Either<GetProviderError, LLMProvider> =
         transactionScope.transaction {
             either {
                 withError({ daoError: LLMProviderError.LLMProviderNotFound ->

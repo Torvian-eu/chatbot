@@ -84,7 +84,7 @@ class MessageServiceImpl(
                     ?: raise(ProcessNewMessageError.ModelConfigurationError("No settings selected for session"))
 
                 // Fetch Model
-                val model = withError({ serviceError: GetModelError.ModelNotFound ->
+                val model = withError({ serviceError: GetModelError ->
                     throw IllegalStateException("Model with ID $modelId not found after validation")
                 }) {
                     llmModelService.getModelById(modelId).bind()
@@ -104,7 +104,7 @@ class MessageServiceImpl(
                 // Get provider and API Key from the model's provider (if the provider requires one)
                 val (provider, apiKey) = run {
                     // First get the provider for this model
-                    val provider = withError({ serviceError: GetProviderError.ProviderNotFound ->
+                    val provider = withError({ serviceError: GetProviderError ->
                         throw IllegalStateException("Provider not found for model ID $modelId (provider ID: ${model.providerId})")
                     }) {
                         llmProviderService.getProviderById(model.providerId).bind()

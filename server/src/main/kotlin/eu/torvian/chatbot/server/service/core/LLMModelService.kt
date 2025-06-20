@@ -17,9 +17,9 @@ interface LLMModelService {
      * Retrieves a single LLM model by its unique identifier.
      *
      * @param id The unique identifier of the LLM model to retrieve.
-     * @return [Either] a [GetModelError.ModelNotFound] if the model doesn't exist, or the [LLMModel].
+     * @return [Either] a [GetModelError], or the [LLMModel].
      */
-    suspend fun getModelById(id: Long): Either<GetModelError.ModelNotFound, LLMModel>
+    suspend fun getModelById(id: Long): Either<GetModelError, LLMModel>
 
     /**
      * Retrieves all LLM models associated with a specific provider.

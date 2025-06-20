@@ -18,9 +18,9 @@ interface LLMProviderService {
      * Retrieves a single LLM provider configuration by its unique identifier.
      *
      * @param id The unique identifier of the provider to retrieve.
-     * @return [Either] a [GetProviderError.ProviderNotFound] if the provider doesn't exist, or the [LLMProvider].
+     * @return [Either] a [GetProviderError], or the [LLMProvider].
      */
-    suspend fun getProviderById(id: Long): Either<GetProviderError.ProviderNotFound, LLMProvider>
+    suspend fun getProviderById(id: Long): Either<GetProviderError, LLMProvider>
 
     /**
      * Adds a new LLM provider configuration.
