@@ -240,11 +240,6 @@ class MessageDaoExposed(
                     MessageAddChildError.ChildNotFound(childId)
                 }.bind()
 
-                // Check if child already has a parent
-                ensure(childMessage.parentMessageId == null) {
-                    MessageAddChildError.ChildAlreadyHasParent(childId, childMessage.parentMessageId!!)
-                }
-
                 // Check if child already exists in parent's children list
                 ensure(childId !in parentMessage.childrenMessageIds) {
                     MessageAddChildError.ChildAlreadyExists(parentId, childId)

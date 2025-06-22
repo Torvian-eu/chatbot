@@ -20,11 +20,6 @@ sealed interface MessageAddChildError {
     data class ChildAlreadyExists(val parentId: Long, val childId: Long) : MessageAddChildError
 
     /**
-     * Indicates that the child message already has a parent.
-     */
-    data class ChildAlreadyHasParent(val childId: Long, val currentParentId: Long) : MessageAddChildError
-
-    /**
      * Indicates that the child message is the parent message itself.
      */
     data class ChildIsParent(val parentId: Long, val childId: Long) : MessageAddChildError

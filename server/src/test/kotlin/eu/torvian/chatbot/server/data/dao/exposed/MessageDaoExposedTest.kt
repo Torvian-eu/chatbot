@@ -576,32 +576,6 @@ class MessageDaoExposedTest {
     }
 
     @Test
-    fun `addChildToMessage should return ChildAlreadyHasParent when child already has a parent`() = runTest {
-        // Setup test data with parent-child relationship already established
-        testDataManager.setup(
-            TestDataSet(
-                chatGroups = listOf(testGroup1),
-                llmModels = listOf(testModel1),
-                llmProviders = listOf(testProvider1),
-                modelSettings = listOf(testSettings1),
-                chatSessions = listOf(testSession1),
-                chatMessages = listOf(testUserMessage1, testAssistantMessage1)
-            )
-        )
-
-        // Try to add the same child again
-        val result = messageDao.addChildToMessage(testUserMessage1.id, testAssistantMessage1.id)
-
-        // Verify
-        assertTrue(result.isLeft(), "Expected Left result for child already has parent")
-        val error = result.leftOrNull()
-        assertNotNull(error, "Expected non-null error")
-        assertTrue(error is MessageAddChildError.ChildAlreadyHasParent, "Expected ChildAlreadyHasParent error")
-        assertEquals(testAssistantMessage1.id, error.childId, "Expected correct child ID in error")
-        assertEquals(testUserMessage1.id, error.currentParentId, "Expected correct current parent ID in error")
-    }
-
-    @Test
     fun `addChildToMessage should return ChildAlreadyExists when child is in parent's children list but has no parent`() = runTest {
         // Setup test data with child in parent's children list but child has no parent (inconsistent state for testing)
         val userMessage = testUserMessage1.copy(childrenMessageIds = listOf(testAssistantMessage1.id))
