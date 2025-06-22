@@ -1,0 +1,185 @@
+package eu.torvian.chatbot.server.ktor.routes
+
+import eu.torvian.chatbot.common.api.ApiError
+import eu.torvian.chatbot.common.api.CommonApiErrorCodes
+import eu.torvian.chatbot.common.api.resources.MessagesResource
+import eu.torvian.chatbot.common.api.resources.href
+import eu.torvian.chatbot.common.misc.di.DIContainer
+import eu.torvian.chatbot.common.misc.di.get
+import eu.torvian.chatbot.common.models.ChatMessage
+import eu.torvian.chatbot.common.models.UpdateMessageRequest
+import eu.torvian.chatbot.server.testutils.data.Table
+import eu.torvian.chatbot.server.testutils.data.TestDataManager
+import eu.torvian.chatbot.server.testutils.data.TestDataSet
+import eu.torvian.chatbot.server.testutils.data.TestDefaults
+import eu.torvian.chatbot.server.testutils.koin.defaultTestContainer
+import eu.torvian.chatbot.server.testutils.ktor.KtorTestApp
+import eu.torvian.chatbot.server.testutils.ktor.myTestApplication
+import io.ktor.client.call.*
+import io.ktor.client.request.*
+import io.ktor.http.*
+import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+
+/**
+ * Integration tests for Message API routes.
+ *
+ * This test suite verifies the HTTP endpoints for message management:
+ * - PUT /api/v1/messages/{messageId}/content - Update message content by ID
+ * - DELETE /api/v1/messages/{messageId} - Delete message by ID
+ */
+class MessageRoutesTest {
+    private lateinit var container: DIContainer
+    private lateinit var messageTestApplication: KtorTestApp
+    private lateinit var testDataManager: TestDataManager
+
+    // Test data
+    private val testSession = TestDefaults.chatSession1.copy(id = 1L)
+    private val testModel = TestDefaults.llmModel1.copy(id = 1L)
+    private val testSettings = TestDefaults.modelSettings1.copy(id = 1L)
+
+    private val testUserMessage = ChatMessage.UserMessage(
+        id = 1L,
+        sessionId = testSession.id,
+        content = "Initial user message content",
+        createdAt = TestDefaults.DEFAULT_INSTANT,
+        updatedAt = TestDefaults.DEFAULT_INSTANT,
+        parentMessageId = null,
+        childrenMessageIds = listOf(2L)
+    )
+
+    private val testAssistantMessage = ChatMessage.AssistantMessage(
+        id = 2L,
+        sessionId = testSession.id,
+        content = "Initial assistant message content",
+        createdAt = TestDefaults.DEFAULT_INSTANT,
+        updatedAt = TestDefaults.DEFAULT_INSTANT,
+        parentMessageId = 1L,
+        childrenMessageIds = emptyList(),
+        modelId = testModel.id,
+        settingsId = testSettings.id
+    )
+
+    @BeforeEach
+    fun setUp() = runTest {
+        container = defaultTestContainer()
+        val apiRoutesKtor: ApiRoutesKtor = container.get()
+
+        messageTestApplication = myTestApplication(
+            container = container,
+            routing = {
+                apiRoutesKtor.configureMessageRoutes(this)
+            }
+        )
+
+        testDataManager = container.get()
+        // Need sessions, models, settings, and messages tables
+        testDataManager.setup(
+            dataSet = TestDataSet(
+                chatSessions = listOf(testSession),
+                llmProviders = listOf(TestDefaults.llmProvider1),
+                llmModels = listOf(testModel),
+                modelSettings = listOf(testSettings),
+                chatGroups = listOf(TestDefaults.chatGroup1)
+            )
+        )
+        testDataManager.createTables(setOf(Table.CHAT_MESSAGES, Table.ASSISTANT_MESSAGES)) // Messages table is created separately
+    }
+
+    @AfterEach
+    fun tearDown() = runTest {
+        testDataManager.cleanup()
+        container.close()
+    }
+
+    // --- PUT /api/v1/messages/{messageId}/content Tests ---
+
+    @Test
+    fun `PUT message content should update message successfully`() = messageTestApplication {
+        // Arrange
+        testDataManager.insertChatMessage(testUserMessage)
+        val newContent = "Updated user message content"
+        val updateRequest = UpdateMessageRequest(content = newContent)
+
+        // Act
+        val response = client.put(href(MessagesResource.ById.Content(parent = MessagesResource.ById(messageId = testUserMessage.id)))) {
+            contentType(ContentType.Application.Json)
+            setBody(updateRequest)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.OK, response.status)
+        val updatedMessage = response.body<ChatMessage>()
+        assertEquals(testUserMessage.id, updatedMessage.id)
+        assertEquals(newContent, updatedMessage.content)
+
+        // Verify the message was actually updated in the database
+        val retrievedMessage = testDataManager.getChatMessage(testUserMessage.id)
+        assertNotNull(retrievedMessage)
+        assertEquals(newContent, retrievedMessage.content)
+    }
+
+    @Test
+    fun `PUT message content with non-existent ID should return 404`() = messageTestApplication {
+        // Arrange
+        val nonExistentId = 999L
+        val updateRequest = UpdateMessageRequest(content = "Some content")
+
+        // Act
+        val response = client.put(href(MessagesResource.ById.Content(parent = MessagesResource.ById(messageId = nonExistentId)))) {
+            contentType(ContentType.Application.Json)
+            setBody(updateRequest)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.NotFound, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
+        assertEquals(404, error.statusCode)
+        assertEquals("Message not found", error.message)
+        assert(error.details?.containsKey("messageId") == true)
+        assertEquals(nonExistentId.toString(), error.details?.get("messageId"))
+    }
+
+    // --- DELETE /api/v1/messages/{messageId} Tests ---
+
+    @Test
+    fun `DELETE message should remove the message successfully`() = messageTestApplication {
+        // Arrange
+        testDataManager.insertChatMessage(testUserMessage)
+        testDataManager.insertChatMessage(testAssistantMessage) // Insert child message too
+
+        // Act
+        val response = client.delete(href(MessagesResource.ById(messageId = testUserMessage.id)))
+
+        // Assert
+        assertEquals(HttpStatusCode.NoContent, response.status)
+
+        // Verify the message was actually deleted
+        val retrievedMessage = testDataManager.getChatMessage(testUserMessage.id)
+        assertNull(retrievedMessage)
+        // Note: Depending on DAO implementation, deleting a parent might delete children.
+        // This test only verifies the parent is gone. A separate DAO test might verify cascade.
+    }
+
+    @Test
+    fun `DELETE message with non-existent ID should return 404`() = messageTestApplication {
+        // Act
+        val nonExistentId = 999L
+        val response = client.delete(href(MessagesResource.ById(messageId = nonExistentId)))
+
+        // Assert
+        assertEquals(HttpStatusCode.NotFound, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
+        assertEquals(404, error.statusCode)
+        assertEquals("Message not found", error.message)
+        assert(error.details?.containsKey("messageId") == true)
+        assertEquals(nonExistentId.toString(), error.details?.get("messageId"))
+    }
+}
