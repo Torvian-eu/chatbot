@@ -47,15 +47,15 @@ object TestDefaults {
     // --- Encrypted Secrets ---
 
     val encryptedSecret1 = EncryptedSecret(
-        encryptedSecret = "encrypted_secret1",
-        encryptedDEK = "encrypted_dek1",
+        encryptedSecret = "ZyJpXUmHp3Yinui9+R2U3YfyLMf8haI57+OqMiTtj4g=", // "sk-new-key"
+        encryptedDEK = "QbC54oQAzGbJz0wafIaiKcdxX3NZBNGBtohSNz+rpgJwIk8uAlqN6UASfDPqQGNw9P29hIWDT/7hcpgZdnDBQg==",
         keyVersion = 1
     )
 
     // --- Test Dataset Entries (representing rows for insertion) ---
 
     val apiSecret1 = ApiSecretEntity(
-        alias = "alias1",
+        alias = "openai-key",
         encryptedCredential = encryptedSecret1.encryptedSecret,
         wrappedDek = encryptedSecret1.encryptedDEK,
         keyVersion = encryptedSecret1.keyVersion,
