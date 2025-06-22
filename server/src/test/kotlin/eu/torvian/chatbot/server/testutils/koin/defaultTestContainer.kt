@@ -4,6 +4,7 @@ import eu.torvian.chatbot.common.misc.di.KoinDIContainer
 import eu.torvian.chatbot.server.koin.daoModule
 import eu.torvian.chatbot.server.koin.databaseModule
 import eu.torvian.chatbot.server.koin.miscModule
+import eu.torvian.chatbot.server.koin.serviceModule
 import org.koin.dsl.koinApplication
 
 /**
@@ -25,7 +26,7 @@ fun defaultTestContainer() = KoinDIContainer(
             defaultTestConfigModule(),
             databaseModule(),
             daoModule(),
-//            serviceModule(),
+            serviceModule(),
             miscModule(),
             testSetupModule()
         )
