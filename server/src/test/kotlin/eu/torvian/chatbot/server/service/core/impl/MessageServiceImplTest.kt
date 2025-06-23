@@ -12,9 +12,10 @@ import eu.torvian.chatbot.server.service.core.LLMProviderService
 import eu.torvian.chatbot.server.service.core.ModelSettingsService
 import eu.torvian.chatbot.server.service.core.error.message.*
 import eu.torvian.chatbot.server.service.llm.LLMApiClient
+import eu.torvian.chatbot.server.service.llm.LLMCompletionResult
+import eu.torvian.chatbot.server.service.llm.LLMCompletionError
 import eu.torvian.chatbot.server.service.security.CredentialManager
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
-import eu.torvian.chatbot.server.domain.llm.OpenAiApiModels
 import io.mockk.*
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Instant
@@ -107,25 +108,25 @@ class MessageServiceImplTest {
         customParamsJson = null
     )
 
-    private val mockLlmResponse = OpenAiApiModels.ChatCompletionResponse(
+    private val mockLlmResponse = LLMCompletionResult(
         id = "test-response-id",
-        `object` = "chat.completion",
-        created = 1234567890L,
-        model = "gpt-3.5-turbo",
         choices = listOf(
-            OpenAiApiModels.ChatCompletionResponse.Choice(
-                index = 0,
-                message = OpenAiApiModels.ChatCompletionResponse.Choice.Message(
-                    role = "assistant",
-                    content = "I'm doing well, thank you!"
-                ),
-                finish_reason = "stop"
+            LLMCompletionResult.CompletionChoice(
+                role = "assistant",
+                content = "I'm doing well, thank you!",
+                finishReason = "stop",
+                index = 0
             )
         ),
-        usage = OpenAiApiModels.ChatCompletionResponse.Usage(
-            prompt_tokens = 10,
-            completion_tokens = 5,
-            total_tokens = 15
+        usage = LLMCompletionResult.UsageStats(
+            promptTokens = 10,
+            completionTokens = 5,
+            totalTokens = 15
+        ),
+        metadata = mapOf(
+            "api_object" to "chat.completion",
+            "api_created" to 1234567890L,
+            "api_model" to "gpt-3.5-turbo"
         )
     )
 
@@ -413,7 +414,7 @@ class MessageServiceImplTest {
         coEvery { messageDao.addChildToMessage(3L, 4L) } returns Unit.right()
         coEvery { messageDao.getMessagesBySessionId(sessionId) } returns listOf(testMessage1, userMessage)
         coEvery { llmApiClient.completeChat(any(), testModel, testProvider, testSettings, "api-key") } returns mockLlmResponse.right()
-        coEvery { messageDao.insertAssistantMessage(sessionId, mockLlmResponse.choices[0].message.content, userMessage.id, testModel.id, testSettings.id) } returns assistantMessage.right()
+        coEvery { messageDao.insertAssistantMessage(sessionId, mockLlmResponse.choices[0].content, userMessage.id, testModel.id, testSettings.id) } returns assistantMessage.right()
         coEvery { sessionDao.updateSessionLeafMessageId(sessionId, assistantMessage.id) } returns Unit.right()
 
         // Act
@@ -474,7 +475,7 @@ class MessageServiceImplTest {
         coEvery { messageDao.insertUserMessage(sessionId, content, null) } returns userMessage.right()
         coEvery { messageDao.addChildToMessage(any(), any()) } returns Unit.right()
         coEvery { messageDao.getMessagesBySessionId(sessionId) } returns listOf(userMessage)
-        coEvery { llmApiClient.completeChat(any(), testModel, testProvider, testSettings, "api-key") } returns "API Error".left()
+        coEvery { llmApiClient.completeChat(any(), testModel, testProvider, testSettings, "api-key") } returns LLMCompletionError.NetworkError("API Error", null).left()
 
         // Act
         val result = messageService.processNewMessage(sessionId, content, null)
