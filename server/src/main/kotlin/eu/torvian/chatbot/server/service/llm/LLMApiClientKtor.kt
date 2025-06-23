@@ -119,7 +119,7 @@ class LLMApiClientKtor(
                 // If status is non-2xx, delegate error processing to the strategy
                 logger.debug("Processing error response with strategy ${strategy::class.simpleName}")
                 val apiError = strategy.processErrorResponse(httpResponse.status.value, responseBody)
-                logger.error("LLM API ${provider.name} returned error (Status: ${httpResponse.status.value}): ${apiError}")
+                logger.error("LLM API ${provider.name} returned error (Status: ${httpResponse.status.value}): $apiError")
                 return apiError.left() // Return the specific API error provided by the strategy
             }
 
