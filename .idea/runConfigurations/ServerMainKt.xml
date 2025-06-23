@@ -1,0 +1,24 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="ServerMainKt" type="KtorApplicationConfigurationType" factoryName="Ktor" nameIsGenerated="true">
+    <option name="MAIN_CLASS_NAME" value="eu.torvian.chatbot.server.main.ServerMainKt" />
+    <module name="chatbot.server.main" />
+    <extension name="coverage">
+      <pattern>
+        <option name="PATTERN" value="eu.torvian.chatbot.server.main.*" />
+        <option name="ENABLED" value="true" />
+      </pattern>
+    </extension>
+    <option name="alternativeJrePath" />
+    <option name="alternativeJrePathEnabled" value="false" />
+    <option name="includeProvidedScope" value="false" />
+    <option name="mainClass" value="eu.torvian.chatbot.server.main.ServerMainKt" />
+    <option name="passParentEnvs" value="true" />
+    <option name="programParameters" value="" />
+    <option name="shortenCommandLine" />
+    <option name="vmParameters" />
+    <option name="workingDirectory" value="C:\Users\Rogier\Documents\MyData\MyProjects\Chatbot\chatbot" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

@@ -44,5 +44,8 @@ bin/
 ### Mac OS ###
 .DS_Store
 
-### Augment Code ###
+### Augment Code plugin ###
 .idea/AugmentWebviewStateStore.xml
+
+### Copy File Content plugin ###
+CopyFileContentSettings.xml
