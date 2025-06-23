@@ -40,6 +40,11 @@ enum class Table {
     API_SECRETS,
 
     /**
+     * Table for storing LLM provider configurations.
+     */
+    LLM_PROVIDERS,
+
+    /**
      * Table for storing session current leaf message relationships.
      * This table breaks the circular dependency between sessions and messages.
      */

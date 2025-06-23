@@ -3,6 +3,8 @@ package eu.torvian.chatbot.server.testutils.data
 import eu.torvian.chatbot.common.models.ChatGroup
 import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.common.models.LLMProvider
+import eu.torvian.chatbot.common.models.LLMProviderType
 import eu.torvian.chatbot.common.models.ModelSettings
 import eu.torvian.chatbot.server.data.entities.ApiSecretEntity
 import eu.torvian.chatbot.server.data.entities.ChatSessionEntity
@@ -45,15 +47,15 @@ object TestDefaults {
     // --- Encrypted Secrets ---
 
     val encryptedSecret1 = EncryptedSecret(
-        encryptedSecret = "encrypted_secret1",
-        encryptedDEK = "encrypted_dek1",
+        encryptedSecret = "ZyJpXUmHp3Yinui9+R2U3YfyLMf8haI57+OqMiTtj4g=", // "sk-new-key"
+        encryptedDEK = "QbC54oQAzGbJz0wafIaiKcdxX3NZBNGBtohSNz+rpgJwIk8uAlqN6UASfDPqQGNw9P29hIWDT/7hcpgZdnDBQg==",
         keyVersion = 1
     )
 
     // --- Test Dataset Entries (representing rows for insertion) ---
 
     val apiSecret1 = ApiSecretEntity(
-        alias = "alias1",
+        alias = "openai-key",
         encryptedCredential = encryptedSecret1.encryptedSecret,
         wrappedDek = encryptedSecret1.encryptedDEK,
         keyVersion = encryptedSecret1.keyVersion,
@@ -73,20 +75,38 @@ object TestDefaults {
         createdAt = DEFAULT_INSTANT
     )
 
+    val llmProvider1 = LLMProvider(
+        id = 1L,
+        apiKeyId = "openai-key",
+        name = "OpenAI Production",
+        description = "OpenAI API for production use",
+        baseUrl = "https://api.openai.com/v1",
+        type = LLMProviderType.OPENAI
+    )
+
+    val llmProvider2 = LLMProvider(
+        id = 2L,
+        apiKeyId = "anthropic-key",
+        name = "Anthropic Production",
+        description = "Anthropic API for production use",
+        baseUrl = "https://api.anthropic.com/v1",
+        type = LLMProviderType.ANTHROPIC
+    )
+
     val llmModel1 = LLMModel(
         id = 1L,
-        name = "GPT-4",
-        baseUrl = "https://api.openai.com/v1",
-        apiKeyId = "openai-key",
-        type = "openai"
+        name = "gpt-4",
+        providerId = llmProvider1.id,
+        active = true,
+        displayName = "GPT-4"
     )
 
     val llmModel2 = LLMModel(
         id = 2L,
-        name = "Claude-3",
-        baseUrl = "https://api.anthropic.com/v1",
-        apiKeyId = "anthropic-key",
-        type = "anthropic"
+        name = "claude-3-sonnet-20240229",
+        providerId = llmProvider2.id,
+        active = true,
+        displayName = "Claude 3 Sonnet"
     )
 
     val modelSettings1 = ModelSettings(

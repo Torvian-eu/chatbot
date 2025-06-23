@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.server.koin
 
+import eu.torvian.chatbot.server.ktor.routes.ApiRoutesKtor
 import eu.torvian.chatbot.server.utils.transactions.ExposedTransactionScope
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
 import org.koin.dsl.module
@@ -9,6 +10,7 @@ import org.koin.dsl.module
  *
  * This module includes:
  * - An instance of [TransactionScope] using [ExposedTransactionScope].
+ * - An instance of [ApiRoutesKtor] for configuring Ktor routes.
  *
  * @return A Koin module with miscellaneous dependencies.
  */
@@ -16,4 +18,5 @@ fun miscModule() = module {
     single<TransactionScope> {
         ExposedTransactionScope(get())
     }
+    single { ApiRoutesKtor( get(), get(), get(), get(), get(), get()) }
 }

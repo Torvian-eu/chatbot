@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.koin
 import eu.torvian.chatbot.server.data.dao.*
 import eu.torvian.chatbot.server.data.dao.exposed.ApiSecretDaoExposed
 import eu.torvian.chatbot.server.data.dao.exposed.GroupDaoExposed
+import eu.torvian.chatbot.server.data.dao.exposed.LLMProviderDaoExposed
 import eu.torvian.chatbot.server.data.dao.exposed.MessageDaoExposed
 import eu.torvian.chatbot.server.data.dao.exposed.ModelDaoExposed
 import eu.torvian.chatbot.server.data.dao.exposed.SessionDaoExposed
@@ -20,6 +21,7 @@ import org.koin.dsl.module
 fun daoModule() = module {
     single<ApiSecretDao> { ApiSecretDaoExposed(get()) }
     single<GroupDao> { GroupDaoExposed(get()) }
+    single<LLMProviderDao> { LLMProviderDaoExposed(get()) }
     single<SessionDao> { SessionDaoExposed(get(), get()) }
     single<MessageDao> { MessageDaoExposed(get()) }
     single<ModelDao> { ModelDaoExposed(get()) }

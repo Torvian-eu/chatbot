@@ -4,17 +4,16 @@ import kotlinx.serialization.Serializable
 
 /**
  * Request body for adding a new LLM model configuration.
- * Includes the raw API key which is handled securely by the backend.
  *
- * @property name The display name of the model.
- * @property baseUrl The base URL for the LLM API endpoint.
- * @property type The type of LLM provider.
- * @property apiKey The raw API key provided by the user. Passed once for secure storage by the backend.
+ * @property name The unique identifier for the model (e.g., "gpt-3.5-turbo", "gpt-4").
+ * @property providerId The ID of the provider that hosts this model.
+ * @property active Whether the model is currently active and available for use.
+ * @property displayName Optional display name for UI purposes.
  */
 @Serializable
 data class AddModelRequest(
     val name: String,
-    val baseUrl: String,
-    val type: String,
-    val apiKey: String? = null
+    val providerId: Long,
+    val active: Boolean = true,
+    val displayName: String? = null
 )

@@ -35,6 +35,7 @@ dependencies {
     // Testing dependencies
     testImplementation(libs.bundles.ktor.server.test)  // Ktor server testing
     testImplementation(libs.bundles.ktor.client)       // Ktor client-related dependencies
+    testImplementation(libs.ktor.client.mock)          // Ktor client mock engine for testing
     testImplementation(libs.kotlin.test)               // Kotlin test framework
     testImplementation(libs.bundles.koin.test)         // Koin testing support
     testImplementation(libs.mockk)                     // Mocking library

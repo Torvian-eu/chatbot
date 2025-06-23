@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.server.testutils.data
 
+import eu.torvian.chatbot.common.models.LLMProvider
 import eu.torvian.chatbot.common.models.ChatGroup
 import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.common.models.LLMModel
@@ -196,6 +197,21 @@ interface TestDataManager {
      * @return The model settings if found, null otherwise.
      */
     suspend fun getModelSettings(id: Long): ModelSettings?
+
+    /**
+     * Inserts an LLM provider into the database. Creates the table if it does not exist.
+     *
+     * @param provider The LLM provider to insert.
+     */
+    suspend fun insertLLMProvider(provider: LLMProvider)
+
+    /**
+     * Retrieves an LLM provider from the database.
+     *
+     * @param id The ID of the LLM provider to retrieve.
+     * @return The LLM provider if found, null otherwise.
+     */
+    suspend fun getLLMProvider(id: Long): LLMProvider?
 
     // Add other individual insert functions here as your chatbot project grows
 }

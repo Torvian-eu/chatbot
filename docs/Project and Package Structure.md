@@ -45,9 +45,11 @@ chatbot/
 **Package Structure**:
 ```
 common/src/main/kotlin/eu/torvian/chatbot/common/
+├── api/resources/                # API resource definitions (for Ktor Resources plugin)
 ├── models/                       # Shared data models (DTOs)
 │   ├── AddModelRequest.kt        # Request DTO for adding LLM models
 │   ├── AddModelSettingsRequest.kt # Request DTO for adding model settings
+│   ├── AddProviderRequest.kt     # Request DTO for adding LLM providers
 │   ├── ApiKeyStatusResponse.kt   # Response DTO for API key status
 │   ├── AssignSessionToGroupRequest.kt # Request DTO for assigning session to group
 │   ├── ChatGroup.kt              # Chat group data model
@@ -57,14 +59,18 @@ common/src/main/kotlin/eu/torvian/chatbot/common/
 │   ├── CreateGroupRequest.kt     # Group creation request DTO
 │   ├── CreateSessionRequest.kt   # Session creation request DTO
 │   ├── LLMModel.kt               # LLM model configuration
+│   ├── LLMProvider.kt            # LLM provider configuration
+│   ├── LLMProviderType.kt        # Enum for LLM provider types
 │   ├── ModelSettings.kt          # Model settings and parameters
 │   ├── ProcessNewMessageRequest.kt # Request DTO for processing new messages
 │   ├── RenameGroupRequest.kt     # Group renaming request DTO
 │   ├── UpdateMessageRequest.kt   # Message update request DTO
-│   ├── UpdateGroupRequest.kt     # Group update request DTO
-│   ├── UpdateModelRequest.kt     # Model update request DTO
-│   ├── UpdateSessionRequest.kt   # Session update request DTO
-│   └── UpdateSettingsRequest.kt   # Settings update request DTO
+│   ├── UpdateProviderCredentialRequest.kt # Request DTO for updating provider credentials
+│   ├── UpdateSessionGroupRequest.kt # Request DTO for updating session group
+│   ├── UpdateSessionLeafRequest.kt # Request DTO for updating session leaf message
+│   ├── UpdateSessionModelRequest.kt # Request DTO for updating session model
+│   ├── UpdateSessionNameRequest.kt # Request DTO for updating session name
+│   └── UpdateSessionSettingsRequest.kt # Request DTO for updating session settings
 └── misc/                         # Miscellaneous utilities
     └── di/                       # Dependency injection abstractions
         ├── DIContainer.kt        # Framework-agnostic DI interface
@@ -96,10 +102,8 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   │   └── exposed/              # Exposed ORM implementations
 │   ├── entities/                 # Database entity mappings
 │   │   ├── ApiSecretEntity.kt    # API secret entity
-│   │   ├── AssistantMessageEntity.kt # Assistant message entity
-│   │   └── ChatMessageEntity.kt  # Chat message entity
-│   ├── misc/                     # Database utilities
-│   │   └── Database.kt           # Database connection and schema management
+│   │   ├── ChatSessionEntity.kt  # Chat session entity
+│   │   └── SessionCurrentLeafEntity.kt # Session current leaf entity
 │   └── tables/                   # Exposed table definitions
 │       ├── ApiSecretTable.kt     # API secrets table
 │       ├── AssistantMessageTable.kt # Assistant messages table
@@ -107,6 +111,7 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │       ├── ChatMessageTable.kt   # Chat messages table
 │       ├── ChatSessionTable.kt   # Chat sessions table
 │       ├── LLMModelTable.kt      # LLM models table
+│       ├── LLMProviderTable.kt   # LLM providers table
 │       ├── ModelSettingsTable.kt # Model settings table
 │       ├── SessionCurrentLeafTable.kt # Session current leaf tracking
 │       └── mappers/              # Entity mapping utilities
@@ -120,18 +125,44 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   ├── configModule.kt           # Configuration DI module
 │   ├── daoModule.kt              # DAO implementations DI module
 │   ├── databaseModule.kt         # Database connection DI module
-│   └── miscModule.kt             # Miscellaneous services DI module
+│   ├── miscModule.kt             # Miscellaneous services DI module
+│   └── serviceModule.kt          # Service implementations DI module
+├── ktor/                         # Ktor server setup
+│   ├── configureKtor.kt          # Ktor server plugin configuration
+│   └── routes/                   # Ktor API routes
+│       ├── ApiRoutesKtor.kt      # Ktor route configuration using type-safe Resources plugin
+│       ├── configureGroupRoutes.kt
+│       ├── configureMessageRoutes.kt
+│       ├── configureModelRoutes.kt
+│       ├── configureProviderRoutes.kt
+│       ├── configureSessionRoutes.kt
+│       └── configureSettingsRoutes.kt
+├── main/
+│   ├── DataManager.kt            # Interface for managing database schema
+│   ├── ExposedDataManager.kt     # Exposed data manager implementation
+│   ├── mainModule.kt             # Koin module for main application setup
+│   └── ServerMain.kt             # Main application entry point
 ├── service/                      # Business logic services
-│   ├── interfaces/               # Service interfaces
+│   ├── core/                     # Core services
 │   │   ├── GroupService.kt       # Group management service interface
+│   │   ├── LLMModelService.kt    # LLM Model management service interface
+│   │   ├── LLMProviderService.kt # LLM Provider management service interface
 │   │   ├── MessageService.kt     # Message handling service interface
-│   │   ├── ModelService.kt       # Model management service interface
-│   │   └── SessionService.kt     # Session management service interface
-│   ├── impl/                     # Service implementations
-│   │   ├── GroupServiceImpl.kt   # Group service implementation
-│   │   ├── MessageServiceImpl.kt # Message service implementation
-│   │   ├── ModelServiceImpl.kt   # Model service implementation
-│   │   └── SessionServiceImpl.kt # Session service implementation
+│   │   ├── ModelSettingsService.kt # Model Settings management service interface
+│   │   ├── SessionService.kt     # Session management service interface
+│   │   └── impl/                 # Core service implementations
+│   ├── llm/                      # LLM interaction services
+│   │   ├── ApiRequestConfig.kt   # Configuration details for making API requests
+│   │   ├── ChatCompletionStrategy.kt # Strategy for chat completion
+│   │   ├── GenericContentType.kt # Generic HTTP content type
+│   │   ├── GenericHttpMethod.kt  # Generic HTTP method
+│   │   ├── LLMApiClient.kt       # LLM API client interface
+│   │   ├── LLMApiClientKtor.kt   # Ktor-based LLM API client implementation
+│   │   ├── LLMCompletionError.kt # LLM completion error type
+│   │   ├── LLMCompletionResult.kt # LLM completion result type
+│   │   └── strategy/             # LLM completion strategy implementations
+│   │       ├── OpenAiApiModels.kt # OpenAI API models (DTOs)
+│   │       └── OpenAIChatStrategy.kt # OpenAI chat completion strategy
 │   └── security/                 # Security services
 │       ├── AESCryptoProvider.kt  # AES encryption provider
 │       ├── CredentialManager.kt  # Credential management interface
@@ -152,14 +183,31 @@ server/src/test/kotlin/eu/torvian/chatbot/server/
 │   └── exposed/                  # Exposed DAO tests
 │       ├── ApiSecretDaoExposedTest.kt
 │       ├── GroupDaoExposedTest.kt
+│       ├── LLMProviderDaoExposedTest.kt
 │       ├── MessageDaoExposedTest.kt
 │       ├── ModelDaoExposedTest.kt
 │       ├── SessionDaoExposedTest.kt
 │       └── SettingsDaoExposedTest.kt
-├── service/                      # Service layer tests
-│   ├── GroupServiceImplTest.kt
-│   ├── MessageServiceImplTest.kt
-│   ├── SessionServiceImplTest.kt
+├── ktor/routes/                  # Ktor route tests
+│   ├── GroupRoutesTest.kt
+│   ├── MessageRoutesTest.kt
+│   ├── ModelRoutesTest.kt
+│   ├── ProviderRoutesTest.kt
+│   ├── SessionRoutesTest.kt
+│   └── SettingsRoutesTest.kt
+├── service                      # Service layer tests
+│   ├── core/impl/               # Core service tests
+│   │   ├── GroupServiceImplTest.kt
+│   │   ├── LLMModelServiceImplTest.kt
+│   │   ├── LLMProviderServiceImplTest.kt
+│   │   ├── MessageServiceImplTest.kt
+│   │   ├── ModelSettingsServiceImplTest.kt
+│   │   └── SessionServiceImplTest.kt
+│   ├── llm/                      # LLM service tests
+│   │   ├── LLMApiClientKtorTest.kt
+│   │   ├── LLMApiClientStub.kt
+│   │   └── strategy/             # LLM strategy tests
+│   │       └── OpenAIChatStrategyTest.kt
 │   └── security/                 # Security service tests
 │       ├── AESCryptoProviderTest.kt
 │       ├── DbEncryptedCredentialManagerTest.kt
@@ -171,10 +219,12 @@ server/src/test/kotlin/eu/torvian/chatbot/server/
     │   ├── TestDataManager.kt    # Test data manager interface
     │   ├── TestDataSet.kt        # Test data set container
     │   └── TestDefaults.kt       # Predefined test data values
-    └── koin/                     # Test DI modules
-        ├── defaultTestContainer.kt # Default test container
-        ├── defaultTestConfigModule.kt # Default test config module
-        └── testSetupModule.kt    # Test setup DI module
+    ├── koin/                     # Test DI modules
+    │   ├── defaultTestConfigModule.kt # Default test config module
+    │   ├── defaultTestContainer.kt # Default test container
+    │   └── testSetupModule.kt    # Test setup DI module
+    └── ktor/                     # Ktor test utilities
+        └── myTestApplication.kt  # Custom test application setup
 ```
 
 **Key Features**:

@@ -37,11 +37,14 @@
 *   **Stories Addressed:** E7.S4, TransactionScope pattern integration for E7.S6 cross-cutting.
 *   **Key Files:**
   *   `server/src/main/kotlin/eu/torvian/chatbot/server/data/exposed/Database.kt`
-  *   `server/src/main/kotlin/eu/torvian/chatbot/server/data/models/ChatSessions.kt`
-  *   `server/src/main/kotlin/eu/torvian/chatbot/server/data/models/ChatMessages.kt` (includes threading columns/FKs)
-  *   `server/src/main/kotlin/eu/torvian/chatbot/server/data/models/ChatGroups.kt`
-  *   `server/src/main/kotlin/eu/torvian/chatbot/server/data/models/LLMModels.kt`
-  *   `server/src/main/kotlin/eu/torvian/chatbot/server/data/models/ModelSettings.kt`
+  *   `server/src/main/kotlin/eu/torvian/chatbot/server/data/tables/ApiSecretTable.kt`
+  *   `server/src/main/kotlin/eu/torvian/chatbot/server/data/tables/AssistantMessageTable.kt`
+  *   `server/src/main/kotlin/eu/torvian/chatbot/server/data/tables/ChatGroupTable.kt`
+  *   `server/src/main/kotlin/eu/torvian/chatbot/server/data/tables/ChatSessionTable.kt`
+  *   `server/src/main/kotlin/eu/torvian/chatbot/server/data/tables/ChatMessageTable.kt`
+  *   `server/src/main/kotlin/eu/torvian/chatbot/server/data/tables/LLMModelTable.kt`
+  *   `server/src/main/kotlin/eu/torvian/chatbot/server/data/tables/ModelSettingsTable.kt`
+  *   `server/src/main/kotlin/eu/torvian/chatbot/server/data/tables/SessionCurrentLeafTable.kt`
   *   `server/src/main/kotlin/eu/torvian/chatbot/server/utils/transactions/*.kt` (TransactionScope, ExposedTransactionScope, Marker, Extensions)
 
 ---
@@ -64,10 +67,6 @@
 *   `server/src/main/kotlin/eu/torvian/chatbot/server/data/dao/ApiSecretDao.kt`
 *   `server/src/main/kotlin/eu/torvian/chatbot/server/data/exposed/ApiSecretDaoExposed.kt`
 *   `server/src/main/kotlin/eu/torvian/chatbot/server/service/security/DbEncryptedCredentialManager.kt`
-*   `server/src/test/kotlin/eu/torvian/chatbot/server/data/exposed/ApiSecretDaoExposedTest.kt`
-*   `server/src/test/kotlin/eu/torvian/chatbot/server/service/security/AESCryptoProviderTest.kt`
-*   `server/src/test/kotlin/eu/torvian/chatbot/server/service/security/DbEncryptedCredentialManagerTest.kt`
-*   `server/src/test/kotlin/eu/torvian/chatbot/server/service/security/EncryptionServiceTest.kt`
 
 ---
 
@@ -95,17 +94,22 @@
 
 *   **Assignee:** Alex
 *   **Reviewer:** Eric, Maya
-*   **Description:** Implement the backend Service layer methods corresponding to basic Session (E2.S1, E2.S3, E2.S4, E6.S1 assign), Group (E6.S3, E6.S4, E6.S6 delete logic), and Credential Status Check (E5.S4) features. These services orchestrate calls to the DAOs and use the `TransactionScope`. Set up the corresponding Ktor API routes (`/api/v1/sessions`, `/api/v1/sessions/{id}`, `/api/v1/sessions/{id}/group`, `/api/v1/groups`, `/api/v1/groups/{id}`, `/api/v1/models/{id}/apikey/status`) in `ApiRoutes.kt` to call these service methods, handling request/response serialization and basic error status codes.
-*   **Stories Addressed:** E2.S1, E2.S3, E2.S4 backend, E6.S1 backend, E6.S3, E6.S4, E6.S6 backend, E5.S4 backend, E7.S3 (Ktor routing setup), E7.S6 (coroutines in services/routes). Depends on PRs 1, 2, 4.
+*   **Description:** Implement the backend Service layer methods corresponding to basic Session (E2.S1, E2.S3, E2.S4, E6.S1 assign), Group (E6.S3, E6.S4, E6.S6 delete logic), and Credential Status Check (E5.S4) features. These services orchestrate calls to the DAOs, use the `TransactionScope`, and handle errors using Arrow `Either`. Set up the corresponding Ktor API routes (`/api/v1/sessions`, `/api/v1/sessions/{id}`, `/api/v1/sessions/{id}/group`, `/api/v1/groups`, `/api/v1/groups/{id}`, `/api/v1/models/{id}/apikey/status`) in `ApiRoutes.kt` to call these service methods, handling request/response serialization and mapping service results/errors to appropriate HTTP responses.
+*   **Stories Addressed:** E2.S1, E2.S3, E2.S4 backend, E6.S1 backend, E6.S3, E6.S4, E6.S6 backend, E5.S4 backend, E1.S4 (LLMClient interface/stub), E7.S3 (Ktor routing setup), E7.S6 (coroutines in services/routes).
 *   **Key Files:**
-  *   `server/src/main/kotlin/eu/torvian/chatbot/server/service/ChatService.kt` (updated interface with suspend)
-  *   `server/src/main/kotlin/eu/torvian/chatbot/server/service/impl/ChatServiceImpl.kt` (implement E2.S1, E2.S3, E2.S4, E6.S1 assign, E5.S4, using TransactionScope)
-  *   `server/src/main/kotlin/eu/torvian/chatbot/server/service/GroupService.kt` (updated interface with suspend)
-  *   `server/src/main/kotlin/eu/torvian/chatbot/server/service/impl/GroupServiceImpl.kt` (implement E6.S3, E6.S4, E6.S6 delete logic using SessionDao.ungroupSessions and GroupDao)
-  *   `server/src/main/kotlin/eu/torvian/chatbot/server/api/server/ApiRoutes.kt` (implement GET/POST /sessions, GET /sessions/{id}, PUT /sessions/{id}/group, GET/POST /groups, DELETE /groups/{id}, GET /models/{id}/apikey/status endpoints)
-  *   `server/src/main/kotlin/eu/torvian/chatbot/server/external/llm/LLMApiClient.kt` (interface)
-  *   `server/src/main/kotlin/eu/torvian/chatbot/server/external/llm/LLMApiClientKtor.kt` (stubbed implementation for S1)
-
+  *   `server/src/main/kotlin/eu/torvian/chatbot/server/service/core/SessionService.kt`
+  *   `server/src/main/kotlin/eu/torvian/chatbot/server/service/core/impl/SessionServiceImpl.kt`
+  *   `server/src/main/kotlin/eu/torvian/chatbot/server/service/core/GroupService.kt`
+  *   `server/src/main/kotlin/eu/torvian/chatbot/server/service/core/impl/GroupServiceImpl.kt`
+  *   `server/src/main/kotlin/eu/torvian/chatbot/server/service/core/ModelService.kt`
+  *   `server/src/main/kotlin/eu/torvian/chatbot/server/service/core/impl/ModelServiceImpl.kt`
+  *   `server/src/main/kotlin/eu/torvian/chatbot/server/service/core/MessageService.kt` (Interface)
+  *   `server/src/main/kotlin/eu/torvian/chatbot/server/service/core/impl/MessageServiceImpl.kt`
+  *   `server/src/main/kotlin/eu/torvian/chatbot/server/service/core/error/*Error.kt` (New Service-level error types)
+  *   `server/src/main/kotlin/eu/torvian/chatbot/server/service/llm/LLMApiClient.kt` (Interface)
+  *   `server/src/main/kotlin/eu/torvian/chatbot/server/service/llm/LLMApiClientKtor.kt`
+  *   `server/src/main/kotlin/eu/torvian/chatbot/server/ktor/routes/ApiRoutesKtor.kt`
+  
 ---
 
 **PR 6: App Infrastructure - DI, Main App Entry & Shutdown**

@@ -34,7 +34,7 @@ interface GroupDao {
      * @param newName The new name for the group.
      * @return [Either] a [GroupError.GroupNotFound] if the group doesn't exist, or [Unit] on success.
      */
-    suspend fun renameGroup(id: Long, newName: String): Either<GroupError, Unit>
+    suspend fun renameGroup(id: Long, newName: String): Either<GroupError.GroupNotFound, Unit>
 
     /**
      * Deletes a chat group by ID.

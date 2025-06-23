@@ -2,7 +2,9 @@ package eu.torvian.chatbot.server.data.dao
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.ChatMessage
+import eu.torvian.chatbot.server.data.dao.error.InsertMessageError
 import eu.torvian.chatbot.server.data.dao.error.MessageError
+import eu.torvian.chatbot.server.data.dao.error.MessageAddChildError
 
 /**
  * Data Access Object for ChatMessage entities.
@@ -32,13 +34,13 @@ interface MessageDao {
      * @param sessionId The ID of the session the message belongs to.
      * @param content The text content of the message.
      * @param parentMessageId Optional ID of the parent message (null for root messages).
-     * @return Either a [MessageError.ForeignKeyViolation] or the newly created [ChatMessage] object.
+     * @return Either a [InsertMessageError] or the newly created [ChatMessage] object.
      */
     suspend fun insertUserMessage(
         sessionId: Long,
         content: String,
         parentMessageId: Long?
-    ): Either<MessageError.ForeignKeyViolation, ChatMessage>
+    ): Either<InsertMessageError, ChatMessage>
 
     /**
      * Inserts a new assistant message record into the database.
@@ -49,7 +51,7 @@ interface MessageDao {
      * @param parentMessageId Optional ID of the parent message (null for root messages).
      * @param modelId Optional ID of the model used (for assistant messages).
      * @param settingsId Optional ID of the settings profile used (for assistant messages).
-     * @return Either a [MessageError.ForeignKeyViolation] or the newly created [ChatMessage] object.
+     * @return Either a [InsertMessageError] or the newly created [ChatMessage] object.
      */
     suspend fun insertAssistantMessage(
         sessionId: Long,
@@ -57,7 +59,7 @@ interface MessageDao {
         parentMessageId: Long?,
         modelId: Long?,
         settingsId: Long?
-    ): Either<MessageError.ForeignKeyViolation, ChatMessage>
+    ): Either<InsertMessageError, ChatMessage>
     
     /**
      * Updates the content and updated timestamp of an existing message.
@@ -82,17 +84,8 @@ interface MessageDao {
      * Used when a new message is inserted as a reply.
      * @param parentId The ID of the parent message.
      * @param childId The ID of the new child message to add to the parent's list.
-     * @return Either a [MessageError] or Unit if successful.
+     * @return Either a [MessageAddChildError] or Unit if successful.
      */
-    suspend fun addChildToMessage(parentId: Long, childId: Long): Either<MessageError, Unit>
-    
-    /**
-     * Removes a child message ID from the `childrenMessageIds` list of the parent message record.
-     * Serializes the updated list back to the database.
-     * Used when a child message is deleted.
-     * @param parentId The ID of the parent message.
-     * @param childId The ID of the child message to remove from the parent's list.
-     * @return Either a [MessageError] or Unit if successful.
-     */
-    suspend fun removeChildFromMessage(parentId: Long, childId: Long): Either<MessageError, Unit>
+    suspend fun addChildToMessage(parentId: Long, childId: Long): Either<MessageAddChildError, Unit>
+
 }

@@ -1,15 +1,19 @@
 package eu.torvian.chatbot.server.testutils.koin
 
+import eu.torvian.chatbot.server.service.llm.LLMApiClient
+import eu.torvian.chatbot.server.service.llm.LLMApiClientStub
 import eu.torvian.chatbot.server.testutils.data.ExposedTestDataManager
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
 import org.koin.dsl.module
 
 /**
- * Koin module for setting up the database helper for chatbot tests.
+ * Koin module for providing test-specific setup components.
  *
- * This module provides a singleton instance of the [TestDataManager] interface,
- * which is implemented by [ExposedTestDataManager].
+ * This module includes:
+ * - An instance of [TestDataManager] using [ExposedTestDataManager].
+ * - An instance of [LLMApiClient] using [LLMApiClientStub].
  */
 fun testSetupModule() = module {
-    single<TestDataManager> { ExposedTestDataManager(get()) } // Requires TransactionScope from database module
+    single<TestDataManager> { ExposedTestDataManager(get()) }
+    single<LLMApiClient> { LLMApiClientStub() }
 }

@@ -1,0 +1,1526 @@
+openapi: 3.0.3
+info:
+  title: AIChat Desktop App Internal API (V1.2) # Updated version number in title
+  description: >
+    API specification for the internal HTTP communication between the Frontend
+    API Client (app module) and the Embedded Ktor Server (server module)
+    within the AIChat Desktop application for Version 1.2 features.
+    This API facilitates the core application features: chat interaction,
+    session management (including grouping), and LLM provider/model configuration.
+  version: 1.2.0
+
+servers:
+  - url: http://localhost:{port}
+    description: Embedded Ktor server running within the desktop application process.
+    variables:
+      port:
+        enum:
+          - '8080' # Common default port
+          - '0'    # Indicates a dynamically assigned port (discovery mechanism required)
+        default: '8080'
+        description: The port the embedded server is listening on. The frontend must discover or be configured with this port.
+
+tags:
+  - name: sessions
+    description: Operations related to managing chat sessions.
+  - name: messages
+    description: Operations related to managing individual chat messages within sessions.
+  - name: providers
+    description: Operations related to managing LLM provider configurations.
+  - name: models
+    description: Operations related to managing specific LLM model configurations.
+  - name: settings
+    description: Operations related to managing LLM model settings profiles.
+  - name: groups
+    description: Operations related to managing chat session groups.
+
+paths:
+  /api/v1/sessions:
+    get:
+      tags:
+        - sessions
+      summary: Get all chat session summaries
+      operationId: getAllSessions
+      description: Retrieves a list of all chat sessions, including their group affiliation, for display in the session list.
+      responses:
+        '200':
+          description: A list of chat session summaries.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChatSessionSummary'
+        '500':
+          $ref: '#/components/responses/ApiError'
+    post:
+      tags:
+        - sessions
+      summary: Create a new chat session
+      operationId: createSession
+      description: Creates a brand new, empty chat session.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionRequest'
+      responses:
+        '201':
+          description: The newly created chat session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatSession'
+        '400':
+          $ref: '#/components/responses/ApiErrorInvalidInput'
+        '500':
+          $ref: '#/components/responses/ApiError'
+
+  /api/v1/sessions/{sessionId}:
+    parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: ID of the chat session to retrieve or modify.
+    get:
+      tags:
+        - sessions
+      summary: Get a specific chat session with all messages
+      operationId: getSessionDetails
+      description: Retrieves the full details of a specific chat session, including all its messages, necessary for displaying the conversation history and threads.
+      responses:
+        '200':
+          description: The requested chat session with all messages.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatSession'
+        '404':
+          $ref: '#/components/responses/ApiErrorNotFound'
+        '500':
+          $ref: '#/components/responses/ApiError'
+    delete:
+      tags:
+        - sessions
+      summary: Delete a chat session
+      operationId: deleteSession
+      description: Deletes a chat session and all its associated messages.
+      responses:
+        '204':
+          description: Session deleted successfully.
+        '404':
+          $ref: '#/components/responses/ApiErrorNotFound'
+        '500':
+          $ref: '#/components/responses/ApiError'
+
+  /api/v1/sessions/{sessionId}/name:
+    parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: ID of the chat session to rename.
+    put:
+      tags:
+        - sessions
+      summary: Update the name of a chat session
+      operationId: updateSessionName
+      description: Updates the name/title of a specific chat session.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSessionNameRequest'
+      responses:
+        '200':
+          description: Chat session updated successfully.
+        '400':
+          $ref: '#/components/responses/ApiErrorInvalidInput'
+        '404':
+          $ref: '#/components/responses/ApiErrorNotFound'
+        '500':
+          $ref: '#/components/responses/ApiError'
+
+  /api/v1/sessions/{sessionId}/model:
+    parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: ID of the chat session to update the model for.
+    put:
+      tags:
+        - sessions
+        - models
+      summary: Update the current model of a chat session
+      operationId: updateSessionModel
+      description: Updates the currently selected LLM model for a specific chat session. Set modelId to null to unset the model.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSessionModelRequest'
+      responses:
+        '200':
+          description: Chat session updated successfully.
+        '400':
+          $ref: '#/components/responses/ApiErrorInvalidInput' # Invalid model ID (e.g., not found)
+        '404':
+          $ref: '#/components/responses/ApiErrorNotFound' # Session not found
+        '500':
+          $ref: '#/components/responses/ApiError'
+
+  /api/v1/sessions/{sessionId}/settings:
+    parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: ID of the chat session to update the settings for.
+    put:
+      tags:
+        - sessions
+        - settings
+      summary: Update the current settings of a chat session
+      operationId: updateSessionSettings
+      description: Updates the currently selected settings profile for a specific chat session. Set settingsId to null to unset the settings.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSessionSettingsRequest'
+      responses:
+        '200':
+          description: Chat session updated successfully.
+        '400':
+          $ref: '#/components/responses/ApiErrorInvalidInput' # Invalid settings ID (e.g., not found)
+        '404':
+          $ref: '#/components/responses/ApiErrorNotFound' # Session not found
+        '500':
+          $ref: '#/components/responses/ApiError'
+
+  /api/v1/sessions/{sessionId}/leafMessage:
+    parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: ID of the chat session to update the leaf message for.
+    put:
+      tags:
+        - sessions
+        - messages
+      summary: Update the current leaf message of a chat session
+      operationId: updateSessionLeafMessage
+      description: Sets the current "active" leaf message for a session, affecting which branch is displayed. Set leafMessageId to null if the session becomes empty.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSessionLeafMessageRequest'
+      responses:
+        '200':
+          description: Chat session updated successfully.
+        '400':
+          $ref: '#/components/responses/ApiErrorInvalidInput' # Invalid leaf message ID (e.g., not found or not in session)
+        '404':
+          $ref: '#/components/responses/ApiErrorNotFound' # Session not found
+        '500':
+          $ref: '#/components/responses/ApiError'
+
+  /api/v1/sessions/{sessionId}/group:
+    parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: ID of the chat session to assign to a group.
+    put:
+      tags:
+        - sessions
+        - groups
+      summary: Assign a chat session to a group
+      operationId: assignSessionToGroup
+      description: Assigns a specific chat session to a chat group, or ungroups it. Set groupId to null to ungroup.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSessionGroupRequest'
+      responses:
+        '200':
+          description: Chat session updated successfully.
+        '400':
+          $ref: '#/components/responses/ApiErrorInvalidInput' # Invalid group ID (e.g., not found)
+        '404':
+          $ref: '#/components/responses/ApiErrorNotFound' # Session not found
+        '500':
+          $ref: '#/components/responses/ApiError'
+
+  /api/v1/sessions/{sessionId}/messages:
+    parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: ID of the chat session to add messages to.
+    post:
+      tags:
+        - messages
+        - sessions
+      summary: Send a new message (user prompt) and get the assistant response
+      operationId: processNewMessage
+      description: >
+        Sends a user message to the specified session. The backend will
+        process this message, determine the appropriate context (considering
+        threading and session state), call the LLM API, and generate/save
+        the assistant response. Returns the newly created user and assistant messages.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProcessNewMessageRequest'
+      responses:
+        '201':
+          description: Returns a list containing the newly created user and assistant messages.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChatMessage'
+                minItems: 2
+                maxItems: 2 # User message and Assistant message
+        '400':
+          description: |
+            Invalid request body or session state / configuration.
+            Specific `code` values include:
+            - `invalid-state`: Parent message not in session.
+            - `model-configuration-error`: Issues with the selected LLM configuration.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          $ref: '#/components/responses/ApiErrorNotFound' # Session not found
+        '500':
+          description: |
+            Internal server error or external service error.
+            Specific `code` values include:
+            - `internal`: Generic internal error.
+            - `external-service-error`: Error interacting with the LLM API (e.g., network, API error).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/v1/messages/{messageId}:
+    parameters:
+      - name: messageId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: ID of the chat message to modify or delete.
+    delete:
+      tags:
+        - messages
+      summary: Delete a specific message
+      operationId: deleteMessage
+      description: Deletes a specific message and handles its impact on thread relationships (e.g., recursively deleting children).
+      responses:
+        '204':
+          description: Message deleted successfully.
+        '404':
+          $ref: '#/components/responses/ApiErrorNotFound' # Message not found
+        '500':
+          $ref: '#/components/responses/ApiError'
+
+  /api/v1/messages/{messageId}/content:
+    parameters:
+      - name: messageId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: ID of the chat message to update content for.
+    put:
+      tags:
+        - messages
+      summary: Update message content
+      operationId: updateMessageContent
+      description: Updates the text content of an existing message.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMessageRequest'
+      responses:
+        '200':
+          description: The updated message object.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatMessage' # Service returns ChatMessage
+        '400':
+          $ref: '#/components/responses/ApiErrorInvalidInput' # e.g. empty content
+        '404':
+          $ref: '#/components/responses/ApiErrorNotFound' # Message not found
+        '500':
+          $ref: '#/components/responses/ApiError'
+
+  /api/v1/providers:
+    get:
+      tags:
+        - providers
+      summary: Get all LLM provider configurations
+      operationId: getAllProviders
+      description: Retrieves a list of all configured LLM providers.
+      responses:
+        '200':
+          description: A list of LLM provider configurations.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LLMProvider'
+        '500':
+          $ref: '#/components/responses/ApiError'
+    post:
+      tags:
+        - providers
+      summary: Add a new LLM provider configuration
+      operationId: addProvider
+      description: Adds a new LLM provider configuration. Securely stores the API key credential if provided.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddProviderRequest'
+      responses:
+        '201':
+          description: The newly created LLM provider configuration (without raw credential).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LLMProvider'
+        '400':
+          $ref: '#/components/responses/ApiErrorInvalidInput' # Invalid input (e.g. missing fields, bad URL format)
+        '500':
+          $ref: '#/components/responses/ApiError' # Internal server error, or failure in secure key storage.
+
+  /api/v1/providers/{providerId}:
+    parameters:
+      - name: providerId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: ID of the LLM provider to retrieve, update, or delete.
+    get:
+      tags:
+        - providers
+      summary: Get a specific LLM provider configuration
+      operationId: getProviderById
+      description: Retrieves details for a specific LLM provider configuration.
+      responses:
+        '200':
+          description: The requested LLM provider configuration.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LLMProvider'
+        '404':
+          $ref: '#/components/responses/ApiErrorNotFound' # Provider not found
+        '500':
+          $ref: '#/components/responses/ApiError'
+    put:
+      tags:
+        - providers
+      summary: Update LLM provider configuration
+      operationId: updateProvider
+      description: Updates details for a specific LLM provider configuration. Does NOT update the credential (use the dedicated /credential endpoint).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LLMProvider' # Request body uses the full schema, but only modifiable fields are relevant. ID in body must match path ID.
+      responses:
+        '200':
+          description: Provider updated successfully.
+        '400':
+          description: |
+            Invalid request body or path ID mismatch.
+            Specific `code` values include:
+            - `invalid-argument`: Path ID and body ID mismatch, invalid input fields.
+            - `already-exists`: API key ID already in use (should not happen often with this endpoint as credential is separate).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          $ref: '#/components/responses/ApiErrorNotFound' # Provider not found
+        '500':
+          $ref: '#/components/responses/ApiError'
+    delete:
+      tags:
+        - providers
+      summary: Delete an LLM provider configuration
+      operationId: deleteProvider
+      description: Deletes an LLM provider configuration, including its associated API key from secure storage. Will fail if models are still linked to this provider.
+      responses:
+        '204':
+          description: Provider deleted successfully.
+        '404':
+          $ref: '#/components/responses/ApiErrorNotFound' # Provider not found
+        '409':
+          description: |
+            Conflict with current state.
+            Specific `code` values include:
+            - `resource-in-use`: Provider is still referenced by active models. Details include model names.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError' # Internal server error or failure in secure key deletion.
+
+  /api/v1/providers/{providerId}/credential:
+    parameters:
+      - name: providerId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: ID of the LLM provider to update the credential for.
+    put:
+      tags:
+        - providers
+      summary: Update LLM provider API credential
+      operationId: updateProviderCredential
+      description: Updates the securely stored API key credential for a specific LLM provider. Provide null in the request body to remove the credential.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProviderCredentialRequest'
+      responses:
+        '200':
+          description: Credential updated successfully.
+        '400':
+          $ref: '#/components/responses/ApiErrorInvalidInput' # Invalid credential input (e.g. format issues)
+        '404':
+          $ref: '#/components/responses/ApiErrorNotFound' # Provider not found
+        '500':
+          $ref: '#/components/responses/ApiError' # Internal error (e.g. secure storage failure)
+
+  /api/v1/providers/{providerId}/models:
+    parameters:
+      - name: providerId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: ID of the LLM provider to get models for.
+    get:
+      tags:
+        - providers
+        - models
+      summary: Get models associated with a specific provider
+      operationId: getModelsByProviderId
+      description: Retrieves a list of LLM model configurations linked to a specific provider.
+      responses:
+        '200':
+          description: A list of LLM model configurations.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LLMModel'
+        # Note: Service call doesn't return specific error for provider not found, just empty list or internal error.
+        '500':
+          $ref: '#/components/responses/ApiError'
+
+  /api/v1/models:
+    get:
+      tags:
+        - models
+      summary: Get all LLM model configurations
+      operationId: getAllModels
+      description: Retrieves a list of all configured LLM models across all providers.
+      responses:
+        '200':
+          description: A list of LLM model configurations.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LLMModel'
+        '500':
+          $ref: '#/components/responses/ApiError'
+    post:
+      tags:
+        - models
+      summary: Add a new LLM model configuration
+      operationId: addModel
+      description: Adds a new LLM model configuration linked to an existing provider.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddModelRequest'
+      responses:
+        '201':
+          description: The newly created LLM model configuration.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LLMModel'
+        '400':
+          description: |
+            Invalid request body or provider ID.
+            Specific `code` values include:
+            - `invalid-argument`: Invalid model input (e.g. missing fields, invalid characters).
+            - `invalid-argument`: Provider not found for the given providerId.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: |
+            Conflict with current state.
+            Specific `code` values include:
+            - `already-exists`: Model name already exists for this provider/globally? (Code says "Model name already exists" without specifying scope). Assume globally for now.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+
+  /api/v1/models/{modelId}:
+    parameters:
+      - name: modelId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: ID of the LLM model to retrieve, update, or delete.
+    get:
+      tags:
+        - models
+      summary: Get a specific LLM model configuration
+      operationId: getModelById
+      description: Retrieves details for a specific LLM model configuration.
+      responses:
+        '200':
+          description: The requested LLM model configuration.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LLMModel'
+        '404':
+          $ref: '#/components/responses/ApiErrorNotFound' # Model not found
+        '500':
+          $ref: '#/components/responses/ApiError'
+    put:
+      tags:
+        - models
+      summary: Update LLM model configuration
+      operationId: updateModel
+      description: Updates details for a specific LLM model configuration. The ID in the path must match the ID in the request body.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LLMModel' # Request body uses the full schema
+      responses:
+        '200':
+          description: The LLM model updated successfully.
+        '400':
+          description: |
+            Invalid request body or path ID mismatch.
+            Specific `code` values include:
+            - `invalid-argument`: Path ID and body ID mismatch.
+            - `invalid-argument`: Invalid model input (e.g., bad provider ID, invalid fields).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          $ref: '#/components/responses/ApiErrorNotFound' # Model not found
+        '409':
+          description: |
+            Conflict with current state.
+            Specific `code` values include:
+            - `already-exists`: Model name already exists.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+    delete:
+      tags:
+        - models
+      summary: Delete an LLM model configuration
+      operationId: deleteModel
+      description: Deletes an LLM model configuration.
+      responses:
+        '204':
+          description: Model deleted successfully.
+        '404':
+          $ref: '#/components/responses/ApiErrorNotFound' # Model not found
+        '500':
+          $ref: '#/components/responses/ApiError' # Internal server error
+
+  /api/v1/models/{modelId}/apikey/status:
+    parameters:
+      - name: modelId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: ID of the LLM model to check API key status for.
+    get:
+      tags:
+        - models
+      summary: Check API key configuration status for a model
+      operationId: getModelApiKeyStatus
+      description: 'Checks if an API key has been securely configured for a specific LLM model without exposing the key itself.Checks if an API key has been securely configured for a specific LLM model without exposing the key itself. Note: This checks for the *provider's* key linked to this model.'
+      responses:
+        '200':
+          description: API key status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyStatusResponse'
+        # Note: Service call doesn't return specific error for model not found, just returns false.
+        '500':
+          $ref: '#/components/responses/ApiError'
+
+  /api/v1/models/{modelId}/settings:
+    parameters:
+      - name: modelId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: ID of the LLM model to get or add settings for.
+    get:
+      tags:
+        - settings
+        - models
+      summary: Get all settings profiles for a model
+      operationId: getSettingsByModelId
+      description: Retrieves a list of all settings profiles associated with a specific LLM model.
+      responses:
+        '200':
+          description: A list of settings profiles.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ModelSettings'
+        # Note: Service call doesn't return specific error for model not found, just empty list or internal error.
+        '500':
+          $ref: '#/components/responses/ApiError'
+    post:
+      tags:
+        - settings
+        - models
+      summary: Add a new settings profile for a model
+      operationId: addModelSettings
+      description: Creates a new settings profile associated with a specific LLM model.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddModelSettingsRequest'
+      responses:
+        '201':
+          description: The newly created settings profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelSettings'
+        '400':
+          description: |
+            Invalid request body or model ID.
+            Specific `code` values include:
+            - `invalid-argument`: Model not found for settings.
+            - `invalid-argument`: Invalid settings input (e.g. bad parameters).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+
+  /api/v1/settings/{settingsId}:
+    parameters:
+      - name: settingsId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: ID of the settings profile to retrieve, update, or delete.
+    get:
+      tags:
+        - settings
+      summary: Get a specific settings profile
+      operationId: getSettingsById
+      description: Retrieves details for a specific settings profile.
+      responses:
+        '200':
+          description: The requested settings profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelSettings'
+        '404':
+          $ref: '#/components/responses/ApiErrorNotFound' # Settings profile not found
+        '500':
+          $ref: '#/components/responses/ApiError'
+    put:
+      tags:
+        - settings
+      summary: Update settings profile details
+      operationId: updateSettings
+      description: Updates the parameters of a specific settings profile. The ID in the path must match the ID in the request body.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelSettings' # Request body uses the full schema
+      responses:
+        '200':
+          description: Settings profile updated successfully.
+        '400':
+          description: |
+            Invalid request body or path ID mismatch.
+            Specific `code` values include:
+            - `invalid-argument`: Path ID and body ID mismatch.
+            - `invalid-argument`: Invalid settings input (e.g. bad parameters).
+            - `invalid-argument`: Model not found for settings (if modelId is updated).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          $ref: '#/components/responses/ApiErrorNotFound' # Settings profile not found
+        '500':
+          $ref: '#/components/responses/ApiError'
+    delete:
+      tags:
+        - settings
+      summary: Delete a settings profile
+      operationId: deleteSettings
+      description: Deletes a specific settings profile.
+      responses:
+        '204':
+          description: Settings profile deleted successfully.
+        '404':
+          $ref: '#/components/responses/ApiErrorNotFound' # Settings profile not found
+        '500':
+          $ref: '#/components/responses/ApiError'
+
+  /api/v1/groups:
+    get:
+      tags:
+        - groups
+      summary: Get all chat session groups
+      operationId: getAllGroups
+      description: Retrieves a list of all defined chat session groups.
+      responses:
+        '200':
+          description: A list of chat groups.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChatGroup'
+        '500':
+          $ref: '#/components/responses/ApiError'
+    post:
+      tags:
+        - groups
+      summary: Create a new chat session group
+      operationId: createGroup
+      description: Creates a new named group for organizing sessions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGroupRequest'
+      responses:
+        '201':
+          description: The newly created chat group.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatGroup'
+        '400':
+          description: |
+            Invalid request body.
+            Specific `code` values include:
+            - `invalid-argument`: Invalid group name (e.g. empty).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+
+  /api/v1/groups/{groupId}:
+    parameters:
+      - name: groupId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: ID of the chat group to rename or delete.
+    put:
+      tags:
+        - groups
+      summary: Rename a chat session group
+      operationId: renameGroup
+      description: Updates the name of a specific chat session group.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenameGroupRequest'
+      responses:
+        '200':
+          description: Chat group renamed successfully.
+        '400':
+          description: |
+            Invalid request body.
+            Specific `code` values include:
+            - `invalid-argument`: Invalid group name (e.g. empty).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          $ref: '#/components/responses/ApiErrorNotFound' # Group not found
+        '500':
+          $ref: '#/components/responses/ApiError'
+    delete:
+      tags:
+        - groups
+      summary: Delete a chat session group
+      operationId: deleteGroup
+      description: Deletes a specific chat session group. Sessions previously assigned to this group will become ungrouped.
+      responses:
+        '204':
+          description: Group deleted successfully.
+        '404':
+          $ref: '#/components/responses/ApiErrorNotFound' # Group not found
+        '500':
+          $ref: '#/components/responses/ApiError'
+
+components:
+  schemas:
+    # --- Common Models (from common module) ---
+    ApiError:
+      type: object
+      description: >
+        Represents a structured error response returned by the API.
+        This model provides a machine-readable and human-readable structure for errors,
+        allowing clients to handle specific error scenarios programmatically.
+        Follows patterns used by Firebase, Google APIs, and Stripe.
+      properties:
+        statusCode:
+          type: integer
+          description: 'The HTTP status code associated with this error (as an Int). Note: This field *within the body* provides context but the actual HTTP status code of the response will also match.'
+        code:
+          type: string
+          description: A machine-readable error code string (e.g., "invalid-argument"). Intended for client programmatic handling. See CommonApiErrorCodes and ChatbotApiErrorCodes documentation for possible values.
+        message:
+          type: string
+          description: A human-readable explanation of the error, intended to be displayed to users or logged.
+        details:
+          type: object
+          additionalProperties:
+            type: string
+          nullable: true
+          description: Optional additional information about the error (e.g. which field failed, what value was expected). Keys and values are strings.
+      required:
+        - statusCode
+        - code
+        - message
+
+    ChatSession:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Unique identifier for the session.
+        name:
+          type: string
+          description: The name or title of the session.
+        createdAt:
+          type: string
+          format: date-time
+          description: Timestamp when the session was created.
+        updatedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the session was last updated.
+        groupId:
+          type: integer
+          format: int64
+          nullable: true
+          description: Optional ID referencing a parent group (null if ungrouped).
+        currentModelId:
+          type: integer
+          format: int64
+          nullable: true
+          description: Optional ID of the currently selected LLM model for this session.
+        currentSettingsId:
+          type: integer
+          format: int64
+          nullable: true
+          description: Optional ID of the currently selected settings profile for this session.
+        currentLeafMessageId:
+          type: integer
+          format: int64
+          nullable: true
+          description: ID of the current leaf message in the session's active branch (null only when no messages exist).
+        messages:
+          type: array
+          description: List of all messages within this session. Populated when loading full details (/sessions/{sessionId}). Not included in summaries.
+          items:
+            $ref: '#/components/schemas/ChatMessage'
+      required:
+        - id
+        - name
+        - createdAt
+        - updatedAt
+        # messages is not required for the schema itself, as it's sometimes empty or not included
+
+    ChatSessionSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Unique identifier for the session.
+        name:
+          type: string
+          description: The name or title of the session.
+        createdAt:
+          type: string
+          format: date-time
+          description: Timestamp when the session was created.
+        updatedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the session was last updated.
+        groupId:
+          type: integer
+          format: int64
+          nullable: true
+          description: Optional ID referencing a parent group (null if ungrouped).
+        groupName:
+          type: string
+          nullable: true
+          description: Name of the referenced group (null if ungrouped), included for convenience.
+      required:
+        - id
+        - name
+        - createdAt
+        - updatedAt
+
+    ChatMessage:
+      oneOf:
+        - $ref: '#/components/schemas/UserMessage'
+        - $ref: '#/components/schemas/AssistantMessage'
+      discriminator:
+        propertyName: role # Matches the 'role' property in the child schemas
+        mapping:
+          USER: '#/components/schemas/UserMessage' # Use uppercase enum name
+          ASSISTANT: '#/components/schemas/AssistantMessage' # Use uppercase enum name
+      description: Represents a single message within a chat session, including threading information.
+
+    BaseMessage: # Common fields for ChatMessage subtypes
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Unique identifier for the message.
+        sessionId:
+          type: integer
+          format: int64
+          description: ID of the session this message belongs to.
+        content:
+          type: string
+          description: The content of the message.
+        createdAt:
+          type: string
+          format: date-time
+          description: Timestamp when the message was created.
+        updatedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the message was last updated.
+        parentMessageId:
+          type: integer
+          format: int64
+          nullable: true
+          description: Optional ID of the parent message. Null for root messages of threads.
+        childrenMessageIds:
+          type: array
+          description: List of child message IDs. Empty for leaf messages. Stored and managed by backend.
+          items:
+            type: integer
+            format: int64
+      required:
+        - id
+        - sessionId
+        - content
+        - createdAt
+        - updatedAt
+        - childrenMessageIds
+
+    UserMessage:
+      allOf:
+        - $ref: '#/components/schemas/BaseMessage'
+        - type: object
+          properties:
+            role:
+              type: string
+              enum: [USER] # Specific role value (uppercase)
+              description: The role of the message sender (always 'USER').
+          required:
+            - role
+
+    AssistantMessage:
+      allOf:
+        - $ref: '#/components/schemas/BaseMessage'
+        - type: object
+          properties:
+            role:
+              type: string
+              enum: [ASSISTANT] # Specific role value (uppercase)
+              description: The role of the message sender (always 'ASSISTANT').
+            modelId:
+              type: integer
+              format: int64
+              nullable: true
+              description: ID of the LLM model used to generate this message.
+            settingsId:
+              type: integer
+              format: int64
+              nullable: true
+              description: ID of the settings profile used to generate this message.
+          required:
+            - role
+
+    LLMProvider:
+      type: object
+      description: Represents an LLM provider configuration in the chatbot system.
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Unique identifier for the provider.
+        apiKeyId:
+          type: string
+          nullable: true
+          description: Reference ID to the securely stored API key for this provider (null for local providers like Ollama). Raw key is NOT exposed.
+        name:
+          type: string
+          description: The display name for the provider.
+        description:
+          type: string
+          description: Optional description providing additional context about the provider.
+        baseUrl:
+          type: string
+          format: url
+          description: The base URL for the LLM API endpoint.
+        type:
+          $ref: '#/components/schemas/LLMProviderType'
+
+      required:
+        - id
+        - name
+        - description
+        - baseUrl
+        - type
+
+    LLMModel:
+      type: object
+      description: Represents a specific LLM model configuration within a provider.
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Unique identifier for the model.
+        name:
+          type: string
+          description: Unique identifier for the LLM model (e.g., "gpt-3.5-turbo").
+        providerId:
+          type: integer
+          format: int64
+          description: Reference to the LLM provider that hosts this model.
+        active:
+          type: boolean
+          description: Whether the model is currently active and available for use.
+        displayName:
+          type: string
+          nullable: true
+          description: Optional display name for UI purposes (falls back to name if null).
+      required:
+        - id
+        - name
+        - providerId
+        - active
+
+    LLMProviderType:
+      type: string
+      description: Represents the different types of LLM providers supported by the system.
+      enum:
+        - OPENAI
+        - OPENROUTER
+        - ANTHROPIC
+        - OLLAMA
+        - CUSTOM
+
+    ModelSettings:
+      type: object
+      description: Represents a specific settings profile for an LLM model.
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Unique identifier for the settings profile.
+        modelId:
+          type: integer
+          format: int64
+          description: Foreign key to the associated LLMModel.
+        name:
+          type: string
+          description: The display name of the settings profile.
+        systemMessage:
+          type: string
+          nullable: true
+          description: The system message/prompt to include in the conversation context.
+        temperature:
+          type: number
+          format: float
+          nullable: true
+          description: Sampling temperature for text generation.
+        maxTokens:
+          type: integer
+          nullable: true
+          description: Maximum number of tokens to generate in the response.
+        customParamsJson:
+          type: string
+          nullable: true
+          description: Arbitrary model-specific parameters stored as a JSON string.
+      required:
+        - id
+        - modelId
+        - name
+
+    ChatGroup:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - createdAt
+
+    # --- Request/Response Specific Schemas ---
+    CreateSessionRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          nullable: true # Name is optional, backend can generate default
+          description: Optional name for the new session.
+      # required: [] # No required fields as name is optional
+
+    UpdateSessionNameRequest:
+      type: object
+      description: Request body for updating the name of a chat session.
+      properties:
+        name:
+          type: string
+          description: The new name for the session.
+      required:
+        - name
+
+    UpdateSessionModelRequest:
+      type: object
+      description: Request body for updating the current model ID of a chat session.
+      properties:
+        modelId:
+          type: integer
+          format: int64
+          nullable: true
+          description: The new optional model ID for the session. Null means no model selected.
+      required:
+        - modelId # Field is required, value can be null
+
+    UpdateSessionSettingsRequest:
+      type: object
+      description: Request body for updating the current settings ID of a chat session.
+      properties:
+        settingsId:
+          type: integer
+          format: int64
+          nullable: true
+          description: The new optional settings ID for the session. Null means no settings selected.
+      required:
+        - settingsId # Field is required, value can be null
+
+    UpdateSessionLeafMessageRequest:
+      type: object
+      description: Request body for updating the current leaf message ID of a chat session.
+      properties:
+        leafMessageId:
+          type: integer
+          format: int64
+          nullable: true
+          description: The new optional leaf message ID for the session. Null means no leaf message (session has no messages).
+      required:
+        - leafMessageId # Field is required, value can be null
+
+    UpdateSessionGroupRequest: # Updated/Renamed Schema (was AssignSessionToGroupRequest)
+      type: object
+      description: Request body for updating the group ID of a chat session.
+      properties:
+        groupId:
+          type: integer
+          format: int64
+          nullable: true
+          description: The ID of the group to assign the session to, or null to ungroup the session.
+      required:
+        - groupId # The field itself is required, its *value* can be null
+
+    ProcessNewMessageRequest:
+      type: object
+      properties:
+        content:
+          type: string
+          description: The user's message content.
+        parentMessageId:
+          type: integer
+          format: int64
+          nullable: true
+          description: The ID of the message this is a reply to (null for initial messages or if replying to the root of a new thread branch).
+      required:
+        - content # Content should not be empty for a message
+
+    UpdateMessageRequest:
+      type: object
+      properties:
+        content:
+          type: string
+          description: The new text content for the message.
+      required:
+        - content # Content should not be empty after editing
+
+    AddProviderRequest:
+      type: object
+      description: Request body for adding a new LLM provider configuration.
+      properties:
+        name:
+          type: string
+          description: The display name for the provider.
+        description:
+          type: string
+          description: Optional description providing additional context about the provider.
+        baseUrl:
+          type: string
+          format: url
+          description: The base URL for the LLM API endpoint.
+        type:
+          $ref: '#/components/schemas/LLMProviderType'
+
+        credential:
+          type: string
+          nullable: true
+          description: The raw API key credential. Passed once for secure storage, should not be stored client-side. Null for local providers.
+      required:
+        - name
+        - description
+        - baseUrl
+        - type
+
+    UpdateProviderCredentialRequest:
+      type: object
+      description: Request body for updating an LLM provider's API key credential.
+      properties:
+        credential:
+          type: string
+          nullable: true
+          description: The new API key credential to store securely, or null to remove the credential.
+      required:
+        - credential # Field is required, value can be null
+
+    AddModelRequest: # Updated Schema based on new code
+      type: object
+      description: Request body for adding a new LLM model configuration.
+      properties:
+        name:
+          type: string
+          description: The unique identifier for the model (e.g., "gpt-3.5-turbo").
+        providerId:
+          type: integer
+          format: int64
+          description: The ID of the provider that hosts this model.
+        active:
+          type: boolean
+          description: Whether the model is currently active and available for use. Defaults to true.
+          default: true
+        displayName:
+          type: string
+          nullable: true
+          description: Optional display name for UI purposes.
+      required:
+        - name
+        - providerId
+        - active # active is required in the data class, though has a default
+
+    ApiKeyStatusResponse:
+      type: object
+      description: Response body for checking API key configuration status for a model's provider.
+      properties:
+        isConfigured:
+          type: boolean
+          description: True if an API key is securely stored for the provider linked to this model, false otherwise.
+      required:
+        - isConfigured
+
+    AddModelSettingsRequest:
+      type: object
+      description: Request body for adding a new settings profile for an LLM model.
+      properties:
+        name:
+          type: string
+          description: The display name of the settings profile.
+        systemMessage:
+          type: string
+          nullable: true
+          description: The system message/prompt (optional).
+        temperature:
+          type: number
+          format: float
+          nullable: true
+          description: Sampling temperature (optional).
+        maxTokens:
+          type: integer
+          nullable: true
+          description: Maximum tokens (optional).
+        customParamsJson:
+          type: string
+          nullable: true
+          description: Arbitrary model-specific parameters as JSON string (optional).
+      required:
+        - name
+
+    CreateGroupRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: The name for the new group.
+      required:
+        - name
+
+    RenameGroupRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: The new name for the group.
+      required:
+        - name
+
+  responses: # Define common error response structures
+    ApiError:
+      description: Generic API error response. See schema for details.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    ApiErrorInvalidInput: # Shortcut for 400 errors often related to client input
+      description: |
+        Bad Request. The request was invalid due to missing fields, malformed data,
+        invalid values, or a conflicting state preventing the operation.
+        Details about the specific error are provided in the response body's `code` and `details` fields.
+        Common `code` values include: `missing-field`, `invalid-argument`, `out-of-range`, `invalid-format`, `invalid-state`, `failed-precondition`, `validation-failed`, `model-configuration-error`.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    ApiErrorNotFound: # Shortcut for 404 errors
+      description: |
+        Not Found. The requested resource could not be found.
+        The response body's `code` will typically be `not-found`.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'

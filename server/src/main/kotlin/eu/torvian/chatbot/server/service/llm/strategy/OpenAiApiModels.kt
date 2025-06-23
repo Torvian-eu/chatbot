@@ -1,0 +1,141 @@
+package eu.torvian.chatbot.server.service.llm.strategy
+
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+
+/**
+ * Data Transfer Objects for OpenAI-compatible API responses and requests.
+ * These models represent the structure of communication with external OpenAI or compatible APIs.
+ */
+object OpenAiApiModels {
+
+    /**
+     * Represents a chat completion response from an OpenAI-compatible API.
+     * Matches the structure documented by OpenAI for non-streaming responses.
+     *
+     * @property id Unique identifier for the completion
+     * @property object The object type (typically "chat.completion")
+     * @property created Unix timestamp of when the completion was created
+     * @property model The model name used by the API
+     * @property choices List of generated responses
+     * @property usage Token usage statistics
+     */
+    @Serializable
+    data class ChatCompletionResponse(
+        val id: String,
+        @SerialName("object")
+        val `object`: String,
+        val created: Long,
+        val model: String,
+        val choices: List<Choice>,
+        val usage: Usage
+    ) {
+        /**
+         * Represents a single choice in the chat completion response.
+         *
+         * @property index Index of the choice (0 for the first)
+         * @property message The generated message
+         * @property finish_reason Reason generation stopped (e.g., "stop", "length")
+         */
+        @Serializable
+        data class Choice(
+            val index: Int,
+            val message: Message,
+            val finish_reason: String
+        ) {
+            /**
+             * Represents a message within a choice.
+             * Contains the role and content of the generated message.
+             *
+             * @property role Role string (e.g., "assistant")
+             * @property content The generated text
+             */
+            @Serializable
+            data class Message(
+                val role: String,
+                val content: String
+            )
+        }
+
+        /**
+         * Represents token usage information for the completion.
+         *
+         * @property prompt_tokens Tokens in the input prompt
+         * @property completion_tokens Tokens in the generated completion
+         * @property total_tokens Total tokens used (prompt + completion)
+         */
+        @Serializable
+        data class Usage(
+            val prompt_tokens: Int,
+            val completion_tokens: Int,
+            val total_tokens: Int
+        )
+    }
+
+    /**
+     * Represents a chat completion request to an OpenAI-compatible API.
+     * Matches the structure documented by OpenAI for non-streaming requests.
+     *
+     * @property model The specific model name string (e.g., "gpt-4o")
+     * @property messages The conversation history
+     * @property temperature Sampling temperature
+     * @property max_tokens Max tokens to generate
+     * @property top_p Nucleus sampling
+     * @property frequency_penalty Penalty for token frequency
+     * @property presence_penalty Penalty for token presence
+     * @property stop Stop sequences
+     */
+    @Serializable
+    data class ChatCompletionRequest(
+        val model: String,
+        val messages: List<RequestMessage>,
+        val temperature: Float? = null,
+        val max_tokens: Int? = null,
+        val top_p: Float? = null,
+        val frequency_penalty: Float? = null,
+        val presence_penalty: Float? = null,
+        val stop: List<String>? = null,
+        // Other OpenAI params like `stream`, `seed`, `response_format`, etc. can be added here
+        // Or handled via customParamsJson in ModelSettings and mapped by the strategy
+    ) {
+        /**
+         * Represents a message in the chat completion request.
+         * Role string must match API expectations ("system", "user", "assistant", "tool", "function").
+         *
+         * @property role Role string (e.g., "system", "user", "assistant")
+         * @property content Message content
+         */
+        @Serializable
+        data class RequestMessage(
+            val role: String,
+            val content: String
+        )
+    }
+
+    // --- DTO for OpenAI specific error response ---
+    /**
+     * Represents the common structure of an error response from OpenAI.
+     * Used by strategies to parse error details from raw error bodies.
+     * Example: {"error": {"message": "...", "type": "...", ...}}
+     *
+     * @property error The error details object
+     */
+    @Serializable
+    data class OpenAiErrorResponse(@SerialName("error") val error: OpenAiErrorDetail) {
+        /**
+         * Represents the detailed error information from OpenAI.
+         *
+         * @property message The error message
+         * @property type The error type (e.g., "invalid_request_error")
+         * @property param The parameter that caused the error, if applicable
+         * @property code The error code, if applicable
+         */
+        @Serializable
+        data class OpenAiErrorDetail(
+            val message: String,
+            val type: String?,
+            val param: String?,
+            val code: String?
+        )
+    }
+}
