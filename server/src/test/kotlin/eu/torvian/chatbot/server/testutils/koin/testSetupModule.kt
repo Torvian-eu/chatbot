@@ -14,6 +14,6 @@ import org.koin.dsl.module
  * - An instance of [LLMApiClient] using [LLMApiClientStub].
  */
 fun testSetupModule() = module {
-    single<TestDataManager> { ExposedTestDataManager(get()) } // Requires TransactionScope from database module
-    single<LLMApiClient> { LLMApiClientStub() } // Override the real LLM API client with a stub
+    single<TestDataManager> { ExposedTestDataManager(get()) }
+    single<LLMApiClient> { LLMApiClientStub() }
 }
