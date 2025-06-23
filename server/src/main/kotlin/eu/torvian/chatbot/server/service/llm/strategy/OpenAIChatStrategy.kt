@@ -55,7 +55,16 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
             )
         }
 
-        val apiMessages = messages.map { it.toOpenAiApiMessage() }
+        // Add system message if present in settings
+        val systemMessage = settings.systemMessage
+        val apiMessages = buildList {
+            if (!systemMessage.isNullOrBlank()) {
+                add(OpenAiApiModels.ChatCompletionRequest.RequestMessage(role = "system", content = systemMessage))
+            }
+            // Add user and assistant messages from the conversation history
+            addAll(messages.map { it.toOpenAiApiMessage() })
+        }
+
 
         // 3. Map ModelSettings to OpenAI API request parameters
         val customParams: JsonObject? = settings.customParamsJson?.let { customJson ->

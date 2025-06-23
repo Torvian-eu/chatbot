@@ -54,6 +54,7 @@ class OpenAIChatStrategyTest {
         val modelConfig = TestDefaults.llmModel1.copy(name = "gpt-4o") // Use a specific model name
         val provider = TestDefaults.llmProvider1.copy(apiKeyId = "test-key-id", baseUrl = "https://api.openai.com/v1")
         val settings = TestDefaults.modelSettings1.copy(
+            systemMessage = "You are a helpful assistant.", // Add system message
             temperature = 0.9f,
             maxTokens = 500,
             customParamsJson = """{"top_p": 0.8, "frequency_penalty": 0.2, "stop": ["\nUser:", "<|end_of_text|>"]}"""
@@ -92,13 +93,19 @@ class OpenAIChatStrategyTest {
         assertEquals(listOf("\nUser:", "<|end_of_text|>"), requestBody.stop)
 
         // Verify messages mapping
-        assertEquals(3, requestBody.messages.size)
-        assertEquals("user", requestBody.messages[0].role)
-        assertEquals("Hello", requestBody.messages[0].content)
-        assertEquals("assistant", requestBody.messages[1].role)
-        assertEquals("Hi there!", requestBody.messages[1].content)
-        assertEquals("user", requestBody.messages[2].role)
-        assertEquals("Tell me a story", requestBody.messages[2].content)
+        assertEquals(4, requestBody.messages.size) // 1 system + 3 chat messages
+
+        // Assert system message is first
+        assertEquals("system", requestBody.messages[0].role)
+        assertEquals(settings.systemMessage, requestBody.messages[0].content)
+
+        // Assert original chat messages follow
+        assertEquals("user", requestBody.messages[1].role)
+        assertEquals("Hello", requestBody.messages[1].content)
+        assertEquals("assistant", requestBody.messages[2].role)
+        assertEquals("Hi there!", requestBody.messages[2].content)
+        assertEquals("user", requestBody.messages[3].role)
+        assertEquals("Tell me a story", requestBody.messages[3].content)
     }
 
     @Test
@@ -144,7 +151,7 @@ class OpenAIChatStrategyTest {
         val requestBody = config.body
         assertEquals(modelConfig.name, requestBody.model)
         assertEquals(settings.temperature, requestBody.temperature)
-        assertEquals(1, requestBody.messages.size)
+        assertEquals(2, requestBody.messages.size) // 1 system + 1 user message
     }
 
 
