@@ -7,6 +7,7 @@ import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
 import eu.torvian.chatbot.server.data.dao.error.*
 import eu.torvian.chatbot.server.service.llm.LLMApiClient
+import eu.torvian.chatbot.server.service.llm.LLMCompletionError
 import eu.torvian.chatbot.server.service.core.LLMModelService
 import eu.torvian.chatbot.server.service.core.LLMProviderService
 import eu.torvian.chatbot.server.service.core.MessageService
@@ -18,9 +19,12 @@ import eu.torvian.chatbot.server.service.core.error.settings.*
 import eu.torvian.chatbot.server.service.security.CredentialManager
 import eu.torvian.chatbot.server.service.security.error.CredentialError
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import org.apache.logging.log4j.LogManager
+import org.apache.logging.log4j.Logger
 
 /**
  * Implementation of the [MessageService] interface.
+ * Orchestrates message persistence, threading, and LLM interaction.
  */
 class MessageServiceImpl(
     private val messageDao: MessageDao,
@@ -32,6 +36,10 @@ class MessageServiceImpl(
     private val credentialManager: CredentialManager,
     private val transactionScope: TransactionScope,
 ) : MessageService {
+
+    companion object {
+        private val logger: Logger = LogManager.getLogger(MessageServiceImpl::class.java)
+    }
 
     override suspend fun getMessagesBySessionId(sessionId: Long): List<ChatMessage> {
         return transactionScope.transaction {
@@ -127,8 +135,9 @@ class MessageServiceImpl(
                 val context = buildContext(userMessage, allMessagesInSession)
 
                 // 6. Call LLM API
-                val llmResponse = withError({ externalErrorMsg: String ->
-                    ProcessNewMessageError.ExternalServiceError("LLM API Error: $externalErrorMsg")
+                val llmResponseResult = withError({ llmError: LLMCompletionError ->
+                    logger.error("LLM API call failed for session $sessionId, provider ${provider.name}: $llmError")
+                    ProcessNewMessageError.ExternalServiceError(llmError)
                 }) {
                     llmApiClient.completeChat(
                         messages = context,
@@ -138,10 +147,16 @@ class MessageServiceImpl(
                         apiKey = apiKey
                     ).bind()
                 }
+                logger.info("LLM API call successful for session $sessionId")
 
-                // 7. Save assistant message
+                // 7. Process the LLM response and save the assistant message.
+                // Extract content from the first completion choice.
                 val assistantMessageContent =
-                    llmResponse.choices.firstOrNull()?.message?.content ?: "Error: Empty LLM response"
+                    llmResponseResult.choices.firstOrNull()?.content ?: run {
+                        logger.error("LLM API returned successful response with no choices or empty content for session $sessionId")
+                        // Treat an empty response as an error scenario
+                        raise(ProcessNewMessageError.ExternalServiceError(LLMCompletionError.InvalidResponseError("LLM API returned success but no completion choices.")))
+                    }
                 val assistantMessage = withError({ daoError: InsertMessageError ->
                     throw IllegalStateException("Failed to insert assistant message: ${daoError.javaClass.simpleName}")
                 }) {

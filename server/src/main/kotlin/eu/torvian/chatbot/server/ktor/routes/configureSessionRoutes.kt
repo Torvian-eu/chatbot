@@ -216,7 +216,7 @@ fun Route.configureSessionRoutes(
                     )
 
                 is ProcessNewMessageError.ExternalServiceError ->
-                    apiError(ChatbotApiErrorCodes.EXTERNAL_SERVICE_ERROR, "LLM API Error", "details" to error.message)
+                    apiError(ChatbotApiErrorCodes.EXTERNAL_SERVICE_ERROR, "LLM API Error", "details" to error.llmError.toString())
             }
         }
     }
