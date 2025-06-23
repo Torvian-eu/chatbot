@@ -5,6 +5,7 @@ import eu.torvian.chatbot.server.koin.daoModule
 import eu.torvian.chatbot.server.koin.databaseModule
 import eu.torvian.chatbot.server.koin.miscModule
 import eu.torvian.chatbot.server.koin.serviceModule
+import org.koin.core.logger.Level
 import org.koin.dsl.koinApplication
 
 /**
@@ -22,6 +23,8 @@ import org.koin.dsl.koinApplication
  */
 fun defaultTestContainer() = KoinDIContainer(
     koinApplication {
+        // Uncomment for debugging:
+        // printLogger(Level.DEBUG)
         modules(
             defaultTestConfigModule(),
             databaseModule(),
