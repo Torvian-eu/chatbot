@@ -15,7 +15,9 @@ typesafe-config = "1.4.3"    # Typesafe Config version
 mockk = "1.13.17"            # MockK version
 compose = "1.8.1"            # Compose Multiplatform version
 arrow = "2.1.2"              # Arrow version
+androidx-lifecycle = "2.9.1" # For Compose Multiplatform ViewModel
 kotlin-buildlogic = "1.9.24" # Kotlin version for build-logic compatibility
+compose-hot-reload = "1.0.0-alpha10" # Compose Hot Reload version
 
 [libraries]
 # Kotlin
@@ -75,11 +77,26 @@ bouncycastle-pkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = 
 koin-core = { module = "io.insert-koin:koin-core", version.ref = "koin" }
 koin-ktor = { module = "io.insert-koin:koin-ktor", version.ref = "koin" }
 koin-logger-slf4j = { module = "io.insert-koin:koin-logger-slf4j", version.ref = "koin" }
-koin-test = { module = "io.insert-koin:koin-test", version.ref = "koin" } # Add Koin Test
+koin-test = { module = "io.insert-koin:koin-test", version.ref = "koin" }
 koin-test-junit5 = { module = "io.insert-koin:koin-test-junit5", version.ref = "koin" }
+koin-compose = { module = "io.insert-koin:koin-compose", version.ref = "koin" }
+koin-compose-viewmodel = { module = "io.insert-koin:koin-compose-viewmodel", version.ref = "koin" }
+koin-compose-navigation = { module = "io.insert-koin:koin-compose-navigation", version.ref = "koin" }
 
 # Arrow (FP library)
 arrow-core = { module = "io.arrow-kt:arrow-core", version.ref = "arrow" }
+
+# AndroidX ViewModel
+androidx-lifecycle-viewmodel = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel", version.ref = "androidx-lifecycle" }
+
+# AndroidX ViewModel utilities for Compose Multiplatform
+androidx-lifecycle-viewmodel-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "androidx-lifecycle" }
+
+# AndroidX Lifecycle utilities for Compose Multiplatform
+androidx-lifecycle-runtime-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose", version.ref = "androidx-lifecycle" }
+
+# KotlinX Coroutines Swing for JVM Main Dispatcher
+kotlinx-coroutines-swing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "coroutines" }
 
 # Testing
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -160,6 +177,11 @@ kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", versi
 # Ktor Gradle Plugin: Adds Ktor-specific tasks to the Gradle build.
 ktor = { id = "io.ktor.plugin", version.ref = "ktor" }
 
+# Kotlin Multiplatform Gradle Plugin: Adds multiplatform-specific tasks to the Gradle build.
+kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+
 # Compose Multiplatform Gradle Plugin: Adds Compose-specific tasks to the Gradle build.
 compose = { id = "org.jetbrains.compose", version.ref = "compose" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+
+compose-hotreload = { id = "org.jetbrains.compose.hot-reload", version.ref = "compose-hot-reload" }

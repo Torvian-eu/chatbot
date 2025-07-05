@@ -1,111 +1,69 @@
 package eu.torvian.chatbot.server.main
 
-import eu.torvian.chatbot.common.misc.di.DIContainerKey
-import eu.torvian.chatbot.common.misc.di.KoinDIContainer
-import eu.torvian.chatbot.server.domain.config.DatabaseConfig
-import eu.torvian.chatbot.server.domain.security.EncryptionConfig
-import eu.torvian.chatbot.server.koin.*
-import eu.torvian.chatbot.server.ktor.configureKtor
-import eu.torvian.chatbot.server.ktor.routes.ApiRoutesKtor
-import io.ktor.server.application.*
-import io.ktor.server.engine.*
-import io.ktor.server.netty.*
-import io.ktor.server.routing.*
 import kotlinx.coroutines.runBlocking
 import org.apache.logging.log4j.Level
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 import org.apache.logging.log4j.core.config.Configurator
-import org.koin.ktor.ext.get
-import org.koin.ktor.ext.getKoin
-import org.koin.ktor.plugin.Koin
+import java.io.BufferedReader
+import java.io.InputStreamReader
 
-private val logger: Logger = LogManager.getLogger("ServerMain")
+val logger: Logger = LogManager.getLogger("ServerMain")
 
 /**
- * Main entry point for the chatbot server application.
- * Sets up Koin dependency injection, configures the database,
- * installs necessary plugins, and starts the Ktor server.
+ * Main entry point for the **standalone** chatbot server application.
+ * Sets up logging and starts the server.
  */
 fun main() {
-    // Configure logging level
+    // TODO: Load server config from application.conf
+    val serverConfig = ServerConfig("http", "localhost", 8080, "")
+    val serverControlService = ServerControlServiceImpl(serverConfig)
+
+    // Configure logging level once at application startup
     Configurator.setRootLevel(Level.DEBUG)
-    logger.info("Starting Chatbot Server...")
 
-    // Start Ktor embedded server
-    embeddedServer(Netty, port = 8080, host = "localhost") {
-        // Configure Koin DI FIRST, as plugins and routing will depend on it
-        configureKoin()
+    try {
+        runBlocking {
+            try {
+                serverControlService.startSuspend()
+            } catch (e: Exception) {
+                logger.error("Error during standalone server startup.", e)
+            }
 
-        // Configure Ktor
-        configureKtor()
+            println("Press Enter twice to exit, or type 'exit'.")
 
-        // Configure the database schema (usually blocking)
-        configureDatabase()
+            val reader = BufferedReader(InputStreamReader(System.`in`))
+            var emptyLineCount = 0
 
-        // Configure routing
-        configureRouting()
+            try {
+                while (true) {
+                    val input = reader.readLine() ?: ""
+                    if (input.trim().lowercase() == "exit") {
+                        break
+                    }
+                    if (input.isBlank()) {
+                        emptyLineCount++
+                        if (emptyLineCount >= 2) {
+                            println("Exiting on double return.")
+                            break
+                        }
+                    } else {
+                        emptyLineCount = 0
+                        println("Invalid command. Press Enter twice or type 'exit' to exit.")
+                    }
+                }
+            } catch (e: Exception) {
+                println("An error occurred: ${e.message}")
+            } finally {
+                reader.close()
+                serverControlService.stopSuspend(100, 3000)
+            }
 
-        // Log successful startup information
-        logger.info("Server started successfully on http://localhost:8080")
-        logger.info("API endpoints available at http://localhost:8080/api/v1/")
-    }.start(wait = true) // Start the server and wait until it's stopped
-}
+            println("Program exited.")
+        }
 
-/**
- * Configures Koin for dependency injection within the Application.
- */
-fun Application.configureKoin() {
-    // Configuration values (e.g., database credentials, encryption keys)
-    val databaseConfig = DatabaseConfig(
-        vendor = "sqlite",
-        type = "file", // Use file-based SQLite for persistence
-        filepath = null,
-        filename = "chatbot.db",
-        user = null,
-        password = null
-    )
-    val encryptionConfig = EncryptionConfig(
-        keyVersion = 1,
-        masterKey = "default-master-key-change-in-production" // **IMPORTANT:** Change this in production!
-    )
-
-    // Initialize Koin plugin with defined modules
-    install(Koin) {
-        modules(
-            configModule(databaseConfig, encryptionConfig),
-            databaseModule(),
-            miscModule(),
-            daoModule(),
-            serviceModule(),
-            mainModule(this@configureKoin)
-        )
-    }
-
-    // Store the DI container in the application attributes for later manual access if needed
-    val container = KoinDIContainer(getKoin())
-    attributes.put(DIContainerKey, container)
-}
-
-/**
- * Configures the database schema for the application.
- */
-fun Application.configureDatabase() {
-    runBlocking {
-        val dataManager: DataManager = get()
-        // Drop and create tables - adjust as needed for production (migrations!)
-        dataManager.dropTables()
-        dataManager.createTables()
-        logger.info("Database initialized successfully")
+    } catch (e: Exception) {
+        logger.error("An unhandled error occurred: ${e.message}", e)
     }
 }
 
-/**
- * Configures routing for the Ktor application.
- */
-fun Application.configureRouting() {
-    val apiRoutesKtor: ApiRoutesKtor = get()
-    routing {
-        apiRoutesKtor.configureAllRoutes(this)
-    }
-}

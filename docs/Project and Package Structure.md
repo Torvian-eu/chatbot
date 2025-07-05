@@ -23,17 +23,17 @@ chatbot/
 ├── build.gradle.kts              # Root build configuration
 ├── settings.gradle.kts           # Module definitions
 ├── gradle.properties             # Global Gradle properties
-├── gradle/
-│   ├── libs.versions.toml        # Version catalog
-│   └── wrapper/                  # Gradle wrapper
+├── app-main/                     # Desktop UI application
+├── app-shared/                   # Shared frontend logic (API clients, ViewModels)
 ├── build-logic/                  # Custom Gradle convention plugins
 │   └── src/main/kotlin/
 │       └── CommonModuleConventionPlugin.kt
-├── docs/                         # Project documentation
-├── temp/                         # Temporary files
 ├── common/                       # Shared models and utilities
-├── server/                       # Backend logic and services
-└── app/                          # Desktop UI application
+├── docs/                         # Project documentation
+├── gradle/
+│   ├── libs.versions.toml        # Version catalog
+│   └── wrapper/                  # Gradle wrapper
+└── server/                       # Backend logic and services
 ```
 
 ## Detailed Module Breakdown
@@ -138,10 +138,16 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │       ├── configureSessionRoutes.kt
 │       └── configureSettingsRoutes.kt
 ├── main/
+│   ├── chatBotServerModule.kt    # Main Ktor application module for the chatbot server
 │   ├── DataManager.kt            # Interface for managing database schema
 │   ├── ExposedDataManager.kt     # Exposed data manager implementation
 │   ├── mainModule.kt             # Koin module for main application setup
-│   └── ServerMain.kt             # Main application entry point
+│   ├── ServerConfig.kt           # Server configuration data class
+│   ├── ServerControlService.kt   # Server control service interface
+│   ├── ServerControlServiceImpl.kt # Server control service implementation
+│   ├── ServerInstanceInfo.kt     # Server instance information
+│   ├── ServerMain.kt             # Main application entry point
+│   └── ServerStatus.kt           # Server status sealed interface  
 ├── service/                      # Business logic services
 │   ├── core/                     # Core services
 │   │   ├── GroupService.kt       # Group management service interface
@@ -234,32 +240,36 @@ server/src/test/kotlin/eu/torvian/chatbot/server/
 - Extensive test coverage with test utilities
 - Koin dependency injection throughout
 
-### 3. App Module (`app/`)
+### 3. App Module (`app-main/` & `app-shared/`)
 
 **Purpose**: Desktop application frontend built with Compose for Desktop.
 
 **Package Structure**:
 ```
-app/src/main/kotlin/eu/torvian/chatbot/app/
-├── AppMain.kt        <- Application entry point, setup (Ktor Server start, UI launch, DI)
-│
-├── ui/            <- UI Layer (Compose for Desktop) - Renders threads and grouped sessions
-│   ├── AppLayout.kt
-│   ├── ChatArea.kt
-│   ├── SessionListPanel.kt
-│   ├── InputArea.kt
-│   ├── SettingsScreen.kt
-│   ├── ... other UI components ...
-│   └── state/           <- UI State Management (e.g., ChatState, SessionListState ViewModel) - Handles threaded and grouped data for display
-│       ├── ChatState.kt <- Depends on eu.torvian.chatbot.app.api.client.ChatApi
-│       └── SessionListState.kt <- Depends on eu.torvian.chatbot.app.api.client.ChatApi, eu.torvian.chatbot.app.api.client.GroupApi
-└── api/
-    └── client/        <- Frontend API Client Layer - Translates UI actions to API calls for chat, models, settings, and groups
-        ├── ChatApi.kt <- Interface (Consumed by eu.torvian.chatbot.app.ui.state.ChatState/SessionListState)
-        ├── GroupApi.kt <- Interface (Consumed by eu.torvian.chatbot.app.ui.state.SessionListState or similar)
-        ├── KtorChatApiClient.kt <- Implementation (Uses Ktor Client to talk to localhost)
-        └── KtorGroupApiClient.kt <- Implementation (Uses Ktor Client to talk to localhost)
+app-main/src/desktopMain/kotlin/eu/torvian/chatbot/app/main/
+└── AppMain.kt        # Application entry point, setup (Ktor Server start, UI launch, DI)
 
+app-shared/src/commonMain/kotlin/eu/torvian/chatbot/app/
+├── compose/          # Compose UI components
+│   ├── AppShell.kt   # Main application shell (contains navigation, top-level layout)
+│   └── ... other UI components ...
+├── koin/            # Koin modules 
+│   └── appModule.kt  # main app DI module
+├── service/          # Frontend services (API clients)
+│   ├── apiclient/    # API client layer
+│   │   ├── ChatApiClient.kt  # Chat API client interface
+│   │   ├── GroupApiClient.kt # Group API client interface
+│   │   ├── ... other API interfaces ...
+│   │   ├── apiclient/  # API client implementations
+│   │   └── ktor/       # Ktor-based API client implementations
+│   │       ├── BaseApiClient.kt  # Base API client implementation
+│   │       ├── createHttpClient.kt # Ktor HTTP client setup
+│   │       ├── KtorChatApiClient.kt
+│   │       ├── KtorGroupApiClient.kt
+│   │       └── ... other Ktor API client implementations ...
+│   └── ... other frontend services ...
+└── viewmodel/        # ViewModels for UI state management
+    └── StartupViewModel.kt  # Startup ViewModel (manages server startup state)
 ```
 
 **Key Features**:
