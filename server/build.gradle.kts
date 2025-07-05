@@ -43,5 +43,5 @@ dependencies {
 
 // Define the main application entry point
 application {
-    mainClass.set("eu.torvian.chatbot.server.ServerMainKt")
+    mainClass.set("eu.torvian.chatbot.server.main.ServerMainKt")
 }
