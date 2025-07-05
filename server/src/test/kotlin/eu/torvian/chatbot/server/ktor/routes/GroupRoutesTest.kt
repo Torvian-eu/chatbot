@@ -2,7 +2,7 @@ package eu.torvian.chatbot.server.ktor.routes
 
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
-import eu.torvian.chatbot.common.api.resources.GroupsResource
+import eu.torvian.chatbot.common.api.resources.GroupResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
@@ -84,7 +84,7 @@ class GroupRoutesTest {
         val expectedGroups = listOf(testGroup1, testGroup2)
 
         // Act & Assert
-        val response = client.get(href(GroupsResource()))
+        val response = client.get(href(GroupResource()))
         assertEquals(HttpStatusCode.OK, response.status)
         val groups = response.body<List<ChatGroup>>()
         assertEquals(expectedGroups, groups)
@@ -99,7 +99,7 @@ class GroupRoutesTest {
         val createRequest = CreateGroupRequest(name = newGroupName)
 
         // Act
-        val response = client.post(href(GroupsResource())) {
+        val response = client.post(href(GroupResource())) {
             contentType(ContentType.Application.Json)
             setBody<CreateGroupRequest>(createRequest)
         }
@@ -121,7 +121,7 @@ class GroupRoutesTest {
         val createRequest = CreateGroupRequest(name = blankName)
 
         // Act
-        val response = client.post(href(GroupsResource())) {
+        val response = client.post(href(GroupResource())) {
             contentType(ContentType.Application.Json)
             setBody<CreateGroupRequest>(createRequest)
         }
@@ -143,7 +143,7 @@ class GroupRoutesTest {
         val createRequest = CreateGroupRequest(name = emptyName)
 
         // Act
-        val response = client.post(href(GroupsResource())) {
+        val response = client.post(href(GroupResource())) {
             contentType(ContentType.Application.Json)
             setBody<CreateGroupRequest>(createRequest)
         }
@@ -166,7 +166,7 @@ class GroupRoutesTest {
         testDataManager.insertChatGroup(testGroup1)
 
         // Act
-        val response = client.delete(href(GroupsResource.ById(groupId = testGroup1.id)))
+        val response = client.delete(href(GroupResource.ById(groupId = testGroup1.id)))
 
         // Assert
         assertEquals(HttpStatusCode.NoContent, response.status)
@@ -180,7 +180,7 @@ class GroupRoutesTest {
     fun `DELETE group with non-existent ID should return 404`() = groupTestApplication {
         // Act
         val nonExistentId = 999L
-        val response = client.delete(href(GroupsResource.ById(groupId = nonExistentId)))
+        val response = client.delete(href(GroupResource.ById(groupId = nonExistentId)))
 
         // Assert
         assertEquals(HttpStatusCode.NotFound, response.status)
@@ -202,7 +202,7 @@ class GroupRoutesTest {
         val renameRequest = RenameGroupRequest(name = newName)
 
         // Act
-        val response = client.put(href(GroupsResource.ById(groupId = testGroup1.id))) {
+        val response = client.put(href(GroupResource.ById(groupId = testGroup1.id))) {
             contentType(ContentType.Application.Json)
             setBody<RenameGroupRequest>(renameRequest)
         }
@@ -222,7 +222,7 @@ class GroupRoutesTest {
         val renameRequest = RenameGroupRequest(name = "New Name")
 
         // Act
-        val response = client.put(href(GroupsResource.ById(groupId = nonExistentId))) {
+        val response = client.put(href(GroupResource.ById(groupId = nonExistentId))) {
             contentType(ContentType.Application.Json)
             setBody<RenameGroupRequest>(renameRequest)
         }
@@ -245,7 +245,7 @@ class GroupRoutesTest {
         val renameRequest = RenameGroupRequest(name = blankName)
 
         // Act
-        val response = client.put(href(GroupsResource.ById(groupId = testGroup1.id))) {
+        val response = client.put(href(GroupResource.ById(groupId = testGroup1.id))) {
             contentType(ContentType.Application.Json)
             setBody<RenameGroupRequest>(renameRequest)
         }
@@ -268,7 +268,7 @@ class GroupRoutesTest {
         val renameRequest = RenameGroupRequest(name = emptyName)
 
         // Act
-        val response = client.put(href(GroupsResource.ById(groupId = testGroup1.id))) {
+        val response = client.put(href(GroupResource.ById(groupId = testGroup1.id))) {
             contentType(ContentType.Application.Json)
             setBody<RenameGroupRequest>(renameRequest)
         }

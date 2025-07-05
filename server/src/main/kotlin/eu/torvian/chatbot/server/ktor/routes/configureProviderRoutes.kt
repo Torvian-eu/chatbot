@@ -2,7 +2,7 @@ package eu.torvian.chatbot.server.ktor.routes
 
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
-import eu.torvian.chatbot.common.api.resources.ProvidersResource
+import eu.torvian.chatbot.common.api.resources.ProviderResource
 import eu.torvian.chatbot.common.models.AddProviderRequest
 import eu.torvian.chatbot.common.models.LLMProvider
 import eu.torvian.chatbot.common.models.UpdateProviderCredentialRequest
@@ -24,12 +24,12 @@ fun Route.configureProviderRoutes(
     llmModelService: LLMModelService
 ) {
     // GET /api/v1/providers - List all providers
-    get<ProvidersResource> {
+    get<ProviderResource> {
         call.respond(llmProviderService.getAllProviders())
     }
 
     // POST /api/v1/providers - Add new provider
-    post<ProvidersResource> {
+    post<ProviderResource> {
         val request = call.receive<AddProviderRequest>()
         call.respondEither(
             llmProviderService.addProvider(
@@ -48,7 +48,7 @@ fun Route.configureProviderRoutes(
     }
 
     // GET /api/v1/providers/{providerId} - Get provider by ID
-    get<ProvidersResource.ById> { resource ->
+    get<ProviderResource.ById> { resource ->
         val providerId = resource.providerId
         call.respondEither(llmProviderService.getProviderById(providerId)) { error ->
             when (error) {
@@ -59,7 +59,7 @@ fun Route.configureProviderRoutes(
     }
 
     // PUT /api/v1/providers/{providerId} - Update provider by ID
-    put<ProvidersResource.ById> { resource ->
+    put<ProviderResource.ById> { resource ->
         val providerId = resource.providerId
         val provider = call.receive<LLMProvider>()
         if (provider.id != providerId) {
@@ -88,7 +88,7 @@ fun Route.configureProviderRoutes(
     }
 
     // DELETE /api/v1/providers/{providerId} - Delete provider by ID
-    delete<ProvidersResource.ById> { resource ->
+    delete<ProviderResource.ById> { resource ->
         val providerId = resource.providerId
         call.respondEither(
             llmProviderService.deleteProvider(providerId),
@@ -110,7 +110,7 @@ fun Route.configureProviderRoutes(
     }
 
     // PUT /api/v1/providers/{providerId}/credential - Update provider credential
-    put<ProvidersResource.ById.Credential> { resource ->
+    put<ProviderResource.ById.Credential> { resource ->
         val providerId = resource.parent.providerId
         val request = call.receive<UpdateProviderCredentialRequest>()
         call.respondEither(
@@ -130,7 +130,7 @@ fun Route.configureProviderRoutes(
     }
 
     // GET /api/v1/providers/{providerId}/models - Get models for this provider
-    get<ProvidersResource.ById.Models> { resource ->
+    get<ProviderResource.ById.Models> { resource ->
         val providerId = resource.parent.providerId
         call.respond(llmModelService.getModelsByProviderId(providerId))
     }

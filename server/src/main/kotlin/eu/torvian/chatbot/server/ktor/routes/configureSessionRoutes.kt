@@ -3,7 +3,7 @@ package eu.torvian.chatbot.server.ktor.routes
 import eu.torvian.chatbot.common.api.ChatbotApiErrorCodes
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
-import eu.torvian.chatbot.common.api.resources.SessionsResource
+import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.models.*
 import eu.torvian.chatbot.server.service.core.MessageService
 import eu.torvian.chatbot.server.service.core.SessionService
@@ -23,12 +23,12 @@ fun Route.configureSessionRoutes(
     messageService: MessageService
 ) {
     // GET /api/v1/sessions - List all sessions
-    get<SessionsResource> {
+    get<SessionResource> {
         call.respond(sessionService.getAllSessionsSummaries())
     }
 
     // POST /api/v1/sessions - Create a new session
-    post<SessionsResource> {
+    post<SessionResource> {
         val request = call.receive<CreateSessionRequest>()
         call.respondEither(
             sessionService.createSession(request.name),
@@ -53,7 +53,7 @@ fun Route.configureSessionRoutes(
     }
 
     // GET /api/v1/sessions/{sessionId} - Get session by ID
-    get<SessionsResource.ById> { resource ->
+    get<SessionResource.ById> { resource ->
         val sessionId = resource.sessionId
         call.respondEither(sessionService.getSessionDetails(sessionId)) { error ->
             when (error) {
@@ -64,7 +64,7 @@ fun Route.configureSessionRoutes(
     }
 
     // DELETE /api/v1/sessions/{sessionId} - Delete session by ID
-    delete<SessionsResource.ById> { resource ->
+    delete<SessionResource.ById> { resource ->
         val sessionId = resource.sessionId
         call.respondEither(
             sessionService.deleteSession(sessionId),
@@ -79,7 +79,7 @@ fun Route.configureSessionRoutes(
 
     // --- Granular PUT routes using nested resources ---
     // PUT /api/v1/sessions/{sessionId}/name - Update the name of a session
-    put<SessionsResource.ById.Name> { resource ->
+    put<SessionResource.ById.Name> { resource ->
         val sessionId = resource.parent.sessionId
         val request = call.receive<UpdateSessionNameRequest>()
         call.respondEither(sessionService.updateSessionName(sessionId, request.name)) { error ->
@@ -98,7 +98,7 @@ fun Route.configureSessionRoutes(
     }
 
     // PUT /api/v1/sessions/{sessionId}/model - Update the current model ID of a session
-    put<SessionsResource.ById.Model> { resource ->
+    put<SessionResource.ById.Model> { resource ->
         val sessionId = resource.parent.sessionId
         val request = call.receive<UpdateSessionModelRequest>()
         call.respondEither(
@@ -119,7 +119,7 @@ fun Route.configureSessionRoutes(
     }
 
     // PUT /api/v1/sessions/{sessionId}/settings - Update the current settings ID of a session
-    put<SessionsResource.ById.Settings> { resource ->
+    put<SessionResource.ById.Settings> { resource ->
         val sessionId = resource.parent.sessionId
         val request = call.receive<UpdateSessionSettingsRequest>()
         call.respondEither(
@@ -140,7 +140,7 @@ fun Route.configureSessionRoutes(
     }
 
     // PUT /api/v1/sessions/{sessionId}/leafMessage - Update the current leaf message ID of a session
-    put<SessionsResource.ById.LeafMessage> { resource ->
+    put<SessionResource.ById.LeafMessage> { resource ->
         val sessionId = resource.parent.sessionId
         val request = call.receive<UpdateSessionLeafMessageRequest>()
         call.respondEither(
@@ -161,7 +161,7 @@ fun Route.configureSessionRoutes(
     }
 
     // PUT /api/v1/sessions/{sessionId}/group - Assign session to group or ungroup
-    put<SessionsResource.ById.Group> { resource ->
+    put<SessionResource.ById.Group> { resource ->
         val sessionId = resource.parent.sessionId
         val request = call.receive<UpdateSessionGroupRequest>()
         call.respondEither(
@@ -182,7 +182,7 @@ fun Route.configureSessionRoutes(
     }
 
     // POST /api/v1/sessions/{sessionId}/messages - Process a new message for a session
-    post<SessionsResource.ById.Messages> { resource ->
+    post<SessionResource.ById.Messages> { resource ->
         val sessionId = resource.parent.sessionId
         val request = call.receive<ProcessNewMessageRequest>()
         call.respondEither(

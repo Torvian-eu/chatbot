@@ -2,7 +2,7 @@ package eu.torvian.chatbot.server.ktor.routes
 
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
-import eu.torvian.chatbot.common.api.resources.ModelResources
+import eu.torvian.chatbot.common.api.resources.ModelResource
 import eu.torvian.chatbot.common.models.AddModelRequest
 import eu.torvian.chatbot.common.models.AddModelSettingsRequest
 import eu.torvian.chatbot.common.models.ApiKeyStatusResponse
@@ -26,12 +26,12 @@ import kotlin.to
  */
 fun Route.configureModelRoutes(llmModelService: LLMModelService, modelSettingsService: ModelSettingsService) {
     // GET /api/v1/models - List all models
-    get<ModelResources> {
+    get<ModelResource> {
         call.respond(llmModelService.getAllModels())
     }
 
     // POST /api/v1/models - Add new model
-    post<ModelResources> {
+    post<ModelResource> {
         val request = call.receive<AddModelRequest>()
         call.respondEither(
             llmModelService.addModel(
@@ -59,7 +59,7 @@ fun Route.configureModelRoutes(llmModelService: LLMModelService, modelSettingsSe
     }
 
     // GET /api/v1/models/{modelId} - Get model by ID
-    get<ModelResources.ById> { resource ->
+    get<ModelResource.ById> { resource ->
         val modelId = resource.modelId
         call.respondEither(llmModelService.getModelById(modelId)) { error ->
             when (error) {
@@ -70,7 +70,7 @@ fun Route.configureModelRoutes(llmModelService: LLMModelService, modelSettingsSe
     }
 
     // PUT /api/v1/models/{modelId} - Update model by ID
-    put<ModelResources.ById> { resource ->
+    put<ModelResource.ById> { resource ->
         val modelId = resource.modelId
         val model = call.receive<LLMModel>()
         if (model.id != modelId) {
@@ -106,7 +106,7 @@ fun Route.configureModelRoutes(llmModelService: LLMModelService, modelSettingsSe
     }
 
     // DELETE /api/v1/models/{modelId} - Delete model by ID
-    delete<ModelResources.ById> { resource ->
+    delete<ModelResource.ById> { resource ->
         val modelId = resource.modelId
         call.respondEither(llmModelService.deleteModel(modelId), HttpStatusCode.NoContent) { error ->
             when (error) {
@@ -119,13 +119,13 @@ fun Route.configureModelRoutes(llmModelService: LLMModelService, modelSettingsSe
     // --- Nested settings routes under model ---
 
     // GET /api/v1/models/{modelId}/settings - List settings for this model
-    get<ModelResources.ById.Settings> { resource ->
+    get<ModelResource.ById.Settings> { resource ->
         val modelId = resource.parent.modelId
         call.respond(modelSettingsService.getSettingsByModelId(modelId))
     }
 
     // POST /api/v1/models/{modelId}/settings - Add new settings for this model
-    post<ModelResources.ById.Settings> { resource ->
+    post<ModelResource.ById.Settings> { resource ->
         val modelId = resource.parent.modelId
         val request = call.receive<AddModelSettingsRequest>()
         call.respondEither(
@@ -153,7 +153,7 @@ fun Route.configureModelRoutes(llmModelService: LLMModelService, modelSettingsSe
     }
 
     // GET /api/v1/models/{modelId}/apikey/status - Get API key status for model
-    get<ModelResources.ById.ApiKeyStatus> { resource ->
+    get<ModelResource.ById.ApiKeyStatus> { resource ->
         val modelId = resource.parent.modelId
         val isConfigured = llmModelService.isApiKeyConfiguredForModel(modelId)
         call.respond(ApiKeyStatusResponse(isConfigured))

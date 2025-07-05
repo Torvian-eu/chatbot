@@ -2,7 +2,7 @@ package eu.torvian.chatbot.server.ktor.routes
 
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
-import eu.torvian.chatbot.common.api.resources.MessagesResource
+import eu.torvian.chatbot.common.api.resources.MessageResource
 import eu.torvian.chatbot.common.models.UpdateMessageRequest
 import eu.torvian.chatbot.server.service.core.MessageService
 import eu.torvian.chatbot.server.service.core.error.message.DeleteMessageError
@@ -17,7 +17,7 @@ import io.ktor.server.routing.Route
  */
 fun Route.configureMessageRoutes(messageService: MessageService) {
     // PUT /api/v1/messages/{messageId}/content - Update message content by ID
-    put<MessagesResource.ById.Content> { resource ->
+    put<MessageResource.ById.Content> { resource ->
         val messageId = resource.parent.messageId
         val request = call.receive<UpdateMessageRequest>()
         call.respondEither(
@@ -34,7 +34,7 @@ fun Route.configureMessageRoutes(messageService: MessageService) {
     }
 
     // DELETE /api/v1/messages/{messageId} - Delete message by ID
-    delete<MessagesResource.ById> { resource ->
+    delete<MessageResource.ById> { resource ->
         val messageId = resource.messageId
         call.respondEither(
             messageService.deleteMessage(messageId),

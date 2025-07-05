@@ -7,12 +7,12 @@ import io.ktor.resources.*
  * (Session-specific messages are defined within SessionResources)
  */
 @Resource("messages")
-class MessagesResource(val parent: Api = Api()) { // References the base Api resource
+class MessageResource(val parent: Api = Api()) { // References the base Api resource
     /**
      * Resource for a specific message by ID: /api/v1/messages/{messageId}
      */
     @Resource("{messageId}")
-    class ById(val parent: MessagesResource = MessagesResource(), val messageId: Long) {
+    class ById(val parent: MessageResource = MessageResource(), val messageId: Long) {
         /**
          * Resource for updating message content: /api/v1/messages/{messageId}/content
          */

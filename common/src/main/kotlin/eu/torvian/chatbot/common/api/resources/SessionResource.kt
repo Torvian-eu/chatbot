@@ -6,12 +6,12 @@ import io.ktor.resources.*
  * Resource definitions for the /api/v1/sessions endpoints.
  */
 @Resource("sessions")
-class SessionsResource(val parent: Api = Api()) {
+class SessionResource(val parent: Api = Api()) {
     /**
      * Resource for a specific session by ID: /api/v1/sessions/{sessionId}
      */
     @Resource("{sessionId}")
-    class ById(val parent: SessionsResource = SessionsResource(), val sessionId: Long) {
+    class ById(val parent: SessionResource = SessionResource(), val sessionId: Long) {
         /**
          * Resource for updating a session's name: /api/v1/sessions/{sessionId}/name
          */

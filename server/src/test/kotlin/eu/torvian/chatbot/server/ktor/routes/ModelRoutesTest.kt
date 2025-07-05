@@ -2,7 +2,7 @@ package eu.torvian.chatbot.server.ktor.routes
 
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
-import eu.torvian.chatbot.common.api.resources.ModelResources
+import eu.torvian.chatbot.common.api.resources.ModelResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
@@ -92,7 +92,7 @@ class ModelRoutesTest {
         val expectedModels = listOf(testModel1, testModel2)
 
         // Act & Assert
-        val response = client.get(href(ModelResources()))
+        val response = client.get(href(ModelResource()))
         assertEquals(HttpStatusCode.OK, response.status)
         val models = response.body<List<LLMModel>>()
         assertEquals(expectedModels, models)
@@ -103,7 +103,7 @@ class ModelRoutesTest {
         // Arrange (no models inserted)
 
         // Act & Assert
-        val response = client.get(href(ModelResources()))
+        val response = client.get(href(ModelResource()))
         assertEquals(HttpStatusCode.OK, response.status)
         val models = response.body<List<LLMModel>>()
         assertEquals(emptyList(), models)
@@ -127,7 +127,7 @@ class ModelRoutesTest {
         )
 
         // Act
-        val response = client.post(href(ModelResources())) {
+        val response = client.post(href(ModelResource())) {
             contentType(ContentType.Application.Json)
             setBody(createRequest)
         }
@@ -158,7 +158,7 @@ class ModelRoutesTest {
         )
 
         // Act
-        val response = client.post(href(ModelResources())) {
+        val response = client.post(href(ModelResource())) {
             contentType(ContentType.Application.Json)
             setBody(createRequest)
         }
@@ -185,7 +185,7 @@ class ModelRoutesTest {
         )
 
         // Act
-        val response = client.post(href(ModelResources())) {
+        val response = client.post(href(ModelResource())) {
             contentType(ContentType.Application.Json)
             setBody(createRequest)
         }
@@ -218,7 +218,7 @@ class ModelRoutesTest {
         )
 
         // Act
-        val response = client.post(href(ModelResources())) {
+        val response = client.post(href(ModelResource())) {
             contentType(ContentType.Application.Json)
             setBody(createRequest)
         }
@@ -246,7 +246,7 @@ class ModelRoutesTest {
         )
 
         // Act
-        val response = client.get(href(ModelResources.ById(modelId = testModel1.id)))
+        val response = client.get(href(ModelResource.ById(modelId = testModel1.id)))
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
@@ -260,7 +260,7 @@ class ModelRoutesTest {
         val nonExistentId = 999L
 
         // Act
-        val response = client.get(href(ModelResources.ById(modelId = nonExistentId)))
+        val response = client.get(href(ModelResource.ById(modelId = nonExistentId)))
 
         // Assert
         assertEquals(HttpStatusCode.NotFound, response.status)
@@ -291,7 +291,7 @@ class ModelRoutesTest {
         )
 
         // Act
-        val response = client.put(href(ModelResources.ById(modelId = testModel1.id))) {
+        val response = client.put(href(ModelResource.ById(modelId = testModel1.id))) {
             contentType(ContentType.Application.Json)
             setBody(updatedModel)
         }
@@ -317,7 +317,7 @@ class ModelRoutesTest {
         val updatedModel = testModel1.copy(id = nonExistentId) // Use a copy with the non-existent ID
 
         // Act
-        val response = client.put(href(ModelResources.ById(modelId = nonExistentId))) {
+        val response = client.put(href(ModelResource.ById(modelId = nonExistentId))) {
             contentType(ContentType.Application.Json)
             setBody(updatedModel)
         }
@@ -345,7 +345,7 @@ class ModelRoutesTest {
         val updatedModel = testModel1.copy(id = mismatchedId) // Body ID is different from path ID
 
         // Act
-        val response = client.put(href(ModelResources.ById(modelId = testModel1.id))) {
+        val response = client.put(href(ModelResource.ById(modelId = testModel1.id))) {
             contentType(ContentType.Application.Json)
             setBody(updatedModel)
         }
@@ -374,7 +374,7 @@ class ModelRoutesTest {
         val updatedModel = testModel1.copy(name = "   ")
 
         // Act
-        val response = client.put(href(ModelResources.ById(modelId = testModel1.id))) {
+        val response = client.put(href(ModelResource.ById(modelId = testModel1.id))) {
             contentType(ContentType.Application.Json)
             setBody(updatedModel)
         }
@@ -403,7 +403,7 @@ class ModelRoutesTest {
             testModel1.copy(name = testModel2.name) // Try to change testModel1's name to testModel2's name
 
         // Act
-        val response = client.put(href(ModelResources.ById(modelId = testModel1.id))) {
+        val response = client.put(href(ModelResource.ById(modelId = testModel1.id))) {
             contentType(ContentType.Application.Json)
             setBody(updatedModel)
         }
@@ -432,7 +432,7 @@ class ModelRoutesTest {
         )
 
         // Act
-        val response = client.delete(href(ModelResources.ById(modelId = testModel1.id)))
+        val response = client.delete(href(ModelResource.ById(modelId = testModel1.id)))
 
         // Assert
         assertEquals(HttpStatusCode.NoContent, response.status)
@@ -448,7 +448,7 @@ class ModelRoutesTest {
         val nonExistentId = 999L
 
         // Act
-        val response = client.delete(href(ModelResources.ById(modelId = nonExistentId)))
+        val response = client.delete(href(ModelResource.ById(modelId = nonExistentId)))
 
         // Assert
         assertEquals(HttpStatusCode.NotFound, response.status)
@@ -474,7 +474,7 @@ class ModelRoutesTest {
         )
 
         // Act
-        val response = client.get(href(ModelResources.ById.Settings(ModelResources.ById(modelId = testModel1.id))))
+        val response = client.get(href(ModelResource.ById.Settings(ModelResource.ById(modelId = testModel1.id))))
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
@@ -494,7 +494,7 @@ class ModelRoutesTest {
         )
 
         // Act
-        val response = client.get(href(ModelResources.ById.Settings(ModelResources.ById(modelId = testModel1.id))))
+        val response = client.get(href(ModelResource.ById.Settings(ModelResource.ById(modelId = testModel1.id))))
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
@@ -510,7 +510,7 @@ class ModelRoutesTest {
         // Act
         // Note: The service layer currently returns an empty list if the model doesn't exist,
         // rather than a Not Found error. The test reflects this current behavior.
-        val response = client.get(href(ModelResources.ById.Settings(ModelResources.ById(modelId = nonExistentId))))
+        val response = client.get(href(ModelResource.ById.Settings(ModelResource.ById(modelId = nonExistentId))))
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status) // Expect OK with empty list based on service impl
@@ -545,7 +545,7 @@ class ModelRoutesTest {
         )
 
         // Act
-        val response = client.post(href(ModelResources.ById.Settings(ModelResources.ById(modelId = testModel1.id)))) {
+        val response = client.post(href(ModelResource.ById.Settings(ModelResource.ById(modelId = testModel1.id)))) {
             contentType(ContentType.Application.Json)
             setBody(createRequest)
         }
@@ -585,7 +585,7 @@ class ModelRoutesTest {
         )
 
         // Act
-        val response = client.post(href(ModelResources.ById.Settings(ModelResources.ById(modelId = testModel1.id)))) {
+        val response = client.post(href(ModelResource.ById.Settings(ModelResource.ById(modelId = testModel1.id)))) {
             contentType(ContentType.Application.Json)
             setBody(createRequest)
         }
@@ -614,7 +614,7 @@ class ModelRoutesTest {
 
         // Act
         val response =
-            client.post(href(ModelResources.ById.Settings(ModelResources.ById(modelId = nonExistentModelId)))) {
+            client.post(href(ModelResource.ById.Settings(ModelResource.ById(modelId = nonExistentModelId)))) {
                 contentType(ContentType.Application.Json)
                 setBody(createRequest)
             }
@@ -643,7 +643,7 @@ class ModelRoutesTest {
         )
 
         // Act
-        val response = client.get(href(ModelResources.ById.ApiKeyStatus(ModelResources.ById(modelId = testModel1.id))))
+        val response = client.get(href(ModelResource.ById.ApiKeyStatus(ModelResource.ById(modelId = testModel1.id))))
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
@@ -663,7 +663,7 @@ class ModelRoutesTest {
         )
 
         // Act
-        val response = client.get(href(ModelResources.ById.ApiKeyStatus(ModelResources.ById(modelId = testModel1.id))))
+        val response = client.get(href(ModelResource.ById.ApiKeyStatus(ModelResource.ById(modelId = testModel1.id))))
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
@@ -679,7 +679,7 @@ class ModelRoutesTest {
         // Act
         // Note: The service layer currently returns false if the model doesn't exist,
         // rather than a Not Found error. The test reflects this current behavior.
-        val response = client.get(href(ModelResources.ById.ApiKeyStatus(ModelResources.ById(modelId = nonExistentId))))
+        val response = client.get(href(ModelResource.ById.ApiKeyStatus(ModelResource.ById(modelId = nonExistentId))))
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status) // Expect OK with false based on service impl
