@@ -55,7 +55,7 @@ kotlin {
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.content.negotiation)
             implementation(libs.ktor.serialization.json)
-            implementation(libs.ktor.resources) // For Ktor Resources type-safe URLs
+            implementation(libs.ktor.client.resources)
 
             // Arrow dependencies for Either
             implementation(libs.arrow.core)
@@ -78,6 +78,7 @@ kotlin {
             implementation(libs.kotlinx.coroutines.test)
             implementation(libs.bundles.koin.test)
             implementation(libs.mockk)
+            implementation(libs.ktor.client.mock)
 
             @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
             implementation(compose.uiTest)
