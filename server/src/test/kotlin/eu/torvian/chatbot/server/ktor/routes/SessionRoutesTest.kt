@@ -2,7 +2,7 @@ package eu.torvian.chatbot.server.ktor.routes
 
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
-import eu.torvian.chatbot.common.api.resources.SessionsResource
+import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
@@ -122,7 +122,7 @@ class SessionRoutesTest {
         testDataManager.insertChatSession(testSession2)
 
         // Act
-        val response = client.get(href(SessionsResource()))
+        val response = client.get(href(SessionResource()))
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
@@ -137,7 +137,7 @@ class SessionRoutesTest {
     @Test
     fun `GET sessions should return empty list when no sessions exist`() = sessionTestApplication {
         // Act
-        val response = client.get(href(SessionsResource()))
+        val response = client.get(href(SessionResource()))
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
@@ -154,7 +154,7 @@ class SessionRoutesTest {
         val createRequest = CreateSessionRequest(name = sessionName)
 
         // Act
-        val response = client.post(href(SessionsResource())) {
+        val response = client.post(href(SessionResource())) {
             contentType(ContentType.Application.Json)
             setBody(createRequest)
         }
@@ -176,7 +176,7 @@ class SessionRoutesTest {
         val createRequest = CreateSessionRequest(name = null)
 
         // Act
-        val response = client.post(href(SessionsResource())) {
+        val response = client.post(href(SessionResource())) {
             contentType(ContentType.Application.Json)
             setBody(createRequest)
         }
@@ -199,7 +199,7 @@ class SessionRoutesTest {
         val createRequest = CreateSessionRequest(name = blankName)
 
         // Act
-        val response = client.post(href(SessionsResource())) {
+        val response = client.post(href(SessionResource())) {
             contentType(ContentType.Application.Json)
             setBody(createRequest)
         }
@@ -221,7 +221,7 @@ class SessionRoutesTest {
         testDataManager.insertChatSession(testSession)
 
         // Act
-        val response = client.get(href(SessionsResource.ById(sessionId = testSession.id)))
+        val response = client.get(href(SessionResource.ById(sessionId = testSession.id)))
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
@@ -239,7 +239,7 @@ class SessionRoutesTest {
         val nonExistentId = 999L
 
         // Act
-        val response = client.get(href(SessionsResource.ById(sessionId = nonExistentId)))
+        val response = client.get(href(SessionResource.ById(sessionId = nonExistentId)))
 
         // Assert
         assertEquals(HttpStatusCode.NotFound, response.status)
@@ -258,7 +258,7 @@ class SessionRoutesTest {
         testDataManager.insertChatSession(testSession)
 
         // Act
-        val response = client.delete(href(SessionsResource.ById(sessionId = testSession.id)))
+        val response = client.delete(href(SessionResource.ById(sessionId = testSession.id)))
 
         // Assert
         assertEquals(HttpStatusCode.NoContent, response.status)
@@ -274,7 +274,7 @@ class SessionRoutesTest {
         val nonExistentId = 999L
 
         // Act
-        val response = client.delete(href(SessionsResource.ById(sessionId = nonExistentId)))
+        val response = client.delete(href(SessionResource.ById(sessionId = nonExistentId)))
 
         // Assert
         assertEquals(HttpStatusCode.NotFound, response.status)
@@ -295,7 +295,7 @@ class SessionRoutesTest {
         val updateRequest = UpdateSessionNameRequest(name = newName)
 
         // Act
-        val response = client.put(href(SessionsResource.ById.Name(parent = SessionsResource.ById(sessionId = testSession.id)))) {
+        val response = client.put(href(SessionResource.ById.Name(parent = SessionResource.ById(sessionId = testSession.id)))) {
             contentType(ContentType.Application.Json)
             setBody(updateRequest)
         }
@@ -316,7 +316,7 @@ class SessionRoutesTest {
         val updateRequest = UpdateSessionNameRequest(name = "New Name")
 
         // Act
-        val response = client.put(href(SessionsResource.ById.Name(parent = SessionsResource.ById(sessionId = nonExistentId)))) {
+        val response = client.put(href(SessionResource.ById.Name(parent = SessionResource.ById(sessionId = nonExistentId)))) {
             contentType(ContentType.Application.Json)
             setBody(updateRequest)
         }
@@ -338,7 +338,7 @@ class SessionRoutesTest {
         val updateRequest = UpdateSessionNameRequest(name = blankName)
 
         // Act
-        val response = client.put(href(SessionsResource.ById.Name(parent = SessionsResource.ById(sessionId = testSession.id)))) {
+        val response = client.put(href(SessionResource.ById.Name(parent = SessionResource.ById(sessionId = testSession.id)))) {
             contentType(ContentType.Application.Json)
             setBody(updateRequest)
         }
@@ -362,7 +362,7 @@ class SessionRoutesTest {
         val updateRequest = UpdateSessionModelRequest(modelId = newModelId)
 
         // Act
-        val response = client.put(href(SessionsResource.ById.Model(parent = SessionsResource.ById(sessionId = testSession.id)))) {
+        val response = client.put(href(SessionResource.ById.Model(parent = SessionResource.ById(sessionId = testSession.id)))) {
             contentType(ContentType.Application.Json)
             setBody(updateRequest)
         }
@@ -386,7 +386,7 @@ class SessionRoutesTest {
         val updateRequest = UpdateSessionSettingsRequest(settingsId = newSettingsId)
 
         // Act
-        val response = client.put(href(SessionsResource.ById.Settings(parent = SessionsResource.ById(sessionId = testSession.id)))) {
+        val response = client.put(href(SessionResource.ById.Settings(parent = SessionResource.ById(sessionId = testSession.id)))) {
             contentType(ContentType.Application.Json)
             setBody(updateRequest)
         }
@@ -410,7 +410,7 @@ class SessionRoutesTest {
         val updateRequest = UpdateSessionGroupRequest(groupId = newGroupId)
 
         // Act
-        val response = client.put(href(SessionsResource.ById.Group(parent = SessionsResource.ById(sessionId = testSession.id)))) {
+        val response = client.put(href(SessionResource.ById.Group(parent = SessionResource.ById(sessionId = testSession.id)))) {
             contentType(ContentType.Application.Json)
             setBody(updateRequest)
         }
@@ -435,7 +435,7 @@ class SessionRoutesTest {
         val updateRequest = UpdateSessionLeafMessageRequest(leafMessageId = testAssistantMessage.id)
 
         // Act
-        val response = client.put(href(SessionsResource.ById.LeafMessage(parent = SessionsResource.ById(sessionId = testSession.id)))) {
+        val response = client.put(href(SessionResource.ById.LeafMessage(parent = SessionResource.ById(sessionId = testSession.id)))) {
             contentType(ContentType.Application.Json)
             setBody(updateRequest)
         }
@@ -459,7 +459,7 @@ class SessionRoutesTest {
         val processRequest = ProcessNewMessageRequest(content = messageContent)
 
         // Act
-        val response = client.post(href(SessionsResource.ById.Messages(parent = SessionsResource.ById(sessionId = testSession.id)))) {
+        val response = client.post(href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = testSession.id)))) {
             contentType(ContentType.Application.Json)
             setBody(processRequest)
         }
@@ -479,7 +479,7 @@ class SessionRoutesTest {
         val processRequest = ProcessNewMessageRequest(content = "Test message")
 
         // Act
-        val response = client.post(href(SessionsResource.ById.Messages(parent = SessionsResource.ById(sessionId = nonExistentId)))) {
+        val response = client.post(href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = nonExistentId)))) {
             contentType(ContentType.Application.Json)
             setBody(processRequest)
         }

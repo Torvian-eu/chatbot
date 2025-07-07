@@ -2,7 +2,7 @@ package eu.torvian.chatbot.server.ktor.routes
 
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
-import eu.torvian.chatbot.common.api.resources.MessagesResource
+import eu.torvian.chatbot.common.api.resources.MessageResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
@@ -107,7 +107,7 @@ class MessageRoutesTest {
         val updateRequest = UpdateMessageRequest(content = newContent)
 
         // Act
-        val response = client.put(href(MessagesResource.ById.Content(parent = MessagesResource.ById(messageId = testUserMessage.id)))) {
+        val response = client.put(href(MessageResource.ById.Content(parent = MessageResource.ById(messageId = testUserMessage.id)))) {
             contentType(ContentType.Application.Json)
             setBody(updateRequest)
         }
@@ -131,7 +131,7 @@ class MessageRoutesTest {
         val updateRequest = UpdateMessageRequest(content = "Some content")
 
         // Act
-        val response = client.put(href(MessagesResource.ById.Content(parent = MessagesResource.ById(messageId = nonExistentId)))) {
+        val response = client.put(href(MessageResource.ById.Content(parent = MessageResource.ById(messageId = nonExistentId)))) {
             contentType(ContentType.Application.Json)
             setBody(updateRequest)
         }
@@ -155,7 +155,7 @@ class MessageRoutesTest {
         testDataManager.insertChatMessage(testAssistantMessage) // Insert child message too
 
         // Act
-        val response = client.delete(href(MessagesResource.ById(messageId = testUserMessage.id)))
+        val response = client.delete(href(MessageResource.ById(messageId = testUserMessage.id)))
 
         // Assert
         assertEquals(HttpStatusCode.NoContent, response.status)
@@ -171,7 +171,7 @@ class MessageRoutesTest {
     fun `DELETE message with non-existent ID should return 404`() = messageTestApplication {
         // Act
         val nonExistentId = 999L
-        val response = client.delete(href(MessagesResource.ById(messageId = nonExistentId)))
+        val response = client.delete(href(MessageResource.ById(messageId = nonExistentId)))
 
         // Assert
         assertEquals(HttpStatusCode.NotFound, response.status)

@@ -2,7 +2,7 @@ package eu.torvian.chatbot.server.ktor.routes
 
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
-import eu.torvian.chatbot.common.api.resources.GroupsResource
+import eu.torvian.chatbot.common.api.resources.GroupResource
 import eu.torvian.chatbot.common.models.CreateGroupRequest
 import eu.torvian.chatbot.common.models.RenameGroupRequest
 import eu.torvian.chatbot.server.service.core.GroupService
@@ -20,12 +20,12 @@ import io.ktor.server.routing.Route
  */
 fun Route.configureGroupRoutes(groupService: GroupService) {
     // GET /api/v1/groups - List all groups
-    get<GroupsResource> {
+    get<GroupResource> {
         call.respond(groupService.getAllGroups())
     }
 
     // POST /api/v1/groups - Create a new group
-    post<GroupsResource> {
+    post<GroupResource> {
         val request = call.receive<CreateGroupRequest>()
         call.respondEither(groupService.createGroup(request.name), HttpStatusCode.Created) { error ->
             when (error) {
@@ -36,7 +36,7 @@ fun Route.configureGroupRoutes(groupService: GroupService) {
     }
 
     // DELETE /api/v1/groups/{groupId} - Delete group by ID
-    delete<GroupsResource.ById> { resource ->
+    delete<GroupResource.ById> { resource ->
         val groupId = resource.groupId
         call.respondEither(groupService.deleteGroup(groupId), HttpStatusCode.NoContent) { error ->
             when (error) {
@@ -47,7 +47,7 @@ fun Route.configureGroupRoutes(groupService: GroupService) {
     }
 
     // PUT /api/v1/groups/{groupId} - Rename group by ID
-    put<GroupsResource.ById> { resource ->
+    put<GroupResource.ById> { resource ->
         val groupId = resource.groupId
         val request = call.receive<RenameGroupRequest>()
         call.respondEither(groupService.renameGroup(groupId, request.name)) { error ->

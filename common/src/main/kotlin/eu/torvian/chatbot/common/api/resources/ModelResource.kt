@@ -6,12 +6,12 @@ import io.ktor.resources.*
  * Resource definitions for the /api/v1/models endpoints.
  */
 @Resource("models")
-class ModelResources(val parent: Api = Api()) {
+class ModelResource(val parent: Api = Api()) {
     /**
      * Resource for a specific model by ID: /api/v1/models/{modelId}
      */
     @Resource("{modelId}")
-    class ById(val parent: ModelResources = ModelResources(), val modelId: Long) {
+    class ById(val parent: ModelResource = ModelResource(), val modelId: Long) {
         /**
          * Resource for settings nested under a model: /api/v1/models/{modelId}/settings
          */

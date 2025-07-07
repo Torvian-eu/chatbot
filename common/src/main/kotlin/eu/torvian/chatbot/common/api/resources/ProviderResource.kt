@@ -6,12 +6,12 @@ import io.ktor.resources.*
  * Resource definitions for the /api/v1/providers endpoints.
  */
 @Resource("providers")
-class ProvidersResource(val parent: Api = Api()) {
+class ProviderResource(val parent: Api = Api()) {
     /**
      * Resource for a specific provider by ID: /api/v1/providers/{providerId}
      */
     @Resource("{providerId}")
-    class ById(val parent: ProvidersResource = ProvidersResource(), val providerId: Long) {
+    class ById(val parent: ProviderResource = ProviderResource(), val providerId: Long) {
         /**
          * Resource for updating a provider's credential: /api/v1/providers/{providerId}/credential
          */
