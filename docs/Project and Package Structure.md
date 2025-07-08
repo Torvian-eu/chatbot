@@ -256,11 +256,13 @@ app-shared/src/commonMain/kotlin/eu/torvian/chatbot/app/
 ├── koin/            # Koin modules 
 │   └── appModule.kt  # main app DI module
 ├── service/          # Frontend services (API clients)
-│   ├── apiclient/    # API client layer
-│   │   ├── ChatApiClient.kt  # Chat API client interface
-│   │   ├── GroupApiClient.kt # Group API client interface
-│   │   ├── ... other API interfaces ...
-│   │   ├── apiclient/  # API client implementations
+│   ├── api/          # API interfaces
+│   │   ├── ChatApi.kt  
+│   │   ├── GroupApi.kt
+│   │   ├── ModelApi.kt
+│   │   ├── ProviderApi.kt
+│   │   ├── SessionApi.kt
+│   │   ├── SettingsApi.kt
 │   │   └── ktor/       # Ktor-based API client implementations
 │   │       ├── BaseApiClient.kt  # Base API client implementation
 │   │       ├── createHttpClient.kt # Ktor HTTP client setup
@@ -270,6 +272,14 @@ app-shared/src/commonMain/kotlin/eu/torvian/chatbot/app/
 │   └── ... other frontend services ...
 └── viewmodel/        # ViewModels for UI state management
     └── StartupViewModel.kt  # Startup ViewModel (manages server startup state)
+    
+app-shared/src/commonTest/kotlin/eu/torvian/chatbot/app/
+├── service/api/ktor/    # Ktor API client tests
+│   ├── KtorChatApiClientTest.kt  
+│   ├── KtorSessionApiClientTest.kt 
+│   └── ... other API client tests ...
+└── viewmodel/
+    └── ... viewmodel tests ...
 ```
 
 **Key Features**:
