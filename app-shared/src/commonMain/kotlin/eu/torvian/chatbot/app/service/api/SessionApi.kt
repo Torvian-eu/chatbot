@@ -29,7 +29,7 @@ interface SessionApi {
      * Corresponds to `GET /api/v1/sessions`.
      * (E2.S3)
      *
-     * @return [arrow.core.Either.Right] containing a list of [eu.torvian.chatbot.common.models.ChatSessionSummary] on success,
+     * @return [Either.Right] containing a list of [ChatSessionSummary] on success,
      *         or [Either.Left] containing an [ApiError] on failure.
      */
     suspend fun getAllSessions(): Either<ApiError, List<ChatSessionSummary>>
@@ -41,7 +41,7 @@ interface SessionApi {
      * (E2.S1)
      *
      * @param request Optional request body containing a suggested name.
-     * @return [Either.Right] containing the newly created [eu.torvian.chatbot.common.models.ChatSession] object on success,
+     * @return [Either.Right] containing the newly created [ChatSession] object on success,
      *         or [Either.Left] containing an [ApiError] on failure.
      */
     suspend fun createSession(request: CreateSessionRequest): Either<ApiError, ChatSession>
