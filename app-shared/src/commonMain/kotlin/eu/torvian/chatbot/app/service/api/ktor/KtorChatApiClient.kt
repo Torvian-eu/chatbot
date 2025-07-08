@@ -14,7 +14,7 @@ import io.ktor.client.plugins.resources.*
 import io.ktor.client.request.*
 
 /**
- * Ktor HttpClient implementation of the [eu.torvian.chatbot.app.service.api.ChatApi] interface.
+ * Ktor HttpClient implementation of the [ChatApi] interface.
  *
  * Uses the configured [HttpClient] and the [BaseApiClient.safeApiCall] helper
  * to interact with the backend's chat message endpoints, mapping responses
@@ -24,14 +24,6 @@ import io.ktor.client.request.*
  */
 class KtorChatApiClient(client: HttpClient) : BaseApiClient(client), ChatApi {
 
-    /**
-     * Sends a new user message and processes the LLM response.
-     * (E1.S1, E1.S4, E1.S7)
-     *
-     * @param sessionId The ID of the session.
-     * @param request The message request details.
-     * @return [Either] the list of new messages or an [ApiError].
-     */
     override suspend fun processNewMessage(
         sessionId: Long,
         request: ProcessNewMessageRequest
@@ -46,14 +38,6 @@ class KtorChatApiClient(client: HttpClient) : BaseApiClient(client), ChatApi {
         }
     }
 
-    /**
-     * Updates the content of an existing message.
-     * (E3.S3)
-     *
-     * @param messageId The ID of the message to update.
-     * @param request The new content.
-     * @return [Either] the updated ChatMessage or an [ApiError].
-     */
     override suspend fun updateMessageContent(
         messageId: Long,
         request: UpdateMessageRequest
@@ -68,13 +52,6 @@ class KtorChatApiClient(client: HttpClient) : BaseApiClient(client), ChatApi {
         }
     }
 
-    /**
-     * Deletes a specific message and its children.
-     * (E3.S4)
-     *
-     * @param messageId The ID of the message to delete.
-     * @return [Either] Unit on success or an [ApiError].
-     */
     override suspend fun deleteMessage(messageId: Long): Either<ApiError, Unit> {
         // Use safeApiCall to wrap the Ktor request
         return safeApiCall {

@@ -1,0 +1,73 @@
+package eu.torvian.chatbot.app.service.api
+
+import arrow.core.Either
+import eu.torvian.chatbot.common.api.ApiError
+import eu.torvian.chatbot.common.models.AddModelSettingsRequest
+import eu.torvian.chatbot.common.models.ModelSettings
+
+/**
+ * Frontend API interface for interacting with Model Settings Profile-related endpoints.
+ *
+ * This interface defines the operations for managing LLM settings profiles.
+ * Implementations use the internal HTTP API. All methods are suspend functions
+ * and return [Either<ApiError, T>].
+ */
+interface SettingsApi {
+    /**
+     * Retrieves a list of all settings profiles associated with a specific LLM model.
+     *
+     * Corresponds to `GET /api/v1/models/{modelId}/settings`.
+     * (E4.S5)
+     *
+     * @param modelId The ID of the model whose settings profiles to retrieve.
+     * @return [Either.Right] containing a list of [ModelSettings] on success,
+     *         or [Either.Left] containing an [ApiError] on failure (e.g., model not found).
+     */
+    suspend fun getSettingsByModelId(modelId: Long): Either<ApiError, List<ModelSettings>>
+
+    /**
+     * Creates a new settings profile associated with a specific LLM model.
+     *
+     * Corresponds to `POST /api/v1/models/{modelId}/settings`.
+     * (E4.S5)
+     *
+     * @param modelId The ID of the model to associate the settings with.
+     * @param request The request body with settings details.
+     * @return [Either.Right] containing the newly created [ModelSettings] object on success,
+     *         or [Either.Left] containing an [ApiError] on failure (e.g., invalid input, model not found).
+     */
+    suspend fun addModelSettings(modelId: Long, request: AddModelSettingsRequest): Either<ApiError, ModelSettings>
+
+    /**
+     * Retrieves details for a specific settings profile.
+     *
+     * Corresponds to `GET /api/v1/settings/{settingsId}`.
+     *
+     * @param settingsId The ID of the settings profile to retrieve.
+     * @return [Either.Right] containing the requested [ModelSettings] on success,
+     *         or [Either.Left] containing an [ApiError] on failure (e.g., not found).
+     */
+    suspend fun getSettingsById(settingsId: Long): Either<ApiError, ModelSettings>
+
+    /**
+     * Updates the parameters of a specific settings profile.
+     *
+     * Corresponds to `PUT /api/v1/settings/{settingsId}`.
+     * (E4.S6)
+     *
+     * @param settings The [ModelSettings] object with updated details. The ID must match the path.
+     * @return [Either.Right] with [Unit] on successful update,
+     *         or [Either.Left] containing an [ApiError] on failure (e.g., not found, invalid input).
+     */
+    suspend fun updateSettings(settings: ModelSettings): Either<ApiError, Unit>
+
+    /**
+     * Deletes a specific settings profile.
+     * (E4.S5)
+     *
+     * @param settingsId The ID of the settings profile to delete.
+     * @return [Either.Right] with [Unit] on successful deletion (typically HTTP 204 No Content),
+     *         or [Either.Left] containing an [ApiError] on failure (e.g., not found).
+     */
+    suspend fun deleteSettings(settingsId: Long): Either<ApiError, Unit>
+}

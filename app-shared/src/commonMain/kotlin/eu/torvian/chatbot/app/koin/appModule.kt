@@ -1,9 +1,17 @@
 package eu.torvian.chatbot.app.koin
 
 import eu.torvian.chatbot.app.service.api.ChatApi
+import eu.torvian.chatbot.app.service.api.GroupApi
+import eu.torvian.chatbot.app.service.api.ModelApi
+import eu.torvian.chatbot.app.service.api.ProviderApi
 import eu.torvian.chatbot.app.service.api.SessionApi
+import eu.torvian.chatbot.app.service.api.SettingsApi
 import eu.torvian.chatbot.app.service.api.ktor.KtorChatApiClient
+import eu.torvian.chatbot.app.service.api.ktor.KtorGroupApiClient
+import eu.torvian.chatbot.app.service.api.ktor.KtorModelApiClient
+import eu.torvian.chatbot.app.service.api.ktor.KtorProviderApiClient
 import eu.torvian.chatbot.app.service.api.ktor.KtorSessionApiClient
+import eu.torvian.chatbot.app.service.api.ktor.KtorSettingsApiClient
 import eu.torvian.chatbot.app.service.api.ktor.createHttpClient
 import io.ktor.client.*
 import kotlinx.serialization.json.Json
@@ -35,7 +43,18 @@ fun appModule(baseUri: String): Module = module {
     single<SessionApi> {
         KtorSessionApiClient(get())
     }
-    // ... add bindings for GroupApi, ProviderApi, ModelApi, SettingsApi clients
+    single<GroupApi> {
+        KtorGroupApiClient(get())
+    }
+    single<ModelApi> {
+        KtorModelApiClient(get())
+    }
+    single<ProviderApi> {
+        KtorProviderApiClient(get())
+    }
+    single<SettingsApi> {
+        KtorSettingsApiClient(get())
+    }
 
     // Provide ViewModel instances using the ViewModel factory and injecting dependencies via Koin
     // These will be retrieved in Composables using viewModel { get() }
