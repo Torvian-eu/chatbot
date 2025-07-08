@@ -21,12 +21,6 @@ import io.ktor.client.request.*
  */
 class KtorSessionApiClient(client: HttpClient) : BaseApiClient(client), SessionApi {
 
-    /**
-     * Retrieves summaries for all chat sessions.
-     * (E2.S3)
-     *
-     * @return [Either] list of session summaries or an [ApiError].
-     */
     override suspend fun getAllSessions(): Either<ApiError, List<ChatSessionSummary>> {
         // Use safeApiCall to wrap the Ktor request
         return safeApiCall {
@@ -36,13 +30,6 @@ class KtorSessionApiClient(client: HttpClient) : BaseApiClient(client), SessionA
         }
     }
 
-    /**
-     * Creates a new chat session.
-     * (E2.S1)
-     *
-     * @param request Optional name request.
-     * @return [Either] the created ChatSession or an [ApiError].
-     */
     override suspend fun createSession(request: CreateSessionRequest): Either<ApiError, ChatSession> {
         // Use safeApiCall to wrap the Ktor request
         return safeApiCall {
@@ -54,13 +41,6 @@ class KtorSessionApiClient(client: HttpClient) : BaseApiClient(client), SessionA
         }
     }
 
-    /**
-     * Retrieves full details for a specific chat session.
-     * (E2.S4)
-     *
-     * @param sessionId The ID of the session.
-     * @return [Either] the ChatSession with messages or an [ApiError].
-     */
     override suspend fun getSessionDetails(sessionId: Long): Either<ApiError, ChatSession> {
         // Use safeApiCall to wrap the Ktor request
         return safeApiCall {
@@ -70,13 +50,6 @@ class KtorSessionApiClient(client: HttpClient) : BaseApiClient(client), SessionA
         }
     }
 
-    /**
-     * Deletes a chat session.
-     * (E2.S6)
-     *
-     * @param sessionId The ID of the session.
-     * @return [Either] Unit on success or an [ApiError].
-     */
     override suspend fun deleteSession(sessionId: Long): Either<ApiError, Unit> {
         // Use safeApiCall to wrap the Ktor request
         return safeApiCall {
@@ -86,14 +59,6 @@ class KtorSessionApiClient(client: HttpClient) : BaseApiClient(client), SessionA
         }
     }
 
-    /**
-     * Updates the name of a chat session.
-     * (E2.S5)
-     *
-     * @param sessionId The ID of the session.
-     * @param request The new name.
-     * @return [Either] Unit on success or an [ApiError].
-     */
     override suspend fun updateSessionName(sessionId: Long, request: UpdateSessionNameRequest): Either<ApiError, Unit> {
         // Use safeApiCall to wrap the Ktor request
         return safeApiCall {
@@ -104,14 +69,6 @@ class KtorSessionApiClient(client: HttpClient) : BaseApiClient(client), SessionA
         }
     }
 
-    /**
-     * Updates the current model of a chat session.
-     * (E4.S7)
-     *
-     * @param sessionId The ID of the session.
-     * @param request The request with the new model ID.
-     * @return [Either] Unit on success or an [ApiError].
-     */
     override suspend fun updateSessionModel(
         sessionId: Long,
         request: UpdateSessionModelRequest
@@ -125,14 +82,6 @@ class KtorSessionApiClient(client: HttpClient) : BaseApiClient(client), SessionA
         }
     }
 
-    /**
-     * Updates the current settings profile of a chat session.
-     * (E4.S7)
-     *
-     * @param sessionId The ID of the session.
-     * @param request The request with the new settings ID.
-     * @return [Either] Unit on success or an [ApiError].
-     */
     override suspend fun updateSessionSettings(
         sessionId: Long,
         request: UpdateSessionSettingsRequest
@@ -146,14 +95,6 @@ class KtorSessionApiClient(client: HttpClient) : BaseApiClient(client), SessionA
         }
     }
 
-    /**
-     * Updates the current leaf message ID of a chat session.
-     * (E1.S5)
-     *
-     * @param sessionId The ID of the session.
-     * @param request The request with the new leaf message ID.
-     * @return [Either] Unit on success or an [ApiError].
-     */
     override suspend fun updateSessionLeafMessage(
         sessionId: Long,
         request: UpdateSessionLeafMessageRequest
@@ -167,14 +108,6 @@ class KtorSessionApiClient(client: HttpClient) : BaseApiClient(client), SessionA
         }
     }
 
-    /**
-     * Assigns a chat session to a group or ungroups it.
-     * (E6.S1, E6.S7)
-     *
-     * @param sessionId The ID of the session.
-     * @param request The request with the new optional group ID.
-     * @return [Either] Unit on success or an [ApiError].
-     */
     override suspend fun updateSessionGroup(
         sessionId: Long,
         request: UpdateSessionGroupRequest
