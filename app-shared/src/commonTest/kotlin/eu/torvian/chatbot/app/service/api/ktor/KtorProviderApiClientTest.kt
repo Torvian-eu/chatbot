@@ -1,0 +1,802 @@
+package eu.torvian.chatbot.app.service.api.ktor
+
+import arrow.core.Either
+import eu.torvian.chatbot.app.service.api.ProviderApi
+import eu.torvian.chatbot.common.api.CommonApiErrorCodes
+import eu.torvian.chatbot.common.api.apiError
+import eu.torvian.chatbot.common.api.resources.ProviderResource
+import eu.torvian.chatbot.common.api.resources.href
+import eu.torvian.chatbot.common.models.*
+import io.ktor.client.engine.mock.*
+import io.ktor.http.*
+import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+import kotlin.test.fail
+
+class KtorProviderApiClientTest {
+    private val json = Json {
+        prettyPrint = true
+    }
+
+    private fun createTestClient(mockEngine: MockEngine): ProviderApi {
+        val httpClient = createHttpClient("http://localhost", json, mockEngine)
+        return KtorProviderApiClient(httpClient)
+    }
+
+    // --- Helper for creating mock data ---
+    private fun mockProvider(
+        id: Long,
+        name: String,
+        type: LLMProviderType,
+        apiKeyId: String? = null
+    ) = LLMProvider(
+        id = id,
+        apiKeyId = apiKeyId,
+        name = name,
+        description = "$name provider",
+        baseUrl = "http://localhost/${name.lowercase()}",
+        type = type
+    )
+
+    private fun mockModel(
+        id: Long,
+        name: String,
+        providerId: Long,
+        active: Boolean = true
+    ) = LLMModel(
+        id = id,
+        name = name,
+        providerId = providerId,
+        active = active,
+        displayName = name.replace("-", " ").capitalize()
+    )
+
+    // --- Tests for getAllProviders ---
+    @Test
+    fun `getAllProviders - success`() = runTest {
+        val mockProviders = listOf(
+            mockProvider(1, "OpenAI", LLMProviderType.OPENAI, "key1"),
+            mockProvider(2, "Anthropic", LLMProviderType.ANTHROPIC, "key2")
+        )
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Get, request.method)
+            assertEquals(href(ProviderResource()), request.url.fullPath)
+            respond(
+                content = json.encodeToString(mockProviders),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        val result = apiClient.getAllProviders()
+        when (result) {
+            is Either.Right -> {
+                val providers = result.value
+                assertEquals(2, providers.size)
+                assertEquals("OpenAI", providers[0].name)
+                assertEquals(LLMProviderType.OPENAI, providers[0].type)
+                assertEquals("Anthropic", providers[1].name)
+                assertEquals(LLMProviderType.ANTHROPIC, providers[1].type)
+            }
+
+            is Either.Left -> fail("Expected success, but got error: ${result.value}")
+        }
+    }
+
+    @Test
+    fun `getAllProviders - failure - 500 Internal Server Error`() = runTest {
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Get, request.method)
+            assertEquals(href(ProviderResource()), request.url.fullPath)
+            respond(
+                content = json.encodeToString(apiError(CommonApiErrorCodes.INTERNAL, "Database error")),
+                status = HttpStatusCode.InternalServerError,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        val result = apiClient.getAllProviders()
+        when (result) {
+            is Either.Right -> fail("Expected failure, but got success: ${result.value}")
+            is Either.Left -> {
+                val error = result.value
+                assertEquals(500, error.statusCode)
+                assertEquals(CommonApiErrorCodes.INTERNAL.code, error.code)
+                assertEquals("Database error", error.message)
+            }
+        }
+    }
+
+    @Test
+    fun `getAllProviders - failure - SerializationException`() = runTest {
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Get, request.method)
+            assertEquals(href(ProviderResource()), request.url.fullPath)
+            respond(
+                content = """{"providers": "not a list"}""", // Bad JSON
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        val result = apiClient.getAllProviders()
+        when (result) {
+            is Either.Right -> fail("Expected failure, but got success: ${result.value}")
+            is Either.Left -> {
+                val error = result.value
+                assertEquals(500, error.statusCode)
+                assertEquals(CommonApiErrorCodes.INTERNAL.code, error.code)
+                assertTrue(error.message.contains("Data Serialization/Deserialization Error"))
+            }
+        }
+    }
+
+    // --- Tests for addProvider ---
+    @Test
+    fun `addProvider - success`() = runTest {
+        val mockRequest = AddProviderRequest(
+            name = "New Provider",
+            description = "Test description",
+            baseUrl = "http://test.com",
+            type = LLMProviderType.CUSTOM,
+            credential = "test-key"
+        )
+        val mockResponseProvider = mockProvider(
+            id = 1,
+            name = "New Provider",
+            type = LLMProviderType.CUSTOM,
+            apiKeyId = "alias-abc" // Backend returns the alias, not the raw key
+        )
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Post, request.method)
+            assertEquals(href(ProviderResource()), request.url.fullPath)
+            val requestBody = request.body.toByteArray().decodeToString()
+            assertEquals(json.encodeToString(mockRequest), requestBody)
+            respond(
+                content = json.encodeToString(mockResponseProvider),
+                status = HttpStatusCode.Created,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        val result = apiClient.addProvider(mockRequest)
+        when (result) {
+            is Either.Right -> {
+                val provider = result.value
+                assertEquals(1, provider.id)
+                assertEquals("New Provider", provider.name)
+                assertEquals("alias-abc", provider.apiKeyId)
+            }
+
+            is Either.Left -> fail("Expected success, but got error: ${result.value}")
+        }
+    }
+
+    @Test
+    fun `addProvider - failure - 400 Bad Request`() = runTest {
+        val mockRequest = AddProviderRequest(
+            name = "", // Invalid name
+            description = "Test description",
+            baseUrl = "http://test.com",
+            type = LLMProviderType.CUSTOM,
+            credential = "test-key"
+        )
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Post, request.method)
+            assertEquals(href(ProviderResource()), request.url.fullPath)
+            respond(
+                content = json.encodeToString(apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Name cannot be empty")),
+                status = HttpStatusCode.BadRequest,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        val result = apiClient.addProvider(mockRequest)
+        when (result) {
+            is Either.Right -> fail("Expected failure, but got success: ${result.value}")
+            is Either.Left -> {
+                val error = result.value
+                assertEquals(400, error.statusCode)
+                assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.code)
+                assertEquals("Name cannot be empty", error.message)
+            }
+        }
+    }
+
+    @Test
+    fun `addProvider - failure - 500 Internal Server Error (Secure Storage)`() = runTest {
+        val mockRequest = AddProviderRequest(
+            name = "New Provider",
+            description = "Test description",
+            baseUrl = "http://test.com",
+            type = LLMProviderType.CUSTOM,
+            credential = "test-key"
+        )
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Post, request.method)
+            assertEquals(href(ProviderResource()), request.url.fullPath)
+            respond(
+                content = json.encodeToString(apiError(CommonApiErrorCodes.INTERNAL, "Secure storage failure")),
+                status = HttpStatusCode.InternalServerError,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        val result = apiClient.addProvider(mockRequest)
+        when (result) {
+            is Either.Right -> fail("Expected failure, but got success: ${result.value}")
+            is Either.Left -> {
+                val error = result.value
+                assertEquals(500, error.statusCode)
+                assertEquals(CommonApiErrorCodes.INTERNAL.code, error.code)
+                assertEquals("Secure storage failure", error.message)
+            }
+        }
+    }
+
+    @Test
+    fun `addProvider - failure - SerializationException`() = runTest {
+        val mockRequest = AddProviderRequest(
+            name = "New Provider",
+            description = "Test description",
+            baseUrl = "http://test.com",
+            type = LLMProviderType.CUSTOM,
+            credential = "test-key"
+        )
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Post, request.method)
+            assertEquals(href(ProviderResource()), request.url.fullPath)
+            respond(
+                content = """{"provider": "not a provider"}""", // Bad JSON
+                status = HttpStatusCode.Created,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        val result = apiClient.addProvider(mockRequest)
+        when (result) {
+            is Either.Right -> fail("Expected failure, but got success: ${result.value}")
+            is Either.Left -> {
+                val error = result.value
+                assertEquals(500, error.statusCode)
+                assertEquals(CommonApiErrorCodes.INTERNAL.code, error.code)
+                assertTrue(error.message.contains("Data Serialization/Deserialization Error"))
+            }
+        }
+    }
+
+    // --- Tests for getProviderById ---
+    @Test
+    fun `getProviderById - success`() = runTest {
+        val providerId = 123L
+        val mockProvider = mockProvider(providerId, "OpenAI", LLMProviderType.OPENAI, "alias-abc")
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Get, request.method)
+            assertEquals(
+                href(ProviderResource.ById(providerId = providerId)),
+                request.url.fullPath
+            )
+            respond(
+                content = json.encodeToString(mockProvider),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        val result = apiClient.getProviderById(providerId)
+        when (result) {
+            is Either.Right -> {
+                val provider = result.value
+                assertEquals(providerId, provider.id)
+                assertEquals("OpenAI", provider.name)
+            }
+
+            is Either.Left -> fail("Expected success, but got error: ${result.value}")
+        }
+    }
+
+    @Test
+    fun `getProviderById - failure - 404 Not Found`() = runTest {
+        val providerId = 999L
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Get, request.method)
+            assertEquals(
+                href(ProviderResource.ById(providerId = providerId)),
+                request.url.fullPath
+            )
+            respond(
+                content = json.encodeToString(apiError(CommonApiErrorCodes.NOT_FOUND, "Provider not found")),
+                status = HttpStatusCode.NotFound,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        val result = apiClient.getProviderById(providerId)
+        when (result) {
+            is Either.Right -> fail("Expected failure, but got success: ${result.value}")
+            is Either.Left -> {
+                val error = result.value
+                assertEquals(404, error.statusCode)
+                assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
+                assertEquals("Provider not found", error.message)
+            }
+        }
+    }
+
+    @Test
+    fun `getProviderById - failure - SerializationException`() = runTest {
+        val providerId = 123L
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Get, request.method)
+            assertEquals(
+                href(ProviderResource.ById(providerId = providerId)),
+                request.url.fullPath
+            )
+            respond(
+                content = """{"id": 1, "name": "Bad Provider"}""", // Missing required fields
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        val result = apiClient.getProviderById(providerId)
+        when (result) {
+            is Either.Right -> fail("Expected failure, but got success: ${result.value}")
+            is Either.Left -> {
+                val error = result.value
+                assertEquals(500, error.statusCode)
+                assertEquals(CommonApiErrorCodes.INTERNAL.code, error.code)
+                assertTrue(error.message.contains("Data Serialization/Deserialization Error"))
+            }
+        }
+    }
+
+    // --- Tests for updateProvider ---
+    @Test
+    fun `updateProvider - success`() = runTest {
+        val providerId = 123L
+        val updatedProvider = mockProvider(
+            id = providerId,
+            name = "Updated Provider Name",
+            type = LLMProviderType.OPENAI,
+            apiKeyId = "alias-abc" // apiKeyId should not be updated via this endpoint
+        ).copy(description = "New Description")
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Put, request.method)
+            assertEquals(
+                href(ProviderResource.ById(providerId = providerId)),
+                request.url.fullPath
+            )
+            val requestBody = request.body.toByteArray().decodeToString()
+            assertEquals(json.encodeToString(updatedProvider), requestBody)
+            respond(
+                content = "", // Unit response
+                status = HttpStatusCode.OK
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        val result = apiClient.updateProvider(updatedProvider)
+        when (result) {
+            is Either.Right -> assertEquals(Unit, result.value)
+            is Either.Left -> fail("Expected success, but got error: ${result.value}")
+        }
+    }
+
+    @Test
+    fun `updateProvider - failure - 400 Bad Request (Invalid Data)`() = runTest {
+        val providerId = 123L
+        val updatedProvider = mockProvider(
+            id = providerId,
+            name = "", // Invalid name
+            type = LLMProviderType.OPENAI,
+            apiKeyId = "alias-abc"
+        )
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Put, request.method)
+            respond(
+                content = json.encodeToString(apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Name cannot be empty")),
+                status = HttpStatusCode.BadRequest,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        val result = apiClient.updateProvider(updatedProvider)
+        when (result) {
+            is Either.Right -> fail("Expected failure, but got success: ${result.value}")
+            is Either.Left -> {
+                val error = result.value
+                assertEquals(400, error.statusCode)
+                assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.code)
+                assertEquals("Name cannot be empty", error.message)
+            }
+        }
+    }
+
+    @Test
+    fun `updateProvider - failure - 404 Not Found`() = runTest {
+        val providerId = 999L
+        val updatedProvider = mockProvider(
+            id = providerId,
+            name = "Updated Provider Name",
+            type = LLMProviderType.OPENAI,
+            apiKeyId = "alias-abc"
+        )
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Put, request.method)
+            assertEquals(
+                href(ProviderResource.ById(providerId = providerId)),
+                request.url.fullPath
+            )
+            respond(
+                content = json.encodeToString(apiError(CommonApiErrorCodes.NOT_FOUND, "Provider not found")),
+                status = HttpStatusCode.NotFound,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        val result = apiClient.updateProvider(updatedProvider)
+        when (result) {
+            is Either.Right -> fail("Expected failure, but got success: ${result.value}")
+            is Either.Left -> {
+                val error = result.value
+                assertEquals(404, error.statusCode)
+                assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
+                assertEquals("Provider not found", error.message)
+            }
+        }
+    }
+
+    // --- Tests for deleteProvider ---
+    @Test
+    fun `deleteProvider - success`() = runTest {
+        val providerId = 456L
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Delete, request.method)
+            assertEquals(
+                href(ProviderResource.ById(providerId = providerId)),
+                request.url.fullPath
+            )
+            respond(
+                content = "", // Unit response
+                status = HttpStatusCode.NoContent
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        val result = apiClient.deleteProvider(providerId)
+        when (result) {
+            is Either.Right -> assertEquals(Unit, result.value)
+            is Either.Left -> fail("Expected success, but got error: ${result.value}")
+        }
+    }
+
+    @Test
+    fun `deleteProvider - failure - 404 Not Found`() = runTest {
+        val providerId = 999L
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Delete, request.method)
+            assertEquals(
+                href(ProviderResource.ById(providerId = providerId)),
+                request.url.fullPath
+            )
+            respond(
+                content = json.encodeToString(apiError(CommonApiErrorCodes.NOT_FOUND, "Provider not found")),
+                status = HttpStatusCode.NotFound,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        val result = apiClient.deleteProvider(providerId)
+        when (result) {
+            is Either.Right -> fail("Expected failure, but got success: ${result.value}")
+            is Either.Left -> {
+                val error = result.value
+                assertEquals(404, error.statusCode)
+                assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
+                assertEquals("Provider not found", error.message)
+            }
+        }
+    }
+
+    @Test
+    fun `deleteProvider - failure - 409 Conflict (Resource In Use)`() = runTest {
+        val providerId = 456L
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Delete, request.method)
+            assertEquals(
+                href(ProviderResource.ById(providerId = providerId)),
+                request.url.fullPath
+            )
+            respond(
+                content = json.encodeToString(
+                    apiError(
+                        CommonApiErrorCodes.RESOURCE_IN_USE,
+                        "Provider is referenced by models",
+                        "modelNames" to "gpt-3.5-turbo, gpt-4"
+                    )
+                ),
+                status = HttpStatusCode.Conflict,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        val result = apiClient.deleteProvider(providerId)
+        when (result) {
+            is Either.Right -> fail("Expected failure, but got success: ${result.value}")
+            is Either.Left -> {
+                val error = result.value
+                assertEquals(409, error.statusCode)
+                assertEquals(CommonApiErrorCodes.RESOURCE_IN_USE.code, error.code)
+                assertEquals("Provider is referenced by models", error.message)
+                assertEquals("gpt-3.5-turbo, gpt-4", error.details?.get("modelNames"))
+            }
+        }
+    }
+
+    @Test
+    fun `deleteProvider - failure - 500 Internal Server Error (Secure Storage)`() = runTest {
+        val providerId = 456L
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Delete, request.method)
+            assertEquals(
+                href(ProviderResource.ById(providerId = providerId)),
+                request.url.fullPath
+            )
+            respond(
+                content = json.encodeToString(
+                    apiError(
+                        CommonApiErrorCodes.INTERNAL,
+                        "Secure storage deletion failure"
+                    )
+                ),
+                status = HttpStatusCode.InternalServerError,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        val result = apiClient.deleteProvider(providerId)
+        when (result) {
+            is Either.Right -> fail("Expected failure, but got success: ${result.value}")
+            is Either.Left -> {
+                val error = result.value
+                assertEquals(500, error.statusCode)
+                assertEquals(CommonApiErrorCodes.INTERNAL.code, error.code)
+                assertEquals("Secure storage deletion failure", error.message)
+            }
+        }
+    }
+
+    // --- Tests for updateProviderCredential ---
+    @Test
+    fun `updateProviderCredential - success`() = runTest {
+        val providerId = 123L
+        val mockRequest = UpdateProviderCredentialRequest(credential = "new-test-key")
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Put, request.method)
+            assertEquals(
+                href(ProviderResource.ById.Credential(ProviderResource.ById(providerId = providerId))),
+                request.url.fullPath
+            )
+            val requestBody = request.body.toByteArray().decodeToString()
+            assertEquals(json.encodeToString(mockRequest), requestBody)
+            respond(
+                content = "", // Unit response
+                status = HttpStatusCode.OK
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        val result = apiClient.updateProviderCredential(providerId, mockRequest)
+        when (result) {
+            is Either.Right -> assertEquals(Unit, result.value)
+            is Either.Left -> fail("Expected success, but got error: ${result.value}")
+        }
+    }
+
+    @Test
+    fun `updateProviderCredential - success - remove credential`() = runTest {
+        val providerId = 123L
+        val mockRequest = UpdateProviderCredentialRequest(credential = null)
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Put, request.method)
+            assertEquals(
+                href(ProviderResource.ById.Credential(ProviderResource.ById(providerId = providerId))),
+                request.url.fullPath
+            )
+            val requestBody = request.body.toByteArray().decodeToString()
+            assertEquals(json.encodeToString(mockRequest), requestBody)
+            respond(
+                content = "", // Unit response
+                status = HttpStatusCode.OK
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        val result = apiClient.updateProviderCredential(providerId, mockRequest)
+        when (result) {
+            is Either.Right -> assertEquals(Unit, result.value)
+            is Either.Left -> fail("Expected success, but got error: ${result.value}")
+        }
+    }
+
+    @Test
+    fun `updateProviderCredential - failure - 404 Not Found`() = runTest {
+        val providerId = 999L
+        val mockRequest = UpdateProviderCredentialRequest(credential = "new-test-key")
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Put, request.method)
+            assertEquals(
+                href(ProviderResource.ById.Credential(ProviderResource.ById(providerId = providerId))),
+                request.url.fullPath
+            )
+            respond(
+                content = json.encodeToString(apiError(CommonApiErrorCodes.NOT_FOUND, "Provider not found")),
+                status = HttpStatusCode.NotFound,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        val result = apiClient.updateProviderCredential(providerId, mockRequest)
+        when (result) {
+            is Either.Right -> fail("Expected failure, but got success: ${result.value}")
+            is Either.Left -> {
+                val error = result.value
+                assertEquals(404, error.statusCode)
+                assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
+                assertEquals("Provider not found", error.message)
+            }
+        }
+    }
+
+    @Test
+    fun `updateProviderCredential - failure - 500 Internal Server Error (Secure Storage)`() = runTest {
+        val providerId = 123L
+        val mockRequest = UpdateProviderCredentialRequest(credential = "new-test-key")
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Put, request.method)
+            assertEquals(
+                href(ProviderResource.ById.Credential(ProviderResource.ById(providerId = providerId))),
+                request.url.fullPath
+            )
+            respond(
+                content = json.encodeToString(apiError(CommonApiErrorCodes.INTERNAL, "Secure storage update failure")),
+                status = HttpStatusCode.InternalServerError,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        val result = apiClient.updateProviderCredential(providerId, mockRequest)
+        when (result) {
+            is Either.Right -> fail("Expected failure, but got success: ${result.value}")
+            is Either.Left -> {
+                val error = result.value
+                assertEquals(500, error.statusCode)
+                assertEquals(CommonApiErrorCodes.INTERNAL.code, error.code)
+                assertEquals("Secure storage update failure", error.message)
+            }
+        }
+    }
+
+    // --- Tests for getModelsByProviderId ---
+    @Test
+    fun `getModelsByProviderId - success`() = runTest {
+        val providerId = 123L
+        val mockModels = listOf(
+            mockModel(1, "gpt-3.5-turbo", providerId),
+            mockModel(2, "gpt-4", providerId)
+        )
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Get, request.method)
+            assertEquals(
+                href(ProviderResource.ById.Models(ProviderResource.ById(providerId = providerId))),
+                request.url.fullPath
+            )
+            respond(
+                content = json.encodeToString(mockModels),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        val result = apiClient.getModelsByProviderId(providerId)
+        when (result) {
+            is Either.Right -> {
+                val models = result.value
+                assertEquals(2, models.size)
+                assertEquals("gpt-3.5-turbo", models[0].name)
+                assertEquals(providerId, models[0].providerId)
+                assertEquals("gpt-4", models[1].name)
+                assertEquals(providerId, models[1].providerId)
+            }
+
+            is Either.Left -> fail("Expected success, but got error: ${result.value}")
+        }
+    }
+
+    @Test
+    fun `getModelsByProviderId - success - provider has no models`() = runTest {
+        val providerId = 123L
+        val mockModels = emptyList<LLMModel>() // Empty list response
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Get, request.method)
+            assertEquals(
+                href(ProviderResource.ById.Models(ProviderResource.ById(providerId = providerId))),
+                request.url.fullPath
+            )
+            respond(
+                content = json.encodeToString(mockModels),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        val result = apiClient.getModelsByProviderId(providerId)
+        when (result) {
+            is Either.Right -> {
+                val models = result.value
+                assertTrue(models.isEmpty()) // Expect empty list
+            }
+
+            is Either.Left -> fail("Expected success (empty list), but got error: ${result.value}")
+        }
+    }
+
+    @Test
+    fun `getModelsByProviderId - failure - 500 Internal Server Error`() = runTest {
+        val providerId = 123L
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Get, request.method)
+            assertEquals(
+                href(ProviderResource.ById.Models(ProviderResource.ById(providerId = providerId))),
+                request.url.fullPath
+            )
+            respond(
+                content = json.encodeToString(apiError(CommonApiErrorCodes.INTERNAL, "Database error")),
+                status = HttpStatusCode.InternalServerError,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        val result = apiClient.getModelsByProviderId(providerId)
+        when (result) {
+            is Either.Right -> fail("Expected failure, but got success: ${result.value}")
+            is Either.Left -> {
+                val error = result.value
+                assertEquals(500, error.statusCode)
+                assertEquals(CommonApiErrorCodes.INTERNAL.code, error.code)
+                assertEquals("Database error", error.message)
+            }
+        }
+    }
+
+    @Test
+    fun `getModelsByProviderId - failure - SerializationException`() = runTest {
+        val providerId = 123L
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Get, request.method)
+            assertEquals(
+                href(ProviderResource.ById.Models(ProviderResource.ById(providerId = providerId))),
+                request.url.fullPath
+            )
+            respond(
+                content = """[{"id": 1, "name": "bad-model"}]""", // Missing required fields for LLMModel
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+        val apiClient = createTestClient(mockEngine)
+        val result = apiClient.getModelsByProviderId(providerId)
+        when (result) {
+            is Either.Right -> fail("Expected failure, but got success: ${result.value}")
+            is Either.Left -> {
+                val error = result.value
+                assertEquals(500, error.statusCode)
+                assertEquals(CommonApiErrorCodes.INTERNAL.code, error.code)
+                assertTrue(error.message.contains("Data Serialization/Deserialization Error"))
+            }
+        }
+    }
+}
+
+// Helper for capitalize
+private fun String.capitalize(): String = replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
