@@ -3,6 +3,8 @@ package eu.torvian.chatbot.app.service.api.ktor
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
+import eu.torvian.chatbot.app.misc.KmpLogger
+import eu.torvian.chatbot.app.misc.kmpLogger
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import io.ktor.client.*
@@ -12,10 +14,7 @@ import io.ktor.client.statement.*
 import io.ktor.serialization.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.SerializationException
-import org.apache.logging.log4j.LogManager
-import org.apache.logging.log4j.Logger
 import java.io.IOException
-
 
 /**
  * Abstract base class for frontend API clients.
@@ -32,7 +31,7 @@ import java.io.IOException
 abstract class BaseApiClient(protected val client: HttpClient) {
 
     companion object {
-        private val logger: Logger = LogManager.getLogger(BaseApiClient::class.java)
+        private val logger: KmpLogger = kmpLogger<BaseApiClient>()
     }
 
     /**
