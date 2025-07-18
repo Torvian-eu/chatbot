@@ -21,7 +21,7 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            implementation(libs.bundles.koin)
+            implementation(libs.koin.core)           // Koin dependency injection
             implementation(libs.ktor.resources)      // Ktor resources for type-safe routing
             implementation(libs.serialization.json)  // KotlinX Serialization JSON
             implementation(libs.kotlinx.datetime)    // KotlinX DateTime

@@ -1,8 +1,8 @@
 package eu.torvian.chatbot.server.testutils.ktor
 
 import eu.torvian.chatbot.common.misc.di.DIContainer
-import eu.torvian.chatbot.common.misc.di.DIContainerKey
 import eu.torvian.chatbot.server.ktor.configureKtor
+import eu.torvian.chatbot.server.utils.misc.DIContainerKey
 import io.ktor.client.*
 import io.ktor.client.engine.*
 import io.ktor.client.plugins.contentnegotiation.*

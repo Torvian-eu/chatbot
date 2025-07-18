@@ -1,19 +1,14 @@
 package eu.torvian.chatbot.server.main
 
-import eu.torvian.chatbot.common.misc.di.DIContainerKey
 import eu.torvian.chatbot.common.misc.di.KoinDIContainer
 import eu.torvian.chatbot.server.domain.config.DatabaseConfig
 import eu.torvian.chatbot.server.domain.security.EncryptionConfig
-import eu.torvian.chatbot.server.koin.configModule
-import eu.torvian.chatbot.server.koin.daoModule
-import eu.torvian.chatbot.server.koin.databaseModule
-import eu.torvian.chatbot.server.koin.miscModule
-import eu.torvian.chatbot.server.koin.serviceModule
+import eu.torvian.chatbot.server.koin.*
 import eu.torvian.chatbot.server.ktor.configureKtor
 import eu.torvian.chatbot.server.ktor.routes.ApiRoutesKtor
-import io.ktor.server.application.Application
-import io.ktor.server.application.install
-import io.ktor.server.routing.routing
+import eu.torvian.chatbot.server.utils.misc.DIContainerKey
+import io.ktor.server.application.*
+import io.ktor.server.routing.*
 import kotlinx.coroutines.runBlocking
 import org.koin.ktor.ext.get
 import org.koin.ktor.ext.getKoin
