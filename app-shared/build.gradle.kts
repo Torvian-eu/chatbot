@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 /**
  * Build configuration for the `app-shared` module.
  *
@@ -21,22 +23,42 @@ repositories {
 
 // Define the Kotlin targets for this multiplatform module
 kotlin {
-    jvm("desktop") // Primary target for Desktop backend-frontend logic
+    // Primary target for Desktop backend-frontend logic
+    jvm("desktop") {
+        compilerOptions {
+            jvmTarget = JvmTarget.JVM_21
+        }
 
-    // Add other targets here if you plan to expand to Android, iOS, Web, etc.
+        testRuns["test"].executionTask.configure {
+            // Use JUnit 5 Platform for testing
+            useJUnitPlatform()
+
+            // Enable dynamic agent loading for MockK and disable class data sharing (JVM args)
+            jvmArgs("-XX:+EnableDynamicAgentLoading", "-Xshare:off")
+
+            // Enable parallel test execution (JVM system properties)
+            systemProperty("junit.jupiter.execution.parallel.enabled", "true")
+            systemProperty("junit.jupiter.execution.parallel.mode.default", "concurrent")
+            systemProperty("junit.jupiter.execution.parallel.mode.classes.default", "concurrent")
+        }
+    }
+
+    // Add other targets here:
     // androidTarget()
     // iosX64()
     // iosArm64()
     // iosSimulatorArm64()
 
+    // Define the source sets for this module
+    // Source sets are used to share code between targets
     sourceSets {
         val desktopMain by getting
+        val desktopTest by getting
 
         commonMain.dependencies {
             // Project dependencies
             // This module depends on the 'common' module for shared DTOs, ApiError etc.
             implementation(project(":common"))
-            implementation(project(":server"))
 
             // Compose dependencies
             implementation(compose.runtime)
@@ -59,6 +81,7 @@ kotlin {
 
             // Arrow dependencies for Either
             implementation(libs.arrow.core)
+            implementation(libs.arrow.fx.coroutines)
 
             // KotlinX dependencies
             implementation(libs.coroutines.core)
@@ -68,16 +91,12 @@ kotlin {
             implementation(libs.koin.core)
             implementation(libs.koin.compose)
             implementation(libs.koin.compose.viewmodel)
-
-            // Logging
-            implementation(libs.bundles.log4j)
         }
 
         commonTest.dependencies {
             implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutines.test)
             implementation(libs.bundles.koin.test)
-            implementation(libs.mockk)
             implementation(libs.ktor.client.mock)
 
             @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
@@ -87,7 +106,15 @@ kotlin {
         desktopMain.dependencies {
             // Ktor Client Engine (JVM-specific)
             implementation(libs.ktor.client.cio)
+            // Logging (JVM-specific)
+            implementation(libs.log4j.api)
+            runtimeOnly(libs.log4j.core)
+            runtimeOnly(libs.log4j.slf4j2)
+
+        }
+        desktopTest.dependencies {
+            // Mocking library (JVM-specific)
+            implementation(libs.mockk)
         }
     }
 }
-
