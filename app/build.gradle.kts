@@ -1,4 +1,8 @@
+import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
+//import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
+//import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpackConfig
 
 /**
  * Build configuration for the `app-shared` module.
@@ -42,6 +46,26 @@ kotlin {
             systemProperty("junit.jupiter.execution.parallel.mode.classes.default", "concurrent")
         }
     }
+
+//    @OptIn(ExperimentalWasmDsl::class)
+//    wasmJs {
+//        moduleName = "composeApp"
+//        browser {
+//            val rootDirPath = project.rootDir.path
+//            val projectDirPath = project.projectDir.path
+//            commonWebpackConfig {
+//                outputFileName = "composeApp.js"
+//                devServer = (devServer ?: KotlinWebpackConfig.DevServer()).apply {
+//                    static = (static ?: mutableListOf()).apply {
+//                        // Serve sources to debug inside browser
+//                        add(rootDirPath)
+//                        add(projectDirPath)
+//                    }
+//                }
+//            }
+//        }
+//        binaries.executable()
+//    }
 
     // Add other targets here:
     // androidTarget()
@@ -104,6 +128,11 @@ kotlin {
         }
 
         desktopMain.dependencies {
+            implementation(project(":server"))
+            // Compose for Desktop
+            implementation(compose.desktop.currentOs)
+            // KotlinX Coroutines Swing for JVM Main Dispatcher
+            implementation(libs.kotlinx.coroutines.swing)
             // Ktor Client Engine (JVM-specific)
             implementation(libs.ktor.client.cio)
             // Logging (JVM-specific)
@@ -115,6 +144,24 @@ kotlin {
         desktopTest.dependencies {
             // Mocking library (JVM-specific)
             implementation(libs.mockk)
+        }
+    }
+}
+
+// Task to create native installers (E7.S1)
+compose.desktop {
+    application {
+        mainClass = "eu.torvian.chatbot.app.mainAppMainKt"
+
+        nativeDistributions {
+            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
+            packageName = "Chatbot"
+            packageVersion = "1.0.0"
+
+            // Add launcher configuration if needed
+            // linux { ... }
+            // windows { ... }
+            // macos { ... }
         }
     }
 }

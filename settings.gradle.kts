@@ -26,8 +26,7 @@ gradle.beforeProject {
 // Include the sub-modules
 include("common") // Contains shared code (models)
 include("server") // Contains backend logic (services, data, external, server API)
-include("app-shared") // Contains shared frontend logic for KMP (API clients, ViewModels)
-include("app-main") // Contains platform-specific entry point for the application (UI, frontend client); Thin client: most of the code is in app-shared
+include("app") // Contains frontend logic for KMP (API clients, ViewModels, UI)
 
 // Include the custom build logic
 includeBuild("build-logic")
