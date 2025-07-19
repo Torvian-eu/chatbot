@@ -86,6 +86,7 @@ koin-compose-navigation = { module = "io.insert-koin:koin-compose-navigation", v
 
 # Arrow (FP library)
 arrow-core = { module = "io.arrow-kt:arrow-core", version.ref = "arrow" }
+arrow-fx-coroutines = { module = "io.arrow-kt:arrow-fx-coroutines", version.ref = "arrow" }
 
 # AndroidX ViewModel
 androidx-lifecycle-viewmodel = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel", version.ref = "androidx-lifecycle" }
