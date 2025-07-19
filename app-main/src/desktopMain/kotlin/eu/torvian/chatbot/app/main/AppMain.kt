@@ -3,8 +3,8 @@ package eu.torvian.chatbot.app.main
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import eu.torvian.chatbot.app.compose.AppShell
-import eu.torvian.chatbot.app.misc.KmpLogger
-import eu.torvian.chatbot.app.misc.createKmpLogger
+import eu.torvian.chatbot.app.utils.misc.KmpLogger
+import eu.torvian.chatbot.app.utils.misc.createKmpLogger
 
 private val logger: KmpLogger = createKmpLogger("DesktopAppMain")
 

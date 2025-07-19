@@ -3,8 +3,8 @@ package eu.torvian.chatbot.app.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import eu.torvian.chatbot.app.koin.appModule
-import eu.torvian.chatbot.app.misc.KmpLogger
-import eu.torvian.chatbot.app.misc.kmpLogger
+import eu.torvian.chatbot.app.utils.misc.KmpLogger
+import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.server.main.ServerControlService
 import eu.torvian.chatbot.server.main.ServerInstanceInfo
 import eu.torvian.chatbot.server.main.ServerStatus

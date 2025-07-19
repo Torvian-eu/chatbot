@@ -1,4 +1,4 @@
-package eu.torvian.chatbot.app.misc
+package eu.torvian.chatbot.app.utils.misc
 
 /**
  * Common logging interface for Kotlin Multiplatform.

@@ -3,8 +3,8 @@ package eu.torvian.chatbot.app.service.api.ktor
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
-import eu.torvian.chatbot.app.misc.KmpLogger
-import eu.torvian.chatbot.app.misc.kmpLogger
+import eu.torvian.chatbot.app.utils.misc.KmpLogger
+import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import io.ktor.client.*
