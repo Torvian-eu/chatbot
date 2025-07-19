@@ -3,6 +3,8 @@ package eu.torvian.chatbot.app.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import eu.torvian.chatbot.app.koin.appModule
+import eu.torvian.chatbot.app.misc.KmpLogger
+import eu.torvian.chatbot.app.misc.kmpLogger
 import eu.torvian.chatbot.server.main.ServerControlService
 import eu.torvian.chatbot.server.main.ServerInstanceInfo
 import eu.torvian.chatbot.server.main.ServerStatus
@@ -11,8 +13,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import org.apache.logging.log4j.LogManager
-import org.apache.logging.log4j.Logger
 import org.koin.core.KoinApplication
 import org.koin.dsl.koinApplication
 
@@ -69,7 +69,7 @@ sealed interface StartupUiState {
 class StartupViewModel(
     private val serverControlService: ServerControlService
 ) : ViewModel() {
-    private val logger: Logger = LogManager.getLogger(this::class.java)
+    private val logger: KmpLogger = kmpLogger<StartupViewModel>()
 
     // StateFlow to expose the server status to the UI
     private val _startupState = MutableStateFlow<StartupUiState>(StartupUiState.NotStarted)

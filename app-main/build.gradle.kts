@@ -1,4 +1,6 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 //import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 //import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpackConfig
 
@@ -23,7 +25,11 @@ repositories {
 }
 
 kotlin {
-    jvm("desktop")
+    jvm("desktop"){
+        compilerOptions {
+            jvmTarget = JvmTarget.JVM_21
+        }
+    }
 
 //    @OptIn(ExperimentalWasmDsl::class)
 //    wasmJs {
@@ -50,15 +56,50 @@ kotlin {
 
         commonMain.dependencies {
             implementation(project(":app-shared"))
-            implementation(project(":server"))
 
-            // Logging
-            implementation(libs.bundles.log4j)
+            // Compose dependencies
+            implementation(compose.runtime)
+            implementation(compose.foundation)
+            implementation(compose.material3)
+            implementation(compose.ui)
+            implementation(compose.components.resources)
+            implementation(compose.components.uiToolingPreview)
+
+            // AndroidX Lifecycle
+            implementation(libs.androidx.lifecycle.viewmodel)
+            implementation(libs.androidx.lifecycle.viewmodel.compose)
+            implementation(libs.androidx.lifecycle.runtime.compose)
+
+            // Ktor Client
+            implementation(libs.ktor.client.core)
+            implementation(libs.ktor.client.content.negotiation)
+            implementation(libs.ktor.serialization.json)
+            implementation(libs.ktor.client.resources)
+
+            // Arrow dependencies for Either
+            implementation(libs.arrow.core)
+            implementation(libs.arrow.fx.coroutines)
+
+            // KotlinX dependencies
+            implementation(libs.coroutines.core)
+            implementation(libs.kotlinx.datetime)
+
+            // Koin dependency injection
+            implementation(libs.koin.core)
+            implementation(libs.koin.compose)
+            implementation(libs.koin.compose.viewmodel)
         }
 
         desktopMain.dependencies {
+            implementation(project(":server"))
+            // Compose for Desktop
             implementation(compose.desktop.currentOs)
+            // KotlinX Coroutines Swing for JVM Main Dispatcher
             implementation(libs.kotlinx.coroutines.swing)
+            // Logging (JVM-specific)
+            implementation(libs.log4j.api)
+            runtimeOnly(libs.log4j.core)
+            runtimeOnly(libs.log4j.slf4j2)
         }
     }
 }
