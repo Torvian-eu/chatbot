@@ -160,11 +160,11 @@ These PRs focus on implementing the ViewModel logic using the KMP ViewModel patt
 *   **Assignee:** Maya
 *   **Focus:**
     *   Define the `UiState<E, T>` sealed class (if not done).
-    *   Create `ChatState` and `SessionListState` classes inheriting from `ViewModel`.
-    *   Define core `StateFlow`s (`_sessionState` for `ChatState`, `_listState` for `SessionListState`, `_selectedSessionId`).
-    *   Implement `ChatState.loadSession` and `ChatState.sendMessage` using `viewModelScope.launch` and calling `ChatApi`/`SessionApi`, folding over the `Either` results to update `_sessionState`.
-    *   Implement `SessionListState.loadSessionsAndGroups` using `parZip` and folding over results to update `_listState`.
-    *   Implement `SessionListState.selectSession`.
+    *   Create `ChatViewModel` and `SessionListViewModel` classes inheriting from `ViewModel`.
+    *   Define core `StateFlow`s (`_sessionState` for `ChatViewModel`, `_listState` for `SessionListViewModel`, `_selectedSessionId`).
+    *   Implement `ChatViewModel.loadSession` and `ChatViewModel.sendMessage` using `viewModelScope.launch` and calling `ChatApi`/`SessionApi`, folding over the `Either` results to update `_sessionState`.
+    *   Implement `SessionListViewModel.loadSessionsAndGroups` using `parZip` and folding over results to update `_listState`.
+    *   Implement `SessionListViewModel.selectSession`.
     *   Implement `buildThreadBranch` function.
     *   Implement `SessionListData` data class with `groupedSessions` derived property.
     *   Ensure Koin modules in `app` provide API client implementations, ready for injection into ViewModels via `viewModel { ... }`.
@@ -173,7 +173,7 @@ These PRs focus on implementing the ViewModel logic using the KMP ViewModel patt
 
 15. **PR: Implement Chat Actions ViewModel Logic (E1.S*, E3.S*, E4.S*)**
 *   **Assignee:** Maya
-*   **Focus:** Implement remaining action methods in `ChatState`:
+*   **Focus:** Implement remaining action methods in `ChatViewModel`:
     *   `startReplyTo`, `cancelReply`, `updateInput`
     *   `startEditing`, `saveEditing`, `cancelEditing` (E3.S1/S2/S3)
     *   `deleteMessage` (E3.S4)
@@ -185,7 +185,7 @@ These PRs focus on implementing the ViewModel logic using the KMP ViewModel patt
 
 16. **PR: Implement Session/Group Actions ViewModel Logic (E2.S*, E6.S*)**
 *   **Assignee:** Maya
-*   **Focus:** Implement remaining action methods in `SessionListState`:
+*   **Focus:** Implement remaining action methods in `SessionListViewModel`:
     *   `createNewSession` (E2.S1)
     *   `renameSession` (E2.S5)
     *   `deleteSession` (E2.S6)
@@ -200,7 +200,7 @@ These PRs focus on implementing the ViewModel logic using the KMP ViewModel patt
 17. **PR: Implement Config ViewModels (E4.S*, E5.S*)**
 *   **Assignee:** Maya
 *   **Focus:** Create and implement ViewModels for managing LLM Providers, Models, and Settings, using the same ViewModel/StateFlow/UiState/Either pattern.
-    *   Need ViewModels like `ProviderConfigState`, `ModelConfigState`, `SettingsConfigState`.
+    *   Need ViewModels like `ProviderConfigViewModel`, `ModelConfigViewModel`, `SettingsConfigViewModel`.
     *   Implement loading lists (`getAllProviders`, `getModelsByProviderId`, `getSettingsByModelId`).
     *   Implement CRUD actions (add, edit, delete).
     *   Implement API key status check (`getModelApiKeyStatus`, E5.S4).
@@ -216,52 +216,52 @@ These PRs focus on building the actual visual elements in Compose for Desktop, c
 *   **Focus:**
     *   Implement the top-level `AppLayout` Composable in `app/ui`.
     *   Set up the basic navigation structure (e.g., showing Session List and Chat Area side-by-side).
-    *   Retrieve `SessionListState` and `ChatState` instances using `viewModel { ... }` factory function within the appropriate screen-level Composables.
+    *   Retrieve `SessionListViewModel` and `ChatViewModel` instances using `viewModel { ... }` factory function within the appropriate screen-level Composables.
     *   Pass these ViewModels or their relevant states/actions down to child UI components.
 *   **Dependencies:** PR 14, PR 17 (ViewModels). Basic Compose Desktop setup.
 
 19. **PR: Implement Session List UI (E2.S3, E6.S2, E6.S*)**
 *   **Assignee:** Maya
 *   **Focus:** Implement the `SessionListPanel` Composable.
-    *   Consume `SessionListState.listState` (UiState<ApiError, SessionListData>) and display the grouped sessions. Handle Loading/Error/Idle states in the UI.
+    *   Consume `SessionListViewModel.listState` (UiState<ApiError, SessionListData>) and display the grouped sessions. Handle Loading/Error/Idle states in the UI.
     *   Display group headers and session summaries under the correct groups.
-    *   Implement click handling to trigger `sessionListState.selectSession`.
+    *   Implement click handling to trigger `sessionListViewModel.selectSession`.
     *   Implement UI for creating, renaming, deleting groups/sessions, triggering ViewModel actions (`createNewGroup`, `renameGroup`, `deleteGroup`, `createNewSession`, `renameSession`, `deleteSession`).
     *   Implement UI for assigning sessions to groups (e.g., context menu or dialog triggering `assignSessionToGroup`).
-*   **Dependencies:** PR 18. PR 16 (SessionListState ViewModel).
+*   **Dependencies:** PR 18. PR 16 (SessionListViewModel ViewModel).
 
 20. **PR: Implement Chat Area UI (Message Display) (E1.S*)**
 *   **Assignee:** Maya
 *   **Focus:** Implement the main chat message display area Composable.
-    *   Consume `ChatState.sessionState` and `ChatState.displayedMessages` (StateFlows).
+    *   Consume `ChatViewModel.sessionState` and `ChatViewModel.displayedMessages` (StateFlows).
     *   Display loading/error states based on `sessionState`.
     *   Render the messages from `displayedMessages`, visually styling user vs. assistant messages.
     *   Implement basic message layout.
-*   **Dependencies:** PR 18. PR 15 (ChatState ViewModel).
+*   **Dependencies:** PR 18. PR 15 (ChatViewModel ViewModel).
 
 21. **PR: Implement Input Area UI (E1.S*, E1.S7)**
 *   **Assignee:** Maya
 *   **Focus:** Implement the message input area Composable.
-    *   Consume `ChatState.inputContent`.
-    *   Implement text input field and update `chatState.updateInput`.
-    *   Implement Send button, trigger `chatState.sendMessage`. Disable when input is blank.
-    *   Display the UI indicating which message is being replied to (`chatState.replyTargetMessage`). Implement cancel reply UI (`chatState.cancelReply`).
-*   **Dependencies:** PR 18. PR 15 (ChatState ViewModel).
+    *   Consume `ChatViewModel.inputContent`.
+    *   Implement text input field and update `chatViewModel.updateInput`.
+    *   Implement Send button, trigger `chatViewModel.sendMessage`. Disable when input is blank.
+    *   Display the UI indicating which message is being replied to (`chatViewModel.replyTargetMessage`). Implement cancel reply UI (`chatViewModel.cancelReply`).
+*   **Dependencies:** PR 18. PR 15 (ChatViewModel ViewModel).
 
 22. **PR: Implement Message Actions UI (Edit, Delete, Reply, Copy) (E3.S*)**
 *   **Assignee:** Maya
 *   **Focus:** Add UI elements (e.g., icons on hover, context menu) to message items to trigger actions.
-    *   Implement "Reply" action triggering `chatState.startReplyTo`.
-    *   Implement "Delete" action triggering `chatState.deleteMessage` (with confirmation dialog).
-    *   Implement "Edit" action triggering `chatState.startEditing`.
-    *   Implement inline editing UI when `chatState.editingMessage` is set (input field, Save/Cancel buttons triggering `chatState.saveEditing`/`cancelEditing`).
-*   **Dependencies:** PR 20. PR 15 (ChatState ViewModel actions). Clipboard logic PR.
+    *   Implement "Reply" action triggering `chatViewModel.startReplyTo`.
+    *   Implement "Delete" action triggering `chatViewModel.deleteMessage` (with confirmation dialog).
+    *   Implement "Edit" action triggering `chatViewModel.startEditing`.
+    *   Implement inline editing UI when `chatViewModel.editingMessage` is set (input field, Save/Cancel buttons triggering `chatViewModel.saveEditing`/`cancelEditing`).
+*   **Dependencies:** PR 20. PR 15 (ChatViewModel ViewModel actions). Clipboard logic PR.
 
 23. **PR: Implement Thread Branch Navigation UI (E1.S5)**
 *   **Assignee:** Maya
 *   **Focus:** Implement visual indicators on messages that have children not currently displayed.
-    *   Implement the UI mechanism (e.g., clicking the indicator, a dedicated button) to trigger `chatState.switchBranchToMessage`.
-*   **Dependencies:** PR 20. PR 15 (ChatState ViewModel).
+    *   Implement the UI mechanism (e.g., clicking the indicator, a dedicated button) to trigger `chatViewModel.switchBranchToMessage`.
+*   **Dependencies:** PR 20. PR 15 (ChatViewModel ViewModel).
 
 24. **PR: Implement Settings Screen UI (E4.S*, E5.S*)**
 *   **Assignee:** Maya

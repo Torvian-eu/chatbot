@@ -23,8 +23,7 @@ chatbot/
 ├── build.gradle.kts              # Root build configuration
 ├── settings.gradle.kts           # Module definitions
 ├── gradle.properties             # Global Gradle properties
-├── app-main/                     # Desktop UI application
-├── app-shared/                   # Shared frontend logic (API clients, ViewModels)
+├── app/                          # Frontend logic (API clients, ViewModels, UI)
 ├── build-logic/                  # Custom Gradle convention plugins
 │   └── src/main/kotlin/
 │       └── CommonModuleConventionPlugin.kt
@@ -240,18 +239,14 @@ server/src/test/kotlin/eu/torvian/chatbot/server/
 - Extensive test coverage with test utilities
 - Koin dependency injection throughout
 
-### 3. App Module (`app-main/` & `app-shared/`)
+### 3. App Module (`app/`)
 
 **Purpose**: Desktop application frontend built with Compose for Desktop.
 
 **Package Structure**:
 ```
-app-main/src/desktopMain/kotlin/eu/torvian/chatbot/app/main/
-└── AppMain.kt        # Application entry point, setup (Ktor Server start, UI launch, DI)
-
-app-shared/src/commonMain/kotlin/eu/torvian/chatbot/app/
+app/src/commonMain/kotlin/eu/torvian/chatbot/app/
 ├── compose/          # Compose UI components
-│   ├── AppShell.kt   # Main application shell (contains navigation, top-level layout)
 │   └── ... other UI components ...
 ├── koin/            # Koin modules 
 │   └── appModule.kt  # main app DI module
@@ -270,16 +265,43 @@ app-shared/src/commonMain/kotlin/eu/torvian/chatbot/app/
 │   │       ├── KtorGroupApiClient.kt
 │   │       └── ... other Ktor API client implementations ...
 │   └── ... other frontend services ...
+├── utils/            # Utility classes
+│   └── misc/       # Miscellaneous utilities
+│       └── KmpLogger.kt  # KMP-compatible logger
 └── viewmodel/        # ViewModels for UI state management
-    └── StartupViewModel.kt  # Startup ViewModel (manages server startup state)
+    ├── ChatViewModel.kt  # Chat ViewModel (manages chat session state)
+    ├── SessionListViewModel.kt # Session List ViewModel (manages session list state)
+    └── UiState.kt        # Shared UI state sealed class
     
-app-shared/src/commonTest/kotlin/eu/torvian/chatbot/app/
+app/src/commonTest/kotlin/eu/torvian/chatbot/app/
 ├── service/api/ktor/    # Ktor API client tests
 │   ├── KtorChatApiClientTest.kt  
 │   ├── KtorSessionApiClientTest.kt 
-│   └── ... other API client tests ...
+│   └── ... 
+└── testutils/     # Test utilities
+    ├── data/
+    │   └── TestData.kt   # Predefined test data (DTOs, etc.)
+    └── viewmodel/
+        └── FlowTestUtils.kt  # Test utilities for Flow-based ViewModels
+
+app/src/desktopMain/kotlin/eu/torvian/chatbot/app/
+├── compose/      # Compose UI components
+│   ├── AppShell.kt   # Main application shell (contains navigation, top-level layout)
+│   └── ... other UI components ...
+├── main/         # Main entry point
+│   └── AppMain.kt    # Application entry point, setup (Ktor Server start, UI launch, DI)
+├── utils/        
+│   └── misc/       # Miscellaneous utilities
+│       └── DesktopKmpLogger.kt # Desktop-specific KMP logger
+└── viewmodel/    
+    └── StartupViewModel.kt  # Startup ViewModel (manages server startup state)
+
+app/src/desktopTest/kotlin/eu/torvian/chatbot/app/
+├── testutils/           
+│   └── viewmodel/        
+│        └── TestMockkExtensions.kt # Mockk test extensions
 └── viewmodel/
-    └── ... viewmodel tests ...
+    └── ChatViewModelTest.kt
 ```
 
 **Key Features**:
