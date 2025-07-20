@@ -1,20 +1,8 @@
 package eu.torvian.chatbot.app.koin
 
-import eu.torvian.chatbot.app.service.api.ChatApi
-import eu.torvian.chatbot.app.service.api.GroupApi
-import eu.torvian.chatbot.app.service.api.ModelApi
-import eu.torvian.chatbot.app.service.api.ProviderApi
-import eu.torvian.chatbot.app.service.api.SessionApi
-import eu.torvian.chatbot.app.service.api.SettingsApi
-import eu.torvian.chatbot.app.service.api.ktor.KtorChatApiClient
-import eu.torvian.chatbot.app.service.api.ktor.KtorGroupApiClient
-import eu.torvian.chatbot.app.service.api.ktor.KtorModelApiClient
-import eu.torvian.chatbot.app.service.api.ktor.KtorProviderApiClient
-import eu.torvian.chatbot.app.service.api.ktor.KtorSessionApiClient
-import eu.torvian.chatbot.app.service.api.ktor.KtorSettingsApiClient
-import eu.torvian.chatbot.app.service.api.ktor.createHttpClient
-import eu.torvian.chatbot.app.viewmodel.ChatViewModel
-import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
+import eu.torvian.chatbot.app.service.api.*
+import eu.torvian.chatbot.app.service.api.ktor.*
+import eu.torvian.chatbot.app.viewmodel.*
 import io.ktor.client.*
 import kotlinx.serialization.json.Json
 import org.koin.core.module.Module
@@ -62,4 +50,7 @@ fun appModule(baseUri: String): Module = module {
     // Provide ViewModels, injecting the required API clients
     viewModel { ChatViewModel(get(), get()) }
     viewModel { SessionListViewModel(get(), get()) }
+    viewModel { ProviderConfigViewModel(get()) }
+    viewModel { ModelConfigViewModel(get(), get()) }
+    viewModel { SettingsConfigViewModel(get(), get()) }
 }

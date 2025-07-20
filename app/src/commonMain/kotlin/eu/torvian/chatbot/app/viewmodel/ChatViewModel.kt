@@ -29,6 +29,7 @@ import kotlinx.datetime.Clock
  * @param sessionApi The API client for session-related operations.
  * @param chatApi The API client for chat message-related operations.
  * @param uiDispatcher The dispatcher to use for UI-related coroutines. Defaults to Main.
+ * @param clock The clock to use for timestamping. Defaults to System clock.
  *
  * @property sessionState The state of the currently loaded chat session, including all messages.
  * @property currentBranchLeafId The ID of the leaf message in the currently displayed thread branch.

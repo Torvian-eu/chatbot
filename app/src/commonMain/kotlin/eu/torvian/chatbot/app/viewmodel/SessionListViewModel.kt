@@ -32,6 +32,8 @@ import kotlinx.datetime.Clock
  * @constructor
  * @param sessionApi The API client for session-related operations.
  * @param groupApi The API client for group-related operations.
+ * @param uiDispatcher The dispatcher to use for UI-related coroutines. Defaults to Main.
+ * @param clock The clock to use for timestamping. Defaults to System clock.
  *
  * @property listState The state of the chat session list and groups.
  * @property selectedSessionId The ID of the currently selected session.
