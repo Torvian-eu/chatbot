@@ -13,7 +13,7 @@
           <option value="desktopRun" />
         </list>
       </option>
-      <option name="vmOptions" />
+      <option name="vmOptions" value="-Duser.language=en -Duser.country=US" />
     </ExternalSystemSettings>
     <ExternalSystemDebugServerProcess>false</ExternalSystemDebugServerProcess>
     <ExternalSystemReattachDebugProcess>true</ExternalSystemReattachDebugProcess>
