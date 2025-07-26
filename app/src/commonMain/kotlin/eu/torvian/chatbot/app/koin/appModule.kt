@@ -2,6 +2,7 @@ package eu.torvian.chatbot.app.koin
 
 import eu.torvian.chatbot.app.service.api.*
 import eu.torvian.chatbot.app.service.api.ktor.*
+import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.viewmodel.*
 import io.ktor.client.*
 import kotlinx.serialization.json.Json
@@ -27,6 +28,11 @@ fun appModule(baseUri: String): Module = module {
         createHttpClient(baseUri, Json)
     }
 
+    // Provide the EventBus for cross-cutting concerns like global events
+    single<EventBus> {
+        EventBus()
+    }
+
     // Provide concrete API client implementations, injecting the HttpClient
     single<ChatApi> {
         KtorChatApiClient(get())
@@ -49,7 +55,7 @@ fun appModule(baseUri: String): Module = module {
 
     // Provide ViewModels, injecting the required API clients
     viewModel { ChatViewModel(get(), get()) }
-    viewModel { SessionListViewModel(get(), get()) }
+    viewModel { SessionListViewModel(get(), get(), get()) }
     viewModel { ProviderConfigViewModel(get()) }
     viewModel { ModelConfigViewModel(get(), get()) }
     viewModel { SettingsConfigViewModel(get(), get()) }
