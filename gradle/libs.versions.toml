@@ -13,9 +13,10 @@ bouncycastle = "1.80"        # BouncyCastle version
 koin = "4.0.2"               # Koin version
 typesafe-config = "1.4.3"    # Typesafe Config version
 mockk = "1.13.17"            # MockK version
-compose = "1.8.1"            # Compose Multiplatform version
 arrow = "2.1.2"              # Arrow version
+compose = "1.8.2"            # Compose Multiplatform version
 androidx-lifecycle = "2.9.1" # For Compose Multiplatform ViewModel
+androidx-navigation = "2.9.0-beta03" # For Compose Multiplatform Navigation
 kotlin-buildlogic = "1.9.24" # Kotlin version for build-logic compatibility
 compose-hot-reload = "1.0.0-alpha10" # Compose Hot Reload version
 
@@ -82,7 +83,7 @@ koin-test = { module = "io.insert-koin:koin-test", version.ref = "koin" }
 koin-test-junit5 = { module = "io.insert-koin:koin-test-junit5", version.ref = "koin" }
 koin-compose = { module = "io.insert-koin:koin-compose", version.ref = "koin" }
 koin-compose-viewmodel = { module = "io.insert-koin:koin-compose-viewmodel", version.ref = "koin" }
-koin-compose-navigation = { module = "io.insert-koin:koin-compose-navigation", version.ref = "koin" }
+koin-compose-viewmodel-navigation = { module = "io.insert-koin:koin-compose-viewmodel-navigation", version.ref = "koin" }
 
 # Arrow (FP library)
 arrow-core = { module = "io.arrow-kt:arrow-core", version.ref = "arrow" }
@@ -96,6 +97,9 @@ androidx-lifecycle-viewmodel-compose = { module = "org.jetbrains.androidx.lifecy
 
 # AndroidX Lifecycle utilities for Compose Multiplatform
 androidx-lifecycle-runtime-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose", version.ref = "androidx-lifecycle" }
+
+# AndroidX Navigation
+androidx-navigation-compose = { module = "org.jetbrains.androidx.navigation:navigation-compose", version.ref = "androidx-navigation" }
 
 # KotlinX Coroutines Swing for JVM Main Dispatcher
 kotlinx-coroutines-swing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "coroutines" }

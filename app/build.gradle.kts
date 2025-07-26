@@ -97,6 +97,9 @@ kotlin {
             implementation(libs.androidx.lifecycle.viewmodel.compose)
             implementation(libs.androidx.lifecycle.runtime.compose)
 
+            // AndroidX Compose Navigation
+            implementation(libs.androidx.navigation.compose)
+
             // Ktor Client
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.content.negotiation)
@@ -151,7 +154,7 @@ kotlin {
 // Task to create native installers (E7.S1)
 compose.desktop {
     application {
-        mainClass = "eu.torvian.chatbot.app.mainAppMainKt"
+        mainClass = "eu.torvian.chatbot.app.main.AppMainKt"
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
@@ -163,5 +166,17 @@ compose.desktop {
             // windows { ... }
             // macos { ... }
         }
+
+        // Uncomment to test with Spanish locale
+//        jvmArgs += "-Duser.language=es"
+//        jvmArgs += "-Duser.country=ES" // Optional, for regional variants like es-ES
+
+    }
+}
+
+compose {
+    resources {
+        // Set the package name for generated resources
+        packageOfResClass = "eu.torvian.chatbot.app.generated.resources"
     }
 }
