@@ -19,7 +19,7 @@ import eu.torvian.chatbot.server.main.ServerControlServiceImpl
  * appropriate UI based on the current state.
  */
 @Composable
-fun AppShell() {
+fun Old_AppShell() {
     val startupViewModel = viewModel {
         StartupViewModel(
             ServerControlServiceImpl(
