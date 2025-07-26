@@ -20,7 +20,7 @@ import eu.torvian.chatbot.app.generated.resources.app_name
 import eu.torvian.chatbot.app.domain.events.GlobalError
 import eu.torvian.chatbot.app.domain.events.GlobalSuccess
 import eu.torvian.chatbot.app.domain.events.SnackbarInteractionEvent
-import eu.torvian.chatbot.app.navigation.AppRoute
+import eu.torvian.chatbot.app.domain.navigation.AppRoute
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.viewmodel.ChatViewModel
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel

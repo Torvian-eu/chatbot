@@ -1,4 +1,4 @@
-package eu.torvian.chatbot.app.navigation
+package eu.torvian.chatbot.app.domain.navigation
 
 /**
  * Defines the sealed class for application navigation routes.
