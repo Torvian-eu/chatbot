@@ -131,7 +131,7 @@ kotlin {
         }
 
         desktopMain.dependencies {
-            implementation(project(":server"))
+            // implementation(project(":server"))
             // Compose for Desktop
             implementation(compose.desktop.currentOs)
             // KotlinX Coroutines Swing for JVM Main Dispatcher
