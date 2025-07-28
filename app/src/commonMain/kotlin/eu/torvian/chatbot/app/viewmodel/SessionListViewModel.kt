@@ -4,14 +4,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import arrow.core.flatMap
 import arrow.fx.coroutines.parZip
-import eu.torvian.chatbot.app.generated.resources.Res
-import eu.torvian.chatbot.app.generated.resources.error_loading_sessions_groups
 import eu.torvian.chatbot.app.domain.events.SnackbarInteractionEvent
 import eu.torvian.chatbot.app.domain.events.apiRequestError
+import eu.torvian.chatbot.app.generated.resources.Res
+import eu.torvian.chatbot.app.generated.resources.error_loading_sessions_groups
 import eu.torvian.chatbot.app.service.api.GroupApi
 import eu.torvian.chatbot.app.service.api.SessionApi
 import eu.torvian.chatbot.app.service.misc.EventBus
-import eu.torvian.chatbot.app.utils.misc.KmpLogger
+import eu.torvian.chatbot.app.utils.misc.ioDispatcher
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
@@ -60,7 +60,7 @@ class SessionListViewModel(
 ) : ViewModel() {
 
     companion object {
-        private val logger: KmpLogger = kmpLogger<SessionListViewModel>()
+        private val logger = kmpLogger<SessionListViewModel>()
     }
 
     // --- Observable State for Compose UI (using StateFlow) ---
@@ -172,7 +172,7 @@ class SessionListViewModel(
 
             // Use parZip to fetch sessions and groups concurrently
             parZip(
-                Dispatchers.IO,
+                ioDispatcher,
                 { sessionApi.getAllSessions() },
                 { groupApi.getAllGroups() }
             ) { sessionsEither, groupsEither ->
