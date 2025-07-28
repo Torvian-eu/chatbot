@@ -13,8 +13,8 @@ import io.ktor.client.plugins.*
 import io.ktor.client.statement.*
 import io.ktor.serialization.*
 import kotlinx.coroutines.CancellationException
+import kotlinx.io.IOException
 import kotlinx.serialization.SerializationException
-import java.io.IOException
 
 /**
  * Abstract base class for frontend API clients.
@@ -77,6 +77,7 @@ abstract class BaseApiClient(protected val client: HttpClient) {
             logger.warn("ContentConvertException: ${e.message}")
             mapToGenericApiError(e, "Data Serialization/Deserialization Error")
         } catch (e: CancellationException) {
+            logger.warn("Request cancelled: ${e.message}")
             throw e // Re-throw cancellation exceptions
         } catch (e: Exception) {
             logger.error("Unexpected Exception during API call: ${e.message}", e)
