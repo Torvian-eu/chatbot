@@ -1,7 +1,7 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-
+import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpackConfig
 
 /**
@@ -18,6 +18,7 @@ plugins {
     alias(libs.plugins.compose)
     alias(libs.plugins.kotlin.compose)
 //    alias(libs.plugins.compose.hotreload)
+    alias(libs.plugins.android.application)
 }
 
 repositories {
@@ -72,8 +73,14 @@ kotlin {
         }
     }
 
+    androidTarget {
+        @OptIn(ExperimentalKotlinGradlePluginApi::class)
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_11)
+        }
+    }
+
     // Add other targets here:
-    // androidTarget()
     // iosX64()
     // iosArm64()
     // iosSimulatorArm64()
@@ -153,6 +160,13 @@ kotlin {
             // Mocking library (JVM-specific)
             implementation(libs.mockk)
         }
+
+        androidMain.dependencies {
+            implementation(compose.preview)
+            implementation(libs.androidx.activity.compose)
+            // Ktor Client Engine (Android-specific)
+            implementation(libs.ktor.client.cio)
+        }
     }
 }
 
@@ -184,4 +198,36 @@ compose {
         // Set the package name for generated resources
         packageOfResClass = "eu.torvian.chatbot.app.generated.resources"
     }
+}
+
+android {
+    namespace = "eu.torvian.chatbot"
+    compileSdk = libs.versions.android.compileSdk.get().toInt()
+
+    defaultConfig {
+        applicationId = "eu.torvian.chatbot"
+        minSdk = libs.versions.android.minSdk.get().toInt()
+        targetSdk = libs.versions.android.targetSdk.get().toInt()
+        versionCode = 1
+        versionName = "1.0"
+    }
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+    }
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = false
+        }
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+    }
+}
+
+dependencies {
+    // UI tooling for debugging and preview
+    debugImplementation(compose.uiTooling)
 }
