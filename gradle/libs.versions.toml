@@ -19,6 +19,11 @@ androidx-lifecycle = "2.9.1" # For Compose Multiplatform ViewModel
 androidx-navigation = "2.9.0-beta03" # For Compose Multiplatform Navigation
 kotlin-buildlogic = "1.9.24" # Kotlin version for build-logic compatibility
 compose-hot-reload = "1.0.0-alpha10" # Compose Hot Reload version
+androidx-activity = "1.10.1" # For Compose Multiplatform Activity
+android-gradle-plugin = "8.10.0" # Android Gradle Plugin version
+android-compileSdk = "36" # The API level to compile against: https://developer.android.com/studio/releases/platforms
+android-minSdk = "24" # The minimum Android version supported
+android-targetSdk = "36" # The target Android version for testing
 
 [libraries]
 # Kotlin
@@ -90,7 +95,7 @@ koin-compose-viewmodel-navigation = { module = "io.insert-koin:koin-compose-view
 arrow-core = { module = "io.arrow-kt:arrow-core", version.ref = "arrow" }
 arrow-fx-coroutines = { module = "io.arrow-kt:arrow-fx-coroutines", version.ref = "arrow" }
 
-# AndroidX ViewModel
+# AndroidX ViewModel for Kotlin Multiplatform
 androidx-lifecycle-viewmodel = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel", version.ref = "androidx-lifecycle" }
 
 # AndroidX ViewModel utilities for Compose Multiplatform
@@ -99,11 +104,16 @@ androidx-lifecycle-viewmodel-compose = { module = "org.jetbrains.androidx.lifecy
 # AndroidX Lifecycle utilities for Compose Multiplatform
 androidx-lifecycle-runtime-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose", version.ref = "androidx-lifecycle" }
 
-# AndroidX Navigation
+# AndroidX Navigation for Compose Multiplatform
 androidx-navigation-compose = { module = "org.jetbrains.androidx.navigation:navigation-compose", version.ref = "androidx-navigation" }
 
+# --- Desktop-specific dependencies ---
 # KotlinX Coroutines Swing for JVM Main Dispatcher
 kotlinx-coroutines-swing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "coroutines" }
+
+# --- Android-specific dependencies ---
+# AndroidX Activity for Compose Multiplatform
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
 
 # Testing
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -193,4 +203,11 @@ kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref 
 compose = { id = "org.jetbrains.compose", version.ref = "compose" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 
+# Compose Hot Reload Gradle Plugin: Adds hot reload support for Compose Multiplatform.
 compose-hotreload = { id = "org.jetbrains.compose.hot-reload", version.ref = "compose-hot-reload" }
+
+# Android Application Gradle Plugin: Adds Android-specific tasks to the Gradle build.
+android-application = { id = "com.android.application", version.ref = "android-gradle-plugin" }
+
+# Android Library Gradle Plugin: Allows building Android libraries.
+android-library = { id = "com.android.library", version.ref = "android-gradle-plugin" }
