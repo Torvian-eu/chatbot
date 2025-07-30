@@ -245,9 +245,24 @@ server/src/test/kotlin/eu/torvian/chatbot/server/
 
 **Package Structure**:
 ```
-app/src/commonMain/kotlin/eu/torvian/chatbot/app/
+app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app targets
 ├── compose/          # Compose UI components
-│   └── ... other UI components ...
+│   ├── AppShell.kt   # Main application shell (contains navigation, top-level layout)
+│   ├── ChatScreen.kt # Main chat interface (displays session list, chat messages, input area)
+│   ├── ChatScreenContent.kt # Stateless content composable for chat interface
+│   ├── SettingsScreen.kt # Settings configuration interface (providers, models, settings)
+│   └── common/       # Common compose components
+│       └── LoadingOverlay.kt  # Loading overlay component
+├── domain/          # Domain models
+│   ├── events/        # Domain events (e.g., user actions, system responses)
+│   │   ├── ApiRequestError.kt # API request error event
+│   │   ├── AppEvent.kt  # Base event class
+│   │   ├── GenericAppError.kt # Generic application error event
+│   │   ├── GlobalError.kt  # Global error event
+│   │   ├── GlobalSuccess.kt # Global success event
+│   │   └── SnackbarInteractionEvent.kt # Snackbar interaction event
+│   └── navigation/   # Navigation related classes
+│       └── AppRoute.kt  # Application routes
 ├── koin/            # Koin modules 
 │   └── appModule.kt  # main app DI module
 ├── service/          # Frontend services (API clients)
@@ -264,16 +279,27 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/
 │   │       ├── KtorChatApiClient.kt
 │   │       ├── KtorGroupApiClient.kt
 │   │       └── ... other Ktor API client implementations ...
-│   └── ... other frontend services ...
+│   └── misc/          # Miscellaneous frontend services
+│       └── EventBus.kt  # Event bus for frontend events
 ├── utils/            # Utility classes
 │   └── misc/       # Miscellaneous utilities
 │       └── KmpLogger.kt  # KMP-compatible logger
 └── viewmodel/        # ViewModels for UI state management
     ├── ChatViewModel.kt  # Chat ViewModel (manages chat session state)
+    ├── ModelConfigViewModel.kt # Model Config ViewModel (manages LLM model state)
+    ├── ProviderConfigViewModel.kt # Provider Config ViewModel (manages LLM provider state)
     ├── SessionListViewModel.kt # Session List ViewModel (manages session list state)
+    ├── SettingsConfigViewModel.kt # Settings Config ViewModel (manages model settings state)
     └── UiState.kt        # Shared UI state sealed class
-    
-app/src/commonTest/kotlin/eu/torvian/chatbot/app/
+ 
+app/src/commonMain/composeResources/  # Compose resources (strings, etc.)
+├── values/  # Default resources
+│   └── strings.xml  # String resources
+├── values-es/  # Spanish resources
+│    └── strings.xml  # Spanish string resources
+└── ... other resources ...
+   
+app/src/commonTest/kotlin/eu/torvian/chatbot/app/  # Common tests
 ├── service/api/ktor/    # Ktor API client tests
 │   ├── KtorChatApiClientTest.kt  
 │   ├── KtorSessionApiClientTest.kt 
@@ -284,19 +310,17 @@ app/src/commonTest/kotlin/eu/torvian/chatbot/app/
     └── viewmodel/
         └── FlowTestUtils.kt  # Test utilities for Flow-based ViewModels
 
-app/src/desktopMain/kotlin/eu/torvian/chatbot/app/
-├── compose/      # Compose UI components
-│   ├── AppShell.kt   # Main application shell (contains navigation, top-level layout)
-│   └── ... other UI components ...
+app/src/desktopMain/kotlin/eu/torvian/chatbot/app/  # Desktop-specific implementations
+├── compose/
+│   └── ... desktop-specific UI components ...
 ├── main/         # Main entry point
-│   └── AppMain.kt    # Application entry point, setup (Ktor Server start, UI launch, DI)
-├── utils/        
-│   └── misc/       # Miscellaneous utilities
-│       └── DesktopKmpLogger.kt # Desktop-specific KMP logger
-└── viewmodel/    
-    └── StartupViewModel.kt  # Startup ViewModel (manages server startup state)
+│   └── AppMain.kt    # Application entry point, setup (UI launch, DI)
+└── utils/        
+    └── misc/       # Miscellaneous utilities
+        └── DesktopKmpLogger.kt # Desktop-specific KMP logger
 
-app/src/desktopTest/kotlin/eu/torvian/chatbot/app/
+
+app/src/desktopTest/kotlin/eu/torvian/chatbot/app/ # Desktop-specific tests
 ├── testutils/           
 │   └── viewmodel/        
 │        └── TestMockkExtensions.kt # Mockk test extensions

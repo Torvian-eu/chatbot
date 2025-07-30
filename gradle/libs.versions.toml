@@ -1,23 +1,30 @@
 [versions]
 javaVersion = "21"           # Java version
-kotlin = "2.1.0"             # Kotlin version
-ktor = "3.1.0"               # Ktor version
-exposed = "0.58.0"           # Exposed ORM version
-sqlite = "3.49.0.0"          # SQLite JDBC driver version
-coroutines = "1.10.1"        # Kotlin Coroutines version
-serialization = "1.8.0"      # Kotlin Serialization version
+kotlin = "2.2.0"             # Kotlin version
+ktor = "3.2.2"               # Ktor version
+exposed = "0.61.0"           # Exposed ORM version
+sqlite = "3.50.3.0"          # SQLite JDBC driver version
+coroutines = "1.10.2"        # Kotlin Coroutines version
+serialization = "1.9.0"      # Kotlin Serialization version
 datetime = "0.6.2"           # Kotlin DateTime version
-log4j = "2.21.0"             # Log4j version
+log4j = "2.25.1"             # Log4j version
 jbcrypt = "0.4"              # JBCrypt version
-bouncycastle = "1.80"        # BouncyCastle version
-koin = "4.0.2"               # Koin version
-typesafe-config = "1.4.3"    # Typesafe Config version
-mockk = "1.13.17"            # MockK version
-compose = "1.8.1"            # Compose Multiplatform version
+bouncycastle = "1.81"        # BouncyCastle version
+koin = "4.1.0"               # Koin version
+typesafe-config = "1.4.4"    # Typesafe Config version
+mockk = "1.14.5"             # MockK version
 arrow = "2.1.2"              # Arrow version
+compose = "1.8.2"            # Compose Multiplatform version
 androidx-lifecycle = "2.9.1" # For Compose Multiplatform ViewModel
+androidx-navigation = "2.9.0-beta03" # For Compose Multiplatform Navigation
 kotlin-buildlogic = "1.9.24" # Kotlin version for build-logic compatibility
 compose-hot-reload = "1.0.0-alpha10" # Compose Hot Reload version
+androidx-activity = "1.10.1" # For Compose Multiplatform Activity
+android-gradle-plugin = "8.10.0" # Android Gradle Plugin version
+android-compileSdk = "36"    # The API level to compile against: https://developer.android.com/studio/releases/platforms
+android-minSdk = "24"        # The minimum Android version supported
+android-targetSdk = "36"     # The target Android version for testing
+slf4j = "2.0.17"             # SLF4J version used for logging
 
 [libraries]
 # Kotlin
@@ -36,6 +43,8 @@ typesafe-config = { module = "com.typesafe:config", version.ref = "typesafe-conf
 log4j-api = { module = "org.apache.logging.log4j:log4j-api", version.ref = "log4j" }
 log4j-core = { module = "org.apache.logging.log4j:log4j-core", version.ref = "log4j" }
 log4j-slf4j2 = { module = "org.apache.logging.log4j:log4j-slf4j2-impl", version.ref = "log4j" }
+slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
+slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
 
 # Ktor Server
 ktor-server-core = { module = "io.ktor:ktor-server-core", version.ref = "ktor" }
@@ -46,6 +55,7 @@ ktor-server-status-pages = { module = "io.ktor:ktor-server-status-pages", versio
 ktor-server-content-negotiation = { module = "io.ktor:ktor-server-content-negotiation", version.ref = "ktor" }
 ktor-server-call-logging = { module = "io.ktor:ktor-server-call-logging", version.ref = "ktor" }
 ktor-server-double-receive = { module = "io.ktor:ktor-server-double-receive", version.ref = "ktor" }
+ktor-server-cors = { module = "io.ktor:ktor-server-cors", version.ref = "ktor" }
 
 # Ktor Client
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
@@ -55,6 +65,7 @@ ktor-client-auth = { module = "io.ktor:ktor-client-auth", version.ref = "ktor" }
 ktor-client-serialization = { module = "io.ktor:ktor-client-serialization", version.ref = "ktor" }
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
 ktor-client-resources = { module = "io.ktor:ktor-client-resources", version.ref = "ktor" }
+ktor-client-logging = { module = "io.ktor:ktor-client-logging", version.ref = "ktor" }
 
 # Ktor Serialization
 ktor-serialization-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
@@ -82,13 +93,13 @@ koin-test = { module = "io.insert-koin:koin-test", version.ref = "koin" }
 koin-test-junit5 = { module = "io.insert-koin:koin-test-junit5", version.ref = "koin" }
 koin-compose = { module = "io.insert-koin:koin-compose", version.ref = "koin" }
 koin-compose-viewmodel = { module = "io.insert-koin:koin-compose-viewmodel", version.ref = "koin" }
-koin-compose-navigation = { module = "io.insert-koin:koin-compose-navigation", version.ref = "koin" }
+koin-compose-viewmodel-navigation = { module = "io.insert-koin:koin-compose-viewmodel-navigation", version.ref = "koin" }
 
 # Arrow (FP library)
 arrow-core = { module = "io.arrow-kt:arrow-core", version.ref = "arrow" }
 arrow-fx-coroutines = { module = "io.arrow-kt:arrow-fx-coroutines", version.ref = "arrow" }
 
-# AndroidX ViewModel
+# AndroidX ViewModel for Kotlin Multiplatform
 androidx-lifecycle-viewmodel = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel", version.ref = "androidx-lifecycle" }
 
 # AndroidX ViewModel utilities for Compose Multiplatform
@@ -97,8 +108,16 @@ androidx-lifecycle-viewmodel-compose = { module = "org.jetbrains.androidx.lifecy
 # AndroidX Lifecycle utilities for Compose Multiplatform
 androidx-lifecycle-runtime-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose", version.ref = "androidx-lifecycle" }
 
+# AndroidX Navigation for Compose Multiplatform
+androidx-navigation-compose = { module = "org.jetbrains.androidx.navigation:navigation-compose", version.ref = "androidx-navigation" }
+
+# --- Desktop-specific dependencies ---
 # KotlinX Coroutines Swing for JVM Main Dispatcher
 kotlinx-coroutines-swing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "coroutines" }
+
+# --- Android-specific dependencies ---
+# AndroidX Activity for Compose Multiplatform
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
 
 # Testing
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -118,7 +137,8 @@ ktor-server = [
     "ktor-server-content-negotiation",
     "ktor-server-call-logging",
     "ktor-server-double-receive",
-    "ktor-server-resources"
+    "ktor-server-resources",
+    "ktor-server-cors"
 ]
 
 ktor-server-test = [
@@ -187,4 +207,11 @@ kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref 
 compose = { id = "org.jetbrains.compose", version.ref = "compose" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 
+# Compose Hot Reload Gradle Plugin: Adds hot reload support for Compose Multiplatform.
 compose-hotreload = { id = "org.jetbrains.compose.hot-reload", version.ref = "compose-hot-reload" }
+
+# Android Application Gradle Plugin: Adds Android-specific tasks to the Gradle build.
+android-application = { id = "com.android.application", version.ref = "android-gradle-plugin" }
+
+# Android Library Gradle Plugin: Allows building Android libraries.
+android-library = { id = "com.android.library", version.ref = "android-gradle-plugin" }

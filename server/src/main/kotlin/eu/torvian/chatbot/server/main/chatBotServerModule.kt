@@ -7,7 +7,9 @@ import eu.torvian.chatbot.server.koin.*
 import eu.torvian.chatbot.server.ktor.configureKtor
 import eu.torvian.chatbot.server.ktor.routes.ApiRoutesKtor
 import eu.torvian.chatbot.server.utils.misc.DIContainerKey
+import io.ktor.http.HttpHeaders
 import io.ktor.server.application.*
+import io.ktor.server.plugins.cors.routing.CORS
 import io.ktor.server.routing.*
 import kotlinx.coroutines.runBlocking
 import org.koin.ktor.ext.get
@@ -24,6 +26,13 @@ fun Application.chatBotServerModule() {
 
     // Configure Ktor (general plugins like content negotiation, status pages, etc.)
     configureKtor()
+
+    // Configure CORS
+    // This allows the WASM app to make requests to the server.
+    install(CORS) {
+        anyHost()
+        allowHeader(HttpHeaders.ContentType)
+    }
 
     // Configure the database schema
     configureDatabase()

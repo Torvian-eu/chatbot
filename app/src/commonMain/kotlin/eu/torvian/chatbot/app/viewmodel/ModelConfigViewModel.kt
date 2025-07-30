@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import arrow.fx.coroutines.parZip
 import eu.torvian.chatbot.app.service.api.ModelApi
 import eu.torvian.chatbot.app.service.api.ProviderApi
+import eu.torvian.chatbot.app.utils.misc.ioDispatcher
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.models.AddModelRequest
@@ -129,7 +130,7 @@ class ModelConfigViewModel(
             _providersForSelection.value = UiState.Loading
 
             parZip(
-                Dispatchers.IO,
+                ioDispatcher,
                 { modelApi.getAllModels() },
                 { providerApi.getAllProviders() }
             ) { modelsEither, providersEither ->

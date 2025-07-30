@@ -49,3 +49,6 @@ bin/
 
 ### Copy File Content plugin ###
 CopyFileContentSettings.xml
+
+### Android related files
+local.properties

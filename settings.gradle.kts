@@ -30,3 +30,12 @@ include("app") // Contains frontend logic for KMP (API clients, ViewModels, UI)
 
 // Include the custom build logic
 includeBuild("build-logic")
+
+// Configure plugin management
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        google()
+        mavenCentral()
+    }
+}

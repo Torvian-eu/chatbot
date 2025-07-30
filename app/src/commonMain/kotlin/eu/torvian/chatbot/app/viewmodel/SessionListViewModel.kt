@@ -4,8 +4,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import arrow.core.flatMap
 import arrow.fx.coroutines.parZip
+import eu.torvian.chatbot.app.domain.events.SnackbarInteractionEvent
+import eu.torvian.chatbot.app.domain.events.apiRequestError
+import eu.torvian.chatbot.app.generated.resources.Res
+import eu.torvian.chatbot.app.generated.resources.error_loading_sessions_groups
 import eu.torvian.chatbot.app.service.api.GroupApi
 import eu.torvian.chatbot.app.service.api.SessionApi
+import eu.torvian.chatbot.app.service.misc.EventBus
+import eu.torvian.chatbot.app.utils.misc.ioDispatcher
+import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.models.*
@@ -16,6 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
+import org.jetbrains.compose.resources.getString
 
 /**
  * Manages the UI state for the chat session list panel,
@@ -32,6 +40,7 @@ import kotlinx.datetime.Clock
  * @constructor
  * @param sessionApi The API client for session-related operations.
  * @param groupApi The API client for group-related operations.
+ * @param eventBus The event bus for emitting global events.
  * @param uiDispatcher The dispatcher to use for UI-related coroutines. Defaults to Main.
  * @param clock The clock to use for timestamping. Defaults to System clock.
  *
@@ -45,9 +54,14 @@ import kotlinx.datetime.Clock
 class SessionListViewModel(
     private val sessionApi: SessionApi,
     private val groupApi: GroupApi,
+    private val eventBus: EventBus,
     private val uiDispatcher: CoroutineDispatcher = Dispatchers.Main,
-    private val clock: Clock = Clock.System
+    private val clock: Clock = Clock.System,
 ) : ViewModel() {
+
+    companion object {
+        private val logger = kmpLogger<SessionListViewModel>()
+    }
 
     // --- Observable State for Compose UI (using StateFlow) ---
 
@@ -97,6 +111,26 @@ class SessionListViewModel(
      */
     val editingGroupNameInput: StateFlow<String> = _editingGroupNameInput.asStateFlow()
 
+    // Store the ID of the last emitted error if a retry is possible
+    private val _lastFailedLoadEventId = MutableStateFlow<String?>(null)
+
+    init {
+        // ViewModel can listen to the EventBus for its own emitted event's responses
+        viewModelScope.launch {
+            eventBus.events.collect { event ->
+                if (event is SnackbarInteractionEvent && event.originalAppEventId == _lastFailedLoadEventId.value) {
+                    if (event.isActionPerformed) {
+                        logger.info("Retrying loadSessionsAndGroups due to Snackbar action!")
+                        _lastFailedLoadEventId.value = null // Clear ID before retrying
+                        loadSessionsAndGroups() // Trigger retry
+                    } else { // It was dismissed (by user or timeout)
+                        logger.info("Snackbar dismissed, not retrying loadSessionsAndGroups.")
+                        _lastFailedLoadEventId.value = null
+                    }
+                }
+            }
+        }
+    }
 
     /**
      * Data class to hold the multiple pieces of data needed for the Session List UI when in Success state.
@@ -138,7 +172,7 @@ class SessionListViewModel(
 
             // Use parZip to fetch sessions and groups concurrently
             parZip(
-                Dispatchers.IO,
+                ioDispatcher,
                 { sessionApi.getAllSessions() },
                 { groupApi.getAllGroups() }
             ) { sessionsEither, groupsEither ->
@@ -153,10 +187,19 @@ class SessionListViewModel(
                 ifLeft = { error ->
                     // Handle Error case (E2.S3, E6.S4 error)
                     _listState.value = UiState.Error(error)
+                    // Emit to generic EventBus using the specific error type
+                    val globalError = apiRequestError(
+                        apiError = error,
+                        shortMessage = getString(Res.string.error_loading_sessions_groups),
+                        isRetryable = true
+                    )
+                    _lastFailedLoadEventId.value = globalError.eventId // Store its ID
+                    eventBus.emitEvent(globalError)
                 },
                 ifRight = { data ->
                     // Handle Success case (E2.S3, E6.S4 success)
                     _listState.value = UiState.Success(data)
+                    _lastFailedLoadEventId.value = null // Clear ID on success
                 }
             )
         }
