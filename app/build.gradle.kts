@@ -117,6 +117,7 @@ kotlin {
             implementation(libs.ktor.client.content.negotiation)
             implementation(libs.ktor.serialization.json)
             implementation(libs.ktor.client.resources)
+            implementation(libs.ktor.client.logging)
 
             // Arrow dependencies for Either
             implementation(libs.arrow.core)
@@ -166,6 +167,8 @@ kotlin {
             implementation(libs.androidx.activity.compose)
             // Ktor Client Engine (Android-specific)
             implementation(libs.ktor.client.cio)
+            // Logging
+            implementation(libs.slf4j.simple)
         }
     }
 }
