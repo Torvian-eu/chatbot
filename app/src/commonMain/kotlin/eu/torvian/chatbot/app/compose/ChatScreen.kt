@@ -4,8 +4,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import eu.torvian.chatbot.app.viewmodel.ChatAreaActions
+import eu.torvian.chatbot.app.viewmodel.ChatAreaState
 import eu.torvian.chatbot.app.viewmodel.ChatViewModel
+import eu.torvian.chatbot.app.viewmodel.SessionListActions
+import eu.torvian.chatbot.app.viewmodel.SessionListState
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
+import eu.torvian.chatbot.common.models.ChatGroup
+import eu.torvian.chatbot.common.models.ChatMessage
+import eu.torvian.chatbot.common.models.ChatSessionSummary
 import org.koin.compose.viewmodel.koinViewModel
 
 /**
@@ -14,7 +22,7 @@ import org.koin.compose.viewmodel.koinViewModel
  * - Obtaining ViewModels via Koin.
  * - Collecting necessary state from these ViewModels.
  * - Managing specific ViewModel interactions for the chat feature.
- * - Passing the collected states and relevant event callbacks to the stateless [ChatScreenContent].
+ * - Constructing and passing stateless UI state and action contracts to [ChatScreenContent].
  * (E7.S2: Implementing the Stateful part of the Screen with internal ViewModel management)
  *
  * @param sessionListViewModel The ViewModel managing the session list state.
@@ -25,33 +33,104 @@ fun ChatScreen(
     sessionListViewModel: SessionListViewModel = koinViewModel(),
     chatViewModel: ChatViewModel = koinViewModel()
 ) {
-    // Collect states from ViewModels relevant to this screen's content
+    // --- Collect States for SessionListPanel ---
     val sessionListUiState by sessionListViewModel.listState.collectAsState()
     val selectedSessionId by sessionListViewModel.selectedSessionId.collectAsState()
-    val chatUiState by chatViewModel.sessionState.collectAsState()
+    val isCreatingNewGroup by sessionListViewModel.isCreatingNewGroup.collectAsState()
+    val newGroupNameInput by sessionListViewModel.newGroupNameInput.collectAsState()
+    val editingGroup by sessionListViewModel.editingGroup.collectAsState()
+    val editingGroupNameInput by sessionListViewModel.editingGroupNameInput.collectAsState()
 
-    // Determine if the chat screen should show a loading overlay
-    // This combines loading states from both sessionListViewModel (initial load)
-    // and chatViewModel (loading specific session details).
-    val showLoading = sessionListUiState.isLoading || chatUiState.isLoading
+    // --- Collect States for ChatArea ---
+    val chatSessionUiState by chatViewModel.sessionState.collectAsState()
+    val chatInputContent by chatViewModel.inputContent.collectAsState()
+    val chatReplyTargetMessage by chatViewModel.replyTargetMessage.collectAsState()
+    val chatEditingMessage by chatViewModel.editingMessage.collectAsState()
+    val chatEditingContent by chatViewModel.editingContent.collectAsState()
+    val chatCurrentBranchLeafId by chatViewModel.currentBranchLeafId.collectAsState()
+    val chatDisplayedMessages by chatViewModel.displayedMessages.collectAsState()
 
-    // This interaction has been moved from AppShell to ChatScreen,
-    // as it's directly related to this screen's functionality.
+    // Determine if the overall screen should show a loading overlay
+    val showLoading = sessionListUiState.isLoading || chatSessionUiState.isLoading
+
+    // --- SessionListPanel Contract Construction ---
+    val sessionListPanelUiState = remember(
+        sessionListUiState, selectedSessionId, isCreatingNewGroup,
+        newGroupNameInput, editingGroup, editingGroupNameInput
+    ) {
+        SessionListState(
+            listUiState = sessionListUiState,
+            selectedSessionId = selectedSessionId,
+            isCreatingNewGroup = isCreatingNewGroup,
+            newGroupNameInput = newGroupNameInput,
+            editingGroup = editingGroup,
+            editingGroupNameInput = editingGroupNameInput
+        )
+    }
+    val sessionListPanelActions = remember(sessionListViewModel) {
+        object : SessionListActions {
+            override fun onSessionSelected(sessionId: Long) = sessionListViewModel.selectSession(sessionId)
+            override fun onCreateNewSession(name: String?) = sessionListViewModel.createNewSession(name)
+            override fun onRenameSession(session: ChatSessionSummary, newName: String) = sessionListViewModel.renameSession(session, newName)
+            override fun onDeleteSession(sessionId: Long) = sessionListViewModel.deleteSession(sessionId)
+            override fun onAssignSessionToGroup(sessionId: Long, groupId: Long?) = sessionListViewModel.assignSessionToGroup(sessionId, groupId)
+            override fun onStartCreatingNewGroup() = sessionListViewModel.startCreatingNewGroup()
+            override fun onUpdateNewGroupNameInput(newText: String) = sessionListViewModel.updateNewGroupNameInput(newText)
+            override fun onCreateNewGroup() = sessionListViewModel.createNewGroup()
+            override fun onCancelCreatingNewGroup() = sessionListViewModel.cancelCreatingNewGroup()
+            override fun onStartRenamingGroup(group: ChatGroup) = sessionListViewModel.startRenamingGroup(group)
+            override fun onUpdateEditingGroupNameInput(newText: String) = sessionListViewModel.updateEditingGroupNameInput(newText)
+            override fun onSaveRenamedGroup() = sessionListViewModel.saveRenamedGroup()
+            override fun onCancelRenamingGroup() = sessionListViewModel.cancelRenamingGroup()
+            override fun onDeleteGroup(groupId: Long) = sessionListViewModel.deleteGroup(groupId)
+        }
+    }
+
+    // --- ChatArea Contract Construction ---
+    val chatAreaState = remember(
+        chatSessionUiState, chatInputContent, chatReplyTargetMessage,
+        chatEditingMessage, chatEditingContent, chatCurrentBranchLeafId, chatDisplayedMessages
+    ) {
+        ChatAreaState(
+            sessionUiState = chatSessionUiState,
+            inputContent = chatInputContent,
+            replyTargetMessage = chatReplyTargetMessage,
+            editingMessage = chatEditingMessage,
+            editingContent = chatEditingContent,
+            currentBranchLeafId = chatCurrentBranchLeafId,
+            displayedMessages = chatDisplayedMessages
+        )
+    }
+    val chatAreaActions = remember(chatViewModel) {
+        object : ChatAreaActions {
+            override fun onUpdateInput(newText: String) = chatViewModel.updateInput(newText)
+            override fun onSendMessage() = chatViewModel.sendMessage()
+            override fun onStartReplyTo(message: ChatMessage) = chatViewModel.startReplyTo(message)
+            override fun onCancelReply() = chatViewModel.cancelReply()
+            override fun onStartEditing(message: ChatMessage) = chatViewModel.startEditing(message)
+            override fun onUpdateEditingContent(newText: String) = chatViewModel.updateEditingContent(newText)
+            override fun onSaveEditing() = chatViewModel.saveEditing()
+            override fun onCancelEditing() = chatViewModel.cancelEditing()
+            override fun onDeleteMessage(messageId: Long) = chatViewModel.deleteMessage(messageId)
+            override fun onSwitchBranchToMessage(messageId: Long) = chatViewModel.switchBranchToMessage(messageId)
+            override fun onSelectModel(modelId: Long?) = chatViewModel.selectModel(modelId)
+            override fun onSelectSettings(settingsId: Long?) = chatViewModel.selectSettings(settingsId)
+        }
+    }
+
+    // Load the chat session when a new one is selected
     LaunchedEffect(selectedSessionId) {
         selectedSessionId?.let { sessionId ->
             chatViewModel.loadSession(sessionId)
         } ?: chatViewModel.clearSession()
     }
 
-    // Pass collected states and event callbacks down to the stateless content composable
+    // Pass all collected states and actions to the stateless ChatScreenContent
     ChatScreenContent(
-        sessionListUiState = sessionListUiState,
-        selectedSessionId = selectedSessionId,
-        onSessionSelected = { sessionId -> sessionListViewModel.selectSession(sessionId) },
-        chatUiState = chatUiState,
+        sessionListState = sessionListPanelUiState,
+        sessionListActions = sessionListPanelActions,
+        chatAreaState = chatAreaState,
+        chatAreaActions = chatAreaActions,
         showLoading = showLoading
-        // TODO: In future PRs, as ChatArea and SessionListPanel get built out,
-        // pass more specific states (e.g., chatViewModel.inputContent, chatViewModel.displayedMessages)
-        // and callbacks (e.g., chatViewModel.sendMessage, sessionListViewModel.createNewSession) here.
     )
 }
