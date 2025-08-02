@@ -17,7 +17,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.compose)
     alias(libs.plugins.kotlin.compose)
-//    alias(libs.plugins.compose.hotreload)
+    alias(libs.plugins.compose.hotreload)
     alias(libs.plugins.android.application)
 }
 
@@ -103,6 +103,7 @@ kotlin {
             implementation(compose.ui)
             implementation(compose.components.resources)
             implementation(compose.components.uiToolingPreview)
+            implementation(compose.materialIconsExtended)
 
             // AndroidX Lifecycle
             implementation(libs.androidx.lifecycle.viewmodel)
