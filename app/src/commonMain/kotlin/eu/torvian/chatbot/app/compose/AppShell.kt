@@ -14,13 +14,14 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import eu.torvian.chatbot.app.generated.resources.Res
-import eu.torvian.chatbot.app.generated.resources.action_retry
-import eu.torvian.chatbot.app.generated.resources.app_name
+import eu.torvian.chatbot.app.compose.common.OverflowTooltipText
 import eu.torvian.chatbot.app.domain.events.GlobalError
 import eu.torvian.chatbot.app.domain.events.GlobalSuccess
 import eu.torvian.chatbot.app.domain.events.SnackbarInteractionEvent
 import eu.torvian.chatbot.app.domain.navigation.AppRoute
+import eu.torvian.chatbot.app.generated.resources.Res
+import eu.torvian.chatbot.app.generated.resources.action_retry
+import eu.torvian.chatbot.app.generated.resources.app_name
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.viewmodel.ChatViewModel
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
@@ -105,7 +106,11 @@ fun AppShell() {
         Scaffold(
             topBar = {
                 CenterAlignedTopAppBar(
-                    title = { Text(stringResource(Res.string.app_name)) },
+                    title = {
+                        OverflowTooltipText(
+                            text = stringResource(Res.string.app_name),
+                        )
+                    },
                     actions = {
                         Button(
                             onClick = {
