@@ -63,198 +63,352 @@ fun SessionListPanel(
     var groupToDeleteId by remember { mutableStateOf<Long?>(null) }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // --- Header and New Session/Group Buttons ---
+        SessionListHeader(
+            onNewSessionClick = { showNewSessionDialog = true },
+            onNewGroupClick = actions::onStartCreatingNewGroup
+        )
+
+        // --- New Group Input (E6.S3) ---
+        NewGroupInputSection(
+            isVisible = state.isCreatingNewGroup,
+            groupNameInput = state.newGroupNameInput,
+            onGroupNameChange = actions::onUpdateNewGroupNameInput,
+            onCreateGroup = actions::onCreateNewGroup,
+            onCancelCreation = actions::onCancelCreatingNewGroup
+        )
+
+        // --- Main Content: Session List (E2.S3, E6.S2) ---
+        SessionListContent(
+            state = state,
+            onSessionSelected = actions::onSessionSelected,
+            onRenameSession = { session ->
+                sessionToRename = session
+                renameSessionNameInput = session.name
+                showRenameSessionDialog = true
+            },
+            onDeleteSession = { sessionId ->
+                sessionToDeleteId = sessionId
+                showDeleteSessionDialog = true
+            },
+            onAssignToGroup = { session ->
+                sessionToAssign = session
+                showAssignGroupDialog = true
+            },
+            onStartRenameGroup = actions::onStartRenamingGroup,
+            onUpdateEditingGroupNameInput = actions::onUpdateEditingGroupNameInput,
+            onSaveRenamedGroup = actions::onSaveRenamedGroup,
+            onCancelRenamingGroup = actions::onCancelRenamingGroup,
+            onDeleteGroup = { group ->
+                groupToDeleteId = group?.id
+                showDeleteGroupDialog = true
+            }
+        )
+    }
+
+    // --- Dialogs ---
+    // New Session Dialog
+    NewSessionDialog(
+        isVisible = showNewSessionDialog,
+        nameInput = newSessionNameInput,
+        onNameInputChange = { newSessionNameInput = it },
+        onCreateSession = {
+            actions.onCreateNewSession(newSessionNameInput.ifBlank { null })
+            showNewSessionDialog = false
+            newSessionNameInput = ""
+        },
+        onDismiss = { showNewSessionDialog = false }
+    )
+
+    // Rename Session Dialog
+    RenameSessionDialog(
+        isVisible = showRenameSessionDialog && sessionToRename != null,
+        nameInput = renameSessionNameInput,
+        onNameInputChange = { renameSessionNameInput = it },
+        onRenameSession = {
+            sessionToRename?.let { actions.onRenameSession(it, renameSessionNameInput) }
+            showRenameSessionDialog = false
+            sessionToRename = null
+        },
+        onDismiss = { 
+            showRenameSessionDialog = false
+            sessionToRename = null 
+        }
+    )
+
+    // Delete Session Confirmation Dialog
+    DeleteSessionDialog(
+        isVisible = showDeleteSessionDialog && sessionToDeleteId != null,
+        onDeleteConfirm = {
+            sessionToDeleteId?.let { actions.onDeleteSession(it) }
+            showDeleteSessionDialog = false
+            sessionToDeleteId = null
+        },
+        onDismiss = { 
+            showDeleteSessionDialog = false
+            sessionToDeleteId = null 
+        }
+    )
+
+    // Assign Session to Group Dialog
+    AssignSessionToGroupDialog(
+        isVisible = showAssignGroupDialog && sessionToAssign != null,
+        session = sessionToAssign,
+        groups = state.listUiState.dataOrNull?.allGroups ?: emptyList(),
+        onAssignToGroup = { sessionId, groupId ->
+            actions.onAssignSessionToGroup(sessionId, groupId)
+            showAssignGroupDialog = false
+            sessionToAssign = null
+        },
+        onDismiss = { 
+            showAssignGroupDialog = false
+            sessionToAssign = null 
+        }
+    )
+
+    // Delete Group Confirmation Dialog
+    DeleteGroupDialog(
+        isVisible = showDeleteGroupDialog && groupToDeleteId != null,
+        onDeleteConfirm = {
+            groupToDeleteId?.let { actions.onDeleteGroup(it) }
+            showDeleteGroupDialog = false
+            groupToDeleteId = null
+        },
+        onDismiss = { 
+            showDeleteGroupDialog = false
+            groupToDeleteId = null 
+        }
+    )
+}
+
+/**
+ * Header section of the session list panel with title and action buttons.
+ */
+@Composable
+private fun SessionListHeader(
+    onNewSessionClick: () -> Unit,
+    onNewGroupClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        OverflowTooltipText(
+            text = "Chat Sessions",
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(Modifier.width(8.dp))
+        Row {
+            // New Session Button
+            PlainTooltipBox(text = "Create new session") {
+                FilledIconButton(
+                    onClick = onNewSessionClick,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "New session")
+                }
+            }
+            Spacer(Modifier.width(8.dp))
+            // New Group Button
+            PlainTooltipBox(text = "Create new group") {
+                FilledIconButton(
+                    onClick = onNewGroupClick,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(Icons.Default.CreateNewFolder, contentDescription = "New group")
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Section for creating a new group with input field and action buttons.
+ */
+@Composable
+private fun NewGroupInputSection(
+    isVisible: Boolean,
+    groupNameInput: String,
+    onGroupNameChange: (String) -> Unit,
+    onCreateGroup: () -> Unit,
+    onCancelCreation: () -> Unit
+) {
+    AnimatedVisibility(
+        visible = isVisible,
+        enter = expandVertically(),
+        exit = shrinkVertically()
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+                .padding(vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            OverflowTooltipText(
-                text = "Chat Sessions",
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onSurface
+            OutlinedTextField(
+                value = groupNameInput,
+                onValueChange = onGroupNameChange,
+                label = { Text(text = "New Group Name", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                singleLine = true,
+                modifier = Modifier.weight(1f)
             )
             Spacer(Modifier.width(8.dp))
-            Row {
-                // New Session Button
-                PlainTooltipBox(text = "Create new session") {
-                    FilledIconButton(
-                        onClick = { showNewSessionDialog = true },
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = "New session")
-                    }
-                }
-                Spacer(Modifier.width(8.dp))
-                // New Group Button
-                PlainTooltipBox(text = "Create new group") {
-                    FilledIconButton(
-                        onClick = actions::onStartCreatingNewGroup,
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(Icons.Default.CreateNewFolder, contentDescription = "New group")
-                    }
-                }
+            IconButton(onClick = onCreateGroup) {
+                Icon(Icons.Default.Check, contentDescription = "Create Group")
+            }
+            IconButton(onClick = onCancelCreation) {
+                Icon(Icons.Default.Close, contentDescription = "Cancel")
             }
         }
+    }
+}
 
-        // --- New Group Input (E6.S3) ---
-        AnimatedVisibility(
-            visible = state.isCreatingNewGroup,
-            enter = expandVertically(),
-            exit = shrinkVertically()
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = state.newGroupNameInput,
-                    onValueChange = actions::onUpdateNewGroupNameInput,
-                    label = { Text(text = "New Group Name", maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f)
+/**
+ * Main content section displaying the list of sessions and groups.
+ */
+@Composable
+private fun SessionListContent(
+    state: SessionListState,
+    onSessionSelected: (Long) -> Unit,
+    onRenameSession: (ChatSessionSummary) -> Unit,
+    onDeleteSession: (Long) -> Unit,
+    onAssignToGroup: (ChatSessionSummary) -> Unit,
+    onStartRenameGroup: (ChatGroup) -> Unit,
+    onUpdateEditingGroupNameInput: (String) -> Unit,
+    onSaveRenamedGroup: () -> Unit,
+    onCancelRenamingGroup: () -> Unit,
+    onDeleteGroup: (ChatGroup?) -> Unit
+) {
+    Box {
+        when (val listUiState = state.listUiState) {
+            UiState.Loading -> LoadingOverlay(Modifier.fillMaxSize())
+            is UiState.Error -> {
+                Text(
+                    "Error loading sessions: ${listUiState.error.message}",
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.align(Alignment.Center)
                 )
-                Spacer(Modifier.width(8.dp))
-                IconButton(onClick = actions::onCreateNewGroup) {
-                    Icon(Icons.Default.Check, contentDescription = "Create Group")
-                }
-                IconButton(onClick = actions::onCancelCreatingNewGroup) {
-                    Icon(Icons.Default.Close, contentDescription = "Cancel")
-                }
             }
-        }
-
-        // --- Main Content: Session List (E2.S3, E6.S2) ---
-        Box {
-            when (val listUiState = state.listUiState) {
-                UiState.Loading -> LoadingOverlay(Modifier.fillMaxSize())
-                is UiState.Error -> {
-                    Text(
-                        "Error loading sessions: ${listUiState.error.message}",
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.align(Alignment.Center)
-                    )
-                }
-
-                UiState.Idle -> {
-                    Text(
-                        "No sessions loaded. Click 'New Session' to start.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.align(Alignment.Center)
-                    )
-                }
-
-                is UiState.Success -> {
-                    val sessionListData = listUiState.data
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        val groupedEntries = sessionListData.groupedSessions.entries.toList()
-                        groupedEntries.forEachIndexed { index, (group, sessions) ->
-                            // Add space before group header ONLY if:
-                            // 1. It's not the very first group (index > 0)
-                            // 2. The *previous* group's list of sessions was not empty
-                            if (index > 0) {
-                                val previousGroupSessions = groupedEntries[index - 1].value
-                                if (previousGroupSessions.isNotEmpty()) {
-                                    item {
-                                        Spacer(modifier = Modifier.height(16.dp))
-                                    }
-                                }
-                            }
-                            // Group Header (E6.S4)
-                            stickyHeader {
-                                GroupHeader(
-                                    group = group,
-                                    isEditing = group != null && state.editingGroup?.id == group.id,
-                                    editingName = state.editingGroupNameInput,
-                                    onEditNameChange = actions::onUpdateEditingGroupNameInput,
-                                    onSaveRename = actions::onSaveRenamedGroup,
-                                    onCancelRename = actions::onCancelRenamingGroup,
-                                    onStartRename = actions::onStartRenamingGroup,
-                                    onDelete = { g ->
-                                        groupToDeleteId = g?.id
-                                        showDeleteGroupDialog = true
-                                    }
-                                )
-                            }
-                            // Add space after group header if there are sessions in the group
-                            if (sessions.isNotEmpty()) {
+            UiState.Idle -> {
+                Text(
+                    "No sessions loaded. Click 'New Session' to start.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.align(Alignment.Center)
+                )
+            }
+            is UiState.Success -> {
+                val sessionListData = listUiState.data
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    val groupedEntries = sessionListData.groupedSessions.entries.toList()
+                    groupedEntries.forEachIndexed { index, (group, sessions) ->
+                        // Add space before group header ONLY if:
+                        // 1. It's not the very first group (index > 0)
+                        // 2. The *previous* group's list of sessions was not empty
+                        if (index > 0) {
+                            val previousGroupSessions = groupedEntries[index - 1].value
+                            if (previousGroupSessions.isNotEmpty()) {
                                 item {
-                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Spacer(modifier = Modifier.height(16.dp))
                                 }
                             }
-                            // Sessions within the group
-                            items(sessions, key = { it.id }) { session ->
-                                SessionListItem(
-                                    session = session,
-                                    isSelected = session.id == state.selectedSessionId,
-                                    onClick = { actions.onSessionSelected(session.id) },
-                                    onRename = { s ->
-                                        sessionToRename = s
-                                        renameSessionNameInput = s.name
-                                        showRenameSessionDialog = true
-                                    },
-                                    onDelete = { sId ->
-                                        sessionToDeleteId = sId
-                                        showDeleteSessionDialog = true
-                                    },
-                                    onAssignToGroup = { s ->
-                                        sessionToAssign = s
-                                        showAssignGroupDialog = true
-                                    }
-                                )
+                        }
+                        // Group Header (E6.S4)
+                        stickyHeader {
+                            GroupHeader(
+                                group = group,
+                                isEditing = group != null && state.editingGroup?.id == group.id,
+                                editingName = state.editingGroupNameInput,
+                                onEditNameChange = onUpdateEditingGroupNameInput,
+                                onSaveRename = onSaveRenamedGroup,
+                                onCancelRename = onCancelRenamingGroup,
+                                onStartRename = onStartRenameGroup,
+                                onDelete = onDeleteGroup
+                            )
+                        }
+                        // Add space after group header if there are sessions in the group
+                        if (sessions.isNotEmpty()) {
+                            item {
+                                Spacer(modifier = Modifier.height(8.dp))
                             }
+                        }
+                        // Sessions within the group
+                        items(sessions, key = { it.id }) { session ->
+                            SessionListItem(
+                                session = session,
+                                isSelected = session.id == state.selectedSessionId,
+                                onClick = { onSessionSelected(session.id) },
+                                onRename = { onRenameSession(session) },
+                                onDelete = { onDeleteSession(session.id) },
+                                onAssignToGroup = { onAssignToGroup(session) }
+                            )
                         }
                     }
                 }
             }
         }
     }
+}
 
-    // --- Dialogs ---
-    // New Session Dialog (E2.S1)
-    if (showNewSessionDialog) {
+/**
+ * Dialog for creating a new session.
+ */
+@Composable
+private fun NewSessionDialog(
+    isVisible: Boolean,
+    nameInput: String,
+    onNameInputChange: (String) -> Unit,
+    onCreateSession: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    if (isVisible) {
         AlertDialog(
-            onDismissRequest = { showNewSessionDialog = false },
+            onDismissRequest = onDismiss,
             title = { Text("Create New Chat Session") },
             text = {
                 OutlinedTextField(
-                    value = newSessionNameInput,
-                    onValueChange = { newSessionNameInput = it },
+                    value = nameInput,
+                    onValueChange = onNameInputChange,
                     label = { Text("Session Name (optional)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
             },
             confirmButton = {
-                Button(
-                    onClick = {
-                        actions.onCreateNewSession(newSessionNameInput.ifBlank { null })
-                        showNewSessionDialog = false
-                        newSessionNameInput = ""
-                    }
-                ) { Text("Create") }
+                Button(onClick = onCreateSession) { 
+                    Text("Create") 
+                }
             },
             dismissButton = {
-                TextButton(onClick = { showNewSessionDialog = false }) { Text("Cancel") }
+                TextButton(onClick = onDismiss) { 
+                    Text("Cancel") 
+                }
             }
         )
     }
+}
 
-    // Rename Session Dialog (E2.S5)
-    if (showRenameSessionDialog && sessionToRename != null) {
+/**
+ * Dialog for renaming an existing session.
+ */
+@Composable
+private fun RenameSessionDialog(
+    isVisible: Boolean,
+    nameInput: String,
+    onNameInputChange: (String) -> Unit,
+    onRenameSession: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    if (isVisible) {
         AlertDialog(
-            onDismissRequest = { showRenameSessionDialog = false; sessionToRename = null },
+            onDismissRequest = onDismiss,
             title = { Text("Rename Session") },
             text = {
                 OutlinedTextField(
-                    value = renameSessionNameInput,
-                    onValueChange = { renameSessionNameInput = it },
+                    value = nameInput,
+                    onValueChange = onNameInputChange,
                     label = { Text("New Session Name") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
@@ -262,86 +416,96 @@ fun SessionListPanel(
             },
             confirmButton = {
                 Button(
-                    onClick = {
-                        sessionToRename?.let { actions.onRenameSession(it, renameSessionNameInput) }
-                        showRenameSessionDialog = false
-                        sessionToRename = null
-                    },
-                    enabled = renameSessionNameInput.isNotBlank()
+                    onClick = onRenameSession,
+                    enabled = nameInput.isNotBlank()
                 ) { Text("Rename") }
             },
             dismissButton = {
-                TextButton(onClick = { showRenameSessionDialog = false; sessionToRename = null }) { Text("Cancel") }
+                TextButton(onClick = onDismiss) { 
+                    Text("Cancel") 
+                }
             }
         )
     }
+}
 
-    // Delete Session Confirmation Dialog (E2.S6)
-    if (showDeleteSessionDialog && sessionToDeleteId != null) {
+/**
+ * Dialog for confirming session deletion.
+ */
+@Composable
+private fun DeleteSessionDialog(
+    isVisible: Boolean,
+    onDeleteConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    if (isVisible) {
         AlertDialog(
-            onDismissRequest = { showDeleteSessionDialog = false; sessionToDeleteId = null },
+            onDismissRequest = onDismiss,
             title = { Text("Delete Session?") },
             text = { Text("Are you sure you want to delete this session and all its messages? This action cannot be undone.") },
             confirmButton = {
                 Button(
-                    onClick = {
-                        sessionToDeleteId?.let { actions.onDeleteSession(it) }
-                        showDeleteSessionDialog = false
-                        sessionToDeleteId = null
-                    },
+                    onClick = onDeleteConfirm,
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) { Text("Delete") }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteSessionDialog = false; sessionToDeleteId = null }) { Text("Cancel") }
+                TextButton(onClick = onDismiss) { 
+                    Text("Cancel") 
+                }
             }
         )
     }
+}
 
-    // Assign Session to Group Dialog (E6.S1)
-    if (showAssignGroupDialog && sessionToAssign != null) {
-        val currentGroups = state.listUiState.dataOrNull?.allGroups ?: emptyList() // Data from uiState.uiState.data
-
+/**
+ * Dialog for assigning a session to a group.
+ */
+@Composable
+private fun AssignSessionToGroupDialog(
+    isVisible: Boolean,
+    session: ChatSessionSummary?,
+    groups: List<ChatGroup>,
+    onAssignToGroup: (Long, Long?) -> Unit,
+    onDismiss: () -> Unit
+) {
+    if (isVisible && session != null) {
         AlertDialog(
-            onDismissRequest = { showAssignGroupDialog = false; sessionToAssign = null },
+            onDismissRequest = onDismiss,
             title = { Text("Assign Session to Group") },
             text = {
                 Column {
-                    Text("Select a group for '${sessionToAssign?.name}':")
+                    Text("Select a group for '${session.name}':")
                     Spacer(Modifier.height(8.dp))
                     // Option for "Ungrouped"
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                sessionToAssign?.let { actions.onAssignSessionToGroup(it.id, null) }
-                                showAssignGroupDialog = false
-                                sessionToAssign = null
+                                onAssignToGroup(session.id, null)
                             }
                             .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         RadioButton(
-                            selected = sessionToAssign?.groupId == null,
+                            selected = session.groupId == null,
                             onClick = null // Handled by row click
                         )
                         Text("Ungrouped")
                     }
                     // Options for existing groups
-                    currentGroups.forEach { group ->
+                    groups.forEach { group ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    sessionToAssign?.let { actions.onAssignSessionToGroup(it.id, group.id) }
-                                    showAssignGroupDialog = false
-                                    sessionToAssign = null
+                                    onAssignToGroup(session.id, group.id)
                                 }
                                 .padding(vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             RadioButton(
-                                selected = sessionToAssign?.groupId == group.id,
+                                selected = session.groupId == group.id,
                                 onClick = null // Handled by row click
                             )
                             Text(group.name)
@@ -353,29 +517,38 @@ fun SessionListPanel(
                 // No explicit confirm button needed, selection triggers action
             },
             dismissButton = {
-                TextButton(onClick = { showAssignGroupDialog = false; sessionToAssign = null }) { Text("Cancel") }
+                TextButton(onClick = onDismiss) { 
+                    Text("Cancel") 
+                }
             }
         )
     }
+}
 
-    // Delete Group Confirmation Dialog (E6.S6)
-    if (showDeleteGroupDialog && groupToDeleteId != null) {
+/**
+ * Dialog for confirming group deletion.
+ */
+@Composable
+private fun DeleteGroupDialog(
+    isVisible: Boolean,
+    onDeleteConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    if (isVisible) {
         AlertDialog(
-            onDismissRequest = { showDeleteGroupDialog = false; groupToDeleteId = null },
+            onDismissRequest = onDismiss,
             title = { Text("Delete Group?") },
             text = { Text("Are you sure you want to delete this group? Any sessions assigned to it will become 'Ungrouped'. This action cannot be undone.") },
             confirmButton = {
                 Button(
-                    onClick = {
-                        groupToDeleteId?.let { actions.onDeleteGroup(it) }
-                        showDeleteGroupDialog = false
-                        groupToDeleteId = null
-                    },
+                    onClick = onDeleteConfirm,
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) { Text("Delete") }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteGroupDialog = false; groupToDeleteId = null }) { Text("Cancel") }
+                TextButton(onClick = onDismiss) { 
+                    Text("Cancel") 
+                }
             }
         )
     }
@@ -395,7 +568,7 @@ fun SessionListPanel(
 private fun SessionListItem(
     session: ChatSessionSummary,
     isSelected: Boolean,
-    onClick: (ChatSessionSummary) -> Unit,
+    onClick: (Long) -> Unit,
     onRename: (ChatSessionSummary) -> Unit,
     onDelete: (Long) -> Unit,
     onAssignToGroup: (ChatSessionSummary) -> Unit
@@ -417,7 +590,7 @@ private fun SessionListItem(
                 }
             )
             .combinedClickable(
-                onClick = { onClick(session) },
+                onClick = { onClick(session.id) },
                 onLongClick = { showMenu = true }
             )
             .hoverable(interactionSource),
@@ -520,7 +693,6 @@ private fun GroupHeader(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-//            .padding(top = 10.dp, bottom = 4.dp)
             .hoverable(interactionSource)
             .combinedClickable(
                 onClick = { /* Not directly clickable, actions are via menu/buttons */ },
@@ -603,4 +775,3 @@ private fun GroupHeader(
         }
     }
 }
-
