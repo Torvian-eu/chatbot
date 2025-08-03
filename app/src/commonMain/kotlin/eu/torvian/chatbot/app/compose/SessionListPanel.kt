@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -64,7 +65,15 @@ fun SessionListPanel(
 ) {
     // Consolidated dialog state management
     var dialogState by remember { mutableStateOf<DialogState>(DialogState.None) }
-
+    // Collapsible group state
+    var expandedGroups by rememberSaveable { mutableStateOf<Set<Long>>(emptySet()) }
+    fun toggleGroup(groupId: Long) {
+        expandedGroups = if (expandedGroups.contains(groupId)) {
+            expandedGroups - groupId
+        } else {
+            expandedGroups + groupId
+        }
+    }
     Column(modifier = Modifier.fillMaxSize()) {
         SessionListHeader(
             onNewSessionClick = {
@@ -105,9 +114,11 @@ fun SessionListPanel(
             },
             onDeleteGroup = { group ->
                 dialogState = DialogState.DeleteGroup(
-                    groupId = group?.id ?: -1
+                    groupId = group?.id ?: -1L
                 )
-            }
+            },
+            expandedGroups = expandedGroups,
+            onToggleGroup = ::toggleGroup
         )
     }
 
@@ -309,7 +320,9 @@ private fun SessionListContent(
     onRenameSession: (ChatSessionSummary) -> Unit,
     onDeleteSession: (Long) -> Unit,
     onAssignToGroup: (ChatSessionSummary) -> Unit,
-    onDeleteGroup: (ChatGroup?) -> Unit
+    onDeleteGroup: (ChatGroup?) -> Unit,
+    expandedGroups: Set<Long>,
+    onToggleGroup: (Long) -> Unit
 ) {
     // Create stable callback references to prevent unnecessary recompositions
     val onSessionSelected = remember(actions) { actions::onSessionSelected }
@@ -353,12 +366,13 @@ private fun SessionListContent(
                             val previousGroupSessions = groupedEntries[index - 1].value
                             if (previousGroupSessions.isNotEmpty()) {
                                 item(key = "spacer_before_${group?.id ?: "ungrouped"}") {
-                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Spacer(modifier = Modifier.height(10.dp))
                                 }
                             }
                         }
                         // Group Header (E6.S4)
-                        stickyHeader(key = "header_${group?.id ?: "ungrouped"}") {
+                        val groupId = group?.id ?: -1L
+                        stickyHeader(key = "header_$groupId") {
                             GroupHeader(
                                 group = group,
                                 isEditing = group != null && state.editingGroup?.id == group.id,
@@ -367,28 +381,34 @@ private fun SessionListContent(
                                 onSaveRename = onSaveRenamedGroup,
                                 onCancelRename = onCancelRenamingGroup,
                                 onStartRename = onStartRenameGroup,
-                                onDelete = onDeleteGroup
+                                onDelete = onDeleteGroup,
+                                isExpanded = expandedGroups.contains(groupId),
+                                onToggleExpand = { onToggleGroup(groupId) },
+                                hasItems = sessions.isNotEmpty()
                             )
                         }
                         // Add space after group header if there are sessions in the group
-                        if (sessions.isNotEmpty()) {
-                            item(key = "spacer_after_${group?.id ?: "ungrouped"}") {
-                                Spacer(modifier = Modifier.height(8.dp))
+                        val isExpanded = expandedGroups.contains(groupId)
+                        if (isExpanded) {
+                            if (sessions.isNotEmpty()) {
+                                item(key = "spacer_after_$groupId") {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                }
                             }
-                        }
-                        // Sessions within the group
-                        items(
-                            items = sessions,
-                            key = { "session_${it.id}" }
-                        ) { session ->
-                            SessionListItem(
-                                session = session,
-                                isSelected = session.id == state.selectedSessionId,
-                                onClick = onSessionSelected,
-                                onRename = onRenameSession,
-                                onDelete = onDeleteSession,
-                                onAssignToGroup = onAssignToGroup
-                            )
+                            // Sessions within the group
+                            items(
+                                items = sessions,
+                                key = { "session_${it.id}" }
+                            ) { session ->
+                                SessionListItem(
+                                    session = session,
+                                    isSelected = session.id == state.selectedSessionId,
+                                    onClick = onSessionSelected,
+                                    onRename = onRenameSession,
+                                    onDelete = onDeleteSession,
+                                    onAssignToGroup = onAssignToGroup
+                                )
+                            }
                         }
                     }
                 }
@@ -637,7 +657,6 @@ private fun SessionListItem(
             else -> MaterialTheme.colorScheme.surface
         },
         shape = RoundedCornerShape(8.dp),
-        shadowElevation = if (isSelected) 2.dp else 1.dp
     ) {
         Row(
             modifier = Modifier
@@ -728,30 +747,51 @@ private fun GroupHeader(
     onSaveRename: () -> Unit,
     onCancelRename: () -> Unit,
     onStartRename: (ChatGroup) -> Unit,
-    onDelete: (ChatGroup?) -> Unit
+    onDelete: (ChatGroup?) -> Unit,
+    isExpanded: Boolean,
+    onToggleExpand: () -> Unit,
+    hasItems: Boolean
 ) {
     var showMenu by remember { mutableStateOf(false) }
     val interactionSource = remember { MutableInteractionSource() }
     val hovered by interactionSource.collectIsHoveredAsState()
-
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .hoverable(interactionSource)
+            .padding(vertical = 2.dp)
             .combinedClickable(
-                onClick = { /* Not directly clickable, actions are via menu/buttons */ },
-                onLongClick = { if (group != null) showMenu = true } // Long click only for actual groups
-            ),
+                onClick = {}, // No-op for click on free area
+                onLongClick = { showMenu = true },
+                role = Role.Button
+            )
+            .hoverable(interactionSource),
         color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
         shape = RoundedCornerShape(8.dp),
     ) {
         Row(
             modifier = Modifier
-                .padding(horizontal = 12.dp, vertical = 8.dp)
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (isEditing) {
+            // Expand/Collapse Button - only show if the group has items
+            if (hasItems) {
+                IconButton(
+                    onClick = onToggleExpand,
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (isExpanded) "Collapse group" else "Expand group",
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+            } else {
+                // Add a spacer with the same width to maintain alignment
+                Spacer(Modifier.width(32.dp))
+            }
+            if (isEditing && group != null) {
                 OutlinedTextField(
                     value = editingName,
                     onValueChange = onEditNameChange,
@@ -767,54 +807,61 @@ private fun GroupHeader(
                     Icon(Icons.Default.Close, contentDescription = "Cancel Rename")
                 }
             } else {
-                // Group name
                 OverflowTooltipText(
                     text = group?.name ?: "Ungrouped",
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
-                // Show menu icon on hover for more actions (only for actual groups)
-                if (group != null && (hovered || showMenu)) {
+                if (hovered || showMenu) {
                     Box {
-                        // Menu button
-                        PlainTooltipBox(text = "More actions for group '${group.name}'", showDelay = 1000L) {
-                            IconButton(
-                                onClick = { showMenu = true },
-                                modifier = Modifier.size(24.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.MoreVert,
-                                    contentDescription = "More actions for group ${group.name}",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                        if (group != null) {
+                            PlainTooltipBox(text = "More actions for group '${group.name}'", showDelay = 1000L) {
+                                IconButton(
+                                    onClick = { showMenu = true },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.MoreVert,
+                                        contentDescription = "More actions for group ${group.name}",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                         DropdownMenu(
                             expanded = showMenu,
                             onDismissRequest = { showMenu = false }
                         ) {
-                            DropdownMenuItem(
-                                text = { Text("Rename Group") },
-                                onClick = {
-                                    onStartRename(group)
-                                    showMenu = false
-                                },
-                                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
-                            )
-                            HorizontalDivider()
-                            DropdownMenuItem(
-                                text = { Text("Delete Group") },
-                                onClick = {
-                                    onDelete(group)
-                                    showMenu = false
-                                },
-                                leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
-                                colors = MenuDefaults.itemColors(
-                                    textColor = MaterialTheme.colorScheme.error,
-                                    leadingIconColor = MaterialTheme.colorScheme.error
+                            if (group != null) {
+                                DropdownMenuItem(
+                                    text = { Text("Rename Group") },
+                                    onClick = {
+                                        onStartRename(group)
+                                        showMenu = false
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
                                 )
-                            )
+                                HorizontalDivider()
+                                DropdownMenuItem(
+                                    text = { Text("Delete Group") },
+                                    onClick = {
+                                        onDelete(group)
+                                        showMenu = false
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                                    colors = MenuDefaults.itemColors(
+                                        textColor = MaterialTheme.colorScheme.error,
+                                        leadingIconColor = MaterialTheme.colorScheme.error
+                                    )
+                                )
+                            } else {
+                                DropdownMenuItem(
+                                    text = { Text("No actions available") },
+                                    onClick = {},
+                                    enabled = false
+                                )
+                            }
                         }
                     }
                 }
