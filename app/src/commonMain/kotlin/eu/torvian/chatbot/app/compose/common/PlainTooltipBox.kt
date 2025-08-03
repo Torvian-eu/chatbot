@@ -15,6 +15,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.window.PopupPositionProvider
 import kotlinx.coroutines.CancellableContinuation
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
 
@@ -27,6 +28,7 @@ import kotlinx.coroutines.withTimeout
  * @param caretSize The size of the caret. Defaults to [TooltipDefaults.caretSize].
  * @param spacingBetweenTooltipAndAnchor The spacing between the tooltip and the anchor content. Defaults to 4.dp.
  * @param tooltipDuration The duration for which the tooltip should be shown. Defaults to 3000ms.
+ * @param showDelay The delay before the tooltip is shown. Defaults to 0ms.
  * @param content The content to display in the tooltip box.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -38,6 +40,7 @@ fun PlainTooltipBox(
     caretSize: DpSize = TooltipDefaults.caretSize,
     spacingBetweenTooltipAndAnchor: Dp = 4.dp,
     tooltipDuration: Long = 3000,
+    showDelay: Long = 0L,
     content: @Composable () -> Unit
 ) {
     Box(modifier = modifier) {
@@ -51,7 +54,10 @@ fun PlainTooltipBox(
                         Text(text)
                     }
                 },
-                state = rememberCustomTooltipState(tooltipDuration = tooltipDuration),
+                state = rememberCustomTooltipState(
+                    tooltipDuration = tooltipDuration,
+                    showDelay = showDelay
+                ),
                 content = content
             )
         } else {
@@ -111,6 +117,7 @@ private fun rememberCustomPlainTooltipPositionProvider(
  * @param mutatorMutex [MutatorMutex] used to ensure that for all of the tooltips associated with
  *   the mutator mutex, only one will be shown on the screen at any time.
  * @param tooltipDuration The duration for which the tooltip should be shown.
+ * @param showDelay The delay before the tooltip is shown.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @ExperimentalMaterial3Api
@@ -119,14 +126,16 @@ private fun rememberCustomTooltipState(
     initialIsVisible: Boolean = false,
     isPersistent: Boolean = false,
     mutatorMutex: MutatorMutex = BasicTooltipDefaults.GlobalMutatorMutex,
-    tooltipDuration: Long = BasicTooltipDefaults.TooltipDuration
+    tooltipDuration: Long = BasicTooltipDefaults.TooltipDuration,
+    showDelay: Long
 ): TooltipState =
-    remember(isPersistent, mutatorMutex) {
+    remember(isPersistent, mutatorMutex, showDelay) {
         TooltipStateImpl(
             initialIsVisible = initialIsVisible,
             isPersistent = isPersistent,
             mutatorMutex = mutatorMutex,
-            tooltipDuration = tooltipDuration
+            tooltipDuration = tooltipDuration,
+            showDelay = showDelay
         )
     }
 
@@ -139,7 +148,8 @@ private class TooltipStateImpl(
     initialIsVisible: Boolean,
     override val isPersistent: Boolean,
     private val mutatorMutex: MutatorMutex,
-    private val tooltipDuration: Long
+    private val tooltipDuration: Long,
+    private val showDelay: Long
 ) : TooltipState {
     override val transition: MutableTransitionState<Boolean> =
         MutableTransitionState(initialIsVisible)
@@ -159,24 +169,22 @@ private class TooltipStateImpl(
 
     override suspend fun show(mutatePriority: MutatePriority) {
         val cancellableShow: suspend () -> Unit = {
+            delay(showDelay)
             suspendCancellableCoroutine { continuation ->
                 transition.targetState = true
                 job = continuation
             }
         }
 
-        // Show associated tooltip for [TooltipDuration] amount of time
-        // or until tooltip is explicitly dismissed depending on [isPersistent].
         mutatorMutex.mutate(mutatePriority) {
             try {
                 if (isPersistent) {
                     cancellableShow()
                 } else {
-                    withTimeout(tooltipDuration) { cancellableShow() }
+                    withTimeout(tooltipDuration + showDelay) { cancellableShow() }
                 }
             } finally {
                 if (mutatePriority != MutatePriority.PreventUserInput) {
-                    // timeout or cancellation has occurred and we close out the current tooltip.
                     dismiss()
                 }
             }
