@@ -16,4 +16,9 @@ interface DataManager {
      * Drops all database tables.
      */
     suspend fun dropTables()
+
+    /**
+     * Checks if the database is empty.
+     */
+    suspend fun isDatabaseEmpty(): Boolean
 }
