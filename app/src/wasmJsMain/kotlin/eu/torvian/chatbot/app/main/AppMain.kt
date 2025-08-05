@@ -11,7 +11,7 @@ import org.koin.compose.KoinApplication
 fun main() {
     ComposeViewport(document.body!!) {
         KoinApplication(application = {
-            modules(appModule("http://localhost:9999"))
+            modules(appModule("http://localhost:8080"))
         }) {
             AppShell()
         }
