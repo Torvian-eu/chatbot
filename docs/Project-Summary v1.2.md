@@ -50,23 +50,24 @@ These features support complex discussions, extensive history, and flexible LLM 
 
 ## 4. Technology Stack & Architecture
 
-Integrated desktop monolith: UI and backend in one process, layered architecture across `common`, `server`, `app` modules.
+**Primary Architecture: Client-Server.**  
+The application now uses a client-server architecture: the backend (Ktor server) runs as a separate process, exposing APIs for the frontend (Compose desktop app) to consume. The integrated monolith (single-process UI+backend) remains a future option.
 
-*   **Core Technologies:**
-    *   Frontend: Compose for Desktop (Kotlin UI, 1.8.1).
-    *   Backend/Logic: Kotlin 2.1.0, layered services manage features (config, threads, groups).
-    *   API Layer: Ktor 3.1.0 Server (with Resources plugin for type-safe routing) exposes backend API for the frontend; Ktor HTTP Client used for LLM communication.
+*   Core Technologies:
+    *   Frontend: Compose Multiplatform (Kotlin UI, 1.8.2) with Material 3.
+    *   Backend/Logic: Kotlin 2.2.0, layered services manage features (config, threads, groups).
+    *   API Layer: Ktor 3.2.3 Server (with Resources plugin for type-safe routing) exposes backend API for the frontend; Ktor HTTP Client used for LLM communication.
     *   Database: SQLite (local persistence).
-    *   ORM: Exposed 0.58.0 (type-safe SQL). Schema supports all entities (sessions, messages, groups, providers, models, settings, secrets).
+    *   ORM: Exposed 0.61.0 (type-safe SQL). Schema supports all entities (sessions, messages, groups, providers, models, settings, secrets).
     *   Secure Storage: Custom DB-backed encryption for API keys.
-    *   DI: Koin 4.0.2.
+    *   DI: Koin 4.1.0.
     *   Functional Programming: Arrow 2.1.2.
-    *   Logging: Log4j 2.21.0.
+    *   Logging: Log4j 2.25.1.
     *   Date/Time: kotlinx.datetime.
     *   Build: Gradle.
 
 *   **Architectural Layers:**
-    *   **User Interface (UI):** Compose components. Handles rendering, input, UI state (`ChatState`, `SessionListState`, `SettingsState`). Presents threads (single branch view), grouped sessions, config UI.
+    *   **User Interface (UI):** Compose components. Handles rendering, input, UI state (`ChatViewModel`, `SessionListViewModel`, `SettingsViewModel`). Presents threads (single branch view), grouped sessions, config UI.
     *   **Application Logic (Service Layer):** Core business rules. Orchestrates ops (messaging, LLM interaction, session/group/provider/model/settings management). Manages thread relationships, group assignments, model/settings selection logic. Builds LLM context from session thread/config.
     *   **Data Access Layer (DAL):** Abstracts DB access (SQLite via Exposed). CRUD for all data entities. Handles persistence of thread links, group assignments, provider configs (`apiKeyId`), model/settings links.
     *   **External Services Layer:** Comm with external systems (LLM APIs via Ktor Client using Provider config; Secure Credential Manager for Provider API keys).

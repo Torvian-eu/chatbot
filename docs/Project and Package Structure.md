@@ -2,18 +2,23 @@
 
 ## Overview
 
-This is a multi-module Kotlin desktop application for AI chatbot interactions, built using Compose for Desktop, Ktor, and Exposed ORM. The project follows a layered architecture pattern distributed across three Gradle modules: `common`, `server`, and `app`.
+This is a multi-module Kotlin desktop application for AI chatbot interactions, built using Compose Multiplatform, Ktor, and Exposed ORM.  
+**The application now uses a client-server architecture by default:**  
+- The backend (Ktor server) runs as a separate process, exposing APIs for the frontend (Compose desktop app) to consume.  
+- An integrated monolith (single-process UI+backend) will be implemented as an option in a future release.
 
 ## Technology Stack
 
-- **Language**: Kotlin 2.1.0
-- **UI Framework**: Compose for Desktop 1.8.1
-- **HTTP Server/Client**: Ktor 3.1.0
-- **Database ORM**: Exposed 0.58.0
-- **Dependency Injection**: Koin 4.0.2
-- **Logging**: Log4j 2.21.0
+- **Language**: Kotlin 2.2.0
+- **UI Framework**: Compose Multiplatform 1.8.2 with Material 3
+- **HTTP Server/Client**: Ktor 3.2.3 (Server & HTTP Client)
+- **Database ORM**: Exposed 0.61.0
+- **Dependency Injection**: Koin 4.1.0
+- **Logging**: Log4j 2.25.1
 - **Functional Programming**: Arrow 2.1.2
-- **Database**: SQLite (local storage)
+- **Date/Time**: kotlinx.datetime
+- **Database**: SQLite (local persistence)
+- **Build**: Gradle
 
 ## Module Structure
 
@@ -43,7 +48,7 @@ chatbot/
 
 **Package Structure**:
 ```
-common/src/main/kotlin/eu/torvian/chatbot/common/
+common/src/commonMain/kotlin/eu/torvian/chatbot/common/
 ├── api/resources/                # API resource definitions (for Ktor Resources plugin)
 ├── models/                       # Shared data models (DTOs)
 │   ├── AddModelRequest.kt        # Request DTO for adding LLM models
@@ -241,7 +246,7 @@ server/src/test/kotlin/eu/torvian/chatbot/server/
 
 ### 3. App Module (`app/`)
 
-**Purpose**: Desktop application frontend built with Compose for Desktop.
+**Purpose**: Desktop application frontend built with Compose Multiplatform. (Android and WebAssembly support planned for future versions.)
 
 **Package Structure**:
 ```
@@ -250,9 +255,12 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   ├── AppShell.kt   # Main application shell (contains navigation, top-level layout)
 │   ├── ChatScreen.kt # Main chat interface (displays session list, chat messages, input area)
 │   ├── ChatScreenContent.kt # Stateless content composable for chat interface
+│   ├── SessionListPanel.kt # Session list panel component
 │   ├── SettingsScreen.kt # Settings configuration interface (providers, models, settings)
 │   └── common/       # Common compose components
-│       └── LoadingOverlay.kt  # Loading overlay component
+│       ├── LoadingOverlay.kt  # Loading overlay component
+│       ├── OverflowTooltipText.kt # Text with overflow tooltip
+│       └── PlainTooltipBox.kt # Plain tooltip box component
 ├── domain/          # Domain models
 │   ├── events/        # Domain events (e.g., user actions, system responses)
 │   │   ├── ApiRequestError.kt # API request error event
@@ -283,6 +291,7 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │       └── EventBus.kt  # Event bus for frontend events
 ├── utils/            # Utility classes
 │   └── misc/       # Miscellaneous utilities
+│       ├── ioDispatcher.kt  # IO dispatcher (expect/actual)
 │       └── KmpLogger.kt  # KMP-compatible logger
 └── viewmodel/        # ViewModels for UI state management
     ├── ChatViewModel.kt  # Chat ViewModel (manages chat session state)
@@ -300,10 +309,6 @@ app/src/commonMain/composeResources/  # Compose resources (strings, etc.)
 └── ... other resources ...
    
 app/src/commonTest/kotlin/eu/torvian/chatbot/app/  # Common tests
-├── service/api/ktor/    # Ktor API client tests
-│   ├── KtorChatApiClientTest.kt  
-│   ├── KtorSessionApiClientTest.kt 
-│   └── ... 
 └── testutils/     # Test utilities
     ├── data/
     │   └── TestData.kt   # Predefined test data (DTOs, etc.)
@@ -317,19 +322,40 @@ app/src/desktopMain/kotlin/eu/torvian/chatbot/app/  # Desktop-specific implement
 │   └── AppMain.kt    # Application entry point, setup (UI launch, DI)
 └── utils/        
     └── misc/       # Miscellaneous utilities
-        └── DesktopKmpLogger.kt # Desktop-specific KMP logger
-
+        └── createKmpLogger.desktop.kt # Desktop-specific KMP logger
 
 app/src/desktopTest/kotlin/eu/torvian/chatbot/app/ # Desktop-specific tests
+├── service/api/ktor/    # Ktor API client tests
+│   ├── KtorChatApiClientTest.kt  
+│   ├── KtorSessionApiClientTest.kt 
+│   └── ... 
 ├── testutils/           
 │   └── viewmodel/        
 │        └── TestMockkExtensions.kt # Mockk test extensions
 └── viewmodel/
     └── ChatViewModelTest.kt
+    
+app/src/androidMain/kotlin/eu/torvian/chatbot/app/  # Android-specific implementations
+├── compose/
+│   └── ... android-specific UI components ...
+├── main/         # Main entry point
+│   └── MainActivity.kt    # Application entry point, setup (UI launch, DI)
+└── utils/        
+    └── misc/       # Miscellaneous utilities
+        └── KmpLogger.android.kt # Android-specific KMP logger
+        
+app/src/wasmJsMain/kotlin/eu/torvian/chatbot/app/  # WebAssembly-specific implementations
+├── compose/
+│   └── ... wasm-specific UI components ...
+├── main/         # Main entry point
+│   └── AppMain.kt    # Application entry point, setup (UI launch, DI)
+└── utils/        
+    └── misc/       # Miscellaneous utilities
+        └── createKmpLogger.wasmJs.kt # WebAssembly-specific KMP logger
 ```
 
 **Key Features**:
-- Compose for Desktop UI framework
+- Compose Multiplatform UI framework
 - Simple application structure (currently minimal implementation)
 - Entry point for the desktop application
 
