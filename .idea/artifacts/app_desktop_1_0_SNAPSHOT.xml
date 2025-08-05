@@ -1,0 +1,8 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="app-desktop-1.0-SNAPSHOT">
+    <output-path>$PROJECT_DIR$/app/build/libs</output-path>
+    <root id="archive" name="app-desktop-1.0-SNAPSHOT.jar">
+      <element id="module-output" name="chatbot.app.desktopMain" />
+    </root>
+  </artifact>
+</component>
