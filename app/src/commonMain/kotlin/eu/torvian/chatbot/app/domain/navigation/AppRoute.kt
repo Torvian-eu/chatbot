@@ -1,22 +1,45 @@
 package eu.torvian.chatbot.app.domain.navigation
 
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+
 /**
- * Defines the sealed class for application navigation routes.
- * Each object represents a distinct screen or a navigation path.
+ * Defines the contract for application navigation routes.
+ *
+ * @property name The name of the route, used for serialization.
+ * @property route The actual route string, used for navigation.
  */
-sealed class AppRoute(val route: String) {
-    /**
-     * Route for the main chat interface.
-     */
-    object Chat : AppRoute("chat_route")
-
-    /**
-     * Route for the settings configuration interface.
-     */
-    object Settings : AppRoute("settings_route")
-
-    // Future routes can be added here, potentially with arguments:
-    // data class SessionDetails(val sessionId: Long) : AppRoute("session_details/{sessionId}") {
-    //     fun createRoute(sessionId: Long) = "session_details/$sessionId"
-    // }
+interface AppRoute {
+    val name: String
+    val route: String
 }
+
+/**
+ * Route for the main chat interface.
+ */
+@Serializable
+@SerialName("chat")
+object Chat : AppRoute {
+    override val name = "chat"
+    override val route = "chat"
+}
+
+/**
+ * Route for the settings configuration interface.
+ */
+@Serializable
+@SerialName("settings")
+object Settings : AppRoute {
+    override val name = "settings"
+    override val route = "settings"
+}
+
+// Future routes can be added here, potentially with arguments:
+
+// @Serializable
+// @SerialName("session_details")
+// object SessionDetails : AppRoute {
+//     override val name = "session_details"
+//     override val route = "session_details/{sessionId}"
+// }
+
