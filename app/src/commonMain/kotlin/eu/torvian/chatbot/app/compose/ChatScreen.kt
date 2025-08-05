@@ -83,6 +83,7 @@ fun ChatScreen(
             override fun onSaveRenamedGroup() = sessionListViewModel.saveRenamedGroup()
             override fun onCancelRenamingGroup() = sessionListViewModel.cancelRenamingGroup()
             override fun onDeleteGroup(groupId: Long) = sessionListViewModel.deleteGroup(groupId)
+            override fun onRetryLoadingSessions() = sessionListViewModel.loadSessionsAndGroups()
         }
     }
 

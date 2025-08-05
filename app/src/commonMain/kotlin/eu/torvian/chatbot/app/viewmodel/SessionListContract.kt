@@ -107,4 +107,9 @@ interface SessionListActions {
      * @param groupId The ID of the group to delete.
      */
     fun onDeleteGroup(groupId: Long)
+
+    /**
+     * Callback for when the user requests to retry loading sessions and groups after a failure.
+     */
+    fun onRetryLoadingSessions()
 }
