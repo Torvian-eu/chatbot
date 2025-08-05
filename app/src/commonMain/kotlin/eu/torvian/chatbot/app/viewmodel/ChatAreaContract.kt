@@ -1,0 +1,105 @@
+package eu.torvian.chatbot.app.viewmodel
+
+import eu.torvian.chatbot.common.api.ApiError
+import eu.torvian.chatbot.common.models.ChatMessage
+import eu.torvian.chatbot.common.models.ChatSession
+
+/**
+ * Encapsulates all UI state relevant to the main Chat Area.
+ * (To be fully implemented in future PRs like 20, 21, etc.)
+ *
+ * @property sessionUiState The state of the currently loaded chat session, including all messages.
+ * @property currentBranchLeafId The ID of the leaf message in the currently displayed thread branch.
+ * @property displayedMessages The list of messages to display in the UI, representing the currently selected thread branch.
+ * @property inputContent The current text content in the message input field.
+ * @property replyTargetMessage The message the user is currently explicitly replying to via the Reply action.
+ * @property editingMessage The message currently being edited (E3.S1, E3.S2).
+ * @property editingContent The content of the message currently being edited (E3.S1, E3.S2).
+ */
+data class ChatAreaState(
+    val sessionUiState: UiState<ApiError, ChatSession>,
+    val currentBranchLeafId: Long?,
+    val displayedMessages: List<ChatMessage>,
+    val inputContent: String,
+    val replyTargetMessage: ChatMessage?,
+    val editingMessage: ChatMessage?,
+    val editingContent: String
+
+    // Will include model/settings selection states from ChatViewModel in future PRs
+)
+
+/**
+ * Defines all UI actions that can be triggered from the main Chat Area.
+ * (To be fully implemented in future PRs like 20, 21, etc.)
+ */
+interface ChatAreaActions {
+    /**
+     * Callback for when the user types in the message input field.
+     * @param newText The new text content of the input field.
+     */
+    fun onUpdateInput(newText: String)
+
+    /**
+     * Callback for when the user sends a message.
+     */
+    fun onSendMessage()
+
+    /**
+     * Callback for when the user starts replying to a specific message.
+     * @param message The message the user is replying to.
+     */
+    fun onStartReplyTo(message: ChatMessage)
+
+    /**
+     * Callback for when the user cancels the reply to a specific message.
+     */
+    fun onCancelReply()
+
+    /**
+     * Callback for when the user starts editing a specific message.
+     * @param message The message the user is editing.
+     */
+    fun onStartEditing(message: ChatMessage)
+
+    /**
+     * Callback for when the user updates the content of the message being edited.
+     * @param newText The new text content of the editing field.
+     */
+    fun onUpdateEditingContent(newText: String)
+
+    /**
+     * Callback for when the user saves the edited message content.
+     */
+    fun onSaveEditing()
+
+    /**
+     * Callback for when the user cancels the editing of a message.
+     */
+    fun onCancelEditing()
+
+    /**
+     * Callback for when the user deletes a specific message.
+     * @param messageId The ID of the message to delete.
+     */
+    fun onDeleteMessage(messageId: Long)
+
+    /**
+     * Callback for when the user switches the displayed thread branch to a specific message.
+     * @param messageId The ID of the message to make the new leaf of the displayed branch.
+     */
+    fun onSwitchBranchToMessage(messageId: Long)
+
+    /**
+     * Callback for when the user selects a specific LLM model for the session.
+     * @param modelId The ID of the model to select, or null to clear selection.
+     */
+    fun onSelectModel(modelId: Long?)
+
+    /**
+     * Callback for when the user selects a specific settings profile for the session.
+     * @param settingsId The ID of the settings profile to select, or null to clear selection.
+     */
+    fun onSelectSettings(settingsId: Long?)
+
+    // Will include copy actions (E2.S7, E3.S5) in future PRs
+}

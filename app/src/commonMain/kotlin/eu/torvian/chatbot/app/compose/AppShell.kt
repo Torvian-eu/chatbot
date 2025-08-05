@@ -10,17 +10,20 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import eu.torvian.chatbot.app.generated.resources.Res
-import eu.torvian.chatbot.app.generated.resources.action_retry
-import eu.torvian.chatbot.app.generated.resources.app_name
+import eu.torvian.chatbot.app.compose.common.OverflowTooltipText
 import eu.torvian.chatbot.app.domain.events.GlobalError
 import eu.torvian.chatbot.app.domain.events.GlobalSuccess
 import eu.torvian.chatbot.app.domain.events.SnackbarInteractionEvent
-import eu.torvian.chatbot.app.domain.navigation.AppRoute
+import eu.torvian.chatbot.app.domain.navigation.Chat
+import eu.torvian.chatbot.app.domain.navigation.Settings
+import eu.torvian.chatbot.app.generated.resources.Res
+import eu.torvian.chatbot.app.generated.resources.action_retry
+import eu.torvian.chatbot.app.generated.resources.app_name
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.viewmodel.ChatViewModel
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
@@ -105,23 +108,36 @@ fun AppShell() {
         Scaffold(
             topBar = {
                 CenterAlignedTopAppBar(
-                    title = { Text(stringResource(Res.string.app_name)) },
+                    title = {
+                        OverflowTooltipText(
+                            text = stringResource(Res.string.app_name),
+                        )
+                    },
                     actions = {
                         Button(
                             onClick = {
-                                if (currentRoute == AppRoute.Chat.route) {
-                                    navController.navigate(AppRoute.Settings.route)
-                                } else {
-                                    navController.navigate(AppRoute.Chat.route) {
-                                        // Pop up to the start destination of the graph to avoid building up a large stack
-                                        popUpTo(AppRoute.Chat.route) {
-                                            inclusive = true
-                                        }
+                                val targetRoute = if (currentRoute == Chat.name) Settings else Chat
+                                // This is the recommended pattern for "tab-like" navigation
+                                // It ensures that only one instance of a top-level screen exists
+                                // at any time, and its state is saved and restored.
+                                navController.navigate(targetRoute) {
+                                    // Pop up to the start destination of the graph to
+                                    // avoid building up a large stack of destinations
+                                    // when selecting items from a bottom navigation bar.
+                                    // This also ensures that the back button behavior
+                                    // is predictable (usually exiting the app from the root tab).
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true // Save the state of the popped destinations
                                     }
+                                    // Avoid multiple copies of the same destination when
+                                    // reselecting the same item.
+                                    launchSingleTop = true
+                                    // Restore state when reselecting a previously selected item
+                                    restoreState = true
                                 }
                             }
                         ) {
-                            Text(if (currentRoute == AppRoute.Chat.route) "Settings" else "Chat")
+                            Text(if (currentRoute == Chat.name) "Settings" else "Chat")
                         }
                     },
                     modifier = Modifier.fillMaxWidth()
@@ -165,11 +181,13 @@ fun AppShell() {
             }
         ) { paddingValues ->
             Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
-                NavHost(navController = navController, startDestination = AppRoute.Chat.route) {
-                    composable(AppRoute.Chat.route) {
+                NavHost(navController = navController, startDestination = Chat) {
+                    composable<Chat> { // backStackEntry ->
+                        // this can be used to extract arguments from the route:
+//                        val route: Chat = backStackEntry.toRoute()
                         ChatScreen(sessionListViewModel, chatViewModel)
                     }
-                    composable(AppRoute.Settings.route) {
+                    composable<Settings> {
                         SettingsScreen()
                     }
                 }

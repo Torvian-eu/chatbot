@@ -4,8 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.CircularProgressIndicator // Changed from material to material3
-import androidx.compose.material3.MaterialTheme // Changed from material to material3
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,8 +27,8 @@ fun LoadingOverlay(modifier: Modifier = Modifier) {
             modifier = Modifier
                 .size(64.dp)
                 .clip(CircleShape) // Optional: make it circular
-                .background(MaterialTheme.colorScheme.surface), // Use M3 color scheme
-            color = MaterialTheme.colorScheme.secondary // Use M3 color scheme
+                .background(MaterialTheme.colorScheme.surface),
+            color = MaterialTheme.colorScheme.secondary
         )
     }
 }

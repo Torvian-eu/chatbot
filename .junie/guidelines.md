@@ -1,13 +1,16 @@
 # Project Information
 
 ## Tech stack
-- Kotlin 2.1.0
-- Ktor 3.1.0
-- Exposed 0.58.0
-- Log4j 2.21.0
-- Koin 4.0.2
+- Kotlin 2.2.0
+- Compose 1.8.2 with Material 3
+- Ktor 3.2.3 (Server & HTTP Client)
+- Exposed 0.61.0
+- Log4j 2.25.1
+- Koin 4.1.0
 - Arrow 2.1.2
-- Compose 1.8.1
+- kotlinx.datetime
+- SQLite (local persistence)
+- Gradle
 
 ## Guidelines
 - Use kotlinx.datetime instead of java.time.

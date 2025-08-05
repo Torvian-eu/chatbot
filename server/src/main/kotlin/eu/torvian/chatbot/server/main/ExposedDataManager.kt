@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.main
 import eu.torvian.chatbot.server.data.tables.*
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
 import org.jetbrains.exposed.sql.SchemaUtils
+import org.jetbrains.exposed.sql.exists
 
 /**
  * Implementation of [DataManager] for Exposed ORM.
@@ -46,6 +47,13 @@ class ExposedDataManager(
     override suspend fun dropTables() {
         transactionScope.transaction {
             SchemaUtils.drop(*tables.reversed().toTypedArray(), inBatch = true)
+        }
+    }
+
+    override suspend fun isDatabaseEmpty(): Boolean {
+        // Check if any tables exist
+        return transactionScope.transaction {
+            !tables.any { it.exists() }
         }
     }
 }

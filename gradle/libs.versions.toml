@@ -1,7 +1,7 @@
 [versions]
 javaVersion = "21"           # Java version
 kotlin = "2.2.0"             # Kotlin version
-ktor = "3.2.2"               # Ktor version
+ktor = "3.2.3"               # Ktor version
 exposed = "0.61.0"           # Exposed ORM version
 sqlite = "3.50.3.0"          # SQLite JDBC driver version
 coroutines = "1.10.2"        # Kotlin Coroutines version
@@ -18,7 +18,7 @@ compose = "1.8.2"            # Compose Multiplatform version
 androidx-lifecycle = "2.9.1" # For Compose Multiplatform ViewModel
 androidx-navigation = "2.9.0-beta03" # For Compose Multiplatform Navigation
 kotlin-buildlogic = "1.9.24" # Kotlin version for build-logic compatibility
-compose-hot-reload = "1.0.0-alpha10" # Compose Hot Reload version
+compose-hot-reload = "1.0.0-beta04" # Compose Hot Reload version
 androidx-activity = "1.10.1" # For Compose Multiplatform Activity
 android-gradle-plugin = "8.10.0" # Android Gradle Plugin version
 android-compileSdk = "36"    # The API level to compile against: https://developer.android.com/studio/releases/platforms
@@ -110,6 +110,10 @@ androidx-lifecycle-runtime-compose = { module = "org.jetbrains.androidx.lifecycl
 
 # AndroidX Navigation for Compose Multiplatform
 androidx-navigation-compose = { module = "org.jetbrains.androidx.navigation:navigation-compose", version.ref = "androidx-navigation" }
+
+# Additional Compose libraries
+compose-material-icons-core = { module = "androidx.compose.material:material-icons-core", version.ref = "compose" }
+compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended", version.ref = "compose" }
 
 # --- Desktop-specific dependencies ---
 # KotlinX Coroutines Swing for JVM Main Dispatcher

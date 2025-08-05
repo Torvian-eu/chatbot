@@ -82,9 +82,11 @@ fun Application.configureKoin() {
 fun Application.configureDatabase() {
     runBlocking {
         val dataManager: DataManager = get()
-        // Drop and create tables - adjust as needed for production
-        dataManager.dropTables()
-        dataManager.createTables()
+//        // Drop and create tables - adjust as needed for production
+//        dataManager.dropTables()
+        // Only create tables if the database is empty
+        if (dataManager.isDatabaseEmpty())
+            dataManager.createTables()
         logger.info("Database initialized successfully.")
     }
 }

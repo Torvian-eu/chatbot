@@ -14,7 +14,6 @@ import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.utils.misc.ioDispatcher
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.api.ApiError
-import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.models.*
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -230,8 +229,13 @@ class SessionListViewModel(
             sessionApi.createSession(CreateSessionRequest(name = initialName))
                 .fold(
                     ifLeft = { error ->
-                        println("Create session API error: ${error.code} - ${error.message}")
-                        // Show transient error message to user
+                        // Handle Error case (E2.S1 error)
+                        eventBus.emitEvent(
+                            apiRequestError(
+                                apiError = error,
+                                shortMessage = "Error creating new session"
+                            )
+                        )
                     },
                     ifRight = { newSession ->
                         // Handle Success (E2.S1)
@@ -279,8 +283,12 @@ class SessionListViewModel(
             sessionApi.updateSessionName(session.id, UpdateSessionNameRequest(trimmedName))
                 .fold(
                     ifLeft = { error ->
-                        println("Rename session API error: ${error.code} - ${error.message}")
-                        // Show transient error message
+                        eventBus.emitEvent(
+                            apiRequestError(
+                                apiError = error,
+                                shortMessage = "Error renaming session"
+                            )
+                        )
                     },
                     ifRight = {
                         // Update the name in the internal allSessions list within the state (E2.S5)
@@ -309,8 +317,12 @@ class SessionListViewModel(
             sessionApi.deleteSession(sessionId)
                 .fold(
                     ifLeft = { error ->
-                        println("Delete session API error: ${error.code} - ${error.message}")
-                        // Show transient error message
+                        eventBus.emitEvent(
+                            apiRequestError(
+                                apiError = error,
+                                shortMessage = "Error deleting session"
+                            )
+                        )
                     },
                     ifRight = {
                         // Remove from the internal list within the state (E2.S6)
@@ -340,8 +352,12 @@ class SessionListViewModel(
             sessionApi.updateSessionGroup(sessionId, UpdateSessionGroupRequest(groupId))
                 .fold(
                     ifLeft = { error ->
-                        println("Assign group API error: ${error.code} - ${error.message}")
-                        // Show transient error message
+                        eventBus.emitEvent(
+                            apiRequestError(
+                                apiError = error,
+                                shortMessage = "Error assigning session to group"
+                            )
+                        )
                     },
                     ifRight = {
                         // Update the session summary in the internal list within the state (E6.S1)
@@ -408,8 +424,12 @@ class SessionListViewModel(
             groupApi.createGroup(CreateGroupRequest(name))
                 .fold(
                     ifLeft = { error ->
-                        println("Create group API error: ${error.code} - ${error.message}")
-                        // Show transient error message
+                        eventBus.emitEvent(
+                            apiRequestError(
+                                apiError = error,
+                                shortMessage = "Error creating new group"
+                            )
+                        )
                     },
                     ifRight = { newGroup ->
                         // Add the new group to the internal list within the state (E6.S3)
@@ -465,8 +485,12 @@ class SessionListViewModel(
             groupApi.renameGroup(groupToRename.id, RenameGroupRequest(newName))
                 .fold(
                     ifLeft = { error ->
-                        println("Rename group API error: ${error.code} - ${error.message}")
-                        // Show transient error message
+                        eventBus.emitEvent(
+                            apiRequestError(
+                                apiError = error,
+                                shortMessage = "Error renaming group"
+                            )
+                        )
                     },
                     ifRight = {
                         // Update the name in the internal _allGroups list within the state (E6.S5)
@@ -503,12 +527,12 @@ class SessionListViewModel(
             groupApi.deleteGroup(groupId)
                 .fold(
                     ifLeft = { error ->
-                        println("Delete group API error: ${error.code} - ${error.message}")
-                        // Show transient error message. Check error.code == CommonApiErrorCodes.RESOURCE_IN_USE
-                        // and display error.details if it contains linked sessions (as per OpenAPI spec description).
-                        if (error.code == CommonApiErrorCodes.RESOURCE_IN_USE.code) {
-                            println("Group deletion conflict: ${error.message} Details: ${error.details}")
-                        }
+                        eventBus.emitEvent(
+                            apiRequestError(
+                                apiError = error,
+                                shortMessage = "Error deleting group"
+                            )
+                        )
                     },
                     ifRight = {
                         // Remove the group from the internal list within the state (E6.S6)

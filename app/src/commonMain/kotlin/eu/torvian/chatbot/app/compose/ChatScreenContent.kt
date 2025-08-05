@@ -12,32 +12,28 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.LoadingOverlay
-import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
-import eu.torvian.chatbot.app.viewmodel.UiState
-import eu.torvian.chatbot.common.api.ApiError
-import eu.torvian.chatbot.common.models.ChatSession
+import eu.torvian.chatbot.app.viewmodel.ChatAreaActions
+import eu.torvian.chatbot.app.viewmodel.ChatAreaState
+import eu.torvian.chatbot.app.viewmodel.SessionListActions
+import eu.torvian.chatbot.app.viewmodel.SessionListState
 
 /**
  * Composable for the main chat interface's content, including the session list and the chat area.
  * This composable is now stateless, receiving all necessary data and callbacks via parameters.
  * (Part of E7.S2: Implement Base App Layout & ViewModel Integration - with State Hoisting)
  *
- * TODO: In PRs 19, 20, 21, more parameters (e.g., chat input, messages) will be added here
- * to pass down specific chat-related data and actions.
- *
- * @param sessionListUiState The current UI state of the session list.
- * @param selectedSessionId The ID of the currently selected session.
- * @param onSessionSelected Callback triggered when a session is selected from the list.
- * @param chatUiState The current UI state of the active chat session.
- * @param showLoading Whether to display the loading overlay.
+ * @param sessionListState The current UI state contract for the session list panel.
+ * @param sessionListActions The actions contract for the session list panel.
+ * @param chatAreaState The current UI state contract for the chat area.
+ * @param chatAreaActions The actions contract for the chat area.
+ * @param showLoading Whether to display the global loading overlay.
  */
-
 @Composable
 fun ChatScreenContent(
-    sessionListUiState: UiState<ApiError, SessionListViewModel.SessionListData>,
-    selectedSessionId: Long?,
-    onSessionSelected: (Long) -> Unit,
-    chatUiState: UiState<ApiError, ChatSession>,
+    sessionListState: SessionListState,
+    sessionListActions: SessionListActions,
+    chatAreaState: ChatAreaState,
+    chatAreaActions: ChatAreaActions,
     showLoading: Boolean
 ) {
     // Wrap the Row in a Box to allow stacking the overlay on top
@@ -49,15 +45,11 @@ fun ChatScreenContent(
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.surface)
                     .padding(16.dp),
-                contentAlignment = Alignment.Center
             ) {
-                // PR 19 will fill this with actual Session List UI,
-                // consuming sessionListUiState and calling onSessionSelected.
-                Text(
-                    "Session List Panel\n(PR 19 will consume sessionListUiState and call onSessionSelected)\n" +
-                            "Current state: ${sessionListUiState::class.simpleName}\n" +
-                            "Selected ID: ${selectedSessionId ?: "None"}",
-                    color = MaterialTheme.colorScheme.onSurface
+                // PR 19: Session List Panel
+                SessionListPanel(
+                    state = sessionListState,
+                    actions = sessionListActions
                 )
             }
             Box(
@@ -71,13 +63,13 @@ fun ChatScreenContent(
                 // PR 20 & 21 will fill this with actual Chat Area UI.
                 // It will receive chat-specific states and actions via hoisted parameters.
                 Text(
-                    "Chat Area\n(PRs 20, 21, etc. will consume chatUiState and other parameters)\n" +
-                            "Current chat state: ${chatUiState::class.simpleName}",
+                    "Chat Area\n(PRs 20, 21, etc. will consume chatAreaState and chatAreaActions)\n" +
+                            "Current chat state: ${chatAreaState.sessionUiState::class.simpleName}\n" +
+                            "Current input: ${chatAreaState.inputContent.take(20)}...",
                     color = MaterialTheme.colorScheme.onBackground
                 )
             }
         }
-
         // Display the loading overlay over the entire content of ChatScreenContent
         if (showLoading) {
             LoadingOverlay(modifier = Modifier.fillMaxSize())
