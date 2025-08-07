@@ -2,8 +2,14 @@ package eu.torvian.chatbot.app.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import eu.torvian.chatbot.app.domain.events.SnackbarInteractionEvent
+import eu.torvian.chatbot.app.domain.events.apiRequestError
+import eu.torvian.chatbot.app.generated.resources.Res
+import eu.torvian.chatbot.app.generated.resources.error_loading_session
 import eu.torvian.chatbot.app.service.api.ChatApi
 import eu.torvian.chatbot.app.service.api.SessionApi
+import eu.torvian.chatbot.app.service.misc.EventBus
+import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.models.*
 import kotlinx.coroutines.CoroutineDispatcher
@@ -12,6 +18,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
+import org.jetbrains.compose.resources.getString
 
 /**
  * Manages the UI state for the main chat area of the currently active session,
@@ -28,6 +35,7 @@ import kotlinx.datetime.Clock
  * @constructor
  * @param sessionApi The API client for session-related operations.
  * @param chatApi The API client for chat message-related operations.
+ * @param eventBus The event bus for emitting global events like retry-able errors.
  * @param uiDispatcher The dispatcher to use for UI-related coroutines. Defaults to Main.
  * @param clock The clock to use for timestamping. Defaults to System clock.
  *
@@ -42,9 +50,12 @@ import kotlinx.datetime.Clock
 class ChatViewModel(
     private val sessionApi: SessionApi,
     private val chatApi: ChatApi,
+    private val eventBus: EventBus,
     private val uiDispatcher: CoroutineDispatcher = Dispatchers.Main,
     private val clock: Clock = Clock.System
 ) : ViewModel() {
+
+    private val logger = kmpLogger<ChatViewModel>()
 
     // --- Observable State for Compose UI (using StateFlow) ---
 
@@ -114,6 +125,32 @@ class ChatViewModel(
      */
     val editingContent: StateFlow<String> = _editingContent.asStateFlow()
 
+    // Store the ID of the last emitted error if a retry is possible
+    private val _lastFailedLoadEventId = MutableStateFlow<String?>(null)
+
+    // Store the session ID for retry functionality
+    private val _lastAttemptedSessionId = MutableStateFlow<Long?>(null)
+
+    init {
+        // ViewModel can listen to the EventBus for its own emitted event's responses
+        viewModelScope.launch {
+            eventBus.events.collect { event ->
+                if (event is SnackbarInteractionEvent && event.originalAppEventId == _lastFailedLoadEventId.value) {
+                    if (event.isActionPerformed) {
+                        logger.info("Retrying loadSession due to Snackbar action!")
+                        _lastFailedLoadEventId.value = null // Clear ID before retrying
+                        _lastAttemptedSessionId.value?.let { sessionId ->
+                            loadSession(sessionId, forceReload = true) // Trigger retry
+                        }
+                    } else { // It was dismissed (by user or timeout)
+                        logger.info("Snackbar dismissed, not retrying loadSession.")
+                        _lastFailedLoadEventId.value = null
+                        _lastAttemptedSessionId.value = null
+                    }
+                }
+            }
+        }
+    }
 
     // --- Public Action Functions (Called by UI Components) ---
 
@@ -129,6 +166,9 @@ class ChatViewModel(
         val currentState = _sessionState.value
         if (!forceReload && (currentState.isLoading || (currentState.dataOrNull?.id == sessionId))) return
 
+        // Store the session ID for potential retry
+        _lastAttemptedSessionId.value = sessionId
+
         viewModelScope.launch(uiDispatcher) {
             _sessionState.value = UiState.Loading
             _replyTargetMessage.value = null
@@ -140,12 +180,23 @@ class ChatViewModel(
                     ifLeft = { error ->
                         // Handle Error case (E1.S6)
                         _sessionState.value = UiState.Error(error)
+                        // Emit to generic EventBus using the specific error type
+                        val globalError = apiRequestError(
+                            apiError = error,
+                            shortMessage = getString(Res.string.error_loading_session),
+                            isRetryable = true
+                        )
+                        _lastFailedLoadEventId.value = globalError.eventId // Store its ID
+                        eventBus.emitEvent(globalError)
                     },
                     ifRight = { session ->
                         // Handle Success case (E2.S4)
                         _sessionState.value = UiState.Success(session) // Success payload is the ChatSession
                         // Set initial leaf to the session's saved leaf ID or null if no messages
                         _currentBranchLeafId.value = session.currentLeafMessageId
+                        // Clear retry state on success
+                        _lastFailedLoadEventId.value = null
+                        _lastAttemptedSessionId.value = null
                     }
                 )
         }

@@ -1,7 +1,9 @@
 package eu.torvian.chatbot.app.viewmodel
 
+import eu.torvian.chatbot.app.domain.events.AppEvent
 import eu.torvian.chatbot.app.service.api.ChatApi
 import eu.torvian.chatbot.app.service.api.SessionApi
+import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.testutils.data.*
 import eu.torvian.chatbot.app.testutils.misc.TestClock
 import eu.torvian.chatbot.app.testutils.viewmodel.returnsDelayed
@@ -11,8 +13,10 @@ import eu.torvian.chatbot.common.models.ChatSession
 import io.mockk.clearMocks
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.test.*
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
@@ -35,6 +39,10 @@ class ChatViewModelTest {
     // Mock the dependencies
     private val sessionApi: SessionApi = mockk()
     private val chatApi: ChatApi = mockk()
+    private val eventBus: EventBus = mockk(relaxed = true)
+
+    // Mock SharedFlow for EventBus events
+    private val mockEventsFlow = MutableSharedFlow<AppEvent>()
 
     // The ViewModel instance to test (System Under Test)
     private lateinit var viewModel: ChatViewModel
@@ -47,12 +55,15 @@ class ChatViewModelTest {
         // Initialize the test clock with a fixed initial time
         val initialTime = LocalDateTime(2023, 1, 1, 10, 0, 0).toInstant(TimeZone.UTC)
         clock = TestClock(initialTime)
+
+        // Set up EventBus mock to return the mock SharedFlow
+        every { eventBus.events } returns mockEventsFlow
     }
 
     @AfterEach
     fun tearDown() {
         // Clear all mocks after each test to ensure isolation
-        clearMocks(sessionApi, chatApi)
+        clearMocks(sessionApi, chatApi, eventBus)
     }
 
     /**
@@ -60,7 +71,7 @@ class ChatViewModelTest {
      */
     private fun TestScope.initViewModelAndCollect() {
         // Initialize the ViewModel, injecting mocked dependencies
-        viewModel = ChatViewModel(sessionApi, chatApi, testDispatcher, clock)
+        viewModel = ChatViewModel(sessionApi, chatApi, eventBus, testDispatcher, clock)
         // Start collecting the StateFlows in the background using the test dispatcher's scope
         // The initial value is collected immediately by startCollecting.
         startCollecting(viewModel.sessionState, collectedSessionStates)
