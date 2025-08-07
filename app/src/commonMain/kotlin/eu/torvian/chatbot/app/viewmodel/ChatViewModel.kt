@@ -338,42 +338,48 @@ class ChatViewModel(
     }
 
     /**
-     * Switches the currently displayed thread branch to the one containing the given message ID as a leaf.
-     * Also persists this choice to the session record (E1.S5).
+     * Switches the currently displayed chat branch to the one that includes the given message ID.
+     * The ViewModel will find the actual leaf message of this branch by traversing down
+     * the path of first children starting from the provided `targetMessageId`.
+     * This new leaf message ID is then persisted to the session record (E1.S5).
      *
-     * @param messageId The ID of the message to make the new leaf of the displayed branch.
+     * @param targetMessageId The ID of the message that serves as the starting point for
+     *                        determining the new displayed branch. This message itself may be
+     *                        a root, middle, or leaf message in the conversation tree.
      */
-    fun switchBranchToMessage(messageId: Long) {
-        val currentSession = _sessionState.value.dataOrNull ?: return // Cannot switch if no session loaded successfully
+    fun switchBranchToMessage(targetMessageId: Long) {
+        val currentSession = _sessionState.value.dataOrNull ?: return
+        if (_currentBranchLeafId.value == targetMessageId) return
 
-        // Check if the message ID actually exists in the current messages before switching/persisting
-        if (!currentSession.messages.any { it.id == messageId }) {
-            println("Attempted to switch to branch with invalid message ID: $messageId")
-            // Optionally show an error to the user (transient message)
+        val messageMap = currentSession.messages.associateBy { it.id }
+
+        // Use the new helper function to find the actual leaf ID
+        val finalLeafId = findLeafOfBranch(targetMessageId, messageMap)
+        if (finalLeafId == null) {
+            println("Warning: Could not determine a valid leaf for branch starting with $targetMessageId.")
             return
         }
 
-        if (_currentBranchLeafId.value == messageId) return // Already on this branch
+        if (_currentBranchLeafId.value == finalLeafId) return // Already on this exact branch
 
         viewModelScope.launch(uiDispatcher) {
             // Optimistically update UI state Flow first for responsiveness
-            _currentBranchLeafId.value = messageId
+            _currentBranchLeafId.value = finalLeafId
 
             // Persist the change to the backend (E1.S5 requirement)
-            sessionApi.updateSessionLeafMessage(currentSession.id, UpdateSessionLeafMessageRequest(messageId))
+            sessionApi.updateSessionLeafMessage(currentSession.id, UpdateSessionLeafMessageRequest(finalLeafId))
                 .fold(
                     ifLeft = { error ->
                         println("Update leaf message API error: ${error.code} - ${error.message}")
-                        // Decide rollback strategy if needed, or just show a transient error message
+                        // Decide rollback strategy if needed, or just show a transient error message.
                     },
                     ifRight = {
                         // Persistence successful.
                         // We should also update the leafMessageId in the session object itself
                         // within the state Flow to keep the ChatSession data consistent.
                         _sessionState.value = UiState.Success(
-                            currentSession.copy(currentLeafMessageId = messageId)
+                            currentSession.copy(currentLeafMessageId = finalLeafId)
                         )
-                        // The displayedMessages Flow reacts via _currentBranchLeafId change already handled above.
                     }
                 )
         }
@@ -427,6 +433,42 @@ class ChatViewModel(
         }
     }
 
+    /**
+     * Finds the ultimate leaf message ID by traversing down the
+     * first child path from a given starting message ID.
+     *
+     * @param startMessageId The ID of the message to start the traversal from.
+     * @param messageMap A map of all messages in the session for efficient lookup.
+     * @return The ID of the leaf message found, or null if the startMessageId is invalid or a cycle/broken link is detected.
+     */
+    private fun findLeafOfBranch(startMessageId: Long, messageMap: Map<Long, ChatMessage>): Long? {
+        var currentPathMessage: ChatMessage? = messageMap[startMessageId]
+        if (currentPathMessage == null) {
+            println("Warning: Starting message for branch traversal not found: $startMessageId")
+            return null
+        }
+
+        var finalLeafId: Long = startMessageId
+        val visitedIds = mutableSetOf<Long>() // To detect cycles and prevent infinite loops
+
+        while (currentPathMessage?.childrenMessageIds?.isNotEmpty() == true) {
+            if (!visitedIds.add(currentPathMessage.id)) {
+                // Cycle detected
+                println("Warning: Cycle detected in message thread path at message ID: ${currentPathMessage.id}. Aborting traversal.")
+                break
+            }
+            // Select the first child to traverse down
+            val firstChildId = currentPathMessage.childrenMessageIds.first()
+            currentPathMessage = messageMap[firstChildId]
+            if (currentPathMessage == null) {
+                // Data inconsistency: a child ID exists but the message is not in the map
+                println("Warning: Child message $firstChildId not found during branch traversal. Using last valid message as leaf.")
+                break
+            }
+            finalLeafId = currentPathMessage.id
+        }
+        return finalLeafId
+    }
 
     /**
      * Utility function to build the list of messages for a specific branch (E1.S5).
@@ -442,14 +484,20 @@ class ChatViewModel(
         val messageMap = allMessages.associateBy { it.id }
         val branch = mutableListOf<ChatMessage>()
         var currentMessageId: Long? = leafId
+        val visitedIds = mutableSetOf<Long>() // Added for cycle detection
 
         // Traverse upwards from the leaf to the root
         while (currentMessageId != null) {
             val message = messageMap[currentMessageId]
             if (message == null) {
                 // This indicates a data inconsistency
-                println("Warning: Could not find message with ID $currentMessageId while building branch.")
-                return emptyList()
+                println("Warning: Could not find message with ID $currentMessageId while building branch. Aborting traversal.")
+                return emptyList() // Return empty as the branch is incomplete/corrupt
+            }
+            if (!visitedIds.add(message.id)) {
+                // Cycle detected during upward traversal
+                println("Warning: Cycle detected in message thread path during upward traversal at message ID: ${message.id}. Aborting traversal.")
+                return emptyList() // Return empty as the branch is corrupted
             }
             branch.add(message)
             currentMessageId = message.parentMessageId
