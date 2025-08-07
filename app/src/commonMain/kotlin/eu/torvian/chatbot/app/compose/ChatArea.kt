@@ -14,7 +14,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -28,6 +27,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import eu.torvian.chatbot.app.compose.common.ErrorStateDisplay
 import eu.torvian.chatbot.app.compose.common.LoadingOverlay
 import eu.torvian.chatbot.app.compose.common.PlainTooltipBox
 import eu.torvian.chatbot.app.viewmodel.ChatAreaActions
@@ -87,9 +87,9 @@ fun ChatArea(
         when (state.sessionUiState) {
             UiState.Loading -> LoadingStateDisplay(modifier = Modifier.fillMaxSize())
             is UiState.Error -> ErrorStateDisplay(
-                mainMessage = "Failed to load chat session",
-                detailMessage = state.sessionUiState.error.message,
-                onRetry = { /* Retry logic will be implemented later, as ChatAreaActions does not directly support it */ },
+                error = state.sessionUiState.error,
+                onRetry = actions::onRetryLoadingSession,
+                title = "Failed to load chat session",
                 modifier = Modifier.align(Alignment.Center)
             )
 
@@ -520,69 +520,5 @@ private fun BranchNavigationControls(
         } else {
             Spacer(Modifier.size(24.dp)) // Maintain spacing if button is hidden
         }
-    }
-}
-
-/**
- * Composable that displays an error state.
- * This is a generic error display component.
- *
- * @param mainMessage A prominent message describing the error type (e.g., "Failed to load").
- * @param detailMessage A more specific, detailed message about the error.
- * @param onRetry Callback for when a retry action is requested. Currently, no button is shown.
- * @param modifier Modifier to be applied to the component.
- */
-@Composable
-private fun ErrorStateDisplay(
-    mainMessage: String,
-    detailMessage: String,
-    onRetry: () -> Unit, // Kept for future extensibility, as no retry button is currently rendered.
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier.padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Icon(
-            imageVector = Icons.Default.Warning,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.error,
-            modifier = Modifier.size(48.dp)
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            text = mainMessage,
-            style = MaterialTheme.typography.headlineSmall,
-            color = MaterialTheme.colorScheme.onErrorContainer,
-            textAlign = TextAlign.Center
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = detailMessage,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f),
-            textAlign = TextAlign.Center
-        )
-        Spacer(modifier = Modifier.height(24.dp))
-        // Removed the Retry button here for now, as ChatAreaActions does not directly support it
-        // and reloading the session needs a sessionId, which is not direct here.
-        // Will revisit global error handling / retry mechanisms in a later polish PR if needed.
-        /*
-        Button(
-            onClick = onRetry,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary
-            )
-        ) {
-            Icon(
-                imageVector = Icons.Default.Refresh,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Retry")
-        }
-        */
     }
 }

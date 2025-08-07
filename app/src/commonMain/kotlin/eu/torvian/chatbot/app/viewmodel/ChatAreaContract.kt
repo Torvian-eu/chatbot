@@ -101,5 +101,10 @@ interface ChatAreaActions {
      */
     fun onSelectSettings(settingsId: Long?)
 
+    /**
+     * Callback for when the user requests to retry loading the current chat session after a failure.
+     */
+    fun onRetryLoadingSession()
+
     // Will include copy actions (E2.S7, E3.S5) in future PRs
 }

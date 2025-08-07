@@ -102,7 +102,7 @@ fun ChatScreen(
             displayedMessages = chatDisplayedMessages
         )
     }
-    val chatAreaActions = remember(chatViewModel) {
+    val chatAreaActions = remember(chatViewModel, selectedSessionId) {
         object : ChatAreaActions {
             override fun onUpdateInput(newText: String) = chatViewModel.updateInput(newText)
             override fun onSendMessage() = chatViewModel.sendMessage()
@@ -116,6 +116,11 @@ fun ChatScreen(
             override fun onSwitchBranchToMessage(messageId: Long) = chatViewModel.switchBranchToMessage(messageId)
             override fun onSelectModel(modelId: Long?) = chatViewModel.selectModel(modelId)
             override fun onSelectSettings(settingsId: Long?) = chatViewModel.selectSettings(settingsId)
+            override fun onRetryLoadingSession() {
+                selectedSessionId?.let { sessionId ->
+                    chatViewModel.loadSession(sessionId, forceReload = true)
+                }
+            }
         }
     }
 

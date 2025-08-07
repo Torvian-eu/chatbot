@@ -26,13 +26,13 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import eu.torvian.chatbot.app.compose.common.ErrorStateDisplay
 import eu.torvian.chatbot.app.compose.common.LoadingOverlay
 import eu.torvian.chatbot.app.compose.common.OverflowTooltipText
 import eu.torvian.chatbot.app.compose.common.PlainTooltipBox
 import eu.torvian.chatbot.app.viewmodel.SessionListActions
 import eu.torvian.chatbot.app.viewmodel.SessionListState
 import eu.torvian.chatbot.app.viewmodel.UiState
-import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.models.ChatGroup
 import eu.torvian.chatbot.common.models.ChatSessionSummary
 
@@ -338,6 +338,7 @@ private fun SessionListContent(
                 ErrorStateDisplay(
                     error = listUiState.error,
                     onRetry = actions::onRetryLoadingSessions,
+                    title = "Failed to load sessions",
                     modifier = Modifier.align(Alignment.Center)
                 )
             }
@@ -867,68 +868,6 @@ private fun GroupHeader(
                     }
                 }
             }
-        }
-    }
-}
-
-/**
- * Composable that displays an error state with a retry button.
- *
- * @param error The API error to display.
- * @param onRetry Callback for when the retry button is clicked.
- * @param modifier Modifier to be applied to the component.
- */
-@Composable
-private fun ErrorStateDisplay(
-    error: ApiError,
-    onRetry: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier.padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Icon(
-            imageVector = Icons.Default.Warning,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.error,
-            modifier = Modifier.size(48.dp)
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(
-            text = "Failed to load sessions",
-            style = MaterialTheme.typography.headlineSmall,
-            color = MaterialTheme.colorScheme.onSurface,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = error.message,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Button(
-            onClick = onRetry,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary
-            )
-        ) {
-            Icon(
-                imageVector = Icons.Default.Refresh,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Retry")
         }
     }
 }
