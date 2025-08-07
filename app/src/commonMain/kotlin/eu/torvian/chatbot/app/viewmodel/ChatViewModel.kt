@@ -133,7 +133,7 @@ class ChatViewModel(
 
     init {
         // ViewModel can listen to the EventBus for its own emitted event's responses
-        viewModelScope.launch {
+        viewModelScope.launch(uiDispatcher) {
             eventBus.events.collect { event ->
                 if (event is SnackbarInteractionEvent && event.originalAppEventId == _lastFailedLoadEventId.value) {
                     if (event.isActionPerformed) {
