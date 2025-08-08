@@ -208,12 +208,10 @@ class SessionListViewModel(
      * Selects a chat session from the list, updating the [selectedSessionId].
      * (E2.S4)
      *
-     * @param sessionId The ID of the session to select.
+     * @param sessionId The ID of the session to select, or null to clear selection.
      */
-    fun selectSession(sessionId: Long) {
+    fun selectSession(sessionId: Long?) {
         _selectedSessionId.value = sessionId
-        // The UI component displaying ChatViewModel should react to this ID change
-        // and call ChatViewModel.loadSession(sessionId).
     }
 
     /**

@@ -15,12 +15,12 @@ import eu.torvian.chatbot.common.models.ChatSessionSummary
  * @property editingGroupNameInput Content of the editing group name input field.
  */
 data class SessionListState(
-    val listUiState: UiState<ApiError, SessionListViewModel.SessionListData>,
-    val selectedSessionId: Long?,
-    val isCreatingNewGroup: Boolean,
-    val newGroupNameInput: String,
-    val editingGroup: ChatGroup?,
-    val editingGroupNameInput: String
+    val listUiState: UiState<ApiError, SessionListViewModel.SessionListData> = UiState.Idle,
+    val selectedSessionId: Long? = null,
+    val isCreatingNewGroup: Boolean = false,
+    val newGroupNameInput: String = "",
+    val editingGroup: ChatGroup? = null,
+    val editingGroupNameInput: String = ""
 )
 
 /**
@@ -29,9 +29,9 @@ data class SessionListState(
 interface SessionListActions {
     /**
      * Callback for when the user selects a session.
-     * @param sessionId The ID of the selected session.
+     * @param sessionId The ID of the selected session, or null to clear selection.
      */
-    fun onSessionSelected(sessionId: Long)
+    fun onSessionSelected(sessionId: Long?)
 
     /**
      * Callback for when the user requests a new session.

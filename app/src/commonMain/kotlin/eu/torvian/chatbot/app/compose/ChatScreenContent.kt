@@ -9,7 +9,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import eu.torvian.chatbot.app.compose.common.LoadingOverlay
 import eu.torvian.chatbot.app.viewmodel.ChatAreaActions
 import eu.torvian.chatbot.app.viewmodel.ChatAreaState
 import eu.torvian.chatbot.app.viewmodel.SessionListActions
@@ -24,49 +23,40 @@ import eu.torvian.chatbot.app.viewmodel.SessionListState
  * @param sessionListActions The actions contract for the session list panel.
  * @param chatAreaState The current UI state contract for the chat area.
  * @param chatAreaActions The actions contract for the chat area.
- * @param showLoading Whether to display the global loading overlay.
  */
 @Composable
 fun ChatScreenContent(
     sessionListState: SessionListState,
     sessionListActions: SessionListActions,
     chatAreaState: ChatAreaState,
-    chatAreaActions: ChatAreaActions,
-    showLoading: Boolean
+    chatAreaActions: ChatAreaActions
 ) {
-    // Wrap the Row in a Box to allow stacking the overlay on top
-    Box(modifier = Modifier.fillMaxSize()) {
-        Row(modifier = Modifier.fillMaxSize()) {
-            Box(
-                modifier = Modifier
-                    .weight(0.25f) // Fixed weight for Session List Panel
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.surface)
-                    .padding(16.dp),
-            ) {
-                // PR 19: Session List Panel
-                SessionListPanel(
-                    state = sessionListState,
-                    actions = sessionListActions
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .weight(0.75f) // Fixed weight for Chat Area
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background)
-                    .padding(16.dp)
-            ) {
-                // PR 20: Implement Chat Area UI (Message Display)
-                ChatArea(
-                    state = chatAreaState,
-                    actions = chatAreaActions
-                )
-            }
+    Row(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .weight(0.25f) // Fixed weight for Session List Panel
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(16.dp),
+        ) {
+            // PR 19: Session List Panel
+            SessionListPanel(
+                state = sessionListState,
+                actions = sessionListActions
+            )
         }
-        // Display the loading overlay over the entire content of ChatScreenContent
-        if (showLoading) {
-            LoadingOverlay(modifier = Modifier.fillMaxSize())
+        Box(
+            modifier = Modifier
+                .weight(0.75f) // Fixed weight for Chat Area
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .padding(16.dp)
+        ) {
+            // PR 20: Implement Chat Area UI (Message Display)
+            ChatArea(
+                state = chatAreaState,
+                actions = chatAreaActions
+            )
         }
     }
 }

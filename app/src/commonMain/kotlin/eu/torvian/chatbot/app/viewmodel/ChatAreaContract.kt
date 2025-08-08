@@ -17,13 +17,13 @@ import eu.torvian.chatbot.common.models.ChatSession
  * @property editingContent The content of the message currently being edited (E3.S1, E3.S2).
  */
 data class ChatAreaState(
-    val sessionUiState: UiState<ApiError, ChatSession>,
-    val currentBranchLeafId: Long?,
-    val displayedMessages: List<ChatMessage>,
-    val inputContent: String,
-    val replyTargetMessage: ChatMessage?,
-    val editingMessage: ChatMessage?,
-    val editingContent: String
+    val sessionUiState: UiState<ApiError, ChatSession> = UiState.Idle,
+    val currentBranchLeafId: Long? = null,
+    val displayedMessages: List<ChatMessage> = emptyList(),
+    val inputContent: String = "",
+    val replyTargetMessage: ChatMessage? = null,
+    val editingMessage: ChatMessage? = null,
+    val editingContent: String = ""
 
     // Will include model/settings selection states from ChatViewModel in future PRs
 )

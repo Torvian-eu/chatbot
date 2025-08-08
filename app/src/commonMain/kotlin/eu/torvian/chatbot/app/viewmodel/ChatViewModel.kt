@@ -158,13 +158,18 @@ class ChatViewModel(
      * Loads a chat session and its messages by ID.
      * Triggered when a session is selected in the session list (E2.S4).
      *
-     * @param sessionId The ID of the session to load.
+     * @param sessionId The ID of the session to load, or null to clear the session.
      * @param forceReload If true, reloads the session even if it's already loaded successfully.
      */
-    fun loadSession(sessionId: Long, forceReload: Boolean = false) {
+    fun loadSession(sessionId: Long?, forceReload: Boolean = false) {
         // Prevent reloading if already loading or if the session is already loaded successfully
         val currentState = _sessionState.value
         if (!forceReload && (currentState.isLoading || (currentState.dataOrNull?.id == sessionId))) return
+
+        if (sessionId == null) {
+            clearSession()
+            return
+        }
 
         // Store the session ID for potential retry
         _lastAttemptedSessionId.value = sessionId
