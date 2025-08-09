@@ -11,6 +11,7 @@ import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -26,10 +27,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import eu.torvian.chatbot.app.compose.common.ErrorStateDisplay
-import eu.torvian.chatbot.app.compose.common.LoadingOverlay
-import eu.torvian.chatbot.app.compose.common.OverflowTooltipText
-import eu.torvian.chatbot.app.compose.common.PlainTooltipBox
+import eu.torvian.chatbot.app.compose.common.*
 import eu.torvian.chatbot.app.viewmodel.SessionListActions
 import eu.torvian.chatbot.app.viewmodel.SessionListState
 import eu.torvian.chatbot.app.viewmodel.UiState
@@ -67,12 +65,12 @@ fun SessionListPanel(
     // Consolidated dialog state management
     var dialogState by remember { mutableStateOf<DialogState>(DialogState.None) }
     // Collapsible group state
-    var expandedGroups by rememberSaveable { mutableStateOf<Set<Long>>(emptySet()) }
+    var collapsedGroups by rememberSaveable { mutableStateOf<Set<Long>>(emptySet()) }
     fun toggleGroup(groupId: Long) {
-        expandedGroups = if (expandedGroups.contains(groupId)) {
-            expandedGroups - groupId
+        collapsedGroups = if (collapsedGroups.contains(groupId)) {
+            collapsedGroups - groupId
         } else {
-            expandedGroups + groupId
+            collapsedGroups + groupId
         }
     }
     Column(modifier = Modifier.fillMaxSize()) {
@@ -118,7 +116,7 @@ fun SessionListPanel(
                     groupId = group?.id ?: -1L
                 )
             },
-            expandedGroups = expandedGroups,
+            collapsedGroups = collapsedGroups,
             onToggleGroup = ::toggleGroup
         )
     }
@@ -224,7 +222,7 @@ private fun SessionListHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 8.dp),
+            .padding(bottom = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -322,7 +320,7 @@ private fun SessionListContent(
     onDeleteSession: (Long) -> Unit,
     onAssignToGroup: (ChatSessionSummary) -> Unit,
     onDeleteGroup: (ChatGroup?) -> Unit,
-    expandedGroups: Set<Long>,
+    collapsedGroups: Set<Long>,
     onToggleGroup: (Long) -> Unit
 ) {
     // Create stable callback references to prevent unnecessary recompositions
@@ -359,57 +357,65 @@ private fun SessionListContent(
                     sessionListData.groupedSessions.entries.toList()
                 }
 
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    groupedEntries.forEachIndexed { index, (group, sessions) ->
-                        // Add space before group header ONLY if:
-                        // 1. It's not the very first group (index > 0)
-                        // 2. The *previous* group's list of sessions was not empty
-                        if (index > 0) {
-                            val previousGroupSessions = groupedEntries[index - 1].value
-                            if (previousGroupSessions.isNotEmpty()) {
-                                item(key = "spacer_before_${group?.id ?: "ungrouped"}") {
-                                    Spacer(modifier = Modifier.height(10.dp))
+                // Create LazyListState for scrollbar integration
+                val lazyListState = rememberLazyListState()
+
+                ScrollbarWrapper(
+                    listState = lazyListState,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    LazyColumn(
+                        state = lazyListState,
+                        contentPadding = PaddingValues(end = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        groupedEntries.forEachIndexed { index, (group, sessions) ->
+                            // Group Header (E6.S4)
+                            val groupId = group?.id ?: -1L
+                            item(key = "header_$groupId") {
+                                Column {
+                                    // Add space before group header ONLY if:
+                                    // 1. It's not the very first group (index > 0)
+                                    // 2. The *previous* group is expanded
+                                    // 3. The *previous* group's list of sessions was not empty
+                                    if (index > 0) {
+                                        val previousGroupId = groupedEntries[index - 1].key?.id ?: -1L
+                                        val previousGroupSessions = groupedEntries[index - 1].value
+                                        if (!collapsedGroups.contains(previousGroupId) && previousGroupSessions.isNotEmpty()) {
+                                            Spacer(modifier = Modifier.height(10.dp))
+                                        }
+                                    }
+                                    GroupHeader(
+                                        group = group,
+                                        isEditing = group != null && state.editingGroup?.id == group.id,
+                                        editingName = state.editingGroupNameInput,
+                                        onEditNameChange = onUpdateEditingGroupNameInput,
+                                        onSaveRename = onSaveRenamedGroup,
+                                        onCancelRename = onCancelRenamingGroup,
+                                        onStartRename = onStartRenameGroup,
+                                        onDelete = onDeleteGroup,
+                                        isExpanded = collapsedGroups.contains(groupId),
+                                        onToggleExpand = { onToggleGroup(groupId) },
+                                        hasItems = sessions.isNotEmpty()
+                                    )
                                 }
                             }
-                        }
-                        // Group Header (E6.S4)
-                        val groupId = group?.id ?: -1L
-                        stickyHeader(key = "header_$groupId") {
-                            GroupHeader(
-                                group = group,
-                                isEditing = group != null && state.editingGroup?.id == group.id,
-                                editingName = state.editingGroupNameInput,
-                                onEditNameChange = onUpdateEditingGroupNameInput,
-                                onSaveRename = onSaveRenamedGroup,
-                                onCancelRename = onCancelRenamingGroup,
-                                onStartRename = onStartRenameGroup,
-                                onDelete = onDeleteGroup,
-                                isExpanded = expandedGroups.contains(groupId),
-                                onToggleExpand = { onToggleGroup(groupId) },
-                                hasItems = sessions.isNotEmpty()
-                            )
-                        }
-                        // Add space after group header if there are sessions in the group
-                        val isExpanded = expandedGroups.contains(groupId)
-                        if (isExpanded) {
-                            if (sessions.isNotEmpty()) {
-                                item(key = "spacer_after_$groupId") {
-                                    Spacer(modifier = Modifier.height(4.dp))
+                            // Show sessions only if the group is expanded
+                            val isExpanded = !collapsedGroups.contains(groupId)
+                            if (isExpanded) {
+                                items(
+                                    items = sessions,
+                                    key = { "session_${it.id}" }
+                                ) { session ->
+                                    SessionListItem(
+                                        session = session,
+                                        isSelected = session.id == state.selectedSessionId,
+                                        onClick = onSessionSelected,
+                                        onRename = onRenameSession,
+                                        onDelete = onDeleteSession,
+                                        onAssignToGroup = onAssignToGroup
+                                    )
                                 }
-                            }
-                            // Sessions within the group
-                            items(
-                                items = sessions,
-                                key = { "session_${it.id}" }
-                            ) { session ->
-                                SessionListItem(
-                                    session = session,
-                                    isSelected = session.id == state.selectedSessionId,
-                                    onClick = onSessionSelected,
-                                    onRename = onRenameSession,
-                                    onDelete = onDeleteSession,
-                                    onAssignToGroup = onAssignToGroup
-                                )
                             }
                         }
                     }
@@ -641,7 +647,6 @@ private fun SessionListItem(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 2.dp)
             .clip(RoundedCornerShape(8.dp))
             .combinedClickable(
                 onClick = { onClick(session.id) },
@@ -760,7 +765,6 @@ private fun GroupHeader(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 2.dp)
             .combinedClickable(
                 onClick = {}, // No-op for click on free area
                 onLongClick = { showMenu = true },

@@ -7,6 +7,7 @@ import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBackIos
@@ -30,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ErrorStateDisplay
 import eu.torvian.chatbot.app.compose.common.LoadingOverlay
 import eu.torvian.chatbot.app.compose.common.PlainTooltipBox
+import eu.torvian.chatbot.app.compose.common.ScrollbarWrapper
 import eu.torvian.chatbot.app.viewmodel.ChatAreaActions
 import eu.torvian.chatbot.app.viewmodel.ChatAreaState
 import eu.torvian.chatbot.app.viewmodel.UiState
@@ -170,27 +172,35 @@ private fun SuccessStateDisplay(
         )
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 16.dp), // Space for future input area
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+    // Create LazyListState for scrollbar integration
+    val lazyListState = rememberLazyListState()
+
+    ScrollbarWrapper(
+        listState = lazyListState,
+        modifier = Modifier.fillMaxSize()
     ) {
-        items(
-            items = displayedMessages,
-            key = { it.id } // Provide a key for efficient recomposition
-        ) { message ->
-            val branchNavData = remember(message, allMessagesMap, allRootMessageIds) {
-                getBranchNavigationData(
+        LazyColumn(
+            state = lazyListState,
+            contentPadding = PaddingValues(bottom = 16.dp, end = 16.dp), // Space for future input area
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(
+                items = displayedMessages,
+                key = { it.id } // Provide a key for efficient recomposition
+            ) { message ->
+                val branchNavData = remember(message, allMessagesMap, allRootMessageIds) {
+                    getBranchNavigationData(
+                        message = message,
+                        allMessagesMap = allMessagesMap,
+                        allRootMessageIds = allRootMessageIds
+                    )
+                }
+                MessageItem(
                     message = message,
-                    allMessagesMap = allMessagesMap,
-                    allRootMessageIds = allRootMessageIds
+                    branchNavigationData = branchNavData,
+                    messageActions = messageActions
                 )
             }
-            MessageItem(
-                message = message,
-                branchNavigationData = branchNavData,
-                messageActions = messageActions
-            )
         }
     }
 }
