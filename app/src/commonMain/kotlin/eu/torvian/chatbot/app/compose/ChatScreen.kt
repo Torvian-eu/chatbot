@@ -1,15 +1,14 @@
 package eu.torvian.chatbot.app.compose
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import eu.torvian.chatbot.app.viewmodel.ChatAreaActions
-import eu.torvian.chatbot.app.viewmodel.ChatAreaState
+import eu.torvian.chatbot.app.domain.contracts.ChatAreaActions
+import eu.torvian.chatbot.app.domain.contracts.ChatAreaState
+import eu.torvian.chatbot.app.domain.contracts.SessionListActions
+import eu.torvian.chatbot.app.domain.contracts.SessionListState
 import eu.torvian.chatbot.app.viewmodel.ChatViewModel
-import eu.torvian.chatbot.app.viewmodel.SessionListActions
-import eu.torvian.chatbot.app.viewmodel.SessionListState
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
 import eu.torvian.chatbot.common.models.ChatGroup
 import eu.torvian.chatbot.common.models.ChatMessage
@@ -50,9 +49,6 @@ fun ChatScreen(
     val chatCurrentBranchLeafId by chatViewModel.currentBranchLeafId.collectAsState()
     val chatDisplayedMessages by chatViewModel.displayedMessages.collectAsState()
 
-    // Determine if the overall screen should show a loading overlay
-    val showLoading = sessionListUiState.isLoading || chatSessionUiState.isLoading
-
     // --- SessionListPanel Contract Construction ---
     val sessionListPanelUiState = remember(
         sessionListUiState, selectedSessionId, isCreatingNewGroup,
@@ -69,17 +65,29 @@ fun ChatScreen(
     }
     val sessionListPanelActions = remember(sessionListViewModel) {
         object : SessionListActions {
-            override fun onSessionSelected(sessionId: Long) = sessionListViewModel.selectSession(sessionId)
+            override fun onSessionSelected(sessionId: Long?) {
+                sessionListViewModel.selectSession(sessionId)
+                chatViewModel.loadSession(sessionId)
+            }
+
             override fun onCreateNewSession(name: String?) = sessionListViewModel.createNewSession(name)
-            override fun onRenameSession(session: ChatSessionSummary, newName: String) = sessionListViewModel.renameSession(session, newName)
+            override fun onRenameSession(session: ChatSessionSummary, newName: String) =
+                sessionListViewModel.renameSession(session, newName)
+
             override fun onDeleteSession(sessionId: Long) = sessionListViewModel.deleteSession(sessionId)
-            override fun onAssignSessionToGroup(sessionId: Long, groupId: Long?) = sessionListViewModel.assignSessionToGroup(sessionId, groupId)
+            override fun onAssignSessionToGroup(sessionId: Long, groupId: Long?) =
+                sessionListViewModel.assignSessionToGroup(sessionId, groupId)
+
             override fun onStartCreatingNewGroup() = sessionListViewModel.startCreatingNewGroup()
-            override fun onUpdateNewGroupNameInput(newText: String) = sessionListViewModel.updateNewGroupNameInput(newText)
+            override fun onUpdateNewGroupNameInput(newText: String) =
+                sessionListViewModel.updateNewGroupNameInput(newText)
+
             override fun onCreateNewGroup() = sessionListViewModel.createNewGroup()
             override fun onCancelCreatingNewGroup() = sessionListViewModel.cancelCreatingNewGroup()
             override fun onStartRenamingGroup(group: ChatGroup) = sessionListViewModel.startRenamingGroup(group)
-            override fun onUpdateEditingGroupNameInput(newText: String) = sessionListViewModel.updateEditingGroupNameInput(newText)
+            override fun onUpdateEditingGroupNameInput(newText: String) =
+                sessionListViewModel.updateEditingGroupNameInput(newText)
+
             override fun onSaveRenamedGroup() = sessionListViewModel.saveRenamedGroup()
             override fun onCancelRenamingGroup() = sessionListViewModel.cancelRenamingGroup()
             override fun onDeleteGroup(groupId: Long) = sessionListViewModel.deleteGroup(groupId)
@@ -102,7 +110,7 @@ fun ChatScreen(
             displayedMessages = chatDisplayedMessages
         )
     }
-    val chatAreaActions = remember(chatViewModel) {
+    val chatAreaActions = remember(chatViewModel, selectedSessionId) {
         object : ChatAreaActions {
             override fun onUpdateInput(newText: String) = chatViewModel.updateInput(newText)
             override fun onSendMessage() = chatViewModel.sendMessage()
@@ -116,14 +124,12 @@ fun ChatScreen(
             override fun onSwitchBranchToMessage(messageId: Long) = chatViewModel.switchBranchToMessage(messageId)
             override fun onSelectModel(modelId: Long?) = chatViewModel.selectModel(modelId)
             override fun onSelectSettings(settingsId: Long?) = chatViewModel.selectSettings(settingsId)
+            override fun onRetryLoadingSession() {
+                selectedSessionId?.let { sessionId ->
+                    chatViewModel.loadSession(sessionId, forceReload = true)
+                }
+            }
         }
-    }
-
-    // Load the chat session when a new one is selected
-    LaunchedEffect(selectedSessionId) {
-        selectedSessionId?.let { sessionId ->
-            chatViewModel.loadSession(sessionId)
-        } ?: chatViewModel.clearSession()
     }
 
     // Pass all collected states and actions to the stateless ChatScreenContent
@@ -131,7 +137,6 @@ fun ChatScreen(
         sessionListState = sessionListPanelUiState,
         sessionListActions = sessionListPanelActions,
         chatAreaState = chatAreaState,
-        chatAreaActions = chatAreaActions,
-        showLoading = showLoading
+        chatAreaActions = chatAreaActions
     )
 }

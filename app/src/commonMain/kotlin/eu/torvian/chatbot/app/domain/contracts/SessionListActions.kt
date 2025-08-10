@@ -1,27 +1,7 @@
-package eu.torvian.chatbot.app.viewmodel
+package eu.torvian.chatbot.app.domain.contracts
 
-import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.models.ChatGroup
 import eu.torvian.chatbot.common.models.ChatSessionSummary
-
-/**
- * Encapsulates all UI state relevant to the Session List Panel.
- *
- * @property listUiState The state of the chat session list and groups.
- * @property selectedSessionId The ID of the currently selected session.
- * @property isCreatingNewGroup UI state indicating if the new group input field is visible.
- * @property newGroupNameInput Content of the new group input field.
- * @property editingGroup The group currently being edited/renamed. Null if none.
- * @property editingGroupNameInput Content of the editing group name input field.
- */
-data class SessionListState(
-    val listUiState: UiState<ApiError, SessionListViewModel.SessionListData>,
-    val selectedSessionId: Long?,
-    val isCreatingNewGroup: Boolean,
-    val newGroupNameInput: String,
-    val editingGroup: ChatGroup?,
-    val editingGroupNameInput: String
-)
 
 /**
  * Defines all UI actions that can be triggered from the Session List Panel.
@@ -29,9 +9,9 @@ data class SessionListState(
 interface SessionListActions {
     /**
      * Callback for when the user selects a session.
-     * @param sessionId The ID of the selected session.
+     * @param sessionId The ID of the selected session, or null to clear selection.
      */
-    fun onSessionSelected(sessionId: Long)
+    fun onSessionSelected(sessionId: Long?)
 
     /**
      * Callback for when the user requests a new session.

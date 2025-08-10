@@ -2,8 +2,15 @@ package eu.torvian.chatbot.app.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import eu.torvian.chatbot.app.domain.contracts.UiState
+import eu.torvian.chatbot.app.domain.events.SnackbarInteractionEvent
+import eu.torvian.chatbot.app.domain.events.apiRequestError
+import eu.torvian.chatbot.app.generated.resources.Res
+import eu.torvian.chatbot.app.generated.resources.error_loading_session
 import eu.torvian.chatbot.app.service.api.ChatApi
 import eu.torvian.chatbot.app.service.api.SessionApi
+import eu.torvian.chatbot.app.service.misc.EventBus
+import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.models.*
 import kotlinx.coroutines.CoroutineDispatcher
@@ -12,6 +19,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
+import org.jetbrains.compose.resources.getString
 
 /**
  * Manages the UI state for the main chat area of the currently active session,
@@ -28,6 +36,7 @@ import kotlinx.datetime.Clock
  * @constructor
  * @param sessionApi The API client for session-related operations.
  * @param chatApi The API client for chat message-related operations.
+ * @param eventBus The event bus for emitting global events like retry-able errors.
  * @param uiDispatcher The dispatcher to use for UI-related coroutines. Defaults to Main.
  * @param clock The clock to use for timestamping. Defaults to System clock.
  *
@@ -42,9 +51,12 @@ import kotlinx.datetime.Clock
 class ChatViewModel(
     private val sessionApi: SessionApi,
     private val chatApi: ChatApi,
+    private val eventBus: EventBus,
     private val uiDispatcher: CoroutineDispatcher = Dispatchers.Main,
     private val clock: Clock = Clock.System
 ) : ViewModel() {
+
+    private val logger = kmpLogger<ChatViewModel>()
 
     // --- Observable State for Compose UI (using StateFlow) ---
 
@@ -114,6 +126,32 @@ class ChatViewModel(
      */
     val editingContent: StateFlow<String> = _editingContent.asStateFlow()
 
+    // Store the ID of the last emitted error if a retry is possible
+    private val _lastFailedLoadEventId = MutableStateFlow<String?>(null)
+
+    // Store the session ID for retry functionality
+    private val _lastAttemptedSessionId = MutableStateFlow<Long?>(null)
+
+    init {
+        // ViewModel can listen to the EventBus for its own emitted event's responses
+        viewModelScope.launch(uiDispatcher) {
+            eventBus.events.collect { event ->
+                if (event is SnackbarInteractionEvent && event.originalAppEventId == _lastFailedLoadEventId.value) {
+                    if (event.isActionPerformed) {
+                        logger.info("Retrying loadSession due to Snackbar action!")
+                        _lastFailedLoadEventId.value = null // Clear ID before retrying
+                        _lastAttemptedSessionId.value?.let { sessionId ->
+                            loadSession(sessionId, forceReload = true) // Trigger retry
+                        }
+                    } else { // It was dismissed (by user or timeout)
+                        logger.info("Snackbar dismissed, not retrying loadSession.")
+                        _lastFailedLoadEventId.value = null
+                        _lastAttemptedSessionId.value = null
+                    }
+                }
+            }
+        }
+    }
 
     // --- Public Action Functions (Called by UI Components) ---
 
@@ -121,13 +159,21 @@ class ChatViewModel(
      * Loads a chat session and its messages by ID.
      * Triggered when a session is selected in the session list (E2.S4).
      *
-     * @param sessionId The ID of the session to load.
+     * @param sessionId The ID of the session to load, or null to clear the session.
      * @param forceReload If true, reloads the session even if it's already loaded successfully.
      */
-    fun loadSession(sessionId: Long, forceReload: Boolean = false) {
+    fun loadSession(sessionId: Long?, forceReload: Boolean = false) {
         // Prevent reloading if already loading or if the session is already loaded successfully
         val currentState = _sessionState.value
         if (!forceReload && (currentState.isLoading || (currentState.dataOrNull?.id == sessionId))) return
+
+        if (sessionId == null) {
+            clearSession()
+            return
+        }
+
+        // Store the session ID for potential retry
+        _lastAttemptedSessionId.value = sessionId
 
         viewModelScope.launch(uiDispatcher) {
             _sessionState.value = UiState.Loading
@@ -140,12 +186,23 @@ class ChatViewModel(
                     ifLeft = { error ->
                         // Handle Error case (E1.S6)
                         _sessionState.value = UiState.Error(error)
+                        // Emit to generic EventBus using the specific error type
+                        val globalError = apiRequestError(
+                            apiError = error,
+                            shortMessage = getString(Res.string.error_loading_session),
+                            isRetryable = true
+                        )
+                        _lastFailedLoadEventId.value = globalError.eventId // Store its ID
+                        eventBus.emitEvent(globalError)
                     },
                     ifRight = { session ->
                         // Handle Success case (E2.S4)
                         _sessionState.value = UiState.Success(session) // Success payload is the ChatSession
                         // Set initial leaf to the session's saved leaf ID or null if no messages
                         _currentBranchLeafId.value = session.currentLeafMessageId
+                        // Clear retry state on success
+                        _lastFailedLoadEventId.value = null
+                        _lastAttemptedSessionId.value = null
                     }
                 )
         }
@@ -338,42 +395,48 @@ class ChatViewModel(
     }
 
     /**
-     * Switches the currently displayed thread branch to the one containing the given message ID as a leaf.
-     * Also persists this choice to the session record (E1.S5).
+     * Switches the currently displayed chat branch to the one that includes the given message ID.
+     * The ViewModel will find the actual leaf message of this branch by traversing down
+     * the path of first children starting from the provided `targetMessageId`.
+     * This new leaf message ID is then persisted to the session record (E1.S5).
      *
-     * @param messageId The ID of the message to make the new leaf of the displayed branch.
+     * @param targetMessageId The ID of the message that serves as the starting point for
+     *                        determining the new displayed branch. This message itself may be
+     *                        a root, middle, or leaf message in the conversation tree.
      */
-    fun switchBranchToMessage(messageId: Long) {
-        val currentSession = _sessionState.value.dataOrNull ?: return // Cannot switch if no session loaded successfully
+    fun switchBranchToMessage(targetMessageId: Long) {
+        val currentSession = _sessionState.value.dataOrNull ?: return
+        if (_currentBranchLeafId.value == targetMessageId) return
 
-        // Check if the message ID actually exists in the current messages before switching/persisting
-        if (!currentSession.messages.any { it.id == messageId }) {
-            println("Attempted to switch to branch with invalid message ID: $messageId")
-            // Optionally show an error to the user (transient message)
+        val messageMap = currentSession.messages.associateBy { it.id }
+
+        // Use the new helper function to find the actual leaf ID
+        val finalLeafId = findLeafOfBranch(targetMessageId, messageMap)
+        if (finalLeafId == null) {
+            println("Warning: Could not determine a valid leaf for branch starting with $targetMessageId.")
             return
         }
 
-        if (_currentBranchLeafId.value == messageId) return // Already on this branch
+        if (_currentBranchLeafId.value == finalLeafId) return // Already on this exact branch
 
         viewModelScope.launch(uiDispatcher) {
             // Optimistically update UI state Flow first for responsiveness
-            _currentBranchLeafId.value = messageId
+            _currentBranchLeafId.value = finalLeafId
 
             // Persist the change to the backend (E1.S5 requirement)
-            sessionApi.updateSessionLeafMessage(currentSession.id, UpdateSessionLeafMessageRequest(messageId))
+            sessionApi.updateSessionLeafMessage(currentSession.id, UpdateSessionLeafMessageRequest(finalLeafId))
                 .fold(
                     ifLeft = { error ->
                         println("Update leaf message API error: ${error.code} - ${error.message}")
-                        // Decide rollback strategy if needed, or just show a transient error message
+                        // Decide rollback strategy if needed, or just show a transient error message.
                     },
                     ifRight = {
                         // Persistence successful.
                         // We should also update the leafMessageId in the session object itself
                         // within the state Flow to keep the ChatSession data consistent.
                         _sessionState.value = UiState.Success(
-                            currentSession.copy(currentLeafMessageId = messageId)
+                            currentSession.copy(currentLeafMessageId = finalLeafId)
                         )
-                        // The displayedMessages Flow reacts via _currentBranchLeafId change already handled above.
                     }
                 )
         }
@@ -427,6 +490,42 @@ class ChatViewModel(
         }
     }
 
+    /**
+     * Finds the ultimate leaf message ID by traversing down the
+     * first child path from a given starting message ID.
+     *
+     * @param startMessageId The ID of the message to start the traversal from.
+     * @param messageMap A map of all messages in the session for efficient lookup.
+     * @return The ID of the leaf message found, or null if the startMessageId is invalid or a cycle/broken link is detected.
+     */
+    private fun findLeafOfBranch(startMessageId: Long, messageMap: Map<Long, ChatMessage>): Long? {
+        var currentPathMessage: ChatMessage? = messageMap[startMessageId]
+        if (currentPathMessage == null) {
+            println("Warning: Starting message for branch traversal not found: $startMessageId")
+            return null
+        }
+
+        var finalLeafId: Long = startMessageId
+        val visitedIds = mutableSetOf<Long>() // To detect cycles and prevent infinite loops
+
+        while (currentPathMessage?.childrenMessageIds?.isNotEmpty() == true) {
+            if (!visitedIds.add(currentPathMessage.id)) {
+                // Cycle detected
+                println("Warning: Cycle detected in message thread path at message ID: ${currentPathMessage.id}. Aborting traversal.")
+                break
+            }
+            // Select the first child to traverse down
+            val firstChildId = currentPathMessage.childrenMessageIds.first()
+            currentPathMessage = messageMap[firstChildId]
+            if (currentPathMessage == null) {
+                // Data inconsistency: a child ID exists but the message is not in the map
+                println("Warning: Child message $firstChildId not found during branch traversal. Using last valid message as leaf.")
+                break
+            }
+            finalLeafId = currentPathMessage.id
+        }
+        return finalLeafId
+    }
 
     /**
      * Utility function to build the list of messages for a specific branch (E1.S5).
@@ -442,14 +541,20 @@ class ChatViewModel(
         val messageMap = allMessages.associateBy { it.id }
         val branch = mutableListOf<ChatMessage>()
         var currentMessageId: Long? = leafId
+        val visitedIds = mutableSetOf<Long>() // Added for cycle detection
 
         // Traverse upwards from the leaf to the root
         while (currentMessageId != null) {
             val message = messageMap[currentMessageId]
             if (message == null) {
                 // This indicates a data inconsistency
-                println("Warning: Could not find message with ID $currentMessageId while building branch.")
-                return emptyList()
+                println("Warning: Could not find message with ID $currentMessageId while building branch. Aborting traversal.")
+                return emptyList() // Return empty as the branch is incomplete/corrupt
+            }
+            if (!visitedIds.add(message.id)) {
+                // Cycle detected during upward traversal
+                println("Warning: Cycle detected in message thread path during upward traversal at message ID: ${message.id}. Aborting traversal.")
+                return emptyList() // Return empty as the branch is corrupted
             }
             branch.add(message)
             currentMessageId = message.parentMessageId

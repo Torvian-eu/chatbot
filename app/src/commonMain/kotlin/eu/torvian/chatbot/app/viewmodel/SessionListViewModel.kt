@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import arrow.core.flatMap
 import arrow.fx.coroutines.parZip
+import eu.torvian.chatbot.app.domain.contracts.SessionListData
+import eu.torvian.chatbot.app.domain.contracts.UiState
 import eu.torvian.chatbot.app.domain.events.SnackbarInteractionEvent
 import eu.torvian.chatbot.app.domain.events.apiRequestError
 import eu.torvian.chatbot.app.generated.resources.Res
@@ -115,7 +117,7 @@ class SessionListViewModel(
 
     init {
         // ViewModel can listen to the EventBus for its own emitted event's responses
-        viewModelScope.launch {
+        viewModelScope.launch(uiDispatcher) {
             eventBus.events.collect { event ->
                 if (event is SnackbarInteractionEvent && event.originalAppEventId == _lastFailedLoadEventId.value) {
                     if (event.isActionPerformed) {
@@ -129,31 +131,6 @@ class SessionListViewModel(
                 }
             }
         }
-    }
-
-    /**
-     * Data class to hold the multiple pieces of data needed for the Session List UI when in Success state.
-     * It holds the raw lists fetched from the backend and provides the derived grouped structure.
-     */
-    data class SessionListData(
-        val allSessions: List<ChatSessionSummary> = emptyList(),
-        val allGroups: List<ChatGroup> = emptyList()
-    ) {
-        /**
-         * Returns the sessions organized by group, ready for display (E6.S2).
-         * This is a derived property calculated based on [allSessions] and [allGroups].
-         */
-        val groupedSessions: Map<ChatGroup?, List<ChatSessionSummary>>
-            get() {
-                val ungrouped = allSessions.filter { it.groupId == null }.sortedByDescending { it.updatedAt }
-                val grouped = allGroups.associateWith { group ->
-                    allSessions.filter { it.groupId == group.id }.sortedByDescending { it.updatedAt }
-                }
-                return LinkedHashMap<ChatGroup?, List<ChatSessionSummary>>().apply {
-                    put(null, ungrouped) // Null key for "Ungrouped" section
-                    putAll(grouped)
-                }
-            }
     }
 
     // --- Public Action Functions (Called by UI Components) ---
@@ -208,12 +185,10 @@ class SessionListViewModel(
      * Selects a chat session from the list, updating the [selectedSessionId].
      * (E2.S4)
      *
-     * @param sessionId The ID of the session to select.
+     * @param sessionId The ID of the session to select, or null to clear selection.
      */
-    fun selectSession(sessionId: Long) {
+    fun selectSession(sessionId: Long?) {
         _selectedSessionId.value = sessionId
-        // The UI component displaying ChatViewModel should react to this ID change
-        // and call ChatViewModel.loadSession(sessionId).
     }
 
     /**

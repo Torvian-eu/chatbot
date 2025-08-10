@@ -1,4 +1,4 @@
-package eu.torvian.chatbot.app.viewmodel
+package eu.torvian.chatbot.app.domain.contracts
 
 import eu.torvian.chatbot.common.api.ApiError
 

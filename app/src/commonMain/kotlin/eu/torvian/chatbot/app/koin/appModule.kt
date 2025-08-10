@@ -54,7 +54,7 @@ fun appModule(baseUri: String): Module = module {
     }
 
     // Provide ViewModels, injecting the required API clients
-    viewModel { ChatViewModel(get(), get()) }
+    viewModel { ChatViewModel(get(), get(), get()) }
     viewModel { SessionListViewModel(get(), get(), get()) }
     viewModel { ProviderConfigViewModel(get()) }
     viewModel { ModelConfigViewModel(get(), get()) }

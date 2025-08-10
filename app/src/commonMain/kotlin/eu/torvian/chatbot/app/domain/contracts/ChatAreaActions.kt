@@ -1,32 +1,6 @@
-package eu.torvian.chatbot.app.viewmodel
+package eu.torvian.chatbot.app.domain.contracts
 
-import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.models.ChatMessage
-import eu.torvian.chatbot.common.models.ChatSession
-
-/**
- * Encapsulates all UI state relevant to the main Chat Area.
- * (To be fully implemented in future PRs like 20, 21, etc.)
- *
- * @property sessionUiState The state of the currently loaded chat session, including all messages.
- * @property currentBranchLeafId The ID of the leaf message in the currently displayed thread branch.
- * @property displayedMessages The list of messages to display in the UI, representing the currently selected thread branch.
- * @property inputContent The current text content in the message input field.
- * @property replyTargetMessage The message the user is currently explicitly replying to via the Reply action.
- * @property editingMessage The message currently being edited (E3.S1, E3.S2).
- * @property editingContent The content of the message currently being edited (E3.S1, E3.S2).
- */
-data class ChatAreaState(
-    val sessionUiState: UiState<ApiError, ChatSession>,
-    val currentBranchLeafId: Long?,
-    val displayedMessages: List<ChatMessage>,
-    val inputContent: String,
-    val replyTargetMessage: ChatMessage?,
-    val editingMessage: ChatMessage?,
-    val editingContent: String
-
-    // Will include model/settings selection states from ChatViewModel in future PRs
-)
 
 /**
  * Defines all UI actions that can be triggered from the main Chat Area.
@@ -100,6 +74,11 @@ interface ChatAreaActions {
      * @param settingsId The ID of the settings profile to select, or null to clear selection.
      */
     fun onSelectSettings(settingsId: Long?)
+
+    /**
+     * Callback for when the user requests to retry loading the current chat session after a failure.
+     */
+    fun onRetryLoadingSession()
 
     // Will include copy actions (E2.S7, E3.S5) in future PRs
 }
