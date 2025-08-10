@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.app.viewmodel
 
+import eu.torvian.chatbot.app.domain.contracts.UiState
 import eu.torvian.chatbot.app.domain.events.AppEvent
 import eu.torvian.chatbot.app.service.api.ChatApi
 import eu.torvian.chatbot.app.service.api.SessionApi
@@ -10,11 +11,7 @@ import eu.torvian.chatbot.app.testutils.viewmodel.returnsDelayed
 import eu.torvian.chatbot.app.testutils.viewmodel.startCollecting
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.models.ChatSession
-import io.mockk.clearMocks
-import io.mockk.coEvery
-import io.mockk.coVerify
-import io.mockk.every
-import io.mockk.mockk
+import io.mockk.*
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.test.*

@@ -2,6 +2,7 @@ package eu.torvian.chatbot.app.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import eu.torvian.chatbot.app.domain.contracts.UiState
 import eu.torvian.chatbot.app.service.api.ModelApi
 import eu.torvian.chatbot.app.service.api.SettingsApi
 import eu.torvian.chatbot.common.api.ApiError

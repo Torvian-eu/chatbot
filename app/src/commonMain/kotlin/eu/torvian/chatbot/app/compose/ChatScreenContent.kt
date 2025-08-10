@@ -9,10 +9,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import eu.torvian.chatbot.app.viewmodel.ChatAreaActions
-import eu.torvian.chatbot.app.viewmodel.ChatAreaState
-import eu.torvian.chatbot.app.viewmodel.SessionListActions
-import eu.torvian.chatbot.app.viewmodel.SessionListState
+import eu.torvian.chatbot.app.domain.contracts.ChatAreaActions
+import eu.torvian.chatbot.app.domain.contracts.ChatAreaState
+import eu.torvian.chatbot.app.domain.contracts.SessionListActions
+import eu.torvian.chatbot.app.domain.contracts.SessionListState
 
 /**
  * Composable for the main chat interface's content, including the session list and the chat area.

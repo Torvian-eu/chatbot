@@ -27,10 +27,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.*
-import eu.torvian.chatbot.app.viewmodel.SessionListActions
-import eu.torvian.chatbot.app.viewmodel.SessionListState
-import eu.torvian.chatbot.app.viewmodel.SessionListViewModel.SessionListData
-import eu.torvian.chatbot.app.viewmodel.UiState
+import eu.torvian.chatbot.app.domain.contracts.SessionListActions
+import eu.torvian.chatbot.app.domain.contracts.SessionListData
+import eu.torvian.chatbot.app.domain.contracts.SessionListState
+import eu.torvian.chatbot.app.domain.contracts.UiState
 import eu.torvian.chatbot.common.models.ChatGroup
 import eu.torvian.chatbot.common.models.ChatSessionSummary
 

@@ -32,9 +32,9 @@ import eu.torvian.chatbot.app.compose.common.ErrorStateDisplay
 import eu.torvian.chatbot.app.compose.common.LoadingOverlay
 import eu.torvian.chatbot.app.compose.common.PlainTooltipBox
 import eu.torvian.chatbot.app.compose.common.ScrollbarWrapper
-import eu.torvian.chatbot.app.viewmodel.ChatAreaActions
-import eu.torvian.chatbot.app.viewmodel.ChatAreaState
-import eu.torvian.chatbot.app.viewmodel.UiState
+import eu.torvian.chatbot.app.domain.contracts.ChatAreaActions
+import eu.torvian.chatbot.app.domain.contracts.ChatAreaState
+import eu.torvian.chatbot.app.domain.contracts.UiState
 import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.common.models.ChatSession
 

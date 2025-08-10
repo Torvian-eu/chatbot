@@ -2,10 +2,10 @@ package eu.torvian.chatbot.app.compose.preview
 
 import androidx.compose.runtime.Composable
 import eu.torvian.chatbot.app.compose.SessionListPanel
-import eu.torvian.chatbot.app.viewmodel.SessionListState
-import eu.torvian.chatbot.app.viewmodel.SessionListActions
-import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
-import eu.torvian.chatbot.app.viewmodel.UiState
+import eu.torvian.chatbot.app.domain.contracts.SessionListState
+import eu.torvian.chatbot.app.domain.contracts.SessionListActions
+import eu.torvian.chatbot.app.domain.contracts.SessionListData
+import eu.torvian.chatbot.app.domain.contracts.UiState
 import eu.torvian.chatbot.common.models.ChatGroup
 import eu.torvian.chatbot.common.models.ChatSessionSummary
 import kotlinx.datetime.Instant
@@ -17,7 +17,7 @@ fun SessionListPanelPreview() {
     // Mock data for preview
     val mockState = SessionListState(
         listUiState = UiState.Success(
-            SessionListViewModel.SessionListData(
+            SessionListData(
                 allSessions = listOf(
                     ChatSessionSummary(
                         id = 1L,

@@ -2,9 +2,9 @@ package eu.torvian.chatbot.app.compose.preview
 
 import androidx.compose.runtime.Composable
 import eu.torvian.chatbot.app.compose.ChatArea
-import eu.torvian.chatbot.app.viewmodel.ChatAreaActions
-import eu.torvian.chatbot.app.viewmodel.ChatAreaState
-import eu.torvian.chatbot.app.viewmodel.UiState
+import eu.torvian.chatbot.app.domain.contracts.ChatAreaActions
+import eu.torvian.chatbot.app.domain.contracts.ChatAreaState
+import eu.torvian.chatbot.app.domain.contracts.UiState
 import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.common.models.ChatSession
 import kotlinx.datetime.Instant

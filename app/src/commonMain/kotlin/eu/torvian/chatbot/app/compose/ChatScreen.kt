@@ -4,7 +4,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import eu.torvian.chatbot.app.viewmodel.*
+import eu.torvian.chatbot.app.domain.contracts.ChatAreaActions
+import eu.torvian.chatbot.app.domain.contracts.ChatAreaState
+import eu.torvian.chatbot.app.domain.contracts.SessionListActions
+import eu.torvian.chatbot.app.domain.contracts.SessionListState
+import eu.torvian.chatbot.app.viewmodel.ChatViewModel
+import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
 import eu.torvian.chatbot.common.models.ChatGroup
 import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.common.models.ChatSessionSummary

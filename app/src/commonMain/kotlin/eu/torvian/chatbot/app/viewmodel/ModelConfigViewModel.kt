@@ -3,6 +3,7 @@ package eu.torvian.chatbot.app.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import arrow.fx.coroutines.parZip
+import eu.torvian.chatbot.app.domain.contracts.UiState
 import eu.torvian.chatbot.app.service.api.ModelApi
 import eu.torvian.chatbot.app.service.api.ProviderApi
 import eu.torvian.chatbot.app.utils.misc.ioDispatcher
