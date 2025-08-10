@@ -323,8 +323,8 @@ private fun MessageItem(
 }
 
 /**
- * Displays a row of action controls for a message, visible on hover.
- * This includes general actions (Edit, Copy, Regenerate) and branch navigation.
+ * Displays a row of action controls for a message.
+ * General actions (Edit, Copy, Regenerate) are visible on hover, while branch navigation is always visible.
  *
  * @param message The [ChatMessage] for which controls are displayed (used for role-specific actions).
  * @param branchNavigationData Pre-calculated data for branch navigation.
@@ -340,24 +340,24 @@ private fun MessageActionRow(
     hovered: Boolean,
     modifier: Modifier = Modifier
 ) {
-    Box(modifier = modifier) {
-        if (hovered) { // Only compose the Row when hovered
-            Row(
-                modifier = Modifier.fillMaxSize(), // Fill the Box
-                horizontalArrangement = Arrangement.SpaceBetween, // Pushes start actions to left, end actions to right
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // General actions aligned to the start
-                GeneralMessageControls(message = message, messageActions = messageActions)
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.SpaceBetween, // Pushes start actions to left, end actions to right
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // General actions aligned to the start - only visible on hover
+        if (hovered) {
+            GeneralMessageControls(message = message, messageActions = messageActions)
+        } else {
+            Spacer(Modifier.width(0.dp)) // Placeholder to maintain layout structure
+        }
 
-                // Branch Navigation Controls aligned to the end
-                if (branchNavigationData.showNavigation) {
-                    BranchNavigationControls(
-                        branchNavigationData = branchNavigationData,
-                        onSwitchBranchToMessage = messageActions.onSwitchBranchToMessage
-                    )
-                }
-            }
+        // Branch Navigation Controls aligned to the end - always visible when navigation is available
+        if (branchNavigationData.showNavigation) {
+            BranchNavigationControls(
+                branchNavigationData = branchNavigationData,
+                onSwitchBranchToMessage = messageActions.onSwitchBranchToMessage
+            )
         }
     }
 }
