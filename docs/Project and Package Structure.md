@@ -253,15 +253,25 @@ server/src/test/kotlin/eu/torvian/chatbot/server/
 app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app targets
 ├── compose/          # Compose UI components
 │   ├── AppShell.kt   # Main application shell (contains navigation, top-level layout)
+│   ├── ChatArea.kt   # Chat area component
 │   ├── ChatScreen.kt # Main chat interface (displays session list, chat messages, input area)
 │   ├── ChatScreenContent.kt # Stateless content composable for chat interface
 │   ├── SessionListPanel.kt # Session list panel component
 │   ├── SettingsScreen.kt # Settings configuration interface (providers, models, settings)
 │   └── common/       # Common compose components
+│       ├── ErrorStateDisplay.kt # Error state display component
 │       ├── LoadingOverlay.kt  # Loading overlay component
 │       ├── OverflowTooltipText.kt # Text with overflow tooltip
-│       └── PlainTooltipBox.kt # Plain tooltip box component
-├── domain/          # Domain models
+│       ├── PlainTooltipBox.kt # Plain tooltip box component
+│       └── ScrollbarWrapper.kt # Scrollbar wrapper component
+├── domain/          # Domain models specific to the *application's presentation layer*
+│   ├── contracts/    # UI State and Action contracts (interfaces between UI and ViewModels)
+│   │   ├── ChatAreaActions.kt  # Chat area user actions contract
+│   │   ├── ChatAreaState.kt    # Chat area UI state contract
+│   │   ├── SessionListActions.kt # Session list user actions contract
+│   │   ├── SessionListData.kt    # Session list data structure
+│   │   ├── SessionListState.kt   # Session list UI state contract
+│   │   └── UiState.kt           # Generic UI state wrapper
 │   ├── events/        # Domain events (e.g., user actions, system responses)
 │   │   ├── ApiRequestError.kt # API request error event
 │   │   ├── AppEvent.kt  # Base event class
@@ -298,9 +308,8 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
     ├── ModelConfigViewModel.kt # Model Config ViewModel (manages LLM model state)
     ├── ProviderConfigViewModel.kt # Provider Config ViewModel (manages LLM provider state)
     ├── SessionListViewModel.kt # Session List ViewModel (manages session list state)
-    ├── SettingsConfigViewModel.kt # Settings Config ViewModel (manages model settings state)
-    └── UiState.kt        # Shared UI state sealed class
- 
+    └── SettingsConfigViewModel.kt # Settings Config ViewModel (manages model settings state)
+     
 app/src/commonMain/composeResources/  # Compose resources (strings, etc.)
 ├── values/  # Default resources
 │   └── strings.xml  # String resources
@@ -325,6 +334,10 @@ app/src/desktopMain/kotlin/eu/torvian/chatbot/app/  # Desktop-specific implement
         └── createKmpLogger.desktop.kt # Desktop-specific KMP logger
 
 app/src/desktopTest/kotlin/eu/torvian/chatbot/app/ # Desktop-specific tests
+├── compose/          # Compose UI component tests
+│   ├── ChatAreaTest.kt 
+│   └── common/       # Common compose component tests
+│       └── LoadingOverlayTest.kt
 ├── service/api/ktor/    # Ktor API client tests
 │   ├── KtorChatApiClientTest.kt  
 │   ├── KtorSessionApiClientTest.kt 
