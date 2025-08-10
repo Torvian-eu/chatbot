@@ -33,8 +33,8 @@ fun assistantMessage(
     updatedAt: Instant = instant(id),
     parentMessageId: Long? = null,
     childrenMessageIds: List<Long> = emptyList(),
-    modelId: Long? = 1, // Default mock values
-    settingsId: Long? = 1
+    modelId: Long? = null,
+    settingsId: Long? = null
 ): ChatMessage.AssistantMessage = ChatMessage.AssistantMessage(
     id = id, sessionId = sessionId, content = content, createdAt = createdAt,
     updatedAt = updatedAt, parentMessageId = parentMessageId, childrenMessageIds = childrenMessageIds,
