@@ -283,6 +283,27 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
             }
         }
 
+    override suspend fun getChatMessagesForSession(sessionId: Long): List<ChatMessage> {
+        return transactionScope.transaction {
+            ensureTableCreated(Table.CHAT_MESSAGES)
+            ensureTableCreated(Table.ASSISTANT_MESSAGES)
+
+            // Perform a single query with left join to get all messages with their assistant data if any
+            val results = ChatMessageTable
+                .leftJoin(AssistantMessageTable, { ChatMessageTable.id }, { AssistantMessageTable.messageId })
+                .selectAll()
+                .where { ChatMessageTable.sessionId eq sessionId }
+
+            // Transform to appropriate message types based on role
+            results.map { row ->
+                when (row[ChatMessageTable.role]) {
+                    ChatMessage.Role.USER -> row.toUserMessage()
+                    ChatMessage.Role.ASSISTANT -> row.toAssistantMessage()
+                }
+            }
+        }
+    }
+
     override suspend fun insertLLMModel(llmModel: LLMModel) =
         transactionScope.transaction {
             ensureTableCreated(Table.LLM_MODELS)
