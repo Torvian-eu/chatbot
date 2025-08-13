@@ -18,6 +18,12 @@
     <string name="error_unknown">An unexpected error occurred.</string>
     <string name="error_loading_sessions_groups">Failed to load sessions or groups.</string>
     <string name="error_loading_session">Failed to load session.</string>
+    <string name="error_sending_message_short">Failed to send message</string>
+
+    <!-- Input Area -->
+    <string name="replying_to_prefix">Replying to:</string>
+    <string name="send_message_button_description">Send message</string>
+    <string name="cancel_reply_button_description">Cancel reply</string>
 
     <!-- Success Messages -->
     <string name="operation_success">Operation completed successfully.</string>

@@ -7,6 +7,7 @@ import eu.torvian.chatbot.app.domain.events.SnackbarInteractionEvent
 import eu.torvian.chatbot.app.domain.events.apiRequestError
 import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.error_loading_session
+import eu.torvian.chatbot.app.generated.resources.error_sending_message_short
 import eu.torvian.chatbot.app.service.api.ChatApi
 import eu.torvian.chatbot.app.service.api.SessionApi
 import eu.torvian.chatbot.app.service.misc.EventBus
@@ -126,6 +127,13 @@ class ChatViewModel(
      */
     val editingContent: StateFlow<String> = _editingContent.asStateFlow()
 
+    private val _isSendingMessage = MutableStateFlow(false)
+
+    /**
+     * Indicates whether a message is currently in the process of being sent. (E1.S3)
+     */
+    val isSendingMessage: StateFlow<Boolean> = _isSendingMessage.asStateFlow()
+
     // Store the ID of the last emitted error if a retry is possible
     private val _lastFailedLoadEventId = MutableStateFlow<String?>(null)
 
@@ -241,44 +249,49 @@ class ChatViewModel(
         val parentId = _replyTargetMessage.value?.id ?: _currentBranchLeafId.value // Use value from StateFlow
 
         viewModelScope.launch(uiDispatcher) {
-            // Optionally show a sending state/indicator (E1.S3)
-            // _isSendingMessage.value = true // Requires a separate StateFlow for this granular status
+            _isSendingMessage.value = true // Set sending state to true (E1.S3)
 
-            // Clear input immediately
-            _inputContent.value = ""
-
-            chatApi.processNewMessage(
-                sessionId = currentSession.id,
-                request = ProcessNewMessageRequest(content = content, parentMessageId = parentId)
-            )
-                .fold(
-                    ifLeft = { error ->
-                        println("Send message API error: ${error.code} - ${error.message}")
-                        // Show transient error message to user (E1.S6)
-                        // Requires a separate StateFlow or SharedFlow for transient UI messages
-                    },
-                    ifRight = { newMessages ->
-                        // Handle Success case (E1.S4)
-                        // We received the new user and assistant messages.
-                        // Add them to the messages list in the current session state Flow.
-                        val updatedMessages = currentSession.messages + newMessages
-                        val newLeafId = newMessages.lastOrNull()?.id // Assume assistant message is the new leaf
-
-                        // Update the session object inside the Success state with the new messages
-                        _sessionState.value = UiState.Success(
-                            currentSession.copy(
-                                messages = updatedMessages,
-                                currentLeafMessageId = newLeafId,
-                                updatedAt = clock.now()
-                            )
-                        )
-                        _currentBranchLeafId.value = newLeafId // Update the separate leaf state Flow
-
-                        // Reset reply target (E1.S7)
-                        _replyTargetMessage.value = null
-                    }
+            try {
+                chatApi.processNewMessage(
+                    sessionId = currentSession.id,
+                    request = ProcessNewMessageRequest(content = content, parentMessageId = parentId)
                 )
-            // _isSendingMessage.value = false
+                    .fold(
+                        ifLeft = { error ->
+                            logger.error("Send message API error: ${error.code} - ${error.message}")
+                            // Emit to EventBus for Snackbar display (E1.S6)
+                            eventBus.emitEvent(
+                                apiRequestError(
+                                    apiError = error,
+                                    shortMessage = getString(Res.string.error_sending_message_short),
+                                )
+                            )
+                        },
+                        ifRight = { newMessages ->
+                            // Handle Success case (E1.S4)
+                            // We received the new user and assistant messages.
+                            // Add them to the messages list in the current session state Flow.
+                            val updatedMessages = currentSession.messages + newMessages
+                            val newLeafId = newMessages.lastOrNull()?.id // Assume assistant message is the new leaf
+
+                            // Update the session object inside the Success state with the new messages
+                            _sessionState.value = UiState.Success(
+                                currentSession.copy(
+                                    messages = updatedMessages,
+                                    currentLeafMessageId = newLeafId,
+                                    updatedAt = clock.now()
+                                )
+                            )
+                            _currentBranchLeafId.value = newLeafId // Update the separate leaf state Flow
+
+                            // Reset reply target (E1.S7)
+                            _replyTargetMessage.value = null
+                            _inputContent.value = "" // Clear input field
+                        }
+                    )
+            } finally {
+                _isSendingMessage.value = false // Always reset sending state
+            }
         }
     }
 

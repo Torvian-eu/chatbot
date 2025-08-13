@@ -48,6 +48,7 @@ fun ChatScreen(
     val chatEditingContent by chatViewModel.editingContent.collectAsState()
     val chatCurrentBranchLeafId by chatViewModel.currentBranchLeafId.collectAsState()
     val chatDisplayedMessages by chatViewModel.displayedMessages.collectAsState()
+    val chatIsSendingMessage by chatViewModel.isSendingMessage.collectAsState()
 
     // --- SessionListPanel Contract Construction ---
     val sessionListPanelUiState = remember(
@@ -98,7 +99,8 @@ fun ChatScreen(
     // --- ChatArea Contract Construction ---
     val chatAreaState = remember(
         chatSessionUiState, chatInputContent, chatReplyTargetMessage,
-        chatEditingMessage, chatEditingContent, chatCurrentBranchLeafId, chatDisplayedMessages
+        chatEditingMessage, chatEditingContent, chatCurrentBranchLeafId, chatDisplayedMessages,
+        chatIsSendingMessage
     ) {
         ChatAreaState(
             sessionUiState = chatSessionUiState,
@@ -107,7 +109,8 @@ fun ChatScreen(
             editingMessage = chatEditingMessage,
             editingContent = chatEditingContent,
             currentBranchLeafId = chatCurrentBranchLeafId,
-            displayedMessages = chatDisplayedMessages
+            displayedMessages = chatDisplayedMessages,
+            isSendingMessage = chatIsSendingMessage
         )
     }
     val chatAreaActions = remember(chatViewModel, selectedSessionId) {
