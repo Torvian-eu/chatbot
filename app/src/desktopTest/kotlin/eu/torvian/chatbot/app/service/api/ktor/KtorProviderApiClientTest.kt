@@ -51,7 +51,8 @@ class KtorProviderApiClientTest {
         name = name,
         providerId = providerId,
         active = active,
-        displayName = name.replace("-", " ").capitalize()
+        displayName = name.replace("-", " ").capitalize(),
+        type = LLMModelType.CHAT
     )
 
     // --- Tests for getAllProviders ---

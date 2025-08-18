@@ -37,8 +37,10 @@ fun Route.configureModelRoutes(llmModelService: LLMModelService, modelSettingsSe
             llmModelService.addModel(
                 request.name,
                 request.providerId,
+                request.type,
                 request.active,
-                request.displayName
+                request.displayName,
+                request.capabilities
             ), HttpStatusCode.Created
         ) { error ->
             when (error) {

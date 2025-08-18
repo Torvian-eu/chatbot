@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.testutils.data
 import eu.torvian.chatbot.common.models.ChatGroup
 import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.common.models.LLMModelType
 import eu.torvian.chatbot.common.models.LLMProvider
 import eu.torvian.chatbot.common.models.LLMProviderType
 import eu.torvian.chatbot.common.models.ModelSettings
@@ -98,7 +99,8 @@ object TestDefaults {
         name = "gpt-4",
         providerId = llmProvider1.id,
         active = true,
-        displayName = "GPT-4"
+        displayName = "GPT-4",
+        type = LLMModelType.CHAT
     )
 
     val llmModel2 = LLMModel(
@@ -106,7 +108,8 @@ object TestDefaults {
         name = "claude-3-sonnet-20240229",
         providerId = llmProvider2.id,
         active = true,
-        displayName = "Claude 3 Sonnet"
+        displayName = "Claude 3 Sonnet",
+        type = LLMModelType.CHAT
     )
 
     val modelSettings1 = ModelSettings(

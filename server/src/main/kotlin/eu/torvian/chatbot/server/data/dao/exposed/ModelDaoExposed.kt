@@ -7,6 +7,7 @@ import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.right
 import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.common.models.LLMModelType
 import eu.torvian.chatbot.server.data.dao.ModelDao
 import eu.torvian.chatbot.server.data.dao.error.InsertModelError
 import eu.torvian.chatbot.server.data.dao.error.ModelError
@@ -14,6 +15,8 @@ import eu.torvian.chatbot.server.data.dao.error.UpdateModelError
 import eu.torvian.chatbot.server.data.tables.LLMModelTable
 import eu.torvian.chatbot.server.data.tables.mappers.toLLMModel
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.exceptions.ExposedSQLException
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -45,15 +48,26 @@ class ModelDaoExposed(
                 .map { it.toLLMModel() }
         }
 
-    override suspend fun insertModel(name: String, providerId: Long, active: Boolean, displayName: String?): Either<InsertModelError, LLMModel> =
+    override suspend fun insertModel(
+        name: String,
+        providerId: Long,
+        type: LLMModelType,
+        active: Boolean,
+        displayName: String?,
+        capabilities: JsonObject?
+    ): Either<InsertModelError, LLMModel> =
         transactionScope.transaction {
             either {
                 catch({
                     val insertStatement = LLMModelTable.insert {
                         it[LLMModelTable.name] = name
                         it[LLMModelTable.providerId] = providerId
+                        it[LLMModelTable.type] = type
                         it[LLMModelTable.active] = active
                         it[LLMModelTable.displayName] = displayName
+                        it[LLMModelTable.capabilities] = capabilities?.let { cap ->
+                            Json.encodeToString(cap)
+                        }
                     }
                     insertStatement.resultedValues?.first()?.toLLMModel()
                         ?: throw IllegalStateException("Failed to retrieve newly inserted model")
@@ -74,8 +88,12 @@ class ModelDaoExposed(
                     val updatedRowCount = LLMModelTable.update({ LLMModelTable.id eq model.id }) {
                         it[name] = model.name
                         it[providerId] = model.providerId
+                        it[type] = model.type
                         it[active] = model.active
                         it[displayName] = model.displayName
+                        it[capabilities] = model.capabilities?.let { cap ->
+                            Json.Default.encodeToString(JsonObject.serializer(), cap)
+                        }
                     }
                     ensure(updatedRowCount != 0) { UpdateModelError.ModelNotFound(model.id) }
                 }) { e: ExposedSQLException ->

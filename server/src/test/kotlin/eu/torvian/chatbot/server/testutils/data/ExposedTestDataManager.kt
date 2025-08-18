@@ -1,10 +1,6 @@
 package eu.torvian.chatbot.server.testutils.data
 
-import eu.torvian.chatbot.common.models.ChatGroup
-import eu.torvian.chatbot.common.models.ChatMessage
-import eu.torvian.chatbot.common.models.LLMModel
-import eu.torvian.chatbot.common.models.LLMProvider
-import eu.torvian.chatbot.common.models.ModelSettings
+import eu.torvian.chatbot.common.models.*
 import eu.torvian.chatbot.server.data.entities.ApiSecretEntity
 import eu.torvian.chatbot.server.data.entities.ChatSessionEntity
 import eu.torvian.chatbot.server.data.entities.SessionCurrentLeafEntity
@@ -313,6 +309,10 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
                 it[providerId] = llmModel.providerId
                 it[active] = llmModel.active
                 it[displayName] = llmModel.displayName
+                it[type] = llmModel.type
+                it[capabilities] = llmModel.capabilities?.let { cap ->
+                    Json.encodeToString(cap)
+                }
             }
             return@transaction
         }

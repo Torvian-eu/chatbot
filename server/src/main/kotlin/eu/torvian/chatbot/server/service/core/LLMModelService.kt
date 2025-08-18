@@ -2,7 +2,9 @@ package eu.torvian.chatbot.server.service.core
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.common.models.LLMModelType
 import eu.torvian.chatbot.server.service.core.error.model.*
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Service interface for managing LLM Models.
@@ -32,11 +34,20 @@ interface LLMModelService {
      * Adds a new LLM model configuration.
      * @param name The unique identifier for the model (e.g., "gpt-3.5-turbo").
      * @param providerId The ID of the provider that hosts this model.
+     * @param type The operational type of this model (e.g., CHAT, EMBEDDING, etc.).
      * @param active Whether the model is currently active and available for use.
      * @param displayName Optional display name for UI purposes.
+     * @param capabilities Optional JSON object containing model capabilities.
      * @return Either an [AddModelError], or the newly created [LLMModel].
      */
-    suspend fun addModel(name: String, providerId: Long, active: Boolean = true, displayName: String? = null): Either<AddModelError, LLMModel>
+    suspend fun addModel(
+        name: String,
+        providerId: Long,
+        type: LLMModelType,
+        active: Boolean = true,
+        displayName: String? = null,
+        capabilities: JsonObject? = null
+    ): Either<AddModelError, LLMModel>
 
     /**
      * Updates an existing LLM model configuration.

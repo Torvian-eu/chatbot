@@ -95,7 +95,8 @@ class MessageServiceImplTest {
         name = "gpt-3.5-turbo",
         providerId = 1L,
         active = true,
-        displayName = "GPT-3.5 Turbo"
+        displayName = "GPT-3.5 Turbo",
+        type = LLMModelType.CHAT
     )
 
     private val testProvider = LLMProvider(

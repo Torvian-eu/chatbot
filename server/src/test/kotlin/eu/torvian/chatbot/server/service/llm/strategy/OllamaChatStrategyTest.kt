@@ -33,7 +33,8 @@ class OllamaChatStrategyTest {
         name = "llama3.2",
         providerId = testProvider.id,
         active = true,
-        displayName = "Llama 3.2"
+        displayName = "Llama 3.2",
+        type = LLMModelType.CHAT
     )
 
     private val testSettings = ModelSettings(

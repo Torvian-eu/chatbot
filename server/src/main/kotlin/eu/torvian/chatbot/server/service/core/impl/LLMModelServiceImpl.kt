@@ -5,6 +5,7 @@ import arrow.core.*
 import arrow.core.raise.*
 import arrow.core.raise.ensure
 import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.common.models.LLMModelType
 import eu.torvian.chatbot.server.data.dao.LLMProviderDao
 import eu.torvian.chatbot.server.data.dao.ModelDao
 import eu.torvian.chatbot.server.data.dao.error.InsertModelError
@@ -13,6 +14,7 @@ import eu.torvian.chatbot.server.data.dao.error.UpdateModelError as DaoUpdateMod
 import eu.torvian.chatbot.server.service.core.LLMModelService
 import eu.torvian.chatbot.server.service.core.error.model.*
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Implementation of the [LLMModelService] interface.
@@ -45,7 +47,14 @@ class LLMModelServiceImpl(
             modelDao.getModelsByProviderId(providerId)
         }
 
-    override suspend fun addModel(name: String, providerId: Long, active: Boolean, displayName: String?): Either<AddModelError, LLMModel> =
+    override suspend fun addModel(
+        name: String,
+        providerId: Long,
+        type: LLMModelType,
+        active: Boolean,
+        displayName: String?,
+        capabilities: JsonObject?
+    ): Either<AddModelError, LLMModel> =
         transactionScope.transaction {
             either {
                 ensure(!name.isBlank()) {
@@ -58,7 +67,7 @@ class LLMModelServiceImpl(
                         is InsertModelError.ModelNameAlreadyExists -> AddModelError.ModelNameAlreadyExists(daoError.name)
                     }
                 }) {
-                    modelDao.insertModel(name, providerId, active, displayName).bind()
+                    modelDao.insertModel(name, providerId, type, active, displayName, capabilities).bind()
                 }
             }
         }

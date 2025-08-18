@@ -122,6 +122,7 @@ class ModelRoutesTest {
         val createRequest = AddModelRequest(
             name = newModelName,
             providerId = testProvider1.id,
+            type = LLMModelType.CHAT,
             active = newModelActive,
             displayName = newModelDisplayName
         )
@@ -153,6 +154,7 @@ class ModelRoutesTest {
         val createRequest = AddModelRequest(
             name = "   ",
             providerId = testProvider1.id,
+            type = LLMModelType.CHAT,
             active = true,
             displayName = null
         )
@@ -180,6 +182,7 @@ class ModelRoutesTest {
         val createRequest = AddModelRequest(
             name = "Model For NonExistent Provider",
             providerId = nonExistentProviderId,
+            type = LLMModelType.CHAT,
             active = true,
             displayName = null
         )
@@ -213,6 +216,7 @@ class ModelRoutesTest {
         val createRequest = AddModelRequest(
             name = testModel1.name, // Use existing name
             providerId = testProvider1.id,
+            type = LLMModelType.CHAT,
             active = true,
             displayName = "Another Display Name"
         )
