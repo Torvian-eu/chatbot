@@ -5,6 +5,7 @@ import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.common.models.LLMModel
 import eu.torvian.chatbot.common.models.LLMProvider
 import eu.torvian.chatbot.common.models.ModelSettings
+import kotlinx.coroutines.flow.Flow
 
 /**
  * Interface for interacting with external LLM APIs.
@@ -13,7 +14,7 @@ import eu.torvian.chatbot.common.models.ModelSettings
  */
 interface LLMApiClient {
     /**
-     * Sends a chat completion request to the appropriate LLM API based on the provider type.
+     * Sends a non-streaming chat completion request to the appropriate LLM API.
      * Delegates the API-specific details (request format, response parsing) to an internal strategy.
      *
      * @param messages The list of messages forming the conversation context.
@@ -31,4 +32,20 @@ interface LLMApiClient {
         settings: ModelSettings,
         apiKey: String?
     ): Either<LLMCompletionError, LLMCompletionResult>
+
+    /**
+     * Sends a streaming chat completion request to the appropriate LLM API.
+     * Delegates API-specific details to a strategy.
+     *
+     * @return A Flow of Either<LLMCompletionError, LLMStreamChunk> representing the stream.
+     *         An error emitted in the Flow indicates a problem during the stream.
+     *         The flow terminates with `LLMStreamChunk.Done` on success or an error.
+     */
+    fun completeChatStreaming(
+        messages: List<ChatMessage>,
+        modelConfig: LLMModel,
+        provider: LLMProvider,
+        settings: ModelSettings,
+        apiKey: String?
+    ): Flow<Either<LLMCompletionError, LLMStreamChunk>>
 }
