@@ -6,6 +6,7 @@ import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.common.models.LLMModel
 import eu.torvian.chatbot.common.models.LLMProvider
 import eu.torvian.chatbot.common.models.ModelSettings
+import kotlinx.coroutines.flow.Flow
 
 /**
  * Stubbed implementation of [LLMApiClient] for testing purposes.
@@ -42,5 +43,15 @@ class LLMApiClientStub : LLMApiClient {
                 "api_model" to modelConfig.name
             )
         ).right()
+    }
+
+    override fun completeChatStreaming(
+        messages: List<ChatMessage>,
+        modelConfig: LLMModel,
+        provider: LLMProvider,
+        settings: ModelSettings,
+        apiKey: String?
+    ): Flow<Either<LLMCompletionError, LLMStreamChunk>> {
+        TODO("Not yet implemented")
     }
 }
