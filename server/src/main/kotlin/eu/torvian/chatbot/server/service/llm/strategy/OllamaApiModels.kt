@@ -52,6 +52,32 @@ object OllamaApiModels {
     }
 
     /**
+     * Represents a single chunk received during a streaming chat completion from Ollama.
+     * Each line in an Ollama stream is a JSON object matching this structure (except for the final 'done: true' object).
+     * The 'done' property indicates if the stream is finished.
+     * The 'message' property contains the delta content.
+     */
+    @Serializable
+    data class ChatCompletionStreamResponse(
+        val model: String,
+        val created_at: String,
+        val message: Message? = null, // message can be null for the final done chunk (which contains stats)
+        val done: Boolean,
+        val total_duration: Long? = null,
+        val load_duration: Long? = null,
+        val prompt_eval_count: Int? = null,
+        val prompt_eval_duration: Long? = null,
+        val eval_count: Int? = null,
+        val eval_duration: Long? = null
+    ) {
+        @Serializable
+        data class Message(
+            val role: String,
+            val content: String
+        )
+    }
+
+    /**
      * Represents a chat completion request to Ollama API.
      * Matches the structure documented by Ollama for non-streaming requests.
      *

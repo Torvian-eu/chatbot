@@ -6,6 +6,7 @@ import arrow.core.right
 import eu.torvian.chatbot.common.models.*
 import eu.torvian.chatbot.server.service.llm.*
 import io.ktor.http.*
+import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.*
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
@@ -202,5 +203,14 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
                 errorBody
             )
         }
+    }
+
+    override fun processStreamingResponse(
+        responseStream: Flow<String>
+    ): Flow<Either<LLMCompletionError.InvalidResponseError, LLMStreamChunk>> = flow {
+        // TODO: Implement OpenAI streaming response processing
+        // OpenAI uses Server-Sent Events (SSE) format for streaming
+        // This is a placeholder implementation
+        emit(LLMCompletionError.InvalidResponseError("OpenAI streaming not yet implemented", null).left())
     }
 }

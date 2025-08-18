@@ -5,6 +5,8 @@ import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.models.*
 import eu.torvian.chatbot.server.service.llm.*
+import kotlinx.coroutines.flow.*
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.*
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
@@ -30,7 +32,6 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
         settings: ModelSettings,
         apiKey: String?
     ): Either<LLMCompletionError.ConfigurationError, ApiRequestConfig> {
-
         logger.debug("OllamaChatStrategy: Preparing request for model ${modelConfig.name}")
 
         // 1. Ollama typically doesn't require an API key for local instances
@@ -62,7 +63,7 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
         val customParams: JsonObject? = settings.customParamsJson?.let { customJson ->
             val element = try {
                 json.parseToJsonElement(customJson)
-            } catch (e: Exception) {
+            } catch (e: SerializationException) {
                 throw IllegalStateException("Failed to parse customParamsJson for Ollama request", e)
             }
 
@@ -93,7 +94,7 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
         val requestBodyDto = OllamaApiModels.ChatCompletionRequest(
             model = modelConfig.name,
             messages = apiMessages,
-            stream = false, // We're using non-streaming mode
+            stream = true, // TODO: Make this configurable
             options = options
         )
 
@@ -122,7 +123,8 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
     }
 
     override fun processSuccessResponse(responseBody: String): Either<LLMCompletionError.InvalidResponseError, LLMCompletionResult> {
-        logger.debug("OllamaChatStrategy: Processing success response body: ${responseBody.take(500)}...") // Log part of the body
+        // This method is for *non-streaming* responses, typically used by completeChat.
+        logger.debug("OllamaChatStrategy: Processing success response body (non-streaming): ${responseBody.take(500)}...")
         return try {
             // 1. Deserialize the raw string body into the API-specific success response DTO
             val successResponse: OllamaApiModels.ChatCompletionResponse = json.decodeFromString(responseBody)
@@ -154,14 +156,55 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
                     "eval_duration" to successResponse.eval_duration
                 ).filterValues { it != null }
             )
-            logger.debug("OllamaChatStrategy: Successfully processed response to LLMCompletionResult")
+            logger.debug("OllamaChatStrategy: Successfully processed non-streaming response to LLMCompletionResult")
             result.right()
 
-        } catch (e: Exception) {
-            // Handle any exceptions during deserialization or mapping
-            logger.error("OllamaChatStrategy: Failed to parse Ollama success response body", e)
-            LLMCompletionError.InvalidResponseError("Failed to parse Ollama success response body: ${e.message}", e)
-                .left()
+        } catch (e: SerializationException) {
+            logger.error("OllamaChatStrategy: Failed to parse Ollama non-streaming success response body", e)
+            LLMCompletionError.InvalidResponseError("Failed to parse Ollama non-streaming success response body: ${e.message}", e).left()
+        } catch (e: IllegalArgumentException) {
+            logger.error("OllamaChatStrategy: The decoded input is not a valid instance of OllamaApiModels.ChatCompletionResponse: $responseBody", e)
+            LLMCompletionError.InvalidResponseError("The decoded input is not a valid instance of OllamaApiModels.ChatCompletionResponse: ${e.message}", e).left()
+        }
+    }
+
+    override fun processStreamingResponse(
+        responseStream: Flow<String>
+    ): Flow<Either<LLMCompletionError.InvalidResponseError, LLMStreamChunk>> = flow {
+        responseStream.collect { rawChunk ->
+            if (rawChunk.isBlank()) return@collect // Ignore empty lines
+
+            try {
+                // Ollama sends newline-delimited JSON objects
+                val streamResponse = json.decodeFromString<OllamaApiModels.ChatCompletionStreamResponse>(rawChunk)
+
+                if (streamResponse.done) {
+                    // This is the final chunk, might contain usage stats
+                    val usage = LLMCompletionResult.UsageStats(
+                        promptTokens = streamResponse.prompt_eval_count ?: 0,
+                        completionTokens = streamResponse.eval_count ?: 0,
+                        totalTokens = (streamResponse.prompt_eval_count ?: 0) + (streamResponse.eval_count ?: 0)
+                    )
+                    emit(
+                        LLMStreamChunk.UsageChunk(usage.promptTokens, usage.completionTokens, usage.totalTokens).right()
+                    )
+                    emit(LLMStreamChunk.Done.right())
+                } else {
+                    // Regular content chunk
+                    streamResponse.message?.let { message ->
+                        emit(LLMStreamChunk.ContentChunk(message.content).right())
+                    } ?: run {
+                        // This case should ideally not happen for non-done chunks, but for safety
+                        logger.warn("OllamaChatStrategy: Received a non-done chunk without a 'message' field: $rawChunk")
+                    }
+                }
+            } catch (e: SerializationException) {
+                logger.error("OllamaChatStrategy: Failed to parse Ollama streaming response chunk: $rawChunk", e)
+                emit(LLMCompletionError.InvalidResponseError("Failed to parse Ollama streaming response chunk: ${e.message}", e).left())
+            } catch (e: IllegalArgumentException) {
+                logger.error("OllamaChatStrategy: The decoded input is not a valid instance of OllamaApiModels.ChatCompletionStreamResponse: $rawChunk", e)
+                emit(LLMCompletionError.InvalidResponseError("The decoded input is not a valid instance of OllamaApiModels.ChatCompletionStreamResponse: ${e.message}", e).left())
+            }
         }
     }
 
@@ -172,9 +215,12 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
         val apiErrorMessage = try {
             val errorResponse = json.decodeFromString<OllamaApiModels.OllamaErrorResponse>(errorBody)
             errorResponse.error
-        } catch (e: Exception) {
+        } catch (e: SerializationException) {
             // If parsing the specific error structure fails, fall back to a generic message
             logger.warn("OllamaChatStrategy: Failed to parse Ollama specific error body, using raw body.", e)
+            errorBody.take(200) // Return start of the raw body if parsing failed
+        } catch (e: IllegalArgumentException) {
+            logger.warn("OllamaChatStrategy: The decoded input is not a valid instance of OllamaApiModels.OllamaErrorResponse: $errorBody", e)
             errorBody.take(200) // Return start of the raw body if parsing failed
         }
 
