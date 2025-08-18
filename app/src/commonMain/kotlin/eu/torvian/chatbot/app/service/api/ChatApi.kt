@@ -3,8 +3,10 @@ package eu.torvian.chatbot.app.service.api
 import arrow.core.Either
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.models.ChatMessage
+import eu.torvian.chatbot.common.models.ChatStreamEvent
 import eu.torvian.chatbot.common.models.ProcessNewMessageRequest
 import eu.torvian.chatbot.common.models.UpdateMessageRequest
+import kotlinx.coroutines.flow.Flow
 
 /**
  * Frontend API interface for interacting with Chat message-related endpoints.
@@ -18,9 +20,9 @@ interface ChatApi {
 
     /**
      * Sends a new user message to a specified session and processes the LLM response.
+     * This is for **non-streaming** responses.
      *
-     * Corresponds to `POST /api/v1/sessions/{sessionId}/messages`.
-     * (E1.S1, E1.S4, E1.S7)
+     * Corresponds to `POST /api/v1/sessions/{sessionId}/messages` with `stream=false`.
      *
      * @param sessionId The ID of the session to send the message to.
      * @param request The details of the new message, including content and optional parent ID.
@@ -28,6 +30,18 @@ interface ChatApi {
      *         or [Either.Left] containing an [ApiError] on failure.
      */
     suspend fun processNewMessage(sessionId: Long, request: ProcessNewMessageRequest): Either<ApiError, List<ChatMessage>>
+
+    /**
+     * Sends a new user message to a specified session and streams the LLM response back.
+     *
+     * Corresponds to `POST /api/v1/sessions/{sessionId}/messages` with `stream=true`.
+     *
+     * @param sessionId The ID of the session to send the message to.
+     * @param request The details of the new message.
+     * @return A [Flow] of [Either<ApiError, ChatStreamEvent>] representing the stream of updates.
+     *         The flow will emit various [ChatStreamEvent] types until [ChatStreamEvent.StreamCompleted] or an error.
+     */
+    fun processNewMessageStreaming(sessionId: Long, request: ProcessNewMessageRequest): Flow<Either<ApiError, ChatStreamEvent>>
 
     /**
      * Updates the content of an existing message.
