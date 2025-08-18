@@ -8,6 +8,7 @@ import eu.torvian.chatbot.server.service.llm.strategy.OpenAIChatStrategy
 import eu.torvian.chatbot.server.service.llm.strategy.OllamaChatStrategy
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
@@ -40,6 +41,7 @@ fun mainModule(application: Application) = module {
             install(ContentNegotiation) {
                 json(get<Json>())
             }
+            install(HttpTimeout)
         }
     }
 
