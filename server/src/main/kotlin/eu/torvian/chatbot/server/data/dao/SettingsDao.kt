@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.data.dao
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.ModelSettings
 import eu.torvian.chatbot.server.data.dao.error.SettingsError
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Data Access Object for ModelSettings entities.
@@ -43,7 +44,7 @@ interface SettingsDao {
      * @param systemMessage Optional system message/prompt to include in the conversation context
      * @param temperature Optional sampling temperature for text generation
      * @param maxTokens Optional maximum number of tokens to generate in the response
-     * @param customParamsJson Optional model-specific parameters stored as a JSON string
+     * @param customParams Optional model-specific parameters stored as a [JsonObject]
      * @return [Either] a [SettingsError.ModelNotFound] if the associated model doesn't exist, or the newly created [ModelSettings]
      */
     suspend fun insertSettings(
@@ -52,7 +53,7 @@ interface SettingsDao {
         systemMessage: String?,
         temperature: Float?,
         maxTokens: Int?,
-        customParamsJson: String?
+        customParams: JsonObject?
     ): Either<SettingsError.ModelNotFound, ModelSettings>
 
     /**

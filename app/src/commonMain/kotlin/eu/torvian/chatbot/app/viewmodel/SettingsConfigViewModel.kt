@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Manages the UI state and logic for configuring LLM Model Settings Profiles (E4.S5, E4.S6).
@@ -249,12 +251,21 @@ class SettingsConfigViewModel(
         }
 
         viewModelScope.launch(uiDispatcher) {
+            val customParams = form.customParamsJson.trim().takeIf { it.isNotBlank() }?.let { jsonString ->
+                try {
+                    Json.decodeFromString<JsonObject>(jsonString)
+                } catch (_: Exception) {
+                    _newSettingsForm.update { s -> s.copy(errorMessage = "Invalid JSON format in custom parameters.") }
+                    return@launch
+                }
+            }
+
             val request = AddModelSettingsRequest(
                 name = form.name.trim(),
                 systemMessage = form.systemMessage.trim().takeIf { it.isNotBlank() },
                 temperature = temperatureFloat,
                 maxTokens = maxTokensInt,
-                customParamsJson = form.customParamsJson.trim().takeIf { it.isNotBlank() }
+                customParams = customParams
             )
             val currentSettings = _settingsState.value.dataOrNull
 
@@ -290,7 +301,7 @@ class SettingsConfigViewModel(
             systemMessage = settings.systemMessage ?: "",
             temperature = settings.temperature?.toString() ?: "",
             maxTokens = settings.maxTokens?.toString() ?: "",
-            customParamsJson = settings.customParamsJson ?: ""
+            customParamsJson = settings.customParams?.let { Json.encodeToString(JsonObject.serializer(), it) } ?: ""
         )
     }
 
@@ -350,12 +361,21 @@ class SettingsConfigViewModel(
         }
 
         viewModelScope.launch(uiDispatcher) {
+            val customParams = form.customParamsJson.trim().takeIf { it.isNotBlank() }?.let { jsonString ->
+                try {
+                    Json.decodeFromString<JsonObject>(jsonString)
+                } catch (_: Exception) {
+                    _editingSettingsForm.update { s -> s.copy(errorMessage = "Invalid JSON format in custom parameters.") }
+                    return@launch
+                }
+            }
+
             val updatedSettings = originalSettings.copy(
                 name = form.name.trim(),
                 systemMessage = form.systemMessage.trim().takeIf { it.isNotBlank() },
                 temperature = temperatureFloat,
                 maxTokens = maxTokensInt,
-                customParamsJson = form.customParamsJson.trim().takeIf { it.isNotBlank() }
+                customParams = customParams
             )
             val currentSettings = _settingsState.value.dataOrNull
 

@@ -68,19 +68,7 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
 
 
         // 3. Map ModelSettings to OpenAI API request parameters
-        val customParams: JsonObject? = settings.customParamsJson?.let { customJson ->
-            val element = try {
-                json.parseToJsonElement(customJson)
-            } catch (e: Exception) {
-                throw IllegalStateException("Failed to parse customParamsJson for OpenAI request", e)
-            }
-
-            // Ensure the parsed element is a JsonObject
-            if (element !is JsonObject) {
-                throw IllegalStateException("customParamsJson for OpenAI request is not a JSON object")
-            }
-            element
-        }
+        val customParams: JsonObject? = settings.customParams
 
         // Safely extract parameters using JsonObject accessors.
         // These accessors handle cases where keys are missing or values have wrong types by returning null.

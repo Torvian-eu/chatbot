@@ -60,19 +60,7 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
         }
 
         // 3. Map ModelSettings to Ollama API request parameters
-        val customParams: JsonObject? = settings.customParamsJson?.let { customJson ->
-            val element = try {
-                json.parseToJsonElement(customJson)
-            } catch (e: SerializationException) {
-                throw IllegalStateException("Failed to parse customParamsJson for Ollama request", e)
-            }
-
-            // Ensure the parsed element is a JsonObject
-            if (element !is JsonObject) {
-                throw IllegalStateException("customParamsJson for Ollama request is not a JSON object")
-            }
-            element
-        }
+        val customParams: JsonObject? = settings.customParams
 
         // Safely extract parameters using JsonObject accessors
         val topP = customParams?.get("top_p")?.jsonPrimitive?.floatOrNull

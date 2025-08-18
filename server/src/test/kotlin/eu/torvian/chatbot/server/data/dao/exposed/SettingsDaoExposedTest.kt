@@ -11,6 +11,7 @@ import eu.torvian.chatbot.server.testutils.data.TestDataSet
 import eu.torvian.chatbot.server.testutils.data.TestDefaults
 import eu.torvian.chatbot.server.testutils.koin.defaultTestContainer
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -86,7 +87,7 @@ class SettingsDaoExposedTest {
         assertEquals(testSettings1.systemMessage, settings.systemMessage, "Expected matching systemMessage")
         assertEquals(testSettings1.temperature, settings.temperature, "Expected matching temperature")
         assertEquals(testSettings1.maxTokens, settings.maxTokens, "Expected matching maxTokens")
-        assertEquals(testSettings1.customParamsJson, settings.customParamsJson, "Expected matching customParamsJson")
+        assertEquals(testSettings1.customParams, settings.customParams, "Expected matching customParams")
     }
 
     @Test
@@ -138,7 +139,7 @@ class SettingsDaoExposedTest {
         assertEquals(testSettings1.systemMessage, settings1.systemMessage)
         assertEquals(testSettings1.temperature, settings1.temperature)
         assertEquals(testSettings1.maxTokens, settings1.maxTokens)
-        assertEquals(testSettings1.customParamsJson, settings1.customParamsJson)
+        assertEquals(testSettings1.customParams, settings1.customParams)
     }
 
     @Test
@@ -201,7 +202,7 @@ class SettingsDaoExposedTest {
             systemMessage = "Test system message",
             temperature = 0.5f,
             maxTokens = 500,
-            customParamsJson = """{"test": "value"}"""
+            customParams = Json.decodeFromString("""{"test": "value"}""")
         )
 
         // Verify
@@ -213,7 +214,7 @@ class SettingsDaoExposedTest {
         assertEquals("Test system message", settings.systemMessage)
         assertEquals(0.5f, settings.temperature)
         assertEquals(500, settings.maxTokens)
-        assertEquals("""{"test": "value"}""", settings.customParamsJson)
+        assertEquals(Json.decodeFromString("""{"test": "value"}"""), settings.customParams)
 
         // Verify settings were actually inserted in the database
         val retrievedResult = settingsDao.getSettingsById(settings.id)
@@ -230,7 +231,7 @@ class SettingsDaoExposedTest {
             systemMessage = "Test system message",
             temperature = 0.5f,
             maxTokens = 500,
-            customParamsJson = """{"test": "value"}"""
+            customParams = Json.decodeFromString("""{"test": "value"}""")
         )
 
         // Verify
@@ -258,7 +259,7 @@ class SettingsDaoExposedTest {
             systemMessage = "Updated system message",
             temperature = 0.9f,
             maxTokens = 1500,
-            customParamsJson = """{"updated": "value"}"""
+            customParams = Json.decodeFromString("""{"updated": "value"}""")
         )
 
         val result = settingsDao.updateSettings(updatedSettings)
@@ -276,9 +277,9 @@ class SettingsDaoExposedTest {
         assertEquals(updatedSettings.temperature, retrievedSettings.temperature, "Expected updated temperature")
         assertEquals(updatedSettings.maxTokens, retrievedSettings.maxTokens, "Expected updated maxTokens")
         assertEquals(
-            updatedSettings.customParamsJson,
-            retrievedSettings.customParamsJson,
-            "Expected updated customParamsJson"
+            updatedSettings.customParams,
+            retrievedSettings.customParams,
+            "Expected updated customParams"
         )
     }
 
@@ -300,7 +301,7 @@ class SettingsDaoExposedTest {
             systemMessage = "Test system message",
             temperature = 0.5f,
             maxTokens = 500,
-            customParamsJson = null
+            customParams = null
         )
 
         val result = settingsDao.updateSettings(nonExistentSettings)

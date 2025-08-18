@@ -13,7 +13,7 @@ import org.jetbrains.exposed.sql.ReferenceOption
  * @property systemMessage The system message to use with this settings profile
  * @property temperature The temperature parameter for controlling randomness in generation
  * @property maxTokens The maximum number of tokens to generate
- * @property customParamsJson Arbitrary JSON for extra model-specific parameters
+ * @property customParams Arbitrary JSON for extra model-specific parameters stored as text
  */
 object ModelSettingsTable : LongIdTable("model_settings") {
     val modelId = reference("model_id", LLMModelTable, onDelete = ReferenceOption.CASCADE)
@@ -21,7 +21,7 @@ object ModelSettingsTable : LongIdTable("model_settings") {
     val systemMessage = text("system_message").nullable()
     val temperature = float("temperature").nullable()
     val maxTokens = integer("max_tokens").nullable()
-    val customParamsJson = text("custom_params_json").nullable()
+    val customParams = text("custom_params_json").nullable()
 
     // Add index for modelId to speed up settings lookup by model (E4.S5)
     init {

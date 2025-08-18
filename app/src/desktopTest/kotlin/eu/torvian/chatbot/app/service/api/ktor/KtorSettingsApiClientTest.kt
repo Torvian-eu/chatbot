@@ -13,6 +13,7 @@ import io.ktor.client.engine.mock.*
 import io.ktor.http.*
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -36,8 +37,8 @@ class KtorSettingsApiClientTest {
         systemMessage: String? = null,
         temperature: Float? = null,
         maxTokens: Int? = null,
-        customParamsJson: String? = null
-    ) = ModelSettings(id, modelId, name, systemMessage, temperature, maxTokens, customParamsJson)
+        customParams: JsonObject? = null
+    ) = ModelSettings(id, modelId, name, systemMessage, temperature, maxTokens, customParams)
 
     // --- Tests for getSettingsByModelId ---
     @Test

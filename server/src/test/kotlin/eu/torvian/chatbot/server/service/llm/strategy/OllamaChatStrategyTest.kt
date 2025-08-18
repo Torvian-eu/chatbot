@@ -44,7 +44,7 @@ class OllamaChatStrategyTest {
         systemMessage = "You are a helpful assistant.",
         temperature = 0.7f,
         maxTokens = 1000,
-        customParamsJson = null
+        customParams = null
     )
 
     private val testMessages = listOf(

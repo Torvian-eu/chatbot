@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.common.models
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Represents a specific settings profile for an LLM model.
@@ -13,7 +14,8 @@ import kotlinx.serialization.Serializable
  * @property systemMessage The system message/prompt to include in the conversation context.
  * @property temperature Sampling temperature for text generation.
  * @property maxTokens Maximum number of tokens to generate in the response.
- * @property customParamsJson Arbitrary model-specific parameters stored as a JSON string.
+ * @property customParams Arbitrary model-specific parameters stored as a [JsonObject].
+ *                         Keys are parameter names and values can be primitives, objects, or arrays.
  */
 @Serializable
 data class ModelSettings(
@@ -23,5 +25,5 @@ data class ModelSettings(
     val systemMessage: String? = null,
     val temperature: Float? = null,
     val maxTokens: Int? = null,
-    val customParamsJson: String? = null
+    val customParams: JsonObject? = null
 )

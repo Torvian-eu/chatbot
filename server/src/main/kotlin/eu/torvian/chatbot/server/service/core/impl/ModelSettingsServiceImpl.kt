@@ -9,6 +9,7 @@ import eu.torvian.chatbot.server.data.dao.error.SettingsError
 import eu.torvian.chatbot.server.service.core.ModelSettingsService
 import eu.torvian.chatbot.server.service.core.error.settings.*
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Implementation of the [ModelSettingsService] interface.
@@ -43,7 +44,7 @@ class ModelSettingsServiceImpl(
 
     override suspend fun addSettings(
         name: String, modelId: Long, systemMessage: String?,
-        temperature: Float?, maxTokens: Int?, customParamsJson: String?
+        temperature: Float?, maxTokens: Int?, customParams: JsonObject?
     ): Either<AddSettingsError, ModelSettings> =
         transactionScope.transaction {
             either {
@@ -60,7 +61,7 @@ class ModelSettingsServiceImpl(
                 withError({ daoError: SettingsError.ModelNotFound ->
                     AddSettingsError.ModelNotFound(daoError.modelId)
                 }) {
-                    settingsDao.insertSettings(name, modelId, systemMessage, temperature, maxTokens, customParamsJson).bind()
+                    settingsDao.insertSettings(name, modelId, systemMessage, temperature, maxTokens, customParams).bind()
                 }
             }
         }

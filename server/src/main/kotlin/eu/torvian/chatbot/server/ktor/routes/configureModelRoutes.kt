@@ -137,7 +137,7 @@ fun Route.configureModelRoutes(llmModelService: LLMModelService, modelSettingsSe
                 request.systemMessage,
                 request.temperature,
                 request.maxTokens,
-                request.customParamsJson
+                request.customParams
             ), HttpStatusCode.Created
         ) { error ->
             when (error) {

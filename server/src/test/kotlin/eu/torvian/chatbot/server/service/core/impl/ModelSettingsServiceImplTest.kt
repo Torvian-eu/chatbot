@@ -9,6 +9,8 @@ import eu.torvian.chatbot.server.service.core.error.settings.*
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
 import io.mockk.*
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -38,7 +40,7 @@ class ModelSettingsServiceImplTest {
         systemMessage = "You are a helpful assistant.",
         temperature = 0.7f,
         maxTokens = 1000,
-        customParamsJson = null
+        customParams = null
     )
 
     private val testSettings2 = ModelSettings(
@@ -48,7 +50,7 @@ class ModelSettingsServiceImplTest {
         systemMessage = "You are a creative writing assistant.",
         temperature = 1.2f,
         maxTokens = 2000,
-        customParamsJson = """{"top_p": 0.9}"""
+        customParams = Json.decodeFromString("""{"top_p": 0.9}""")
     )
 
     @BeforeEach
@@ -185,18 +187,18 @@ class ModelSettingsServiceImplTest {
         val systemMessage = "You are a helpful assistant."
         val temperature = 0.7f
         val maxTokens = 1000
-        val customParamsJson: String? = null
-        
-        coEvery { settingsDao.insertSettings(name, modelId, systemMessage, temperature, maxTokens, customParamsJson) } returns testSettings1.right()
+        val customParams: JsonObject? = null
+
+        coEvery { settingsDao.insertSettings(name, modelId, systemMessage, temperature, maxTokens, customParams) } returns testSettings1.right()
 
         // Act
-        val result = modelSettingsService.addSettings(name, modelId, systemMessage, temperature, maxTokens, customParamsJson)
+        val result = modelSettingsService.addSettings(name, modelId, systemMessage, temperature, maxTokens, customParams)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful creation")
         assertEquals(testSettings1, result.getOrNull(), "Should return the created settings")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { settingsDao.insertSettings(name, modelId, systemMessage, temperature, maxTokens, customParamsJson) }
+        coVerify(exactly = 1) { settingsDao.insertSettings(name, modelId, systemMessage, temperature, maxTokens, customParams) }
     }
 
     @Test

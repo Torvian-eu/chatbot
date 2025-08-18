@@ -57,7 +57,7 @@ class OpenAIChatStrategyTest {
             systemMessage = "You are a helpful assistant.", // Add system message
             temperature = 0.9f,
             maxTokens = 500,
-            customParamsJson = """{"top_p": 0.8, "frequency_penalty": 0.2, "stop": ["\nUser:", "<|end_of_text|>"]}"""
+            customParams = Json.decodeFromString("""{"top_p": 0.8, "frequency_penalty": 0.2, "stop": ["\nUser:", "<|end_of_text|>"]}""")
         )
         val apiKey = "sk-test-api-key"
 

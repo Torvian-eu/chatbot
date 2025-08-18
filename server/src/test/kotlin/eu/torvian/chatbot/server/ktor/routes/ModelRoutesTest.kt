@@ -18,6 +18,7 @@ import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.http.*
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -545,7 +546,7 @@ class ModelRoutesTest {
             systemMessage = newSystemMessage,
             temperature = newTemperature,
             maxTokens = newMaxTokens,
-            customParamsJson = newCustomParams
+            customParams = Json.decodeFromString(newCustomParams)
         )
 
         // Act
@@ -562,7 +563,7 @@ class ModelRoutesTest {
         assertEquals(newSystemMessage, createdSettings.systemMessage)
         assertEquals(newTemperature, createdSettings.temperature)
         assertEquals(newMaxTokens, createdSettings.maxTokens)
-        assertEquals(newCustomParams, createdSettings.customParamsJson)
+        assertEquals(Json.decodeFromString(newCustomParams), createdSettings.customParams)
 
         // Verify the settings were actually created in the database
         val retrievedSettings = testDataManager.getModelSettings(createdSettings.id)
@@ -585,7 +586,7 @@ class ModelRoutesTest {
             systemMessage = "sys",
             temperature = 0.5f,
             maxTokens = 100,
-            customParamsJson = null
+            customParams = null
         )
 
         // Act
@@ -613,7 +614,7 @@ class ModelRoutesTest {
             systemMessage = "sys",
             temperature = 0.5f,
             maxTokens = 100,
-            customParamsJson = null
+            customParams = null
         )
 
         // Act

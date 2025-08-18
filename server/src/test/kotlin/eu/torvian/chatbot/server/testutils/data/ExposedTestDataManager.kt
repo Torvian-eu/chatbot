@@ -335,7 +335,9 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
                 it[systemMessage] = modelSettings.systemMessage
                 it[temperature] = modelSettings.temperature
                 it[maxTokens] = modelSettings.maxTokens
-                it[customParamsJson] = modelSettings.customParamsJson
+                it[customParams] = modelSettings.customParams?.let { params ->
+                    Json.encodeToString(params)
+                }
             }
             return@transaction
         }

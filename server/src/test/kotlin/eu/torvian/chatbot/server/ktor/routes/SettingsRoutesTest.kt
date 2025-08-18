@@ -18,6 +18,7 @@ import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.http.*
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -46,7 +47,7 @@ class SettingsRoutesTest {
         systemMessage = "Test system message",
         temperature = 0.7f,
         maxTokens = 1000,
-        customParamsJson = """{"key": "value"}"""
+        customParams = Json.decodeFromString("""{"key": "value"}""")
     )
 
     @BeforeEach

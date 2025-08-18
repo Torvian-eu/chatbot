@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.service.core
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.ModelSettings
 import eu.torvian.chatbot.server.service.core.error.settings.*
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Service interface for managing Model Settings.
@@ -36,7 +37,7 @@ interface ModelSettingsService {
      * @param systemMessage Optional system message/prompt to include in the conversation context
      * @param temperature Optional sampling temperature for text generation
      * @param maxTokens Optional maximum number of tokens to generate in the response
-     * @param customParamsJson Optional model-specific parameters stored as a JSON string
+     * @param customParams Optional model-specific parameters stored as a [JsonObject]
      * @return [Either] an [AddSettingsError] if the associated model doesn't exist or insertion fails, or the newly created [ModelSettings]
      */
     suspend fun addSettings(
@@ -45,7 +46,7 @@ interface ModelSettingsService {
         systemMessage: String?,
         temperature: Float?,
         maxTokens: Int?,
-        customParamsJson: String?
+        customParams: JsonObject?
     ): Either<AddSettingsError, ModelSettings>
 
     /**

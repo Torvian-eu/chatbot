@@ -7,6 +7,8 @@ import eu.torvian.chatbot.server.data.dao.SettingsDao
 import eu.torvian.chatbot.server.data.dao.error.SettingsError
 import eu.torvian.chatbot.server.data.tables.mappers.toModelSettings
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.exceptions.ExposedSQLException
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -48,7 +50,7 @@ class SettingsDaoExposed(
         systemMessage: String?,
         temperature: Float?,
         maxTokens: Int?,
-        customParamsJson: String?
+        customParams: JsonObject?
     ): Either<SettingsError.ModelNotFound, ModelSettings> =
         transactionScope.transaction {
             either {
@@ -59,7 +61,9 @@ class SettingsDaoExposed(
                         it[ModelSettingsTable.systemMessage] = systemMessage
                         it[ModelSettingsTable.temperature] = temperature
                         it[ModelSettingsTable.maxTokens] = maxTokens
-                        it[ModelSettingsTable.customParamsJson] = customParamsJson
+                        it[ModelSettingsTable.customParams] = customParams?.let { params ->
+                            Json.encodeToString(params)
+                        }
                     }
                     insertStatement.resultedValues?.first()?.toModelSettings()
                         ?: throw IllegalStateException("Failed to retrieve newly inserted settings")
@@ -80,7 +84,9 @@ class SettingsDaoExposed(
                         it[systemMessage] = settings.systemMessage
                         it[temperature] = settings.temperature
                         it[maxTokens] = settings.maxTokens
-                        it[customParamsJson] = settings.customParamsJson
+                        it[customParams] = settings.customParams?.let { params ->
+                            Json.encodeToString(JsonObject.serializer(), params)
+                        }
                     }
                     ensure(updatedRowCount != 0) { SettingsError.SettingsNotFound(settings.id) }
                 }) { e: ExposedSQLException ->

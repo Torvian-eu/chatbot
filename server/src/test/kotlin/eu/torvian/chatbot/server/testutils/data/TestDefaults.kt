@@ -14,6 +14,7 @@ import eu.torvian.chatbot.server.domain.config.DatabaseConfig
 import eu.torvian.chatbot.server.domain.security.EncryptedSecret
 import eu.torvian.chatbot.server.domain.security.EncryptionConfig
 import kotlinx.datetime.Instant
+import kotlinx.serialization.json.Json
 
 /**
  * Predefined domain objects and test data entries for use in tests.
@@ -119,7 +120,7 @@ object TestDefaults {
         systemMessage = "You are a helpful assistant.",
         temperature = 0.7f,
         maxTokens = 1000,
-        customParamsJson = """{"top_p": 0.9, "frequency_penalty": 0.1}"""
+        customParams = Json.decodeFromString("""{"top_p": 0.9, "frequency_penalty": 0.1}""")
     )
 
     val modelSettings2 = ModelSettings(
@@ -129,7 +130,7 @@ object TestDefaults {
         systemMessage = "You are Claude, a helpful AI assistant.",
         temperature = 0.8f,
         maxTokens = 2000,
-        customParamsJson = null
+        customParams = null
     )
 
     val chatSession1 = ChatSessionEntity(
