@@ -9,6 +9,7 @@ import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logger
 import io.ktor.client.plugins.logging.Logging
 import io.ktor.client.plugins.resources.*
+import io.ktor.client.plugins.sse.SSE
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
@@ -128,4 +129,12 @@ fun <T : HttpClientEngineConfig> HttpClientConfig<T>.configureClient(
         logger = Logger.DEFAULT
         level = logLevel
     }
+
+    install(HttpTimeout) {
+        requestTimeoutMillis = 30_000
+        connectTimeoutMillis = 15_000
+        socketTimeoutMillis = 15_000
+    }
+
+    install(SSE)
 }
