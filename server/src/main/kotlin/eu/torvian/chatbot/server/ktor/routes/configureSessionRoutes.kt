@@ -205,7 +205,7 @@ fun Route.configureSessionRoutes(
             return@post call.respond(HttpStatusCode.fromValue(apiError.statusCode), apiError)
         }
 
-        if (true) { // TODO: Check if streaming is enabled in model settings
+        if ((llmConfig.settings as ChatModelSettings).stream) {
             // Handle Streaming Request using SSE
             call.respond(SSEServerContent(call, handle = {
                 try {

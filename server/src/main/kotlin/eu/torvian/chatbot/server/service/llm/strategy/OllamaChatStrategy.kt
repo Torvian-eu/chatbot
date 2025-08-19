@@ -82,7 +82,7 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
         val requestBodyDto = OllamaApiModels.ChatCompletionRequest(
             model = modelConfig.name,
             messages = apiMessages,
-            stream = true, // TODO: Make this configurable
+            stream = settings.stream,
             options = options
         )
 
