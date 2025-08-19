@@ -41,7 +41,7 @@ class LLMApiClientKtor(
         messages: List<ChatMessage>,
         modelConfig: LLMModel,
         provider: LLMProvider,
-        settings: ModelSettings,
+        settings: ChatModelSettings,
         apiKey: String?
     ): Either<LLMCompletionError, LLMCompletionResult> {
 
@@ -145,7 +145,7 @@ class LLMApiClientKtor(
         messages: List<ChatMessage>,
         modelConfig: LLMModel,
         provider: LLMProvider,
-        settings: ModelSettings,
+        settings: ChatModelSettings,
         apiKey: String?
     ): Flow<Either<LLMCompletionError, LLMStreamChunk>> = channelFlow {
         logger.info("LLMApiClientKtor: Received streaming request for model ${modelConfig.name} (Provider: ${provider.name}, Type: ${provider.type})")

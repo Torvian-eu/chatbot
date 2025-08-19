@@ -4,7 +4,7 @@ import arrow.core.Either
 import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.common.models.LLMModel
 import eu.torvian.chatbot.common.models.LLMProvider
-import eu.torvian.chatbot.common.models.ModelSettings
+import eu.torvian.chatbot.common.models.ChatModelSettings
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -29,7 +29,7 @@ interface LLMApiClient {
         messages: List<ChatMessage>,
         modelConfig: LLMModel,
         provider: LLMProvider,
-        settings: ModelSettings,
+        settings: ChatModelSettings,
         apiKey: String?
     ): Either<LLMCompletionError, LLMCompletionResult>
 
@@ -45,7 +45,7 @@ interface LLMApiClient {
         messages: List<ChatMessage>,
         modelConfig: LLMModel,
         provider: LLMProvider,
-        settings: ModelSettings,
+        settings: ChatModelSettings,
         apiKey: String?
     ): Flow<Either<LLMCompletionError, LLMStreamChunk>>
 }

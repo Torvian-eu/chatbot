@@ -29,7 +29,7 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
         messages: List<ChatMessage>,
         modelConfig: LLMModel,
         provider: LLMProvider,
-        settings: ModelSettings,
+        settings: ChatModelSettings,
         apiKey: String?
     ): Either<LLMCompletionError.ConfigurationError, ApiRequestConfig> {
         logger.debug("OllamaChatStrategy: Preparing request for model ${modelConfig.name}")

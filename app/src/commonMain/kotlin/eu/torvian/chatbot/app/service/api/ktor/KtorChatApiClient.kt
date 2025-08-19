@@ -95,6 +95,7 @@ class KtorChatApiClient(client: HttpClient) : BaseApiClient(client), ChatApi {
                 }
             }
         } catch (e: Exception) {
+            // TODO: always seems to throw SSEClientException
             logger.error("Network or streaming error during processNewMessageStreaming for session $sessionId", e)
             // Map common Ktor exceptions to ApiError type
             val apiError = when (e) {

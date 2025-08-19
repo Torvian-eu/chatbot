@@ -108,7 +108,7 @@ class MessageServiceImplTest {
         type = LLMProviderType.OPENAI
     )
 
-    private val testSettings = ModelSettings(
+    private val testSettings = ChatModelSettings(
         id = 1L,
         name = "Default",
         modelId = 1L,

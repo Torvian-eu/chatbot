@@ -29,7 +29,7 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
         messages: List<ChatMessage>,
         modelConfig: LLMModel,
         provider: LLMProvider,
-        settings: ModelSettings,
+        settings: ChatModelSettings,
         apiKey: String?
     ): Either<LLMCompletionError.ConfigurationError, ApiRequestConfig> {
 

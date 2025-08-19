@@ -4,6 +4,7 @@ import arrow.core.Either
 import arrow.core.getOrElse
 import arrow.core.left
 import arrow.core.raise.either
+import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import arrow.core.right
 import eu.torvian.chatbot.common.models.*
@@ -97,14 +98,26 @@ class MessageServiceImpl(
                 modelSettingsService.getSettingsById(settingsId).bind()
             }
 
-            // 6. Get LLM provider
+            // 6. Validate model and settings compatibility
+            ensure(model.type == LLMModelType.CHAT) {
+                ValidateNewMessageError.ModelConfigurationError(
+                    "Model type ${model.type} is not supported for chat sessions"
+                )
+            }
+            ensure(settings is ChatModelSettings) {
+                ValidateNewMessageError.ModelConfigurationError(
+                    "Settings type ${settings::class.simpleName} is not compatible with model type ${model.type}"
+                )
+            }
+
+            // 7. Get LLM provider
             val provider = withError({ serviceError: GetProviderError ->
                 throw IllegalStateException("Provider not found for model ID $modelId (provider ID: ${model.providerId})")
             }) {
                 llmProviderService.getProviderById(model.providerId).bind()
             }
 
-            // 7. Get API Key (if required)
+            // 8. Get API Key (if required)
             val apiKey = provider.apiKeyId?.let { keyId ->
                 withError({ credError: CredentialError.CredentialNotFound ->
                     throw IllegalStateException("API key not found in secure storage for provider ID ${provider.id} (key alias: $keyId)")
@@ -113,7 +126,7 @@ class MessageServiceImpl(
                 }
             }
 
-            // 8. Return session and llmConfig
+            // 9. Return session and llmConfig
             session to LLMConfig(provider, model, settings, apiKey)
         }
     }
@@ -140,7 +153,7 @@ class MessageServiceImpl(
                     messages = context,
                     modelConfig = llmConfig.model,
                     provider = llmConfig.provider,
-                    settings = llmConfig.settings,
+                    settings = llmConfig.settings as ChatModelSettings,
                     apiKey = llmConfig.apiKey
                 ).bind()
             }
@@ -387,7 +400,7 @@ class MessageServiceImpl(
     ) {
         var accumulatedContent = ""
 
-        llmApiClient.completeChatStreaming(context, model, provider, settings, apiKey)
+        llmApiClient.completeChatStreaming(context, model, provider, settings as ChatModelSettings, apiKey)
             .collect { llmStreamChunkEither ->
                 llmStreamChunkEither.fold(
                     ifLeft = { llmError ->

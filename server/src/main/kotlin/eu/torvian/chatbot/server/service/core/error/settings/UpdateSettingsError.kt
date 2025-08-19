@@ -9,11 +9,13 @@ sealed interface UpdateSettingsError {
      * Maps from SettingsError.SettingsNotFound in the DAO layer.
      */
     data class SettingsNotFound(val id: Long) : UpdateSettingsError
+
     /**
      * Indicates that the associated model for the settings profile was not found.
      * Maps from SettingsError.ModelNotFound in the DAO layer.
      */
     data class ModelNotFound(val modelId: Long) : UpdateSettingsError
+
     /**
      * Indicates invalid input data for the update (e.g., name blank, temperature out of range).
      * This would typically be a business rule validation failure.

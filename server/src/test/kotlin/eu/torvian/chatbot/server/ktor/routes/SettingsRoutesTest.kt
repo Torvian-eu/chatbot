@@ -6,6 +6,7 @@ import eu.torvian.chatbot.common.api.resources.SettingsResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
+import eu.torvian.chatbot.common.models.ChatModelSettings
 import eu.torvian.chatbot.common.models.ModelSettings
 import eu.torvian.chatbot.server.testutils.data.Table
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
@@ -23,8 +24,8 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * Integration tests for Settings API routes.
@@ -40,7 +41,7 @@ class SettingsRoutesTest {
     private lateinit var testDataManager: TestDataManager
 
     // Test data
-    private val testSettings1 = ModelSettings(
+    private val testSettings1 = ChatModelSettings(
         id = 1L,
         modelId = 1L,
         name = "Test Settings 1",
@@ -112,6 +113,11 @@ class SettingsRoutesTest {
         assertEquals(nonExistentId.toString(), error.details?.get("settingsId"))
     }
 
+    // --- POST /api/v1/settings Tests ---
+
+    // TODO: Add tests for POST /api/v1/settings
+
+
     // --- PUT /api/v1/settings/{settingsId} Tests ---
 
     @Test
@@ -128,7 +134,7 @@ class SettingsRoutesTest {
         // Act
         val response = client.put(href(SettingsResource.ById(settingsId = testSettings1.id))) {
             contentType(ContentType.Application.Json)
-            setBody(updatedSettings)
+            setBody(updatedSettings as ModelSettings)
         }
 
         // Assert
@@ -136,7 +142,7 @@ class SettingsRoutesTest {
 
         // Verify the settings were actually updated in the database
         val retrievedSettings = testDataManager.getModelSettings(testSettings1.id)
-        assertNotNull(retrievedSettings)
+        assertTrue(retrievedSettings is ChatModelSettings, "Expected ChatModelSettings type")
         assertEquals(updatedSettings.name, retrievedSettings.name)
         assertEquals(updatedSettings.systemMessage, retrievedSettings.systemMessage)
         assertEquals(updatedSettings.temperature, retrievedSettings.temperature)
@@ -152,7 +158,7 @@ class SettingsRoutesTest {
         // Act
         val response = client.put(href(SettingsResource.ById(settingsId = nonExistentId))) {
             contentType(ContentType.Application.Json)
-            setBody(updatedSettings)
+            setBody(updatedSettings as ModelSettings)
         }
 
         // Assert
@@ -175,7 +181,7 @@ class SettingsRoutesTest {
         // Act
         val response = client.put(href(SettingsResource.ById(settingsId = testSettings1.id))) {
             contentType(ContentType.Application.Json)
-            setBody(updatedSettings)
+            setBody(updatedSettings as ModelSettings)
         }
 
         // Assert
@@ -200,7 +206,7 @@ class SettingsRoutesTest {
         // Act
         val response = client.put(href(SettingsResource.ById(settingsId = testSettings1.id))) {
             contentType(ContentType.Application.Json)
-            setBody(updatedSettings)
+            setBody(updatedSettings as ModelSettings)
         }
 
         // Assert

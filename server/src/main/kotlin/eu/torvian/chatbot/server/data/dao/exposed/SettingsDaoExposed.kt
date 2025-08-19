@@ -6,9 +6,8 @@ import eu.torvian.chatbot.common.models.ModelSettings
 import eu.torvian.chatbot.server.data.dao.SettingsDao
 import eu.torvian.chatbot.server.data.dao.error.SettingsError
 import eu.torvian.chatbot.server.data.tables.mappers.toModelSettings
+import eu.torvian.chatbot.server.data.toEntity
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.exceptions.ExposedSQLException
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -44,31 +43,22 @@ class SettingsDaoExposed(
                 .map { it.toModelSettings() }
         }
 
-    override suspend fun insertSettings(
-        name: String,
-        modelId: Long,
-        systemMessage: String?,
-        temperature: Float?,
-        maxTokens: Int?,
-        customParams: JsonObject?
-    ): Either<SettingsError.ModelNotFound, ModelSettings> =
+    override suspend fun insertSettings(settings: ModelSettings): Either<SettingsError.ModelNotFound, ModelSettings> =
         transactionScope.transaction {
             either {
                 catch({
+                    val entity = settings.toEntity()
                     val insertStatement = ModelSettingsTable.insert {
-                        it[ModelSettingsTable.name] = name
-                        it[ModelSettingsTable.modelId] = modelId
-                        it[ModelSettingsTable.systemMessage] = systemMessage
-                        it[ModelSettingsTable.temperature] = temperature
-                        it[ModelSettingsTable.maxTokens] = maxTokens
-                        it[ModelSettingsTable.customParams] = customParams?.let { params ->
-                            Json.encodeToString(params)
-                        }
+                        it[ModelSettingsTable.name] = entity.name
+                        it[ModelSettingsTable.modelId] = entity.modelId
+                        it[ModelSettingsTable.type] = entity.type
+                        it[ModelSettingsTable.variableParamsJson] = entity.variableParamsJson
+                        it[ModelSettingsTable.customParamsJson] = entity.customParamsJson
                     }
                     insertStatement.resultedValues?.first()?.toModelSettings()
                         ?: throw IllegalStateException("Failed to retrieve newly inserted settings")
                 }) { e: ExposedSQLException ->
-                    ensure(!e.isForeignKeyViolation()) { SettingsError.ModelNotFound(modelId) }
+                    ensure(!e.isForeignKeyViolation()) { SettingsError.ModelNotFound(settings.modelId) }
                     throw e
                 }
             }
@@ -78,15 +68,13 @@ class SettingsDaoExposed(
         transactionScope.transaction {
             either {
                 catch({
+                    val entity = settings.toEntity()
                     val updatedRowCount = ModelSettingsTable.update({ ModelSettingsTable.id eq settings.id }) {
-                        it[name] = settings.name
-                        it[modelId] = settings.modelId
-                        it[systemMessage] = settings.systemMessage
-                        it[temperature] = settings.temperature
-                        it[maxTokens] = settings.maxTokens
-                        it[customParams] = settings.customParams?.let { params ->
-                            Json.encodeToString(JsonObject.serializer(), params)
-                        }
+                        it[name] = entity.name
+                        it[modelId] = entity.modelId
+                        it[type] = entity.type
+                        it[variableParamsJson] = entity.variableParamsJson
+                        it[customParamsJson] = entity.customParamsJson
                     }
                     ensure(updatedRowCount != 0) { SettingsError.SettingsNotFound(settings.id) }
                 }) { e: ExposedSQLException ->

@@ -2,7 +2,7 @@ package eu.torvian.chatbot.server.data.dao.exposed
 
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
-import eu.torvian.chatbot.common.models.ModelSettings
+import eu.torvian.chatbot.common.models.ChatModelSettings
 import eu.torvian.chatbot.server.data.dao.SettingsDao
 import eu.torvian.chatbot.server.data.dao.error.SettingsError
 import eu.torvian.chatbot.server.testutils.data.Table
@@ -78,9 +78,8 @@ class SettingsDaoExposedTest {
         val result = settingsDao.getSettingsById(testSettings1.id)
 
         // Verify
-        assertTrue(result.isRight(), "Expected Right result for existing settings")
         val settings = result.getOrNull()
-        assertNotNull(settings, "Expected non-null settings")
+        assertTrue(settings is ChatModelSettings, "Expected ChatModelSettings type")
         assertEquals(testSettings1.id, settings.id, "Expected matching ID")
         assertEquals(testSettings1.modelId, settings.modelId, "Expected matching modelId")
         assertEquals(testSettings1.name, settings.name, "Expected matching name")
@@ -133,7 +132,7 @@ class SettingsDaoExposedTest {
 
         // Verify settings properties
         val settings1 = settings.find { it.id == testSettings1.id }
-        assertNotNull(settings1, "Expected to find settings1")
+        assertTrue(settings1 is ChatModelSettings, "Expected ChatModelSettings type")
         assertEquals(testSettings1.modelId, settings1.modelId)
         assertEquals(testSettings1.name, settings1.name)
         assertEquals(testSettings1.systemMessage, settings1.systemMessage)
@@ -196,19 +195,20 @@ class SettingsDaoExposedTest {
         )
 
         // Insert new settings
-        val result = settingsDao.insertSettings(
-            name = "Test Settings",
+        val newSettings = ChatModelSettings(
+            id = 0L, // Will be set by database
             modelId = testModel1.id,
+            name = "Test Settings",
             systemMessage = "Test system message",
             temperature = 0.5f,
             maxTokens = 500,
             customParams = Json.decodeFromString("""{"test": "value"}""")
         )
+        val result = settingsDao.insertSettings(newSettings)
 
         // Verify
-        assertTrue(result.isRight(), "Expected Right result for successful insertion")
         val settings = result.getOrNull()
-        assertNotNull(settings, "Expected non-null settings")
+        assertTrue(settings is ChatModelSettings, "Expected ChatModelSettings type")
         assertEquals("Test Settings", settings.name)
         assertEquals(testModel1.id, settings.modelId)
         assertEquals("Test system message", settings.systemMessage)
@@ -225,14 +225,16 @@ class SettingsDaoExposedTest {
     @Test
     fun `insertSettings should return ModelNotFound when model does not exist`() = runTest {
         // Try to insert settings for a non-existent model
-        val result = settingsDao.insertSettings(
-            name = "Test Settings",
+        val newSettings = ChatModelSettings(
+            id = 0L,
             modelId = 999L,
+            name = "Test Settings",
             systemMessage = "Test system message",
             temperature = 0.5f,
             maxTokens = 500,
             customParams = Json.decodeFromString("""{"test": "value"}""")
         )
+        val result = settingsDao.insertSettings(newSettings)
 
         // Verify
         assertTrue(result.isLeft(), "Expected Left result for non-existent model")
@@ -269,8 +271,8 @@ class SettingsDaoExposedTest {
 
         // Verify the settings were actually updated
         val retrievedResult = settingsDao.getSettingsById(testSettings1.id)
-        assertTrue(retrievedResult.isRight(), "Expected to find the updated settings")
         val retrievedSettings = retrievedResult.getOrNull()
+        assertTrue(retrievedSettings is ChatModelSettings, "Expected ChatModelSettings type")
         assertNotNull(retrievedSettings, "Expected non-null settings")
         assertEquals(updatedSettings.name, retrievedSettings.name, "Expected updated name")
         assertEquals(updatedSettings.systemMessage, retrievedSettings.systemMessage, "Expected updated systemMessage")
@@ -294,7 +296,7 @@ class SettingsDaoExposedTest {
         )
 
         // Try to update non-existent settings
-        val nonExistentSettings = ModelSettings(
+        val nonExistentSettings = ChatModelSettings(
             id = 999L,
             modelId = testModel1.id,
             name = "Non-existent Settings",

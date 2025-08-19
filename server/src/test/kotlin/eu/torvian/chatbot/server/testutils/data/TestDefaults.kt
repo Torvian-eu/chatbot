@@ -1,12 +1,6 @@
 package eu.torvian.chatbot.server.testutils.data
 
-import eu.torvian.chatbot.common.models.ChatGroup
-import eu.torvian.chatbot.common.models.ChatMessage
-import eu.torvian.chatbot.common.models.LLMModel
-import eu.torvian.chatbot.common.models.LLMModelType
-import eu.torvian.chatbot.common.models.LLMProvider
-import eu.torvian.chatbot.common.models.LLMProviderType
-import eu.torvian.chatbot.common.models.ModelSettings
+import eu.torvian.chatbot.common.models.*
 import eu.torvian.chatbot.server.data.entities.ApiSecretEntity
 import eu.torvian.chatbot.server.data.entities.ChatSessionEntity
 import eu.torvian.chatbot.server.data.entities.SessionCurrentLeafEntity
@@ -113,17 +107,17 @@ object TestDefaults {
         type = LLMModelType.CHAT
     )
 
-    val modelSettings1 = ModelSettings(
+    val modelSettings1 = ChatModelSettings(
         id = 1L,
         modelId = llmModel1.id,
         name = "Default GPT-4 Settings",
         systemMessage = "You are a helpful assistant.",
         temperature = 0.7f,
         maxTokens = 1000,
-        customParams = Json.decodeFromString("""{"top_p": 0.9, "frequency_penalty": 0.1}""")
+        customParams = Json.decodeFromString("""{"frequency_penalty": 0.1}""")
     )
 
-    val modelSettings2 = ModelSettings(
+    val modelSettings2 = ChatModelSettings(
         id = 2L,
         modelId = llmModel2.id,
         name = "Default Claude-3 Settings",

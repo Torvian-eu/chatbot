@@ -6,6 +6,7 @@ import eu.torvian.chatbot.server.data.entities.ChatSessionEntity
 import eu.torvian.chatbot.server.data.entities.SessionCurrentLeafEntity
 import eu.torvian.chatbot.server.data.tables.*
 import eu.torvian.chatbot.server.data.tables.mappers.*
+import eu.torvian.chatbot.server.data.toEntity
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.SchemaUtils
@@ -328,16 +329,14 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
     override suspend fun insertModelSettings(modelSettings: ModelSettings) =
         transactionScope.transaction {
             ensureTableCreated(Table.MODEL_SETTINGS)
+            val entity = modelSettings.toEntity()
             ModelSettingsTable.insert {
-                it[id] = modelSettings.id
-                it[modelId] = modelSettings.modelId
-                it[name] = modelSettings.name
-                it[systemMessage] = modelSettings.systemMessage
-                it[temperature] = modelSettings.temperature
-                it[maxTokens] = modelSettings.maxTokens
-                it[customParams] = modelSettings.customParams?.let { params ->
-                    Json.encodeToString(params)
-                }
+                it[id] = entity.id
+                it[modelId] = entity.modelId
+                it[name] = entity.name
+                it[type] = entity.type
+                it[variableParamsJson] = entity.variableParamsJson
+                it[customParamsJson] = entity.customParamsJson
             }
             return@transaction
         }

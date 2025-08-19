@@ -15,9 +15,17 @@ CREATE TABLE llm_models (
 );
 INSERT INTO llm_models VALUES(1,'qwen3:latest',1,1,'qwen3-8b','CHAT',NULL);
 INSERT INTO llm_models VALUES(2,'gemma3:latest',1,1,'gemma3-5b','CHAT',NULL);
-CREATE TABLE model_settings (id INTEGER PRIMARY KEY AUTOINCREMENT, model_id BIGINT NOT NULL, "name" VARCHAR(255) NOT NULL, system_message TEXT NULL, temperature SINGLE NULL, max_tokens INT NULL, custom_params_json TEXT NULL, CONSTRAINT fk_model_settings_model_id__id FOREIGN KEY (model_id) REFERENCES llm_models(id) ON DELETE CASCADE ON UPDATE RESTRICT, CONSTRAINT chk_model_settings_signed_integer_max_tokens CHECK (max_tokens BETWEEN -2147483648 AND 2147483647));
-INSERT INTO model_settings VALUES(1,1,'Default',NULL,NULL,NULL,NULL);
-INSERT INTO model_settings VALUES(2,2,'Default',NULL,NULL,NULL,NULL);
+CREATE TABLE model_settings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    model_id BIGINT NOT NULL,
+    "name" VARCHAR(255) NOT NULL,
+    type VARCHAR(50) NOT NULL,
+    variable_params_json TEXT NOT NULL,
+    custom_params_json TEXT NULL,
+    CONSTRAINT fk_model_settings_model_id__id FOREIGN KEY (model_id) REFERENCES llm_models(id) ON DELETE CASCADE ON UPDATE RESTRICT
+);
+INSERT INTO model_settings VALUES(1,1,'Default','CHAT','{}',NULL);
+INSERT INTO model_settings VALUES(2,2,'Default','CHAT','{}',NULL);
 CREATE TABLE chat_groups (id INTEGER PRIMARY KEY AUTOINCREMENT, "name" VARCHAR(255) NOT NULL, created_at BIGINT DEFAULT 1754505428820 NOT NULL);
 INSERT INTO chat_groups VALUES(22,'Work Discussions',1754248607000);
 INSERT INTO chat_groups VALUES(23,'Personal Chats',1754335007000);

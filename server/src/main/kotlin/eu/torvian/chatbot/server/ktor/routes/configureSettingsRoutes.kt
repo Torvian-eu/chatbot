@@ -5,6 +5,7 @@ import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.SettingsResource
 import eu.torvian.chatbot.common.models.ModelSettings
 import eu.torvian.chatbot.server.service.core.ModelSettingsService
+import eu.torvian.chatbot.server.service.core.error.settings.AddSettingsError
 import eu.torvian.chatbot.server.service.core.error.settings.DeleteSettingsError
 import eu.torvian.chatbot.server.service.core.error.settings.GetSettingsByIdError
 import eu.torvian.chatbot.server.service.core.error.settings.UpdateSettingsError
@@ -30,6 +31,26 @@ fun Route.configureSettingsRoutes(modelSettingsService: ModelSettingsService) {
         }
     }
 
+    // POST /api/v1/settings - Add new settings profile
+    post<SettingsResource> {
+        val settings = call.receive<ModelSettings>()
+        call.respondEither(
+            modelSettingsService.addSettings(settings), HttpStatusCode.Created
+        ) { error ->
+            when (error) {
+                is AddSettingsError.ModelNotFound ->
+                    apiError(
+                        CommonApiErrorCodes.INVALID_ARGUMENT,
+                        "Model not found for settings",
+                        "modelId" to error.modelId.toString()
+                    )
+
+                is AddSettingsError.InvalidInput ->
+                    apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid settings input", "reason" to error.reason)
+            }
+        }
+    }
+
     // PUT /api/v1/settings/{settingsId} - Update settings by ID
     put<SettingsResource.ById> { resource ->
         val settingsId = resource.settingsId
@@ -50,15 +71,15 @@ fun Route.configureSettingsRoutes(modelSettingsService: ModelSettingsService) {
                 is UpdateSettingsError.SettingsNotFound ->
                     apiError(CommonApiErrorCodes.NOT_FOUND, "Settings not found", "settingsId" to error.id.toString())
 
-                is UpdateSettingsError.InvalidInput ->
-                    apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid settings input", "reason" to error.reason)
-
                 is UpdateSettingsError.ModelNotFound ->
                     apiError(
                         CommonApiErrorCodes.INVALID_ARGUMENT,
                         "Model not found for settings",
                         "modelId" to error.modelId.toString()
                     )
+
+                is UpdateSettingsError.InvalidInput ->
+                    apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid settings input", "reason" to error.reason)
             }
         }
     }

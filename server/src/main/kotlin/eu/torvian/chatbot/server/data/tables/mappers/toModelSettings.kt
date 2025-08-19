@@ -1,22 +1,23 @@
 package eu.torvian.chatbot.server.data.tables.mappers
 
 import eu.torvian.chatbot.common.models.ModelSettings
+import eu.torvian.chatbot.server.data.ModelSettingsEntity
 import eu.torvian.chatbot.server.data.tables.ModelSettingsTable
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
+import eu.torvian.chatbot.server.data.toDomain
 import org.jetbrains.exposed.sql.ResultRow
 
 /**
  * Maps an Exposed ResultRow from ModelSettings table to a ModelSettings DTO.
+ * Uses the new flexible schema with type discriminator and JSON columns.
  */
-fun ResultRow.toModelSettings() = ModelSettings(
-    id = this[ModelSettingsTable.id].value,
-    modelId = this[ModelSettingsTable.modelId].value,
-    name = this[ModelSettingsTable.name],
-    systemMessage = this[ModelSettingsTable.systemMessage],
-    temperature = this[ModelSettingsTable.temperature],
-    maxTokens = this[ModelSettingsTable.maxTokens],
-    customParams = this[ModelSettingsTable.customParams]?.let { customParamsJson ->
-        Json.decodeFromString<JsonObject>(customParamsJson)
-    }
-)
+fun ResultRow.toModelSettings(): ModelSettings {
+    val entity = ModelSettingsEntity(
+        id = this[ModelSettingsTable.id].value,
+        modelId = this[ModelSettingsTable.modelId].value,
+        name = this[ModelSettingsTable.name],
+        type = this[ModelSettingsTable.type],
+        variableParamsJson = this[ModelSettingsTable.variableParamsJson],
+        customParamsJson = this[ModelSettingsTable.customParamsJson]
+    )
+    return entity.toDomain()
+}
