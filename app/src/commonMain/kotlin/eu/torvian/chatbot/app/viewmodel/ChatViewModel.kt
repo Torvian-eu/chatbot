@@ -94,27 +94,12 @@ class ChatViewModel(
      */
     val displayedMessages: StateFlow<List<ChatMessage>> = combine(
         _sessionState.filterIsInstance<UiState.Success<ChatSession>>()
-            .map { it.data.messages }, // Flow of just the message list when in Success state
-        _currentBranchLeafId, // Flow of the current leaf ID
-        _streamingAssistantMessage // Include the streaming message flow
-    ) { allPersistedMessages, leafId, streamingAssistantMessage ->
-        // This is where the UI state logic (E1.S5) happens:
-        // Prepare the list of messages for `buildThreadBranch`.
-        val messagesForBranching = if (streamingAssistantMessage != null) {
-            // If streaming, create a copy of the persisted messages
-            // and replace/add the streaming message for real-time display.
-            // This ensures `buildThreadBranch` always sees the latest state.
-            val updatedMessages = allPersistedMessages.toMutableList()
-            val existingIndex = updatedMessages.indexOfFirst { it.id == streamingAssistantMessage.id }
-            if (existingIndex != -1) {
-                updatedMessages[existingIndex] = streamingAssistantMessage
-            } else {
-                updatedMessages.add(streamingAssistantMessage)
-            }
-            updatedMessages.toList()
-        } else {
-            allPersistedMessages
-        }
+            .map { it.data.messages },
+        _currentBranchLeafId,
+        _streamingUserMessage,
+        _streamingAssistantMessage
+    ) { allPersistedMessages, leafId, streamingUserMessage, streamingAssistantMessage ->
+        val messagesForBranching = allPersistedMessages + listOfNotNull(streamingUserMessage, streamingAssistantMessage)
         buildThreadBranch(messagesForBranching, leafId)
     }
         .stateIn(
@@ -122,7 +107,6 @@ class ChatViewModel(
             started = SharingStarted.Eagerly,
             initialValue = emptyList()
         )
-
 
     private val _inputContent = MutableStateFlow("")
 
@@ -284,47 +268,9 @@ class ChatViewModel(
                 val isStreamingEnabled = true // TODO: Implement settings check
 
                 if (isStreamingEnabled) {
-                    // Handle streaming message
                     handleStreamingMessage(currentSession, content, parentId)
                 } else {
-                    // Handle non-streaming message (existing logic)
-                    chatApi.processNewMessage(
-                        sessionId = currentSession.id,
-                        request = ProcessNewMessageRequest(content = content, parentMessageId = parentId)
-                    )
-                        .fold(
-                            ifLeft = { error ->
-                                logger.error("Send message API error: ${error.code} - ${error.message}")
-                                // Emit to EventBus for Snackbar display (E1.S6)
-                                eventBus.emitEvent(
-                                    apiRequestError(
-                                        apiError = error,
-                                        shortMessage = getString(Res.string.error_sending_message_short),
-                                    )
-                                )
-                            },
-                            ifRight = { newMessages ->
-                                // Handle Success case (E1.S4)
-                                // We received the new user and assistant messages.
-                                // Add them to the messages list in the current session state Flow.
-                                val updatedMessages = currentSession.messages + newMessages
-                                val newLeafId = newMessages.lastOrNull()?.id // Assume assistant message is the new leaf
-
-                                // Update the session object inside the Success state with the new messages
-                                _sessionState.value = UiState.Success(
-                                    currentSession.copy(
-                                        messages = updatedMessages,
-                                        currentLeafMessageId = newLeafId,
-                                        updatedAt = clock.now()
-                                    )
-                                )
-                                _currentBranchLeafId.value = newLeafId // Update the separate leaf state Flow
-
-                                // Reset reply target (E1.S7)
-                                _replyTargetMessage.value = null
-                                _inputContent.value = "" // Clear input field
-                            }
-                        )
+                    handleNonStreamingMessage(currentSession, content, parentId)
                 }
             } finally {
                 _isSendingMessage.value = false // Always reset sending state
@@ -362,14 +308,6 @@ class ChatViewModel(
                         is ChatStreamEvent.UserMessageSaved -> {
                             // Store the user message in the temporary streaming state
                             _streamingUserMessage.value = chatUpdate.message
-                            // Add the user message to the session immediately
-                            val updatedMessages = currentSession.messages + chatUpdate.message
-                            _sessionState.value = UiState.Success(
-                                currentSession.copy(
-                                    messages = updatedMessages,
-                                    updatedAt = clock.now()
-                                )
-                            )
                             _currentBranchLeafId.value = chatUpdate.message.id
                             // Clear input and reply target after user message is confirmed
                             _inputContent.value = ""
@@ -390,16 +328,10 @@ class ChatViewModel(
                         }
 
                         is ChatStreamEvent.AssistantMessageEnd -> {
-                            // Replace the temporary streaming message with the final persisted messages
-                            val finalAssistantMessage = chatUpdate.finalAssistantMessage
-                            val finalUserMessage = chatUpdate.finalUserMessage
-
-                            // Update the session with both the updated user message and the final assistant message
-                            // Remove the old user message and add both updated messages
+                            // Update the session with the new messages
                             val updatedMessages =
-                                currentSession.messages.filterNot { it.id == _streamingUserMessage.value?.id } +
-                                        finalUserMessage + finalAssistantMessage
-                            val newLeafId = finalAssistantMessage.id
+                                currentSession.messages + chatUpdate.finalUserMessage + chatUpdate.finalAssistantMessage
+                            val newLeafId = chatUpdate.finalAssistantMessage.id
 
                             _sessionState.value = UiState.Success(
                                 currentSession.copy(
@@ -434,6 +366,43 @@ class ChatViewModel(
                 }
             )
         }
+    }
+
+    /**
+     * Handles non-streaming message processing.
+     */
+    private suspend fun handleNonStreamingMessage(currentSession: ChatSession, content: String, parentId: Long?) {
+        chatApi.processNewMessage(
+            sessionId = currentSession.id,
+            request = ProcessNewMessageRequest(content = content, parentMessageId = parentId)
+        ).fold(
+            ifLeft = { error ->
+                logger.error("Send message API error: ${error.code} - ${error.message}")
+                eventBus.emitEvent(
+                    apiRequestError(
+                        apiError = error,
+                        shortMessage = getString(Res.string.error_sending_message_short),
+                    )
+                )
+            },
+            ifRight = { newMessages ->
+                // Add the new messages to the current session's messages
+                val updatedMessages = currentSession.messages + newMessages
+                val newLeafId = newMessages.lastOrNull()?.id
+
+                // Update the session object inside the Success state with the new messages
+                _sessionState.value = UiState.Success(
+                    currentSession.copy(
+                        messages = updatedMessages,
+                        currentLeafMessageId = newLeafId,
+                        updatedAt = clock.now()
+                    )
+                )
+                _currentBranchLeafId.value = newLeafId
+                _replyTargetMessage.value = null
+                _inputContent.value = ""
+            }
+        )
     }
 
     /**
