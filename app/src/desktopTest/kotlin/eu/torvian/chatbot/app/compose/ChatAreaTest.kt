@@ -10,8 +10,11 @@ import eu.torvian.chatbot.app.testutils.data.chatSession
 import eu.torvian.chatbot.app.testutils.data.userMessage
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
+import io.mockk.clearMocks
 import io.mockk.mockk
 import io.mockk.verify
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
 /**
@@ -19,6 +22,19 @@ import org.junit.jupiter.api.Test
  */
 @OptIn(ExperimentalTestApi::class)
 class ChatAreaTest {
+
+    private lateinit var mockActions: ChatAreaActions
+
+    @BeforeEach
+    fun setUp() {
+        mockActions = mockk(relaxed = true)
+    }
+
+    @AfterEach
+    fun tearDown() {
+        // Clear only the specific mock used in these tests to avoid cross-test interference
+        clearMocks(mockActions)
+    }
 
     @Test
     fun errorState_showsRetryButton() {
@@ -33,9 +49,6 @@ class ChatAreaTest {
             editingMessage = null,
             editingContent = ""
         )
-
-        // Using mockk to create a mock for ChatAreaActions
-        val mockActions = mockk<ChatAreaActions>(relaxed = true) // relaxed = true allows un-stubbed calls to do nothing
 
         // Act & Assert - Using runComposeUiTest for Compose Multiplatform
         runComposeUiTest {
@@ -69,9 +82,6 @@ class ChatAreaTest {
         val loadingState = ChatAreaState(
             sessionUiState = UiState.Loading
         )
-
-        // Using mockk for ChatAreaActions
-        val mockActions = mockk<ChatAreaActions>(relaxed = true)
 
         // Act & Assert
         runComposeUiTest {
@@ -141,8 +151,6 @@ class ChatAreaTest {
             sessionUiState = UiState.Idle
         )
 
-        val mockActions = mockk<ChatAreaActions>(relaxed = true)
-
         // Act & Assert
         runComposeUiTest {
             setContent {
@@ -186,8 +194,6 @@ class ChatAreaTest {
             displayedMessages = testSession.messages
         )
 
-        val mockActions = mockk<ChatAreaActions>(relaxed = true)
-
         // Act & Assert
         runComposeUiTest {
             setContent {
@@ -220,8 +226,6 @@ class ChatAreaTest {
             currentBranchLeafId = null,
             displayedMessages = emptyList()
         )
-
-        val mockActions = mockk<ChatAreaActions>(relaxed = true)
 
         // Act & Assert
         runComposeUiTest {
@@ -277,8 +281,6 @@ class ChatAreaTest {
             displayedMessages = testMessages
         )
 
-        val mockActions = mockk<ChatAreaActions>(relaxed = true)
-
         // Act & Assert
         runComposeUiTest {
             setContent {
@@ -328,8 +330,6 @@ class ChatAreaTest {
             displayedMessages = testMessages
         )
 
-        val mockActions = mockk<ChatAreaActions>(relaxed = true)
-
         // Act & Assert
         runComposeUiTest {
             setContent {
@@ -378,8 +378,6 @@ class ChatAreaTest {
             currentBranchLeafId = 2L,
             displayedMessages = testMessages
         )
-
-        val mockActions = mockk<ChatAreaActions>(relaxed = true)
 
         // Act & Assert
         runComposeUiTest {
@@ -450,8 +448,6 @@ class ChatAreaTest {
             displayedMessages = listOf(m1, m2, m3) // Display first branch
         )
 
-        val mockActions = mockk<ChatAreaActions>(relaxed = true)
-
         // Act & Assert
         runComposeUiTest {
             setContent {
@@ -479,8 +475,6 @@ class ChatAreaTest {
         val errorState = ChatAreaState(
             sessionUiState = UiState.Error(notFoundError)
         )
-
-        val mockActions = mockk<ChatAreaActions>(relaxed = true)
 
         runComposeUiTest {
             setContent {
@@ -527,8 +521,6 @@ class ChatAreaTest {
             displayedMessages = testMessages
         )
 
-        val mockActions = mockk<ChatAreaActions>(relaxed = true)
-
         // Act & Assert
         runComposeUiTest {
             setContent {
@@ -568,8 +560,6 @@ class ChatAreaTest {
             displayedMessages = testMessages
         )
 
-        val mockActions = mockk<ChatAreaActions>(relaxed = true)
-
         // Act & Assert
         runComposeUiTest {
             setContent {
@@ -591,8 +581,6 @@ class ChatAreaTest {
         val errorState = ChatAreaState(
             sessionUiState = UiState.Error(testError)
         )
-
-        val mockActions = mockk<ChatAreaActions>(relaxed = true)
 
         // Act & Assert
         runComposeUiTest {
@@ -627,8 +615,6 @@ class ChatAreaTest {
             currentLeafMessageId = 1L,
             messages = testMessages
         )
-
-        val mockActions = mockk<ChatAreaActions>(relaxed = true)
 
         runComposeUiTest {
             // Start with loading state
