@@ -43,8 +43,14 @@ kotlin {
 
             // Enable parallel test execution (JVM system properties)
             systemProperty("junit.jupiter.execution.parallel.enabled", "true")
+            // Run tests in parallel within a class
             systemProperty("junit.jupiter.execution.parallel.mode.default", "concurrent")
-            systemProperty("junit.jupiter.execution.parallel.mode.classes.default", "concurrent")
+            // Run tests from the same class in the same thread to avoid concurrency issues
+            systemProperty("junit.jupiter.execution.parallel.mode.classes.default", "same_thread")
+            // Dynamic parallelism strategy
+            systemProperty("junit.jupiter.execution.parallel.config.strategy", "dynamic")
+            // Dynamic parallelism factor (50% of available processors)
+            systemProperty("junit.jupiter.execution.parallel.config.dynamic.factor", "0.5")
         }
     }
 
@@ -147,9 +153,9 @@ kotlin {
         desktopMain.dependencies {
             // implementation(project(":server"))
             // Compose for Desktop
-            implementation(compose.desktop.currentOs)
+            runtimeOnly(compose.desktop.currentOs)
             // KotlinX Coroutines Swing for JVM Main Dispatcher
-            implementation(libs.kotlinx.coroutines.swing)
+            runtimeOnly(libs.kotlinx.coroutines.swing)
             // Ktor Client Engine (JVM-specific)
             implementation(libs.ktor.client.cio)
             // Logging (JVM-specific)
