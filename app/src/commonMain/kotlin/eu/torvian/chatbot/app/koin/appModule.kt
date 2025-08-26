@@ -116,7 +116,7 @@ fun appModule(baseUri: String): Module = module {
     }
 
     factory<SwitchBranchUseCase> { (chatState: ChatState) ->
-        SwitchBranchUseCase(get(), get(), chatState)
+        SwitchBranchUseCase(get(), get(), chatState, get())
     }
 
     factory<StreamingCoordinator> { (chatState: ChatState) ->

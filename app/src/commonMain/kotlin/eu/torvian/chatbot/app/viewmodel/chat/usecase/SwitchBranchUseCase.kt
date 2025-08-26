@@ -1,9 +1,12 @@
 package eu.torvian.chatbot.app.viewmodel.chat.usecase
 
+import eu.torvian.chatbot.app.generated.resources.Res
+import eu.torvian.chatbot.app.generated.resources.error_switching_branch
 import eu.torvian.chatbot.app.service.api.SessionApi
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.SessionState
 import eu.torvian.chatbot.app.viewmodel.chat.util.ThreadBuilder
+import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
 import eu.torvian.chatbot.common.models.UpdateSessionLeafMessageRequest
 
 /**
@@ -13,7 +16,8 @@ import eu.torvian.chatbot.common.models.UpdateSessionLeafMessageRequest
 class SwitchBranchUseCase(
     private val sessionApi: SessionApi,
     private val threadBuilder: ThreadBuilder,
-    private val state: SessionState
+    private val state: SessionState,
+    private val errorNotifier: ErrorNotifier
 ) {
 
     private val logger = kmpLogger<SwitchBranchUseCase>()
@@ -51,7 +55,10 @@ class SwitchBranchUseCase(
         ).fold(
             ifLeft = { error ->
                 logger.error("Switch branch API error: ${error.code} - ${error.message}")
-                // TODO: Show error notification
+                errorNotifier.apiError(
+                    error = error,
+                    shortMessageRes = Res.string.error_switching_branch
+                )
             },
             ifRight = {
                 logger.info("Successfully switched branch to $finalLeafId")

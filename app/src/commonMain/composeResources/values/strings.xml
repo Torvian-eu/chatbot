@@ -21,6 +21,7 @@
     <string name="error_sending_message_short">Failed to send message</string>
     <string name="error_updating_session_model">Failed to update session model</string>
     <string name="error_updating_session_settings">Failed to update session settings</string>
+    <string name="error_switching_branch">Failed to switch conversation branch</string>
 
     <!-- Input Area -->
     <string name="replying_to_prefix">Replying to:</string>
