@@ -1,12 +1,20 @@
 package eu.torvian.chatbot.app.viewmodel.chat.usecase
 
+import arrow.core.raise.Raise
+import arrow.core.raise.either
+import arrow.core.raise.ensure
 import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.error_loading_session
 import eu.torvian.chatbot.app.service.api.SessionApi
-import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
+import eu.torvian.chatbot.app.service.api.SettingsApi
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
-import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatSessionData
+import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
+import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
+import eu.torvian.chatbot.common.api.ApiError
+import eu.torvian.chatbot.common.api.CommonApiErrorCodes
+import eu.torvian.chatbot.common.api.apiError
+import eu.torvian.chatbot.common.models.ChatModelSettings
 
 /**
  * Use case for loading chat sessions from the API.
@@ -14,6 +22,7 @@ import eu.torvian.chatbot.app.viewmodel.chat.state.ChatSessionData
  */
 class LoadSessionUseCase(
     private val sessionApi: SessionApi,
+    private val settingsApi: SettingsApi,
     private val state: ChatState,
     private val errorNotifier: ErrorNotifier
 ) {
@@ -31,7 +40,7 @@ class LoadSessionUseCase(
         val currentState = state.sessionDataState.value
         if (!forceReload && (currentState.isLoading || (currentState.dataOrNull?.session?.id == sessionId))) return
 
-        // Store the session ID for potential retry in SharedChatState
+        // Store the session ID for potential retry
         state.setRetryState(sessionId, null)
 
         state.setSessionDataLoading()
@@ -39,28 +48,53 @@ class LoadSessionUseCase(
         state.setEditingMessage(null)
         state.setCurrentLeafId(null)
 
-        sessionApi.getSessionDetails(sessionId)
-            .fold(
-                ifLeft = { error ->
-                    // Handle Error case
-                    state.setSessionDataError(error)
-                    // Emit to generic EventBus using the specific error type
-                    val eventId = errorNotifier.apiError(
-                        error = error,
-                        shortMessageRes = Res.string.error_loading_session,
-                        isRetryable = true
-                    )
-                    // Store event ID in SharedChatState for retry functionality
-                    state.setRetryState(sessionId, eventId)
-                },
-                ifRight = { session ->
-                    // Handle Success case
-                    logger.info("Successfully loaded session: ${session.id}")
-                    state.setSessionDataSuccess(ChatSessionData(session = session, modelSettings = null))
-                    state.setCurrentLeafId(session.currentLeafMessageId)
-                    state.clearRetryState()
+        // Load session and model settings
+        either {
+            val session = sessionApi.getSessionDetails(sessionId).bind()
+
+            val modelSettings = session.currentSettingsId
+                ?.let { settingsId -> loadModelSettings(settingsId) }
+
+            ChatSessionData(session = session, modelSettings = modelSettings)
+        }.fold(
+            ifLeft = { error ->
+                state.setSessionDataError(error)
+                val eventId = errorNotifier.apiError(
+                    error = error,
+                    shortMessageRes = Res.string.error_loading_session,
+                    isRetryable = true
+                )
+                state.setRetryState(sessionId, eventId)
+            },
+            ifRight = { data ->
+                logger.info("Successfully loaded session: ${data.session.id}")
+                if (data.modelSettings == null) {
+                    logger.debug("Session ${data.session.id} has no model settings configured")
+                } else {
+                    logger.info("Successfully loaded model settings: ${data.modelSettings.name} (ID: ${data.modelSettings.id})")
                 }
-            )
+                state.setSessionDataSuccess(data)
+                state.setCurrentLeafId(data.session.currentLeafMessageId)
+                state.clearRetryState()
+            }
+        )
+    }
+
+    /**
+     * Loads model settings by ID.
+     *
+     * @param settingsId The ID of the model settings to load
+     * @return Either an ApiError or the loaded ChatModelSettings
+     */
+    private suspend fun Raise<ApiError>.loadModelSettings(settingsId: Long): ChatModelSettings {
+        val modelSettings = settingsApi.getSettingsById(settingsId).bind()
+        ensure(modelSettings is ChatModelSettings) {
+            val errorMessage =
+                "Unexpected model settings type: ${modelSettings::class.simpleName}. Expected ChatModelSettings."
+            logger.warn(errorMessage)
+            apiError(CommonApiErrorCodes.INTERNAL, errorMessage)
+        }
+        return modelSettings
     }
 
     /**
