@@ -3,8 +3,10 @@ package eu.torvian.chatbot.app.viewmodel.chat.usecase
 import arrow.core.raise.Raise
 import arrow.core.raise.either
 import arrow.core.raise.ensure
+import arrow.fx.coroutines.parZip
 import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.error_loading_session
+import eu.torvian.chatbot.app.service.api.ModelApi
 import eu.torvian.chatbot.app.service.api.SessionApi
 import eu.torvian.chatbot.app.service.api.SettingsApi
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
@@ -15,6 +17,7 @@ import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.models.ChatModelSettings
+import eu.torvian.chatbot.common.models.LLMModel
 
 /**
  * Use case for loading chat sessions from the API.
@@ -23,6 +26,7 @@ import eu.torvian.chatbot.common.models.ChatModelSettings
 class LoadSessionUseCase(
     private val sessionApi: SessionApi,
     private val settingsApi: SettingsApi,
+    private val modelApi: ModelApi,
     private val state: ChatState,
     private val errorNotifier: ErrorNotifier
 ) {
@@ -48,14 +52,18 @@ class LoadSessionUseCase(
         state.setEditingMessage(null)
         state.setCurrentLeafId(null)
 
-        // Load session and model settings
+        // Load session and related data
         either {
             val session = sessionApi.getSessionDetails(sessionId).bind()
 
-            val modelSettings = session.currentSettingsId
-                ?.let { settingsId -> loadModelSettings(settingsId) }
-
-            ChatSessionData(session = session, modelSettings = modelSettings)
+            // Load LLM model and model settings in parallel
+            val (llmModel, modelSettings) = parZip(
+                { session.currentModelId?.let { modelId -> loadLLMModel(modelId) } },
+                { session.currentSettingsId?.let { settingsId -> loadModelSettings(settingsId) } }
+            ) { llmModel, modelSettings ->
+                llmModel to modelSettings
+            }
+            ChatSessionData(session = session, modelSettings = modelSettings, llmModel = llmModel)
         }.fold(
             ifLeft = { error ->
                 state.setSessionDataError(error)
@@ -68,6 +76,11 @@ class LoadSessionUseCase(
             },
             ifRight = { data ->
                 logger.info("Successfully loaded session: ${data.session.id}")
+                if (data.llmModel == null) {
+                    logger.debug("Session ${data.session.id} has no LLM model configured")
+                } else {
+                    logger.info("Successfully loaded LLM model: ${data.llmModel.name} (ID: ${data.llmModel.id})")
+                }
                 if (data.modelSettings == null) {
                     logger.debug("Session ${data.session.id} has no model settings configured")
                 } else {
@@ -95,6 +108,16 @@ class LoadSessionUseCase(
             apiError(CommonApiErrorCodes.INTERNAL, errorMessage)
         }
         return modelSettings
+    }
+
+    /**
+     * Loads the LLM model by ID.
+     *
+     * @param modelId The ID of the LLM model to load
+     * @return Either an ApiError or the loaded LLMModel
+     */
+    private suspend fun Raise<ApiError>.loadLLMModel(modelId: Long): LLMModel {
+        return modelApi.getModelById(modelId).bind()
     }
 
     /**

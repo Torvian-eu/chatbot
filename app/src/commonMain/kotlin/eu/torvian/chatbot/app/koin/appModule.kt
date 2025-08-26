@@ -96,7 +96,7 @@ fun appModule(baseUri: String): Module = module {
 
     // Provide use cases with updated dependencies (no more uiDispatcher parameters)
     factory<LoadSessionUseCase> { (chatState: ChatState) ->
-        LoadSessionUseCase(get(), get(), chatState, get())
+        LoadSessionUseCase(get(), get(), get(), chatState, get())
     }
 
     factory<UpdateInputUseCase> { (chatState: ChatState) ->
