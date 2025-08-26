@@ -8,7 +8,7 @@ import eu.torvian.chatbot.app.domain.contracts.ChatAreaActions
 import eu.torvian.chatbot.app.domain.contracts.ChatAreaState
 import eu.torvian.chatbot.app.domain.contracts.SessionListActions
 import eu.torvian.chatbot.app.domain.contracts.SessionListState
-import eu.torvian.chatbot.app.viewmodel.ChatViewModel
+import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
 import eu.torvian.chatbot.common.models.ChatGroup
 import eu.torvian.chatbot.common.models.ChatMessage
@@ -68,7 +68,12 @@ fun ChatScreen(
         object : SessionListActions {
             override fun onSessionSelected(sessionId: Long?) {
                 sessionListViewModel.selectSession(sessionId)
-                chatViewModel.loadSession(sessionId)
+                // Load the session if a valid ID is provided, otherwise clear the session
+                if (sessionId != null) {
+                    chatViewModel.loadSession(sessionId)
+                } else {
+                    chatViewModel.clearSession()
+                }
             }
 
             override fun onCreateNewSession(name: String?) = sessionListViewModel.createNewSession(name)
