@@ -7,7 +7,6 @@ import eu.torvian.chatbot.server.service.llm.GenericHttpMethod
 import eu.torvian.chatbot.server.service.llm.LLMCompletionError
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
-import org.junit.jupiter.api.Disabled
 import kotlin.test.*
 
 class OllamaChatStrategyTest {
@@ -44,6 +43,7 @@ class OllamaChatStrategyTest {
         systemMessage = "You are a helpful assistant.",
         temperature = 0.7f,
         maxTokens = 1000,
+        stream = false, // Configure for non-streaming mode
         customParams = null
     )
 
@@ -60,7 +60,6 @@ class OllamaChatStrategyTest {
     )
 
     @Test
-    @Disabled("Need to configure model settings for non-streaming mode")
     fun `prepareRequest should create valid Ollama API request`() {
         // Act
         val result = strategy.prepareRequest(
