@@ -55,7 +55,8 @@ class KtorChatApiClient(client: HttpClient) : BaseApiClient(client), ChatApi {
                 // Set the request body with the ProcessNewMessageRequest DTO
                 setBody(request)
                 timeout {
-                    requestTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS // Allow indefinite stream
+                    requestTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS // Allow indefinite timeout (for long LLM responses)
+                    socketTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS
                 }
             }.body<List<ChatMessage>>() // Expect a List<ChatMessage> in the response body on success (HTTP 201)
         }
