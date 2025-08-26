@@ -56,6 +56,12 @@ class SessionRoutesTest {
     private val testModel2 = TestDefaults.llmModel2.copy(id = 2L)
     private val testSettings = TestDefaults.modelSettings1.copy(id = 1L)
     private val testSettings2 = TestDefaults.modelSettings2.copy(id = 2L)
+    // Create additional settings that belong to the same model as testSession for testing
+    private val testSettings3 = TestDefaults.modelSettings1.copy(
+        id = 3L,
+        modelId = testModel.id, // Same model as testSession
+        name = "Alternative Settings for Model 1"
+    )
     private val testSession = TestDefaults.chatSession1.copy(
         id = 1L,
         name = "Test Session",
@@ -100,7 +106,7 @@ class SessionRoutesTest {
                 chatGroups = listOf(testGroup, testGroup2),
                 llmProviders = listOf(TestDefaults.llmProvider1, TestDefaults.llmProvider2),
                 llmModels = listOf(testModel, testModel2),
-                modelSettings = listOf(testSettings, testSettings2)
+                modelSettings = listOf(testSettings, testSettings2, testSettings3)
             )
         )
         testDataManager.createTables(setOf(
@@ -386,7 +392,7 @@ class SessionRoutesTest {
     fun `PUT session settings should update settings ID successfully`() = sessionTestApplication {
         // Arrange
         testDataManager.insertChatSession(testSession)
-        val newSettingsId = 2L
+        val newSettingsId = testSettings3.id // Use settings that belong to the same model as the session
         val updateRequest = UpdateSessionSettingsRequest(settingsId = newSettingsId)
 
         // Act

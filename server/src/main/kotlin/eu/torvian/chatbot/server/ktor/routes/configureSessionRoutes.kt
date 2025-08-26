@@ -145,6 +145,23 @@ fun Route.configureSessionRoutes(
                         "Invalid settings ID provided",
                         "settingsId" to request.settingsId.toString()
                     )
+
+                is UpdateSessionCurrentSettingsIdError.SettingsModelMismatch ->
+                    apiError(
+                        CommonApiErrorCodes.INVALID_ARGUMENT,
+                        "Settings are not compatible with the current model",
+                        "settingsId" to error.settingsId.toString(),
+                        "settingsModelId" to error.settingsModelId.toString(),
+                        "sessionModelId" to (error.sessionModelId?.toString() ?: "null")
+                    )
+
+                is UpdateSessionCurrentSettingsIdError.InvalidSettingsType ->
+                    apiError(
+                        CommonApiErrorCodes.INVALID_ARGUMENT,
+                        "Settings must be of ChatModelSettings type for chat sessions",
+                        "settingsId" to error.settingsId.toString(),
+                        "actualType" to error.actualType
+                    )
             }
         }
     }
