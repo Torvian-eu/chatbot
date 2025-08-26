@@ -81,7 +81,7 @@ class StreamingCoordinator(
             }
 
             is ChatStreamEvent.AssistantMessageDelta -> {
-                logger.debug("Assistant message delta: ${event.deltaContent.length} chars")
+                logger.trace("Assistant message delta: ${event.deltaContent.length} chars")
                 // Update the streaming message content
                 val currentStreamingMessage = state.displayedMessages.value
                     .filterIsInstance<ChatMessage.AssistantMessage>()
