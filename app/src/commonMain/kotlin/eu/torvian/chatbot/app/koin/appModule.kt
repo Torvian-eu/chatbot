@@ -108,11 +108,11 @@ fun appModule(baseUri: String): Module = module {
     }
 
     factory<SelectModelUseCase> { (chatState: ChatState) ->
-        SelectModelUseCase(get(), chatState, get())
+        SelectModelUseCase(get(), get(), chatState, get())
     }
 
     factory<SelectSettingsUseCase> { (chatState: ChatState) ->
-        SelectSettingsUseCase(get(), chatState, get())
+        SelectSettingsUseCase(get(), get(), chatState, get())
     }
 
     factory<SwitchBranchUseCase> { (chatState: ChatState) ->
