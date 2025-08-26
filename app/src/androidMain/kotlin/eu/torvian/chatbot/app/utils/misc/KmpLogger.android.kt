@@ -6,6 +6,10 @@ import android.util.Log
  * Actual implementation of [KmpLogger] for the Android target, using Android's Log API.
  */
 class AndroidKmpLogger(private val tag: String) : KmpLogger {
+    override fun trace(message: String, throwable: Throwable?) {
+        Log.v(tag, message, throwable)
+    }
+
     override fun debug(message: String, throwable: Throwable?) {
         Log.d(tag, message, throwable)
     }
@@ -20,6 +24,10 @@ class AndroidKmpLogger(private val tag: String) : KmpLogger {
 
     override fun error(message: String, throwable: Throwable?) {
         Log.e(tag, message, throwable)
+    }
+
+    override fun fatal(message: String, throwable: Throwable?) {
+        Log.wtf(tag, message, throwable)
     }
 }
 

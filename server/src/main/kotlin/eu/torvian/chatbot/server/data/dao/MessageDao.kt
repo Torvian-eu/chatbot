@@ -34,13 +34,13 @@ interface MessageDao {
      * @param sessionId The ID of the session the message belongs to.
      * @param content The text content of the message.
      * @param parentMessageId Optional ID of the parent message (null for root messages).
-     * @return Either a [InsertMessageError] or the newly created [ChatMessage] object.
+     * @return Either a [InsertMessageError] or the newly created [ChatMessage.UserMessage].
      */
     suspend fun insertUserMessage(
         sessionId: Long,
         content: String,
         parentMessageId: Long?
-    ): Either<InsertMessageError, ChatMessage>
+    ): Either<InsertMessageError, ChatMessage.UserMessage>
 
     /**
      * Inserts a new assistant message record into the database.
@@ -51,7 +51,7 @@ interface MessageDao {
      * @param parentMessageId Optional ID of the parent message (null for root messages).
      * @param modelId Optional ID of the model used (for assistant messages).
      * @param settingsId Optional ID of the settings profile used (for assistant messages).
-     * @return Either a [InsertMessageError] or the newly created [ChatMessage] object.
+     * @return Either a [InsertMessageError] or the newly created [ChatMessage.AssistantMessage].
      */
     suspend fun insertAssistantMessage(
         sessionId: Long,
@@ -59,7 +59,7 @@ interface MessageDao {
         parentMessageId: Long?,
         modelId: Long?,
         settingsId: Long?
-    ): Either<InsertMessageError, ChatMessage>
+    ): Either<InsertMessageError, ChatMessage.AssistantMessage>
     
     /**
      * Updates the content and updated timestamp of an existing message.

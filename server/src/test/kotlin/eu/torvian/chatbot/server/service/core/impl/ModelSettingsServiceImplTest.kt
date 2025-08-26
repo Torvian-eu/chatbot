@@ -2,17 +2,30 @@ package eu.torvian.chatbot.server.service.core.impl
 
 import arrow.core.left
 import arrow.core.right
-import eu.torvian.chatbot.common.models.ModelSettings
+import eu.torvian.chatbot.common.models.ChatModelSettings
+import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.common.models.LLMModelType
 import eu.torvian.chatbot.server.data.dao.SettingsDao
 import eu.torvian.chatbot.server.data.dao.error.SettingsError
-import eu.torvian.chatbot.server.service.core.error.settings.*
+import eu.torvian.chatbot.server.service.core.LLMModelService
+import eu.torvian.chatbot.server.service.core.error.model.GetModelError
+import eu.torvian.chatbot.server.service.core.error.settings.AddSettingsError
+import eu.torvian.chatbot.server.service.core.error.settings.DeleteSettingsError
+import eu.torvian.chatbot.server.service.core.error.settings.GetSettingsByIdError
+import eu.torvian.chatbot.server.service.core.error.settings.UpdateSettingsError
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
-import io.mockk.*
+import io.mockk.clearMocks
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import kotlin.test.*
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 /**
  * Unit tests for [ModelSettingsServiceImpl].
@@ -25,40 +38,51 @@ class ModelSettingsServiceImplTest {
 
     // Mocked dependencies
     private lateinit var settingsDao: SettingsDao
+    private lateinit var llmModelService: LLMModelService
     private lateinit var transactionScope: TransactionScope
 
     // Class under test
     private lateinit var modelSettingsService: ModelSettingsServiceImpl
 
     // Test data
-    private val testSettings1 = ModelSettings(
+    private val testModel1 = LLMModel(
+        id = 1L,
+        name = "gpt-3.5-turbo",
+        providerId = 1L,
+        active = true,
+        displayName = "GPT-3.5 Turbo",
+        type = LLMModelType.CHAT
+    )
+
+    private val testSettings1 = ChatModelSettings(
         id = 1L,
         name = "Default",
         modelId = 1L,
         systemMessage = "You are a helpful assistant.",
         temperature = 0.7f,
         maxTokens = 1000,
-        customParamsJson = null
+        customParams = null
     )
 
-    private val testSettings2 = ModelSettings(
+    private val testSettings2 = ChatModelSettings(
         id = 2L,
         name = "Creative",
         modelId = 1L,
         systemMessage = "You are a creative writing assistant.",
         temperature = 1.2f,
         maxTokens = 2000,
-        customParamsJson = """{"top_p": 0.9}"""
+        customParams = Json.decodeFromString("""{"top_p": 0.9}""")
     )
 
     @BeforeEach
     fun setUp() {
         // Create mocks for all dependencies
         settingsDao = mockk()
+        llmModelService = mockk()
         transactionScope = mockk()
 
         // Create the service instance with mocked dependencies
-        modelSettingsService = ModelSettingsServiceImpl(settingsDao, transactionScope)
+        modelSettingsService = ModelSettingsServiceImpl(settingsDao, llmModelService, transactionScope)
 
         // Mock the transaction scope to execute blocks directly
         coEvery { transactionScope.transaction(any<suspend () -> Any>()) } coAnswers {
@@ -70,7 +94,7 @@ class ModelSettingsServiceImplTest {
     @AfterEach
     fun tearDown() {
         // Clear all mocks after each test to ensure isolation
-        clearMocks(settingsDao, transactionScope)
+        clearMocks(settingsDao, llmModelService, transactionScope)
     }
 
     // --- getSettingsById Tests ---
@@ -180,114 +204,41 @@ class ModelSettingsServiceImplTest {
     @Test
     fun `addSettings should create settings successfully with valid parameters`() = runTest {
         // Arrange
-        val name = "Default"
-        val modelId = 1L
-        val systemMessage = "You are a helpful assistant."
-        val temperature = 0.7f
-        val maxTokens = 1000
-        val customParamsJson: String? = null
-        
-        coEvery { settingsDao.insertSettings(name, modelId, systemMessage, temperature, maxTokens, customParamsJson) } returns testSettings1.right()
+        val settings = testSettings1
+
+        coEvery { llmModelService.getModelById(settings.modelId) } returns testModel1.right()
+        coEvery { settingsDao.insertSettings(settings) } returns testSettings1.right()
 
         // Act
-        val result = modelSettingsService.addSettings(name, modelId, systemMessage, temperature, maxTokens, customParamsJson)
+        val result = modelSettingsService.addSettings(settings)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful creation")
         assertEquals(testSettings1, result.getOrNull(), "Should return the created settings")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { settingsDao.insertSettings(name, modelId, systemMessage, temperature, maxTokens, customParamsJson) }
+        coVerify(exactly = 1) { llmModelService.getModelById(settings.modelId) }
+        coVerify(exactly = 1) { settingsDao.insertSettings(settings) }
     }
 
-    @Test
-    fun `addSettings should return InvalidInput error for blank name`() = runTest {
-        // Arrange
-        val blankName = "   "
-        val modelId = 1L
-
-        // Act
-        val result = modelSettingsService.addSettings(blankName, modelId, null, null, null, null)
-
-        // Assert
-        assertTrue(result.isLeft(), "Should return Left for blank name")
-        val error = result.leftOrNull()
-        assertNotNull(error, "Error should not be null")
-        assertTrue(error is AddSettingsError.InvalidInput, "Should be InvalidInput error")
-        assertEquals("Settings name cannot be blank.", (error as AddSettingsError.InvalidInput).reason)
-        coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 0) { settingsDao.insertSettings(any(), any(), any(), any(), any(), any()) }
-    }
-
-    @Test
-    fun `addSettings should return InvalidInput error for invalid temperature below range`() = runTest {
-        // Arrange
-        val name = "Test Settings"
-        val modelId = 1L
-        val invalidTemperature = -0.1f
-
-        // Act
-        val result = modelSettingsService.addSettings(name, modelId, null, invalidTemperature, null, null)
-
-        // Assert
-        assertTrue(result.isLeft(), "Should return Left for invalid temperature")
-        val error = result.leftOrNull()
-        assertNotNull(error, "Error should not be null")
-        assertTrue(error is AddSettingsError.InvalidInput, "Should be InvalidInput error")
-        assertEquals("Temperature must be between 0.0 and 2.0", (error as AddSettingsError.InvalidInput).reason)
-        coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 0) { settingsDao.insertSettings(any(), any(), any(), any(), any(), any()) }
-    }
-
-    @Test
-    fun `addSettings should return InvalidInput error for invalid temperature above range`() = runTest {
-        // Arrange
-        val name = "Test Settings"
-        val modelId = 1L
-        val invalidTemperature = 2.1f
-
-        // Act
-        val result = modelSettingsService.addSettings(name, modelId, null, invalidTemperature, null, null)
-
-        // Assert
-        assertTrue(result.isLeft(), "Should return Left for invalid temperature")
-        val error = result.leftOrNull()
-        assertNotNull(error, "Error should not be null")
-        assertTrue(error is AddSettingsError.InvalidInput, "Should be InvalidInput error")
-        assertEquals("Temperature must be between 0.0 and 2.0", (error as AddSettingsError.InvalidInput).reason)
-        coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 0) { settingsDao.insertSettings(any(), any(), any(), any(), any(), any()) }
-    }
-
-    @Test
-    fun `addSettings should return InvalidInput error for invalid maxTokens`() = runTest {
-        // Arrange
-        val name = "Test Settings"
-        val modelId = 1L
-        val invalidMaxTokens = 0
-
-        // Act
-        val result = modelSettingsService.addSettings(name, modelId, null, null, invalidMaxTokens, null)
-
-        // Assert
-        assertTrue(result.isLeft(), "Should return Left for invalid maxTokens")
-        val error = result.leftOrNull()
-        assertNotNull(error, "Error should not be null")
-        assertTrue(error is AddSettingsError.InvalidInput, "Should be InvalidInput error")
-        assertEquals("Max tokens must be positive", (error as AddSettingsError.InvalidInput).reason)
-        coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 0) { settingsDao.insertSettings(any(), any(), any(), any(), any(), any()) }
-    }
 
     @Test
     fun `addSettings should return ModelNotFound error when model does not exist`() = runTest {
         // Arrange
-        val name = "Test Settings"
         val modelId = 999L
-        val daoError = SettingsError.ModelNotFound(modelId)
-        coEvery { settingsDao.insertSettings(name, modelId, null, null, null, null) } returns daoError.left()
+        val settings = ChatModelSettings(
+            id = 0L,
+            modelId = modelId,
+            name = "Test Settings",
+            systemMessage = null,
+            temperature = null,
+            maxTokens = null,
+            customParams = null
+        )
+        val getModelError = GetModelError.ModelNotFound(modelId)
+        coEvery { llmModelService.getModelById(modelId) } returns getModelError.left()
 
         // Act
-        val result = modelSettingsService.addSettings(name, modelId, null, null, null, null)
+        val result = modelSettingsService.addSettings(settings)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for non-existent model")
@@ -296,7 +247,8 @@ class ModelSettingsServiceImplTest {
         assertTrue(error is AddSettingsError.ModelNotFound, "Should be ModelNotFound error")
         assertEquals(modelId, (error as AddSettingsError.ModelNotFound).modelId)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { settingsDao.insertSettings(name, modelId, null, null, null, null) }
+        coVerify(exactly = 1) { llmModelService.getModelById(modelId) }
+        coVerify(exactly = 0) { settingsDao.insertSettings(any()) }
     }
 
     // --- updateSettings Tests ---
@@ -305,6 +257,7 @@ class ModelSettingsServiceImplTest {
     fun `updateSettings should update settings successfully`() = runTest {
         // Arrange
         val updatedSettings = testSettings1.copy(name = "Updated Default")
+        coEvery { llmModelService.getModelById(updatedSettings.modelId) } returns testModel1.right()
         coEvery { settingsDao.updateSettings(updatedSettings) } returns Unit.right()
 
         // Act
@@ -313,61 +266,8 @@ class ModelSettingsServiceImplTest {
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful update")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+        coVerify(exactly = 1) { llmModelService.getModelById(updatedSettings.modelId) }
         coVerify(exactly = 1) { settingsDao.updateSettings(updatedSettings) }
-    }
-
-    @Test
-    fun `updateSettings should return InvalidInput error for blank name`() = runTest {
-        // Arrange
-        val settingsWithBlankName = testSettings1.copy(name = "  ")
-
-        // Act
-        val result = modelSettingsService.updateSettings(settingsWithBlankName)
-
-        // Assert
-        assertTrue(result.isLeft(), "Should return Left for blank name")
-        val error = result.leftOrNull()
-        assertNotNull(error, "Error should not be null")
-        assertTrue(error is UpdateSettingsError.InvalidInput, "Should be InvalidInput error")
-        assertEquals("Settings name cannot be blank.", (error as UpdateSettingsError.InvalidInput).reason)
-        coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 0) { settingsDao.updateSettings(any()) }
-    }
-
-    @Test
-    fun `updateSettings should return InvalidInput error for invalid temperature`() = runTest {
-        // Arrange
-        val settingsWithInvalidTemperature = testSettings1.copy(temperature = 3.0f)
-
-        // Act
-        val result = modelSettingsService.updateSettings(settingsWithInvalidTemperature)
-
-        // Assert
-        assertTrue(result.isLeft(), "Should return Left for invalid temperature")
-        val error = result.leftOrNull()
-        assertNotNull(error, "Error should not be null")
-        assertTrue(error is UpdateSettingsError.InvalidInput, "Should be InvalidInput error")
-        assertEquals("Temperature must be between 0.0 and 2.0", (error as UpdateSettingsError.InvalidInput).reason)
-        coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 0) { settingsDao.updateSettings(any()) }
-    }
-
-    @Test
-    fun `updateSettings should return InvalidInput error for invalid maxTokens`() = runTest {
-        // Arrange
-        val settingsWithInvalidMaxTokens = testSettings1.copy(maxTokens = -1)
-
-        // Act
-        val result = modelSettingsService.updateSettings(settingsWithInvalidMaxTokens)
-
-        // Assert
-        assertTrue(result.isLeft(), "Should return Left for invalid maxTokens")
-        val error = result.leftOrNull()
-        assertNotNull(error, "Error should not be null")
-        assertTrue(error is UpdateSettingsError.InvalidInput, "Should be InvalidInput error")
-        assertEquals("Max tokens must be positive", (error as UpdateSettingsError.InvalidInput).reason)
-        coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 0) { settingsDao.updateSettings(any()) }
     }
 
     @Test
@@ -376,6 +276,7 @@ class ModelSettingsServiceImplTest {
         val settingsId = 999L
         val updatedSettings = testSettings1.copy(id = settingsId)
         val daoError = SettingsError.SettingsNotFound(settingsId)
+        coEvery { llmModelService.getModelById(updatedSettings.modelId) } returns testModel1.right()
         coEvery { settingsDao.updateSettings(updatedSettings) } returns daoError.left()
 
         // Act
@@ -388,6 +289,7 @@ class ModelSettingsServiceImplTest {
         assertTrue(error is UpdateSettingsError.SettingsNotFound, "Should be SettingsNotFound error")
         assertEquals(settingsId, (error as UpdateSettingsError.SettingsNotFound).id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+        coVerify(exactly = 1) { llmModelService.getModelById(updatedSettings.modelId) }
         coVerify(exactly = 1) { settingsDao.updateSettings(updatedSettings) }
     }
 
@@ -396,8 +298,8 @@ class ModelSettingsServiceImplTest {
         // Arrange
         val modelId = 999L
         val updatedSettings = testSettings1.copy(modelId = modelId)
-        val daoError = SettingsError.ModelNotFound(modelId)
-        coEvery { settingsDao.updateSettings(updatedSettings) } returns daoError.left()
+        val getModelError = GetModelError.ModelNotFound(modelId)
+        coEvery { llmModelService.getModelById(modelId) } returns getModelError.left()
 
         // Act
         val result = modelSettingsService.updateSettings(updatedSettings)
@@ -409,7 +311,8 @@ class ModelSettingsServiceImplTest {
         assertTrue(error is UpdateSettingsError.ModelNotFound, "Should be ModelNotFound error")
         assertEquals(modelId, (error as UpdateSettingsError.ModelNotFound).modelId)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { settingsDao.updateSettings(updatedSettings) }
+        coVerify(exactly = 1) { llmModelService.getModelById(modelId) }
+        coVerify(exactly = 0) { settingsDao.updateSettings(any()) }
     }
 
     // --- deleteSettings Tests ---

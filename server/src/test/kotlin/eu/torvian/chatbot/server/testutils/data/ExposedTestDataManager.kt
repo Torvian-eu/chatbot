@@ -1,15 +1,12 @@
 package eu.torvian.chatbot.server.testutils.data
 
-import eu.torvian.chatbot.common.models.ChatGroup
-import eu.torvian.chatbot.common.models.ChatMessage
-import eu.torvian.chatbot.common.models.LLMModel
-import eu.torvian.chatbot.common.models.LLMProvider
-import eu.torvian.chatbot.common.models.ModelSettings
+import eu.torvian.chatbot.common.models.*
 import eu.torvian.chatbot.server.data.entities.ApiSecretEntity
 import eu.torvian.chatbot.server.data.entities.ChatSessionEntity
 import eu.torvian.chatbot.server.data.entities.SessionCurrentLeafEntity
 import eu.torvian.chatbot.server.data.tables.*
 import eu.torvian.chatbot.server.data.tables.mappers.*
+import eu.torvian.chatbot.server.data.toEntity
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.SchemaUtils
@@ -283,6 +280,27 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
             }
         }
 
+    override suspend fun getChatMessagesForSession(sessionId: Long): List<ChatMessage> {
+        return transactionScope.transaction {
+            ensureTableCreated(Table.CHAT_MESSAGES)
+            ensureTableCreated(Table.ASSISTANT_MESSAGES)
+
+            // Perform a single query with left join to get all messages with their assistant data if any
+            val results = ChatMessageTable
+                .leftJoin(AssistantMessageTable, { ChatMessageTable.id }, { AssistantMessageTable.messageId })
+                .selectAll()
+                .where { ChatMessageTable.sessionId eq sessionId }
+
+            // Transform to appropriate message types based on role
+            results.map { row ->
+                when (row[ChatMessageTable.role]) {
+                    ChatMessage.Role.USER -> row.toUserMessage()
+                    ChatMessage.Role.ASSISTANT -> row.toAssistantMessage()
+                }
+            }
+        }
+    }
+
     override suspend fun insertLLMModel(llmModel: LLMModel) =
         transactionScope.transaction {
             ensureTableCreated(Table.LLM_MODELS)
@@ -292,6 +310,10 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
                 it[providerId] = llmModel.providerId
                 it[active] = llmModel.active
                 it[displayName] = llmModel.displayName
+                it[type] = llmModel.type
+                it[capabilities] = llmModel.capabilities?.let { cap ->
+                    Json.encodeToString(cap)
+                }
             }
             return@transaction
         }
@@ -307,14 +329,14 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
     override suspend fun insertModelSettings(modelSettings: ModelSettings) =
         transactionScope.transaction {
             ensureTableCreated(Table.MODEL_SETTINGS)
+            val entity = modelSettings.toEntity()
             ModelSettingsTable.insert {
-                it[id] = modelSettings.id
-                it[modelId] = modelSettings.modelId
-                it[name] = modelSettings.name
-                it[systemMessage] = modelSettings.systemMessage
-                it[temperature] = modelSettings.temperature
-                it[maxTokens] = modelSettings.maxTokens
-                it[customParamsJson] = modelSettings.customParamsJson
+                it[id] = entity.id
+                it[modelId] = entity.modelId
+                it[name] = entity.name
+                it[type] = entity.type
+                it[variableParamsJson] = entity.variableParamsJson
+                it[customParamsJson] = entity.customParamsJson
             }
             return@transaction
         }

@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="Tests in 'chatbot.app.commonTest'" type="GradleRunConfiguration" factoryName="Gradle">
+  <configuration default="false" name="Tests in 'chatbot.app.desktopTest'" type="GradleRunConfiguration" factoryName="Gradle">
     <ExternalSystemSettings>
       <option name="executionName" />
       <option name="externalProjectPath" value="$PROJECT_DIR$" />
@@ -10,7 +10,6 @@
       </option>
       <option name="taskNames">
         <list>
-          <option value=":app:cleanDesktopTest" />
           <option value=":app:desktopTest" />
         </list>
       </option>

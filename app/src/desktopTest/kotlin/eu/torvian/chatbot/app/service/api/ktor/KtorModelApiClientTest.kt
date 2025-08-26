@@ -9,6 +9,7 @@ import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.models.AddModelRequest
 import eu.torvian.chatbot.common.models.ApiKeyStatusResponse
 import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.common.models.LLMModelType
 import io.ktor.client.engine.mock.*
 import io.ktor.http.*
 import kotlinx.coroutines.test.runTest
@@ -39,7 +40,8 @@ class KtorModelApiClientTest {
         name = name,
         providerId = providerId,
         active = active,
-        displayName = name.replace("-", " ").capitalizeWords()
+        displayName = name.replace("-", " ").capitalizeWords(),
+        type = LLMModelType.CHAT
     )
 
     private fun mockApiKeyStatusResponse(isConfigured: Boolean) =
@@ -131,6 +133,7 @@ class KtorModelApiClientTest {
         val mockRequest = AddModelRequest(
             name = "new-model",
             providerId = 10,
+            type = LLMModelType.CHAT,
             active = true,
             displayName = "New Model"
         )
@@ -165,6 +168,7 @@ class KtorModelApiClientTest {
         val mockRequest = AddModelRequest(
             name = "", // Invalid name
             providerId = 10,
+            type = LLMModelType.CHAT,
             active = true
         )
         val mockEngine = MockEngine { request ->
@@ -194,6 +198,7 @@ class KtorModelApiClientTest {
         val mockRequest = AddModelRequest(
             name = "new-model",
             providerId = 999, // Non-existent provider
+            type = LLMModelType.CHAT,
             active = true
         )
         val mockEngine = MockEngine { request ->
@@ -223,6 +228,7 @@ class KtorModelApiClientTest {
         val mockRequest = AddModelRequest(
             name = "gpt-3.5-turbo", // Name already exists
             providerId = 10,
+            type = LLMModelType.CHAT,
             active = true
         )
         val mockEngine = MockEngine { request ->
@@ -257,6 +263,7 @@ class KtorModelApiClientTest {
         val mockRequest = AddModelRequest(
             name = "new-model",
             providerId = 10,
+            type = LLMModelType.CHAT,
             active = true
         )
         val mockEngine = MockEngine { request ->
@@ -286,6 +293,7 @@ class KtorModelApiClientTest {
         val mockRequest = AddModelRequest(
             name = "new-model",
             providerId = 10,
+            type = LLMModelType.CHAT,
             active = true
         )
         val mockEngine = MockEngine { request ->

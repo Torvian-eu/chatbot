@@ -76,7 +76,7 @@ class MessageDaoExposed(
         sessionId: Long,
         content: String,
         parentMessageId: Long?
-    ): Either<InsertMessageError, ChatMessage> =
+    ): Either<InsertMessageError, ChatMessage.UserMessage> =
         transactionScope.transaction {
             either {
                 if (parentMessageId != null) {
@@ -111,7 +111,7 @@ class MessageDaoExposed(
         parentMessageId: Long?,
         modelId: Long?,
         settingsId: Long?
-    ): Either<InsertMessageError, ChatMessage> =
+    ): Either<InsertMessageError, ChatMessage.AssistantMessage> =
         transactionScope.transaction {
             either {
                 if (parentMessageId != null) {

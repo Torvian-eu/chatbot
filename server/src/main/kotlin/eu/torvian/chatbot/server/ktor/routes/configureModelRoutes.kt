@@ -4,7 +4,6 @@ import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.ModelResource
 import eu.torvian.chatbot.common.models.AddModelRequest
-import eu.torvian.chatbot.common.models.AddModelSettingsRequest
 import eu.torvian.chatbot.common.models.ApiKeyStatusResponse
 import eu.torvian.chatbot.common.models.LLMModel
 import eu.torvian.chatbot.server.service.core.LLMModelService
@@ -13,7 +12,6 @@ import eu.torvian.chatbot.server.service.core.error.model.AddModelError
 import eu.torvian.chatbot.server.service.core.error.model.DeleteModelError
 import eu.torvian.chatbot.server.service.core.error.model.GetModelError
 import eu.torvian.chatbot.server.service.core.error.model.UpdateModelError
-import eu.torvian.chatbot.server.service.core.error.settings.AddSettingsError
 import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.server.resources.*
@@ -37,8 +35,10 @@ fun Route.configureModelRoutes(llmModelService: LLMModelService, modelSettingsSe
             llmModelService.addModel(
                 request.name,
                 request.providerId,
+                request.type,
                 request.active,
-                request.displayName
+                request.displayName,
+                request.capabilities
             ), HttpStatusCode.Created
         ) { error ->
             when (error) {
@@ -122,34 +122,6 @@ fun Route.configureModelRoutes(llmModelService: LLMModelService, modelSettingsSe
     get<ModelResource.ById.Settings> { resource ->
         val modelId = resource.parent.modelId
         call.respond(modelSettingsService.getSettingsByModelId(modelId))
-    }
-
-    // POST /api/v1/models/{modelId}/settings - Add new settings for this model
-    post<ModelResource.ById.Settings> { resource ->
-        val modelId = resource.parent.modelId
-        val request = call.receive<AddModelSettingsRequest>()
-        call.respondEither(
-            modelSettingsService.addSettings(
-                request.name,
-                modelId,
-                request.systemMessage,
-                request.temperature,
-                request.maxTokens,
-                request.customParamsJson
-            ), HttpStatusCode.Created
-        ) { error ->
-            when (error) {
-                is AddSettingsError.ModelNotFound ->
-                    apiError(
-                        CommonApiErrorCodes.INVALID_ARGUMENT,
-                        "Model not found for settings",
-                        "modelId" to error.modelId.toString()
-                    )
-
-                is AddSettingsError.InvalidInput ->
-                    apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid settings input", "reason" to error.reason)
-            }
-        }
     }
 
     // GET /api/v1/models/{modelId}/apikey/status - Get API key status for model

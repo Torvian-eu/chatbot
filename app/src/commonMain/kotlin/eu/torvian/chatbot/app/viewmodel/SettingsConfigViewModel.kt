@@ -6,7 +6,7 @@ import eu.torvian.chatbot.app.domain.contracts.UiState
 import eu.torvian.chatbot.app.service.api.ModelApi
 import eu.torvian.chatbot.app.service.api.SettingsApi
 import eu.torvian.chatbot.common.api.ApiError
-import eu.torvian.chatbot.common.models.AddModelSettingsRequest
+import eu.torvian.chatbot.common.models.ChatModelSettings
 import eu.torvian.chatbot.common.models.LLMModel
 import eu.torvian.chatbot.common.models.ModelSettings
 import kotlinx.coroutines.CoroutineDispatcher
@@ -16,11 +16,15 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Manages the UI state and logic for configuring LLM Model Settings Profiles (E4.S5, E4.S6).
  *
- * This ViewModel handles:
+ * This ViewModel currently focuses on managing settings for [ChatModelSettings] only.
+ *
+ * It handles:
  * - Loading and displaying a list of available LLM models (for selection).
  * - Loading and displaying a list of settings profiles associated with a selected model (E4.S5).
  * - Managing the state for adding new settings profiles (E4.S5).
@@ -36,6 +40,7 @@ import kotlinx.coroutines.launch
  * @property modelsForSelection The state of the list of LLM models available for selection (E4.S5).
  * @property selectedModelId The ID of the currently selected LLM model (E4.S5).
  * @property settingsState The state of the list of settings profiles for the [selectedModelId] (E4.S5).
+ *                         Only [ChatModelSettings] are displayed and manageable by this ViewModel.
  * @property isAddingNewSettings UI state indicating if the "Add New Settings Profile" form is visible (E4.S5).
  * @property newSettingsForm The state of the "Add New Settings Profile" form (E4.S5).
  * @property editingSettings The settings profile currently being edited (E4.S6). Null if no settings are being edited.
@@ -65,13 +70,13 @@ class SettingsConfigViewModel(
      */
     val selectedModelId: StateFlow<Long?> = _selectedModelId.asStateFlow()
 
-    private val _settingsState = MutableStateFlow<UiState<ApiError, List<ModelSettings>>>(UiState.Idle)
+    private val _settingsState = MutableStateFlow<UiState<ApiError, List<ChatModelSettings>>>(UiState.Idle)
 
     /**
      * The state of the list of settings profiles for the [selectedModelId] (E4.S5).
-     * Includes loading, success with data, or error states.
+     * Includes loading, success with data, or error states. Only [ChatModelSettings] are included.
      */
-    val settingsState: StateFlow<UiState<ApiError, List<ModelSettings>>> = _settingsState.asStateFlow()
+    val settingsState: StateFlow<UiState<ApiError, List<ChatModelSettings>>> = _settingsState.asStateFlow()
 
     private val _isAddingNewSettings = MutableStateFlow(false)
 
@@ -88,12 +93,12 @@ class SettingsConfigViewModel(
      */
     val newSettingsForm: StateFlow<NewSettingsFormState> = _newSettingsForm.asStateFlow()
 
-    private val _editingSettings = MutableStateFlow<ModelSettings?>(null)
+    private val _editingSettings = MutableStateFlow<ChatModelSettings?>(null) // Now specifically ChatModelSettings
 
     /**
      * The settings profile currently being edited (E4.S6). Null if no settings are being edited.
      */
-    val editingSettings: StateFlow<ModelSettings?> = _editingSettings.asStateFlow()
+    val editingSettings: StateFlow<ChatModelSettings?> = _editingSettings.asStateFlow()
 
     private val _editingSettingsForm = MutableStateFlow(EditSettingsFormState())
 
@@ -103,25 +108,31 @@ class SettingsConfigViewModel(
     val editingSettingsForm: StateFlow<EditSettingsFormState> = _editingSettingsForm.asStateFlow()
 
     /**
-     * Data class representing the state of the "Add New Settings Profile" form.
+     * Data class representing the state of the "Add New Settings Profile" form for [ChatModelSettings].
      */
     data class NewSettingsFormState(
         val name: String = "",
         val systemMessage: String = "",
-        val temperature: String = "", // String for UI input, will be parsed to Float
-        val maxTokens: String = "",   // String for UI input, will be parsed to Int
+        val temperature: String = "", // String for UI input
+        val maxTokens: String = "",   // String for UI input
+        val topP: String = "",        // String for UI input
+        val topK: String = "",        // String for UI input
+        val stopSequences: String = "", // Comma-separated string for UI input
         val customParamsJson: String = "",
         val errorMessage: String? = null // For inline validation/API errors
     )
 
     /**
-     * Data class representing the state of the "Edit Settings Profile" form.
+     * Data class representing the state of the "Edit Settings Profile" form for [ChatModelSettings].
      */
     data class EditSettingsFormState(
         val name: String = "",
         val systemMessage: String = "",
         val temperature: String = "", // String for UI input
         val maxTokens: String = "",   // String for UI input
+        val topP: String = "",        // String for UI input
+        val topK: String = "",        // String for UI input
+        val stopSequences: String = "", // Comma-separated string for UI input
         val customParamsJson: String = "",
         val errorMessage: String? = null // For inline validation/API errors
     )
@@ -175,8 +186,13 @@ class SettingsConfigViewModel(
                         _settingsState.value = UiState.Error(error)
                         println("Error loading settings for model $modelId: ${error.code} - ${error.message}")
                     },
-                    ifRight = { settings ->
-                        _settingsState.value = UiState.Success(settings)
+                    ifRight = { settingsList ->
+                        // Filter to only ChatModelSettings as this ViewModel currently only supports them
+                        val chatSettingsList = settingsList.filterIsInstance<ChatModelSettings>()
+                        _settingsState.value = UiState.Success(chatSettingsList)
+                        if (chatSettingsList.size != settingsList.size) {
+                            println("Warning: Found non-ChatModelSettings for model $modelId. These are not supported by this UI.")
+                        }
                     }
                 )
         }
@@ -215,6 +231,18 @@ class SettingsConfigViewModel(
         _newSettingsForm.update { it.copy(maxTokens = maxTokens, errorMessage = null) }
     }
 
+    fun updateNewSettingsTopP(topP: String) {
+        _newSettingsForm.update { it.copy(topP = topP, errorMessage = null) }
+    }
+
+    fun updateNewSettingsTopK(topK: String) {
+        _newSettingsForm.update { it.copy(topK = topK, errorMessage = null) }
+    }
+
+    fun updateNewSettingsStopSequences(stopSequences: String) {
+        _newSettingsForm.update { it.copy(stopSequences = stopSequences, errorMessage = null) }
+    }
+
     fun updateNewSettingsCustomParamsJson(json: String) {
         _newSettingsForm.update { it.copy(customParamsJson = json, errorMessage = null) }
     }
@@ -229,12 +257,14 @@ class SettingsConfigViewModel(
             return
         }
         val form = _newSettingsForm.value
+
+        // Basic validation for name (constructor will also validate, but early UI feedback is good)
         if (form.name.isBlank()) {
             _newSettingsForm.update { it.copy(errorMessage = "Settings profile name cannot be empty.") }
             return
         }
 
-        // Parse optional numeric fields from String inputs
+        // Parse optional numeric/list fields from String inputs
         val temperatureFloat = form.temperature.toFloatOrNull().also {
             if (form.temperature.isNotBlank() && it == null) {
                 _newSettingsForm.update { s -> s.copy(errorMessage = "Temperature must be a number.") }
@@ -247,50 +277,99 @@ class SettingsConfigViewModel(
                 return
             }
         }
+        val topPFloat = form.topP.toFloatOrNull().also {
+            if (form.topP.isNotBlank() && it == null) {
+                _newSettingsForm.update { s -> s.copy(errorMessage = "Top P must be a number.") }
+                return
+            }
+        }
+        val topKInt = form.topK.toIntOrNull().also {
+            if (form.topK.isNotBlank() && it == null) {
+                _newSettingsForm.update { s -> s.copy(errorMessage = "Top K must be an integer.") }
+                return
+            }
+        }
+        val stopSequencesList = form.stopSequences.split(',')
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .takeIf { it.isNotEmpty() }
 
         viewModelScope.launch(uiDispatcher) {
-            val request = AddModelSettingsRequest(
-                name = form.name.trim(),
-                systemMessage = form.systemMessage.trim().takeIf { it.isNotBlank() },
-                temperature = temperatureFloat,
-                maxTokens = maxTokensInt,
-                customParamsJson = form.customParamsJson.trim().takeIf { it.isNotBlank() }
-            )
-            val currentSettings = _settingsState.value.dataOrNull
+            val customParams = form.customParamsJson.trim().takeIf { it.isNotBlank() }?.let { jsonString ->
+                try {
+                    Json.decodeFromString<JsonObject>(jsonString)
+                } catch (_: Exception) {
+                    _newSettingsForm.update { s -> s.copy(errorMessage = "Invalid JSON format in custom parameters.") }
+                    return@launch
+                }
+            }
 
-            settingsApi.addModelSettings(modelId, request)
-                .fold(
-                    ifLeft = { error ->
-                        _newSettingsForm.update { it.copy(errorMessage = "Error adding settings: ${error.message}") }
-                        println("Error adding settings: ${error.code} - ${error.message}")
-                    },
-                    ifRight = { newSettings ->
-                        // Add the new settings profile to the list, maintaining the Success state (E4.S5)
-                        if (currentSettings != null) {
-                            _settingsState.value = UiState.Success(currentSettings + newSettings)
-                        } else {
-                            // Fallback to full reload if state wasn't Success
-                            selectModel(modelId) // Reloads settings for the selected model
-                        }
-                        cancelAddingNewSettings() // Hide form and reset
-                    }
+            try {
+                // Construct the specific ChatModelSettings object
+                val chatSettings = ChatModelSettings(
+                    id = 0L, // ID will be assigned by the backend
+                    modelId = modelId,
+                    name = form.name.trim(),
+                    systemMessage = form.systemMessage.trim().takeIf { it.isNotBlank() },
+                    temperature = temperatureFloat,
+                    maxTokens = maxTokensInt,
+                    topP = topPFloat,
+                    topK = topKInt,
+                    stopSequences = stopSequencesList,
+                    customParams = customParams
                 )
+
+                val currentSettings = _settingsState.value.dataOrNull
+
+                settingsApi.addModelSettings(chatSettings) // Pass the specific ChatModelSettings
+                    .fold(
+                        ifLeft = { error ->
+                            _newSettingsForm.update { it.copy(errorMessage = "Error adding settings: ${error.message}") }
+                            println("Error adding settings: ${error.code} - ${error.message}")
+                        },
+                        ifRight = { newSettings ->
+                            // Add the new settings profile to the list, maintaining the Success state
+                            // Ensure it's a ChatModelSettings before adding to the list
+                            if (currentSettings != null && newSettings is ChatModelSettings) {
+                                _settingsState.value = UiState.Success(currentSettings + newSettings)
+                            } else {
+                                // Fallback to full reload if state wasn't Success or type mismatch (shouldn't happen)
+                                selectModel(modelId) // Reloads settings for the selected model
+                            }
+                            cancelAddingNewSettings() // Hide form and reset
+                        }
+                    )
+            } catch (e: IllegalArgumentException) {
+                // Catch validation errors from ChatModelSettings constructor
+                _newSettingsForm.update { it.copy(errorMessage = e.message) }
+                println("Client-side validation failed for new settings: ${e.message}")
+            }
         }
     }
 
     /**
      * Initiates the editing process for an existing settings profile (E4.S6).
      *
-     * @param settings The [ModelSettings] to be edited.
+     * @param settings The [ModelSettings] to be edited. Must be a [ChatModelSettings].
      */
     fun startEditingSettings(settings: ModelSettings) {
-        _editingSettings.value = settings
+        if (settings !is ChatModelSettings) {
+            println("Cannot edit: Settings with ID ${settings.id} is not a ChatModelSettings. This ViewModel only supports ChatModelSettings.")
+            _editingSettings.value = null
+            _editingSettingsForm.value = EditSettingsFormState(errorMessage = "Unsupported settings type for editing.")
+            return
+        }
+
+        _editingSettings.value = settings // Store the ChatModelSettings instance
         _editingSettingsForm.value = EditSettingsFormState(
             name = settings.name,
             systemMessage = settings.systemMessage ?: "",
             temperature = settings.temperature?.toString() ?: "",
             maxTokens = settings.maxTokens?.toString() ?: "",
-            customParamsJson = settings.customParamsJson ?: ""
+            topP = settings.topP?.toString() ?: "",
+            topK = settings.topK?.toString() ?: "",
+            stopSequences = settings.stopSequences?.joinToString(",") ?: "",
+            customParamsJson = settings.customParams?.let { Json.encodeToString(it) } ?: ""
         )
     }
 
@@ -319,6 +398,18 @@ class SettingsConfigViewModel(
         _editingSettingsForm.update { it.copy(maxTokens = maxTokens, errorMessage = null) }
     }
 
+    fun updateEditingSettingsTopP(topP: String) {
+        _editingSettingsForm.update { it.copy(topP = topP, errorMessage = null) }
+    }
+
+    fun updateEditingSettingsTopK(topK: String) {
+        _editingSettingsForm.update { it.copy(topK = topK, errorMessage = null) }
+    }
+
+    fun updateEditingSettingsStopSequences(stopSequences: String) {
+        _editingSettingsForm.update { it.copy(stopSequences = stopSequences, errorMessage = null) }
+    }
+
     fun updateEditingSettingsCustomParamsJson(json: String) {
         _editingSettingsForm.update { it.copy(customParamsJson = json, errorMessage = null) }
     }
@@ -327,15 +418,16 @@ class SettingsConfigViewModel(
      * Saves the details of an edited settings profile (E4.S6).
      */
     fun saveEditedSettings() {
-        val originalSettings = _editingSettings.value ?: return
+        val originalSettings = _editingSettings.value ?: return // Must be ChatModelSettings
         val form = _editingSettingsForm.value
 
+        // Basic validation for name (constructor will also validate)
         if (form.name.isBlank()) {
             _editingSettingsForm.update { it.copy(errorMessage = "Settings profile name cannot be empty.") }
             return
         }
 
-        // Parse optional numeric fields from String inputs
+        // Parse optional numeric/list fields from String inputs
         val temperatureFloat = form.temperature.toFloatOrNull().also {
             if (form.temperature.isNotBlank() && it == null) {
                 _editingSettingsForm.update { s -> s.copy(errorMessage = "Temperature must be a number.") }
@@ -348,39 +440,75 @@ class SettingsConfigViewModel(
                 return
             }
         }
+        val topPFloat = form.topP.toFloatOrNull().also {
+            if (form.topP.isNotBlank() && it == null) {
+                _editingSettingsForm.update { s -> s.copy(errorMessage = "Top P must be a number.") }
+                return
+            }
+        }
+        val topKInt = form.topK.toIntOrNull().also {
+            if (form.topK.isNotBlank() && it == null) {
+                _editingSettingsForm.update { s -> s.copy(errorMessage = "Top K must be an integer.") }
+                return
+            }
+        }
+        val stopSequencesList = form.stopSequences.split(',')
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .takeIf { it.isNotEmpty() }
 
         viewModelScope.launch(uiDispatcher) {
-            val updatedSettings = originalSettings.copy(
-                name = form.name.trim(),
-                systemMessage = form.systemMessage.trim().takeIf { it.isNotBlank() },
-                temperature = temperatureFloat,
-                maxTokens = maxTokensInt,
-                customParamsJson = form.customParamsJson.trim().takeIf { it.isNotBlank() }
-            )
-            val currentSettings = _settingsState.value.dataOrNull
+            val customParams = form.customParamsJson.trim().takeIf { it.isNotBlank() }?.let { jsonString ->
+                try {
+                    Json.decodeFromString<JsonObject>(jsonString)
+                } catch (_: Exception) {
+                    _editingSettingsForm.update { s -> s.copy(errorMessage = "Invalid JSON format in custom parameters.") }
+                    return@launch
+                }
+            }
 
-            settingsApi.updateSettings(updatedSettings)
-                .fold(
-                    ifLeft = { error ->
-                        _editingSettingsForm.update { it.copy(errorMessage = "Error updating settings: ${error.message}") }
-                        println("Error updating settings: ${error.code} - ${error.message}")
-                    },
-                    ifRight = {
-                        // Update the settings in the list (E4.S6)
-                        if (currentSettings != null) {
-                            _settingsState.value = UiState.Success(currentSettings.map {
-                                if (it.id == updatedSettings.id) updatedSettings else it
-                            })
-                        } else {
-                            // Fallback to full reload if state wasn't Success
-                            selectModel(originalSettings.modelId) // Reloads settings for the selected model
-                        }
-                        // Keep editing state active, but clear error messages related to this save
-                        _editingSettingsForm.update { it.copy(errorMessage = null) }
-                        // Also update the _editingSettings itself to reflect changes in the UI
-                        _editingSettings.value = updatedSettings
-                    }
+            try {
+                // Create an updated ChatModelSettings object
+                val updatedChatSettings = originalSettings.copy(
+                    name = form.name.trim(),
+                    systemMessage = form.systemMessage.trim().takeIf { it.isNotBlank() },
+                    temperature = temperatureFloat,
+                    maxTokens = maxTokensInt,
+                    topP = topPFloat,
+                    topK = topKInt,
+                    stopSequences = stopSequencesList,
+                    customParams = customParams
                 )
+                val currentSettings = _settingsState.value.dataOrNull
+
+                settingsApi.updateSettings(updatedChatSettings) // Pass the specific ChatModelSettings
+                    .fold(
+                        ifLeft = { error ->
+                            _editingSettingsForm.update { it.copy(errorMessage = "Error updating settings: ${error.message}") }
+                            println("Error updating settings: ${error.code} - ${error.message}")
+                        },
+                        ifRight = {
+                            // Update the settings in the list (E4.S6)
+                            if (currentSettings != null) {
+                                val updatedList = currentSettings.map {
+                                    if (it.id == updatedChatSettings.id) updatedChatSettings else it
+                                }
+                                _settingsState.value = UiState.Success(updatedList)
+                            } else {
+                                // Fallback to full reload if state wasn't Success
+                                selectModel(originalSettings.modelId) // Reloads settings for the selected model
+                            }
+                            // Keep editing state active, but clear error messages related to this save
+                            _editingSettingsForm.update { it.copy(errorMessage = null) }
+                            // Also update the _editingSettings itself to reflect changes in the UI
+                            _editingSettings.value = updatedChatSettings
+                        }
+                    )
+            } catch (e: IllegalArgumentException) {
+                // Catch validation errors from ChatModelSettings constructor
+                _editingSettingsForm.update { it.copy(errorMessage = e.message) }
+                println("Client-side validation failed for edited settings: ${e.message}")
+            }
         }
     }
 
@@ -406,7 +534,6 @@ class SettingsConfigViewModel(
                 .fold(
                     ifLeft = { error ->
                         // Present the error to the user.
-                        // (No specific RESOURCE_IN_USE for settings in E4.S5, but useful to handle generally)
                         println("Error deleting settings: ${error.code} - ${error.message}")
                     },
                     ifRight = {

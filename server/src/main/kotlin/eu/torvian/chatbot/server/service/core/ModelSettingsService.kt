@@ -31,22 +31,10 @@ interface ModelSettingsService {
     /**
      * Creates a new settings profile with the specified parameters.
      *
-     * @param name The display name of the settings profile (e.g., "Default", "Creative")
-     * @param modelId The ID of the LLM model this settings profile is associated with
-     * @param systemMessage Optional system message/prompt to include in the conversation context
-     * @param temperature Optional sampling temperature for text generation
-     * @param maxTokens Optional maximum number of tokens to generate in the response
-     * @param customParamsJson Optional model-specific parameters stored as a JSON string
+     * @param settings The ModelSettings object containing all the settings data to create
      * @return [Either] an [AddSettingsError] if the associated model doesn't exist or insertion fails, or the newly created [ModelSettings]
      */
-    suspend fun addSettings(
-        name: String,
-        modelId: Long,
-        systemMessage: String?,
-        temperature: Float?,
-        maxTokens: Int?,
-        customParamsJson: String?
-    ): Either<AddSettingsError, ModelSettings>
+    suspend fun addSettings(settings: ModelSettings): Either<AddSettingsError, ModelSettings>
 
     /**
      * Updates an existing settings profile with new values.

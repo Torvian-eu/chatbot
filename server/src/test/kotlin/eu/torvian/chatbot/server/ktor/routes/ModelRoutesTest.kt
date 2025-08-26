@@ -122,6 +122,7 @@ class ModelRoutesTest {
         val createRequest = AddModelRequest(
             name = newModelName,
             providerId = testProvider1.id,
+            type = LLMModelType.CHAT,
             active = newModelActive,
             displayName = newModelDisplayName
         )
@@ -153,6 +154,7 @@ class ModelRoutesTest {
         val createRequest = AddModelRequest(
             name = "   ",
             providerId = testProvider1.id,
+            type = LLMModelType.CHAT,
             active = true,
             displayName = null
         )
@@ -180,6 +182,7 @@ class ModelRoutesTest {
         val createRequest = AddModelRequest(
             name = "Model For NonExistent Provider",
             providerId = nonExistentProviderId,
+            type = LLMModelType.CHAT,
             active = true,
             displayName = null
         )
@@ -213,6 +216,7 @@ class ModelRoutesTest {
         val createRequest = AddModelRequest(
             name = testModel1.name, // Use existing name
             providerId = testProvider1.id,
+            type = LLMModelType.CHAT,
             active = true,
             displayName = "Another Display Name"
         )
@@ -516,117 +520,6 @@ class ModelRoutesTest {
         assertEquals(HttpStatusCode.OK, response.status) // Expect OK with empty list based on service impl
         val settingsList = response.body<List<ModelSettings>>()
         assertEquals(emptyList(), settingsList)
-    }
-
-    // --- POST /api/v1/models/{modelId}/settings Tests ---
-
-    @Test
-    fun `POST model settings should add new settings successfully`() = modelTestApplication {
-        // Arrange
-        testDataManager.setup(
-            TestDataSet(
-                llmProviders = listOf(testProvider1),
-                llmModels = listOf(testModel1) // Need model for settings
-            )
-        )
-
-        val newSettingsName = "New Settings"
-        val newSystemMessage = "You are a helpful assistant."
-        val newTemperature = 0.7f
-        val newMaxTokens = 500
-        val newCustomParams = """{"top_p": 0.9}"""
-
-        val createRequest = AddModelSettingsRequest(
-            name = newSettingsName,
-            systemMessage = newSystemMessage,
-            temperature = newTemperature,
-            maxTokens = newMaxTokens,
-            customParamsJson = newCustomParams
-        )
-
-        // Act
-        val response = client.post(href(ModelResource.ById.Settings(ModelResource.ById(modelId = testModel1.id)))) {
-            contentType(ContentType.Application.Json)
-            setBody(createRequest)
-        }
-
-        // Assert
-        assertEquals(HttpStatusCode.Created, response.status)
-        val createdSettings = response.body<ModelSettings>()
-        assertEquals(newSettingsName, createdSettings.name)
-        assertEquals(testModel1.id, createdSettings.modelId)
-        assertEquals(newSystemMessage, createdSettings.systemMessage)
-        assertEquals(newTemperature, createdSettings.temperature)
-        assertEquals(newMaxTokens, createdSettings.maxTokens)
-        assertEquals(newCustomParams, createdSettings.customParamsJson)
-
-        // Verify the settings were actually created in the database
-        val retrievedSettings = testDataManager.getModelSettings(createdSettings.id)
-        assertNotNull(retrievedSettings)
-        assertEquals(createdSettings, retrievedSettings)
-    }
-
-    @Test
-    fun `POST model settings should return 400 for blank name`() = modelTestApplication {
-        // Arrange
-        testDataManager.setup(
-            TestDataSet(
-                llmProviders = listOf(testProvider1),
-                llmModels = listOf(testModel1)
-            )
-        )
-
-        val createRequest = AddModelSettingsRequest(
-            name = "   ",
-            systemMessage = "sys",
-            temperature = 0.5f,
-            maxTokens = 100,
-            customParamsJson = null
-        )
-
-        // Act
-        val response = client.post(href(ModelResource.ById.Settings(ModelResource.ById(modelId = testModel1.id)))) {
-            contentType(ContentType.Application.Json)
-            setBody(createRequest)
-        }
-
-        // Assert
-        assertEquals(HttpStatusCode.BadRequest, response.status)
-        val error = response.body<ApiError>()
-        assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.code)
-        assertEquals(400, error.statusCode)
-        assertEquals("Invalid settings input", error.message)
-        assert(error.details?.containsKey("reason") == true)
-        assertEquals("Settings name cannot be blank.", error.details?.get("reason"))
-    }
-
-    @Test
-    fun `POST model settings should return 400 for non-existent model ID`() = modelTestApplication {
-        // Arrange
-        val nonExistentModelId = 999L
-        val createRequest = AddModelSettingsRequest(
-            name = "Settings for NonExistent Model",
-            systemMessage = "sys",
-            temperature = 0.5f,
-            maxTokens = 100,
-            customParamsJson = null
-        )
-
-        // Act
-        val response =
-            client.post(href(ModelResource.ById.Settings(ModelResource.ById(modelId = nonExistentModelId)))) {
-                contentType(ContentType.Application.Json)
-                setBody(createRequest)
-            }
-
-        // Assert
-        assertEquals(HttpStatusCode.BadRequest, response.status)
-        val error = response.body<ApiError>()
-        assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.code)
-        assertEquals(400, error.statusCode)
-        assertEquals("Model not found for settings", error.message)
-        assert(error.details?.containsKey("modelId") == true)
-        assertEquals(nonExistentModelId.toString(), error.details?.get("modelId"))
     }
 
     // --- GET /api/v1/models/{modelId}/apikey/status Tests ---

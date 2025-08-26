@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.service.core.impl
 import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.common.models.LLMModelType
 import eu.torvian.chatbot.common.models.LLMProvider
 import eu.torvian.chatbot.common.models.LLMProviderType
 import eu.torvian.chatbot.server.data.dao.LLMProviderDao
@@ -43,7 +44,8 @@ class LLMModelServiceImplTest {
         name = "gpt-3.5-turbo",
         providerId = 1L,
         active = true,
-        displayName = "GPT-3.5 Turbo"
+        displayName = "GPT-3.5 Turbo",
+        type = LLMModelType.CHAT
     )
 
     private val testModel2 = LLMModel(
@@ -51,7 +53,8 @@ class LLMModelServiceImplTest {
         name = "gpt-4",
         providerId = 1L,
         active = true,
-        displayName = "GPT-4"
+        displayName = "GPT-4",
+        type = LLMModelType.CHAT
     )
 
     private val testProvider = LLMProvider(
@@ -195,18 +198,19 @@ class LLMModelServiceImplTest {
         // Arrange
         val name = "gpt-3.5-turbo"
         val providerId = 1L
+        val type = LLMModelType.CHAT
         val active = true
         val displayName = "GPT-3.5 Turbo"
-        coEvery { modelDao.insertModel(name, providerId, active, displayName) } returns testModel1.right()
+        coEvery { modelDao.insertModel(name, providerId, type, active, displayName, null) } returns testModel1.right()
 
         // Act
-        val result = llmModelService.addModel(name, providerId, active, displayName)
+        val result = llmModelService.addModel(name, providerId, type, active, displayName, null)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful creation")
         assertEquals(testModel1, result.getOrNull(), "Should return the created model")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { modelDao.insertModel(name, providerId, active, displayName) }
+        coVerify(exactly = 1) { modelDao.insertModel(name, providerId, type, active, displayName, null) }
     }
 
     @Test
@@ -214,9 +218,10 @@ class LLMModelServiceImplTest {
         // Arrange
         val blankName = "   "
         val providerId = 1L
+        val type = LLMModelType.CHAT
 
         // Act
-        val result = llmModelService.addModel(blankName, providerId, true, null)
+        val result = llmModelService.addModel(blankName, providerId, type, true, null, null)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for blank name")
@@ -225,7 +230,7 @@ class LLMModelServiceImplTest {
         assertTrue(error is AddModelError.InvalidInput, "Should be InvalidInput error")
         assertEquals("Model name cannot be blank.", (error as AddModelError.InvalidInput).reason)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 0) { modelDao.insertModel(any(), any(), any(), any()) }
+        coVerify(exactly = 0) { modelDao.insertModel(any(), any(), any(), any(), any(), any()) }
     }
 
     @Test
@@ -233,11 +238,12 @@ class LLMModelServiceImplTest {
         // Arrange
         val name = "test-model"
         val providerId = 999L
+        val type = LLMModelType.CHAT
         val daoError = InsertModelError.ProviderNotFound(providerId)
-        coEvery { modelDao.insertModel(name, providerId, true, null) } returns daoError.left()
+        coEvery { modelDao.insertModel(name, providerId, type, true, null, null) } returns daoError.left()
 
         // Act
-        val result = llmModelService.addModel(name, providerId, true, null)
+        val result = llmModelService.addModel(name, providerId, type, true, null, null)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for non-existent provider")
@@ -246,7 +252,7 @@ class LLMModelServiceImplTest {
         assertTrue(error is AddModelError.ProviderNotFound, "Should be ProviderNotFound error")
         assertEquals(providerId, (error as AddModelError.ProviderNotFound).providerId)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { modelDao.insertModel(name, providerId, true, null) }
+        coVerify(exactly = 1) { modelDao.insertModel(name, providerId, type, true, null, null) }
     }
 
     @Test
@@ -254,11 +260,12 @@ class LLMModelServiceImplTest {
         // Arrange
         val name = "existing-model"
         val providerId = 1L
+        val type = LLMModelType.CHAT
         val daoError = InsertModelError.ModelNameAlreadyExists(name)
-        coEvery { modelDao.insertModel(name, providerId, true, null) } returns daoError.left()
+        coEvery { modelDao.insertModel(name, providerId, type, true, null, null) } returns daoError.left()
 
         // Act
-        val result = llmModelService.addModel(name, providerId, true, null)
+        val result = llmModelService.addModel(name, providerId, type, true, null, null)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for duplicate name")
@@ -267,7 +274,7 @@ class LLMModelServiceImplTest {
         assertTrue(error is AddModelError.ModelNameAlreadyExists, "Should be ModelNameAlreadyExists error")
         assertEquals(name, (error as AddModelError.ModelNameAlreadyExists).name)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { modelDao.insertModel(name, providerId, true, null) }
+        coVerify(exactly = 1) { modelDao.insertModel(name, providerId, type, true, null, null) }
     }
 
     // --- updateModel Tests ---

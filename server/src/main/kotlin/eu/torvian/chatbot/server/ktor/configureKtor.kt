@@ -5,6 +5,7 @@ import io.ktor.server.application.Application
 import io.ktor.server.application.install
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.resources.Resources
+import io.ktor.server.sse.SSE
 import kotlinx.serialization.json.Json
 
 /**
@@ -18,4 +19,7 @@ fun Application.configureKtor() {
 
     // Install the Resources plugin for type-safe routing
     install(Resources)
+
+    // Install the SSE plugin for server-sent events support
+    install(SSE)
 }

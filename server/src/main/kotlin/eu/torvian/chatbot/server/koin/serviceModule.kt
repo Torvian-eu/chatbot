@@ -18,10 +18,10 @@ import org.koin.dsl.module
  */
 fun serviceModule() = module {
     // --- Core Services ---
-    single<SessionService> { SessionServiceImpl(get(), get()) }
+    single<SessionService> { SessionServiceImpl(get(), get(), get(), get()) }
     single<GroupService> { GroupServiceImpl(get(), get(), get()) }
     single<LLMModelService> { LLMModelServiceImpl(get(), get(), get()) }
-    single<ModelSettingsService> { ModelSettingsServiceImpl(get(), get()) }
+    single<ModelSettingsService> { ModelSettingsServiceImpl(get(), get(), get()) }
     single<LLMProviderService> { LLMProviderServiceImpl(get(), get(), get(), get()) }
     single<MessageService> { MessageServiceImpl(get(), get(), get(), get(), get(), get(), get(), get()) }
 

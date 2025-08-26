@@ -663,7 +663,15 @@ class LLMApiClientKtorTest {
         assertEquals(expectedResult, result.getOrNull())
 
         // Verify interactions
-        verify(exactly = 1) { mockStrategy.prepareRequest(testMessages, testModel, testProvider, testSettings, null) }
+        verify(exactly = 1) {
+            mockStrategy.prepareRequest(
+                testMessages,
+                testModel,
+                testProvider,
+                testSettings,
+                null
+            )
+        }
         verify(exactly = 1) { mockStrategy.processSuccessResponse(successResponseBody) }
         verify(exactly = 0) { mockStrategy.processErrorResponse(any(), any()) }
     }

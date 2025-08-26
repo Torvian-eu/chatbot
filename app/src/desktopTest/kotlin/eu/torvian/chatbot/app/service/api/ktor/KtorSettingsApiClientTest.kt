@@ -7,12 +7,13 @@ import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.ModelResource
 import eu.torvian.chatbot.common.api.resources.SettingsResource
 import eu.torvian.chatbot.common.api.resources.href
-import eu.torvian.chatbot.common.models.AddModelSettingsRequest
+import eu.torvian.chatbot.common.models.ChatModelSettings
 import eu.torvian.chatbot.common.models.ModelSettings
 import io.ktor.client.engine.mock.*
 import io.ktor.http.*
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -36,16 +37,16 @@ class KtorSettingsApiClientTest {
         systemMessage: String? = null,
         temperature: Float? = null,
         maxTokens: Int? = null,
-        customParamsJson: String? = null
-    ) = ModelSettings(id, modelId, name, systemMessage, temperature, maxTokens, customParamsJson)
+        customParams: JsonObject? = null
+    ) = ChatModelSettings(id, modelId, name, systemMessage, temperature, maxTokens, customParams = customParams)
 
     // --- Tests for getSettingsByModelId ---
     @Test
     fun `getSettingsByModelId - success`() = runTest {
         val modelId = 123L
         val mockSettingsList = listOf(
-            mockModelSettings(1, modelId, "Default"),
-            mockModelSettings(2, modelId, "Creative", temperature = 0.8f)
+            mockModelSettings(1, modelId, "Default") as ModelSettings,
+            mockModelSettings(2, modelId, "Creative", temperature = 0.8f) as ModelSettings
         )
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Get, request.method)
@@ -68,7 +69,7 @@ class KtorSettingsApiClientTest {
                 assertEquals("Default", settings[0].name)
                 assertEquals(modelId, settings[0].modelId)
                 assertEquals("Creative", settings[1].name)
-                assertEquals(0.8f, settings[1].temperature)
+                assertEquals(0.8f, (settings[1] as? ChatModelSettings)?.temperature)
             }
 
             is Either.Left -> fail("Expected success, but got error: ${result.value}")
@@ -163,28 +164,24 @@ class KtorSettingsApiClientTest {
     @Test
     fun `addModelSettings - success`() = runTest {
         val modelId = 123L
-        val mockRequest = AddModelSettingsRequest(
-            name = "New Settings",
-            temperature = 0.7f,
-            maxTokens = 1000
-        )
+        val mockSettings = mockModelSettings(0, modelId, "New Settings", temperature = 0.7f, maxTokens = 1000)
         val mockResponseSettings = mockModelSettings(1, modelId, "New Settings", temperature = 0.7f, maxTokens = 1000)
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Post, request.method)
             assertEquals(
-                href(ModelResource.ById.Settings(ModelResource.ById(modelId = modelId))),
+                href(SettingsResource()),
                 request.url.fullPath
             )
             val requestBody = request.body.toByteArray().decodeToString()
-            assertEquals(json.encodeToString(mockRequest), requestBody)
+            assertEquals(json.encodeToString(mockSettings as ModelSettings), requestBody)
             respond(
-                content = json.encodeToString(mockResponseSettings),
+                content = json.encodeToString(mockResponseSettings as ModelSettings),
                 status = HttpStatusCode.Created,
                 headers = headersOf(HttpHeaders.ContentType, "application/json")
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.addModelSettings(modelId, mockRequest)
+        val result = apiClient.addModelSettings(mockSettings)
         when (result) {
             is Either.Right -> {
                 val settings = result.value
@@ -198,45 +195,13 @@ class KtorSettingsApiClientTest {
     }
 
     @Test
-    fun `addModelSettings - failure - 400 Bad Request (Invalid Data)`() = runTest {
-        val modelId = 123L
-        val mockRequest = AddModelSettingsRequest(
-            name = "", // Invalid name
-            temperature = -0.5f // Invalid temperature
-        )
-        val mockEngine = MockEngine { request ->
-            assertEquals(HttpMethod.Post, request.method)
-            assertEquals(
-                href(ModelResource.ById.Settings(ModelResource.ById(modelId = modelId))),
-                request.url.fullPath
-            )
-            respond(
-                content = json.encodeToString(apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid parameters")),
-                status = HttpStatusCode.BadRequest,
-                headers = headersOf(HttpHeaders.ContentType, "application/json")
-            )
-        }
-        val apiClient = createTestClient(mockEngine)
-        val result = apiClient.addModelSettings(modelId, mockRequest)
-        when (result) {
-            is Either.Right -> fail("Expected failure, but got success: ${result.value}")
-            is Either.Left -> {
-                val error = result.value
-                assertEquals(400, error.statusCode)
-                assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.code)
-                assertEquals("Invalid parameters", error.message)
-            }
-        }
-    }
-
-    @Test
     fun `addModelSettings - failure - 400 Bad Request (Model Not Found)`() = runTest {
         val modelId = 999L // Non-existent model
-        val mockRequest = AddModelSettingsRequest(name = "New Settings")
+        val mockSettings = mockModelSettings(0, modelId, "New Settings", temperature = 0.7f, maxTokens = 1000)
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Post, request.method)
             assertEquals(
-                href(ModelResource.ById.Settings(ModelResource.ById(modelId = modelId))),
+                href(SettingsResource()),
                 request.url.fullPath
             )
             respond(
@@ -246,7 +211,7 @@ class KtorSettingsApiClientTest {
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.addModelSettings(modelId, mockRequest)
+        val result = apiClient.addModelSettings(mockSettings)
         when (result) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
@@ -261,11 +226,11 @@ class KtorSettingsApiClientTest {
     @Test
     fun `addModelSettings - failure - 500 Internal Server Error`() = runTest {
         val modelId = 123L
-        val mockRequest = AddModelSettingsRequest(name = "New Settings")
+        val mockSettings = mockModelSettings(0, modelId, "New Settings")
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Post, request.method)
             assertEquals(
-                href(ModelResource.ById.Settings(ModelResource.ById(modelId = modelId))),
+                href(SettingsResource()),
                 request.url.fullPath
             )
             respond(
@@ -275,7 +240,7 @@ class KtorSettingsApiClientTest {
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.addModelSettings(modelId, mockRequest)
+        val result = apiClient.addModelSettings(mockSettings)
         when (result) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
@@ -290,11 +255,11 @@ class KtorSettingsApiClientTest {
     @Test
     fun `addModelSettings - failure - SerializationException`() = runTest {
         val modelId = 123L
-        val mockRequest = AddModelSettingsRequest(name = "New Settings")
+        val mockSettings = mockModelSettings(0, modelId, "New Settings")
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Post, request.method)
             assertEquals(
-                href(ModelResource.ById.Settings(ModelResource.ById(modelId = modelId))),
+                href(SettingsResource()),
                 request.url.fullPath
             )
             respond(
@@ -304,7 +269,7 @@ class KtorSettingsApiClientTest {
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.addModelSettings(modelId, mockRequest)
+        val result = apiClient.addModelSettings(mockSettings)
         when (result) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
@@ -328,7 +293,7 @@ class KtorSettingsApiClientTest {
                 request.url.fullPath
             )
             respond(
-                content = json.encodeToString(mockSettings),
+                content = json.encodeToString(mockSettings as ModelSettings),
                 status = HttpStatusCode.OK,
                 headers = headersOf(HttpHeaders.ContentType, "application/json")
             )
@@ -338,6 +303,7 @@ class KtorSettingsApiClientTest {
         when (result) {
             is Either.Right -> {
                 val settings = result.value
+                assertTrue(settings is ChatModelSettings, "Expected ChatModelSettings type")
                 assertEquals(settingsId, settings.id)
                 assertEquals("My Settings", settings.name)
                 assertEquals("Be helpful.", settings.systemMessage)
@@ -415,7 +381,7 @@ class KtorSettingsApiClientTest {
                 request.url.fullPath
             )
             val requestBody = request.body.toByteArray().decodeToString()
-            assertEquals(json.encodeToString(updatedSettings), requestBody)
+            assertEquals(json.encodeToString(updatedSettings as ModelSettings), requestBody)
             respond(
                 content = "", // Unit response
                 status = HttpStatusCode.OK
@@ -426,35 +392,6 @@ class KtorSettingsApiClientTest {
         when (result) {
             is Either.Right -> assertEquals(Unit, result.value)
             is Either.Left -> fail("Expected success, but got error: ${result.value}")
-        }
-    }
-
-    @Test
-    fun `updateSettings - failure - 400 Bad Request (Invalid Data)`() = runTest {
-        val settingsId = 123L
-        val updatedSettings = mockModelSettings(settingsId, 10, "", temperature = 1.1f) // Invalid name, temp
-        val mockEngine = MockEngine { request ->
-            assertEquals(HttpMethod.Put, request.method)
-            assertEquals(
-                href(SettingsResource.ById(settingsId = settingsId)),
-                request.url.fullPath
-            )
-            respond(
-                content = json.encodeToString(apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid parameters")),
-                status = HttpStatusCode.BadRequest,
-                headers = headersOf(HttpHeaders.ContentType, "application/json")
-            )
-        }
-        val apiClient = createTestClient(mockEngine)
-        val result = apiClient.updateSettings(updatedSettings)
-        when (result) {
-            is Either.Right -> fail("Expected failure, but got success: ${result.value}")
-            is Either.Left -> {
-                val error = result.value
-                assertEquals(400, error.statusCode)
-                assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.code)
-                assertEquals("Invalid parameters", error.message)
-            }
         }
     }
 

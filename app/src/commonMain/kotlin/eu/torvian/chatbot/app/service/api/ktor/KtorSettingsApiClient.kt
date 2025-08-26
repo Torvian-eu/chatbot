@@ -5,8 +5,8 @@ import eu.torvian.chatbot.app.service.api.SettingsApi
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.resources.ModelResource
 import eu.torvian.chatbot.common.api.resources.ModelResource.ById.Settings
+import eu.torvian.chatbot.common.api.resources.SettingsResource
 import eu.torvian.chatbot.common.api.resources.SettingsResource.ById
-import eu.torvian.chatbot.common.models.AddModelSettingsRequest
 import eu.torvian.chatbot.common.models.ModelSettings
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -30,13 +30,10 @@ class KtorSettingsApiClient(client: HttpClient) : BaseApiClient(client), Setting
         }
     }
 
-    override suspend fun addModelSettings(
-        modelId: Long,
-        request: AddModelSettingsRequest
-    ): Either<ApiError, ModelSettings> {
+    override suspend fun addModelSettings(settings: ModelSettings): Either<ApiError, ModelSettings> {
         return safeApiCall {
-            client.post(Settings(ModelResource.ById(modelId = modelId))) {
-                setBody(request)
+            client.post(SettingsResource()) {
+                setBody(settings)
             }.body<ModelSettings>()
         }
     }

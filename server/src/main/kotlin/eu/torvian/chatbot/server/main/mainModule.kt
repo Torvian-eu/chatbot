@@ -5,8 +5,10 @@ import eu.torvian.chatbot.server.service.llm.ChatCompletionStrategy
 import eu.torvian.chatbot.server.service.llm.LLMApiClient
 import eu.torvian.chatbot.server.service.llm.LLMApiClientKtor
 import eu.torvian.chatbot.server.service.llm.strategy.OpenAIChatStrategy
+import eu.torvian.chatbot.server.service.llm.strategy.OllamaChatStrategy
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
@@ -29,6 +31,7 @@ fun mainModule(application: Application) = module {
         Json {
             ignoreUnknownKeys = true
             isLenient = true
+            encodeDefaults = true
         }
     }
 
@@ -38,19 +41,21 @@ fun mainModule(application: Application) = module {
             install(ContentNegotiation) {
                 json(get<Json>())
             }
+            install(HttpTimeout)
         }
     }
 
     // --- LLM Strategies ---
     single<OpenAIChatStrategy> { OpenAIChatStrategy(get()) }
+    single<OllamaChatStrategy> { OllamaChatStrategy(get()) }
 
     single<Map<LLMProviderType, ChatCompletionStrategy>> {
         mapOf(
             LLMProviderType.OPENAI to get<OpenAIChatStrategy>(),
             LLMProviderType.OPENROUTER to get<OpenAIChatStrategy>(), // OpenRouter uses OpenAI-compatible API
+            LLMProviderType.OLLAMA to get<OllamaChatStrategy>(),
             // Add other strategies here as they are implemented
             // LLMProviderType.ANTHROPIC to get<AnthropicChatStrategy>(),
-            // LLMProviderType.OLLAMA to get<OllamaChatStrategy>(),
         )
     }
 }

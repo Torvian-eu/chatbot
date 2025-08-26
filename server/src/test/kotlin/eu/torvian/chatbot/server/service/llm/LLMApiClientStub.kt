@@ -3,9 +3,10 @@ package eu.torvian.chatbot.server.service.llm
 import arrow.core.Either
 import arrow.core.right
 import eu.torvian.chatbot.common.models.ChatMessage
+import eu.torvian.chatbot.common.models.ChatModelSettings
 import eu.torvian.chatbot.common.models.LLMModel
 import eu.torvian.chatbot.common.models.LLMProvider
-import eu.torvian.chatbot.common.models.ModelSettings
+import kotlinx.coroutines.flow.Flow
 
 /**
  * Stubbed implementation of [LLMApiClient] for testing purposes.
@@ -18,7 +19,7 @@ class LLMApiClientStub : LLMApiClient {
         messages: List<ChatMessage>,
         modelConfig: LLMModel,
         provider: LLMProvider,
-        settings: ModelSettings,
+        settings: ChatModelSettings,
         apiKey: String?
     ): Either<LLMCompletionError, LLMCompletionResult> {
         return LLMCompletionResult(
@@ -42,5 +43,15 @@ class LLMApiClientStub : LLMApiClient {
                 "api_model" to modelConfig.name
             )
         ).right()
+    }
+
+    override fun completeChatStreaming(
+        messages: List<ChatMessage>,
+        modelConfig: LLMModel,
+        provider: LLMProvider,
+        settings: ChatModelSettings,
+        apiKey: String?
+    ): Flow<Either<LLMCompletionError, LLMStreamChunk>> {
+        TODO("Not yet implemented")
     }
 }

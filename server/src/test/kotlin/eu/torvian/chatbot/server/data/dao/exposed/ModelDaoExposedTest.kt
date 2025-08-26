@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.data.dao.exposed
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.common.models.LLMModelType
 import eu.torvian.chatbot.server.data.dao.ModelDao
 import eu.torvian.chatbot.server.data.dao.error.ModelError
 import eu.torvian.chatbot.server.data.dao.error.UpdateModelError
@@ -179,8 +180,10 @@ class ModelDaoExposedTest {
         val result = modelDao.insertModel(
             name = testModel1.name,
             providerId = testModel1.providerId,
+            type = testModel1.type,
             active = testModel1.active,
-            displayName = testModel1.displayName
+            displayName = testModel1.displayName,
+            capabilities = testModel1.capabilities
         )
 
         // Verify
@@ -189,8 +192,10 @@ class ModelDaoExposedTest {
         assertNotNull(model, "Expected non-null model")
         assertEquals(testModel1.name, model.name, "Expected matching name")
         assertEquals(testModel1.providerId, model.providerId, "Expected matching providerId")
+        assertEquals(testModel1.type, model.type, "Expected matching type")
         assertEquals(testModel1.active, model.active, "Expected matching active")
         assertEquals(testModel1.displayName, model.displayName, "Expected matching displayName")
+        assertEquals(testModel1.capabilities, model.capabilities, "Expected matching capabilities")
         assertTrue(model.id > 0, "Expected positive ID")
 
         // Verify model was actually inserted in the database
@@ -229,8 +234,10 @@ class ModelDaoExposedTest {
         assertNotNull(retrievedModel, "Expected non-null model")
         assertEquals(updatedModel.name, retrievedModel.name, "Expected updated name")
         assertEquals(updatedModel.providerId, retrievedModel.providerId, "Expected updated providerId")
+        assertEquals(updatedModel.type, retrievedModel.type, "Expected updated type")
         assertEquals(updatedModel.active, retrievedModel.active, "Expected updated active")
         assertEquals(updatedModel.displayName, retrievedModel.displayName, "Expected updated displayName")
+        assertEquals(updatedModel.capabilities, retrievedModel.capabilities, "Expected updated capabilities")
     }
 
     @Test
@@ -248,7 +255,8 @@ class ModelDaoExposedTest {
             name = "non-existent-model",
             providerId = testProvider1.id,
             active = true,
-            displayName = "Non-existent Model"
+            displayName = "Non-existent Model",
+            type = LLMModelType.CHAT
         )
 
         val result = modelDao.updateModel(nonExistentModel)

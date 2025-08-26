@@ -25,7 +25,7 @@ import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.action_retry
 import eu.torvian.chatbot.app.generated.resources.app_name
 import eu.torvian.chatbot.app.service.misc.EventBus
-import eu.torvian.chatbot.app.viewmodel.ChatViewModel
+import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.getString

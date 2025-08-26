@@ -17,3 +17,12 @@
 
 ## Tips
 - JUnit 5 parallel testing can make console output hard to follow. For failed tests, run them individually to view output in order.
+- By default, your console commands will be run in PowerShell.
+
+## Running Gradle tasks
+- `./gradlew assemble` to build all modules
+- `./gradlew app:desktopMainClasses` to build the desktop application
+- `./gradlew app:desktopTestClasses` to build the desktop tests
+- `./gradlew app:desktopTest` to run the desktop tests
+- `./gradlew server:assemble` to build the server module
+- `./gradlew server:test` to run the server tests

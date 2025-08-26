@@ -7,6 +7,7 @@ import eu.torvian.chatbot.app.domain.contracts.ChatAreaState
 import eu.torvian.chatbot.app.domain.contracts.UiState
 import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.common.models.ChatSession
+import eu.torvian.chatbot.app.viewmodel.chat.state.ChatSessionData
 import kotlinx.datetime.Instant
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -48,7 +49,7 @@ fun ChatAreaPreview() {
     )
     ChatArea(
         state = ChatAreaState(
-            sessionUiState = UiState.Success(mockChatSession),
+            sessionUiState = UiState.Success(ChatSessionData(session = mockChatSession)),
             currentBranchLeafId = 2L,
             displayedMessages = mockChatSession.messages
         ),

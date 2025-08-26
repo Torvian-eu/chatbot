@@ -27,6 +27,14 @@ external val console: Console
  * using the browser's `console` API.
  */
 class WasmKmpLogger(private val tag: String) : KmpLogger {
+    override fun trace(message: String, throwable: Throwable?) {
+        if (throwable != null) {
+            console.debug("[$tag] $message ${throwable.stackTraceToString()}")
+        } else {
+            console.debug("[$tag] $message")
+        }
+    }
+
     override fun debug(message: String, throwable: Throwable?) {
         if (throwable != null) {
             console.debug("[$tag] $message ${throwable.stackTraceToString()}")
@@ -52,6 +60,14 @@ class WasmKmpLogger(private val tag: String) : KmpLogger {
     }
 
     override fun error(message: String, throwable: Throwable?) {
+        if (throwable != null) {
+            console.error("[$tag] $message ${throwable.stackTraceToString()}")
+        } else {
+            console.error("[$tag] $message")
+        }
+    }
+
+    override fun fatal(message: String, throwable: Throwable?) {
         if (throwable != null) {
             console.error("[$tag] $message ${throwable.stackTraceToString()}")
         } else {

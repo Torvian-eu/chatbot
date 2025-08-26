@@ -5,6 +5,8 @@ import arrow.core.right
 import eu.torvian.chatbot.common.models.ChatSession
 import eu.torvian.chatbot.common.models.ChatSessionSummary
 import eu.torvian.chatbot.server.data.dao.SessionDao
+import eu.torvian.chatbot.server.data.dao.SettingsDao
+import eu.torvian.chatbot.server.data.dao.ModelDao
 import eu.torvian.chatbot.server.data.dao.error.SessionError
 import eu.torvian.chatbot.server.service.core.error.session.*
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
@@ -21,12 +23,14 @@ import kotlin.test.*
  *
  * This test suite verifies that [SessionServiceImpl] correctly orchestrates
  * calls to the underlying DAO and handles business logic validation.
- * All dependencies ([SessionDao], [TransactionScope]) are mocked using MockK.
+ * All dependencies ([SessionDao], [SettingsDao], [ModelDao], [TransactionScope]) are mocked using MockK.
  */
 class SessionServiceImplTest {
 
     // Mocked dependencies
     private lateinit var sessionDao: SessionDao
+    private lateinit var settingsDao: SettingsDao
+    private lateinit var modelDao: ModelDao
     private lateinit var transactionScope: TransactionScope
 
     // Class under test
@@ -67,10 +71,12 @@ class SessionServiceImplTest {
     fun setUp() {
         // Create mocks for all dependencies
         sessionDao = mockk()
+        settingsDao = mockk()
+        modelDao = mockk()
         transactionScope = mockk()
 
         // Create the service instance with mocked dependencies
-        sessionService = SessionServiceImpl(sessionDao, transactionScope)
+        sessionService = SessionServiceImpl(sessionDao, settingsDao, modelDao, transactionScope)
 
         // Mock the transaction scope to execute blocks directly
         coEvery { transactionScope.transaction(any<suspend () -> Any>()) } coAnswers {
@@ -82,7 +88,7 @@ class SessionServiceImplTest {
     @AfterEach
     fun tearDown() {
         // Clear all mocks after each test to ensure isolation
-        clearMocks(sessionDao, transactionScope)
+        clearMocks(sessionDao, settingsDao, modelDao, transactionScope)
     }
 
     // --- getAllSessionsSummaries Tests ---
@@ -367,6 +373,7 @@ class SessionServiceImplTest {
         val sessionId = 1L
         val modelId = 2L
         coEvery { sessionDao.updateSessionCurrentModelId(sessionId, modelId) } returns Unit.right()
+        coEvery { sessionDao.updateSessionCurrentSettingsId(sessionId, null) } returns Unit.right()
 
         // Act
         val result = sessionService.updateSessionCurrentModelId(sessionId, modelId)
@@ -375,6 +382,7 @@ class SessionServiceImplTest {
         assertTrue(result.isRight(), "Should return Right for successful update")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { sessionDao.updateSessionCurrentModelId(sessionId, modelId) }
+        coVerify(exactly = 1) { sessionDao.updateSessionCurrentSettingsId(sessionId, null) }
     }
 
     @Test
@@ -426,6 +434,22 @@ class SessionServiceImplTest {
         // Arrange
         val sessionId = 1L
         val settingsId = 2L
+        val modelId = 1L
+
+        // Create test session with current model
+        val sessionWithModel = testSession.copy(currentModelId = modelId)
+
+        // Create test settings that belong to the same model
+        val testSettings = eu.torvian.chatbot.common.models.ChatModelSettings(
+            id = settingsId,
+            modelId = modelId,
+            name = "Test Settings",
+            systemMessage = "Test system message"
+        )
+
+        // Mock the validation calls
+        coEvery { sessionDao.getSessionById(sessionId) } returns sessionWithModel.right()
+        coEvery { settingsDao.getSettingsById(settingsId) } returns testSettings.right()
         coEvery { sessionDao.updateSessionCurrentSettingsId(sessionId, settingsId) } returns Unit.right()
 
         // Act
@@ -434,7 +458,29 @@ class SessionServiceImplTest {
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful update")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+        coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
+        coVerify(exactly = 1) { settingsDao.getSettingsById(settingsId) }
         coVerify(exactly = 1) { sessionDao.updateSessionCurrentSettingsId(sessionId, settingsId) }
+    }
+
+    @Test
+    fun `updateSessionCurrentSettingsId should update to null settings ID successfully`() = runTest {
+        // Arrange
+        val sessionId = 1L
+        val settingsId: Long? = null
+
+        // When settingsId is null, no validation calls should be made
+        coEvery { sessionDao.updateSessionCurrentSettingsId(sessionId, null) } returns Unit.right()
+
+        // Act
+        val result = sessionService.updateSessionCurrentSettingsId(sessionId, settingsId)
+
+        // Assert
+        assertTrue(result.isRight(), "Should return Right for successful update to null")
+        coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+        coVerify(exactly = 0) { sessionDao.getSessionById(any()) }
+        coVerify(exactly = 0) { settingsDao.getSettingsById(any()) }
+        coVerify(exactly = 1) { sessionDao.updateSessionCurrentSettingsId(sessionId, null) }
     }
 
     @Test
@@ -443,7 +489,9 @@ class SessionServiceImplTest {
         val sessionId = 999L
         val settingsId = 1L
         val daoError = SessionError.SessionNotFound(sessionId)
-        coEvery { sessionDao.updateSessionCurrentSettingsId(sessionId, settingsId) } returns daoError.left()
+
+        // Mock the session lookup (which will fail first)
+        coEvery { sessionDao.getSessionById(sessionId) } returns daoError.left()
 
         // Act
         val result = sessionService.updateSessionCurrentSettingsId(sessionId, settingsId)
@@ -455,7 +503,10 @@ class SessionServiceImplTest {
         assertTrue(error is UpdateSessionCurrentSettingsIdError.SessionNotFound, "Should be SessionNotFound error")
         assertEquals(sessionId, (error as UpdateSessionCurrentSettingsIdError.SessionNotFound).id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { sessionDao.updateSessionCurrentSettingsId(sessionId, settingsId) }
+        coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
+        // Should not get to settings validation or update
+        coVerify(exactly = 0) { settingsDao.getSettingsById(any()) }
+        coVerify(exactly = 0) { sessionDao.updateSessionCurrentSettingsId(any(), any()) }
     }
 
     @Test
@@ -463,20 +514,71 @@ class SessionServiceImplTest {
         // Arrange
         val sessionId = 1L
         val settingsId = 999L
-        val daoError = SessionError.ForeignKeyViolation("Invalid settings ID")
-        coEvery { sessionDao.updateSessionCurrentSettingsId(sessionId, settingsId) } returns daoError.left()
+        val modelId = 1L
+
+        // Create test session with current model
+        val sessionWithModel = testSession.copy(currentModelId = modelId)
+
+        // Mock session lookup success but settings lookup failure
+        coEvery { sessionDao.getSessionById(sessionId) } returns sessionWithModel.right()
+        coEvery { settingsDao.getSettingsById(settingsId) } returns eu.torvian.chatbot.server.data.dao.error.SettingsError.SettingsNotFound(settingsId).left()
 
         // Act
         val result = sessionService.updateSessionCurrentSettingsId(sessionId, settingsId)
 
         // Assert
-        assertTrue(result.isLeft(), "Should return Left for foreign key violation")
+        assertTrue(result.isLeft(), "Should return Left for non-existent settings")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
         assertTrue(error is UpdateSessionCurrentSettingsIdError.InvalidRelatedEntity, "Should be InvalidRelatedEntity error")
-        assertEquals("Invalid settings ID", (error as UpdateSessionCurrentSettingsIdError.InvalidRelatedEntity).message)
+        assertEquals("Settings with ID $settingsId not found", (error as UpdateSessionCurrentSettingsIdError.InvalidRelatedEntity).message)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { sessionDao.updateSessionCurrentSettingsId(sessionId, settingsId) }
+        coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
+        coVerify(exactly = 1) { settingsDao.getSettingsById(settingsId) }
+        // Should not get to the final update
+        coVerify(exactly = 0) { sessionDao.updateSessionCurrentSettingsId(any(), any()) }
+    }
+
+    @Test
+    fun `updateSessionCurrentSettingsId should return SettingsModelMismatch error when settings belong to different model`() = runTest {
+        // Arrange
+        val sessionId = 1L
+        val settingsId = 2L
+        val sessionModelId = 1L
+        val settingsModelId = 3L // Different model
+
+        // Create test session with one model
+        val sessionWithModel = testSession.copy(currentModelId = sessionModelId)
+
+        // Create test settings that belong to a different model
+        val testSettings = eu.torvian.chatbot.common.models.ChatModelSettings(
+            id = settingsId,
+            modelId = settingsModelId, // Different from session model
+            name = "Test Settings",
+            systemMessage = "Test system message"
+        )
+
+        // Mock the validation calls
+        coEvery { sessionDao.getSessionById(sessionId) } returns sessionWithModel.right()
+        coEvery { settingsDao.getSettingsById(settingsId) } returns testSettings.right()
+
+        // Act
+        val result = sessionService.updateSessionCurrentSettingsId(sessionId, settingsId)
+
+        // Assert
+        assertTrue(result.isLeft(), "Should return Left for model mismatch")
+        val error = result.leftOrNull()
+        assertNotNull(error, "Error should not be null")
+        assertTrue(error is UpdateSessionCurrentSettingsIdError.SettingsModelMismatch, "Should be SettingsModelMismatch error")
+        val mismatchError = error as UpdateSessionCurrentSettingsIdError.SettingsModelMismatch
+        assertEquals(settingsId, mismatchError.settingsId)
+        assertEquals(settingsModelId, mismatchError.settingsModelId)
+        assertEquals(sessionModelId, mismatchError.sessionModelId)
+        coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+        coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
+        coVerify(exactly = 1) { settingsDao.getSettingsById(settingsId) }
+        // Should not get to the final update due to validation failure
+        coVerify(exactly = 0) { sessionDao.updateSessionCurrentSettingsId(any(), any()) }
     }
 
     // --- updateSessionLeafMessageId Tests ---

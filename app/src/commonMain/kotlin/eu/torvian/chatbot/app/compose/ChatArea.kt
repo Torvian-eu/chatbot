@@ -97,9 +97,12 @@ fun ChatArea(
 
             UiState.Idle -> IdleStateDisplay(modifier = Modifier.align(Alignment.Center))
             is UiState.Success -> SuccessStateDisplay(
-                chatSession = state.sessionUiState.data,
+                chatSession = state.sessionUiState.data.session,
                 displayedMessages = state.displayedMessages,
-                actions = actions // Pass the full actions contract
+                actions = actions, // Pass the full actions contract
+                inputContent = state.inputContent,
+                replyTargetMessage = state.replyTargetMessage,
+                isSendingMessage = state.isSendingMessage
             )
         }
     }
@@ -145,12 +148,18 @@ private fun IdleStateDisplay(modifier: Modifier = Modifier) {
  * @param chatSession The current chat session data.
  * @param displayedMessages The list of messages to display.
  * @param actions The actions contract for the chat area, providing message-related callbacks.
+ * @param inputContent The current text content in the message input field.
+ * @param replyTargetMessage The message the user is currently explicitly replying to via the Reply action.
+ * @param isSendingMessage Indicates whether a message is currently in the process of being sent.
  */
 @Composable
 private fun SuccessStateDisplay(
     chatSession: ChatSession,
     displayedMessages: List<ChatMessage>,
-    actions: ChatAreaActions // Use the full actions for better future flexibility
+    actions: ChatAreaActions,
+    inputContent: String,
+    replyTargetMessage: ChatMessage?,
+    isSendingMessage: Boolean
 ) {
     val allMessagesMap = remember(chatSession.messages) {
         chatSession.messages.associateBy { it.id }
@@ -175,33 +184,46 @@ private fun SuccessStateDisplay(
     // Create LazyListState for scrollbar integration
     val lazyListState = rememberLazyListState()
 
-    ScrollbarWrapper(
-        listState = lazyListState,
-        modifier = Modifier.fillMaxSize()
-    ) {
-        LazyColumn(
-            state = lazyListState,
-            contentPadding = PaddingValues(bottom = 16.dp, end = 16.dp), // Space for future input area
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+    Column(modifier = Modifier.fillMaxSize()) {
+        ScrollbarWrapper(
+            listState = lazyListState,
+            modifier = Modifier.weight(1f) // Messages take up most space
         ) {
-            items(
-                items = displayedMessages,
-                key = { it.id } // Provide a key for efficient recomposition
-            ) { message ->
-                val branchNavData = remember(message, allMessagesMap, allRootMessageIds) {
-                    getBranchNavigationData(
+            LazyColumn(
+                state = lazyListState,
+                contentPadding = PaddingValues(bottom = 16.dp, end = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(
+                    items = displayedMessages,
+                    key = { it.id } // Provide a key for efficient recomposition
+                ) { message ->
+                    val branchNavData = remember(message, allMessagesMap, allRootMessageIds) {
+                        getBranchNavigationData(
+                            message = message,
+                            allMessagesMap = allMessagesMap,
+                            allRootMessageIds = allRootMessageIds
+                        )
+                    }
+                    MessageItem(
                         message = message,
-                        allMessagesMap = allMessagesMap,
-                        allRootMessageIds = allRootMessageIds
+                        branchNavigationData = branchNavData,
+                        messageActions = messageActions
                     )
                 }
-                MessageItem(
-                    message = message,
-                    branchNavigationData = branchNavData,
-                    messageActions = messageActions
-                )
             }
         }
+        InputArea(
+            inputContent = inputContent,
+            onUpdateInput = actions::onUpdateInput,
+            onSendMessage = actions::onSendMessage,
+            replyTargetMessage = replyTargetMessage,
+            onCancelReply = actions::onCancelReply,
+            isSendingMessage = isSendingMessage,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp) // Small padding between messages and input
+        )
     }
 }
 

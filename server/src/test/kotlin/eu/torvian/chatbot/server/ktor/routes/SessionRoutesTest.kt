@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.ktor.routes
 
 import eu.torvian.chatbot.common.api.ApiError
+import eu.torvian.chatbot.common.api.ChatbotApiErrorCodes
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.api.resources.href
@@ -24,6 +25,8 @@ import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.test.fail
 
 /**
  * Integration tests for Session API routes.
@@ -52,6 +55,19 @@ class SessionRoutesTest {
     private val testModel2 = TestDefaults.llmModel2.copy(id = 2L)
     private val testSettings = TestDefaults.modelSettings1.copy(id = 1L)
     private val testSettings2 = TestDefaults.modelSettings2.copy(id = 2L)
+    // Create additional settings that belong to the same model as testSession for testing
+    private val testSettings3 = TestDefaults.modelSettings1.copy(
+        id = 3L,
+        modelId = testModel.id, // Same model as testSession
+        name = "Alternative Settings for Model 1"
+    )
+    // Create non-streaming settings for testing non-streaming message processing
+    private val testNonStreamingSettings = TestDefaults.modelSettings1.copy(
+        id = 4L,
+        modelId = testModel.id,
+        name = "Non-Streaming Settings for Model 1",
+        stream = false
+    )
     private val testSession = TestDefaults.chatSession1.copy(
         id = 1L,
         name = "Test Session",
@@ -65,6 +81,14 @@ class SessionRoutesTest {
         groupId = testGroup.id,
         currentModelId = testModel.id,
         currentSettingsId = testSettings.id
+    )
+    // Create a test session configured for non-streaming
+    private val testNonStreamingSession = TestDefaults.chatSession1.copy(
+        id = 3L,
+        name = "Non-Streaming Test Session",
+        groupId = testGroup.id,
+        currentModelId = testModel.id,
+        currentSettingsId = testNonStreamingSettings.id
     )
     private val testUserMessage = TestDefaults.chatMessage1.copy(
         id = 1L,
@@ -96,7 +120,7 @@ class SessionRoutesTest {
                 chatGroups = listOf(testGroup, testGroup2),
                 llmProviders = listOf(TestDefaults.llmProvider1, TestDefaults.llmProvider2),
                 llmModels = listOf(testModel, testModel2),
-                modelSettings = listOf(testSettings, testSettings2)
+                modelSettings = listOf(testSettings, testSettings2, testSettings3, testNonStreamingSettings)
             )
         )
         testDataManager.createTables(setOf(
@@ -382,7 +406,7 @@ class SessionRoutesTest {
     fun `PUT session settings should update settings ID successfully`() = sessionTestApplication {
         // Arrange
         testDataManager.insertChatSession(testSession)
-        val newSettingsId = 2L
+        val newSettingsId = testSettings3.id // Use settings that belong to the same model as the session
         val updateRequest = UpdateSessionSettingsRequest(settingsId = newSettingsId)
 
         // Act
@@ -454,12 +478,12 @@ class SessionRoutesTest {
     @Test
     fun `POST session message should process new message successfully`() = sessionTestApplication {
         // Arrange
-        testDataManager.insertChatSession(testSession)
+        testDataManager.insertChatSession(testNonStreamingSession)
         val messageContent = "Test message content"
         val processRequest = ProcessNewMessageRequest(content = messageContent)
 
         // Act
-        val response = client.post(href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = testSession.id)))) {
+        val response = client.post(href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = testNonStreamingSession.id)))) {
             contentType(ContentType.Application.Json)
             setBody(processRequest)
         }
@@ -469,7 +493,30 @@ class SessionRoutesTest {
         val messages = response.body<List<ChatMessage>>()
         assertEquals(2, messages.size) // User message and assistant response
         assertEquals(messageContent, messages[0].content)
-        assertEquals(testSession.id, messages[0].sessionId)
+        assertEquals(testNonStreamingSession.id, messages[0].sessionId)
+
+        // Verify the session leaf message ID was actually updated in the database
+        testDataManager.getSessionCurrentLeaf(testNonStreamingSession.id)?.let { leaf ->
+            assertEquals(messages[1].id, leaf.messageId)
+        } ?: fail("Expected leaf message to be created")
+
+        // Verify the messages were actually created in the database
+        testDataManager.getChatMessage(messages[0].id)?.let { chatMessage ->
+            assertTrue(chatMessage is ChatMessage.UserMessage)
+            assertEquals(messages[0].id, chatMessage.id)
+            assertEquals(testNonStreamingSession.id, chatMessage.sessionId)
+            assertEquals(messageContent, chatMessage.content)
+            assertNull(chatMessage.parentMessageId)
+        } ?: fail("Expected user message to be created")
+
+        testDataManager.getChatMessage(messages[1].id)?.let { chatMessage ->
+            assertTrue(chatMessage is ChatMessage.AssistantMessage)
+            assertEquals(messages[1].id, chatMessage.id)
+            assertEquals(testNonStreamingSession.id, chatMessage.sessionId)
+            assertEquals(messages[0].id, chatMessage.parentMessageId)
+            assertEquals(testModel.id, chatMessage.modelId)
+            assertEquals(testNonStreamingSettings.id, chatMessage.settingsId)
+        } ?: fail("Expected assistant message to be created")
     }
 
     @Test
@@ -491,5 +538,27 @@ class SessionRoutesTest {
         assertEquals("Session not found", error.message)
         assert(error.details?.containsKey("sessionId") == true)
         assertEquals(nonExistentId.toString(), error.details?.get("sessionId"))
+    }
+    
+    @Test
+    fun `POST session message should return 400 for missing model`() = sessionTestApplication {
+        // Arrange
+        testDataManager.insertChatSession(testSession.copy(currentModelId = null))
+        val processRequest = ProcessNewMessageRequest(content = "Test message")
+
+        // Act
+        val response = client.post(href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = testSession.id)))) {
+            contentType(ContentType.Application.Json)
+            setBody(processRequest)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(ChatbotApiErrorCodes.MODEL_CONFIGURATION_ERROR.code, error.code)
+        assertEquals("LLM configuration error", error.message)
+
+        // Verify no messages were created
+        assertEquals(0, testDataManager.getChatMessagesForSession(testSession.id).size)
     }
 }

@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.service.core.impl
 import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.common.models.LLMModelType
 import eu.torvian.chatbot.common.models.LLMProvider
 import eu.torvian.chatbot.common.models.LLMProviderType
 import eu.torvian.chatbot.server.data.dao.LLMProviderDao
@@ -60,7 +61,8 @@ class LLMProviderServiceImplTest {
         name = "gpt-3.5-turbo",
         providerId = 1L,
         active = true,
-        displayName = "GPT-3.5 Turbo"
+        displayName = "GPT-3.5 Turbo",
+        type = LLMModelType.CHAT
     )
 
     @BeforeEach

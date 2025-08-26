@@ -52,7 +52,6 @@ common/src/commonMain/kotlin/eu/torvian/chatbot/common/
 ├── api/resources/                # API resource definitions (for Ktor Resources plugin)
 ├── models/                       # Shared data models (DTOs)
 │   ├── AddModelRequest.kt        # Request DTO for adding LLM models
-│   ├── AddModelSettingsRequest.kt # Request DTO for adding model settings
 │   ├── AddProviderRequest.kt     # Request DTO for adding LLM providers
 │   ├── ApiKeyStatusResponse.kt   # Response DTO for API key status
 │   ├── AssignSessionToGroupRequest.kt # Request DTO for assigning session to group
@@ -60,9 +59,13 @@ common/src/commonMain/kotlin/eu/torvian/chatbot/common/
 │   ├── ChatMessage.kt            # Chat message with threading support
 │   ├── ChatSession.kt            # Chat session data model
 │   ├── ChatSessionSummary.kt     # Session summary for lists
+│   ├── ChatStreamEvent.kt        # Chat stream event DTO
 │   ├── CreateGroupRequest.kt     # Group creation request DTO
 │   ├── CreateSessionRequest.kt   # Session creation request DTO
 │   ├── LLMModel.kt               # LLM model configuration
+│   ├── LLMModel_exensions.kt     # Extension functions for LLMModel
+│   ├── LLMModelCapabilities.kt   # Data class for model capabilities
+│   ├── LLMModelType.kt           # Enum for LLM model types
 │   ├── LLMProvider.kt            # LLM provider configuration
 │   ├── LLMProviderType.kt        # Enum for LLM provider types
 │   ├── ModelSettings.kt          # Model settings and parameters
@@ -95,6 +98,7 @@ common/src/commonMain/kotlin/eu/torvian/chatbot/common/
 ```
 server/src/main/kotlin/eu/torvian/chatbot/server/
 ├── data/                         # Data access layer
+│   ├── ModelSettingsMapper.kt    # Model settings mapper
 │   ├── dao/                      # Data Access Objects (interfaces)
 │   │   ├── ApiSecretDao.kt       # API secret management interface
 │   │   ├── GroupDao.kt           # Group operations interface
@@ -158,6 +162,7 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   │   ├── LLMModelService.kt    # LLM Model management service interface
 │   │   ├── LLMProviderService.kt # LLM Provider management service interface
 │   │   ├── MessageService.kt     # Message handling service interface
+│   │   ├── MessageStreamEvent.kt # Message stream event type
 │   │   ├── ModelSettingsService.kt # Model Settings management service interface
 │   │   ├── SessionService.kt     # Session management service interface
 │   │   └── impl/                 # Core service implementations
@@ -170,7 +175,10 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   │   ├── LLMApiClientKtor.kt   # Ktor-based LLM API client implementation
 │   │   ├── LLMCompletionError.kt # LLM completion error type
 │   │   ├── LLMCompletionResult.kt # LLM completion result type
+│   │   ├── LLMStreamChunk.kt     # LLM stream chunk type
 │   │   └── strategy/             # LLM completion strategy implementations
+│   │       ├── OllamaApiModels.kt # Ollama API models (DTOs)
+│   │       ├── OllamaChatStrategy.kt # Ollama chat completion strategy
 │   │       ├── OpenAiApiModels.kt # OpenAI API models (DTOs)
 │   │       └── OpenAIChatStrategy.kt # OpenAI chat completion strategy
 │   └── security/                 # Security services
@@ -217,6 +225,7 @@ server/src/test/kotlin/eu/torvian/chatbot/server/
 │   │   ├── LLMApiClientKtorTest.kt
 │   │   ├── LLMApiClientStub.kt
 │   │   └── strategy/             # LLM strategy tests
+│   │       ├── OllamaChatStrategyTest.kt
 │   │       └── OpenAIChatStrategyTest.kt
 │   └── security/                 # Security service tests
 │       ├── AESCryptoProviderTest.kt
@@ -256,6 +265,7 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   ├── ChatArea.kt   # Chat area component
 │   ├── ChatScreen.kt # Main chat interface (displays session list, chat messages, input area)
 │   ├── ChatScreenContent.kt # Stateless content composable for chat interface
+│   ├── InputArea.kt  # Message input area component
 │   ├── SessionListPanel.kt # Session list panel component
 │   ├── SettingsScreen.kt # Settings configuration interface (providers, models, settings)
 │   └── common/       # Common compose components
@@ -308,7 +318,24 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
     ├── ModelConfigViewModel.kt # Model Config ViewModel (manages LLM model state)
     ├── ProviderConfigViewModel.kt # Provider Config ViewModel (manages LLM provider state)
     ├── SessionListViewModel.kt # Session List ViewModel (manages session list state)
-    └── SettingsConfigViewModel.kt # Settings Config ViewModel (manages model settings state)
+    ├── SettingsConfigViewModel.kt # Settings Config ViewModel (manages model settings state)
+    ├── chat/
+    │   ├── ChatViewModel.kt  # Chat ViewModel (manages chat session state)
+    │   ├── state/  # Chat ViewModel state
+    │   │   ├── ChatSessionData.kt  # Chat session data class
+    │   │   ├── ChatState.kt  # Chat state data class
+    │   │   ├── ChatStateImpl.kt  # Chat state implementation
+    │   │   ├── InteractionState.kt  # User interaction state data class
+    │   │   └── SessionState.kt  # Chat session state data class
+    │   ├── usecase/  # Chat ViewModel use cases
+    │   │   ├── LoadSessionUseCase.kt  # Load session use case
+    │   │   ├── SendMessageUseCase.kt  # Send message use case
+    │   │   └── ... other use cases ...
+    │   └── util/  # Chat ViewModel utilities
+    │       └── ThreadBuilder.kt  # Thread builder utility
+    └── common/  # Common ViewModel utilities
+        ├── CoroutineScopeProvider.kt  # Coroutine scope provider
+        └── ErrorNotifier.kt  # Error notifier utility
      
 app/src/commonMain/composeResources/  # Compose resources (strings, etc.)
 ├── values/  # Default resources

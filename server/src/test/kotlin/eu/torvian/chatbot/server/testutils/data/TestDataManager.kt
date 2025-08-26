@@ -153,6 +153,14 @@ interface TestDataManager {
     suspend fun getChatMessage(id: Long): ChatMessage?
 
     /**
+     * Retrieves all chat messages from the database for a specific session.
+     *
+     * @param sessionId The ID of the session to get the messages for.
+     * @return The list of chat messages for the session.
+     */
+    suspend fun getChatMessagesForSession(sessionId: Long): List<ChatMessage>
+
+    /**
      * Inserts a session current leaf record into the database. Creates the table if it does not exist.
      * This record links a session with its current leaf message.
      *

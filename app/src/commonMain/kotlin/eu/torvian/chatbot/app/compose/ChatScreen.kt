@@ -8,7 +8,7 @@ import eu.torvian.chatbot.app.domain.contracts.ChatAreaActions
 import eu.torvian.chatbot.app.domain.contracts.ChatAreaState
 import eu.torvian.chatbot.app.domain.contracts.SessionListActions
 import eu.torvian.chatbot.app.domain.contracts.SessionListState
-import eu.torvian.chatbot.app.viewmodel.ChatViewModel
+import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
 import eu.torvian.chatbot.common.models.ChatGroup
 import eu.torvian.chatbot.common.models.ChatMessage
@@ -41,13 +41,14 @@ fun ChatScreen(
     val editingGroupNameInput by sessionListViewModel.editingGroupNameInput.collectAsState()
 
     // --- Collect States for ChatArea ---
-    val chatSessionUiState by chatViewModel.sessionState.collectAsState()
+    val chatSessionUiState by chatViewModel.sessionDataState.collectAsState()
     val chatInputContent by chatViewModel.inputContent.collectAsState()
     val chatReplyTargetMessage by chatViewModel.replyTargetMessage.collectAsState()
     val chatEditingMessage by chatViewModel.editingMessage.collectAsState()
     val chatEditingContent by chatViewModel.editingContent.collectAsState()
     val chatCurrentBranchLeafId by chatViewModel.currentBranchLeafId.collectAsState()
     val chatDisplayedMessages by chatViewModel.displayedMessages.collectAsState()
+    val chatIsSendingMessage by chatViewModel.isSendingMessage.collectAsState()
 
     // --- SessionListPanel Contract Construction ---
     val sessionListPanelUiState = remember(
@@ -67,7 +68,12 @@ fun ChatScreen(
         object : SessionListActions {
             override fun onSessionSelected(sessionId: Long?) {
                 sessionListViewModel.selectSession(sessionId)
-                chatViewModel.loadSession(sessionId)
+                // Load the session if a valid ID is provided, otherwise clear the session
+                if (sessionId != null) {
+                    chatViewModel.loadSession(sessionId)
+                } else {
+                    chatViewModel.clearSession()
+                }
             }
 
             override fun onCreateNewSession(name: String?) = sessionListViewModel.createNewSession(name)
@@ -98,7 +104,8 @@ fun ChatScreen(
     // --- ChatArea Contract Construction ---
     val chatAreaState = remember(
         chatSessionUiState, chatInputContent, chatReplyTargetMessage,
-        chatEditingMessage, chatEditingContent, chatCurrentBranchLeafId, chatDisplayedMessages
+        chatEditingMessage, chatEditingContent, chatCurrentBranchLeafId, chatDisplayedMessages,
+        chatIsSendingMessage
     ) {
         ChatAreaState(
             sessionUiState = chatSessionUiState,
@@ -107,7 +114,8 @@ fun ChatScreen(
             editingMessage = chatEditingMessage,
             editingContent = chatEditingContent,
             currentBranchLeafId = chatCurrentBranchLeafId,
-            displayedMessages = chatDisplayedMessages
+            displayedMessages = chatDisplayedMessages,
+            isSendingMessage = chatIsSendingMessage
         )
     }
     val chatAreaActions = remember(chatViewModel, selectedSessionId) {

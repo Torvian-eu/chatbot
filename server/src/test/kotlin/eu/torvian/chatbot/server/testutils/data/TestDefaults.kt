@@ -1,11 +1,6 @@
 package eu.torvian.chatbot.server.testutils.data
 
-import eu.torvian.chatbot.common.models.ChatGroup
-import eu.torvian.chatbot.common.models.ChatMessage
-import eu.torvian.chatbot.common.models.LLMModel
-import eu.torvian.chatbot.common.models.LLMProvider
-import eu.torvian.chatbot.common.models.LLMProviderType
-import eu.torvian.chatbot.common.models.ModelSettings
+import eu.torvian.chatbot.common.models.*
 import eu.torvian.chatbot.server.data.entities.ApiSecretEntity
 import eu.torvian.chatbot.server.data.entities.ChatSessionEntity
 import eu.torvian.chatbot.server.data.entities.SessionCurrentLeafEntity
@@ -13,6 +8,7 @@ import eu.torvian.chatbot.server.domain.config.DatabaseConfig
 import eu.torvian.chatbot.server.domain.security.EncryptedSecret
 import eu.torvian.chatbot.server.domain.security.EncryptionConfig
 import kotlinx.datetime.Instant
+import kotlinx.serialization.json.Json
 
 /**
  * Predefined domain objects and test data entries for use in tests.
@@ -98,7 +94,8 @@ object TestDefaults {
         name = "gpt-4",
         providerId = llmProvider1.id,
         active = true,
-        displayName = "GPT-4"
+        displayName = "GPT-4",
+        type = LLMModelType.CHAT
     )
 
     val llmModel2 = LLMModel(
@@ -106,27 +103,28 @@ object TestDefaults {
         name = "claude-3-sonnet-20240229",
         providerId = llmProvider2.id,
         active = true,
-        displayName = "Claude 3 Sonnet"
+        displayName = "Claude 3 Sonnet",
+        type = LLMModelType.CHAT
     )
 
-    val modelSettings1 = ModelSettings(
+    val modelSettings1 = ChatModelSettings(
         id = 1L,
         modelId = llmModel1.id,
         name = "Default GPT-4 Settings",
         systemMessage = "You are a helpful assistant.",
         temperature = 0.7f,
         maxTokens = 1000,
-        customParamsJson = """{"top_p": 0.9, "frequency_penalty": 0.1}"""
+        customParams = Json.decodeFromString("""{"frequency_penalty": 0.1}""")
     )
 
-    val modelSettings2 = ModelSettings(
+    val modelSettings2 = ChatModelSettings(
         id = 2L,
         modelId = llmModel2.id,
         name = "Default Claude-3 Settings",
         systemMessage = "You are Claude, a helpful AI assistant.",
         temperature = 0.8f,
         maxTokens = 2000,
-        customParamsJson = null
+        customParams = null
     )
 
     val chatSession1 = ChatSessionEntity(

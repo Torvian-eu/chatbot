@@ -7,22 +7,31 @@ import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
 import eu.torvian.chatbot.server.data.dao.error.MessageError
 import eu.torvian.chatbot.server.data.dao.error.SessionError
+import eu.torvian.chatbot.server.service.core.LLMConfig
 import eu.torvian.chatbot.server.service.core.LLMModelService
 import eu.torvian.chatbot.server.service.core.LLMProviderService
 import eu.torvian.chatbot.server.service.core.ModelSettingsService
-import eu.torvian.chatbot.server.service.core.error.message.*
+import eu.torvian.chatbot.server.service.core.error.message.DeleteMessageError
+import eu.torvian.chatbot.server.service.core.error.message.ProcessNewMessageError
+import eu.torvian.chatbot.server.service.core.error.message.UpdateMessageContentError
+import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageError
 import eu.torvian.chatbot.server.service.llm.LLMApiClient
-import eu.torvian.chatbot.server.service.llm.LLMCompletionResult
 import eu.torvian.chatbot.server.service.llm.LLMCompletionError
+import eu.torvian.chatbot.server.service.llm.LLMCompletionResult
 import eu.torvian.chatbot.server.service.security.CredentialManager
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
-import io.mockk.*
+import io.mockk.clearMocks
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Instant
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import kotlin.test.*
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 /**
  * Unit tests for [MessageServiceImpl].
@@ -86,7 +95,8 @@ class MessageServiceImplTest {
         name = "gpt-3.5-turbo",
         providerId = 1L,
         active = true,
-        displayName = "GPT-3.5 Turbo"
+        displayName = "GPT-3.5 Turbo",
+        type = LLMModelType.CHAT
     )
 
     private val testProvider = LLMProvider(
@@ -98,14 +108,21 @@ class MessageServiceImplTest {
         type = LLMProviderType.OPENAI
     )
 
-    private val testSettings = ModelSettings(
+    private val testSettings = ChatModelSettings(
         id = 1L,
         name = "Default",
         modelId = 1L,
         systemMessage = "You are a helpful assistant.",
         temperature = 0.7f,
         maxTokens = 1000,
-        customParamsJson = null
+        customParams = null
+    )
+
+    private val testLlmConfig = LLMConfig(
+        provider = testProvider,
+        model = testModel,
+        settings = testSettings,
+        apiKey = "test-api-key"
     )
 
     private val mockLlmResponse = LLMCompletionResult(
@@ -275,101 +292,172 @@ class MessageServiceImplTest {
         coVerify(exactly = 1) { messageDao.deleteMessage(messageId) }
     }
 
-    // --- processNewMessage Tests (Basic Cases) ---
+    // --- validateProcessNewMessageRequest Tests ---
 
     @Test
-    fun `processNewMessage should return SessionNotFound error when session does not exist`() = runTest {
+    fun `validateProcessNewMessageRequest should return SessionNotFound when session does not exist`() = runTest {
         // Arrange
         val sessionId = 999L
-        val content = "Hello"
         val daoError = SessionError.SessionNotFound(sessionId)
         coEvery { sessionDao.getSessionById(sessionId) } returns daoError.left()
 
         // Act
-        val result = messageService.processNewMessage(sessionId, content, null)
+        val result = messageService.validateProcessNewMessageRequest(sessionId, null)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for non-existent session")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is ProcessNewMessageError.SessionNotFound, "Should be SessionNotFound error")
-        assertEquals(sessionId, (error as ProcessNewMessageError.SessionNotFound).sessionId)
+        assertTrue(error is ValidateNewMessageError.SessionNotFound, "Should be SessionNotFound error")
+        assertEquals(sessionId, (error as ValidateNewMessageError.SessionNotFound).sessionId)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
     }
 
     @Test
-    fun `processNewMessage should return ModelConfigurationError when no model is selected`() = runTest {
+    fun `validateProcessNewMessageRequest should return ModelConfigurationError when no model is selected`() = runTest {
         // Arrange
         val sessionId = 1L
-        val content = "Hello"
         val sessionWithoutModel = testSession.copy(currentModelId = null)
         coEvery { sessionDao.getSessionById(sessionId) } returns sessionWithoutModel.right()
-        coEvery { messageDao.insertUserMessage(sessionId, content, null) } returns testMessage1.right()
 
         // Act
-        val result = messageService.processNewMessage(sessionId, content, null)
+        val result = messageService.validateProcessNewMessageRequest(sessionId, null)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left when no model is selected")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is ProcessNewMessageError.ModelConfigurationError, "Should be ModelConfigurationError")
-        assertEquals("No model selected for session", (error as ProcessNewMessageError.ModelConfigurationError).message)
+        assertTrue(error is ValidateNewMessageError.ModelConfigurationError, "Should be ModelConfigurationError")
+        assertEquals(
+            "No model selected for session $sessionId",
+            (error as ValidateNewMessageError.ModelConfigurationError).message
+        )
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
-        coVerify(exactly = 1) { messageDao.insertUserMessage(sessionId, content, null) }
     }
 
     @Test
-    fun `processNewMessage should return ModelConfigurationError when no settings are selected`() = runTest {
+    fun `validateProcessNewMessageRequest should return ModelConfigurationError when no settings are selected`() =
+        runTest {
+            // Arrange
+            val sessionId = 1L
+            val sessionWithoutSettings = testSession.copy(currentSettingsId = null)
+            coEvery { sessionDao.getSessionById(sessionId) } returns sessionWithoutSettings.right()
+            coEvery { llmModelService.getModelById(sessionWithoutSettings.currentModelId!!) } returns testModel.right()
+
+            // Act
+            val result = messageService.validateProcessNewMessageRequest(sessionId, null)
+
+            // Assert
+            assertTrue(result.isLeft(), "Should return Left when no settings are selected")
+            val error = result.leftOrNull()
+            assertNotNull(error, "Error should not be null")
+            assertTrue(error is ValidateNewMessageError.ModelConfigurationError, "Should be ModelConfigurationError")
+            assertEquals(
+                "No settings selected for session $sessionId",
+                (error as ValidateNewMessageError.ModelConfigurationError).message
+            )
+            coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+            coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
+        }
+
+    @Test
+    fun `validateProcessNewMessageRequest should return ParentNotInSession when parent message does not exist`() =
+        runTest {
+            // Arrange
+            val sessionId = 1L
+            val parentMessageId = 999L
+            val daoError = MessageError.MessageNotFound(parentMessageId)
+
+            coEvery { sessionDao.getSessionById(sessionId) } returns testSession.right()
+            coEvery { messageDao.getMessageById(parentMessageId) } returns daoError.left()
+
+            // Act
+            val result = messageService.validateProcessNewMessageRequest(sessionId, parentMessageId)
+
+            // Assert
+            assertTrue(result.isLeft(), "Should return Left for parent not found")
+            val error = result.leftOrNull()
+            assertNotNull(error, "Error should not be null")
+            assertTrue(error is ValidateNewMessageError.ParentNotInSession, "Should be ParentNotInSession error")
+            assertEquals(sessionId, (error as ValidateNewMessageError.ParentNotInSession).sessionId)
+            assertEquals(parentMessageId, error.parentId)
+
+            coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+            coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
+            coVerify(exactly = 1) { messageDao.getMessageById(parentMessageId) }
+        }
+
+    @Test
+    fun `validateProcessNewMessageRequest should return session and LLMConfig when validation succeeds`() = runTest {
         // Arrange
         val sessionId = 1L
-        val content = "Hello"
-        val sessionWithoutSettings = testSession.copy(currentSettingsId = null)
-        coEvery { sessionDao.getSessionById(sessionId) } returns sessionWithoutSettings.right()
-        coEvery { messageDao.insertUserMessage(sessionId, content, null) } returns testMessage1.right()
+        coEvery { sessionDao.getSessionById(sessionId) } returns testSession.right()
+        coEvery { llmModelService.getModelById(testSession.currentModelId!!) } returns testModel.right()
+        coEvery { modelSettingsService.getSettingsById(testSession.currentSettingsId!!) } returns testSettings.right()
+        coEvery { llmProviderService.getProviderById(testModel.providerId) } returns testProvider.right()
+        coEvery { credentialManager.getCredential(testProvider.apiKeyId!!) } returns "test-api-key".right()
 
         // Act
-        val result = messageService.processNewMessage(sessionId, content, null)
+        val result = messageService.validateProcessNewMessageRequest(sessionId, null)
 
         // Assert
-        assertTrue(result.isLeft(), "Should return Left when no settings are selected")
-        val error = result.leftOrNull()
-        assertNotNull(error, "Error should not be null")
-        assertTrue(error is ProcessNewMessageError.ModelConfigurationError, "Should be ModelConfigurationError")
-        assertEquals("No settings selected for session", (error as ProcessNewMessageError.ModelConfigurationError).message)
+        assertTrue(result.isRight(), "Should return Right for successful validation")
+        val (session, llmConfig) = result.getOrNull()!!
+        assertEquals(testSession, session, "Should return the correct session")
+        assertEquals(testProvider, llmConfig.provider, "Should return correct provider")
+        assertEquals(testModel, llmConfig.model, "Should return correct model")
+        assertEquals(testSettings, llmConfig.settings, "Should return correct settings")
+        assertEquals("test-api-key", llmConfig.apiKey, "Should return correct API key")
+
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
-        coVerify(exactly = 1) { messageDao.insertUserMessage(sessionId, content, null) }
+        coVerify(exactly = 1) { llmModelService.getModelById(testSession.currentModelId!!) }
+        coVerify(exactly = 1) { modelSettingsService.getSettingsById(testSession.currentSettingsId!!) }
+        coVerify(exactly = 1) { llmProviderService.getProviderById(testModel.providerId) }
+        coVerify(exactly = 1) { credentialManager.getCredential(testProvider.apiKeyId!!) }
     }
 
-    // --- processNewMessage Success Tests ---
+    // --- processNewMessage Tests ---
 
     @Test
-    fun `processNewMessage should process message successfully and return user and assistant messages`() = runTest {
+    fun `processNewMessage should successfully process message and return user and assistant messages`() = runTest {
         // Arrange
-        val sessionId = 1L
         val content = "Hello, how are you?"
         val userMessage = testMessage1
         val assistantMessage = testMessage2
         val llmResponseContent = "I'm doing well, thank you!"
 
         // Mock all the dependencies for successful flow
-        coEvery { sessionDao.getSessionById(sessionId) } returns testSession.right()
-        coEvery { llmModelService.getModelById(testSession.currentModelId!!) } returns testModel.right()
-        coEvery { modelSettingsService.getSettingsById(testSession.currentSettingsId!!) } returns testSettings.right()
-        coEvery { llmProviderService.getProviderById(testModel.providerId) } returns testProvider.right()
-        coEvery { credentialManager.getCredential(testProvider.apiKeyId!!) } returns "api-key".right()
-        coEvery { messageDao.insertUserMessage(sessionId, content, null) } returns userMessage.right()
+        coEvery { messageDao.insertUserMessage(testSession.id, content, null) } returns userMessage.right()
         coEvery { messageDao.addChildToMessage(any(), any()) } returns Unit.right()
-        coEvery { messageDao.getMessagesBySessionId(sessionId) } returns listOf(userMessage)
-        coEvery { llmApiClient.completeChat(any(), testModel, testProvider, testSettings, "api-key") } returns mockLlmResponse.right()
-        coEvery { messageDao.insertAssistantMessage(sessionId, llmResponseContent, userMessage.id, testModel.id, testSettings.id) } returns assistantMessage.right()
-        coEvery { sessionDao.updateSessionLeafMessageId(sessionId, assistantMessage.id) } returns Unit.right()
+        coEvery {
+            llmApiClient.completeChat(
+                any(),
+                testModel,
+                testProvider,
+                testSettings,
+                "test-api-key"
+            )
+        } returns mockLlmResponse.right()
+        coEvery {
+            messageDao.insertAssistantMessage(
+                testSession.id,
+                llmResponseContent,
+                userMessage.id,
+                testModel.id,
+                testSettings.id
+            )
+        } returns assistantMessage.right()
+        // Mock both updateSessionLeafMessageId calls: first for user message, then for assistant message
+        coEvery { sessionDao.updateSessionLeafMessageId(testSession.id, userMessage.id) } returns Unit.right()
+        coEvery { sessionDao.updateSessionLeafMessageId(testSession.id, assistantMessage.id) } returns Unit.right()
+        // Mock getMessageById call to retrieve updated user message
+        coEvery { messageDao.getMessageById(userMessage.id) } returns userMessage.right()
 
         // Act
-        val result = messageService.processNewMessage(sessionId, content, null)
+        val result = messageService.processNewMessage(testSession, testLlmConfig, content, null)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful processing")
@@ -380,45 +468,68 @@ class MessageServiceImplTest {
         assertEquals(assistantMessage, messages[1], "Second message should be assistant message")
 
         // Verify all interactions
-        coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
-        coVerify(exactly = 1) { llmModelService.getModelById(testSession.currentModelId!!) }
-        coVerify(exactly = 1) { modelSettingsService.getSettingsById(testSession.currentSettingsId!!) }
-        coVerify(exactly = 1) { llmProviderService.getProviderById(testModel.providerId) }
-        coVerify(exactly = 1) { credentialManager.getCredential(testProvider.apiKeyId!!) }
-        coVerify(exactly = 1) { messageDao.insertUserMessage(sessionId, content, null) }
-        coVerify(exactly = 1) { messageDao.getMessagesBySessionId(sessionId) }
-        coVerify(exactly = 1) { llmApiClient.completeChat(any(), testModel, testProvider, testSettings, "api-key") }
-        coVerify(exactly = 1) { messageDao.insertAssistantMessage(sessionId, llmResponseContent, userMessage.id, testModel.id, testSettings.id) }
-        coVerify(exactly = 1) { sessionDao.updateSessionLeafMessageId(sessionId, assistantMessage.id) }
+        coVerify(exactly = 1) { messageDao.insertUserMessage(testSession.id, content, null) }
+        coVerify(exactly = 1) {
+            llmApiClient.completeChat(
+                any(),
+                testModel,
+                testProvider,
+                testSettings,
+                "test-api-key"
+            )
+        }
+        coVerify(exactly = 1) {
+            messageDao.insertAssistantMessage(
+                testSession.id,
+                llmResponseContent,
+                userMessage.id,
+                testModel.id,
+                testSettings.id
+            )
+        }
+        coVerify(exactly = 1) { sessionDao.updateSessionLeafMessageId(testSession.id, userMessage.id) }
+        coVerify(exactly = 1) { sessionDao.updateSessionLeafMessageId(testSession.id, assistantMessage.id) }
+        coVerify(exactly = 1) { messageDao.getMessageById(userMessage.id) }
     }
 
     @Test
-    fun `processNewMessage should handle parent message correctly`() = runTest {
+    fun `processNewMessage should handle parent message relationships correctly`() = runTest {
         // Arrange
-        val sessionId = 1L
         val content = "Follow-up question"
         val parentMessageId = 1L
         val userMessage = testMessage1.copy(id = 3L, parentMessageId = parentMessageId)
         val assistantMessage = testMessage2.copy(id = 4L, parentMessageId = userMessage.id)
-        val llmResponse = "Follow-up response"
 
         // Mock all the dependencies for successful flow with parent message
-        coEvery { sessionDao.getSessionById(sessionId) } returns testSession.right()
-        coEvery { llmModelService.getModelById(testSession.currentModelId!!) } returns testModel.right()
-        coEvery { modelSettingsService.getSettingsById(testSession.currentSettingsId!!) } returns testSettings.right()
-        coEvery { llmProviderService.getProviderById(testModel.providerId) } returns testProvider.right()
-        coEvery { credentialManager.getCredential(testProvider.apiKeyId!!) } returns "api-key".right()
-        coEvery { messageDao.insertUserMessage(sessionId, content, parentMessageId) } returns userMessage.right()
+        coEvery { messageDao.insertUserMessage(testSession.id, content, parentMessageId) } returns userMessage.right()
         coEvery { messageDao.addChildToMessage(1L, 3L) } returns Unit.right()
         coEvery { messageDao.addChildToMessage(3L, 4L) } returns Unit.right()
-        coEvery { messageDao.getMessagesBySessionId(sessionId) } returns listOf(testMessage1, userMessage)
-        coEvery { llmApiClient.completeChat(any(), testModel, testProvider, testSettings, "api-key") } returns mockLlmResponse.right()
-        coEvery { messageDao.insertAssistantMessage(sessionId, mockLlmResponse.choices[0].content, userMessage.id, testModel.id, testSettings.id) } returns assistantMessage.right()
-        coEvery { sessionDao.updateSessionLeafMessageId(sessionId, assistantMessage.id) } returns Unit.right()
+        coEvery {
+            llmApiClient.completeChat(
+                any(),
+                testModel,
+                testProvider,
+                testSettings,
+                "test-api-key"
+            )
+        } returns mockLlmResponse.right()
+        coEvery {
+            messageDao.insertAssistantMessage(
+                testSession.id,
+                mockLlmResponse.choices[0].content,
+                userMessage.id,
+                testModel.id,
+                testSettings.id
+            )
+        } returns assistantMessage.right()
+        // Mock both updateSessionLeafMessageId calls: first for user message, then for assistant message
+        coEvery { sessionDao.updateSessionLeafMessageId(testSession.id, userMessage.id) } returns Unit.right()
+        coEvery { sessionDao.updateSessionLeafMessageId(testSession.id, assistantMessage.id) } returns Unit.right()
+        // Mock getMessageById call to retrieve updated user message
+        coEvery { messageDao.getMessageById(userMessage.id) } returns userMessage.right()
 
         // Act
-        val result = messageService.processNewMessage(sessionId, content, parentMessageId)
+        val result = messageService.processNewMessage(testSession, testLlmConfig, content, parentMessageId)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful processing with parent")
@@ -428,57 +539,54 @@ class MessageServiceImplTest {
         assertEquals(parentMessageId, messages[0].parentMessageId, "User message should have correct parent")
         assertEquals(messages[0].id, messages[1].parentMessageId, "Assistant message should be child of user message")
 
-        // Verify parent message was used
-        coVerify(exactly = 1) { messageDao.insertUserMessage(sessionId, content, parentMessageId) }
-    }
-
-    // --- processNewMessage Error Tests ---
-
-    @Test
-    fun `processNewMessage should return ParentNotInSession error when parent message is not in session`() = runTest {
-        // Arrange
-        val sessionId = 1L
-        val content = "Hello"
-        val parentMessageId = 999L
-        val daoError = eu.torvian.chatbot.server.data.dao.error.InsertMessageError.ParentNotInSession(parentMessageId, sessionId)
-
-        coEvery { sessionDao.getSessionById(sessionId) } returns testSession.right()
-        coEvery { messageDao.insertUserMessage(sessionId, content, parentMessageId) } returns daoError.left()
-
-        // Act
-        val result = messageService.processNewMessage(sessionId, content, parentMessageId)
-
-        // Assert
-        assertTrue(result.isLeft(), "Should return Left for parent not in session")
-        val error = result.leftOrNull()
-        assertNotNull(error, "Error should not be null")
-        assertTrue(error is ProcessNewMessageError.ParentNotInSession, "Should be ParentNotInSession error")
-        assertEquals(sessionId, (error as ProcessNewMessageError.ParentNotInSession).sessionId)
-        assertEquals(parentMessageId, error.parentId)
-
-        coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { messageDao.insertUserMessage(sessionId, content, parentMessageId) }
+        // Verify all interactions
+        coVerify(exactly = 1) { messageDao.insertUserMessage(testSession.id, content, parentMessageId) }
+        coVerify(exactly = 1) {
+            llmApiClient.completeChat(
+                any(),
+                testModel,
+                testProvider,
+                testSettings,
+                "test-api-key"
+            )
+        }
+        coVerify(exactly = 1) {
+            messageDao.insertAssistantMessage(
+                testSession.id,
+                mockLlmResponse.choices[0].content,
+                userMessage.id,
+                testModel.id,
+                testSettings.id
+            )
+        }
+        coVerify(exactly = 1) { sessionDao.updateSessionLeafMessageId(testSession.id, userMessage.id) }
+        coVerify(exactly = 1) { sessionDao.updateSessionLeafMessageId(testSession.id, assistantMessage.id) }
+        coVerify(exactly = 1) { messageDao.getMessageById(userMessage.id) }
     }
 
     @Test
     fun `processNewMessage should return ExternalServiceError when LLM API call fails`() = runTest {
         // Arrange
-        val sessionId = 1L
         val content = "Hello"
         val userMessage = testMessage1
 
-        coEvery { sessionDao.getSessionById(sessionId) } returns testSession.right()
-        coEvery { llmModelService.getModelById(testSession.currentModelId!!) } returns testModel.right()
-        coEvery { modelSettingsService.getSettingsById(testSession.currentSettingsId!!) } returns testSettings.right()
-        coEvery { llmProviderService.getProviderById(testModel.providerId) } returns testProvider.right()
-        coEvery { credentialManager.getCredential(testProvider.apiKeyId!!) } returns "api-key".right()
-        coEvery { messageDao.insertUserMessage(sessionId, content, null) } returns userMessage.right()
+        coEvery { messageDao.insertUserMessage(testSession.id, content, null) } returns userMessage.right()
         coEvery { messageDao.addChildToMessage(any(), any()) } returns Unit.right()
-        coEvery { messageDao.getMessagesBySessionId(sessionId) } returns listOf(userMessage)
-        coEvery { llmApiClient.completeChat(any(), testModel, testProvider, testSettings, "api-key") } returns LLMCompletionError.NetworkError("API Error", null).left()
+        coEvery { messageDao.getMessagesBySessionId(testSession.id) } returns listOf(userMessage)
+        coEvery {
+            llmApiClient.completeChat(
+                any(),
+                testModel,
+                testProvider,
+                testSettings,
+                "test-api-key"
+            )
+        } returns LLMCompletionError.NetworkError("API Error", null).left()
+        // Mock the updateSessionLeafMessageId call for the user message (this will be called before LLM API call)
+        coEvery { sessionDao.updateSessionLeafMessageId(testSession.id, userMessage.id) } returns Unit.right()
 
         // Act
-        val result = messageService.processNewMessage(sessionId, content, null)
+        val result = messageService.processNewMessage(testSession, testLlmConfig, content, null)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for LLM API failure")
@@ -486,10 +594,15 @@ class MessageServiceImplTest {
         assertNotNull(error, "Error should not be null")
         assertTrue(error is ProcessNewMessageError.ExternalServiceError, "Should be ExternalServiceError")
 
-        coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { llmApiClient.completeChat(any(), testModel, testProvider, testSettings, "api-key") }
+        coVerify(exactly = 1) {
+            llmApiClient.completeChat(
+                any(),
+                testModel,
+                testProvider,
+                testSettings,
+                "test-api-key"
+            )
+        }
+        coVerify(exactly = 1) { sessionDao.updateSessionLeafMessageId(testSession.id, userMessage.id) }
     }
-
-
-
 }

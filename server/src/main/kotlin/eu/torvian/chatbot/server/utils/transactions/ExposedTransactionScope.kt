@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.server.utils.transactions
 
+import arrow.core.Either
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.exposed.sql.Database
@@ -28,9 +29,15 @@ class ExposedTransactionScope(private val db: Database) : TransactionScope {
             // Not in a transaction managed by this scope; create a new one.
             // Add TransactionMarker to the new context.
             withContext(Dispatchers.IO + TransactionMarker()) {
-                 // newSuspendedTransaction handles setting up the Exposed transaction in this CoroutineContext
+                // newSuspendedTransaction handles setting up the Exposed transaction in this CoroutineContext
                 newSuspendedTransaction(context = coroutineContext, db = db) {
-                    block() // Execute the suspending block within the transaction
+                    val result = block() // Execute the suspending block within the transaction
+
+                    // If the result is Either.Left, rollback the transaction
+                    if (result is Either.Left<*>) {
+                        rollback()
+                    }
+                    result
                 }
             }
         }

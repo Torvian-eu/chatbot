@@ -1,5 +1,7 @@
 package eu.torvian.chatbot.server.utils.transactions
 
+import arrow.core.Either
+
 /**
  * Represents an abstraction for managing database transactions.
  *
@@ -9,7 +11,8 @@ package eu.torvian.chatbot.server.utils.transactions
  */
 interface TransactionScope {
     /**
-     * Runs the given [block] of code inside a single transaction.
+     * Runs the given [block] of code inside a single transaction. If the block returns an [Either.Left],
+     * the transaction is rolled back.
      *
      * If a transaction is already active in the current coroutine context (marked by [TransactionMarker]),
      * the block is run within that existing transaction context.

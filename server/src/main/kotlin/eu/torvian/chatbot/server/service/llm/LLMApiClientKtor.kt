@@ -6,9 +6,14 @@ import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.models.*
 import io.ktor.client.*
+import io.ktor.client.call.*
+import io.ktor.client.plugins.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
+import io.ktor.utils.io.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.channelFlow
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 
@@ -28,7 +33,6 @@ class LLMApiClientKtor(
     private val httpClient: HttpClient,
     private val strategies: Map<LLMProviderType, ChatCompletionStrategy>
 ) : LLMApiClient {
-
     companion object {
         private val logger: Logger = LogManager.getLogger(LLMApiClientKtor::class.java)
     }
@@ -37,7 +41,7 @@ class LLMApiClientKtor(
         messages: List<ChatMessage>,
         modelConfig: LLMModel,
         provider: LLMProvider,
-        settings: ModelSettings,
+        settings: ChatModelSettings,
         apiKey: String?
     ): Either<LLMCompletionError, LLMCompletionResult> {
 
@@ -87,6 +91,9 @@ class LLMApiClientKtor(
                 // Set the request body. HttpClient's ContentNegotiation feature will
                 // automatically serialize the object based on the content type.
                 setBody(apiRequestConfig.body)
+                timeout {
+                    requestTimeoutMillis = 180_000 // 3 minutes
+                }
             }
             logger.debug("Received HTTP response: ${httpResponse.status}")
 
@@ -133,7 +140,100 @@ class LLMApiClientKtor(
             ).left()
         }
     }
+
+    override fun completeChatStreaming(
+        messages: List<ChatMessage>,
+        modelConfig: LLMModel,
+        provider: LLMProvider,
+        settings: ChatModelSettings,
+        apiKey: String?
+    ): Flow<Either<LLMCompletionError, LLMStreamChunk>> = channelFlow {
+        logger.info("LLMApiClientKtor: Received streaming request for model ${modelConfig.name} (Provider: ${provider.name}, Type: ${provider.type})")
+
+        val strategy = strategies[provider.type]
+            ?: run {
+                val errorMsg = "No ChatCompletionStrategy found for provider type: ${provider.type}"
+                logger.error(errorMsg)
+                send(LLMCompletionError.ConfigurationError(errorMsg).left())
+                return@channelFlow
+            }
+
+        val apiRequestConfig = strategy.prepareRequest(
+            messages = messages,
+            modelConfig = modelConfig,
+            provider = provider,
+            settings = settings,
+            apiKey = apiKey
+        ).getOrElse { error ->
+            logger.error("Strategy ${strategy::class.simpleName} failed to prepare streaming request: ${error.message}")
+            send(error.left())
+            return@channelFlow
+        }
+
+        try {
+            logger.debug("Executing HTTP streaming request: ${apiRequestConfig.method} ${provider.baseUrl}${apiRequestConfig.path}")
+
+            // Use preparePost and execute to get a streaming response
+            httpClient.prepareRequest("${provider.baseUrl}${apiRequestConfig.path}") {
+                method = apiRequestConfig.method.toKtorHttpMethod()
+                contentType(apiRequestConfig.contentType.toKtorContentType())
+                headers {
+                    apiRequestConfig.customHeaders.forEach { (key, value) ->
+                        append(key, value)
+                    }
+                }
+                setBody(apiRequestConfig.body)
+                timeout {
+                    requestTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS // Allow indefinite stream
+                }
+            }.execute { httpResponse -> // Use execute block for streaming
+                if (httpResponse.status.isSuccess()) {
+                    logger.debug("Received HTTP streaming response: ${httpResponse.status}")
+
+                    // Get the ByteReadChannel for raw content
+                    val byteReadChannel: ByteReadChannel = httpResponse.body()
+
+                    // Transform ByteReadChannel into a Flow of lines
+                    val responseStream: Flow<String> = channelFlow {
+                        while (!byteReadChannel.isClosedForRead) {
+                            val line = byteReadChannel.readUTF8Line()
+                            if (line != null) {
+                                send(line)
+                            } else {
+                                break // End of stream
+                            }
+                        }
+                    }
+
+                    // Process the stream using the strategy
+                    strategy.processStreamingResponse(responseStream).collect { chunkEither ->
+                        send(chunkEither) // Forward each processed chunk to the downstream flow
+                    }
+                } else {
+                    val errorBody = try {
+                        httpResponse.bodyAsText()
+                    } catch (e: Exception) {
+                        logger.error("Failed to read error response body from ${provider.name} API", e)
+                        "Failed to read error body: ${e.message}"
+                    }
+                    logger.debug("Processing error response (streaming) with strategy ${strategy::class.simpleName}")
+                    val apiError = strategy.processErrorResponse(httpResponse.status.value, errorBody)
+                    logger.error("LLM API ${provider.name} returned error (Streaming Status: ${httpResponse.status.value}): $apiError")
+                    send(apiError.left())
+                }
+            }
+        } catch (e: Exception) {
+            logger.error("LLMApiClientKtor: HTTP streaming request failed for provider ${provider.name}", e)
+            send(
+                LLMCompletionError.NetworkError(
+                    "Network or communication error with ${provider.name}: ${e.message}",
+                    e
+                ).left()
+            )
+        }
+    }
 }
+
 
 // --- Helper functions ---
 

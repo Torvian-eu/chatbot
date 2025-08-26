@@ -11,6 +11,7 @@ import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.models.AddModelRequest
 import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.common.models.LLMModelType
 import eu.torvian.chatbot.common.models.LLMProvider
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -219,6 +220,7 @@ class ModelConfigViewModel(
             val request = AddModelRequest(
                 name = form.name.trim(),
                 providerId = form.providerId, // Already validated as non-null
+                type = LLMModelType.CHAT, // Default to CHAT type for now
                 active = form.active,
                 displayName = form.displayName.trim().takeIf { it.isNotBlank() } // Null if blank
             )

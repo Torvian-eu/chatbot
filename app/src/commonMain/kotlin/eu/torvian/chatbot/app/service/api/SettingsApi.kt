@@ -2,7 +2,6 @@ package eu.torvian.chatbot.app.service.api
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.api.ApiError
-import eu.torvian.chatbot.common.models.AddModelSettingsRequest
 import eu.torvian.chatbot.common.models.ModelSettings
 
 /**
@@ -26,17 +25,16 @@ interface SettingsApi {
     suspend fun getSettingsByModelId(modelId: Long): Either<ApiError, List<ModelSettings>>
 
     /**
-     * Creates a new settings profile associated with a specific LLM model.
+     * Creates a new settings profile.
      *
-     * Corresponds to `POST /api/v1/models/{modelId}/settings`.
+     * Corresponds to `POST /api/v1/settings`.
      * (E4.S5)
      *
-     * @param modelId The ID of the model to associate the settings with.
-     * @param request The request body with settings details.
+     * @param settings The [ModelSettings] object to create.
      * @return [Either.Right] containing the newly created [ModelSettings] object on success,
      *         or [Either.Left] containing an [ApiError] on failure (e.g., invalid input, model not found).
      */
-    suspend fun addModelSettings(modelId: Long, request: AddModelSettingsRequest): Either<ApiError, ModelSettings>
+    suspend fun addModelSettings(settings: ModelSettings): Either<ApiError, ModelSettings>
 
     /**
      * Retrieves details for a specific settings profile.

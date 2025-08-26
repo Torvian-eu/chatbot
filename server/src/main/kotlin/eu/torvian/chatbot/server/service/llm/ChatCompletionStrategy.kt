@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.service.llm
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.*
+import kotlinx.coroutines.flow.Flow
 
 /**
  * Defines the interface for provider-specific chat completion logic.
@@ -29,7 +30,7 @@ interface ChatCompletionStrategy {
         messages: List<ChatMessage>,
         modelConfig: LLMModel,
         provider: LLMProvider,
-        settings: ModelSettings,
+        settings: ChatModelSettings,
         apiKey: String?
     ): Either<LLMCompletionError.ConfigurationError, ApiRequestConfig>
 
@@ -43,6 +44,18 @@ interface ChatCompletionStrategy {
      *         or the generic [LLMCompletionResult].
      */
     fun processSuccessResponse(responseBody: String): Either<LLMCompletionError.InvalidResponseError, LLMCompletionResult>
+
+    /**
+     * Processes a raw streaming API response (as a Flow of strings/bytes) into a generic stream of LLMStreamChunk.
+     * The strategy is responsible for parsing each raw chunk according to its provider's streaming format
+     * (e.g., SSE for OpenAI, NDJSON for Ollama) and mapping it to LLMStreamChunk.
+     *
+     * @param responseStream A Flow of raw string chunks from the HTTP response.
+     * @return A Flow of Either<LLMCompletionError.InvalidResponseError, LLMStreamChunk>
+     */
+    fun processStreamingResponse(
+        responseStream: Flow<String>
+    ): Flow<Either<LLMCompletionError.InvalidResponseError, LLMStreamChunk>>
 
     /**
      * Processes a raw error API response body string and status code into a specific generic error ([LLMCompletionError]).

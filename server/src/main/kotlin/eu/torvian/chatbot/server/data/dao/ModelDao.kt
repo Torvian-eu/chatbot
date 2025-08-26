@@ -2,9 +2,11 @@ package eu.torvian.chatbot.server.data.dao
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.common.models.LLMModelType
 import eu.torvian.chatbot.server.data.dao.error.InsertModelError
 import eu.torvian.chatbot.server.data.dao.error.ModelError
 import eu.torvian.chatbot.server.data.dao.error.UpdateModelError
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Data Access Object for LLMModel entities.
@@ -43,11 +45,20 @@ interface ModelDao {
      *
      * @param name The unique identifier for the model (e.g., "gpt-3.5-turbo").
      * @param providerId The ID of the provider that hosts this model.
+     * @param type The operational type of this model (e.g., CHAT, EMBEDDING, etc.).
      * @param active Whether the model is currently active and available for use.
      * @param displayName Optional display name for UI purposes.
+     * @param capabilities Optional JSON object containing model capabilities.
      * @return Either an [InsertModelError] or the newly created LLMModel with its assigned ID.
      */
-    suspend fun insertModel(name: String, providerId: Long, active: Boolean = true, displayName: String? = null): Either<InsertModelError, LLMModel>
+    suspend fun insertModel(
+        name: String,
+        providerId: Long,
+        type: LLMModelType,
+        active: Boolean = true,
+        displayName: String? = null,
+        capabilities: JsonObject? = null
+    ): Either<InsertModelError, LLMModel>
 
     /**
      * Updates an existing LLM model in the database.

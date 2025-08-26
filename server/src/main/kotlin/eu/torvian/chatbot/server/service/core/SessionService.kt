@@ -51,6 +51,9 @@ interface SessionService {
 
     /**
      * Updates the current model ID of an existing chat session.
+     * Automatically resets the currentSettingsId to null since settings
+     * will no longer be valid for the new model.
+     *
      * @param id The ID of the session to update.
      * @param modelId The new optional model ID for the session.
      * @return Either an [UpdateSessionCurrentModelIdError] if the session or model is not found,
@@ -60,15 +63,37 @@ interface SessionService {
 
     /**
      * Updates the current settings ID of an existing chat session.
+     * Verifies that the settings are valid for the session's current model
+     * and are of the ChatModelSettings type.
+     *
      * @param id The ID of the session to update.
      * @param settingsId The new optional settings ID for the session.
      * @return Either an [UpdateSessionCurrentSettingsIdError] if the session or settings are not found,
-     *         or Unit if successful.
+     *         or if the settings are incompatible with the current model, or if the settings are not
+     *         of the ChatModelSettings type, or Unit if successful.
      */
     suspend fun updateSessionCurrentSettingsId(
         id: Long,
         settingsId: Long?
     ): Either<UpdateSessionCurrentSettingsIdError, Unit>
+
+    /**
+     * Updates both the current model ID and settings ID of an existing chat session atomically.
+     * This ensures consistency between model and settings, and automatically clears settings
+     * if they're incompatible with the new model. Also verifies that the settings are of the
+     * ChatModelSettings type.
+     *
+     * @param id The ID of the session to update.
+     * @param modelId The new optional model ID for the session.
+     * @param settingsId The new optional settings ID for the session.
+     * @return Either an [UpdateSessionCurrentModelAndSettingsIdError] if the session, model, or settings are not found or incompatible,
+     *         or if the settings are not of the ChatModelSettings type, or Unit if successful.
+     */
+    suspend fun updateSessionCurrentModelAndSettingsId(
+        id: Long,
+        modelId: Long?,
+        settingsId: Long?
+    ): Either<UpdateSessionCurrentModelAndSettingsIdError, Unit>
 
     /**
      * Updates the current leaf message ID of an existing chat session.

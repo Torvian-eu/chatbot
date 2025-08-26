@@ -6,6 +6,8 @@ import arrow.core.raise.ensure
 import eu.torvian.chatbot.common.models.ModelSettings
 import eu.torvian.chatbot.server.data.dao.SettingsDao
 import eu.torvian.chatbot.server.data.dao.error.SettingsError
+import eu.torvian.chatbot.server.service.core.error.model.GetModelError
+import eu.torvian.chatbot.server.service.core.LLMModelService
 import eu.torvian.chatbot.server.service.core.ModelSettingsService
 import eu.torvian.chatbot.server.service.core.error.settings.*
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
@@ -15,6 +17,7 @@ import eu.torvian.chatbot.server.utils.transactions.TransactionScope
  */
 class ModelSettingsServiceImpl(
     private val settingsDao: SettingsDao,
+    private val llmModelService: LLMModelService,
     private val transactionScope: TransactionScope,
 ) : ModelSettingsService {
 
@@ -41,26 +44,28 @@ class ModelSettingsServiceImpl(
         }
     }
 
-    override suspend fun addSettings(
-        name: String, modelId: Long, systemMessage: String?,
-        temperature: Float?, maxTokens: Int?, customParamsJson: String?
-    ): Either<AddSettingsError, ModelSettings> =
+    override suspend fun addSettings(settings: ModelSettings): Either<AddSettingsError, ModelSettings> =
         transactionScope.transaction {
             either {
-                ensure(!name.isBlank()) {
-                    AddSettingsError.InvalidInput("Settings name cannot be blank.")
+                // Get the associated LLMModel to verify type consistency
+                val llmModel = withError({ getModelError: GetModelError ->
+                    when (getModelError) {
+                        is GetModelError.ModelNotFound -> AddSettingsError.ModelNotFound(getModelError.id)
+                    }
+                }) {
+                    llmModelService.getModelById(settings.modelId).bind()
                 }
-                ensure(!(temperature != null && (temperature < 0f || temperature > 2f))) {
-                    AddSettingsError.InvalidInput("Temperature must be between 0.0 and 2.0")
-                }
-                ensure(!(maxTokens != null && maxTokens <= 0)) {
-                    AddSettingsError.InvalidInput("Max tokens must be positive")
+                ensure(settings.modelType == llmModel.type) {
+                    AddSettingsError.InvalidInput(
+                        "Model settings type (${settings.modelType}) does not match the associated LLM Model's type (${llmModel.type})."
+                    )
                 }
 
+                // Insert the settings
                 withError({ daoError: SettingsError.ModelNotFound ->
                     AddSettingsError.ModelNotFound(daoError.modelId)
                 }) {
-                    settingsDao.insertSettings(name, modelId, systemMessage, temperature, maxTokens, customParamsJson).bind()
+                    settingsDao.insertSettings(settings).bind()
                 }
             }
         }
@@ -68,18 +73,23 @@ class ModelSettingsServiceImpl(
     override suspend fun updateSettings(settings: ModelSettings): Either<UpdateSettingsError, Unit> =
         transactionScope.transaction {
             either {
-                ensure(!settings.name.isBlank()) {
-                    UpdateSettingsError.InvalidInput("Settings name cannot be blank.")
-                }
-                val temperature = settings.temperature
-                ensure(!(temperature != null && (temperature < 0f || temperature > 2f))) {
-                    UpdateSettingsError.InvalidInput("Temperature must be between 0.0 and 2.0")
-                }
-                val maxTokens = settings.maxTokens
-                ensure(!(maxTokens != null && maxTokens <= 0)) {
-                    UpdateSettingsError.InvalidInput("Max tokens must be positive")
+                // Get the associated LLMModel to verify type consistency
+                val llmModel = withError({ getModelError: GetModelError ->
+                    when (getModelError) {
+                        is GetModelError.ModelNotFound -> UpdateSettingsError.ModelNotFound(getModelError.id)
+                    }
+                }) {
+                    llmModelService.getModelById(settings.modelId).bind()
                 }
 
+                // Verify that the ModelSettings type matches the LLMModel's type
+                ensure(settings.modelType == llmModel.type) {
+                    UpdateSettingsError.InvalidInput(
+                        "Model settings type (${settings.modelType}) does not match the associated LLM Model's type (${llmModel.type})."
+                    )
+                }
+
+                // Update the settings
                 withError({ daoError: SettingsError ->
                     when(daoError) {
                         is SettingsError.SettingsNotFound -> UpdateSettingsError.SettingsNotFound(daoError.id)
