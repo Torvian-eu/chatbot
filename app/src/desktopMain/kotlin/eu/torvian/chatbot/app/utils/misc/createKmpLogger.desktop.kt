@@ -8,6 +8,10 @@ import org.apache.logging.log4j.LogManager
 class DesktopKmpLogger(private val tag: String) : KmpLogger {
     private val logger = LogManager.getLogger(tag)
 
+    override fun trace(message: String, throwable: Throwable?) {
+        logger.trace(message, throwable)
+    }
+
     override fun debug(message: String, throwable: Throwable?) {
         logger.debug(message, throwable)
     }
@@ -22,6 +26,10 @@ class DesktopKmpLogger(private val tag: String) : KmpLogger {
 
     override fun error(message: String, throwable: Throwable?) {
         logger.error(message, throwable)
+    }
+
+    override fun fatal(message: String, throwable: Throwable?) {
+        logger.fatal(message, throwable)
     }
 }
 

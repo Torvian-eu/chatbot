@@ -6,10 +6,12 @@ package eu.torvian.chatbot.app.utils.misc
  * Each platform will provide its actual implementation.
  */
 interface KmpLogger {
+    fun trace(message: String, throwable: Throwable? = null)
     fun debug(message: String, throwable: Throwable? = null)
     fun info(message: String, throwable: Throwable? = null)
     fun warn(message: String, throwable: Throwable? = null)
     fun error(message: String, throwable: Throwable? = null)
+    fun fatal(message: String, throwable: Throwable? = null)
 }
 
 /**
