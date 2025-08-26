@@ -15,3 +15,14 @@
 ## Guidelines
 - Use kotlinx.datetime instead of java.time.
 - Error return types in Arrow should be logical errors, not technical errors.
+
+## Running Gradle tasks
+- `./gradlew app:desktopMainClasses` to build the desktop application
+- `./gradlew app:desktopTestClasses` to build the desktop tests
+- `./gradlew app:desktopTest` to run the desktop tests
+- `./gradlew server:assemble` to build the server module
+- `./gradlew server:test` to run the server tests
+
+## Tips
+- Console commands are run in PowerShell.
+- There's no need to `cd` into the project directory before running Gradle tasks. The current working directory is already the project root.
