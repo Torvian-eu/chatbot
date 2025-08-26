@@ -2,13 +2,13 @@ package eu.torvian.chatbot.app.domain.contracts
 
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.models.ChatMessage
-import eu.torvian.chatbot.common.models.ChatSession
+import eu.torvian.chatbot.app.viewmodel.chat.state.ChatSessionData
 
 /**
  * Encapsulates all UI state relevant to the main Chat Area.
  * (To be fully implemented in future PRs like 20, 21, etc.)
  *
- * @property sessionUiState The state of the currently loaded chat session, including all messages.
+ * @property sessionUiState The state of the currently loaded chat session with its model settings.
  * @property currentBranchLeafId The ID of the leaf message in the currently displayed thread branch.
  * @property displayedMessages The list of messages to display in the UI, representing the currently selected thread branch.
  * @property inputContent The current text content in the message input field.
@@ -18,7 +18,7 @@ import eu.torvian.chatbot.common.models.ChatSession
  * @property isSendingMessage Indicates whether a message is currently in the process of being sent (E1.S3).
  */
 data class ChatAreaState(
-    val sessionUiState: UiState<ApiError, ChatSession> = UiState.Idle,
+    val sessionUiState: UiState<ApiError, ChatSessionData> = UiState.Idle,
     val currentBranchLeafId: Long? = null,
     val displayedMessages: List<ChatMessage> = emptyList(),
     val inputContent: String = "",

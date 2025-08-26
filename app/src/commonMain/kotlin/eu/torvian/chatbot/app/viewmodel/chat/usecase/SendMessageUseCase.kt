@@ -28,7 +28,8 @@ class SendMessageUseCase(
      * Branches on streaming settings to use appropriate processing method.
      */
     suspend fun execute() {
-        val currentSession = state.sessionState.value.dataOrNull ?: return
+        val currentSessionData = state.currentSessionData ?: return
+        val currentSession = currentSessionData.session
         val content = state.inputContent.value.trim()
         if (content.isBlank()) return // Cannot send empty message
 
@@ -39,8 +40,8 @@ class SendMessageUseCase(
         state.setIsSending(true) // Set sending state to true
 
         try {
-            // Check if streaming is enabled in settings
-            val isStreamingEnabled = true // TODO: Implement settings check
+            // Check if streaming is enabled in settings, default to true if no settings available
+            val isStreamingEnabled = currentSessionData.modelSettings?.stream ?: true
 
             if (isStreamingEnabled) {
                 handleStreamingMessage(currentSession, content, parentId)

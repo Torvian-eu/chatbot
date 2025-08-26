@@ -4,7 +4,6 @@ import eu.torvian.chatbot.app.domain.contracts.UiState
 import eu.torvian.chatbot.app.viewmodel.chat.util.ThreadBuilder
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.models.ChatMessage
-import eu.torvian.chatbot.common.models.ChatSession
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.*
 import kotlinx.datetime.Clock
@@ -22,7 +21,7 @@ class ChatStateImpl(
 
     // --- Private MutableStateFlows ---
 
-    private val _sessionState = MutableStateFlow<UiState<ApiError, ChatSession>>(UiState.Idle)
+    private val _sessionDataState = MutableStateFlow<UiState<ApiError, ChatSessionData>>(UiState.Idle)
     private val _currentBranchLeafId = MutableStateFlow<Long?>(null)
     private val _streamingAssistantMessage = MutableStateFlow<ChatMessage.AssistantMessage?>(null)
     private val _streamingUserMessage = MutableStateFlow<ChatMessage.UserMessage?>(null)
@@ -36,7 +35,8 @@ class ChatStateImpl(
 
     // --- Public Read-Only StateFlows ---
 
-    override val sessionState: StateFlow<UiState<ApiError, ChatSession>> = _sessionState.asStateFlow()
+    override val sessionDataState: StateFlow<UiState<ApiError, ChatSessionData>> = _sessionDataState.asStateFlow()
+
     override val currentBranchLeafId: StateFlow<Long?> = _currentBranchLeafId.asStateFlow()
     override val inputContent: StateFlow<String> = _inputContent.asStateFlow()
     override val replyTargetMessage: StateFlow<ChatMessage?> = _replyTargetMessage.asStateFlow()
@@ -49,8 +49,8 @@ class ChatStateImpl(
     // --- Computed StateFlows ---
 
     override val displayedMessages: StateFlow<List<ChatMessage>> = combine(
-        _sessionState.filterIsInstance<UiState.Success<ChatSession>>()
-            .map { it.data.messages },
+        _sessionDataState.filterIsInstance<UiState.Success<ChatSessionData>>()
+            .map { it.data.session.messages },
         _currentBranchLeafId,
         _streamingUserMessage,
         _streamingAssistantMessage
@@ -65,16 +65,16 @@ class ChatStateImpl(
 
     // --- Public State Mutation Methods ---
 
-    override fun setSessionLoading() {
-        _sessionState.value = UiState.Loading
+    override fun setSessionDataLoading() {
+        _sessionDataState.value = UiState.Loading
     }
 
-    override fun setSessionError(error: ApiError) {
-        _sessionState.value = UiState.Error(error)
+    override fun setSessionDataError(error: ApiError) {
+        _sessionDataState.value = UiState.Error(error)
     }
 
-    override fun setSessionSuccess(session: ChatSession) {
-        _sessionState.value = UiState.Success(session)
+    override fun setSessionDataSuccess(sessionData: ChatSessionData) {
+        _sessionDataState.value = UiState.Success(sessionData)
     }
 
     override fun setCurrentLeafId(leafId: Long?) {
@@ -120,33 +120,39 @@ class ChatStateImpl(
     }
 
     override fun updateSessionMessages(messages: List<ChatMessage>, newLeafId: Long?) {
-        val currentSession = _sessionState.value.dataOrNull ?: return
-        _sessionState.value = UiState.Success(
-            currentSession.copy(
-                messages = messages,
-                currentLeafMessageId = newLeafId,
-                updatedAt = clock.now()
+        val currentSessionData = _sessionDataState.value.dataOrNull ?: return
+        _sessionDataState.value = UiState.Success(
+            currentSessionData.copy(
+                session = currentSessionData.session.copy(
+                    messages = messages,
+                    currentLeafMessageId = newLeafId,
+                    updatedAt = clock.now()
+                )
             )
         )
         _currentBranchLeafId.value = newLeafId
     }
 
     override fun updateSessionModelId(modelId: Long?) {
-        val currentSession = _sessionState.value.dataOrNull ?: return
-        _sessionState.value = UiState.Success(
-            currentSession.copy(currentModelId = modelId)
+        val currentSessionData = _sessionDataState.value.dataOrNull ?: return
+        _sessionDataState.value = UiState.Success(
+            currentSessionData.copy(
+                session = currentSessionData.session.copy(currentModelId = modelId)
+            )
         )
     }
 
     override fun updateSessionSettingsId(settingsId: Long?) {
-        val currentSession = _sessionState.value.dataOrNull ?: return
-        _sessionState.value = UiState.Success(
-            currentSession.copy(currentSettingsId = settingsId)
+        val currentSessionData = _sessionDataState.value.dataOrNull ?: return
+        _sessionDataState.value = UiState.Success(
+            currentSessionData.copy(
+                session = currentSessionData.session.copy(currentSettingsId = settingsId)
+            )
         )
     }
 
     override fun resetState() {
-        _sessionState.value = UiState.Idle
+        _sessionDataState.value = UiState.Idle
         _currentBranchLeafId.value = null
         _streamingAssistantMessage.value = null
         _streamingUserMessage.value = null

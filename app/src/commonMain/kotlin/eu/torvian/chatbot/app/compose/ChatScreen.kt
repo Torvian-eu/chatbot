@@ -41,7 +41,7 @@ fun ChatScreen(
     val editingGroupNameInput by sessionListViewModel.editingGroupNameInput.collectAsState()
 
     // --- Collect States for ChatArea ---
-    val chatSessionUiState by chatViewModel.sessionState.collectAsState()
+    val chatSessionUiState by chatViewModel.sessionDataState.collectAsState()
     val chatInputContent by chatViewModel.inputContent.collectAsState()
     val chatReplyTargetMessage by chatViewModel.replyTargetMessage.collectAsState()
     val chatEditingMessage by chatViewModel.editingMessage.collectAsState()

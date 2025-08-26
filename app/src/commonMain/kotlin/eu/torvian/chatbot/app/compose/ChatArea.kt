@@ -97,7 +97,7 @@ fun ChatArea(
 
             UiState.Idle -> IdleStateDisplay(modifier = Modifier.align(Alignment.Center))
             is UiState.Success -> SuccessStateDisplay(
-                chatSession = state.sessionUiState.data,
+                chatSession = state.sessionUiState.data.session,
                 displayedMessages = state.displayedMessages,
                 actions = actions, // Pass the full actions contract
                 inputContent = state.inputContent,

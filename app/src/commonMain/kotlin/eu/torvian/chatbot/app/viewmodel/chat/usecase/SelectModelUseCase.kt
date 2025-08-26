@@ -26,7 +26,7 @@ class SelectModelUseCase(
      * @param modelId The ID of the model to select, or null to clear the selection
      */
     suspend fun execute(modelId: Long?) {
-        val currentSession = state.sessionState.value.dataOrNull ?: return
+        val currentSession = state.currentSession ?: return
 
         logger.info("Selecting model $modelId for session ${currentSession.id}")
 

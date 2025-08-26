@@ -5,4 +5,9 @@ package eu.torvian.chatbot.app.viewmodel.chat.state
  * This interface combines session management and user interaction state
  * to provide full access to all chat state operations.
  */
-interface ChatState : SessionState, InteractionState
+interface ChatState : SessionState, InteractionState {
+    /**
+     * Resets the entire chat state to its initial state.
+     */
+    fun resetState()
+}

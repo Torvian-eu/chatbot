@@ -25,7 +25,7 @@ class DeleteMessageUseCase(
      * @param messageId The ID of the message to delete
      */
     suspend fun execute(messageId: Long) {
-        val currentSession = state.sessionState.value.dataOrNull ?: return
+        val currentSession = state.currentSession ?: return
 
         logger.info("Deleting message $messageId from session ${currentSession.id}")
 

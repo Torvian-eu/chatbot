@@ -8,6 +8,7 @@ import eu.torvian.chatbot.app.domain.contracts.UiState
 import eu.torvian.chatbot.app.testutils.data.assistantMessage
 import eu.torvian.chatbot.app.testutils.data.chatSession
 import eu.torvian.chatbot.app.testutils.data.userMessage
+import eu.torvian.chatbot.app.viewmodel.chat.state.ChatSessionData
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
 import io.mockk.clearMocks
@@ -121,7 +122,7 @@ class ChatAreaTest {
         )
 
         val successState = ChatAreaState(
-            sessionUiState = UiState.Success(testSession),
+            sessionUiState = UiState.Success(ChatSessionData(session = testSession)),
             currentBranchLeafId = 2L,
             displayedMessages = testSession.messages
         )
@@ -189,7 +190,7 @@ class ChatAreaTest {
         )
 
         val successState = ChatAreaState(
-            sessionUiState = UiState.Success(testSession),
+            sessionUiState = UiState.Success(ChatSessionData(session = testSession)),
             currentBranchLeafId = 2L,
             displayedMessages = testSession.messages
         )
@@ -222,7 +223,7 @@ class ChatAreaTest {
         )
 
         val successState = ChatAreaState(
-            sessionUiState = UiState.Success(testSession),
+            sessionUiState = UiState.Success(ChatSessionData(session = testSession)),
             currentBranchLeafId = null,
             displayedMessages = emptyList()
         )
@@ -276,7 +277,7 @@ class ChatAreaTest {
         )
 
         val successState = ChatAreaState(
-            sessionUiState = UiState.Success(testSession),
+            sessionUiState = UiState.Success(ChatSessionData(session = testSession)),
             currentBranchLeafId = 4L,
             displayedMessages = testMessages
         )
@@ -325,7 +326,7 @@ class ChatAreaTest {
         )
 
         val successState = ChatAreaState(
-            sessionUiState = UiState.Success(testSession),
+            sessionUiState = UiState.Success(ChatSessionData(session = testSession)),
             currentBranchLeafId = 2L,
             displayedMessages = testMessages
         )
@@ -374,7 +375,7 @@ class ChatAreaTest {
         )
 
         val successState = ChatAreaState(
-            sessionUiState = UiState.Success(testSession),
+            sessionUiState = UiState.Success(ChatSessionData(session = testSession)),
             currentBranchLeafId = 2L,
             displayedMessages = testMessages
         )
@@ -443,7 +444,7 @@ class ChatAreaTest {
         )
 
         val successState = ChatAreaState(
-            sessionUiState = UiState.Success(testSession),
+            sessionUiState = UiState.Success(ChatSessionData(session = testSession)),
             currentBranchLeafId = 3L,
             displayedMessages = listOf(m1, m2, m3) // Display first branch
         )
@@ -516,7 +517,7 @@ class ChatAreaTest {
         )
 
         val successState = ChatAreaState(
-            sessionUiState = UiState.Success(testSession),
+            sessionUiState = UiState.Success(ChatSessionData(session = testSession)),
             currentBranchLeafId = 2L,
             displayedMessages = testMessages
         )
@@ -555,7 +556,7 @@ class ChatAreaTest {
         )
 
         val successState = ChatAreaState(
-            sessionUiState = UiState.Success(testSession),
+            sessionUiState = UiState.Success(ChatSessionData(session = testSession)),
             currentBranchLeafId = 1L,
             displayedMessages = testMessages
         )
@@ -632,7 +633,7 @@ class ChatAreaTest {
             setContent {
                 ChatArea(
                     state = ChatAreaState(
-                        sessionUiState = UiState.Success(testSession),
+                        sessionUiState = UiState.Success(ChatSessionData(session = testSession)),
                         currentBranchLeafId = 1L,
                         displayedMessages = testMessages
                     ),

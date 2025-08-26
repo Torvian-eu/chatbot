@@ -55,7 +55,7 @@ class EditMessageUseCase(
             return
         }
 
-        val currentSession = state.sessionState.value.dataOrNull ?: return
+        val currentSessionData = state.currentSessionData ?: return
 
         logger.info("Saving edited message ${messageToEdit.id}")
 
@@ -72,16 +72,18 @@ class EditMessageUseCase(
                 ifRight = { updatedMessage ->
                     logger.info("Successfully saved edited message ${updatedMessage.id}")
                     // Update the message in the messages list within the current session
-                    val updatedAllMessages = currentSession.messages.map {
+                    val updatedAllMessages = currentSessionData.session.messages.map {
                         if (it.id == updatedMessage.id) updatedMessage else it
                     }
 
                     // Update session with new messages and timestamp
-                    val updatedSession = currentSession.copy(
-                        messages = updatedAllMessages,
-                        updatedAt = clock.now()
+                    val updatedSessionData = currentSessionData.copy(
+                        session = currentSessionData.session.copy(
+                            messages = updatedAllMessages,
+                            updatedAt = clock.now()
+                        )
                     )
-                    state.setSessionSuccess(updatedSession)
+                    state.setSessionDataSuccess(updatedSessionData)
 
                     // Clear editing state on success
                     cancel()

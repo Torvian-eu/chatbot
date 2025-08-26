@@ -6,6 +6,7 @@ import eu.torvian.chatbot.app.service.api.SessionApi
 import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
+import eu.torvian.chatbot.app.viewmodel.chat.state.ChatSessionData
 
 /**
  * Use case for loading chat sessions from the API.
@@ -27,13 +28,13 @@ class LoadSessionUseCase(
      */
     suspend fun execute(sessionId: Long, forceReload: Boolean = false) {
         // Prevent reloading if already loading or if the session is already loaded successfully
-        val currentState = state.sessionState.value
-        if (!forceReload && (currentState.isLoading || (currentState.dataOrNull?.id == sessionId))) return
+        val currentState = state.sessionDataState.value
+        if (!forceReload && (currentState.isLoading || (currentState.dataOrNull?.session?.id == sessionId))) return
 
         // Store the session ID for potential retry in SharedChatState
         state.setRetryState(sessionId, null)
 
-        state.setSessionLoading()
+        state.setSessionDataLoading()
         state.setReplyTarget(null)
         state.setEditingMessage(null)
         state.setCurrentLeafId(null)
@@ -42,7 +43,7 @@ class LoadSessionUseCase(
             .fold(
                 ifLeft = { error ->
                     // Handle Error case
-                    state.setSessionError(error)
+                    state.setSessionDataError(error)
                     // Emit to generic EventBus using the specific error type
                     val eventId = errorNotifier.apiError(
                         error = error,
@@ -55,7 +56,7 @@ class LoadSessionUseCase(
                 ifRight = { session ->
                     // Handle Success case
                     logger.info("Successfully loaded session: ${session.id}")
-                    state.setSessionSuccess(session)
+                    state.setSessionDataSuccess(ChatSessionData(session = session, modelSettings = null))
                     state.setCurrentLeafId(session.currentLeafMessageId)
                     state.clearRetryState()
                 }

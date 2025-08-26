@@ -15,10 +15,11 @@ interface SessionState {
     // --- Read-only State Properties ---
 
     /**
-     * The state of the currently loaded chat session, including all messages.
-     * When in Success state, provides the ChatSession object.
+     * The state of the currently loaded chat session combined with its model settings.
+     * When in Success state, provides the ChatSessionData object containing both session and settings.
+     * This is the primary state property that should be used for accessing session data with settings.
      */
-    val sessionState: StateFlow<UiState<ApiError, ChatSession>>
+    val sessionDataState: StateFlow<UiState<ApiError, ChatSessionData>>
 
     /**
      * The ID of the leaf message in the currently displayed thread branch.
@@ -46,22 +47,36 @@ interface SessionState {
      */
     val lastFailedLoadEventId: StateFlow<String?>
 
+    /**
+     * Convenience property to get the current session data if available.
+     * Returns null if the session data state is not in Success state.
+     */
+    val currentSessionData: ChatSessionData?
+        get() = sessionDataState.value.dataOrNull
+
+    /**
+     * Convenience property to get the current session if available.
+     * Returns null if the session data state is not in Success state.
+     */
+    val currentSession: ChatSession?
+        get() = currentSessionData?.session
+
     // --- State Mutation Methods ---
 
     /**
-     * Sets the session state to loading.
+     * Sets the session data state to loading.
      */
-    fun setSessionLoading()
+    fun setSessionDataLoading()
 
     /**
-     * Sets the session state to error.
+     * Sets the session data state to error.
      */
-    fun setSessionError(error: ApiError)
+    fun setSessionDataError(error: ApiError)
 
     /**
-     * Sets the session state to success with the provided session data.
+     * Sets the session data state to success with the provided session and model settings.
      */
-    fun setSessionSuccess(session: ChatSession)
+    fun setSessionDataSuccess(sessionData: ChatSessionData)
 
     /**
      * Sets the current branch leaf ID.
@@ -102,9 +117,4 @@ interface SessionState {
      * Clears the retry state.
      */
     fun clearRetryState()
-
-    /**
-     * Resets all state to initial values.
-     */
-    fun resetState()
 }

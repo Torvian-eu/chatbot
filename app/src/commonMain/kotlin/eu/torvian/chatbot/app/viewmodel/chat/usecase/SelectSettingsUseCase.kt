@@ -26,7 +26,7 @@ class SelectSettingsUseCase(
      * @param settingsId The ID of the settings to select, or null to clear the selection
      */
     suspend fun execute(settingsId: Long?) {
-        val currentSession = state.sessionState.value.dataOrNull ?: return
+        val currentSession = state.currentSession ?: return
 
         logger.info("Selecting settings $settingsId for session ${currentSession.id}")
 

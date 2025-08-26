@@ -17,7 +17,7 @@ import eu.torvian.chatbot.app.viewmodel.chat.usecase.SwitchBranchUseCase
 import eu.torvian.chatbot.app.viewmodel.chat.usecase.UpdateInputUseCase
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.models.ChatMessage
-import eu.torvian.chatbot.common.models.ChatSession
+import eu.torvian.chatbot.app.viewmodel.chat.state.ChatSessionData
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.StateFlow
@@ -67,9 +67,10 @@ class ChatViewModel(
     // --- Public State Properties (delegated to SharedChatState) ---
 
     /**
-     * The state of the currently loaded chat session, including all messages.
+     * The state of the currently loaded chat session combined with its model settings.
+     * When in Success state, provides the ChatSessionData object containing both session and settings.
      */
-    val sessionState: StateFlow<UiState<ApiError, ChatSession>> = state.sessionState
+    val sessionDataState: StateFlow<UiState<ApiError, ChatSessionData>> = state.sessionDataState
 
     /**
      * The ID of the leaf message in the currently displayed thread branch.
