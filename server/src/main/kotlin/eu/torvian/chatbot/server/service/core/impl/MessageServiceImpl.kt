@@ -71,7 +71,7 @@ class MessageServiceImpl(
 
             // 2. Validate parent message if provided
             if (parentMessageId != null) {
-                withError({ daoError: MessageError.MessageNotFound ->
+                withError({ _: MessageError.MessageNotFound ->
                     ValidateNewMessageError.ParentNotInSession(sessionId, parentMessageId)
                 }) {
                     messageDao.getMessageById(parentMessageId).bind()
@@ -85,14 +85,14 @@ class MessageServiceImpl(
                 ?: raise(ValidateNewMessageError.ModelConfigurationError("No settings selected for session $sessionId"))
 
             // 4. Fetch Model
-            val model = withError({ serviceError: GetModelError ->
+            val model = withError({ _: GetModelError ->
                 throw IllegalStateException("Model with ID $modelId not found after validation")
             }) {
                 llmModelService.getModelById(modelId).bind()
             }
 
             // 5. Fetch Settings
-            val settings = withError({ serviceError: GetSettingsByIdError ->
+            val settings = withError({ _: GetSettingsByIdError ->
                 throw IllegalStateException("Settings with ID $settingsId not found after validation")
             }) {
                 modelSettingsService.getSettingsById(settingsId).bind()
@@ -111,7 +111,7 @@ class MessageServiceImpl(
             }
 
             // 7. Get LLM provider
-            val provider = withError({ serviceError: GetProviderError ->
+            val provider = withError({ _: GetProviderError ->
                 throw IllegalStateException("Provider not found for model ID $modelId (provider ID: ${model.providerId})")
             }) {
                 llmProviderService.getProviderById(model.providerId).bind()
@@ -119,7 +119,7 @@ class MessageServiceImpl(
 
             // 8. Get API Key (if required)
             val apiKey = provider.apiKeyId?.let { keyId ->
-                withError({ credError: CredentialError.CredentialNotFound ->
+                withError({ _: CredentialError.CredentialNotFound ->
                     throw IllegalStateException("API key not found in secure storage for provider ID ${provider.id} (key alias: $keyId)")
                 }) {
                     credentialManager.getCredential(keyId).bind()
@@ -263,7 +263,7 @@ class MessageServiceImpl(
         content: String,
         parentMessageId: Long?
     ): ChatMessage.UserMessage = transactionScope.transaction {
-        // 1. Insert user message
+        // 1. Insert user message (DAO will handle child linking atomically when parent is provided)
         val userMessage = messageDao.insertUserMessage(sessionId, content, parentMessageId).getOrElse { daoError ->
             throw IllegalStateException(
                 "Failed to insert user message. " +
@@ -271,19 +271,7 @@ class MessageServiceImpl(
             )
         }
 
-        // 2. Link user message as child to parent if parentMessageId is provided
-        // TODO: update MessageDao.insertUserMessage to handle this
-        if (parentMessageId != null) {
-            messageDao.addChildToMessage(parentMessageId, userMessage.id).getOrElse { linkError ->
-                throw IllegalStateException(
-                    "Failed to link user message as child to parent. " +
-                            "Parent message id: $parentMessageId. User message id: ${userMessage.id}. " +
-                            "Error: $linkError"
-                )
-            }
-        }
-
-        // 3. Update session's leaf message ID
+        // 2. Update session's leaf message ID
         sessionDao.updateSessionLeafMessageId(sessionId, userMessage.id).getOrElse { updateError ->
             throw IllegalStateException(
                 "Failed to update session leaf message ID. " +
@@ -291,7 +279,7 @@ class MessageServiceImpl(
             )
         }
 
-        // 4. Return user message
+        // 3. Return user message
         userMessage
     }
 
@@ -324,35 +312,25 @@ class MessageServiceImpl(
         settings: ModelSettings
     ): Pair<ChatMessage.AssistantMessage, ChatMessage.UserMessage> =
         transactionScope.transaction {
-            // 1. Insert assistant message
+            // 1. Insert assistant message (DAO will handle child linking atomically)
             val assistantMsg = messageDao.insertAssistantMessage(
                 sessionId, content, userMessage.id, model.id, settings.id
             ).getOrElse { daoError ->
                 throw IllegalStateException(
-                    "Failed to insert final assistant message. " +
-                            "Session id: $sessionId. Parent message id: ${userMessage.id}. Error: ${daoError::class.simpleName}"
+                    "Failed to insert assistant message. " +
+                            "Session id: $sessionId. Parent message id: ${userMessage.id}. Error: $daoError"
                 )
             }
 
-            // 2. Link assistant message as child to user message
-            // TODO: update MessageDao.insertAssistantMessage to handle this
-            messageDao.addChildToMessage(userMessage.id, assistantMsg.id).mapLeft { linkError ->
-                throw IllegalStateException(
-                    "Failed to link assistant message as child to user message. " +
-                            "User message id: ${userMessage.id}. Assistant message id: ${assistantMsg.id}. " +
-                            "Error: $linkError"
-                )
-            }
-
-            // 3. Update session's leaf message ID
-            sessionDao.updateSessionLeafMessageId(sessionId, assistantMsg.id).mapLeft { updateError ->
+            // 2. Update session's leaf message ID
+            sessionDao.updateSessionLeafMessageId(sessionId, assistantMsg.id).getOrElse { updateError ->
                 throw IllegalStateException(
                     "Failed to update session leaf message ID. " +
                             "Session id: $sessionId. New leaf message id: ${assistantMsg.id}. Error: $updateError"
                 )
             }
 
-            // 4. Retrieve updated user message
+            // 3. Retrieve updated user message
             val updatedUserMsg = messageDao.getMessageById(userMessage.id).getOrElse { daoError ->
                 throw IllegalStateException(
                     "Failed to retrieve updated user message. " +
@@ -410,6 +388,7 @@ class MessageServiceImpl(
                     ifRight = { chunk ->
                         when (chunk) {
                             is LLMStreamChunk.ContentChunk -> {
+                                @Suppress("AssignedValueIsNeverRead")
                                 accumulatedContent += chunk.deltaContent
                                 onContentDelta(chunk.deltaContent)
                             }

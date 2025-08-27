@@ -79,22 +79,25 @@ class MessageDaoExposed(
     ): Either<InsertMessageError, ChatMessage.UserMessage> =
         transactionScope.transaction {
             either {
-                if (parentMessageId != null) {
-                    verifyParentInSession(parentMessageId, sessionId)
-                }
                 catch({
                     val now = System.currentTimeMillis()
-                    val insertStatement = ChatMessageTable.insert {
-                        it[ChatMessageTable.sessionId] = sessionId
-                        it[ChatMessageTable.role] = ChatMessage.Role.USER
-                        it[ChatMessageTable.content] = content
-                        it[ChatMessageTable.createdAt] = now
-                        it[ChatMessageTable.updatedAt] = now
-                        it[ChatMessageTable.parentMessageId] = parentMessageId
-                        it[ChatMessageTable.childrenMessageIds] = Json.encodeToString(emptyList<Long>())
+                    val insertedRow = insertChatMessageRow(
+                        sessionId = sessionId,
+                        content = content,
+                        parentMessageId = parentMessageId,
+                        role = ChatMessage.Role.USER,
+                        now = now
+                    )
+
+                    val insertedId = insertedRow[ChatMessageTable.id].value
+
+                    // If there is a parent, atomically update parent's children list now
+                    if (parentMessageId != null) {
+                        linkChildToParent(parentMessageId, insertedId, sessionId)
                     }
-                    insertStatement.resultedValues?.first()?.toUserMessage()
-                        ?: throw IllegalStateException("Failed to retrieve newly inserted user message")
+
+                    // Return the inserted message
+                    insertedRow.toUserMessage()
                 }) { e: ExposedSQLException ->
                     logger.error(
                         "Failed to insert user message for session $sessionId and parent $parentMessageId", e
@@ -114,33 +117,33 @@ class MessageDaoExposed(
     ): Either<InsertMessageError, ChatMessage.AssistantMessage> =
         transactionScope.transaction {
             either {
-                if (parentMessageId != null) {
-                    verifyParentInSession(parentMessageId, sessionId)
-                }
                 catch({
                     val now = System.currentTimeMillis()
-                    val insertStatement = ChatMessageTable.insert {
-                        it[ChatMessageTable.sessionId] = sessionId
-                        it[ChatMessageTable.role] = ChatMessage.Role.ASSISTANT
-                        it[ChatMessageTable.content] = content
-                        it[ChatMessageTable.createdAt] = now
-                        it[ChatMessageTable.updatedAt] = now
-                        it[ChatMessageTable.parentMessageId] = parentMessageId
-                        it[ChatMessageTable.childrenMessageIds] = Json.encodeToString(emptyList<Long>())
-                    }
-                    val messageRow = insertStatement.resultedValues?.first()
-                        ?: throw IllegalStateException("Failed to retrieve newly inserted assistant message")
+                    val messageRow = insertChatMessageRow(
+                        sessionId = sessionId,
+                        content = content,
+                        parentMessageId = parentMessageId,
+                        role = ChatMessage.Role.ASSISTANT,
+                        now = now
+                    )
+
+                    val insertedId = messageRow[ChatMessageTable.id].value
 
                     // Insert into AssistantMessages table
                     AssistantMessageTable.insert {
-                        it[AssistantMessageTable.messageId] = messageRow[ChatMessageTable.id].value
+                        it[AssistantMessageTable.messageId] = insertedId
                         it[AssistantMessageTable.modelId] = modelId
                         it[AssistantMessageTable.settingsId] = settingsId
                     }
 
+                    // If there is a parent, atomically update parent's children list now
+                    if (parentMessageId != null) {
+                        linkChildToParent(parentMessageId, insertedId, sessionId)
+                    }
+
                     // Return AssistantMessage object
                     ChatMessage.AssistantMessage(
-                        id = messageRow[ChatMessageTable.id].value,
+                        id = insertedId,
                         sessionId = messageRow[ChatMessageTable.sessionId].value,
                         content = messageRow[ChatMessageTable.content],
                         createdAt = Instant.fromEpochMilliseconds(messageRow[ChatMessageTable.createdAt]),
@@ -282,12 +285,71 @@ class MessageDaoExposed(
         }
     }
 
-    private fun Raise<InsertMessageError>.verifyParentInSession(parentId: Long, sessionId: Long) {
-        val parentSessionId = ChatMessageTable
-            .selectAll().where { ChatMessageTable.id eq parentId }
-            .singleOrNull()?.get(ChatMessageTable.sessionId)?.value
-        ensure(parentSessionId == sessionId) {
-            InsertMessageError.ParentNotInSession(parentId, sessionId)
+    /**
+     * Helper method to insert a new chat message row into the database.
+     * Should only be called from within a transaction block.
+     */
+    private fun insertChatMessageRow(
+        sessionId: Long,
+        content: String,
+        parentMessageId: Long?,
+        role: ChatMessage.Role,
+        now: Long
+    ): ResultRow {
+        val insertStatement = ChatMessageTable.insert {
+            it[ChatMessageTable.sessionId] = sessionId
+            it[ChatMessageTable.role] = role
+            it[ChatMessageTable.content] = content
+            it[ChatMessageTable.createdAt] = now
+            it[ChatMessageTable.updatedAt] = now
+            it[ChatMessageTable.parentMessageId] = parentMessageId
+            it[ChatMessageTable.childrenMessageIds] = Json.encodeToString(emptyList<Long>())
         }
+        return insertStatement.resultedValues?.first()
+            ?: throw IllegalStateException("Failed to retrieve newly inserted message (role=$role)")
     }
+
+    /**
+     * Helper method to link a child message to its parent.
+     * Should only be called from within a transaction block.
+     *
+     * @param parentMessageId The ID of the parent message
+     * @param childId The ID of the child message
+     * @param childSessionId The session ID of the child message to validate session consistency
+     */
+    private fun Raise<InsertMessageError>.linkChildToParent(
+        parentMessageId: Long,
+        childId: Long,
+        childSessionId: Long
+    ) {
+        // Defensive check
+        ensure(parentMessageId != childId) {
+            InsertMessageError.ChildIsParent(parentMessageId, childId)
+        }
+        // Fetch parent row
+        val parentRow = ChatMessageTable
+            .selectAll()
+            .where { ChatMessageTable.id eq parentMessageId }
+            .singleOrNull()
+        ensure(parentRow != null) { InsertMessageError.ParentNotFound(parentMessageId) }
+
+        // Validate session match
+        val parentSessionId = parentRow[ChatMessageTable.sessionId].value
+        ensure(parentSessionId == childSessionId) {
+            InsertMessageError.ParentNotInSession(parentMessageId, childSessionId)
+        }
+
+        // Update children list
+        val currentChildrenIdsString = parentRow[ChatMessageTable.childrenMessageIds]
+        val childrenList = Json.decodeFromString<MutableList<Long>>(currentChildrenIdsString)
+        ensure(childId !in childrenList) { InsertMessageError.ChildAlreadyExists(parentMessageId, childId) }
+
+        childrenList.add(childId)
+        val newChildrenIdsString = Json.encodeToString(childrenList)
+        val updated = ChatMessageTable.update({ ChatMessageTable.id eq parentMessageId }) {
+            it[childrenMessageIds] = newChildrenIdsString
+        }
+        ensure(updated != 0) { InsertMessageError.ParentNotFound(parentMessageId) }
+    }
+
 }

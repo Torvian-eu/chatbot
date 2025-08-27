@@ -232,7 +232,8 @@ class MessageDaoExposedTest {
 
     @Test
     fun `insertUserMessage should handle parent-child relationship`() = runTest {
-        // Setup session with a parent message
+        // Setup session with a parent message (ensure parent has no pre-populated children)
+        val parentWithoutChildren = testUserMessage1.copy(childrenMessageIds = emptyList())
         testDataManager.setup(
             TestDataSet(
                 chatGroups = listOf(testGroup1),
@@ -240,7 +241,7 @@ class MessageDaoExposedTest {
                 llmProviders = listOf(testProvider1),
                 modelSettings = listOf(testSettings1),
                 chatSessions = listOf(testSession1),
-                chatMessages = listOf(testUserMessage1)
+                chatMessages = listOf(parentWithoutChildren)
             )
         )
 
@@ -316,7 +317,8 @@ class MessageDaoExposedTest {
 
     @Test
     fun `insertAssistantMessage should insert a new assistant message`() = runTest {
-        // Setup session and parent message
+        // Setup session and parent message (ensure parent has no pre-populated children)
+        val parentWithoutChildren = testUserMessage1.copy(childrenMessageIds = emptyList())
         testDataManager.setup(
             TestDataSet(
                 chatGroups = listOf(testGroup1),
@@ -324,7 +326,7 @@ class MessageDaoExposedTest {
                 llmProviders = listOf(testProvider1),
                 modelSettings = listOf(testSettings1),
                 chatSessions = listOf(testSession1),
-                chatMessages = listOf(testUserMessage1)
+                chatMessages = listOf(parentWithoutChildren)
             )
         )
 
