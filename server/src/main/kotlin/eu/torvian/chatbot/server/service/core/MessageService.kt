@@ -74,9 +74,17 @@ interface MessageService {
 
     /**
      * Deletes a specific message and its children recursively.
-     * Updates the parent's children list.
+     * Updates the parent's children list and maintains session leaf message consistency.
+     *
+     * When a message is deleted, the session's currentLeafMessageId is automatically updated:
+     * - If the deleted message is not in the current leaf's path, no change is made
+     * - If a non-root message is deleted, the parent becomes the new leaf or the first remaining sibling's leaf
+     * - If a root message is deleted, the oldest remaining root message's leaf becomes active
+     * - If no messages remain, the session's leaf message ID is set to null
+     *
      * @param id The ID of the message to delete.
-     * @return Either a [DeleteMessageError] if the message doesn't exist, or Unit if successful.
+     * @return Either a [DeleteMessageError] if the message doesn't exist or session update fails,
+     *         or Unit if successful.
      */
     suspend fun deleteMessage(id: Long): Either<DeleteMessageError, Unit>
 }

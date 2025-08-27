@@ -247,13 +247,107 @@ class MessageServiceImpl(
     override suspend fun deleteMessage(id: Long): Either<DeleteMessageError, Unit> =
         transactionScope.transaction {
             either {
+                // Get message details before deletion
+                val messageToDelete = withError({ daoError: MessageError.MessageNotFound ->
+                    DeleteMessageError.MessageNotFound(daoError.id)
+                }) {
+                    messageDao.getMessageById(id).bind()
+                }
+
+                val sessionId = messageToDelete.sessionId
+
+                // Get session and check if update is needed BEFORE deletion
+                val session = withError({ _: SessionError ->
+                    DeleteMessageError.SessionUpdateFailed(sessionId)
+                }) {
+                    sessionDao.getSessionById(sessionId).bind()
+                }
+
+                val currentLeafId = session.currentLeafMessageId
+
+                // Check if the deleted message affects current leaf and calculate new leaf ID if needed
+                val leafUpdateResult = calculateLeafUpdateIfNeeded(
+                    messageToDelete, session, currentLeafId
+                )
+
+                // Perform the deletion
                 withError({ daoError: MessageError.MessageNotFound ->
                     DeleteMessageError.MessageNotFound(daoError.id)
                 }) {
                     messageDao.deleteMessage(id).bind()
                 }
+
+                // Update session leaf message if needed
+                if (leafUpdateResult.needsUpdate) {
+                    withError({ _: SessionError ->
+                        DeleteMessageError.SessionUpdateFailed(sessionId)
+                    }) {
+                        sessionDao.updateSessionLeafMessageId(sessionId, leafUpdateResult.newLeafId).bind()
+                    }
+                }
             }
         }
+
+    /**
+     * Checks if a target message is in the path from root to a leaf message.
+     *
+     * @param targetMessageId The ID of the message to check for.
+     * @param leafMessageId The ID of the leaf message to trace back from.
+     * @param messageMap Map of message ID to ChatMessage for efficient lookups.
+     * @return True if the target message is an ancestor of the leaf message.
+     */
+    private fun isMessageInPath(
+        targetMessageId: Long,
+        leafMessageId: Long,
+        messageMap: Map<Long, ChatMessage>
+    ): Boolean {
+        var currentId: Long? = leafMessageId
+        while (currentId != null) {
+            if (currentId == targetMessageId) return true
+            currentId = messageMap[currentId]?.parentMessageId
+        }
+        return false
+    }
+
+    /**
+     * Finds the leaf message in a subtree by following the first child path.
+     *
+     * @param rootMessageId The ID of the root message to start from.
+     * @param messageMap Map of message ID to ChatMessage for efficient lookups.
+     * @return The ID of the leaf message in this subtree.
+     */
+    private fun findLeafInSubtree(rootMessageId: Long, messageMap: Map<Long, ChatMessage>): Long {
+        var currentId = rootMessageId
+        while (true) {
+            val message = messageMap[currentId]
+                ?: throw IllegalStateException("Message $currentId not found in message map")
+            if (message.childrenMessageIds.isEmpty()) {
+                return currentId
+            }
+            // Follow first child path
+            currentId = message.childrenMessageIds.first()
+        }
+    }
+
+    /**
+     * Finds the first available root message in a session, excluding the deleted one.
+     *
+     * @param sessionId The ID of the session.
+     * @param deletedMessageId The ID of the message being deleted (to exclude).
+     * @param messageMap Map of message ID to ChatMessage for efficient lookups.
+     * @return The ID of the oldest available root message, or null if none exist.
+     */
+    private fun findFirstAvailableRootMessage(
+        sessionId: Long,
+        deletedMessageId: Long,
+        messageMap: Map<Long, ChatMessage>
+    ): Long? {
+        // Find all root messages (parentMessageId == null) excluding the deleted one
+        return messageMap.values
+            .filter { it.sessionId == sessionId && it.parentMessageId == null && it.id != deletedMessageId }
+            .minByOrNull { it.createdAt }  // Use oldest root as the new active branch
+            ?.id
+    }
 
     /**
      * Saves user message and updates relationships.
@@ -410,4 +504,76 @@ class MessageServiceImpl(
                 )
             }
     }
+
+    /**
+     * Calculates if the leaf message ID needs to be updated after a deletion,
+     * and determines the new leaf message ID if needed.
+     *
+     * @param messageToDelete The message that is being deleted.
+     * @param session The current session.
+     * @param currentLeafId The current leaf message ID of the session.
+     * @return A [LeafUpdateCalculation] indicating if an update is needed and the new leaf ID.
+     */
+    private suspend fun calculateLeafUpdateIfNeeded(
+        messageToDelete: ChatMessage,
+        session: ChatSession,
+        currentLeafId: Long?
+    ): LeafUpdateCalculation {
+        // If there's no current leaf, no update is needed
+        if (currentLeafId == null) {
+            return LeafUpdateCalculation(needsUpdate = false, newLeafId = null)
+        }
+
+        // Build fresh message map from the database
+        val allMessages = messageDao.getMessagesBySessionId(session.id)
+        val messageMap = allMessages.associateBy { it.id }
+
+        // Check if the deleted message affects current leaf
+        val needsLeafUpdate = isMessageInPath(messageToDelete.id, currentLeafId, messageMap)
+
+        if (!needsLeafUpdate) {
+            return LeafUpdateCalculation(needsUpdate = false, newLeafId = null)
+        }
+
+        // Calculate new leaf message before deletion
+        val newLeafId = when (val parentId = messageToDelete.parentMessageId) {
+            null -> {
+                // Deleted a root message, find another available root
+                val nextRootId = findFirstAvailableRootMessage(session.id, messageToDelete.id, messageMap)
+                if (nextRootId != null) {
+                    // Traverse down to find the leaf of this root
+                    findLeafInSubtree(nextRootId, messageMap)
+                } else {
+                    // No more root messages, session becomes empty
+                    null
+                }
+            }
+            else -> {
+                // Get parent's current state (before deletion)
+                val parent = messageMap[parentId]
+                    ?: throw IllegalStateException("Parent message $parentId not found")
+
+                // Calculate remaining children after deletion
+                val remainingChildren = parent.childrenMessageIds.filter { it != messageToDelete.id }
+
+                if (remainingChildren.isEmpty()) {
+                    // Parent becomes the new leaf
+                    parentId
+                } else {
+                    // Find leaf in first remaining child's subtree
+                    findLeafInSubtree(remainingChildren.first(), messageMap)
+                }
+            }
+        }
+
+        return LeafUpdateCalculation(needsUpdate = true, newLeafId = newLeafId)
+    }
 }
+
+/**
+ * Result of leaf update calculation.
+ */
+private data class LeafUpdateCalculation(
+    val needsUpdate: Boolean,
+    val newLeafId: Long?
+)
