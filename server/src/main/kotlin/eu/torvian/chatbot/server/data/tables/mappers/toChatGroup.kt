@@ -6,12 +6,12 @@ import kotlinx.datetime.Instant
 import org.jetbrains.exposed.sql.ResultRow
 
 /**
- * Extension function to map an Exposed [org.jetbrains.exposed.sql.ResultRow] to a [eu.torvian.chatbot.common.models.ChatGroup].
+ * Extension function to map an Exposed [ResultRow] to a [ChatGroup].
  */
 fun ResultRow.toChatGroup(): ChatGroup {
     return ChatGroup(
         id = this[ChatGroupTable.id].value,
         name = this[ChatGroupTable.name],
-        createdAt = Instant.Companion.fromEpochMilliseconds(this[ChatGroupTable.createdAt])
+        createdAt = Instant.fromEpochMilliseconds(this[ChatGroupTable.createdAt])
     )
 }
