@@ -431,7 +431,6 @@ class MessageServiceImplTest {
 
         // Mock all the dependencies for successful flow
         coEvery { messageDao.insertUserMessage(testSession.id, content, null) } returns userMessage.right()
-        coEvery { messageDao.addChildToMessage(any(), any()) } returns Unit.right()
         coEvery {
             llmApiClient.completeChat(
                 any(),
@@ -502,8 +501,6 @@ class MessageServiceImplTest {
 
         // Mock all the dependencies for successful flow with parent message
         coEvery { messageDao.insertUserMessage(testSession.id, content, parentMessageId) } returns userMessage.right()
-        coEvery { messageDao.addChildToMessage(1L, 3L) } returns Unit.right()
-        coEvery { messageDao.addChildToMessage(3L, 4L) } returns Unit.right()
         coEvery {
             llmApiClient.completeChat(
                 any(),
@@ -571,7 +568,6 @@ class MessageServiceImplTest {
         val userMessage = testMessage1
 
         coEvery { messageDao.insertUserMessage(testSession.id, content, null) } returns userMessage.right()
-        coEvery { messageDao.addChildToMessage(any(), any()) } returns Unit.right()
         coEvery { messageDao.getMessagesBySessionId(testSession.id) } returns listOf(userMessage)
         coEvery {
             llmApiClient.completeChat(

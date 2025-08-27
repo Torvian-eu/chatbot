@@ -4,7 +4,6 @@ import arrow.core.Either
 import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.server.data.dao.error.InsertMessageError
 import eu.torvian.chatbot.server.data.dao.error.MessageError
-import eu.torvian.chatbot.server.data.dao.error.MessageAddChildError
 
 /**
  * Data Access Object for ChatMessage entities.
@@ -77,14 +76,5 @@ interface MessageDao {
      * @return Either a [MessageError.MessageNotFound] or Unit if successful.
      */
     suspend fun deleteMessage(id: Long): Either<MessageError.MessageNotFound, Unit>
-    
-    /**
-     * Adds a child message ID to the `childrenMessageIds` list of the parent message record.
-     * Serializes the updated list back to the database.
-     * @param parentId The ID of the parent message.
-     * @param childId The ID of the new child message to add to the parent's list.
-     * @return Either a [MessageAddChildError] or Unit if successful.
-     */
-    suspend fun addChildToMessage(parentId: Long, childId: Long): Either<MessageAddChildError, Unit>
 
 }

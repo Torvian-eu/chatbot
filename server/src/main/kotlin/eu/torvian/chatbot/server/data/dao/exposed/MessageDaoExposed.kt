@@ -9,7 +9,6 @@ import arrow.core.raise.ensure
 import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.error.InsertMessageError
-import eu.torvian.chatbot.server.data.dao.error.MessageAddChildError
 import eu.torvian.chatbot.server.data.dao.error.MessageError
 import eu.torvian.chatbot.server.data.tables.AssistantMessageTable
 import eu.torvian.chatbot.server.data.tables.ChatMessageTable
@@ -221,47 +220,6 @@ class MessageDaoExposed(
                     }
                 }
                 logger.debug("DAO: Successfully deleted message with ID $id")
-            }
-        }
-
-    override suspend fun addChildToMessage(parentId: Long, childId: Long): Either<MessageAddChildError, Unit> =
-        transactionScope.transaction {
-            either {
-                logger.debug("DAO: Adding child message ID $childId to parent ID $parentId")
-                // Check if child is the parent itself
-                ensure(parentId != childId) {
-                    MessageAddChildError.ChildIsParent(parentId, childId)
-                }
-
-                // Get the parent message
-                val parentMessage = getMessageById(parentId).mapLeft {
-                    MessageAddChildError.ParentNotFound(parentId)
-                }.bind()
-
-                // Get the child message
-                val childMessage = getMessageById(childId).mapLeft {
-                    MessageAddChildError.ChildNotFound(childId)
-                }.bind()
-
-                // Check if child already exists in parent's children list
-                ensure(childId !in parentMessage.childrenMessageIds) {
-                    MessageAddChildError.ChildAlreadyExists(parentId, childId)
-                }
-
-                // Check if child and parent are in the same session
-                ensure(parentMessage.sessionId == childMessage.sessionId) {
-                    MessageAddChildError.ChildNotInSession(childId, parentId, parentMessage.sessionId)
-                }
-
-                // Update the parent's children list
-                val updatedRowCount = ChatMessageTable.update({ ChatMessageTable.id eq parentId }) {
-                    it[ChatMessageTable.childrenMessageIds] =
-                        Json.encodeToString(parentMessage.childrenMessageIds + childId)
-                }
-                if (updatedRowCount == 0) {
-                    throw IllegalStateException("Failed to update parent message with ID $parentId when adding child $childId")
-                }
-                logger.debug("DAO: Successfully added child ID $childId to parent ID $parentId")
             }
         }
 
