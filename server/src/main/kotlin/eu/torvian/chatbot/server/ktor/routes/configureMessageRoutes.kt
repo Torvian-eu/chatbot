@@ -34,12 +34,12 @@ fun Route.configureMessageRoutes(messageService: MessageService) {
     }
 
     // DELETE /api/v1/messages/{messageId} - Delete message by ID
-    // Optional query parameter mode=single to perform non-recursive single delete
+    // Optional query parameter mode=single to perform non-recursive single delete(default), and mode=recursive to delete children.
     delete<MessageResource.ById> { resource ->
         val messageId = resource.messageId
         val mode = call.request.queryParameters["mode"]
-        val result = if (mode == "single") {
-            messageService.deleteSingleMessage(messageId)
+        val result = if (mode == "recursive") {
+            messageService.deleteMessageRecursively(messageId)
         } else {
             messageService.deleteMessage(messageId)
         }

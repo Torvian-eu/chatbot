@@ -244,7 +244,7 @@ class MessageServiceImpl(
             }
         }
 
-    override suspend fun deleteMessage(id: Long): Either<DeleteMessageError, Unit> =
+    override suspend fun deleteMessageRecursively(id: Long): Either<DeleteMessageError, Unit> =
         transactionScope.transaction {
             either {
                 // Get message details before deletion
@@ -274,7 +274,7 @@ class MessageServiceImpl(
                 withError({ daoError: MessageError.MessageNotFound ->
                     DeleteMessageError.MessageNotFound(daoError.id)
                 }) {
-                    messageDao.deleteMessage(id).bind()
+                    messageDao.deleteMessageRecursively(id).bind()
                 }
 
                 // Update session leaf message if needed
@@ -288,7 +288,7 @@ class MessageServiceImpl(
             }
         }
 
-    override suspend fun deleteSingleMessage(id: Long): Either<DeleteMessageError, Unit> =
+    override suspend fun deleteMessage(id: Long): Either<DeleteMessageError, Unit> =
         transactionScope.transaction {
             either {
                 // Get message details before deletion
@@ -318,7 +318,7 @@ class MessageServiceImpl(
                 withError({ daoError: MessageError.MessageNotFound ->
                     DeleteMessageError.MessageNotFound(daoError.id)
                 }) {
-                    messageDao.deleteSingle(id).bind()
+                    messageDao.deleteMessage(id).bind()
                 }
 
                 // Update session leaf message if needed

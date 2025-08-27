@@ -28,7 +28,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Tests for deleteSingleMessage (non-recursive single delete) in [MessageServiceImpl].
+ * Tests for deleteMessage (non-recursive single delete) in [MessageServiceImpl].
  * Mirrors the structure of MessageServiceImplDeleteTest but targets single-delete semantics.
  */
 class MessageServiceImplSingleDeleteTest {
@@ -102,7 +102,7 @@ class MessageServiceImplSingleDeleteTest {
 
     // === Basic ===
     @Test
-    fun `deleteSingleMessage should delete message successfully when not in current leaf path`() = runTest {
+    fun `deleteMessage should delete message successfully when not in current leaf path`() = runTest {
         val messageId = 10L
         val sessionId = 100L
         val parentId = 5L
@@ -113,38 +113,38 @@ class MessageServiceImplSingleDeleteTest {
         coEvery { messageDao.getMessageById(messageId) } returns messageToDelete.right()
         coEvery { sessionDao.getSessionById(sessionId) } returns session.right()
         coEvery { messageDao.getMessagesBySessionId(sessionId) } returns allMessages
-        coEvery { messageDao.deleteSingle(messageId) } returns Unit.right()
+        coEvery { messageDao.deleteMessage(messageId) } returns Unit.right()
 
-        val result = messageService.deleteSingleMessage(messageId)
+        val result = messageService.deleteMessage(messageId)
 
         assertTrue(result.isRight())
         coVerify(exactly = 1) { messageDao.getMessageById(messageId) }
         coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
         coVerify(exactly = 1) { messageDao.getMessagesBySessionId(sessionId) }
-        coVerify(exactly = 1) { messageDao.deleteSingle(messageId) }
+        coVerify(exactly = 1) { messageDao.deleteMessage(messageId) }
         coVerify(exactly = 0) { sessionDao.updateSessionLeafMessageId(any(), any()) }
         // Ensure recursive delete is NOT used
-        coVerify(exactly = 0) { messageDao.deleteMessage(any()) }
+        coVerify(exactly = 0) { messageDao.deleteMessageRecursively(any()) }
     }
 
     @Test
-    fun `deleteSingleMessage should return MessageNotFound error when message does not exist`() = runTest {
+    fun `deleteMessage should return MessageNotFound error when message does not exist`() = runTest {
         val messageId = 10L
         coEvery { messageDao.getMessageById(messageId) } returns MessageError.MessageNotFound(messageId).left()
 
-        val result = messageService.deleteSingleMessage(messageId)
+        val result = messageService.deleteMessage(messageId)
 
         assertTrue(result.isLeft())
         val err = (result as arrow.core.Either.Left).value as DeleteMessageError.MessageNotFound
         assertEquals(messageId, err.id)
         coVerify(exactly = 1) { messageDao.getMessageById(messageId) }
-        coVerify(exactly = 0) { messageDao.deleteSingle(any()) }
+        coVerify(exactly = 0) { messageDao.deleteMessage(any()) }
     }
 
 
     // === Leaf update cases specific to single delete ===
     @Test
-    fun `deleteSingleMessage should update to parent when deleting current leaf with no children`() = runTest {
+    fun `deleteMessage should update to parent when deleting current leaf with no children`() = runTest {
         // Tree: P -> L(leaf). Delete L; new leaf should be P.
         val sessionId = 10L
         val parentId = 1L
@@ -158,17 +158,17 @@ class MessageServiceImplSingleDeleteTest {
         coEvery { messageDao.getMessageById(leafId) } returns leaf.right()
         coEvery { sessionDao.getSessionById(sessionId) } returns session.right()
         coEvery { messageDao.getMessagesBySessionId(sessionId) } returns allMessages
-        coEvery { messageDao.deleteSingle(leafId) } returns Unit.right()
+        coEvery { messageDao.deleteMessage(leafId) } returns Unit.right()
         coEvery { sessionDao.updateSessionLeafMessageId(sessionId, parentId) } returns Unit.right()
 
-        val result = messageService.deleteSingleMessage(leafId)
+        val result = messageService.deleteMessage(leafId)
 
         assertTrue(result.isRight())
         coVerify(exactly = 1) { sessionDao.updateSessionLeafMessageId(sessionId, parentId) }
     }
 
     @Test
-    fun `deleteSingleMessage should keep same leaf when deleting ancestor on current leaf path`() = runTest {
+    fun `deleteMessage should keep same leaf when deleting ancestor on current leaf path`() = runTest {
         // Tree: R -> A -> B(leaf). Delete A (non-leaf ancestor); children promoted, leaf remains B.
         val sessionId = 10L
         val r = 1L
@@ -185,18 +185,18 @@ class MessageServiceImplSingleDeleteTest {
         coEvery { messageDao.getMessageById(a) } returns anc.right()
         coEvery { sessionDao.getSessionById(sessionId) } returns session.right()
         coEvery { messageDao.getMessagesBySessionId(sessionId) } returns allMessages
-        coEvery { messageDao.deleteSingle(a) } returns Unit.right()
+        coEvery { messageDao.deleteMessage(a) } returns Unit.right()
         // Expected: leaf remains b, so update is needed but value equals current; implementation sets needsUpdate=true and calls update.
         coEvery { sessionDao.updateSessionLeafMessageId(sessionId, b) } returns Unit.right()
 
-        val result = messageService.deleteSingleMessage(a)
+        val result = messageService.deleteMessage(a)
 
         assertTrue(result.isRight())
         coVerify(exactly = 1) { sessionDao.updateSessionLeafMessageId(sessionId, b) }
     }
 
     @Test
-    fun `deleteSingleMessage should not update session when deleted message is outside current leaf path`() = runTest {
+    fun `deleteMessage should not update session when deleted message is outside current leaf path`() = runTest {
         // Two branches: R has children A (branch1->L1) and X (branch2->L2 current leaf). Delete A; leaf remains L2 and no update.
         val sessionId = 10L
         val r = 1L
@@ -217,9 +217,9 @@ class MessageServiceImplSingleDeleteTest {
         coEvery { messageDao.getMessageById(a) } returns branchA.right()
         coEvery { sessionDao.getSessionById(sessionId) } returns session.right()
         coEvery { messageDao.getMessagesBySessionId(sessionId) } returns allMessages
-        coEvery { messageDao.deleteSingle(a) } returns Unit.right()
+        coEvery { messageDao.deleteMessage(a) } returns Unit.right()
 
-        val result = messageService.deleteSingleMessage(a)
+        val result = messageService.deleteMessage(a)
 
         assertTrue(result.isRight())
         coVerify(exactly = 0) { sessionDao.updateSessionLeafMessageId(any(), any()) }
@@ -227,7 +227,7 @@ class MessageServiceImplSingleDeleteTest {
 
     // === Error flows ===
     @Test
-    fun `deleteSingleMessage should return SessionUpdateFailed when session retrieval fails`() = runTest {
+    fun `deleteMessage should return SessionUpdateFailed when session retrieval fails`() = runTest {
         val messageId = 1L
         val sessionId = 10L
         val msg = testMessage1.copy(id = messageId, sessionId = sessionId)
@@ -235,18 +235,18 @@ class MessageServiceImplSingleDeleteTest {
         coEvery { messageDao.getMessageById(messageId) } returns msg.right()
         coEvery { sessionDao.getSessionById(sessionId) } returns SessionError.SessionNotFound(sessionId).left()
 
-        val result = messageService.deleteSingleMessage(messageId)
+        val result = messageService.deleteMessage(messageId)
 
         assertTrue(result.isLeft())
         val err = (result as arrow.core.Either.Left).value as DeleteMessageError.SessionUpdateFailed
         assertEquals(sessionId, err.sessionId)
         coVerify(exactly = 1) { messageDao.getMessageById(messageId) }
         coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
-        coVerify(exactly = 0) { messageDao.deleteSingle(any()) }
+        coVerify(exactly = 0) { messageDao.deleteMessage(any()) }
     }
 
     @Test
-    fun `deleteSingleMessage should return SessionUpdateFailed when session leaf update fails`() = runTest {
+    fun `deleteMessage should return SessionUpdateFailed when session leaf update fails`() = runTest {
         // Delete ancestor A on path to B(leaf). We expect to call update with B; simulate failure.
         val sessionId = 10L
         val r = 1L
@@ -261,10 +261,10 @@ class MessageServiceImplSingleDeleteTest {
         coEvery { messageDao.getMessageById(a) } returns anc.right()
         coEvery { sessionDao.getSessionById(sessionId) } returns session.right()
         coEvery { messageDao.getMessagesBySessionId(sessionId) } returns all
-        coEvery { messageDao.deleteSingle(a) } returns Unit.right()
+        coEvery { messageDao.deleteMessage(a) } returns Unit.right()
         coEvery { sessionDao.updateSessionLeafMessageId(sessionId, b) } returns SessionError.SessionNotFound(sessionId).left()
 
-        val result = messageService.deleteSingleMessage(a)
+        val result = messageService.deleteMessage(a)
 
         assertTrue(result.isLeft())
         val err = (result as arrow.core.Either.Left).value as DeleteMessageError.SessionUpdateFailed
@@ -272,7 +272,7 @@ class MessageServiceImplSingleDeleteTest {
     }
 
     @Test
-    fun `deleteSingleMessage should handle deletion failure after successful session checks`() = runTest {
+    fun `deleteMessage should handle deletion failure after successful session checks`() = runTest {
         val messageId = 1L
         val sessionId = 10L
         val msg = testMessage1.copy(id = messageId, sessionId = sessionId)
@@ -280,9 +280,9 @@ class MessageServiceImplSingleDeleteTest {
 
         coEvery { messageDao.getMessageById(messageId) } returns msg.right()
         coEvery { sessionDao.getSessionById(sessionId) } returns session.right()
-        coEvery { messageDao.deleteSingle(messageId) } returns MessageError.MessageNotFound(messageId).left()
+        coEvery { messageDao.deleteMessage(messageId) } returns MessageError.MessageNotFound(messageId).left()
 
-        val result = messageService.deleteSingleMessage(messageId)
+        val result = messageService.deleteMessage(messageId)
 
         assertTrue(result.isLeft())
         val err = (result as arrow.core.Either.Left).value as DeleteMessageError.MessageNotFound

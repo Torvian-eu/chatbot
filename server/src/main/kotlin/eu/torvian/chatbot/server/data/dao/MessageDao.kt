@@ -75,7 +75,7 @@ interface MessageDao {
      * @param id The ID of the message to delete.
      * @return Either a [MessageError.MessageNotFound] or Unit if successful.
      */
-    suspend fun deleteMessage(id: Long): Either<MessageError.MessageNotFound, Unit>
+    suspend fun deleteMessageRecursively(id: Long): Either<MessageError.MessageNotFound, Unit>
 
     /**
      * Deletes a single message without deleting its descendants.
@@ -84,5 +84,5 @@ interface MessageDao {
      * @param id The ID of the message to delete.
      * @return Either a [MessageError.MessageNotFound] or Unit if successful.
      */
-    suspend fun deleteSingle(id: Long): Either<MessageError.MessageNotFound, Unit>
+    suspend fun deleteMessage(id: Long): Either<MessageError.MessageNotFound, Unit>
 }

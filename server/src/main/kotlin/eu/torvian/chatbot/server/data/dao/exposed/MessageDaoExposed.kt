@@ -179,7 +179,7 @@ class MessageDaoExposed(
             }
         }
 
-    override suspend fun deleteMessage(id: Long): Either<MessageError.MessageNotFound, Unit> =
+    override suspend fun deleteMessageRecursively(id: Long): Either<MessageError.MessageNotFound, Unit> =
         transactionScope.transaction {
             either {
                 logger.debug("DAO: Deleting message with ID $id")
@@ -223,7 +223,7 @@ class MessageDaoExposed(
             }
         }
 
-    override suspend fun deleteSingle(id: Long): Either<MessageError.MessageNotFound, Unit> =
+    override suspend fun deleteMessage(id: Long): Either<MessageError.MessageNotFound, Unit> =
         transactionScope.transaction {
             either {
                 logger.debug("DAO: Deleting single message with ID $id (non-recursive)")

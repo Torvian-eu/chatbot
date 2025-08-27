@@ -86,7 +86,7 @@ interface MessageService {
      * @return Either a [DeleteMessageError] if the message doesn't exist or session update fails,
      *         or Unit if successful.
      */
-    suspend fun deleteMessage(id: Long): Either<DeleteMessageError, Unit>
+    suspend fun deleteMessageRecursively(id: Long): Either<DeleteMessageError, Unit>
 
     /**
      * Deletes a single message (non-recursive) and promotes its children to the deleted message's parent.
@@ -96,5 +96,5 @@ interface MessageService {
      * @return Either a [DeleteMessageError] if the message doesn't exist or session update fails,
      *         or Unit if successful.
      */
-    suspend fun deleteSingleMessage(id: Long): Either<DeleteMessageError, Unit>
+    suspend fun deleteMessage(id: Long): Either<DeleteMessageError, Unit>
 }

@@ -470,7 +470,7 @@ class MessageDaoExposedTest {
         )
 
         // Delete the message
-        val result = messageDao.deleteMessage(testAssistantMessage1.id)
+        val result = messageDao.deleteMessageRecursively(testAssistantMessage1.id)
 
         // Verify deletion was successful
         assertTrue(result.isRight(), "Expected Right result for successful deletion")
@@ -495,7 +495,7 @@ class MessageDaoExposedTest {
         )
 
         // Delete the parent message
-        val result = messageDao.deleteMessage(testUserMessage1.id)
+        val result = messageDao.deleteMessageRecursively(testUserMessage1.id)
 
         // Verify deletion was successful
         assertTrue(result.isRight(), "Expected Right result for successful deletion")
@@ -524,7 +524,7 @@ class MessageDaoExposedTest {
         )
 
         // Delete the child message
-        val result = messageDao.deleteMessage(testAssistantMessage1.id)
+        val result = messageDao.deleteMessageRecursively(testAssistantMessage1.id)
 
         // Verify deletion was successful
         assertTrue(result.isRight(), "Expected Right result for successful deletion")

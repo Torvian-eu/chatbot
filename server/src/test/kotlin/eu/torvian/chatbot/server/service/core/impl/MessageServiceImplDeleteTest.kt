@@ -29,7 +29,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * Focused unit tests for the deleteMessage functionality in [MessageServiceImpl].
+ * Focused unit tests for the deleteMessageRecursively functionality in [MessageServiceImpl].
  *
  * This test class specifically covers all aspects of message deletion including:
  * - Basic deletion scenarios
@@ -112,7 +112,7 @@ class MessageServiceImplDeleteTest {
     // === Basic Deletion Tests ===
 
     @Test
-    fun `deleteMessage should delete message successfully when not in current leaf path`() = runTest {
+    fun `deleteMessageRecursively should delete message successfully when not in current leaf path`() = runTest {
         // Arrange
         val messageId = 1L
         val sessionId = 10L
@@ -122,18 +122,18 @@ class MessageServiceImplDeleteTest {
         val allMessages = listOf(messageToDelete)
 
         coEvery { messageDao.getMessageById(messageId) } returns messageToDelete.right()
-        coEvery { messageDao.deleteMessage(messageId) } returns Unit.right()
+        coEvery { messageDao.deleteMessageRecursively(messageId) } returns Unit.right()
         coEvery { sessionDao.getSessionById(sessionId) } returns session.right()
         coEvery { messageDao.getMessagesBySessionId(sessionId) } returns allMessages
 
         // Act
-        val result = messageService.deleteMessage(messageId)
+        val result = messageService.deleteMessageRecursively(messageId)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful deletion")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { messageDao.getMessageById(messageId) }
-        coVerify(exactly = 1) { messageDao.deleteMessage(messageId) }
+        coVerify(exactly = 1) { messageDao.deleteMessageRecursively(messageId) }
         coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
         coVerify(exactly = 1) { messageDao.getMessagesBySessionId(sessionId) }
         // Should not update session since deleted message is not in current leaf path
@@ -141,14 +141,14 @@ class MessageServiceImplDeleteTest {
     }
 
     @Test
-    fun `deleteMessage should return MessageNotFound error when message does not exist`() = runTest {
+    fun `deleteMessageRecursively should return MessageNotFound error when message does not exist`() = runTest {
         // Arrange
         val messageId = 999L
         val daoError = MessageError.MessageNotFound(messageId)
         coEvery { messageDao.getMessageById(messageId) } returns daoError.left()
 
         // Act
-        val result = messageService.deleteMessage(messageId)
+        val result = messageService.deleteMessageRecursively(messageId)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for non-existent message")
@@ -158,11 +158,11 @@ class MessageServiceImplDeleteTest {
         assertEquals(messageId, (error as DeleteMessageError.MessageNotFound).id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { messageDao.getMessageById(messageId) }
-        coVerify(exactly = 0) { messageDao.deleteMessage(any()) }
+        coVerify(exactly = 0) { messageDao.deleteMessageRecursively(any()) }
     }
 
     @Test
-    fun `deleteMessage should update session leaf when deleting message in current leaf path`() = runTest {
+    fun `deleteMessageRecursively should update session leaf when deleting message in current leaf path`() = runTest {
         // Arrange - Create a message tree: root -> child -> grandchild (leaf)
         val sessionId = 10L
         val rootMessageId = 1L
@@ -198,12 +198,12 @@ class MessageServiceImplDeleteTest {
         // Mock getting all messages BEFORE deletion (this is the key - all messages should be present)
         coEvery { messageDao.getMessagesBySessionId(sessionId) } returns allMessages
         // Mock the actual deletion
-        coEvery { messageDao.deleteMessage(childMessageId) } returns Unit.right()
+        coEvery { messageDao.deleteMessageRecursively(childMessageId) } returns Unit.right()
         // The session should be updated to point to the root (parent of deleted message)
         coEvery { sessionDao.updateSessionLeafMessageId(sessionId, rootMessageId) } returns Unit.right()
 
         // Act
-        val result = messageService.deleteMessage(childMessageId)
+        val result = messageService.deleteMessageRecursively(childMessageId)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful deletion")
@@ -214,13 +214,13 @@ class MessageServiceImplDeleteTest {
         coVerify(exactly = 1) { messageDao.getMessageById(childMessageId) }
         coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
         coVerify(exactly = 1) { messageDao.getMessagesBySessionId(sessionId) }
-        coVerify(exactly = 1) { messageDao.deleteMessage(childMessageId) }
+        coVerify(exactly = 1) { messageDao.deleteMessageRecursively(childMessageId) }
     }
 
     // === Session State Edge Cases ===
 
     @Test
-    fun `deleteMessage should update to parent when deleting current leaf message`() = runTest {
+    fun `deleteMessageRecursively should update to parent when deleting current leaf message`() = runTest {
         // Arrange - Delete the leaf message itself
         val sessionId = 10L
         val parentMessageId = 1L
@@ -245,11 +245,11 @@ class MessageServiceImplDeleteTest {
         coEvery { messageDao.getMessageById(leafMessageId) } returns leafMessage.right()
         coEvery { sessionDao.getSessionById(sessionId) } returns session.right()
         coEvery { messageDao.getMessagesBySessionId(sessionId) } returns allMessages
-        coEvery { messageDao.deleteMessage(leafMessageId) } returns Unit.right()
+        coEvery { messageDao.deleteMessageRecursively(leafMessageId) } returns Unit.right()
         coEvery { sessionDao.updateSessionLeafMessageId(sessionId, parentMessageId) } returns Unit.right()
 
         // Act
-        val result = messageService.deleteMessage(leafMessageId)
+        val result = messageService.deleteMessageRecursively(leafMessageId)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful deletion")
@@ -259,7 +259,7 @@ class MessageServiceImplDeleteTest {
     // === Root Message Deletion Scenarios ===
 
     @Test
-    fun `deleteMessage should handle root deletion with multiple roots`() = runTest {
+    fun `deleteMessageRecursively should handle root deletion with multiple roots`() = runTest {
         // Arrange - Delete one root when multiple roots exist
         val sessionId = 10L
         val root1Id = 1L
@@ -293,12 +293,12 @@ class MessageServiceImplDeleteTest {
         coEvery { messageDao.getMessageById(root1Id) } returns root1.right()
         coEvery { sessionDao.getSessionById(sessionId) } returns session.right()
         coEvery { messageDao.getMessagesBySessionId(sessionId) } returns allMessages
-        coEvery { messageDao.deleteMessage(root1Id) } returns Unit.right()
+        coEvery { messageDao.deleteMessageRecursively(root1Id) } returns Unit.right()
         // Should update to leaf of oldest remaining root (root2 -> leafInRoot2)
         coEvery { sessionDao.updateSessionLeafMessageId(sessionId, leafInRoot2Id) } returns Unit.right()
 
         // Act
-        val result = messageService.deleteMessage(root1Id)
+        val result = messageService.deleteMessageRecursively(root1Id)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful deletion")
@@ -306,7 +306,7 @@ class MessageServiceImplDeleteTest {
     }
 
     @Test
-    fun `deleteMessage should set session leaf to null when deleting last root`() = runTest {
+    fun `deleteMessageRecursively should set session leaf to null when deleting last root`() = runTest {
         // Arrange - Delete the only root message
         val sessionId = 10L
         val rootId = 1L
@@ -324,11 +324,11 @@ class MessageServiceImplDeleteTest {
         coEvery { messageDao.getMessageById(rootId) } returns rootMessage.right()
         coEvery { sessionDao.getSessionById(sessionId) } returns session.right()
         coEvery { messageDao.getMessagesBySessionId(sessionId) } returns allMessages
-        coEvery { messageDao.deleteMessage(rootId) } returns Unit.right()
+        coEvery { messageDao.deleteMessageRecursively(rootId) } returns Unit.right()
         coEvery { sessionDao.updateSessionLeafMessageId(sessionId, null) } returns Unit.right()
 
         // Act
-        val result = messageService.deleteMessage(rootId)
+        val result = messageService.deleteMessageRecursively(rootId)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful deletion")
@@ -338,7 +338,7 @@ class MessageServiceImplDeleteTest {
     // === Complex Tree Structure Tests ===
 
     @Test
-    fun `deleteMessage should update to sibling's leaf when parent has remaining children`() = runTest {
+    fun `deleteMessageRecursively should update to sibling's leaf when parent has remaining children`() = runTest {
         // Arrange - Delete middle child when parent has multiple children
         val sessionId = 10L
         val parentId = 1L
@@ -384,12 +384,12 @@ class MessageServiceImplDeleteTest {
         coEvery { messageDao.getMessageById(child1Id) } returns child1.right()
         coEvery { sessionDao.getSessionById(sessionId) } returns session.right()
         coEvery { messageDao.getMessagesBySessionId(sessionId) } returns allMessages
-        coEvery { messageDao.deleteMessage(child1Id) } returns Unit.right()
+        coEvery { messageDao.deleteMessageRecursively(child1Id) } returns Unit.right()
         // Should update to leaf of first remaining sibling (child2 -> grandchild)
         coEvery { sessionDao.updateSessionLeafMessageId(sessionId, grandchildId) } returns Unit.right()
 
         // Act
-        val result = messageService.deleteMessage(child1Id)
+        val result = messageService.deleteMessageRecursively(child1Id)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful deletion")
@@ -397,7 +397,7 @@ class MessageServiceImplDeleteTest {
     }
 
     @Test
-    fun `deleteMessage should not update session when deleted message is not in current leaf path`() = runTest {
+    fun `deleteMessageRecursively should not update session when deleted message is not in current leaf path`() = runTest {
         // Arrange - Create two separate branches, delete from non-current branch
         val sessionId = 10L
         val rootId = 1L
@@ -429,17 +429,17 @@ class MessageServiceImplDeleteTest {
         coEvery { messageDao.getMessageById(branch2Id) } returns branch2.right()
         coEvery { sessionDao.getSessionById(sessionId) } returns session.right()
         coEvery { messageDao.getMessagesBySessionId(sessionId) } returns allMessages
-        coEvery { messageDao.deleteMessage(branch2Id) } returns Unit.right()
+        coEvery { messageDao.deleteMessageRecursively(branch2Id) } returns Unit.right()
 
         // Act
-        val result = messageService.deleteMessage(branch2Id)
+        val result = messageService.deleteMessageRecursively(branch2Id)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful deletion")
         coVerify(exactly = 1) { messageDao.getMessageById(branch2Id) }
         coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
         coVerify(exactly = 1) { messageDao.getMessagesBySessionId(sessionId) }
-        coVerify(exactly = 1) { messageDao.deleteMessage(branch2Id) }
+        coVerify(exactly = 1) { messageDao.deleteMessageRecursively(branch2Id) }
         // Should NOT update session since branch2 is not in branch1's path
         coVerify(exactly = 0) { sessionDao.updateSessionLeafMessageId(any(), any()) }
     }
@@ -447,7 +447,7 @@ class MessageServiceImplDeleteTest {
     // === Error Handling Tests ===
 
     @Test
-    fun `deleteMessage should return SessionUpdateFailed when session retrieval fails`() = runTest {
+    fun `deleteMessageRecursively should return SessionUpdateFailed when session retrieval fails`() = runTest {
         // Arrange
         val messageId = 1L
         val sessionId = 10L
@@ -458,7 +458,7 @@ class MessageServiceImplDeleteTest {
         coEvery { sessionDao.getSessionById(sessionId) } returns sessionError.left()
 
         // Act
-        val result = messageService.deleteMessage(messageId)
+        val result = messageService.deleteMessageRecursively(messageId)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for session retrieval failure")
@@ -469,11 +469,11 @@ class MessageServiceImplDeleteTest {
 
         coVerify(exactly = 1) { messageDao.getMessageById(messageId) }
         coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
-        coVerify(exactly = 0) { messageDao.deleteMessage(any()) }
+        coVerify(exactly = 0) { messageDao.deleteMessageRecursively(any()) }
     }
 
     @Test
-    fun `deleteMessage should return SessionUpdateFailed when session leaf update fails`() = runTest {
+    fun `deleteMessageRecursively should return SessionUpdateFailed when session leaf update fails`() = runTest {
         // Arrange
         val sessionId = 10L
         val messageId = 1L
@@ -499,11 +499,11 @@ class MessageServiceImplDeleteTest {
         coEvery { messageDao.getMessageById(messageId) } returns messageToDelete.right()
         coEvery { sessionDao.getSessionById(sessionId) } returns session.right()
         coEvery { messageDao.getMessagesBySessionId(sessionId) } returns allMessages
-        coEvery { messageDao.deleteMessage(messageId) } returns Unit.right()
+        coEvery { messageDao.deleteMessageRecursively(messageId) } returns Unit.right()
         coEvery { sessionDao.updateSessionLeafMessageId(sessionId, parentId) } returns sessionUpdateError.left()
 
         // Act
-        val result = messageService.deleteMessage(messageId)
+        val result = messageService.deleteMessageRecursively(messageId)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for session update failure")
@@ -512,12 +512,12 @@ class MessageServiceImplDeleteTest {
         assertTrue(error is DeleteMessageError.SessionUpdateFailed, "Should be SessionUpdateFailed error")
         assertEquals(sessionId, (error as DeleteMessageError.SessionUpdateFailed).sessionId)
 
-        coVerify(exactly = 1) { messageDao.deleteMessage(messageId) }
+        coVerify(exactly = 1) { messageDao.deleteMessageRecursively(messageId) }
         coVerify(exactly = 1) { sessionDao.updateSessionLeafMessageId(sessionId, parentId) }
     }
 
     @Test
-    fun `deleteMessage should handle deletion failure after successful session checks`() = runTest {
+    fun `deleteMessageRecursively should handle deletion failure after successful session checks`() = runTest {
         // Arrange
         val messageId = 1L
         val sessionId = 10L
@@ -527,10 +527,10 @@ class MessageServiceImplDeleteTest {
 
         coEvery { messageDao.getMessageById(messageId) } returns messageToDelete.right()
         coEvery { sessionDao.getSessionById(sessionId) } returns session.right()
-        coEvery { messageDao.deleteMessage(messageId) } returns deleteError.left()
+        coEvery { messageDao.deleteMessageRecursively(messageId) } returns deleteError.left()
 
         // Act
-        val result = messageService.deleteMessage(messageId)
+        val result = messageService.deleteMessageRecursively(messageId)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for deletion failure")
@@ -541,7 +541,7 @@ class MessageServiceImplDeleteTest {
 
         coVerify(exactly = 1) { messageDao.getMessageById(messageId) }
         coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
-        coVerify(exactly = 1) { messageDao.deleteMessage(messageId) }
+        coVerify(exactly = 1) { messageDao.deleteMessageRecursively(messageId) }
         coVerify(exactly = 0) { sessionDao.updateSessionLeafMessageId(any(), any()) }
     }
 }
