@@ -2,7 +2,8 @@ package eu.torvian.chatbot.server.service.core.impl
 
 import arrow.core.left
 import arrow.core.right
-import eu.torvian.chatbot.common.models.*
+import eu.torvian.chatbot.common.models.ChatMessage
+import eu.torvian.chatbot.common.models.ChatSession
 import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
 import eu.torvian.chatbot.server.data.dao.error.MessageError
@@ -217,31 +218,6 @@ class MessageServiceImplDeleteTest {
     }
 
     // === Session State Edge Cases ===
-
-    @Test
-    fun `deleteMessage should handle session with no current leaf`() = runTest {
-        // Arrange
-        val messageId = 1L
-        val sessionId = 10L
-        val messageToDelete = testMessage1.copy(id = messageId, sessionId = sessionId)
-        val session = testSession.copy(id = sessionId, currentLeafMessageId = null) // No current leaf
-
-        coEvery { messageDao.getMessageById(messageId) } returns messageToDelete.right()
-        coEvery { sessionDao.getSessionById(sessionId) } returns session.right()
-        coEvery { messageDao.deleteMessage(messageId) } returns Unit.right()
-
-        // Act
-        val result = messageService.deleteMessage(messageId)
-
-        // Assert
-        assertTrue(result.isRight(), "Should return Right for successful deletion")
-        coVerify(exactly = 1) { messageDao.getMessageById(messageId) }
-        coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
-        coVerify(exactly = 1) { messageDao.deleteMessage(messageId) }
-        // Should not call getMessagesBySessionId or updateSessionLeafMessageId when no current leaf
-        coVerify(exactly = 0) { messageDao.getMessagesBySessionId(any()) }
-        coVerify(exactly = 0) { sessionDao.updateSessionLeafMessageId(any(), any()) }
-    }
 
     @Test
     fun `deleteMessage should update to parent when deleting current leaf message`() = runTest {

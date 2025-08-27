@@ -87,4 +87,14 @@ interface MessageService {
      *         or Unit if successful.
      */
     suspend fun deleteMessage(id: Long): Either<DeleteMessageError, Unit>
+
+    /**
+     * Deletes a single message (non-recursive) and promotes its children to the deleted message's parent.
+     * Updates session currentLeafMessageId if needed.
+     *
+     * @param id The ID of the message to delete.
+     * @return Either a [DeleteMessageError] if the message doesn't exist or session update fails,
+     *         or Unit if successful.
+     */
+    suspend fun deleteSingleMessage(id: Long): Either<DeleteMessageError, Unit>
 }

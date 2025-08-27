@@ -288,6 +288,50 @@ class MessageServiceImpl(
             }
         }
 
+    override suspend fun deleteSingleMessage(id: Long): Either<DeleteMessageError, Unit> =
+        transactionScope.transaction {
+            either {
+                // Get message details before deletion
+                val messageToDelete = withError({ daoError: MessageError.MessageNotFound ->
+                    DeleteMessageError.MessageNotFound(daoError.id)
+                }) {
+                    messageDao.getMessageById(id).bind()
+                }
+
+                val sessionId = messageToDelete.sessionId
+
+                // Get session BEFORE deletion
+                val session = withError({ _: SessionError ->
+                    DeleteMessageError.SessionUpdateFailed(sessionId)
+                }) {
+                    sessionDao.getSessionById(sessionId).bind()
+                }
+
+                val currentLeafId = session.currentLeafMessageId
+
+                // Calculate new leaf for single-delete semantics
+                val leafUpdateResult = calculateLeafUpdateForSingleDelete(
+                    messageToDelete, session, currentLeafId
+                )
+
+                // Perform the single deletion
+                withError({ daoError: MessageError.MessageNotFound ->
+                    DeleteMessageError.MessageNotFound(daoError.id)
+                }) {
+                    messageDao.deleteSingle(id).bind()
+                }
+
+                // Update session leaf message if needed
+                if (leafUpdateResult.needsUpdate) {
+                    withError({ _: SessionError ->
+                        DeleteMessageError.SessionUpdateFailed(sessionId)
+                    }) {
+                        sessionDao.updateSessionLeafMessageId(sessionId, leafUpdateResult.newLeafId).bind()
+                    }
+                }
+            }
+        }
+
     /**
      * Checks if a target message is in the path from root to a leaf message.
      *
@@ -564,6 +608,49 @@ class MessageServiceImpl(
                     findLeafInSubtree(remainingChildren.first(), messageMap)
                 }
             }
+        }
+
+        return LeafUpdateCalculation(needsUpdate = true, newLeafId = newLeafId)
+    }
+
+    /**
+     * Calculates leaf update for single-message delete where children are promoted.
+     * This does not differentiate between user or assistant roles.
+     */
+    private suspend fun calculateLeafUpdateForSingleDelete(
+        messageToDelete: ChatMessage,
+        session: ChatSession,
+        currentLeafId: Long?
+    ): LeafUpdateCalculation {
+        if (currentLeafId == null) return LeafUpdateCalculation(needsUpdate = false, newLeafId = null)
+
+        val allMessages = messageDao.getMessagesBySessionId(session.id)
+        val messageMap = allMessages.associateBy { it.id }
+
+        val affectsLeaf = isMessageInPath(messageToDelete.id, currentLeafId, messageMap)
+        if (!affectsLeaf) return LeafUpdateCalculation(needsUpdate = false, newLeafId = null)
+
+        val children = messageToDelete.childrenMessageIds
+        val parentId = messageToDelete.parentMessageId
+
+        val newLeafId = if (currentLeafId == messageToDelete.id) {
+            if (parentId == null) {
+                if (children.isEmpty()) {
+                    val nextRootId = findFirstAvailableRootMessage(session.id, messageToDelete.id, messageMap)
+                    nextRootId?.let { findLeafInSubtree(it, messageMap) }
+                } else {
+                    findLeafInSubtree(children.first(), messageMap)
+                }
+            } else {
+                if (children.isEmpty()) {
+                    parentId
+                } else {
+                    findLeafInSubtree(children.first(), messageMap)
+                }
+            }
+        } else {
+            // Leaf is deeper in the deleted node's subtree; its ID remains the same after promotion
+            currentLeafId
         }
 
         return LeafUpdateCalculation(needsUpdate = true, newLeafId = newLeafId)

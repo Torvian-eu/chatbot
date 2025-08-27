@@ -77,4 +77,12 @@ interface MessageDao {
      */
     suspend fun deleteMessage(id: Long): Either<MessageError.MessageNotFound, Unit>
 
+    /**
+     * Deletes a single message without deleting its descendants.
+     * Promotes all children of the deleted message to its parent (or to root if the deleted message is a root),
+     * preserving child order, and updates parent/children links accordingly.
+     * @param id The ID of the message to delete.
+     * @return Either a [MessageError.MessageNotFound] or Unit if successful.
+     */
+    suspend fun deleteSingle(id: Long): Either<MessageError.MessageNotFound, Unit>
 }

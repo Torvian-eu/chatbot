@@ -223,6 +223,72 @@ class MessageDaoExposed(
             }
         }
 
+    override suspend fun deleteSingle(id: Long): Either<MessageError.MessageNotFound, Unit> =
+        transactionScope.transaction {
+            either {
+                logger.debug("DAO: Deleting single message with ID $id (non-recursive)")
+
+                // Load the message to delete
+                val message = getMessageById(id).bind()
+                val parentId = message.parentMessageId
+                val sessionId = message.sessionId
+                val children: List<Long> = message.childrenMessageIds
+
+                // If there is a parent, update parent's children list by replacing this id with the children sequence
+                if (parentId != null) {
+                    val parentRow = ChatMessageTable
+                        .selectAll().where { ChatMessageTable.id eq parentId }.singleOrNull()
+                        ?: throw IllegalStateException("Parent message with ID $parentId not found when deleting child $id")
+
+                    val parentSessionId = parentRow[ChatMessageTable.sessionId].value
+                    if (parentSessionId != sessionId) {
+                        throw IllegalStateException("Session mismatch between parent $parentId and child $id")
+                    }
+
+                    val parentChildrenJson = parentRow[ChatMessageTable.childrenMessageIds]
+                    val parentChildren = Json.decodeFromString<MutableList<Long>>(parentChildrenJson)
+
+                    val idx = parentChildren.indexOf(id)
+                    if (idx == -1) {
+                        throw IllegalStateException("Child ID $id not found in parent ID $parentId children list")
+                    }
+                    // Replace the deleted node with its children in place
+                    parentChildren.removeAt(idx)
+                    if (children.isNotEmpty()) {
+                        parentChildren.addAll(idx, children)
+                    }
+                    val newParentChildrenJson = Json.encodeToString(parentChildren)
+                    val updated = ChatMessageTable.update({ ChatMessageTable.id eq parentId }) {
+                        it[childrenMessageIds] = newParentChildrenJson
+                    }
+                    if (updated == 0) {
+                        throw IllegalStateException("Failed to update parent message with ID $parentId when deleting single $id")
+                    }
+                }
+
+                // Reparent all direct children to the grandparent (or root)
+                for (childId in children) {
+                    val count = ChatMessageTable.update({ ChatMessageTable.id eq childId }) {
+                        it[ChatMessageTable.parentMessageId] = parentId
+                    }
+                    if (count == 0) {
+                        throw IllegalStateException("Failed to reparent child $childId when deleting single $id")
+                    }
+                }
+
+                // Remove assistant metadata if any
+                AssistantMessageTable.deleteWhere { AssistantMessageTable.messageId eq id }
+
+                // Finally, delete only this message row
+                val deleted = ChatMessageTable.deleteWhere { ChatMessageTable.id eq id }
+                if (deleted == 0) {
+                    throw IllegalStateException("Failed to delete message with ID $id")
+                }
+
+                logger.debug("DAO: Successfully deleted single message with ID $id")
+            }
+        }
+
     /**
      * Helper method to recursively delete a message and all its children.
      * Should only be called from within a transaction block.
