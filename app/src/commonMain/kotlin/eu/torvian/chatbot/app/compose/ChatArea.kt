@@ -17,13 +17,8 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -164,6 +159,9 @@ private fun SuccessStateDisplay(
     replyTargetMessage: ChatMessage?,
     isSendingMessage: Boolean
 ) {
+    // State for delete confirmation dialog
+    var messageToDelete by remember { mutableStateOf<ChatMessage?>(null) }
+
     val allMessagesMap = remember(chatSession.messages) {
         chatSession.messages.associateBy { it.id }
     }
@@ -179,7 +177,7 @@ private fun SuccessStateDisplay(
             onSwitchBranchToMessage = actions::onSwitchBranchToMessage,
             onEditMessage = actions::onStartEditing,
             onReplyMessage = actions::onStartReplyTo,
-            onDeleteMessage = { message -> actions.onDeleteMessage(message.id) },
+            onDeleteMessage = { message -> messageToDelete = message }, // Show confirmation dialog
             // Keep onCopyMessage as null until PR 25 - Copy to Clipboard implementation
             onCopyMessage = null,
             // TODO: Wire up regenerate action when available
@@ -229,6 +227,18 @@ private fun SuccessStateDisplay(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 8.dp) // Small padding between messages and input
+        )
+    }
+
+    // Delete confirmation dialog
+    messageToDelete?.let { message ->
+        DeleteMessageDialog(
+            message = message,
+            onConfirmDelete = {
+                actions.onDeleteMessage(message.id)
+                messageToDelete = null
+            },
+            onDismiss = { messageToDelete = null }
         )
     }
 }
@@ -612,4 +622,41 @@ private fun BranchNavigationControls(
             Spacer(Modifier.size(24.dp)) // Maintain spacing if button is hidden
         }
     }
+}
+
+/**
+ * Composable for displaying a delete confirmation dialog for a message.
+ *
+ * @param message The message for which deletion is being confirmed.
+ * @param onConfirmDelete Callback for the confirm delete action.
+ * @param onDismiss Callback for the dismiss action.
+ */
+@Composable
+fun DeleteMessageDialog(
+    message: ChatMessage,
+    onConfirmDelete: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Confirm Deletion") },
+        text = { Text("Are you sure you want to delete this message? This action cannot be undone.") },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onConfirmDelete()
+                }
+            ) {
+                Text("Delete", color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss
+            ) {
+                Text("Cancel")
+            }
+        },
+        modifier = Modifier.padding(16.dp)
+    )
 }
