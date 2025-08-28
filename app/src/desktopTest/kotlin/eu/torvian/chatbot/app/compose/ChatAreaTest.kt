@@ -43,7 +43,6 @@ class ChatAreaTest {
         val testError = apiError(CommonApiErrorCodes.INTERNAL, "Test error message")
         val errorState = ChatAreaState(
             sessionUiState = UiState.Error(testError),
-            currentBranchLeafId = null,
             displayedMessages = emptyList(),
             inputContent = "",
             replyTargetMessage = null,
@@ -123,7 +122,6 @@ class ChatAreaTest {
 
         val successState = ChatAreaState(
             sessionUiState = UiState.Success(ChatSessionData(session = testSession)),
-            currentBranchLeafId = 2L,
             displayedMessages = testSession.messages
         )
 
@@ -191,7 +189,6 @@ class ChatAreaTest {
 
         val successState = ChatAreaState(
             sessionUiState = UiState.Success(ChatSessionData(session = testSession)),
-            currentBranchLeafId = 2L,
             displayedMessages = testSession.messages
         )
 
@@ -224,7 +221,6 @@ class ChatAreaTest {
 
         val successState = ChatAreaState(
             sessionUiState = UiState.Success(ChatSessionData(session = testSession)),
-            currentBranchLeafId = null,
             displayedMessages = emptyList()
         )
 
@@ -278,7 +274,6 @@ class ChatAreaTest {
 
         val successState = ChatAreaState(
             sessionUiState = UiState.Success(ChatSessionData(session = testSession)),
-            currentBranchLeafId = 4L,
             displayedMessages = testMessages
         )
 
@@ -327,7 +322,6 @@ class ChatAreaTest {
 
         val successState = ChatAreaState(
             sessionUiState = UiState.Success(ChatSessionData(session = testSession)),
-            currentBranchLeafId = 2L,
             displayedMessages = testMessages
         )
 
@@ -376,7 +370,6 @@ class ChatAreaTest {
 
         val successState = ChatAreaState(
             sessionUiState = UiState.Success(ChatSessionData(session = testSession)),
-            currentBranchLeafId = 2L,
             displayedMessages = testMessages
         )
 
@@ -445,7 +438,6 @@ class ChatAreaTest {
 
         val successState = ChatAreaState(
             sessionUiState = UiState.Success(ChatSessionData(session = testSession)),
-            currentBranchLeafId = 3L,
             displayedMessages = listOf(m1, m2, m3) // Display first branch
         )
 
@@ -518,7 +510,6 @@ class ChatAreaTest {
 
         val successState = ChatAreaState(
             sessionUiState = UiState.Success(ChatSessionData(session = testSession)),
-            currentBranchLeafId = 2L,
             displayedMessages = testMessages
         )
 
@@ -557,7 +548,6 @@ class ChatAreaTest {
 
         val successState = ChatAreaState(
             sessionUiState = UiState.Success(ChatSessionData(session = testSession)),
-            currentBranchLeafId = 1L,
             displayedMessages = testMessages
         )
 
@@ -634,7 +624,6 @@ class ChatAreaTest {
                 ChatArea(
                     state = ChatAreaState(
                         sessionUiState = UiState.Success(ChatSessionData(session = testSession)),
-                        currentBranchLeafId = 1L,
                         displayedMessages = testMessages
                     ),
                     actions = mockActions

@@ -50,7 +50,6 @@ fun ChatAreaPreview() {
     ChatArea(
         state = ChatAreaState(
             sessionUiState = UiState.Success(ChatSessionData(session = mockChatSession)),
-            currentBranchLeafId = 2L,
             displayedMessages = mockChatSession.messages
         ),
         actions = object : ChatAreaActions {

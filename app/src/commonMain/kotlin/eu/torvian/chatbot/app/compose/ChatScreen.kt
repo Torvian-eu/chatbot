@@ -112,7 +112,6 @@ fun ChatScreen(
             replyTargetMessage = chatReplyTargetMessage,
             editingMessage = chatEditingMessage,
             editingContent = chatEditingContent,
-            currentBranchLeafId = chatSessionUiState.dataOrNull?.session?.currentLeafMessageId,
             displayedMessages = chatDisplayedMessages,
             isSendingMessage = chatIsSendingMessage
         )
