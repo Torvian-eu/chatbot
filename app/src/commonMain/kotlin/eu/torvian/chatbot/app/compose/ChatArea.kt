@@ -12,7 +12,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBackIos
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
+import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
@@ -56,20 +58,21 @@ private data class BranchNavigationData(
 }
 
 /**
- * Data class to hold all potential actions that can be performed on a chat message.
- * Callbacks are nullable as not all actions might be implemented or applicable yet.
- * This pattern allows for clear API definition while maintaining flexibility for phased implementation.
- *
- * @param onSwitchBranchToMessage Callback to switch to a different thread branch.
- * @param onEditMessage Callback for when the user wants to edit a message.
- * @param onCopyMessage Callback for when the user wants to copy message content to clipboard.
+ * Data class holding all possible message actions that can be performed.
+ * @param onSwitchBranchToMessage Callback for when the user wants to switch branch to a specific message.
+ * @param onEditMessage Callback for when the user wants to edit a specific message.
+ * @param onCopyMessage Callback for when the user wants to copy message content.
  * @param onRegenerateMessage Callback for when the user wants to regenerate an assistant message.
+ * @param onReplyMessage Callback for when the user wants to reply to a specific message.
+ * @param onDeleteMessage Callback for when the user wants to delete a specific message.
  */
 private data class MessageActions(
     val onSwitchBranchToMessage: (Long) -> Unit,
     val onEditMessage: ((ChatMessage) -> Unit)? = null,
     val onCopyMessage: ((ChatMessage) -> Unit)? = null,
-    val onRegenerateMessage: ((ChatMessage) -> Unit)? = null
+    val onRegenerateMessage: ((ChatMessage) -> Unit)? = null,
+    val onReplyMessage: ((ChatMessage) -> Unit)? = null,
+    val onDeleteMessage: ((ChatMessage) -> Unit)? = null
 )
 
 /**
@@ -174,10 +177,13 @@ private fun SuccessStateDisplay(
     val messageActions = remember(actions) {
         MessageActions(
             onSwitchBranchToMessage = actions::onSwitchBranchToMessage,
-            // Future actions - uncomment and pass actions from `actions` contract when implemented:
-            // onEditMessage = actions::onStartEditing,
-            // onCopyMessage = actions::onCopyMessageContent,
-            // onRegenerateMessage = actions::onRegenerateAssistantMessage
+            onEditMessage = actions::onStartEditing,
+            onReplyMessage = actions::onStartReplyTo,
+            onDeleteMessage = { message -> actions.onDeleteMessage(message.id) },
+            // Keep onCopyMessage as null until PR 25 - Copy to Clipboard implementation
+            onCopyMessage = null,
+            // TODO: Wire up regenerate action when available
+            onRegenerateMessage = null
         )
     }
 
@@ -402,18 +408,22 @@ private fun GeneralMessageControls(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp) // Spacing between action icons
     ) {
-        // Edit Button (User Message only)
-        if (message.role == ChatMessage.Role.USER) {
-            EditButton(message = message, onEditMessage = messageActions.onEditMessage)
-        }
+        // Edit Button
+        EditButton(message = message, onEditMessage = messageActions.onEditMessage)
 
-        // Copy Button (All messages)
+        // Copy Button
         CopyButton(message = message, onCopyMessage = messageActions.onCopyMessage)
 
         // Regenerate Button (Assistant Message only)
         if (message.role == ChatMessage.Role.ASSISTANT) {
             RegenerateButton(message = message, onRegenerateMessage = messageActions.onRegenerateMessage)
         }
+
+        // Reply Button
+        ReplyButton(message = message, onReplyMessage = messageActions.onReplyMessage)
+
+        // Delete Button
+        DeleteButton(message = message, onDeleteMessage = messageActions.onDeleteMessage)
     }
 }
 
@@ -483,6 +493,55 @@ private fun RegenerateButton(message: ChatMessage, onRegenerateMessage: ((ChatMe
                     Icons.Default.Refresh,
                     contentDescription = "Regenerate response",
                     tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Displays the Reply message button.
+ *
+ * @param message The message to which a reply is being composed.
+ * @param onReplyMessage Callback for the reply action, can be null if not implemented.
+ */
+@Composable
+private fun ReplyButton(message: ChatMessage, onReplyMessage: ((ChatMessage) -> Unit)?) {
+    if (onReplyMessage != null) {
+        PlainTooltipBox(text = "Reply to message") {
+            IconButton(
+                onClick = { onReplyMessage(message) },
+                modifier = Modifier.size(24.dp)
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.Reply,
+                    contentDescription = "Reply to message",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Displays the Delete message button.
+ *
+ * @param message The message to be deleted.
+ * @param onDeleteMessage Callback for the delete action, can be null if not implemented.
+ */
+@Composable
+private fun DeleteButton(message: ChatMessage, onDeleteMessage: ((ChatMessage) -> Unit)?) {
+    if (onDeleteMessage != null) {
+        PlainTooltipBox(text = "Delete message") {
+            IconButton(
+                onClick = { onDeleteMessage(message) },
+                modifier = Modifier.size(24.dp)
+            ) {
+                // Using a standard trash icon for deletion
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "Delete message",
+                    tint = MaterialTheme.colorScheme.error
                 )
             }
         }
