@@ -1,4 +1,4 @@
-package eu.torvian.chatbot.app.compose
+package eu.torvian.chatbot.app.compose.chatarea
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically

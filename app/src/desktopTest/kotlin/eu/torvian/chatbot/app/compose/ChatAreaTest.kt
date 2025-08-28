@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.app.compose
 
 import androidx.compose.ui.test.*
+import eu.torvian.chatbot.app.compose.chatarea.ChatArea
 import eu.torvian.chatbot.app.compose.common.LOADING_OVERLAY_TAG
 import eu.torvian.chatbot.app.domain.contracts.ChatAreaActions
 import eu.torvian.chatbot.app.domain.contracts.ChatAreaState
