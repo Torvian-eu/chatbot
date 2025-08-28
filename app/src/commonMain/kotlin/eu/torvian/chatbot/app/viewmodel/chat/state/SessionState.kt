@@ -22,16 +22,8 @@ interface SessionState {
     val sessionDataState: StateFlow<UiState<ApiError, ChatSessionData>>
 
     /**
-     * The ID of the leaf message in the currently displayed thread branch.
-     * Changing this triggers the UI to show a different branch.
-     * Null if the session is empty or not loaded/successful.
-     */
-    val currentBranchLeafId: StateFlow<Long?>
-
-    /**
      * The list of messages to display in the UI, representing the currently selected thread branch.
-     * This is derived from the session's full list of messages and the current leaf message ID,
-     * combined with any actively streaming message.
+     * This is derived from the session's full list of messages and the current leaf message ID.
      */
     val displayedMessages: StateFlow<List<ChatMessage>>
 
@@ -61,6 +53,13 @@ interface SessionState {
     val currentSession: ChatSession?
         get() = currentSessionData?.session
 
+    /**
+     * Convenience property to get the current leaf message ID if available.
+     * Returns null if the session data state is not in Success state.
+     */
+    val currentBranchLeafId: Long?
+        get() = currentSession?.currentLeafMessageId
+
     // --- State Mutation Methods ---
 
     /**
@@ -79,24 +78,14 @@ interface SessionState {
     fun setSessionDataSuccess(sessionData: ChatSessionData)
 
     /**
-     * Sets the current branch leaf ID.
+     * Updates the session messages.
      */
-    fun setCurrentLeafId(leafId: Long?)
+    fun updateSessionMessages(messages: List<ChatMessage>)
 
     /**
-     * Sets the streaming user message.
+     * Updates the session's current leaf message ID.
      */
-    fun setStreamingUserMessage(message: ChatMessage.UserMessage?)
-
-    /**
-     * Sets the streaming assistant message.
-     */
-    fun setStreamingAssistantMessage(message: ChatMessage.AssistantMessage?)
-
-    /**
-     * Updates the session messages and leaf ID.
-     */
-    fun updateSessionMessages(messages: List<ChatMessage>, newLeafId: Long?)
+    fun updateSessionLeafId(leafId: Long?)
 
     /**
      * Updates the session's current model ID.

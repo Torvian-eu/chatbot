@@ -34,7 +34,7 @@ class SwitchBranchUseCase(
      */
     suspend fun execute(targetMessageId: Long) {
         val currentSession = state.currentSession ?: return
-        if (state.currentBranchLeafId.value == targetMessageId) return
+        if (state.currentBranchLeafId == targetMessageId) return
 
         val messageMap = currentSession.messages.associateBy { it.id }
 
@@ -45,7 +45,7 @@ class SwitchBranchUseCase(
             return
         }
 
-        if (state.currentBranchLeafId.value == finalLeafId) return // Already on this exact branch
+        if (state.currentBranchLeafId == finalLeafId) return // Already on this exact branch
 
         logger.info("Switching branch to message $targetMessageId (leaf: $finalLeafId) for session ${currentSession.id}")
 
@@ -62,7 +62,7 @@ class SwitchBranchUseCase(
             },
             ifRight = {
                 logger.info("Successfully switched branch to $finalLeafId")
-                state.setCurrentLeafId(finalLeafId)
+                state.updateSessionLeafId(finalLeafId)
             }
         )
     }

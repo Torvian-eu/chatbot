@@ -22,9 +22,6 @@ class ChatStateImpl(
     // --- Private MutableStateFlows ---
 
     private val _sessionDataState = MutableStateFlow<UiState<ApiError, ChatSessionData>>(UiState.Idle)
-    private val _currentBranchLeafId = MutableStateFlow<Long?>(null)
-    private val _streamingAssistantMessage = MutableStateFlow<ChatMessage.AssistantMessage?>(null)
-    private val _streamingUserMessage = MutableStateFlow<ChatMessage.UserMessage?>(null)
     private val _inputContent = MutableStateFlow("")
     private val _replyTargetMessage = MutableStateFlow<ChatMessage?>(null)
     private val _editingMessage = MutableStateFlow<ChatMessage?>(null)
@@ -36,8 +33,6 @@ class ChatStateImpl(
     // --- Public Read-Only StateFlows ---
 
     override val sessionDataState: StateFlow<UiState<ApiError, ChatSessionData>> = _sessionDataState.asStateFlow()
-
-    override val currentBranchLeafId: StateFlow<Long?> = _currentBranchLeafId.asStateFlow()
     override val inputContent: StateFlow<String> = _inputContent.asStateFlow()
     override val replyTargetMessage: StateFlow<ChatMessage?> = _replyTargetMessage.asStateFlow()
     override val editingMessage: StateFlow<ChatMessage?> = _editingMessage.asStateFlow()
@@ -48,20 +43,15 @@ class ChatStateImpl(
 
     // --- Computed StateFlows ---
 
-    override val displayedMessages: StateFlow<List<ChatMessage>> = combine(
+    override val displayedMessages: StateFlow<List<ChatMessage>> =
         _sessionDataState.filterIsInstance<UiState.Success<ChatSessionData>>()
-            .map { it.data.session.messages },
-        _currentBranchLeafId,
-        _streamingUserMessage,
-        _streamingAssistantMessage
-    ) { allPersistedMessages, leafId, streamingUserMessage, streamingAssistantMessage ->
-        val messagesForBranching = allPersistedMessages + listOfNotNull(streamingUserMessage, streamingAssistantMessage)
-        threadBuilder.buildThreadBranch(messagesForBranching, leafId)
-    }.stateIn(
-        scope = backgroundScope,
-        started = SharingStarted.Eagerly,
-        initialValue = emptyList()
-    )
+            .map { it.data.session }
+            .map { threadBuilder.buildThreadBranch(it.messages, it.currentLeafMessageId) }
+            .stateIn(
+                scope = backgroundScope,
+                started = SharingStarted.Eagerly,
+                initialValue = emptyList()
+            )
 
     // --- Public State Mutation Methods ---
 
@@ -75,18 +65,6 @@ class ChatStateImpl(
 
     override fun setSessionDataSuccess(sessionData: ChatSessionData) {
         _sessionDataState.value = UiState.Success(sessionData)
-    }
-
-    override fun setCurrentLeafId(leafId: Long?) {
-        _currentBranchLeafId.value = leafId
-    }
-
-    override fun setStreamingUserMessage(message: ChatMessage.UserMessage?) {
-        _streamingUserMessage.value = message
-    }
-
-    override fun setStreamingAssistantMessage(message: ChatMessage.AssistantMessage?) {
-        _streamingAssistantMessage.value = message
     }
 
     override fun setInputContent(content: String) {
@@ -119,18 +97,25 @@ class ChatStateImpl(
         _lastFailedLoadEventId.value = null
     }
 
-    override fun updateSessionMessages(messages: List<ChatMessage>, newLeafId: Long?) {
+    override fun updateSessionMessages(messages: List<ChatMessage>) {
         val currentSessionData = _sessionDataState.value.dataOrNull ?: return
         _sessionDataState.value = UiState.Success(
             currentSessionData.copy(
                 session = currentSessionData.session.copy(
                     messages = messages,
-                    currentLeafMessageId = newLeafId,
                     updatedAt = clock.now()
                 )
             )
         )
-        _currentBranchLeafId.value = newLeafId
+    }
+
+    override fun updateSessionLeafId(leafId: Long?) {
+        val currentSessionData = _sessionDataState.value.dataOrNull ?: return
+        _sessionDataState.value = UiState.Success(
+            currentSessionData.copy(
+                session = currentSessionData.session.copy(currentLeafMessageId = leafId)
+            )
+        )
     }
 
     override fun updateSessionModelId(modelId: Long?) {
@@ -153,9 +138,6 @@ class ChatStateImpl(
 
     override fun resetState() {
         _sessionDataState.value = UiState.Idle
-        _currentBranchLeafId.value = null
-        _streamingAssistantMessage.value = null
-        _streamingUserMessage.value = null
         _inputContent.value = ""
         _replyTargetMessage.value = null
         _editingMessage.value = null
