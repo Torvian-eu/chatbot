@@ -615,7 +615,6 @@ class MessageServiceImpl(
 
     /**
      * Calculates leaf update for single-message delete where children are promoted.
-     * This does not differentiate between user or assistant roles.
      */
     private suspend fun calculateLeafUpdateForSingleDelete(
         messageToDelete: ChatMessage,
@@ -630,22 +629,23 @@ class MessageServiceImpl(
         val affectsLeaf = isMessageInPath(messageToDelete.id, currentLeafId, messageMap)
         if (!affectsLeaf) return LeafUpdateCalculation(needsUpdate = false, newLeafId = null)
 
-        val children = messageToDelete.childrenMessageIds
         val parentId = messageToDelete.parentMessageId
 
+        // Calculate new leaf message before deletion
         val newLeafId = if (currentLeafId == messageToDelete.id) {
             if (parentId == null) {
-                if (children.isEmpty()) {
-                    val nextRootId = findFirstAvailableRootMessage(session.id, messageToDelete.id, messageMap)
-                    nextRootId?.let { findLeafInSubtree(it, messageMap) }
-                } else {
-                    findLeafInSubtree(children.first(), messageMap)
-                }
+                // Deleted root message, find another available root
+                val nextRootId = findFirstAvailableRootMessage(session.id, messageToDelete.id, messageMap)
+                nextRootId?.let { findLeafInSubtree(it, messageMap) }
             } else {
-                if (children.isEmpty()) {
+                val parent = messageMap[parentId] ?: throw IllegalStateException("Parent message $parentId not found")
+                val otherChildOfParent = parent.childrenMessageIds.firstOrNull { it != messageToDelete.id }
+                if (otherChildOfParent == null) {
+                    // Parent becomes the new leaf
                     parentId
                 } else {
-                    findLeafInSubtree(children.first(), messageMap)
+                    // Find leaf in first remaining child's subtree
+                    findLeafInSubtree(otherChildOfParent, messageMap)
                 }
             }
         } else {
