@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.app.compose.preview
 
 import androidx.compose.runtime.Composable
-import eu.torvian.chatbot.app.compose.SessionListPanel
+import eu.torvian.chatbot.app.compose.sessionlist.SessionListPanel
 import eu.torvian.chatbot.app.domain.contracts.SessionListState
 import eu.torvian.chatbot.app.domain.contracts.SessionListActions
 import eu.torvian.chatbot.app.domain.contracts.SessionListData
