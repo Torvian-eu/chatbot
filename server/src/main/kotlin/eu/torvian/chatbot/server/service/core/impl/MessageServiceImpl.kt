@@ -432,7 +432,11 @@ class MessageServiceImpl(
         val context = mutableListOf<ChatMessage>()
         val messageMap = allMessages.associateBy { it.id }
         var c: ChatMessage? = currentUserMessage
-        while (c != null) {
+        // Keep track of visited IDs to detect cycles
+        val visitedIds = mutableSetOf<Long>()
+        // Traverse up the tree from the user message
+        while (c != null && !visitedIds.contains(c.id)) {
+            visitedIds.add(c.id)
             context.add(c)
             c = c.parentMessageId?.let { messageMap[it] }
         }
@@ -592,6 +596,7 @@ class MessageServiceImpl(
                     null
                 }
             }
+
             else -> {
                 // Get parent's current state (before deletion)
                 val parent = messageMap[parentId]
