@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.app.compose.preview
 
 import androidx.compose.runtime.Composable
-import eu.torvian.chatbot.app.compose.ChatArea
+import eu.torvian.chatbot.app.compose.chatarea.ChatArea
 import eu.torvian.chatbot.app.domain.contracts.ChatAreaActions
 import eu.torvian.chatbot.app.domain.contracts.ChatAreaState
 import eu.torvian.chatbot.app.domain.contracts.UiState
@@ -50,7 +50,6 @@ fun ChatAreaPreview() {
     ChatArea(
         state = ChatAreaState(
             sessionUiState = UiState.Success(ChatSessionData(session = mockChatSession)),
-            currentBranchLeafId = 2L,
             displayedMessages = mockChatSession.messages
         ),
         actions = object : ChatAreaActions {

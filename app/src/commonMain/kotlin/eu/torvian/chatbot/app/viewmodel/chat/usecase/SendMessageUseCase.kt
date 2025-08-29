@@ -33,7 +33,7 @@ class SendMessageUseCase(
         val content = state.inputContent.value.trim()
         if (content.isBlank()) return // Cannot send empty message
 
-        val parentId = state.replyTargetMessage.value?.id ?: state.currentBranchLeafId.value
+        val parentId = state.replyTargetMessage.value?.id ?: state.currentBranchLeafId
 
         logger.info("Sending message to session ${currentSession.id}, parent: $parentId")
 
@@ -90,7 +90,9 @@ class SendMessageUseCase(
                 val newLeafId = newMessages.lastOrNull()?.id
 
                 // Update the session state with new messages
-                state.updateSessionMessages(updatedMessages, newLeafId)
+                // TODO: Update parent's children list (parent of the user message)
+                state.updateSessionMessages(updatedMessages)
+                state.updateSessionLeafId(newLeafId)
                 state.setReplyTarget(null)
                 state.setInputContent("")
             }

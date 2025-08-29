@@ -71,7 +71,7 @@ class MessageServiceImpl(
 
             // 2. Validate parent message if provided
             if (parentMessageId != null) {
-                withError({ daoError: MessageError.MessageNotFound ->
+                withError({ _: MessageError.MessageNotFound ->
                     ValidateNewMessageError.ParentNotInSession(sessionId, parentMessageId)
                 }) {
                     messageDao.getMessageById(parentMessageId).bind()
@@ -85,14 +85,14 @@ class MessageServiceImpl(
                 ?: raise(ValidateNewMessageError.ModelConfigurationError("No settings selected for session $sessionId"))
 
             // 4. Fetch Model
-            val model = withError({ serviceError: GetModelError ->
+            val model = withError({ _: GetModelError ->
                 throw IllegalStateException("Model with ID $modelId not found after validation")
             }) {
                 llmModelService.getModelById(modelId).bind()
             }
 
             // 5. Fetch Settings
-            val settings = withError({ serviceError: GetSettingsByIdError ->
+            val settings = withError({ _: GetSettingsByIdError ->
                 throw IllegalStateException("Settings with ID $settingsId not found after validation")
             }) {
                 modelSettingsService.getSettingsById(settingsId).bind()
@@ -111,7 +111,7 @@ class MessageServiceImpl(
             }
 
             // 7. Get LLM provider
-            val provider = withError({ serviceError: GetProviderError ->
+            val provider = withError({ _: GetProviderError ->
                 throw IllegalStateException("Provider not found for model ID $modelId (provider ID: ${model.providerId})")
             }) {
                 llmProviderService.getProviderById(model.providerId).bind()
@@ -119,7 +119,7 @@ class MessageServiceImpl(
 
             // 8. Get API Key (if required)
             val apiKey = provider.apiKeyId?.let { keyId ->
-                withError({ credError: CredentialError.CredentialNotFound ->
+                withError({ _: CredentialError.CredentialNotFound ->
                     throw IllegalStateException("API key not found in secure storage for provider ID ${provider.id} (key alias: $keyId)")
                 }) {
                     credentialManager.getCredential(keyId).bind()
@@ -244,16 +244,154 @@ class MessageServiceImpl(
             }
         }
 
+    override suspend fun deleteMessageRecursively(id: Long): Either<DeleteMessageError, Unit> =
+        transactionScope.transaction {
+            either {
+                // Get message details before deletion
+                val messageToDelete = withError({ daoError: MessageError.MessageNotFound ->
+                    DeleteMessageError.MessageNotFound(daoError.id)
+                }) {
+                    messageDao.getMessageById(id).bind()
+                }
+
+                val sessionId = messageToDelete.sessionId
+
+                // Get session and check if update is needed BEFORE deletion
+                val session = withError({ _: SessionError ->
+                    DeleteMessageError.SessionUpdateFailed(sessionId)
+                }) {
+                    sessionDao.getSessionById(sessionId).bind()
+                }
+
+                val currentLeafId = session.currentLeafMessageId
+
+                // Check if the deleted message affects current leaf and calculate new leaf ID if needed
+                val leafUpdateResult = calculateLeafUpdateIfNeeded(
+                    messageToDelete, session, currentLeafId
+                )
+
+                // Perform the deletion
+                withError({ daoError: MessageError.MessageNotFound ->
+                    DeleteMessageError.MessageNotFound(daoError.id)
+                }) {
+                    messageDao.deleteMessageRecursively(id).bind()
+                }
+
+                // Update session leaf message if needed
+                if (leafUpdateResult.needsUpdate) {
+                    withError({ _: SessionError ->
+                        DeleteMessageError.SessionUpdateFailed(sessionId)
+                    }) {
+                        sessionDao.updateSessionLeafMessageId(sessionId, leafUpdateResult.newLeafId).bind()
+                    }
+                }
+            }
+        }
+
     override suspend fun deleteMessage(id: Long): Either<DeleteMessageError, Unit> =
         transactionScope.transaction {
             either {
+                // Get message details before deletion
+                val messageToDelete = withError({ daoError: MessageError.MessageNotFound ->
+                    DeleteMessageError.MessageNotFound(daoError.id)
+                }) {
+                    messageDao.getMessageById(id).bind()
+                }
+
+                val sessionId = messageToDelete.sessionId
+
+                // Get session BEFORE deletion
+                val session = withError({ _: SessionError ->
+                    DeleteMessageError.SessionUpdateFailed(sessionId)
+                }) {
+                    sessionDao.getSessionById(sessionId).bind()
+                }
+
+                val currentLeafId = session.currentLeafMessageId
+
+                // Calculate new leaf for single-delete semantics
+                val leafUpdateResult = calculateLeafUpdateForSingleDelete(
+                    messageToDelete, session, currentLeafId
+                )
+
+                // Perform the single deletion
                 withError({ daoError: MessageError.MessageNotFound ->
                     DeleteMessageError.MessageNotFound(daoError.id)
                 }) {
                     messageDao.deleteMessage(id).bind()
                 }
+
+                // Update session leaf message if needed
+                if (leafUpdateResult.needsUpdate) {
+                    withError({ _: SessionError ->
+                        DeleteMessageError.SessionUpdateFailed(sessionId)
+                    }) {
+                        sessionDao.updateSessionLeafMessageId(sessionId, leafUpdateResult.newLeafId).bind()
+                    }
+                }
             }
         }
+
+    /**
+     * Checks if a target message is in the path from root to a leaf message.
+     *
+     * @param targetMessageId The ID of the message to check for.
+     * @param leafMessageId The ID of the leaf message to trace back from.
+     * @param messageMap Map of message ID to ChatMessage for efficient lookups.
+     * @return True if the target message is an ancestor of the leaf message.
+     */
+    private fun isMessageInPath(
+        targetMessageId: Long,
+        leafMessageId: Long,
+        messageMap: Map<Long, ChatMessage>
+    ): Boolean {
+        var currentId: Long? = leafMessageId
+        while (currentId != null) {
+            if (currentId == targetMessageId) return true
+            currentId = messageMap[currentId]?.parentMessageId
+        }
+        return false
+    }
+
+    /**
+     * Finds the leaf message in a subtree by following the first child path.
+     *
+     * @param rootMessageId The ID of the root message to start from.
+     * @param messageMap Map of message ID to ChatMessage for efficient lookups.
+     * @return The ID of the leaf message in this subtree.
+     */
+    private fun findLeafInSubtree(rootMessageId: Long, messageMap: Map<Long, ChatMessage>): Long {
+        var currentId = rootMessageId
+        while (true) {
+            val message = messageMap[currentId]
+                ?: throw IllegalStateException("Message $currentId not found in message map")
+            if (message.childrenMessageIds.isEmpty()) {
+                return currentId
+            }
+            // Follow first child path
+            currentId = message.childrenMessageIds.first()
+        }
+    }
+
+    /**
+     * Finds the first available root message in a session, excluding the deleted one.
+     *
+     * @param sessionId The ID of the session.
+     * @param deletedMessageId The ID of the message being deleted (to exclude).
+     * @param messageMap Map of message ID to ChatMessage for efficient lookups.
+     * @return The ID of the oldest available root message, or null if none exist.
+     */
+    private fun findFirstAvailableRootMessage(
+        sessionId: Long,
+        deletedMessageId: Long,
+        messageMap: Map<Long, ChatMessage>
+    ): Long? {
+        // Find all root messages (parentMessageId == null) excluding the deleted one
+        return messageMap.values
+            .filter { it.sessionId == sessionId && it.parentMessageId == null && it.id != deletedMessageId }
+            .minByOrNull { it.createdAt }  // Use oldest root as the new active branch
+            ?.id
+    }
 
     /**
      * Saves user message and updates relationships.
@@ -263,7 +401,7 @@ class MessageServiceImpl(
         content: String,
         parentMessageId: Long?
     ): ChatMessage.UserMessage = transactionScope.transaction {
-        // 1. Insert user message
+        // 1. Insert user message (DAO will handle child linking atomically when parent is provided)
         val userMessage = messageDao.insertUserMessage(sessionId, content, parentMessageId).getOrElse { daoError ->
             throw IllegalStateException(
                 "Failed to insert user message. " +
@@ -271,19 +409,7 @@ class MessageServiceImpl(
             )
         }
 
-        // 2. Link user message as child to parent if parentMessageId is provided
-        // TODO: update MessageDao.insertUserMessage to handle this
-        if (parentMessageId != null) {
-            messageDao.addChildToMessage(parentMessageId, userMessage.id).getOrElse { linkError ->
-                throw IllegalStateException(
-                    "Failed to link user message as child to parent. " +
-                            "Parent message id: $parentMessageId. User message id: ${userMessage.id}. " +
-                            "Error: $linkError"
-                )
-            }
-        }
-
-        // 3. Update session's leaf message ID
+        // 2. Update session's leaf message ID
         sessionDao.updateSessionLeafMessageId(sessionId, userMessage.id).getOrElse { updateError ->
             throw IllegalStateException(
                 "Failed to update session leaf message ID. " +
@@ -291,7 +417,7 @@ class MessageServiceImpl(
             )
         }
 
-        // 4. Return user message
+        // 3. Return user message
         userMessage
     }
 
@@ -306,7 +432,11 @@ class MessageServiceImpl(
         val context = mutableListOf<ChatMessage>()
         val messageMap = allMessages.associateBy { it.id }
         var c: ChatMessage? = currentUserMessage
-        while (c != null) {
+        // Keep track of visited IDs to detect cycles
+        val visitedIds = mutableSetOf<Long>()
+        // Traverse up the tree from the user message
+        while (c != null && !visitedIds.contains(c.id)) {
+            visitedIds.add(c.id)
             context.add(c)
             c = c.parentMessageId?.let { messageMap[it] }
         }
@@ -324,35 +454,25 @@ class MessageServiceImpl(
         settings: ModelSettings
     ): Pair<ChatMessage.AssistantMessage, ChatMessage.UserMessage> =
         transactionScope.transaction {
-            // 1. Insert assistant message
+            // 1. Insert assistant message (DAO will handle child linking atomically)
             val assistantMsg = messageDao.insertAssistantMessage(
                 sessionId, content, userMessage.id, model.id, settings.id
             ).getOrElse { daoError ->
                 throw IllegalStateException(
-                    "Failed to insert final assistant message. " +
-                            "Session id: $sessionId. Parent message id: ${userMessage.id}. Error: ${daoError::class.simpleName}"
+                    "Failed to insert assistant message. " +
+                            "Session id: $sessionId. Parent message id: ${userMessage.id}. Error: $daoError"
                 )
             }
 
-            // 2. Link assistant message as child to user message
-            // TODO: update MessageDao.insertAssistantMessage to handle this
-            messageDao.addChildToMessage(userMessage.id, assistantMsg.id).mapLeft { linkError ->
-                throw IllegalStateException(
-                    "Failed to link assistant message as child to user message. " +
-                            "User message id: ${userMessage.id}. Assistant message id: ${assistantMsg.id}. " +
-                            "Error: $linkError"
-                )
-            }
-
-            // 3. Update session's leaf message ID
-            sessionDao.updateSessionLeafMessageId(sessionId, assistantMsg.id).mapLeft { updateError ->
+            // 2. Update session's leaf message ID
+            sessionDao.updateSessionLeafMessageId(sessionId, assistantMsg.id).getOrElse { updateError ->
                 throw IllegalStateException(
                     "Failed to update session leaf message ID. " +
                             "Session id: $sessionId. New leaf message id: ${assistantMsg.id}. Error: $updateError"
                 )
             }
 
-            // 4. Retrieve updated user message
+            // 3. Retrieve updated user message
             val updatedUserMsg = messageDao.getMessageById(userMessage.id).getOrElse { daoError ->
                 throw IllegalStateException(
                     "Failed to retrieve updated user message. " +
@@ -410,6 +530,7 @@ class MessageServiceImpl(
                     ifRight = { chunk ->
                         when (chunk) {
                             is LLMStreamChunk.ContentChunk -> {
+                                @Suppress("AssignedValueIsNeverRead")
                                 accumulatedContent += chunk.deltaContent
                                 onContentDelta(chunk.deltaContent)
                             }
@@ -431,4 +552,120 @@ class MessageServiceImpl(
                 )
             }
     }
+
+    /**
+     * Calculates if the leaf message ID needs to be updated after a deletion,
+     * and determines the new leaf message ID if needed.
+     *
+     * @param messageToDelete The message that is being deleted.
+     * @param session The current session.
+     * @param currentLeafId The current leaf message ID of the session.
+     * @return A [LeafUpdateCalculation] indicating if an update is needed and the new leaf ID.
+     */
+    private suspend fun calculateLeafUpdateIfNeeded(
+        messageToDelete: ChatMessage,
+        session: ChatSession,
+        currentLeafId: Long?
+    ): LeafUpdateCalculation {
+        // If there's no current leaf, no update is needed
+        if (currentLeafId == null) {
+            return LeafUpdateCalculation(needsUpdate = false, newLeafId = null)
+        }
+
+        // Build fresh message map from the database
+        val allMessages = messageDao.getMessagesBySessionId(session.id)
+        val messageMap = allMessages.associateBy { it.id }
+
+        // Check if the deleted message affects current leaf
+        val needsLeafUpdate = isMessageInPath(messageToDelete.id, currentLeafId, messageMap)
+
+        if (!needsLeafUpdate) {
+            return LeafUpdateCalculation(needsUpdate = false, newLeafId = null)
+        }
+
+        // Calculate new leaf message before deletion
+        val newLeafId = when (val parentId = messageToDelete.parentMessageId) {
+            null -> {
+                // Deleted a root message, find another available root
+                val nextRootId = findFirstAvailableRootMessage(session.id, messageToDelete.id, messageMap)
+                if (nextRootId != null) {
+                    // Traverse down to find the leaf of this root
+                    findLeafInSubtree(nextRootId, messageMap)
+                } else {
+                    // No more root messages, session becomes empty
+                    null
+                }
+            }
+
+            else -> {
+                // Get parent's current state (before deletion)
+                val parent = messageMap[parentId]
+                    ?: throw IllegalStateException("Parent message $parentId not found")
+
+                // Calculate remaining children after deletion
+                val remainingChildren = parent.childrenMessageIds.filter { it != messageToDelete.id }
+
+                if (remainingChildren.isEmpty()) {
+                    // Parent becomes the new leaf
+                    parentId
+                } else {
+                    // Find leaf in first remaining child's subtree
+                    findLeafInSubtree(remainingChildren.first(), messageMap)
+                }
+            }
+        }
+
+        return LeafUpdateCalculation(needsUpdate = true, newLeafId = newLeafId)
+    }
+
+    /**
+     * Calculates leaf update for single-message delete where children are promoted.
+     */
+    private suspend fun calculateLeafUpdateForSingleDelete(
+        messageToDelete: ChatMessage,
+        session: ChatSession,
+        currentLeafId: Long?
+    ): LeafUpdateCalculation {
+        if (currentLeafId == null) return LeafUpdateCalculation(needsUpdate = false, newLeafId = null)
+
+        val allMessages = messageDao.getMessagesBySessionId(session.id)
+        val messageMap = allMessages.associateBy { it.id }
+
+        val affectsLeaf = isMessageInPath(messageToDelete.id, currentLeafId, messageMap)
+        if (!affectsLeaf) return LeafUpdateCalculation(needsUpdate = false, newLeafId = null)
+
+        val parentId = messageToDelete.parentMessageId
+
+        // Calculate new leaf message before deletion
+        val newLeafId = if (currentLeafId == messageToDelete.id) {
+            if (parentId == null) {
+                // Deleted root message, find another available root
+                val nextRootId = findFirstAvailableRootMessage(session.id, messageToDelete.id, messageMap)
+                nextRootId?.let { findLeafInSubtree(it, messageMap) }
+            } else {
+                val parent = messageMap[parentId] ?: throw IllegalStateException("Parent message $parentId not found")
+                val otherChildOfParent = parent.childrenMessageIds.firstOrNull { it != messageToDelete.id }
+                if (otherChildOfParent == null) {
+                    // Parent becomes the new leaf
+                    parentId
+                } else {
+                    // Find leaf in first remaining child's subtree
+                    findLeafInSubtree(otherChildOfParent, messageMap)
+                }
+            }
+        } else {
+            // Leaf is deeper in the deleted node's subtree; its ID remains the same after promotion
+            currentLeafId
+        }
+
+        return LeafUpdateCalculation(needsUpdate = true, newLeafId = newLeafId)
+    }
 }
+
+/**
+ * Result of leaf update calculation.
+ */
+private data class LeafUpdateCalculation(
+    val needsUpdate: Boolean,
+    val newLeafId: Long?
+)

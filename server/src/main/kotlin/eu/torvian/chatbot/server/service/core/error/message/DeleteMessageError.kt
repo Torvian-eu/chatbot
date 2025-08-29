@@ -9,4 +9,10 @@ sealed interface DeleteMessageError {
      * Maps from MessageError.MessageNotFound in the DAO layer.
      */
     data class MessageNotFound(val id: Long) : DeleteMessageError
+
+    /**
+     * Indicates that updating the session's leaf message ID failed after successful message deletion.
+     * This ensures the session state remains consistent even if the deletion succeeded.
+     */
+    data class SessionUpdateFailed(val sessionId: Long) : DeleteMessageError
 }

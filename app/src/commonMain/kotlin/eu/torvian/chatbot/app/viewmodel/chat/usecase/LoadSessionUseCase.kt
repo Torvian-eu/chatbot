@@ -50,7 +50,6 @@ class LoadSessionUseCase(
         state.setSessionDataLoading()
         state.setReplyTarget(null)
         state.setEditingMessage(null)
-        state.setCurrentLeafId(null)
 
         // Load session and related data
         either {
@@ -87,7 +86,6 @@ class LoadSessionUseCase(
                     logger.info("Successfully loaded model settings: ${data.modelSettings.name} (ID: ${data.modelSettings.id})")
                 }
                 state.setSessionDataSuccess(data)
-                state.setCurrentLeafId(data.session.currentLeafMessageId)
                 state.clearRetryState()
             }
         )

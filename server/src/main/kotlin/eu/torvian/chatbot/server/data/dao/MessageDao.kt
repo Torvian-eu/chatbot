@@ -4,7 +4,6 @@ import arrow.core.Either
 import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.server.data.dao.error.InsertMessageError
 import eu.torvian.chatbot.server.data.dao.error.MessageError
-import eu.torvian.chatbot.server.data.dao.error.MessageAddChildError
 
 /**
  * Data Access Object for ChatMessage entities.
@@ -28,9 +27,9 @@ interface MessageDao {
     suspend fun getMessageById(id: Long): Either<MessageError.MessageNotFound, ChatMessage>
 
     /**
-     * Inserts a new user message record into the database.
-     * Saves content, session ID, parent ID, and initializes other fields.
-     * Children list is initialized as empty.
+     * Inserts a new user message and automatically handles parent-child relationships.
+     * If parentMessageId is provided, adds this message as a child to the parent.
+     *
      * @param sessionId The ID of the session the message belongs to.
      * @param content The text content of the message.
      * @param parentMessageId Optional ID of the parent message (null for root messages).
@@ -43,9 +42,9 @@ interface MessageDao {
     ): Either<InsertMessageError, ChatMessage.UserMessage>
 
     /**
-     * Inserts a new assistant message record into the database.
-     * Saves content, session ID, parent ID, and optional model/settings IDs.
-     * Children list is initialized as empty.
+     * Inserts a new assistant message and automatically handles parent-child relationships.
+     * If parentMessageId is provided, adds this message as a child to the parent.
+     *
      * @param sessionId The ID of the session the message belongs to.
      * @param content The text content of the message.
      * @param parentMessageId Optional ID of the parent message (null for root messages).
@@ -76,16 +75,14 @@ interface MessageDao {
      * @param id The ID of the message to delete.
      * @return Either a [MessageError.MessageNotFound] or Unit if successful.
      */
-    suspend fun deleteMessage(id: Long): Either<MessageError.MessageNotFound, Unit>
-    
-    /**
-     * Adds a child message ID to the `childrenMessageIds` list of the parent message record.
-     * Serializes the updated list back to the database.
-     * Used when a new message is inserted as a reply.
-     * @param parentId The ID of the parent message.
-     * @param childId The ID of the new child message to add to the parent's list.
-     * @return Either a [MessageAddChildError] or Unit if successful.
-     */
-    suspend fun addChildToMessage(parentId: Long, childId: Long): Either<MessageAddChildError, Unit>
+    suspend fun deleteMessageRecursively(id: Long): Either<MessageError.MessageNotFound, Unit>
 
+    /**
+     * Deletes a single message without deleting its descendants.
+     * Promotes all children of the deleted message to its parent (or to root if the deleted message is a root),
+     * preserving child order, and updates parent/children links accordingly.
+     * @param id The ID of the message to delete.
+     * @return Either a [MessageError.MessageNotFound] or Unit if successful.
+     */
+    suspend fun deleteMessage(id: Long): Either<MessageError.MessageNotFound, Unit>
 }

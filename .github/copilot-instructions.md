@@ -25,4 +25,5 @@
 
 ## Tips
 - Console commands are run in PowerShell.
+- In Powershell several commands can be chained together with the character `;`. (Don't use `&&` for this, which only works in Windows Command prompt).
 - There's no need to `cd` into the project directory before running Gradle tasks. The current working directory is already the project root.

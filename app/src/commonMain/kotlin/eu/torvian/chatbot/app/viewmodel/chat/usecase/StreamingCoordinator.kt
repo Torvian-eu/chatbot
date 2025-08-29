@@ -10,6 +10,7 @@ import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.common.models.ChatSession
 import eu.torvian.chatbot.common.models.ChatStreamEvent
 import eu.torvian.chatbot.common.models.ProcessNewMessageRequest
+import kotlinx.datetime.Clock
 
 /**
  * Coordinates streaming message processing.
@@ -31,10 +32,6 @@ class StreamingCoordinator(
      * @param parentId The parent message ID for threading
      */
     suspend fun execute(currentSession: ChatSession, content: String, parentId: Long?) {
-        // Clear any previous streaming state
-        state.setStreamingUserMessage(null)
-        state.setStreamingAssistantMessage(null)
-
         logger.info("Starting streaming message for session ${currentSession.id}")
 
         chatApi.processNewMessageStreaming(
@@ -44,8 +41,6 @@ class StreamingCoordinator(
             eitherUpdate.fold(
                 ifLeft = { error ->
                     logger.error("Streaming message API error: ${error.code} - ${error.message}")
-                    // Clear any streaming state and emit error
-                    clearStreamingState()
                     errorNotifier.apiError(
                         error = error,
                         shortMessageRes = Res.string.error_sending_message_short
@@ -62,12 +57,33 @@ class StreamingCoordinator(
      * Handles individual streaming events from the API.
      */
     private suspend fun handleStreamingEvent(event: ChatStreamEvent, currentSession: ChatSession) {
+        if (state.currentSession?.id != currentSession.id) return
         when (event) {
             is ChatStreamEvent.UserMessageSaved -> {
                 logger.debug("User message saved: ${event.message.id}")
-                // Store the user message in the temporary streaming state
-                state.setStreamingUserMessage(event.message)
-                state.setCurrentLeafId(event.message.id)
+                // Add the user message to the session's messages and update parent's children list
+                state.currentSession?.let { session ->
+                    val updatedMessages = session.messages.map {
+                        if (it.id == event.message.parentMessageId) {
+                            val newChildren = it.childrenMessageIds + event.message.id
+                            val now = Clock.System.now()
+                            when (it) {
+                                is ChatMessage.UserMessage -> it.copy(
+                                    childrenMessageIds = newChildren,
+                                    updatedAt = now
+                                )
+                                is ChatMessage.AssistantMessage -> it.copy(
+                                    childrenMessageIds = newChildren,
+                                    updatedAt = now
+                                )
+                            }
+                        } else {
+                            it
+                        }
+                    } + event.message
+                    state.updateSessionMessages(updatedMessages)
+                    state.updateSessionLeafId(event.message.id)
+                }
                 // Clear input and reply target after user message is confirmed
                 state.setInputContent("")
                 state.setReplyTarget(null)
@@ -75,41 +91,46 @@ class StreamingCoordinator(
 
             is ChatStreamEvent.AssistantMessageStart -> {
                 logger.debug("Assistant message started: ${event.assistantMessage.id}")
-                // Use the assistant message directly from the update
-                state.setCurrentLeafId(event.assistantMessage.id)
-                state.setStreamingAssistantMessage(event.assistantMessage)
+                // Add the assistant message to the session's messages
+                state.currentSession?.let { session ->
+                    val updatedMessages = session.messages + event.assistantMessage
+                    state.updateSessionMessages(updatedMessages)
+                    state.updateSessionLeafId(event.assistantMessage.id)
+                }
             }
 
             is ChatStreamEvent.AssistantMessageDelta -> {
                 logger.trace("Assistant message delta: ${event.deltaContent.length} chars")
                 // Update the streaming message content
-                val currentStreamingMessage = state.displayedMessages.value
-                    .filterIsInstance<ChatMessage.AssistantMessage>()
-                    .find { it.id == event.messageId }
-
-                currentStreamingMessage?.let { streamingMessage ->
-                    state.setStreamingAssistantMessage(
-                        streamingMessage.copy(
-                            content = streamingMessage.content + event.deltaContent
-                        )
-                    )
+                state.currentSession?.let { session ->
+                    val updatedMessages = session.messages.map {
+                        if (it.id == event.messageId) {
+                            val newContent = it.content + event.deltaContent
+                            val now = Clock.System.now()
+                            (it as ChatMessage.AssistantMessage).copy(content = newContent, updatedAt = now)
+                        } else {
+                            it
+                        }
+                    }
+                    state.updateSessionMessages(updatedMessages)
                 }
             }
 
             is ChatStreamEvent.AssistantMessageEnd -> {
                 logger.info("Assistant message completed: ${event.finalAssistantMessage.id}")
-                // Update the session with the new messages
-                val updatedMessages = currentSession.messages + event.finalUserMessage + event.finalAssistantMessage
-                val newLeafId = event.finalAssistantMessage.id
-
-                state.updateSessionMessages(updatedMessages, newLeafId)
-                // Clear streaming state
-                clearStreamingState()
+                // Remove the temporary messages from the session's messages and add the final ones
+                state.currentSession?.let { session ->
+                    val updatedMessages = session.messages.filter {
+                        it.id != event.tempMessageId && it.id != event.finalUserMessage.id
+                    } + event.finalUserMessage + event.finalAssistantMessage
+                    val newLeafId = event.finalAssistantMessage.id
+                    state.updateSessionMessages(updatedMessages)
+                    state.updateSessionLeafId(newLeafId)
+                }
             }
 
             is ChatStreamEvent.ErrorOccurred -> {
                 logger.error("Streaming error: ${event.error.message}")
-                clearStreamingState()
                 errorNotifier.apiError(
                     error = event.error,
                     shortMessageRes = Res.string.error_sending_message_short
@@ -117,16 +138,8 @@ class StreamingCoordinator(
             }
 
             ChatStreamEvent.StreamCompleted -> {
-                logger.info("Streaming completed for session ${currentSession.id}")
+                logger.info("Streaming completed for session ${state.currentSession?.id}")
             }
         }
-    }
-
-    /**
-     * Clears all streaming state.
-     */
-    private fun clearStreamingState() {
-        state.setStreamingUserMessage(null)
-        state.setStreamingAssistantMessage(null)
     }
 }

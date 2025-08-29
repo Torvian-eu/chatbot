@@ -13,11 +13,11 @@ fun ResultRow.toUserMessage(): ChatMessage.UserMessage {
     val id = this[ChatMessageTable.id].value
     val sessionId = this[ChatMessageTable.sessionId].value
     val content = this[ChatMessageTable.content]
-    val createdAt = Instant.Companion.fromEpochMilliseconds(this[ChatMessageTable.createdAt])
-    val updatedAt = Instant.Companion.fromEpochMilliseconds(this[ChatMessageTable.updatedAt])
+    val createdAt = Instant.fromEpochMilliseconds(this[ChatMessageTable.createdAt])
+    val updatedAt = Instant.fromEpochMilliseconds(this[ChatMessageTable.updatedAt])
     val parentMessageId = this[ChatMessageTable.parentMessageId]?.value
     val childrenMessageIdsString = this[ChatMessageTable.childrenMessageIds]
-    val childrenMessageIds = Json.Default.decodeFromString<List<Long>>(childrenMessageIdsString)
+    val childrenMessageIds = Json.decodeFromString<List<Long>>(childrenMessageIdsString)
 
     return ChatMessage.UserMessage(
         id = id,

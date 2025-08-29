@@ -5,7 +5,6 @@ import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.error.MessageError
-import eu.torvian.chatbot.server.data.dao.error.MessageAddChildError
 import eu.torvian.chatbot.server.data.dao.error.InsertMessageError
 import eu.torvian.chatbot.server.testutils.data.Table
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
@@ -232,7 +231,8 @@ class MessageDaoExposedTest {
 
     @Test
     fun `insertUserMessage should handle parent-child relationship`() = runTest {
-        // Setup session with a parent message
+        // Setup session with a parent message (ensure parent has no pre-populated children)
+        val parentWithoutChildren = testUserMessage1.copy(childrenMessageIds = emptyList())
         testDataManager.setup(
             TestDataSet(
                 chatGroups = listOf(testGroup1),
@@ -240,7 +240,7 @@ class MessageDaoExposedTest {
                 llmProviders = listOf(testProvider1),
                 modelSettings = listOf(testSettings1),
                 chatSessions = listOf(testSession1),
-                chatMessages = listOf(testUserMessage1)
+                chatMessages = listOf(parentWithoutChildren)
             )
         )
 
@@ -316,7 +316,8 @@ class MessageDaoExposedTest {
 
     @Test
     fun `insertAssistantMessage should insert a new assistant message`() = runTest {
-        // Setup session and parent message
+        // Setup session and parent message (ensure parent has no pre-populated children)
+        val parentWithoutChildren = testUserMessage1.copy(childrenMessageIds = emptyList())
         testDataManager.setup(
             TestDataSet(
                 chatGroups = listOf(testGroup1),
@@ -324,7 +325,7 @@ class MessageDaoExposedTest {
                 llmProviders = listOf(testProvider1),
                 modelSettings = listOf(testSettings1),
                 chatSessions = listOf(testSession1),
-                chatMessages = listOf(testUserMessage1)
+                chatMessages = listOf(parentWithoutChildren)
             )
         )
 
@@ -469,7 +470,7 @@ class MessageDaoExposedTest {
         )
 
         // Delete the message
-        val result = messageDao.deleteMessage(testAssistantMessage1.id)
+        val result = messageDao.deleteMessageRecursively(testAssistantMessage1.id)
 
         // Verify deletion was successful
         assertTrue(result.isRight(), "Expected Right result for successful deletion")
@@ -494,7 +495,7 @@ class MessageDaoExposedTest {
         )
 
         // Delete the parent message
-        val result = messageDao.deleteMessage(testUserMessage1.id)
+        val result = messageDao.deleteMessageRecursively(testUserMessage1.id)
 
         // Verify deletion was successful
         assertTrue(result.isRight(), "Expected Right result for successful deletion")
@@ -523,7 +524,7 @@ class MessageDaoExposedTest {
         )
 
         // Delete the child message
-        val result = messageDao.deleteMessage(testAssistantMessage1.id)
+        val result = messageDao.deleteMessageRecursively(testAssistantMessage1.id)
 
         // Verify deletion was successful
         assertTrue(result.isRight(), "Expected Right result for successful deletion")
@@ -539,66 +540,5 @@ class MessageDaoExposedTest {
             parentMessage.childrenMessageIds.contains(testAssistantMessage1.id),
             "Expected parent's childrenMessageIds to no longer contain deleted child ID"
         )
-    }
-
-    @Test
-    fun `addChildToMessage should add child to parent's children list`() = runTest {
-        // Setup test data with parent and unlinked child
-        val userMessage = testUserMessage1.copy(childrenMessageIds = emptyList())
-        val assistantMessage = testAssistantMessage1.copy(parentMessageId = null)
-
-        testDataManager.setup(
-            TestDataSet(
-                chatGroups = listOf(testGroup1),
-                llmModels = listOf(testModel1),
-                llmProviders = listOf(testProvider1),
-                modelSettings = listOf(testSettings1),
-                chatSessions = listOf(testSession1),
-                chatMessages = listOf(userMessage, assistantMessage)
-            )
-        )
-
-        // Add child to parent
-        val result = messageDao.addChildToMessage(userMessage.id, assistantMessage.id)
-
-        // Verify operation was successful
-        assertTrue(result.isRight(), "Expected Right result for successful operation")
-
-        // Verify parent now has child in its children list
-        val parentMessage = testDataManager.getChatMessage(userMessage.id)
-        assertNotNull(parentMessage, "Expected to find parent message")
-        assertTrue(
-            parentMessage.childrenMessageIds.contains(assistantMessage.id),
-            "Expected parent's childrenMessageIds to contain added child ID"
-        )
-    }
-
-    @Test
-    fun `addChildToMessage should return ChildAlreadyExists when child is in parent's children list but has no parent`() = runTest {
-        // Setup test data with child in parent's children list but child has no parent (inconsistent state for testing)
-        val userMessage = testUserMessage1.copy(childrenMessageIds = listOf(testAssistantMessage1.id))
-        val assistantMessage = testAssistantMessage1.copy(parentMessageId = null)
-
-        testDataManager.setup(
-            TestDataSet(
-                chatGroups = listOf(testGroup1),
-                llmModels = listOf(testModel1),
-                llmProviders = listOf(testProvider1),
-                modelSettings = listOf(testSettings1),
-                chatSessions = listOf(testSession1),
-                chatMessages = listOf(userMessage, assistantMessage)
-            )
-        )
-
-        // Try to add the child again
-        val result = messageDao.addChildToMessage(userMessage.id, assistantMessage.id)
-
-        // Verify
-        assertTrue(result.isLeft(), "Expected Left result for child already exists")
-        val error = result.leftOrNull()
-        assertNotNull(error, "Expected non-null error")
-        assertTrue(error is MessageAddChildError.ChildAlreadyExists, "Expected ChildAlreadyExists error")
-        assertEquals(userMessage.id, error.parentId, "Expected correct parent ID in error")
-        assertEquals(assistantMessage.id, error.childId, "Expected correct child ID in error")
     }
 }

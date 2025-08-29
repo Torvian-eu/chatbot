@@ -9,7 +9,6 @@ import eu.torvian.chatbot.app.viewmodel.chat.state.ChatSessionData
  * (To be fully implemented in future PRs like 20, 21, etc.)
  *
  * @property sessionUiState The state of the currently loaded chat session with its model settings.
- * @property currentBranchLeafId The ID of the leaf message in the currently displayed thread branch.
  * @property displayedMessages The list of messages to display in the UI, representing the currently selected thread branch.
  * @property inputContent The current text content in the message input field.
  * @property replyTargetMessage The message the user is currently explicitly replying to via the Reply action.
@@ -19,7 +18,6 @@ import eu.torvian.chatbot.app.viewmodel.chat.state.ChatSessionData
  */
 data class ChatAreaState(
     val sessionUiState: UiState<ApiError, ChatSessionData> = UiState.Idle,
-    val currentBranchLeafId: Long? = null,
     val displayedMessages: List<ChatMessage> = emptyList(),
     val inputContent: String = "",
     val replyTargetMessage: ChatMessage? = null,

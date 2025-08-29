@@ -11,7 +11,6 @@ import eu.torvian.chatbot.server.service.core.LLMConfig
 import eu.torvian.chatbot.server.service.core.LLMModelService
 import eu.torvian.chatbot.server.service.core.LLMProviderService
 import eu.torvian.chatbot.server.service.core.ModelSettingsService
-import eu.torvian.chatbot.server.service.core.error.message.DeleteMessageError
 import eu.torvian.chatbot.server.service.core.error.message.ProcessNewMessageError
 import eu.torvian.chatbot.server.service.core.error.message.UpdateMessageContentError
 import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageError
@@ -255,43 +254,6 @@ class MessageServiceImplTest {
         coVerify(exactly = 1) { messageDao.updateMessageContent(messageId, newContent) }
     }
 
-    // --- deleteMessage Tests ---
-
-    @Test
-    fun `deleteMessage should delete message successfully`() = runTest {
-        // Arrange
-        val messageId = 1L
-        coEvery { messageDao.deleteMessage(messageId) } returns Unit.right()
-
-        // Act
-        val result = messageService.deleteMessage(messageId)
-
-        // Assert
-        assertTrue(result.isRight(), "Should return Right for successful deletion")
-        coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { messageDao.deleteMessage(messageId) }
-    }
-
-    @Test
-    fun `deleteMessage should return MessageNotFound error when message does not exist`() = runTest {
-        // Arrange
-        val messageId = 999L
-        val daoError = MessageError.MessageNotFound(messageId)
-        coEvery { messageDao.deleteMessage(messageId) } returns daoError.left()
-
-        // Act
-        val result = messageService.deleteMessage(messageId)
-
-        // Assert
-        assertTrue(result.isLeft(), "Should return Left for non-existent message")
-        val error = result.leftOrNull()
-        assertNotNull(error, "Error should not be null")
-        assertTrue(error is DeleteMessageError.MessageNotFound, "Should be MessageNotFound error")
-        assertEquals(messageId, (error as DeleteMessageError.MessageNotFound).id)
-        coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { messageDao.deleteMessage(messageId) }
-    }
-
     // --- validateProcessNewMessageRequest Tests ---
 
     @Test
@@ -431,7 +393,6 @@ class MessageServiceImplTest {
 
         // Mock all the dependencies for successful flow
         coEvery { messageDao.insertUserMessage(testSession.id, content, null) } returns userMessage.right()
-        coEvery { messageDao.addChildToMessage(any(), any()) } returns Unit.right()
         coEvery {
             llmApiClient.completeChat(
                 any(),
@@ -502,8 +463,6 @@ class MessageServiceImplTest {
 
         // Mock all the dependencies for successful flow with parent message
         coEvery { messageDao.insertUserMessage(testSession.id, content, parentMessageId) } returns userMessage.right()
-        coEvery { messageDao.addChildToMessage(1L, 3L) } returns Unit.right()
-        coEvery { messageDao.addChildToMessage(3L, 4L) } returns Unit.right()
         coEvery {
             llmApiClient.completeChat(
                 any(),
@@ -571,7 +530,6 @@ class MessageServiceImplTest {
         val userMessage = testMessage1
 
         coEvery { messageDao.insertUserMessage(testSession.id, content, null) } returns userMessage.right()
-        coEvery { messageDao.addChildToMessage(any(), any()) } returns Unit.right()
         coEvery { messageDao.getMessagesBySessionId(testSession.id) } returns listOf(userMessage)
         coEvery {
             llmApiClient.completeChat(

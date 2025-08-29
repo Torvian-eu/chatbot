@@ -8,6 +8,7 @@ import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.common.models.UpdateMessageRequest
+import eu.torvian.chatbot.server.data.entities.SessionCurrentLeafEntity
 import eu.torvian.chatbot.server.testutils.data.Table
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
 import eu.torvian.chatbot.server.testutils.data.TestDataSet
@@ -153,6 +154,15 @@ class MessageRoutesTest {
         // Arrange
         testDataManager.insertChatMessage(testUserMessage)
         testDataManager.insertChatMessage(testAssistantMessage) // Insert child message too
+
+        // Set up the session's current leaf message ID to point to the assistant message
+        // This simulates a real scenario where the session tracks the current conversation leaf
+        testDataManager.insertSessionCurrentLeaf(
+            SessionCurrentLeafEntity(
+                sessionId = testSession.id,
+                messageId = testAssistantMessage.id
+            )
+        )
 
         // Act
         val response = client.delete(href(MessageResource.ById(messageId = testUserMessage.id)))

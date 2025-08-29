@@ -73,11 +73,6 @@ class ChatViewModel(
     val sessionDataState: StateFlow<UiState<ApiError, ChatSessionData>> = state.sessionDataState
 
     /**
-     * The ID of the leaf message in the currently displayed thread branch.
-     */
-    val currentBranchLeafId: StateFlow<Long?> = state.currentBranchLeafId
-
-    /**
      * The list of messages to display in the UI, representing the currently selected thread branch.
      */
     val displayedMessages: StateFlow<List<ChatMessage>> = state.displayedMessages

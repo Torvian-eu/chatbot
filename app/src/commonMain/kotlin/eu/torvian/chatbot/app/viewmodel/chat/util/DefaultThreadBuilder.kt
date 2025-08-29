@@ -1,5 +1,7 @@
 package eu.torvian.chatbot.app.viewmodel.chat.util
 
+import eu.torvian.chatbot.app.utils.misc.KmpLogger
+import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.models.ChatMessage
 
 /**
@@ -7,6 +9,10 @@ import eu.torvian.chatbot.common.models.ChatMessage
  * and branch building with cycle detection and error handling.
  */
 class DefaultThreadBuilder : ThreadBuilder {
+
+    companion object {
+        private val logger: KmpLogger = kmpLogger<DefaultThreadBuilder>()
+    }
 
     override fun buildThreadBranch(allMessages: List<ChatMessage>, leafId: Long?): List<ChatMessage> {
         if (leafId == null || allMessages.isEmpty()) return emptyList()
@@ -21,12 +27,12 @@ class DefaultThreadBuilder : ThreadBuilder {
             val message = messageMap[currentMessageId]
             if (message == null) {
                 // This indicates a data inconsistency
-                println("Warning: Could not find message with ID $currentMessageId while building branch. Aborting traversal.")
+                logger.warn("Warning: Could not find message with ID $currentMessageId while building branch. Aborting traversal.")
                 return emptyList() // Return empty as the branch is incomplete/corrupt
             }
             if (!visitedIds.add(message.id)) {
                 // Cycle detected during upward traversal
-                println("Warning: Cycle detected in message thread path during upward traversal at message ID: ${message.id}. Aborting traversal.")
+                logger.warn("Warning: Cycle detected in message thread path during upward traversal at message ID: ${message.id}. Aborting traversal.")
                 return emptyList() // Return empty as the branch is corrupted
             }
             branch.add(message)
