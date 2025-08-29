@@ -262,18 +262,22 @@ server/src/test/kotlin/eu/torvian/chatbot/server/
 app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app targets
 ├── compose/          # Compose UI components
 │   ├── AppShell.kt   # Main application shell (contains navigation, top-level layout)
-│   ├── ChatArea.kt   # Chat area component
 │   ├── ChatScreen.kt # Main chat interface (displays session list, chat messages, input area)
 │   ├── ChatScreenContent.kt # Stateless content composable for chat interface
-│   ├── InputArea.kt  # Message input area component
-│   ├── SessionListPanel.kt # Session list panel component
 │   ├── SettingsScreen.kt # Settings configuration interface (providers, models, settings)
-│   └── common/       # Common compose components
-│       ├── ErrorStateDisplay.kt # Error state display component
-│       ├── LoadingOverlay.kt  # Loading overlay component
-│       ├── OverflowTooltipText.kt # Text with overflow tooltip
-│       ├── PlainTooltipBox.kt # Plain tooltip box component
-│       └── ScrollbarWrapper.kt # Scrollbar wrapper component
+│   ├── chatarea/     # Chat area components
+│   │   ├── ChatArea.kt
+│   │   └── ... other chat area components ...
+│   ├── common/       # Common compose components
+│   │   ├── ErrorStateDisplay.kt # Error state display component
+│   │   ├── LoadingOverlay.kt  # Loading overlay component
+│   │   ├── OverflowTooltipText.kt # Text with overflow tooltip
+│   │   ├── PlainTooltipBox.kt # Plain tooltip box component
+│   │   └── ScrollbarWrapper.kt # Scrollbar wrapper component
+│   ├── preview/     # Compose UI previews
+│   ├── sessionlist/  # Session list components
+│   │   ├── SessionListPanel.kt
+│   │   └── ... other session list components ...
 ├── domain/          # Domain models specific to the *application's presentation layer*
 │   ├── contracts/    # UI State and Action contracts (interfaces between UI and ViewModels)
 │   │   ├── ChatAreaActions.kt  # Chat area user actions contract
@@ -306,7 +310,7 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   │       ├── createHttpClient.kt # Ktor HTTP client setup
 │   │       ├── KtorChatApiClient.kt
 │   │       ├── KtorGroupApiClient.kt
-│   │       └── ... other Ktor API client implementations ...
+│   │       └── ... 
 │   └── misc/          # Miscellaneous frontend services
 │       └── EventBus.kt  # Event bus for frontend events
 ├── utils/            # Utility classes
