@@ -3,6 +3,8 @@ package eu.torvian.chatbot.app.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import eu.torvian.chatbot.app.domain.contracts.UiState
+import eu.torvian.chatbot.app.domain.contracts.NewSettingsFormState
+import eu.torvian.chatbot.app.domain.contracts.EditSettingsFormState
 import eu.torvian.chatbot.app.service.api.ModelApi
 import eu.torvian.chatbot.app.service.api.SettingsApi
 import eu.torvian.chatbot.common.api.ApiError
@@ -106,36 +108,6 @@ class SettingsConfigViewModel(
      * Holds the data for the "Edit Settings Profile" form (E4.S6).
      */
     val editingSettingsForm: StateFlow<EditSettingsFormState> = _editingSettingsForm.asStateFlow()
-
-    /**
-     * Data class representing the state of the "Add New Settings Profile" form for [ChatModelSettings].
-     */
-    data class NewSettingsFormState(
-        val name: String = "",
-        val systemMessage: String = "",
-        val temperature: String = "", // String for UI input
-        val maxTokens: String = "",   // String for UI input
-        val topP: String = "",        // String for UI input
-        val topK: String = "",        // String for UI input
-        val stopSequences: String = "", // Comma-separated string for UI input
-        val customParamsJson: String = "",
-        val errorMessage: String? = null // For inline validation/API errors
-    )
-
-    /**
-     * Data class representing the state of the "Edit Settings Profile" form for [ChatModelSettings].
-     */
-    data class EditSettingsFormState(
-        val name: String = "",
-        val systemMessage: String = "",
-        val temperature: String = "", // String for UI input
-        val maxTokens: String = "",   // String for UI input
-        val topP: String = "",        // String for UI input
-        val topK: String = "",        // String for UI input
-        val stopSequences: String = "", // Comma-separated string for UI input
-        val customParamsJson: String = "",
-        val errorMessage: String? = null // For inline validation/API errors
-    )
 
     // --- Public Action Functions ---
 
@@ -548,3 +520,4 @@ class SettingsConfigViewModel(
         }
     }
 }
+
