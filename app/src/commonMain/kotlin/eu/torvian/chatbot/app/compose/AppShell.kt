@@ -16,6 +16,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import eu.torvian.chatbot.app.compose.common.OverflowTooltipText
+import eu.torvian.chatbot.app.compose.settings.SettingsScreen
 import eu.torvian.chatbot.app.domain.events.GlobalError
 import eu.torvian.chatbot.app.domain.events.GlobalSuccess
 import eu.torvian.chatbot.app.domain.events.SnackbarInteractionEvent
@@ -25,8 +26,8 @@ import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.action_retry
 import eu.torvian.chatbot.app.generated.resources.app_name
 import eu.torvian.chatbot.app.service.misc.EventBus
-import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
+import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
