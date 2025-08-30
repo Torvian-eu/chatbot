@@ -9,11 +9,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import eu.torvian.chatbot.app.domain.contracts.ProviderFormState
 import eu.torvian.chatbot.app.viewmodel.ModelConfigViewModel
 import eu.torvian.chatbot.app.viewmodel.ProviderConfigViewModel
 import eu.torvian.chatbot.app.viewmodel.SettingsConfigViewModel
 import eu.torvian.chatbot.common.models.LLMProvider
-import eu.torvian.chatbot.common.models.LLMProviderType
 import org.koin.compose.viewmodel.koinViewModel
 
 /**
@@ -46,10 +46,9 @@ fun SettingsScreen(
 
     // Collect states from ViewModels
     val providersState by providerConfigViewModel.providersState.collectAsState()
-    val isAddingNewProvider by providerConfigViewModel.isAddingNewProvider.collectAsState()
+    val isEditingProvider by providerConfigViewModel.isEditingProvider.collectAsState()
     val editingProvider by providerConfigViewModel.editingProvider.collectAsState()
-    val newProviderForm by providerConfigViewModel.newProviderForm.collectAsState()
-    val editingProviderForm by providerConfigViewModel.editingProviderForm.collectAsState()
+    val providerForm by providerConfigViewModel.providerForm.collectAsState()
     val credentialUpdateLoading by providerConfigViewModel.credentialUpdateLoading.collectAsState()
 
     val modelsState by modelConfigViewModel.modelsState.collectAsState()
@@ -61,10 +60,9 @@ fun SettingsScreen(
     // Create state objects
     val providersTabState = ProvidersTabState(
         providersUiState = providersState,
-        isAddingNewProvider = isAddingNewProvider,
+        isEditingProvider = isEditingProvider,
         editingProvider = editingProvider,
-        newProviderForm = newProviderForm,
-        editingProviderForm = editingProviderForm,
+        providerForm = providerForm,
         credentialUpdateLoading = credentialUpdateLoading
     )
 
@@ -82,41 +80,14 @@ fun SettingsScreen(
     val providersTabActions = object : ProvidersTabActions {
         override fun onLoadProviders() = providerConfigViewModel.loadProviders()
         override fun onStartAddingNewProvider() = providerConfigViewModel.startAddingNewProvider()
-        override fun onCancelAddingNewProvider() = providerConfigViewModel.cancelAddingNewProvider()
-        override fun onAddNewProvider() = providerConfigViewModel.addNewProvider()
+        override fun onCancelProviderForm() = providerConfigViewModel.cancelProviderForm()
+        override fun onSaveProviderForm() = providerConfigViewModel.saveProviderForm()
         override fun onStartEditingProvider(provider: LLMProvider) =
             providerConfigViewModel.startEditingProvider(provider)
-
-        override fun onCancelEditingProvider() = providerConfigViewModel.cancelEditingProvider()
-        override fun onSaveEditedProviderDetails() = providerConfigViewModel.saveEditedProviderDetails()
         override fun onDeleteProvider(providerId: Long) = providerConfigViewModel.deleteProvider(providerId)
         override fun onUpdateProviderCredential() = providerConfigViewModel.updateProviderCredential()
-
-        override fun onUpdateNewProviderName(name: String) = providerConfigViewModel.updateNewProviderName(name)
-        override fun onUpdateNewProviderType(type: LLMProviderType) =
-            providerConfigViewModel.updateNewProviderType(type)
-
-        override fun onUpdateNewProviderBaseUrl(baseUrl: String) =
-            providerConfigViewModel.updateNewProviderBaseUrl(baseUrl)
-
-        override fun onUpdateNewProviderDescription(description: String) =
-            providerConfigViewModel.updateNewProviderDescription(description)
-
-        override fun onUpdateNewProviderCredential(credential: String) =
-            providerConfigViewModel.updateNewProviderCredential(credential)
-
-        override fun onUpdateEditingProviderName(name: String) = providerConfigViewModel.updateEditingProviderName(name)
-        override fun onUpdateEditingProviderType(type: LLMProviderType) =
-            providerConfigViewModel.updateEditingProviderType(type)
-
-        override fun onUpdateEditingProviderBaseUrl(baseUrl: String) =
-            providerConfigViewModel.updateEditingProviderBaseUrl(baseUrl)
-
-        override fun onUpdateEditingProviderDescription(description: String) =
-            providerConfigViewModel.updateEditingProviderDescription(description)
-
-        override fun onUpdateEditingProviderNewCredentialInput(credential: String) =
-            providerConfigViewModel.updateEditingProviderNewCredentialInput(credential)
+        override fun onUpdateProviderForm(update: (ProviderFormState) -> ProviderFormState) =
+            providerConfigViewModel.updateProviderForm(update)
     }
 
     val modelsTabActions = object : ModelsTabActions {

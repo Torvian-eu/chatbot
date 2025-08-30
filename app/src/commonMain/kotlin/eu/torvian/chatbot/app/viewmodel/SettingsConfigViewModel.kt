@@ -332,14 +332,4 @@ class SettingsConfigViewModel(
             else -> getSupportedSettingsTypes()
         }
     }
-
-    /**
-     * Checks if the form is currently in edit mode.
-     */
-    fun isEditMode(): Boolean = _settingsForm.value.mode == FormMode.EDIT
-
-    /**
-     * Checks if the form is currently in new/create mode.
-     */
-    fun isNewMode(): Boolean = _settingsForm.value.mode == FormMode.NEW
 }

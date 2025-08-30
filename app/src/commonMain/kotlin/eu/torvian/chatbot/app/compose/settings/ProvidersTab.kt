@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ErrorStateDisplay
 import eu.torvian.chatbot.app.compose.common.LoadingStateDisplay
+import eu.torvian.chatbot.app.domain.contracts.FormMode
 import eu.torvian.chatbot.common.models.LLMProvider
 
 /**
@@ -24,6 +25,20 @@ fun ProvidersTab(
 ) {
     var selectedProvider by remember { mutableStateOf<LLMProvider?>(null) }
     var providerToDelete by remember { mutableStateOf<LLMProvider?>(null) }
+
+    // Update selectedProvider when the providers list changes
+    LaunchedEffect(state.providersUiState) {
+        selectedProvider?.let { selected ->
+            // If we have a selected provider, find the updated version in the providers list
+            val providers = state.providersUiState.dataOrNull
+            if (providers != null) {
+                val updatedProvider = providers.find { it.id == selected.id }
+                if (updatedProvider != null && updatedProvider != selected) {
+                    selectedProvider = updatedProvider
+                }
+            }
+        }
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         when {
@@ -107,35 +122,37 @@ fun ProvidersTab(
         }
     }
 
-    // Add Provider Dialog
-    if (state.isAddingNewProvider) {
-        AddProviderDialog(
-            formState = state.newProviderForm,
-            onNameChange = { actions.onUpdateNewProviderName(it) },
-            onTypeChange = { actions.onUpdateNewProviderType(it) },
-            onBaseUrlChange = { actions.onUpdateNewProviderBaseUrl(it) },
-            onDescriptionChange = { actions.onUpdateNewProviderDescription(it) },
-            onCredentialChange = { actions.onUpdateNewProviderCredential(it) },
-            onConfirm = { actions.onAddNewProvider() },
-            onDismiss = { actions.onCancelAddingNewProvider() }
-        )
-    }
-
-    // Edit Provider Dialog
-    state.editingProvider?.let { provider ->
-        EditProviderDialog(
-            provider = provider,
-            formState = state.editingProviderForm,
-            credentialUpdateLoading = state.credentialUpdateLoading,
-            onNameChange = { actions.onUpdateEditingProviderName(it) },
-            onTypeChange = { actions.onUpdateEditingProviderType(it) },
-            onBaseUrlChange = { actions.onUpdateEditingProviderBaseUrl(it) },
-            onDescriptionChange = { actions.onUpdateEditingProviderDescription(it) },
-            onNewCredentialInputChange = { actions.onUpdateEditingProviderNewCredentialInput(it) },
-            onUpdateProvider = { actions.onSaveEditedProviderDetails() },
-            onUpdateCredential = { actions.onUpdateProviderCredential() },
-            onDismiss = { actions.onCancelEditingProvider() }
-        )
+    // Unified Provider Form Dialog (for both adding and editing)
+    if (state.isEditingProvider) {
+        when (state.providerForm.mode) {
+            FormMode.NEW -> {
+                AddProviderDialog(
+                    formState = state.providerForm,
+                    onNameChange = { name -> actions.onUpdateProviderForm { it.copy(name = name) } },
+                    onTypeChange = { type -> actions.onUpdateProviderForm { it.copy(type = type) } },
+                    onBaseUrlChange = { baseUrl -> actions.onUpdateProviderForm { it.copy(baseUrl = baseUrl) } },
+                    onDescriptionChange = { description -> actions.onUpdateProviderForm { it.copy(description = description) } },
+                    onCredentialChange = { credential -> actions.onUpdateProviderForm { it.copy(credential = credential) } },
+                    onConfirm = { actions.onSaveProviderForm() },
+                    onDismiss = { actions.onCancelProviderForm() }
+                )
+            }
+            FormMode.EDIT -> {
+                EditProviderDialog(
+                    originalProviderName = state.editingProvider?.name ?: "Unknown Provider",
+                    formState = state.providerForm,
+                    credentialUpdateLoading = state.credentialUpdateLoading,
+                    onNameChange = { name -> actions.onUpdateProviderForm { it.copy(name = name) } },
+                    onTypeChange = { type -> actions.onUpdateProviderForm { it.copy(type = type) } },
+                    onBaseUrlChange = { baseUrl -> actions.onUpdateProviderForm { it.copy(baseUrl = baseUrl) } },
+                    onDescriptionChange = { description -> actions.onUpdateProviderForm { it.copy(description = description) } },
+                    onNewCredentialInputChange = { credential -> actions.onUpdateProviderForm { it.copy(credential = credential) } },
+                    onUpdateProvider = { actions.onSaveProviderForm() },
+                    onUpdateCredential = { actions.onUpdateProviderCredential() },
+                    onDismiss = { actions.onCancelProviderForm() }
+                )
+            }
+        }
     }
 
     // Delete Confirmation Dialog

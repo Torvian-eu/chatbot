@@ -13,8 +13,7 @@ import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ConfigDropdown
 import eu.torvian.chatbot.app.compose.common.ConfigTextField
 import eu.torvian.chatbot.app.compose.common.CredentialField
-import eu.torvian.chatbot.app.domain.contracts.EditProviderFormState
-import eu.torvian.chatbot.app.domain.contracts.NewProviderFormState
+import eu.torvian.chatbot.app.domain.contracts.ProviderFormState
 import eu.torvian.chatbot.common.models.LLMProvider
 import eu.torvian.chatbot.common.models.LLMProviderType
 
@@ -24,7 +23,7 @@ import eu.torvian.chatbot.common.models.LLMProviderType
  */
 @Composable
 fun AddProviderDialog(
-    formState: NewProviderFormState,
+    formState: ProviderFormState,
     onNameChange: (String) -> Unit,
     onTypeChange: (LLMProviderType) -> Unit,
     onBaseUrlChange: (String) -> Unit,
@@ -53,7 +52,7 @@ fun AddProviderDialog(
                     value = formState.name,
                     onValueChange = onNameChange,
                     label = "Provider Name",
-                    placeholder = "e.g., OpenAI Production",
+                    placeholder = "e.g., OpenAI, Anthropic",
                     isError = formState.errorMessage?.contains("name", ignoreCase = true) ?: false
                 )
 
@@ -71,7 +70,7 @@ fun AddProviderDialog(
                     value = formState.baseUrl,
                     onValueChange = onBaseUrlChange,
                     label = "Base URL",
-                    placeholder = "e.g., https://api.openai.com/v1",
+                    placeholder = "https://api.example.com/v1",
                     isError = formState.errorMessage?.contains("url", ignoreCase = true) ?: false
                 )
 
@@ -84,35 +83,39 @@ fun AddProviderDialog(
                     singleLine = false
                 )
 
-                // API Key (Credential)
+                // API Key (Optional for new providers)
                 CredentialField(
                     value = formState.credential,
                     onValueChange = onCredentialChange,
-                    label = "API Key",
-                    placeholder = "Enter API key (optional for local providers)"
+                    label = "API Key (Optional)",
+                    placeholder = "Enter API key if available"
                 )
 
                 // Error message display
-                formState.errorMessage?.let { errorMessage ->
-                    Text(
-                        text = errorMessage,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                formState.errorMessage?.let { error ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Text(
+                            text = error,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
                 }
             }
         },
         confirmButton = {
-            Button(
-                onClick = onConfirm
-            ) {
+            Button(onClick = onConfirm) {
                 Text("Add Provider")
             }
         },
         dismissButton = {
-            OutlinedButton(
-                onClick = onDismiss
-            ) {
+            TextButton(onClick = onDismiss) {
                 Text("Cancel")
             }
         }
@@ -120,13 +123,13 @@ fun AddProviderDialog(
 }
 
 /**
- * Modal dialog for editing an existing LLM provider (E4.S10, E4.S12).
- * Includes both general provider details and credential management.
+ * Modal dialog for editing an existing LLM provider (E4.S10 & E4.S12).
+ * Supports both general details editing and credential management.
  */
 @Composable
 fun EditProviderDialog(
-    provider: LLMProvider,
-    formState: EditProviderFormState,
+    originalProviderName: String,
+    formState: ProviderFormState,
     credentialUpdateLoading: Boolean,
     onNameChange: (String) -> Unit,
     onTypeChange: (LLMProviderType) -> Unit,
@@ -141,7 +144,7 @@ fun EditProviderDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "Edit Provider: ${provider.name}",
+                text = "Edit Provider: $originalProviderName",
                 style = MaterialTheme.typography.headlineSmall
             )
         },
@@ -202,92 +205,69 @@ fun EditProviderDialog(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
 
-                        // Current API Key Status (E5.S4)
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Current Status:",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                if (provider.apiKeyId != null) {
-                                    Icon(
-                                        imageVector = Icons.Default.Key,
-                                        contentDescription = "API Key Configured",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.padding(end = 4.dp)
-                                    )
-                                    Text(
-                                        text = "Configured",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                } else {
-                                    Text(
-                                        text = "Not configured",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                    )
-                                }
-                            }
-                        }
-
-                        // New API Key Input
+                        // New credential input
                         CredentialField(
-                            value = formState.newCredentialInput,
+                            value = formState.credential,
                             onValueChange = onNewCredentialInputChange,
                             label = "New API Key",
-                            placeholder = "Enter new API key to update (leave empty to keep current)"
+                            placeholder = "Enter new API key to update"
                         )
 
-                        // Update Credential Button
-                        Button(
-                            onClick = onUpdateCredential,
-                            enabled = !credentialUpdateLoading && formState.newCredentialInput.isNotBlank(),
-                            modifier = Modifier.fillMaxWidth()
+                        // Update credential button
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            if (credentialUpdateLoading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    strokeWidth = 2.dp
-                                )
+                            Button(
+                                onClick = onUpdateCredential,
+                                enabled = !credentialUpdateLoading && formState.credential.isNotBlank(),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                if (credentialUpdateLoading) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.Key,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
                                 Spacer(modifier = Modifier.width(8.dp))
+                                Text("Update API Key")
                             }
-                            Text(
-                                text = if (credentialUpdateLoading) "Updating..." else "Update API Key"
-                            )
                         }
                     }
                 }
 
                 // Error message display
-                formState.errorMessage?.let { errorMessage ->
-                    Text(
-                        text = errorMessage,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                formState.errorMessage?.let { error ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Text(
+                            text = error,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
                 }
             }
         },
         confirmButton = {
-            Button(
-                onClick = onUpdateProvider
-            ) {
+            Button(onClick = onUpdateProvider) {
                 Text("Update Provider")
             }
         },
         dismissButton = {
-            OutlinedButton(
-                onClick = onDismiss
-            ) {
+            TextButton(onClick = onDismiss) {
                 Text("Cancel")
             }
         }

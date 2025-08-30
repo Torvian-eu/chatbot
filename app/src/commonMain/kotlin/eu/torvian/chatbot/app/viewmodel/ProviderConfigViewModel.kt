@@ -2,15 +2,14 @@ package eu.torvian.chatbot.app.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import eu.torvian.chatbot.app.domain.contracts.EditProviderFormState
-import eu.torvian.chatbot.app.domain.contracts.NewProviderFormState
+import eu.torvian.chatbot.app.domain.contracts.FormMode
+import eu.torvian.chatbot.app.domain.contracts.ProviderFormState
 import eu.torvian.chatbot.app.domain.contracts.UiState
 import eu.torvian.chatbot.app.service.api.ProviderApi
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.models.AddProviderRequest
 import eu.torvian.chatbot.common.models.LLMProvider
-import eu.torvian.chatbot.common.models.LLMProviderType
 import eu.torvian.chatbot.common.models.UpdateProviderCredentialRequest
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -36,10 +35,8 @@ import kotlinx.coroutines.launch
  * @param uiDispatcher The dispatcher to use for UI-related coroutines. Defaults to Main.
  *
  * @property providersState The state of the list of all configured LLM providers (E4.S9).
- * @property isAddingNewProvider UI state indicating if the new provider input form is visible (E4.S8).
- * @property newProviderForm The data for the "Add New Provider" form (E4.S8).
- * @property editingProvider The provider currently being edited (E4.S10, E4.S12). Null if no provider is being edited.
- * @property editingProviderForm The data for the "Edit Provider" form (E4.S10, E4.S12).
+ * @property isEditingProvider UI state indicating if a provider form is visible and in what mode.
+ * @property providerForm The unified data for both "Add New Provider" and "Edit Provider" forms.
  * @property credentialUpdateLoading UI state indicating if an API credential update operation is in progress (E4.S12).
  */
 class ProviderConfigViewModel(
@@ -57,33 +54,26 @@ class ProviderConfigViewModel(
      */
     val providersState: StateFlow<UiState<ApiError, List<LLMProvider>>> = _providersState.asStateFlow()
 
-    private val _isAddingNewProvider = MutableStateFlow(false)
+    private val _isEditingProvider = MutableStateFlow(false)
 
     /**
-     * Controls the visibility of the "Add New Provider" form (E4.S8).
+     * Controls the visibility of the provider form.
      */
-    val isAddingNewProvider: StateFlow<Boolean> = _isAddingNewProvider.asStateFlow()
-
-    private val _newProviderForm = MutableStateFlow(NewProviderFormState())
-
-    /**
-     * Holds the data for the "Add New Provider" form (E4.S8).
-     */
-    val newProviderForm: StateFlow<NewProviderFormState> = _newProviderForm.asStateFlow()
+    val isEditingProvider: StateFlow<Boolean> = _isEditingProvider.asStateFlow()
 
     private val _editingProvider = MutableStateFlow<LLMProvider?>(null)
 
     /**
-     * The provider currently being edited (E4.S10, E4.S12). Null if no provider is being edited.
+     * The provider currently being edited, if any.
      */
     val editingProvider: StateFlow<LLMProvider?> = _editingProvider.asStateFlow()
 
-    private val _editingProviderForm = MutableStateFlow(EditProviderFormState())
+    private val _providerForm = MutableStateFlow(ProviderFormState())
 
     /**
-     * Holds the data for the "Edit Provider" form (E4.S10, E4.S12).
+     * Holds the unified data for both "Add New Provider" and "Edit Provider" forms.
      */
-    val editingProviderForm: StateFlow<EditProviderFormState> = _editingProviderForm.asStateFlow()
+    val providerForm: StateFlow<ProviderFormState> = _providerForm.asStateFlow()
 
     private val _credentialUpdateLoading = MutableStateFlow(false)
 
@@ -91,7 +81,6 @@ class ProviderConfigViewModel(
      * Indicates if an API credential update operation is in progress (E4.S12).
      */
     val credentialUpdateLoading: StateFlow<Boolean> = _credentialUpdateLoading.asStateFlow()
-
 
     // --- Public Action Functions ---
 
@@ -119,60 +108,63 @@ class ProviderConfigViewModel(
      * Initiates the process of adding a new provider by showing the form (E4.S8).
      */
     fun startAddingNewProvider() {
-        _isAddingNewProvider.value = true
-        _newProviderForm.value = NewProviderFormState() // Reset form
+        _isEditingProvider.value = true
+        _providerForm.value = ProviderFormState(mode = FormMode.NEW)
     }
 
     /**
-     * Cancels the new provider addition process.
+     * Initiates the editing process for an existing provider (E4.S10).
+     *
+     * @param provider The [LLMProvider] to be edited.
      */
-    fun cancelAddingNewProvider() {
-        _isAddingNewProvider.value = false
-        _newProviderForm.value = NewProviderFormState() // Clear form
+    fun startEditingProvider(provider: LLMProvider) {
+        _isEditingProvider.value = true
+        _providerForm.value = ProviderFormState(
+            mode = FormMode.EDIT,
+            name = provider.name,
+            description = provider.description,
+            baseUrl = provider.baseUrl,
+            type = provider.type,
+            credential = "" // Credential input is always fresh
+        )
+        _editingProvider.value = provider
     }
 
     /**
-     * Updates the name field in the new provider form.
+     * Cancels the provider form (both new and edit).
      */
-    fun updateNewProviderName(name: String) {
-        _newProviderForm.update { it.copy(name = name, errorMessage = null) }
+    fun cancelProviderForm() {
+        _isEditingProvider.value = false
+        _providerForm.value = ProviderFormState() // Clear form
+        _editingProvider.value = null
     }
 
     /**
-     * Updates the description field in the new provider form.
+     * Updates the provider form using a transformation function.
      */
-    fun updateNewProviderDescription(description: String) {
-        _newProviderForm.update { it.copy(description = description, errorMessage = null) }
+    fun updateProviderForm(update: (ProviderFormState) -> ProviderFormState) {
+        _providerForm.update { form -> update(form.copy(errorMessage = null)) }
     }
 
     /**
-     * Updates the base URL field in the new provider form.
+     * Saves the provider form data. Behavior depends on the form mode:
+     * - NEW: Creates a new provider
+     * - EDIT: Updates provider details (not credentials)
      */
-    fun updateNewProviderBaseUrl(baseUrl: String) {
-        _newProviderForm.update { it.copy(baseUrl = baseUrl, errorMessage = null) }
-    }
-
-    /**
-     * Updates the type field in the new provider form.
-     */
-    fun updateNewProviderType(type: LLMProviderType) {
-        _newProviderForm.update { it.copy(type = type, errorMessage = null) }
-    }
-
-    /**
-     * Updates the credential field in the new provider form.
-     */
-    fun updateNewProviderCredential(credential: String) {
-        _newProviderForm.update { it.copy(credential = credential, errorMessage = null) }
+    fun saveProviderForm() {
+        val form = _providerForm.value
+        when (form.mode) {
+            FormMode.NEW -> addNewProvider(form)
+            FormMode.EDIT -> saveEditedProviderDetails(form)
+        }
     }
 
     /**
      * Saves the new LLM provider configuration to the backend (E4.S8).
      */
-    fun addNewProvider() {
-        val form = _newProviderForm.value
+    private fun addNewProvider(form: ProviderFormState) {
         if (form.name.isBlank() || form.baseUrl.isBlank()) {
-            _newProviderForm.update { it.copy(errorMessage = "Name and Base URL cannot be empty.") }
+            _providerForm.update { it.withError("Name and Base URL cannot be empty.") }
             return
         }
 
@@ -189,7 +181,7 @@ class ProviderConfigViewModel(
             providerApi.addProvider(request)
                 .fold(
                     ifLeft = { error ->
-                        _newProviderForm.update { it.copy(errorMessage = "Error adding provider: ${error.message}") }
+                        _providerForm.update { it.withError("Error adding provider: ${error.message}") }
                         println("Error adding provider: ${error.code} - ${error.message}")
                     },
                     ifRight = { newProvider ->
@@ -199,81 +191,22 @@ class ProviderConfigViewModel(
                         } else {
                             loadProviders() // Fallback to full reload if state wasn't Success
                         }
-                        cancelAddingNewProvider() // Hide form and reset
+                        cancelProviderForm() // Hide form and reset
                     }
                 )
         }
     }
 
     /**
-     * Initiates the editing process for an existing provider (E4.S10).
-     *
-     * @param provider The [LLMProvider] to be edited.
-     */
-    fun startEditingProvider(provider: LLMProvider) {
-        _editingProvider.value = provider
-        _editingProviderForm.value = EditProviderFormState(
-            name = provider.name,
-            description = provider.description,
-            baseUrl = provider.baseUrl,
-            type = provider.type,
-            newCredentialInput = "" // Credential input is always fresh
-        )
-    }
-
-    /**
-     * Cancels the editing process for a provider.
-     */
-    fun cancelEditingProvider() {
-        _editingProvider.value = null
-        _editingProviderForm.value = EditProviderFormState() // Clear form
-    }
-
-    /**
-     * Updates the name field in the edit provider form.
-     */
-    fun updateEditingProviderName(name: String) {
-        _editingProviderForm.update { it.copy(name = name, errorMessage = null) }
-    }
-
-    /**
-     * Updates the description field in the edit provider form.
-     */
-    fun updateEditingProviderDescription(description: String) {
-        _editingProviderForm.update { it.copy(description = description, errorMessage = null) }
-    }
-
-    /**
-     * Updates the base URL field in the edit provider form.
-     */
-    fun updateEditingProviderBaseUrl(baseUrl: String) {
-        _editingProviderForm.update { it.copy(baseUrl = baseUrl, errorMessage = null) }
-    }
-
-    /**
-     * Updates the type field in the edit provider form.
-     */
-    fun updateEditingProviderType(type: LLMProviderType) {
-        _editingProviderForm.update { it.copy(type = type, errorMessage = null) }
-    }
-
-    /**
-     * Updates the new credential input field in the edit provider form.
-     */
-    fun updateEditingProviderNewCredentialInput(credential: String) {
-        _editingProviderForm.update { it.copy(newCredentialInput = credential, errorMessage = null) }
-    }
-
-    /**
      * Saves the general details (name, description, base URL, type) of an edited provider (E4.S10).
      * This does NOT update the API key.
      */
-    fun saveEditedProviderDetails() {
-        val originalProvider = _editingProvider.value ?: return
-        val form = _editingProviderForm.value
+    private fun saveEditedProviderDetails(form: ProviderFormState) {
+        val currentProviders = _providersState.value.dataOrNull ?: return
+        val originalProvider = _editingProvider.value ?: return // Use the tracked editing provider
 
         if (form.name.isBlank() || form.baseUrl.isBlank()) {
-            _editingProviderForm.update { it.copy(errorMessage = "Name and Base URL cannot be empty.") }
+            _providerForm.update { it.withError("Name and Base URL cannot be empty.") }
             return
         }
 
@@ -283,29 +216,21 @@ class ProviderConfigViewModel(
                 description = form.description.trim(),
                 baseUrl = form.baseUrl.trim(),
                 type = form.type
-                // apiKeyId is not updated here, it's immutable from the DTO perspective for general updates
             )
-            val currentProviders = _providersState.value.dataOrNull
 
             providerApi.updateProvider(updatedProvider)
                 .fold(
                     ifLeft = { error ->
-                        _editingProviderForm.update { it.copy(errorMessage = "Error updating provider: ${error.message}") }
+                        _providerForm.update { it.withError("Error updating provider: ${error.message}") }
                         println("Error updating provider: ${error.code} - ${error.message}")
                     },
                     ifRight = {
                         // Update the provider in the list (E4.S10)
-                        if (currentProviders != null) {
-                            _providersState.value = UiState.Success(currentProviders.map {
-                                if (it.id == updatedProvider.id) updatedProvider else it
-                            })
-                        } else {
-                            loadProviders() // Fallback to full reload
-                        }
-                        // Keep editing state active, but clear error messages related to this save
-                        _editingProviderForm.update { it.copy(errorMessage = null) }
-                        // Also update the _editingProvider itself to reflect changes in the UI
-                        _editingProvider.value = updatedProvider
+                        _providersState.value = UiState.Success(currentProviders.map {
+                            if (it.id == updatedProvider.id) updatedProvider else it
+                        })
+                        // Close the form after successful update
+                        cancelProviderForm()
                     }
                 )
         }
@@ -316,48 +241,42 @@ class ProviderConfigViewModel(
      * This is a separate action to handle the sensitive nature of credentials.
      */
     fun updateProviderCredential() {
-        val providerId = _editingProvider.value?.id ?: return
+        val form = _providerForm.value
+        if (form.mode != FormMode.EDIT) return
+
+        val originalProvider = _editingProvider.value ?: return // Use the tracked editing provider
+        val currentProviders = _providersState.value.dataOrNull ?: return
+
         // Take non-blank credential, otherwise send null to remove it
-        val credential = _editingProviderForm.value.newCredentialInput.takeIf { it.isNotBlank() }
+        val credential = form.credential.takeIf { it.isNotBlank() }
 
         viewModelScope.launch(uiDispatcher) {
             _credentialUpdateLoading.value = true // Show loading indicator specifically for credential
-            _editingProviderForm.update { it.copy(errorMessage = null) } // Clear previous form error
+            _providerForm.update { it.copy(errorMessage = null) } // Clear previous form error
 
-            providerApi.updateProviderCredential(providerId, UpdateProviderCredentialRequest(credential))
+            providerApi.updateProviderCredential(originalProvider.id, UpdateProviderCredentialRequest(credential))
                 .fold(
                     ifLeft = { error ->
-                        _editingProviderForm.update { it.copy(errorMessage = "Error updating credential: ${error.message}") }
+                        _providerForm.update { it.withError("Error updating credential: ${error.message}") }
                         println("Error updating provider credential: ${error.code} - ${error.message}")
                     },
                     ifRight = {
                         // Credential updated successfully. Refresh the provider in the list to reflect apiKeyId status.
-                        // We fetch just the updated provider to avoid a full list refresh for efficiency.
-                        providerApi.getProviderById(providerId)
+                        providerApi.getProviderById(originalProvider.id)
                             .fold(
                                 ifLeft = { error ->
                                     println("Error refreshing provider after credential update: ${error.code} - ${error.message}. Reloading all providers as fallback.")
                                     loadProviders() // Fallback to full reload if fetching single fails
                                 },
                                 ifRight = { updatedProviderFromApi ->
-                                    val currentProviders = _providersState.value.dataOrNull
-                                    if (currentProviders != null) {
-                                        _providersState.value = UiState.Success(currentProviders.map {
-                                            if (it.id == updatedProviderFromApi.id) updatedProviderFromApi else it
-                                        })
-                                    } else {
-                                        loadProviders() // Fallback to full reload if initial state was not success
-                                    }
-                                    _editingProvider.value =
-                                        updatedProviderFromApi // Update the currently edited provider's details
+                                    _providersState.value = UiState.Success(currentProviders.map {
+                                        if (it.id == updatedProviderFromApi.id) updatedProviderFromApi else it
+                                    })
+                                    // Update the editing provider reference as well
+                                    _editingProvider.value = updatedProviderFromApi
                                 }
                             )
-                        _editingProviderForm.update {
-                            it.copy(
-                                newCredentialInput = "",
-                                errorMessage = null
-                            )
-                        } // Clear input field
+                        _providerForm.update { it.copy(credential = "", errorMessage = null) } // Clear input field
                     }
                 )
             _credentialUpdateLoading.value = false
@@ -374,7 +293,6 @@ class ProviderConfigViewModel(
             val currentProviders = _providersState.value.dataOrNull
             if (currentProviders == null) {
                 println("Cannot delete provider: provider list is not in Success state.")
-                // Optionally trigger a reload or show a generic error.
                 return@launch
             }
 
@@ -389,8 +307,6 @@ class ProviderConfigViewModel(
 
                             else -> "Error deleting provider: ${error.message}"
                         }
-                        // This message should ideally be displayed via a transient UI channel (e.g., toast, SnackBar)
-                        // rather than altering the main UiState directly for a list.
                         println(errorMessage) // For now, logging to console
                     },
                     ifRight = {
@@ -398,7 +314,7 @@ class ProviderConfigViewModel(
                         _providersState.value = UiState.Success(currentProviders.filter { it.id != providerId })
                         // If the deleted provider was being edited, clear the editing state
                         if (_editingProvider.value?.id == providerId) {
-                            cancelEditingProvider()
+                            cancelProviderForm()
                         }
                     }
                 )
