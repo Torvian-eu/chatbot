@@ -8,14 +8,6 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 
 /**
- * Enum representing the mode of the form - whether creating new settings or editing existing ones.
- */
-enum class FormMode {
-    NEW,
-    EDIT
-}
-
-/**
  * Sealed class representing the state of form inputs for different types of ModelSettings.
  * Uses FormMode to distinguish between creating new settings and editing existing ones.
  */

@@ -3,6 +3,8 @@ package eu.torvian.chatbot.app.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import arrow.fx.coroutines.parZip
+import eu.torvian.chatbot.app.domain.contracts.FormMode
+import eu.torvian.chatbot.app.domain.contracts.ModelFormState
 import eu.torvian.chatbot.app.domain.contracts.UiState
 import eu.torvian.chatbot.app.service.api.ModelApi
 import eu.torvian.chatbot.app.service.api.ProviderApi
@@ -11,7 +13,6 @@ import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.models.AddModelRequest
 import eu.torvian.chatbot.common.models.LLMModel
-import eu.torvian.chatbot.common.models.LLMModelType
 import eu.torvian.chatbot.common.models.LLMProvider
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -40,9 +41,8 @@ import kotlinx.coroutines.launch
  * @property modelsState The state of the list of all configured LLM models (E4.S2).
  * @property providersForSelection The state of the list of LLM providers available for selection when adding/editing models (E4.S1).
  * @property isAddingNewModel UI state indicating if the "Add New Model" form is visible (E4.S1).
- * @property newModelForm The state of the "Add New Model" form (E4.S1).
+ * @property modelForm The unified state of the model form (for both adding and editing).
  * @property editingModel The model currently being edited (E4.S3). Null if no model is being edited.
- * @property editingModelForm The state of the "Edit Model" form (E4.S3).
  */
 class ModelConfigViewModel(
     private val modelApi: ModelApi,
@@ -75,12 +75,12 @@ class ModelConfigViewModel(
      */
     val isAddingNewModel: StateFlow<Boolean> = _isAddingNewModel.asStateFlow()
 
-    private val _newModelForm = MutableStateFlow(NewModelFormState())
+    private val _modelForm = MutableStateFlow(ModelFormState())
 
     /**
-     * Holds the data for the "Add New Model" form (E4.S1).
+     * Holds the unified form state for model configuration (both adding new and editing existing).
      */
-    val newModelForm: StateFlow<NewModelFormState> = _newModelForm.asStateFlow()
+    val modelForm: StateFlow<ModelFormState> = _modelForm.asStateFlow()
 
     private val _editingModel = MutableStateFlow<LLMModel?>(null)
 
@@ -89,34 +89,6 @@ class ModelConfigViewModel(
      */
     val editingModel: StateFlow<LLMModel?> = _editingModel.asStateFlow()
 
-    private val _editingModelForm = MutableStateFlow(EditModelFormState())
-
-    /**
-     * Holds the data for the "Edit Model" form (E4.S3).
-     */
-    val editingModelForm: StateFlow<EditModelFormState> = _editingModelForm.asStateFlow()
-
-    /**
-     * Data class representing the state of the "Add New Model" form.
-     */
-    data class NewModelFormState(
-        val name: String = "", // e.g., "gpt-3.5-turbo"
-        val providerId: Long? = null,
-        val active: Boolean = true,
-        val displayName: String = "", // Optional, display name for UI
-        val errorMessage: String? = null // For inline validation/API errors
-    )
-
-    /**
-     * Data class representing the state of the "Edit Model" form.
-     */
-    data class EditModelFormState(
-        val name: String = "", // e.g., "gpt-3.5-turbo"
-        val providerId: Long? = null,
-        val active: Boolean = true,
-        val displayName: String = "", // Optional, display name for UI
-        val errorMessage: String? = null // For inline validation/API errors
-    )
 
     // --- Public Action Functions ---
 
@@ -164,7 +136,9 @@ class ModelConfigViewModel(
      */
     fun startAddingNewModel() {
         _isAddingNewModel.value = true
-        _newModelForm.value = NewModelFormState(
+        _editingModel.value = null
+        _modelForm.value = ModelFormState(
+            mode = FormMode.NEW,
             // Pre-select first provider if available, otherwise null
             providerId = _providersForSelection.value.dataOrNull?.firstOrNull()?.id
         )
@@ -175,61 +149,51 @@ class ModelConfigViewModel(
      */
     fun cancelAddingNewModel() {
         _isAddingNewModel.value = false
-        _newModelForm.value = NewModelFormState() // Clear form
+        _modelForm.value = ModelFormState() // Clear form
     }
 
     /**
-     * Updates the name field in the new model form.
+     * Updates any field in the model form using a lambda function.
+     * This replaces all the individual update functions with a single, flexible approach.
      */
-    fun updateNewModelName(name: String) {
-        _newModelForm.update { it.copy(name = name, errorMessage = null) }
+    fun updateModelForm(update: (ModelFormState) -> ModelFormState) {
+        _modelForm.update { update(it).withError(null) }
     }
 
     /**
-     * Updates the provider ID field in the new model form.
+     * Saves the model configuration - either creates new or updates existing based on form mode.
      */
-    fun updateNewModelProviderId(providerId: Long?) {
-        _newModelForm.update { it.copy(providerId = providerId, errorMessage = null) }
-    }
+    fun saveModel() {
+        val form = _modelForm.value
+        if (form.name.isBlank() || form.providerId == null) {
+            _modelForm.update { it.copy(errorMessage = "Model Name and Provider must be selected.") }
+            return
+        }
 
-    /**
-     * Updates the active status field in the new model form.
-     */
-    fun updateNewModelActive(active: Boolean) {
-        _newModelForm.update { it.copy(active = active, errorMessage = null) }
-    }
-
-    /**
-     * Updates the display name field in the new model form.
-     */
-    fun updateNewModelDisplayName(displayName: String) {
-        _newModelForm.update { it.copy(displayName = displayName, errorMessage = null) }
+        when (form.mode) {
+            FormMode.NEW -> addNewModel(form)
+            FormMode.EDIT -> saveEditedModel(form)
+        }
     }
 
     /**
      * Saves the new LLM model configuration to the backend (E4.S1).
      */
-    fun addNewModel() {
-        val form = _newModelForm.value
-        if (form.name.isBlank() || form.providerId == null) {
-            _newModelForm.update { it.copy(errorMessage = "Model Name and Provider must be selected.") }
-            return
-        }
-
+    private fun addNewModel(form: ModelFormState) {
         viewModelScope.launch(uiDispatcher) {
             val request = AddModelRequest(
                 name = form.name.trim(),
-                providerId = form.providerId, // Already validated as non-null
-                type = LLMModelType.CHAT, // Default to CHAT type for now
+                providerId = form.providerId!!, // Already validated as non-null
+                type = form.type,
                 active = form.active,
-                displayName = form.displayName.trim().takeIf { it.isNotBlank() } // Null if blank
+                displayName = form.displayName.trim().takeIf { it.isNotBlank() }
             )
             val currentModels = _modelsState.value.dataOrNull
 
             modelApi.addModel(request)
                 .fold(
                     ifLeft = { error ->
-                        _newModelForm.update { it.copy(errorMessage = "Error adding model: ${error.message}") }
+                        _modelForm.update { it.copy(errorMessage = "Error adding model: ${error.message}") }
                         println("Error adding model: ${error.code} - ${error.message}")
                     },
                     ifRight = { newModel ->
@@ -253,11 +217,14 @@ class ModelConfigViewModel(
      */
     fun startEditingModel(model: LLMModel) {
         _editingModel.value = model
-        _editingModelForm.value = EditModelFormState(
+        _isAddingNewModel.value = false
+        _modelForm.value = ModelFormState(
+            mode = FormMode.EDIT,
             name = model.name,
             providerId = model.providerId,
+            type = model.type,
             active = model.active,
-            displayName = model.displayName ?: "" // Convert null to empty string for UI field
+            displayName = model.displayName ?: ""
         )
     }
 
@@ -266,53 +233,20 @@ class ModelConfigViewModel(
      */
     fun cancelEditingModel() {
         _editingModel.value = null
-        _editingModelForm.value = EditModelFormState() // Clear form
-    }
-
-    /**
-     * Updates the name field in the edit model form.
-     */
-    fun updateEditingModelName(name: String) {
-        _editingModelForm.update { it.copy(name = name, errorMessage = null) }
-    }
-
-    /**
-     * Updates the provider ID field in the edit model form.
-     */
-    fun updateEditingModelProviderId(providerId: Long?) {
-        _editingModelForm.update { it.copy(providerId = providerId, errorMessage = null) }
-    }
-
-    /**
-     * Updates the active status field in the edit model form.
-     */
-    fun updateEditingModelActive(active: Boolean) {
-        _editingModelForm.update { it.copy(active = active, errorMessage = null) }
-    }
-
-    /**
-     * Updates the display name field in the edit model form.
-     */
-    fun updateEditingModelDisplayName(displayName: String) {
-        _editingModelForm.update { it.copy(displayName = displayName, errorMessage = null) }
+        _modelForm.value = ModelFormState() // Clear form
     }
 
     /**
      * Saves the details of an edited model (E4.S3).
      */
-    fun saveEditedModel() {
+    private fun saveEditedModel(form: ModelFormState) {
         val originalModel = _editingModel.value ?: return
-        val form = _editingModelForm.value
-
-        if (form.name.isBlank() || form.providerId == null) {
-            _editingModelForm.update { it.copy(errorMessage = "Model Name and Provider must be selected.") }
-            return
-        }
 
         viewModelScope.launch(uiDispatcher) {
             val updatedModel = originalModel.copy(
                 name = form.name.trim(),
-                providerId = form.providerId, // Already validated as non-null
+                providerId = form.providerId!!, // Already validated as non-null
+                type = form.type,
                 active = form.active,
                 displayName = form.displayName.trim().takeIf { it.isNotBlank() }
             )
@@ -321,7 +255,7 @@ class ModelConfigViewModel(
             modelApi.updateModel(updatedModel)
                 .fold(
                     ifLeft = { error ->
-                        _editingModelForm.update { it.copy(errorMessage = "Error updating model: ${error.message}") }
+                        _modelForm.update { it.copy(errorMessage = "Error updating model: ${error.message}") }
                         println("Error updating model: ${error.code} - ${error.message}")
                     },
                     ifRight = {
@@ -333,8 +267,8 @@ class ModelConfigViewModel(
                         } else {
                             loadModelsAndProviders() // Fallback to full reload
                         }
-                        // Keep editing state active, but clear error messages related to this save
-                        _editingModelForm.update { it.copy(errorMessage = null) }
+                        // Clear error messages related to this save
+                        _modelForm.update { it.copy(errorMessage = null) }
                         // Also update the _editingModel itself to reflect changes in the UI
                         _editingModel.value = updatedModel
                     }
