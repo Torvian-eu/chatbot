@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import arrow.fx.coroutines.parZip
 import eu.torvian.chatbot.app.domain.contracts.FormMode
+import eu.torvian.chatbot.app.domain.contracts.ModelConfigData
 import eu.torvian.chatbot.app.domain.contracts.ModelFormState
 import eu.torvian.chatbot.app.domain.contracts.UiState
 import eu.torvian.chatbot.app.service.api.ModelApi
@@ -13,7 +14,6 @@ import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.models.AddModelRequest
 import eu.torvian.chatbot.common.models.LLMModel
-import eu.torvian.chatbot.common.models.LLMProvider
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,8 +38,7 @@ import kotlinx.coroutines.launch
  * @param providerApi The API client for LLM Provider-related operations.
  * @param uiDispatcher The dispatcher to use for UI-related coroutines. Defaults to Main.
  *
- * @property modelsState The state of the list of all configured LLM models (E4.S2).
- * @property providersForSelection The state of the list of LLM providers available for selection when adding/editing models (E4.S1).
+ * @property modelConfigState The unified state containing both models and providers data.
  * @property isAddingNewModel UI state indicating if the "Add New Model" form is visible (E4.S1).
  * @property modelForm The unified state of the model form (for both adding and editing).
  * @property editingModel The model currently being edited (E4.S3). Null if no model is being edited.
@@ -52,21 +51,27 @@ class ModelConfigViewModel(
 
     // --- Observable State for Compose UI ---
 
-    private val _modelsState = MutableStateFlow<UiState<ApiError, List<LLMModel>>>(UiState.Idle)
+    private val _modelConfigState = MutableStateFlow<UiState<ApiError, ModelConfigData>>(UiState.Idle)
 
     /**
-     * The state of the list of all configured LLM models (E4.S2).
-     * Includes loading, success with data, or error states.
+     * The unified state containing both models and providers data.
+     * This replaces the separate modelsState and providersForSelection properties.
      */
-    val modelsState: StateFlow<UiState<ApiError, List<LLMModel>>> = _modelsState.asStateFlow()
-
-    private val _providersForSelection = MutableStateFlow<UiState<ApiError, List<LLMProvider>>>(UiState.Idle)
+    val modelConfigState: StateFlow<UiState<ApiError, ModelConfigData>> = _modelConfigState.asStateFlow()
 
     /**
-     * The state of the list of LLM providers available for selection when adding/editing models (E4.S1).
-     * This list is used to populate dropdowns in model configuration forms.
+     * Helper property to get the current config data if in success state, null otherwise.
+     * Follows the Law of Demeter and provides a clean way to check for success state.
      */
-    val providersForSelection: StateFlow<UiState<ApiError, List<LLMProvider>>> = _providersForSelection.asStateFlow()
+    private val currentConfigData: ModelConfigData?
+        get() = _modelConfigState.value.dataOrNull
+
+    /**
+     * Helper property to check if the model config state is successfully loaded.
+     * More descriptive than checking for null data.
+     */
+    private val isConfigDataLoaded: Boolean
+        get() = _modelConfigState.value is UiState.Success
 
     private val _isAddingNewModel = MutableStateFlow(false)
 
@@ -111,38 +116,45 @@ class ModelConfigViewModel(
      * Uses parZip for concurrent loading.
      */
     fun loadModelsAndProviders() {
-        if (_modelsState.value.isLoading || _providersForSelection.value.isLoading) return // Prevent duplicate loading
+        if (_modelConfigState.value.isLoading) return // Prevent duplicate loading
 
         viewModelScope.launch(uiDispatcher) {
-            _modelsState.value = UiState.Loading
-            _providersForSelection.value = UiState.Loading
+            _modelConfigState.value = UiState.Loading
 
             parZip(
                 ioDispatcher,
                 { modelApi.getAllModels() },
                 { providerApi.getAllProviders() }
             ) { modelsEither, providersEither ->
-                modelsEither.fold(
+                // Combine both results into a single state update
+                val modelsResult = modelsEither.fold(
                     ifLeft = { error ->
-                        _modelsState.value = UiState.Error(error)
+                        _modelConfigState.value = UiState.Error(error)
                         println("Error loading models: ${error.code} - ${error.message}")
+                        return@parZip
                     },
-                    ifRight = { models ->
-                        _modelsState.value = UiState.Success(models)
-                        // Keep selected model in sync with refreshed list
-                        syncSelectedModelWithList(models)
-                    }
+                    ifRight = { it }
                 )
 
-                providersEither.fold(
+                val providersResult = providersEither.fold(
                     ifLeft = { error ->
-                        _providersForSelection.value = UiState.Error(error)
+                        _modelConfigState.value = UiState.Error(error)
                         println("Error loading providers for model selection: ${error.code} - ${error.message}")
+                        return@parZip
                     },
-                    ifRight = { providers ->
-                        _providersForSelection.value = UiState.Success(providers)
-                    }
+                    ifRight = { it }
                 )
+
+                // Both succeeded, combine into ModelConfigData
+                _modelConfigState.value = UiState.Success(
+                    ModelConfigData(
+                        models = modelsResult,
+                        providers = providersResult
+                    )
+                )
+
+                // Keep selected model in sync with refreshed list
+                syncSelectedModelWithList(modelsResult)
             }
         }
     }
@@ -151,12 +163,15 @@ class ModelConfigViewModel(
      * Initiates the process of adding a new model by showing the form (E4.S1).
      */
     fun startAddingNewModel() {
+        // Only allow adding new models if we have successfully loaded data
+        val configData = currentConfigData ?: return
+
         _isAddingNewModel.value = true
         _editingModel.value = null
         _modelForm.value = ModelFormState(
             mode = FormMode.NEW,
             // Pre-select first provider if available, otherwise null
-            providerId = _providersForSelection.value.dataOrNull?.firstOrNull()?.id
+            providerId = configData.providers.firstOrNull()?.id
         )
     }
 
@@ -180,6 +195,9 @@ class ModelConfigViewModel(
      * Saves the model configuration - either creates new or updates existing based on form mode.
      */
     fun saveModel() {
+        // Only proceed if we have successfully loaded config data
+        if (!isConfigDataLoaded) return
+
         val form = _modelForm.value
         if (form.name.isBlank() || form.providerId == null) {
             _modelForm.update { it.copy(errorMessage = "Model Name and Provider must be selected.") }
@@ -204,7 +222,6 @@ class ModelConfigViewModel(
                 active = form.active,
                 displayName = form.displayName.trim().takeIf { it.isNotBlank() }
             )
-            val currentModels = _modelsState.value.dataOrNull
 
             modelApi.addModel(request)
                 .fold(
@@ -214,12 +231,7 @@ class ModelConfigViewModel(
                     },
                     ifRight = { newModel ->
                         // Add the new model to the list, maintaining the Success state (E4.S1)
-                        if (currentModels != null) {
-                            _modelsState.value = UiState.Success(currentModels + newModel)
-                        } else {
-                            // Fallback to full reload if state wasn't Success (shouldn't happen often)
-                            loadModelsAndProviders()
-                        }
+                        updateModels { it + newModel }
                         cancelAddingNewModel() // Hide form and reset
                         selectModel(newModel)
                     }
@@ -233,6 +245,9 @@ class ModelConfigViewModel(
      * @param model The [LLMModel] to be edited.
      */
     fun startEditingModel(model: LLMModel) {
+        // Only allow editing if we have successfully loaded data (for provider validation)
+        if (!isConfigDataLoaded) return
+
         _editingModel.value = model
         _isAddingNewModel.value = false
         _modelForm.value = ModelFormState(
@@ -267,7 +282,6 @@ class ModelConfigViewModel(
                 active = form.active,
                 displayName = form.displayName.trim().takeIf { it.isNotBlank() }
             )
-            val currentModels = _modelsState.value.dataOrNull
 
             modelApi.updateModel(updatedModel)
                 .fold(
@@ -277,17 +291,14 @@ class ModelConfigViewModel(
                     },
                     ifRight = {
                         // Update the model in the list (E4.S3)
-                        if (currentModels != null) {
-                            val newList = currentModels.map {
-                                if (it.id == updatedModel.id) updatedModel else it
+                        updateModels { models ->
+                            models.map { model ->
+                                if (model.id == updatedModel.id) updatedModel else model
                             }
-                            _modelsState.value = UiState.Success(newList)
-                            // Sync the selected model instance if it's the one updated
-                            if (_selectedModel.value?.id == updatedModel.id) {
-                                _selectedModel.value = updatedModel
-                            }
-                        } else {
-                            loadModelsAndProviders() // Fallback to full reload
+                        }
+                        // Sync the selected model instance if it's the one updated
+                        if (_selectedModel.value?.id == updatedModel.id) {
+                            _selectedModel.value = updatedModel
                         }
                         // Clear error messages related to this save
                         _modelForm.update { it.copy(errorMessage = null) }
@@ -304,13 +315,10 @@ class ModelConfigViewModel(
      * @param modelId The ID of the model to delete.
      */
     fun deleteModel(modelId: Long) {
-        viewModelScope.launch(uiDispatcher) {
-            val currentModels = _modelsState.value.dataOrNull
-            if (currentModels == null) {
-                println("Cannot delete model: model list is not in Success state.")
-                return@launch
-            }
+        // Only proceed if we have successfully loaded models
+        if (!isConfigDataLoaded) return
 
+        viewModelScope.launch(uiDispatcher) {
             modelApi.deleteModel(modelId)
                 .fold(
                     ifLeft = { error ->
@@ -328,7 +336,7 @@ class ModelConfigViewModel(
                     },
                     ifRight = {
                         // Remove the deleted model from the list (E4.S4)
-                        _modelsState.value = UiState.Success(currentModels.filter { it.id != modelId })
+                        updateModels { it.filter { model -> model.id != modelId } }
                         // If the deleted model was being edited, clear the editing state
                         if (_editingModel.value?.id == modelId) {
                             cancelEditingModel()
@@ -343,6 +351,17 @@ class ModelConfigViewModel(
     }
 
     // --- Internal helpers ---
+
+    /**
+     * Convenience function to update only the models list in the config state.
+     * This is the most common operation - updating models while keeping providers unchanged.
+     */
+    private fun updateModels(update: (List<LLMModel>) -> List<LLMModel>) {
+        _modelConfigState.update { state ->
+            val currentData = state.dataOrNull ?: return@update state
+            UiState.Success(currentData.copy(models = update(currentData.models)))
+        }
+    }
 
     /**
      * Ensures that the currently selected model instance is synchronized with the latest list of models.

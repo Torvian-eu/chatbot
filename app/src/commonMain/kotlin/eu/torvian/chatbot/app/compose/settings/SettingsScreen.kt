@@ -53,8 +53,7 @@ fun SettingsScreen(
     val providerForm by providerConfigViewModel.providerForm.collectAsState()
     val credentialUpdateLoading by providerConfigViewModel.credentialUpdateLoading.collectAsState()
 
-    val modelsState by modelConfigViewModel.modelsState.collectAsState()
-    val providersForSelection by modelConfigViewModel.providersForSelection.collectAsState()
+    val modelConfigState by modelConfigViewModel.modelConfigState.collectAsState()
     val isAddingNewModel by modelConfigViewModel.isAddingNewModel.collectAsState()
     val modelForm by modelConfigViewModel.modelForm.collectAsState()
     val editingModel by modelConfigViewModel.editingModel.collectAsState()
@@ -74,8 +73,7 @@ fun SettingsScreen(
     )
 
     val modelsTabState = ModelsTabState(
-        modelsUiState = modelsState,
-        providersForSelection = providersForSelection,
+        modelConfigUiState = modelConfigState,
         isAddingNewModel = isAddingNewModel,
         modelForm = modelForm,
         editingModel = editingModel,

@@ -11,8 +11,7 @@ import androidx.compose.ui.window.Dialog
 import eu.torvian.chatbot.app.compose.common.*
 import eu.torvian.chatbot.app.domain.contracts.FormMode
 import eu.torvian.chatbot.app.domain.contracts.ModelFormState
-import eu.torvian.chatbot.app.domain.contracts.UiState
-import eu.torvian.chatbot.common.api.ApiError
+import eu.torvian.chatbot.app.domain.contracts.ModelConfigData
 import eu.torvian.chatbot.common.models.LLMModelType
 import eu.torvian.chatbot.common.models.LLMProvider
 
@@ -25,7 +24,7 @@ import eu.torvian.chatbot.common.models.LLMProvider
 fun ModelFormDialog(
     title: String,
     form: ModelFormState,
-    providersForSelection: UiState<ApiError, List<LLMProvider>>,
+    modelConfigData: ModelConfigData,
     onFormUpdate: ((ModelFormState) -> ModelFormState) -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit,
@@ -52,35 +51,11 @@ fun ModelFormDialog(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 // Form Content
-                when {
-                    providersForSelection.isLoading -> {
-                        LoadingStateDisplay(
-                            message = "Loading providers...",
-                            modifier = Modifier.fillMaxWidth().height(200.dp)
-                        )
-                    }
-
-                    providersForSelection.isError -> {
-                        val error = providersForSelection.errorOrNull
-                        if (error != null) {
-                            ErrorStateDisplay(
-                                title = "Failed to load providers",
-                                error = error,
-                                onRetry = { /* Could add retry logic here */ },
-                                modifier = Modifier.fillMaxWidth().height(200.dp)
-                            )
-                        }
-                    }
-
-                    providersForSelection.isSuccess -> {
-                        val providers = providersForSelection.dataOrNull ?: emptyList()
-                        ModelFormContent(
-                            form = form,
-                            providers = providers,
-                            onFormUpdate = onFormUpdate
-                        )
-                    }
-                }
+                ModelFormContent(
+                    form = form,
+                    providers = modelConfigData.providers,
+                    onFormUpdate = onFormUpdate
+                )
 
                 // Error message
                 form.errorMessage?.let { error ->
