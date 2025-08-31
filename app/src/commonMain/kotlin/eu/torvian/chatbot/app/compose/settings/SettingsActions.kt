@@ -1,7 +1,9 @@
 package eu.torvian.chatbot.app.compose.settings
 
 import eu.torvian.chatbot.app.domain.contracts.ProviderFormState
+import eu.torvian.chatbot.app.domain.contracts.ModelFormState
 import eu.torvian.chatbot.common.models.LLMProvider
+import eu.torvian.chatbot.common.models.LLMModel
 
 /**
  * Action callbacks for the Providers tab.
@@ -24,6 +26,16 @@ interface ProvidersTabActions {
  */
 interface ModelsTabActions {
     fun onLoadModelsAndProviders()
+    fun onStartAddingNewModel()
+    fun onCancelAddingNewModel()
+    fun onSaveModel()
+    fun onStartEditingModel(model: LLMModel)
+    fun onCancelEditingModel()
+    fun onDeleteModel(modelId: Long)
+    fun onSelectModel(model: LLMModel?)
+
+    // Unified form field updates
+    fun onUpdateModelForm(update: (ModelFormState) -> ModelFormState)
 }
 
 /**

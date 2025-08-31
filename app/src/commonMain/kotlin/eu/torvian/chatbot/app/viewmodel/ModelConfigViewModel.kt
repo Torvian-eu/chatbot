@@ -89,8 +89,22 @@ class ModelConfigViewModel(
      */
     val editingModel: StateFlow<LLMModel?> = _editingModel.asStateFlow()
 
+    private val _selectedModel = MutableStateFlow<LLMModel?>(null)
+
+    /**
+     * The currently selected model in the master-detail UI.
+     */
+    val selectedModel: StateFlow<LLMModel?> = _selectedModel.asStateFlow()
+
 
     // --- Public Action Functions ---
+
+    /**
+     * Selects a model (or clears selection when null).
+     */
+    fun selectModel(model: LLMModel?) {
+        _selectedModel.value = model
+    }
 
     /**
      * Loads all configured LLM models (E4.S2) and providers (for selection dropdown).
@@ -115,6 +129,8 @@ class ModelConfigViewModel(
                     },
                     ifRight = { models ->
                         _modelsState.value = UiState.Success(models)
+                        // Keep selected model in sync with refreshed list
+                        syncSelectedModelWithList(models)
                     }
                 )
 
@@ -205,6 +221,7 @@ class ModelConfigViewModel(
                             loadModelsAndProviders()
                         }
                         cancelAddingNewModel() // Hide form and reset
+                        selectModel(newModel)
                     }
                 )
         }
@@ -261,16 +278,21 @@ class ModelConfigViewModel(
                     ifRight = {
                         // Update the model in the list (E4.S3)
                         if (currentModels != null) {
-                            _modelsState.value = UiState.Success(currentModels.map {
+                            val newList = currentModels.map {
                                 if (it.id == updatedModel.id) updatedModel else it
-                            })
+                            }
+                            _modelsState.value = UiState.Success(newList)
+                            // Sync the selected model instance if it's the one updated
+                            if (_selectedModel.value?.id == updatedModel.id) {
+                                _selectedModel.value = updatedModel
+                            }
                         } else {
                             loadModelsAndProviders() // Fallback to full reload
                         }
                         // Clear error messages related to this save
                         _modelForm.update { it.copy(errorMessage = null) }
-                        // Also update the _editingModel itself to reflect changes in the UI
-                        _editingModel.value = updatedModel
+                        // Close the edit dialog after successful save
+                        cancelEditingModel()
                     }
                 )
         }
@@ -311,8 +333,25 @@ class ModelConfigViewModel(
                         if (_editingModel.value?.id == modelId) {
                             cancelEditingModel()
                         }
+                        // If the deleted model was selected, clear the selection
+                        if (_selectedModel.value?.id == modelId) {
+                            _selectedModel.value = null
+                        }
                     }
                 )
         }
+    }
+
+    // --- Internal helpers ---
+
+    /**
+     * Ensures that the currently selected model instance is synchronized with the latest list of models.
+     * This is important after operations that refresh the model list, such as loading or updating models.
+     *
+     * @param list The latest list of [LLMModel]s.
+     */
+    private fun syncSelectedModelWithList(list: List<LLMModel>) {
+        val sel = _selectedModel.value ?: return
+        _selectedModel.value = list.find { it.id == sel.id }
     }
 }

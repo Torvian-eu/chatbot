@@ -10,10 +10,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.domain.contracts.ProviderFormState
+import eu.torvian.chatbot.app.domain.contracts.ModelFormState
 import eu.torvian.chatbot.app.viewmodel.ModelConfigViewModel
 import eu.torvian.chatbot.app.viewmodel.ProviderConfigViewModel
 import eu.torvian.chatbot.app.viewmodel.SettingsConfigViewModel
 import eu.torvian.chatbot.common.models.LLMProvider
+import eu.torvian.chatbot.common.models.LLMModel
 import org.koin.compose.viewmodel.koinViewModel
 
 /**
@@ -52,6 +54,11 @@ fun SettingsScreen(
     val credentialUpdateLoading by providerConfigViewModel.credentialUpdateLoading.collectAsState()
 
     val modelsState by modelConfigViewModel.modelsState.collectAsState()
+    val providersForSelection by modelConfigViewModel.providersForSelection.collectAsState()
+    val isAddingNewModel by modelConfigViewModel.isAddingNewModel.collectAsState()
+    val modelForm by modelConfigViewModel.modelForm.collectAsState()
+    val editingModel by modelConfigViewModel.editingModel.collectAsState()
+    val selectedModel by modelConfigViewModel.selectedModel.collectAsState()
 
     val modelsForSelection by settingsConfigViewModel.modelsForSelection.collectAsState()
     val selectedModelId by settingsConfigViewModel.selectedModelId.collectAsState()
@@ -67,7 +74,12 @@ fun SettingsScreen(
     )
 
     val modelsTabState = ModelsTabState(
-        modelsUiState = modelsState
+        modelsUiState = modelsState,
+        providersForSelection = providersForSelection,
+        isAddingNewModel = isAddingNewModel,
+        modelForm = modelForm,
+        editingModel = editingModel,
+        selectedModel = selectedModel
     )
 
     val settingsConfigTabState = SettingsConfigTabState(
@@ -92,6 +104,15 @@ fun SettingsScreen(
 
     val modelsTabActions = object : ModelsTabActions {
         override fun onLoadModelsAndProviders() = modelConfigViewModel.loadModelsAndProviders()
+        override fun onStartAddingNewModel() = modelConfigViewModel.startAddingNewModel()
+        override fun onCancelAddingNewModel() = modelConfigViewModel.cancelAddingNewModel()
+        override fun onSaveModel() = modelConfigViewModel.saveModel()
+        override fun onStartEditingModel(model: LLMModel) = modelConfigViewModel.startEditingModel(model)
+        override fun onCancelEditingModel() = modelConfigViewModel.cancelEditingModel()
+        override fun onDeleteModel(modelId: Long) = modelConfigViewModel.deleteModel(modelId)
+        override fun onUpdateModelForm(update: (ModelFormState) -> ModelFormState) =
+            modelConfigViewModel.updateModelForm(update)
+        override fun onSelectModel(model: LLMModel?) = modelConfigViewModel.selectModel(model)
     }
 
     val settingsConfigTabActions = object : SettingsConfigTabActions {
