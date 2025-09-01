@@ -1,13 +1,9 @@
 package eu.torvian.chatbot.app.compose.settings
 
-import eu.torvian.chatbot.app.domain.contracts.ModelConfigData
-import eu.torvian.chatbot.app.domain.contracts.ModelsDialogState
-import eu.torvian.chatbot.app.domain.contracts.ProvidersDialogState
-import eu.torvian.chatbot.app.domain.contracts.UiState
+import eu.torvian.chatbot.app.domain.contracts.*
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.models.LLMModel
 import eu.torvian.chatbot.common.models.LLMProvider
-import eu.torvian.chatbot.common.models.ModelSettings
 
 /**
  * State contract for the Providers tab.
@@ -31,7 +27,7 @@ data class ModelsTabState(
  * State contract for the Settings Config tab.
  */
 data class SettingsConfigTabState(
-    val modelsForSelection: UiState<ApiError, List<LLMModel>>,
+    val settingsConfigState: UiState<ApiError, SettingsConfigData>,
     val selectedModelId: Long?,
-    val settingsState: UiState<ApiError, List<ModelSettings>>
+    val dialogState: SettingsDialogState
 )

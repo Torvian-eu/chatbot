@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ErrorStateDisplay
 import eu.torvian.chatbot.app.compose.common.LoadingStateDisplay
+import eu.torvian.chatbot.app.domain.contracts.UiState
 
 /**
  * Settings management tab with ViewModel integration.
@@ -33,35 +34,28 @@ fun SettingsConfigTab(
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
-        when {
-            state.modelsForSelection.isLoading -> {
+        when (val uiState = state.settingsConfigState) {
+            is UiState.Loading -> {
                 LoadingStateDisplay(
-                    message = "Loading models for settings...",
+                    message = "Loading models and settings...",
                     modifier = Modifier.fillMaxSize()
                 )
             }
 
-            state.modelsForSelection.isError -> {
-                val error = state.modelsForSelection.errorOrNull
-                if (error != null) {
-                    ErrorStateDisplay(
-                        title = "Failed to load models",
-                        error = error,
-                        onRetry = { actions.onLoadModels() },
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else {
-                    Text(
-                        text = "Unknown error occurred",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
+            is UiState.Error -> {
+                val error = uiState.error
+                ErrorStateDisplay(
+                    title = "Failed to load models and settings",
+                    error = error,
+                    onRetry = { actions.onLoadModels() },
+                    modifier = Modifier.fillMaxSize()
+                )
             }
 
-            state.modelsForSelection.isSuccess -> {
-                val models = state.modelsForSelection.dataOrNull ?: emptyList()
+            is UiState.Success -> {
+                val configData = uiState.data
+                val models = configData.models
+                val settings = configData.settings
 
                 if (models.isEmpty()) {
                     Text(
@@ -70,16 +64,10 @@ fun SettingsConfigTab(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 } else {
-                    val settingsCount = when {
-                        state.settingsState.isLoading -> "Loading..."
-                        state.settingsState.isError -> "Error"
-                        else -> state.settingsState.dataOrNull?.size?.toString() ?: "0"
-                    }
-
                     Text(
                         text = "Selected Model ID: ${state.selectedModelId ?: "None"}\n" +
                                 "Available models: ${models.size}\n" +
-                                "Settings profiles: $settingsCount\n\n" +
+                                "Settings profiles: ${settings.size}\n\n" +
                                 "Full settings management UI will be implemented in Phase 4.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onBackground
@@ -87,8 +75,7 @@ fun SettingsConfigTab(
                 }
             }
 
-            else -> {
-                // Idle state
+            is UiState.Idle -> {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center

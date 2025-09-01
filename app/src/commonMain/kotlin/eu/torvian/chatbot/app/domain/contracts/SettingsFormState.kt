@@ -14,6 +14,7 @@ import kotlinx.serialization.json.JsonObject
 sealed class SettingsFormState {
     abstract val mode: FormMode
     abstract val name: String
+    abstract val modelId: Long?
     abstract val customParamsJson: String
     abstract val errorMessage: String?
     abstract val modelType: LLMModelType
@@ -21,6 +22,7 @@ sealed class SettingsFormState {
     data class Chat(
         override val mode: FormMode = FormMode.NEW,
         override val name: String = "",
+        override val modelId: Long? = null,
         val systemMessage: String = "",
         val temperature: String = "",
         val maxTokens: String = "",
@@ -37,6 +39,7 @@ sealed class SettingsFormState {
     data class Embedding(
         override val mode: FormMode = FormMode.NEW,
         override val name: String = "",
+        override val modelId: Long? = null,
         val dimensions: String = "",
         val encodingFormat: String = "",
         override val customParamsJson: String = "",
@@ -54,6 +57,7 @@ fun ModelSettings.toEditFormState(): SettingsFormState {
         is ChatModelSettings -> SettingsFormState.Chat(
             mode = FormMode.EDIT,
             name = this.name,
+            modelId = this.modelId,
             systemMessage = this.systemMessage ?: "",
             temperature = this.temperature?.toString() ?: "",
             maxTokens = this.maxTokens?.toString() ?: "",
@@ -67,6 +71,7 @@ fun ModelSettings.toEditFormState(): SettingsFormState {
         is EmbeddingModelSettings -> SettingsFormState.Embedding(
             mode = FormMode.EDIT,
             name = this.name,
+            modelId = this.modelId,
             dimensions = this.dimensions?.toString() ?: "",
             encodingFormat = this.encodingFormat ?: "",
             customParamsJson = this.customParams?.let { Json.encodeToString(JsonObject.serializer(), it) } ?: ""
@@ -129,6 +134,16 @@ fun SettingsFormState.validate(): String? {
     if (this.name.isBlank()) {
         return "Settings profile name cannot be empty."
     }
+    if (this.modelId == null) {
+        return "Model must be selected."
+    }
+    if (this.customParamsJson.isNotBlank()) {
+        try {
+            Json.decodeFromString<JsonObject>(this.customParamsJson)
+        } catch (_: Exception) {
+            return "Invalid JSON format in custom parameters."
+        }
+    }
 
     when (this) {
         is SettingsFormState.Chat -> {
@@ -150,14 +165,6 @@ fun SettingsFormState.validate(): String? {
             if (this.dimensions.isNotBlank() && this.dimensions.toIntOrNull() == null) {
                 return "Dimensions must be an integer."
             }
-        }
-    }
-
-    if (this.customParamsJson.isNotBlank()) {
-        try {
-            Json.decodeFromString<JsonObject>(this.customParamsJson)
-        } catch (_: Exception) {
-            return "Invalid JSON format in custom parameters."
         }
     }
 
@@ -196,8 +203,5 @@ fun getSupportedSettingsTypes(): List<LLMModelType> {
  * Checks if a ModelSettings instance is of a supported type that can be edited.
  */
 fun isModelSettingsSupported(settings: ModelSettings): Boolean {
-    return when (settings) {
-        is ChatModelSettings, is EmbeddingModelSettings -> true
-        else -> false
-    }
+    return getSupportedSettingsTypes().contains(settings.modelType)
 }

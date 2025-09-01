@@ -9,13 +9,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import eu.torvian.chatbot.app.domain.contracts.ProviderFormState
 import eu.torvian.chatbot.app.domain.contracts.ModelFormState
+import eu.torvian.chatbot.app.domain.contracts.ProviderFormState
 import eu.torvian.chatbot.app.viewmodel.ModelConfigViewModel
 import eu.torvian.chatbot.app.viewmodel.ProviderConfigViewModel
 import eu.torvian.chatbot.app.viewmodel.SettingsConfigViewModel
-import eu.torvian.chatbot.common.models.LLMProvider
 import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.common.models.LLMProvider
 import org.koin.compose.viewmodel.koinViewModel
 
 /**
@@ -55,9 +55,9 @@ fun SettingsScreen(
     val selectedModel by modelConfigViewModel.selectedModel.collectAsState()
     val dialogState by modelConfigViewModel.dialogState.collectAsState()
 
-    val modelsForSelection by settingsConfigViewModel.modelsForSelection.collectAsState()
     val selectedModelId by settingsConfigViewModel.selectedModelId.collectAsState()
-    val settingsState by settingsConfigViewModel.settingsState.collectAsState()
+    val settingsConfigState by settingsConfigViewModel.settingsConfigState.collectAsState()
+    val settingsDialogState by settingsConfigViewModel.dialogState.collectAsState()
 
     // Create state objects
     val providersTabState = ProvidersTabState(
@@ -73,9 +73,9 @@ fun SettingsScreen(
     )
 
     val settingsConfigTabState = SettingsConfigTabState(
-        modelsForSelection = modelsForSelection,
+        settingsConfigState = settingsConfigState,
         selectedModelId = selectedModelId,
-        settingsState = settingsState
+        dialogState = settingsDialogState
     )
 
     // Create action implementations
@@ -87,8 +87,10 @@ fun SettingsScreen(
         override fun onSaveProvider() = providerConfigViewModel.saveProvider()
         override fun onStartEditingProvider(provider: LLMProvider) =
             providerConfigViewModel.startEditingProvider(provider)
+
         override fun onStartDeletingProvider(provider: LLMProvider) =
             providerConfigViewModel.startDeletingProvider(provider)
+
         override fun onDeleteProvider(providerId: Long) = providerConfigViewModel.deleteProvider(providerId)
         override fun onUpdateProviderCredential() = providerConfigViewModel.updateProviderCredential()
         override fun onUpdateProviderForm(update: (ProviderFormState) -> ProviderFormState) =
@@ -105,6 +107,7 @@ fun SettingsScreen(
         override fun onSelectModel(model: LLMModel?) = modelConfigViewModel.selectModel(model)
         override fun onUpdateModelForm(update: (ModelFormState) -> ModelFormState) =
             modelConfigViewModel.updateModelForm(update)
+
         override fun onCancelDialog() = modelConfigViewModel.cancelDialog()
     }
 
