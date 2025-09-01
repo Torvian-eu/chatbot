@@ -63,44 +63,18 @@ class SettingsConfigViewModel(
      */
     val settingsState: StateFlow<UiState<ApiError, List<ModelSettings>>> = _settingsState.asStateFlow()
 
-    private val _isAddingNewSettings = MutableStateFlow(false)
+    private val _dialogState = MutableStateFlow<SettingsDialogState>(SettingsDialogState.None)
 
     /**
-     * Controls the visibility of the "Add New Settings Profile" form (E4.S5).
+     * The current dialog state for the settings tab.
+     * Manages which dialog (if any) should be displayed and contains dialog-specific form state.
      */
-    val isAddingNewSettings: StateFlow<Boolean> = _isAddingNewSettings.asStateFlow()
-
-    private val _settingsForm = MutableStateFlow(getDefaultNewFormState())
-
-    /**
-     * Holds the current form state for settings - can be for adding new settings or editing existing ones.
-     * Check the form's mode property to determine if it's for creation or editing.
-     */
-    val settingsForm: StateFlow<SettingsFormState> = _settingsForm.asStateFlow()
-
-    private val _editingSettings = MutableStateFlow<ModelSettings?>(null)
-
-    /**
-     * The settings profile currently being edited (E4.S6). Null if no settings are being edited.
-     */
-    val editingSettings: StateFlow<ModelSettings?> = _editingSettings.asStateFlow()
-
-    private val _selectedSettingsType = MutableStateFlow(getDefaultSettingsType())
-
-    /**
-     * The type of settings to create when adding new settings profiles.
-     * This determines which form variant will be used for new settings creation.
-     */
-    val selectedSettingsType: StateFlow<LLMModelType> = _selectedSettingsType.asStateFlow()
+    val dialogState: StateFlow<SettingsDialogState> = _dialogState.asStateFlow()
 
     // --- Private Helper Functions ---
 
     private fun getDefaultSettingsType(): LLMModelType {
         return getSupportedSettingsTypes().first()
-    }
-
-    private fun getDefaultNewFormState(): SettingsFormState {
-        return createEmptyNewSettingsForm(getDefaultSettingsType())
     }
 
     // --- Public Action Functions ---
@@ -136,7 +110,7 @@ class SettingsConfigViewModel(
 
         _selectedModelId.value = modelId
         _settingsState.value = UiState.Idle
-        cancelFormOperation()
+        cancelDialog()
 
         if (modelId == null) return
 
@@ -161,66 +135,121 @@ class SettingsConfigViewModel(
     }
 
     /**
+     * Initiates the process of adding a new settings profile by showing the form.
+     */
+    fun startAddingNewSettings() {
+        val availableTypes = getAvailableSettingsTypes()
+        val defaultType = availableTypes.firstOrNull() ?: getDefaultSettingsType()
+
+        _dialogState.value = SettingsDialogState.AddNewSettings(
+            formState = createEmptyNewSettingsForm(defaultType),
+            availableSettingsTypes = availableTypes,
+            selectedSettingsType = defaultType
+        )
+    }
+
+    /**
      * Sets the type of settings to create when adding new settings.
      */
     fun selectSettingsType(modelType: LLMModelType) {
-        _selectedSettingsType.value = modelType
-        if (_isAddingNewSettings.value) {
-            _settingsForm.value = createEmptyNewSettingsForm(modelType)
+        _dialogState.update { dialogState ->
+            when (dialogState) {
+                is SettingsDialogState.AddNewSettings -> dialogState.copy(
+                    selectedSettingsType = modelType,
+                    formState = createEmptyNewSettingsForm(modelType)
+                )
+                else -> dialogState
+            }
         }
     }
 
     /**
-     * Initiates the process of adding a new settings profile by showing the form.
+     * Cancels any dialog operation (adding new or editing existing settings).
      */
-    fun startAddingNewSettings() {
-        _isAddingNewSettings.value = true
-        _editingSettings.value = null
-        _settingsForm.value = createEmptyNewSettingsForm(_selectedSettingsType.value)
-    }
-
-    /**
-     * Cancels any form operation (adding new or editing existing settings).
-     */
-    fun cancelFormOperation() {
-        _isAddingNewSettings.value = false
-        _editingSettings.value = null
-        _settingsForm.value = createEmptyNewSettingsForm(_selectedSettingsType.value)
+    fun cancelDialog() {
+        _dialogState.value = SettingsDialogState.None
     }
 
     /**
      * Updates any field in the current settings form.
      */
     fun updateSettingsForm(update: (SettingsFormState) -> SettingsFormState) {
-        _settingsForm.update { update(it).withError(null) }
+        _dialogState.update { dialogState ->
+            when (dialogState) {
+                is SettingsDialogState.AddNewSettings -> dialogState.copy(
+                    formState = update(dialogState.formState).withError(null)
+                )
+                is SettingsDialogState.EditSettings -> dialogState.copy(
+                    formState = update(dialogState.formState).withError(null)
+                )
+                else -> dialogState
+            }
+        }
     }
 
     /**
-     * Saves the current form - either creates new settings or updates existing ones based on the form mode.
+     * Saves the current form - either creates new settings or updates existing ones based on the dialog state.
      */
     fun saveSettings() {
         val modelId = _selectedModelId.value
         if (modelId == null) {
-            _settingsForm.update { it.withError("No model selected for settings.") }
+            updateSettingsFormError("No model selected for settings.")
             return
         }
 
-        val form = _settingsForm.value
+        when (val dialogState = _dialogState.value) {
+            is SettingsDialogState.AddNewSettings -> saveNewSettings(dialogState, modelId)
+            is SettingsDialogState.EditSettings -> saveEditedSettings(dialogState, modelId)
+            else -> return
+        }
+    }
+
+    private fun saveNewSettings(dialogState: SettingsDialogState.AddNewSettings, modelId: Long) {
+        val form = dialogState.formState
         val validationError = form.validate()
         if (validationError != null) {
-            _settingsForm.update { it.withError(validationError) }
+            updateSettingsFormError(validationError)
             return
         }
 
         viewModelScope.launch(uiDispatcher) {
             try {
-                when (form.mode) {
-                    FormMode.NEW -> addNewSettings(form, modelId)
-                    FormMode.EDIT -> updateExistingSettings(form, modelId)
-                }
+                addNewSettings(form, modelId)
             } catch (e: Exception) {
-                _settingsForm.update { it.withError(e.message) }
+                updateSettingsFormError(e.message)
                 println("Error saving settings: ${e.message}")
+            }
+        }
+    }
+
+    private fun saveEditedSettings(dialogState: SettingsDialogState.EditSettings, modelId: Long) {
+        val form = dialogState.formState
+        val validationError = form.validate()
+        if (validationError != null) {
+            updateSettingsFormError(validationError)
+            return
+        }
+
+        viewModelScope.launch(uiDispatcher) {
+            try {
+                updateExistingSettings(form, dialogState.settings)
+            } catch (e: Exception) {
+                updateSettingsFormError(e.message)
+                println("Error saving settings: ${e.message}")
+            }
+        }
+    }
+
+    private fun updateSettingsFormError(errorMessage: String?) {
+        _dialogState.update { dialogState ->
+            when (dialogState) {
+                is SettingsDialogState.AddNewSettings -> dialogState.copy(
+                    formState = dialogState.formState.withError(errorMessage)
+                )
+                is SettingsDialogState.EditSettings -> dialogState.copy(
+                    formState = dialogState.formState.withError(errorMessage)
+                )
+                else -> dialogState
             }
         }
     }
@@ -232,7 +261,7 @@ class SettingsConfigViewModel(
         settingsApi.addModelSettings(newSettings)
             .fold(
                 ifLeft = { error ->
-                    _settingsForm.update { it.withError("Error adding settings: ${error.message}") }
+                    updateSettingsFormError("Error adding settings: ${error.message}")
                     println("Error adding settings: ${error.code} - ${error.message}")
                 },
                 ifRight = { createdSettings ->
@@ -241,20 +270,19 @@ class SettingsConfigViewModel(
                     } else {
                         selectModel(modelId)
                     }
-                    cancelFormOperation()
+                    cancelDialog()
                 }
             )
     }
 
-    private suspend fun updateExistingSettings(form: SettingsFormState, modelId: Long) {
-        val originalSettings = _editingSettings.value ?: return
+    private suspend fun updateExistingSettings(form: SettingsFormState, originalSettings: ModelSettings) {
         val updatedSettings = form.toModelSettings(originalSettings.id, originalSettings.modelId)
         val currentSettings = _settingsState.value.dataOrNull
 
         settingsApi.updateSettings(updatedSettings)
             .fold(
                 ifLeft = { error ->
-                    _settingsForm.update { it.withError("Error updating settings: ${error.message}") }
+                    updateSettingsFormError("Error updating settings: ${error.message}")
                     println("Error updating settings: ${error.code} - ${error.message}")
                 },
                 ifRight = {
@@ -266,8 +294,15 @@ class SettingsConfigViewModel(
                     } else {
                         selectModel(originalSettings.modelId)
                     }
-                    _settingsForm.update { it.withError(null) }
-                    _editingSettings.value = updatedSettings
+                    _dialogState.update { dialogState ->
+                        when (dialogState) {
+                            is SettingsDialogState.EditSettings -> dialogState.copy(
+                                settings = updatedSettings,
+                                formState = dialogState.formState.withError(null)
+                            )
+                            else -> dialogState
+                        }
+                    }
                 }
             )
     }
@@ -281,9 +316,17 @@ class SettingsConfigViewModel(
             return
         }
 
-        _isAddingNewSettings.value = false
-        _editingSettings.value = settings
-        _settingsForm.value = settings.toEditFormState()
+        _dialogState.value = SettingsDialogState.EditSettings(
+            settings = settings,
+            formState = settings.toEditFormState()
+        )
+    }
+
+    /**
+     * Initiates the deletion process for a settings profile by showing the confirmation dialog.
+     */
+    fun startDeletingSettings(settings: ModelSettings) {
+        _dialogState.value = SettingsDialogState.DeleteSettings(settings)
     }
 
     /**
@@ -310,9 +353,7 @@ class SettingsConfigViewModel(
                     },
                     ifRight = {
                         _settingsState.value = UiState.Success(currentSettings.filter { it.id != settingsId })
-                        if (_editingSettings.value?.id == settingsId) {
-                            cancelFormOperation()
-                        }
+                        cancelDialog()
                     }
                 )
         }
