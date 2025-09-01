@@ -11,9 +11,7 @@ sealed class SettingsDialogState {
     object None : SettingsDialogState()
 
     data class AddNewSettings(
-        val formState: SettingsFormState,
-        val availableSettingsTypes: List<LLMModelType>,
-        val selectedSettingsType: LLMModelType
+        val formState: SettingsFormState
     ) : SettingsDialogState()
 
     data class EditSettings(

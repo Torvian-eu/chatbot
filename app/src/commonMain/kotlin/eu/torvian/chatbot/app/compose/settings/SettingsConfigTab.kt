@@ -65,7 +65,7 @@ fun SettingsConfigTab(
                     )
                 } else {
                     Text(
-                        text = "Selected Model ID: ${state.selectedModelId ?: "None"}\n" +
+                        text = "Selected Model ID: ${state.selectedModel?.id ?: "None"}\n" +
                                 "Available models: ${models.size}\n" +
                                 "Settings profiles: ${settings.size}\n\n" +
                                 "Full settings management UI will be implemented in Phase 4.",

@@ -55,7 +55,8 @@ fun SettingsScreen(
     val selectedModel by modelConfigViewModel.selectedModel.collectAsState()
     val dialogState by modelConfigViewModel.dialogState.collectAsState()
 
-    val selectedModelId by settingsConfigViewModel.selectedModelId.collectAsState()
+    val selectedModelForSettings by settingsConfigViewModel.selectedModel.collectAsState()
+    val selectedSettings by settingsConfigViewModel.selectedSettings.collectAsState()
     val settingsConfigState by settingsConfigViewModel.settingsConfigState.collectAsState()
     val settingsDialogState by settingsConfigViewModel.dialogState.collectAsState()
 
@@ -74,7 +75,8 @@ fun SettingsScreen(
 
     val settingsConfigTabState = SettingsConfigTabState(
         settingsConfigState = settingsConfigState,
-        selectedModelId = selectedModelId,
+        selectedModel= selectedModelForSettings,
+        selectedSettings = selectedSettings,
         dialogState = settingsDialogState
     )
 

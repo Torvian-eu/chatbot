@@ -6,7 +6,7 @@ import eu.torvian.chatbot.app.domain.contracts.*
 import eu.torvian.chatbot.app.service.api.ModelApi
 import eu.torvian.chatbot.app.service.api.SettingsApi
 import eu.torvian.chatbot.common.api.ApiError
-import eu.torvian.chatbot.common.models.LLMModelType
+import eu.torvian.chatbot.common.models.LLMModel
 import eu.torvian.chatbot.common.models.ModelSettings
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -36,7 +36,7 @@ import kotlinx.coroutines.launch
  * @param uiDispatcher The dispatcher to use for UI-related coroutines. Defaults to Main.
  *
  * @property settingsConfigState The state containing both models and settings data for unified state management.
- * @property selectedModelId The ID of the currently selected LLM model. Settings profiles will be loaded for this model.
+ * @property selectedModel The currently selected LLM model. Settings profiles will be loaded for this model.
  * @property dialogState The current dialog state for the settings tab.
  */
 class SettingsConfigViewModel(
@@ -48,7 +48,8 @@ class SettingsConfigViewModel(
     // --- Private State Properties ---
 
     private val _settingsConfigState = MutableStateFlow<UiState<ApiError, SettingsConfigData>>(UiState.Idle)
-    private val _selectedModelId = MutableStateFlow<Long?>(null)
+    private val _selectedModel = MutableStateFlow<LLMModel?>(null)
+    private val _selectedSettings = MutableStateFlow<ModelSettings?>(null)
     private val _dialogState = MutableStateFlow<SettingsDialogState>(SettingsDialogState.None)
 
     // --- Public State Properties ---
@@ -59,10 +60,15 @@ class SettingsConfigViewModel(
     val settingsConfigState: StateFlow<UiState<ApiError, SettingsConfigData>> = _settingsConfigState.asStateFlow()
 
     /**
-     * The ID of the currently selected LLM model. Settings profiles will be loaded for this model.
+     * The currently selected LLM model. Settings profiles will be loaded for this model.
      * If null, no model is selected and no settings are displayed.
      */
-    val selectedModelId: StateFlow<Long?> = _selectedModelId.asStateFlow()
+    val selectedModel: StateFlow<LLMModel?> = _selectedModel.asStateFlow()
+
+    /**
+     * The currently selected settings profile in the master-detail UI.
+     */
+    val selectedSettings: StateFlow<ModelSettings?> = _selectedSettings.asStateFlow()
 
     /**
      * The current dialog state for the settings tab.
@@ -99,9 +105,10 @@ class SettingsConfigViewModel(
                             settings = emptyList()
                         )
                         _settingsConfigState.value = UiState.Success(configData)
-                        if (_selectedModelId.value == null && models.isNotEmpty()) {
-                            selectModel(models.first().id)
+                        if (_selectedModel.value == null && models.isNotEmpty()) {
+                            selectModel(models.first())
                         }
+                        syncSelectedInstances()
                     }
                 )
         }
@@ -110,48 +117,53 @@ class SettingsConfigViewModel(
     /**
      * Selects an LLM model and loads its associated settings profiles.
      */
-    fun selectModel(modelId: Long?) {
-        if (_selectedModelId.value == modelId && currentConfigData?.settings?.isNotEmpty() == true) return
+    fun selectModel(model: LLMModel?) {
+        _selectedModel.value = model
 
-        _selectedModelId.value = modelId
-        cancelDialog()
-
-        if (modelId == null) {
+        if (model == null) {
             // Clear settings when no model is selected
             updateSettingsInState { emptyList() }
             return
         }
 
         viewModelScope.launch(uiDispatcher) {
-            settingsApi.getSettingsByModelId(modelId)
+            settingsApi.getSettingsByModelId(model.id)
                 .fold(
                     ifLeft = { error ->
                         _settingsConfigState.value = UiState.Error(error)
-                        println("Error loading settings for model $modelId: ${error.code} - ${error.message}")
+                        println("Error loading settings for model ${model.id}: ${error.code} - ${error.message}")
                     },
                     ifRight = { settingsList ->
                         // Filter to only supported types
                         val supportedSettings = settingsList.filter { isModelSettingsSupported(it) }
                         updateSettingsInState { supportedSettings }
                         if (supportedSettings.size != settingsList.size) {
-                            println("Warning: Found unsupported ModelSettings types for model $modelId. Only supported types are displayed.")
+                            println("Warning: Found unsupported ModelSettings types for model ${model.id}. Only supported types are displayed.")
                         }
+                        syncSelectedInstances()
                     }
                 )
         }
     }
 
     /**
+     * Selects a settings profile or clears selection when null.
+     */
+    fun selectSettings(settings: ModelSettings?) {
+        _selectedSettings.value = settings
+    }
+
+    /**
      * Initiates the process of adding a new settings profile by showing the form.
      */
     fun startAddingNewSettings() {
-        val availableTypes = getSupportedSettingsTypes()
-        val defaultType = availableTypes.first()
-
+        val selectedModel = _selectedModel.value ?: return
+        if (selectedModel.type !in getSupportedSettingsTypes()) {
+            println("Cannot add new settings: Model type ${selectedModel.type} is not supported.")
+            return
+        }
         _dialogState.value = SettingsDialogState.AddNewSettings(
-            formState = createEmptyNewSettingsForm(defaultType),
-            availableSettingsTypes = availableTypes,
-            selectedSettingsType = defaultType
+            formState = createEmptyNewSettingsForm(selectedModel.type),
         )
     }
 
@@ -175,22 +187,6 @@ class SettingsConfigViewModel(
      */
     fun startDeletingSettings(settings: ModelSettings) {
         _dialogState.value = SettingsDialogState.DeleteSettings(settings)
-    }
-
-    /**
-     * Sets the type of settings to create when adding new settings.
-     */
-    fun selectSettingsType(modelType: LLMModelType) {
-        _dialogState.update { dialogState ->
-            when (dialogState) {
-                is SettingsDialogState.AddNewSettings -> dialogState.copy(
-                    selectedSettingsType = modelType,
-                    formState = createEmptyNewSettingsForm(modelType)
-                )
-
-                else -> dialogState
-            }
-        }
     }
 
     /**
@@ -227,12 +223,6 @@ class SettingsConfigViewModel(
      * Deletes a specific LLM settings profile.
      */
     fun deleteSettings(settingsId: Long) {
-        val modelId = _selectedModelId.value
-        if (modelId == null) {
-            println("Cannot delete settings: No model selected.")
-            return
-        }
-
         viewModelScope.launch(uiDispatcher) {
             val currentSettings = currentConfigData?.settings
             if (currentSettings == null) {
@@ -248,6 +238,10 @@ class SettingsConfigViewModel(
                     ifRight = {
                         updateSettingsInState { currentSettings ->
                             currentSettings.filter { it.id != settingsId }
+                        }
+                        // If the deleted settings was selected, clear the selection
+                        if (_selectedSettings.value?.id == settingsId) {
+                            _selectedSettings.value = null
                         }
                         cancelDialog()
                     }
@@ -302,6 +296,7 @@ class SettingsConfigViewModel(
                             currentSettings + createdSettings
                         }
                         cancelDialog()
+                        selectSettings(createdSettings)
                     }
                 )
         }
@@ -332,6 +327,10 @@ class SettingsConfigViewModel(
                                 if (it.id == updatedSettings.id) updatedSettings else it
                             }
                         }
+                        // Sync the selected settings instance if it's the one updated
+                        if (_selectedSettings.value?.id == updatedSettings.id) {
+                            _selectedSettings.value = updatedSettings
+                        }
                         cancelDialog()
                     }
                 )
@@ -352,5 +351,18 @@ class SettingsConfigViewModel(
                 else -> dialogState
             }
         }
+    }
+
+    /**
+     * Ensures that the currently selected settings and model instances are synchronized with the latest loaded data.
+     * This is important after operations that refresh the model or settings list.
+     */
+    private fun syncSelectedInstances() {
+        val settingsList = _settingsConfigState.value.dataOrNull?.settings
+        val modelsList = _settingsConfigState.value.dataOrNull?.models
+        val selectedSettings = _selectedSettings.value
+        val selectedModel = _selectedModel.value
+        _selectedSettings.value = settingsList?.find { it.id == selectedSettings?.id }
+        _selectedModel.value = modelsList?.find { it.id == selectedModel?.id }
     }
 }
