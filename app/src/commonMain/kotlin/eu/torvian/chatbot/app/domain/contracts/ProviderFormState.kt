@@ -19,4 +19,20 @@ data class ProviderFormState(
      * Creates a copy of this form state with the error message set.
      */
     fun withError(errorMessage: String?): ProviderFormState = copy(errorMessage = errorMessage)
+
+    companion object {
+        /**
+         * Creates a ProviderFormState from an existing LLMProvider for editing.
+         */
+        fun fromProvider(provider: eu.torvian.chatbot.common.models.LLMProvider): ProviderFormState {
+            return ProviderFormState(
+                mode = FormMode.EDIT,
+                name = provider.name,
+                description = provider.description,
+                baseUrl = provider.baseUrl,
+                type = provider.type,
+                credential = "" // Credential input is always fresh for security
+            )
+        }
+    }
 }

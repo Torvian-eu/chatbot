@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Key
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -20,7 +19,6 @@ fun ProviderDetailPanel(
     provider: LLMProvider?,
     onEditProvider: (LLMProvider) -> Unit,
     onDeleteProvider: (LLMProvider) -> Unit,
-    onManageCredentials: (LLMProvider) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -81,16 +79,6 @@ fun ProviderDetailPanel(
                                 imageVector = Icons.Default.Edit,
                                 contentDescription = "Edit Provider",
                                 tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-
-                        IconButton(
-                            onClick = { onManageCredentials(provider) }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Key,
-                                contentDescription = "Manage Credentials",
-                                tint = MaterialTheme.colorScheme.secondary
                             )
                         }
 

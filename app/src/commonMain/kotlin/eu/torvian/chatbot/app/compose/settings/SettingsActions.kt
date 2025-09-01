@@ -10,10 +10,12 @@ import eu.torvian.chatbot.common.models.LLMModel
  */
 interface ProvidersTabActions {
     fun onLoadProviders()
+    fun onSelectProvider(provider: LLMProvider?)
     fun onStartAddingNewProvider()
-    fun onCancelProviderForm()
-    fun onSaveProviderForm()
+    fun onCancelDialog()
+    fun onSaveProvider()
     fun onStartEditingProvider(provider: LLMProvider)
+    fun onStartDeletingProvider(provider: LLMProvider)
     fun onDeleteProvider(providerId: Long)
     fun onUpdateProviderCredential()
 

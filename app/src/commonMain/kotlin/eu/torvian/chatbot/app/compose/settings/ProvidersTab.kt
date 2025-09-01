@@ -4,14 +4,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ErrorStateDisplay
 import eu.torvian.chatbot.app.compose.common.LoadingStateDisplay
-import eu.torvian.chatbot.app.domain.contracts.FormMode
-import eu.torvian.chatbot.common.models.LLMProvider
+import eu.torvian.chatbot.app.domain.contracts.ProvidersDialogState
 
 /**
  * Providers management tab with master-detail layout.
@@ -23,23 +22,6 @@ fun ProvidersTab(
     actions: ProvidersTabActions,
     modifier: Modifier = Modifier
 ) {
-    var selectedProvider by remember { mutableStateOf<LLMProvider?>(null) }
-    var providerToDelete by remember { mutableStateOf<LLMProvider?>(null) }
-
-    // Update selectedProvider when the providers list changes
-    LaunchedEffect(state.providersUiState) {
-        selectedProvider?.let { selected ->
-            // If we have a selected provider, find the updated version in the providers list
-            val providers = state.providersUiState.dataOrNull
-            if (providers != null) {
-                val updatedProvider = providers.find { it.id == selected.id }
-                if (updatedProvider != null && updatedProvider != selected) {
-                    selectedProvider = updatedProvider
-                }
-            }
-        }
-    }
-
     Box(modifier = modifier.fillMaxSize()) {
         when {
             state.providersUiState.isLoading -> {
@@ -48,6 +30,7 @@ fun ProvidersTab(
                     modifier = Modifier.fillMaxSize()
                 )
             }
+
             state.providersUiState.isError -> {
                 val error = state.providersUiState.errorOrNull
                 if (error != null) {
@@ -66,6 +49,7 @@ fun ProvidersTab(
                     )
                 }
             }
+
             state.providersUiState.isSuccess -> {
                 val providers = state.providersUiState.dataOrNull ?: emptyList()
 
@@ -73,8 +57,8 @@ fun ProvidersTab(
                     // Master: Providers List
                     ProvidersListPanel(
                         providers = providers,
-                        selectedProvider = selectedProvider,
-                        onProviderSelected = { selectedProvider = it },
+                        selectedProvider = state.selectedProvider,
+                        onProviderSelected = { actions.onSelectProvider(it) },
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
@@ -82,10 +66,9 @@ fun ProvidersTab(
 
                     // Detail: Provider Details/Edit
                     ProviderDetailPanel(
-                        provider = selectedProvider,
+                        provider = state.selectedProvider,
                         onEditProvider = { actions.onStartEditingProvider(it) },
-                        onDeleteProvider = { providerToDelete = it },
-                        onManageCredentials = { actions.onStartEditingProvider(it) },
+                        onDeleteProvider = { actions.onStartDeletingProvider(it) },
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
@@ -93,6 +76,7 @@ fun ProvidersTab(
                     )
                 }
             }
+
             else -> {
                 // Idle state
                 Box(
@@ -122,52 +106,49 @@ fun ProvidersTab(
         }
     }
 
-    // Unified Provider Form Dialog (for both adding and editing)
-    if (state.isEditingProvider) {
-        when (state.providerForm.mode) {
-            FormMode.NEW -> {
-                AddProviderDialog(
-                    formState = state.providerForm,
-                    onNameChange = { name -> actions.onUpdateProviderForm { it.copy(name = name) } },
-                    onTypeChange = { type -> actions.onUpdateProviderForm { it.copy(type = type) } },
-                    onBaseUrlChange = { baseUrl -> actions.onUpdateProviderForm { it.copy(baseUrl = baseUrl) } },
-                    onDescriptionChange = { description -> actions.onUpdateProviderForm { it.copy(description = description) } },
-                    onCredentialChange = { credential -> actions.onUpdateProviderForm { it.copy(credential = credential) } },
-                    onConfirm = { actions.onSaveProviderForm() },
-                    onDismiss = { actions.onCancelProviderForm() }
-                )
-            }
-            FormMode.EDIT -> {
-                EditProviderDialog(
-                    originalProviderName = state.editingProvider?.name ?: "Unknown Provider",
-                    formState = state.providerForm,
-                    credentialUpdateLoading = state.credentialUpdateLoading,
-                    onNameChange = { name -> actions.onUpdateProviderForm { it.copy(name = name) } },
-                    onTypeChange = { type -> actions.onUpdateProviderForm { it.copy(type = type) } },
-                    onBaseUrlChange = { baseUrl -> actions.onUpdateProviderForm { it.copy(baseUrl = baseUrl) } },
-                    onDescriptionChange = { description -> actions.onUpdateProviderForm { it.copy(description = description) } },
-                    onNewCredentialInputChange = { credential -> actions.onUpdateProviderForm { it.copy(credential = credential) } },
-                    onUpdateProvider = { actions.onSaveProviderForm() },
-                    onUpdateCredential = { actions.onUpdateProviderCredential() },
-                    onDismiss = { actions.onCancelProviderForm() }
-                )
-            }
+    // Dialog handling based on dialog state
+    when (val dialogState = state.dialogState) {
+        is ProvidersDialogState.None -> {
+            // No dialog open
         }
-    }
 
-    // Delete Confirmation Dialog
-    providerToDelete?.let { provider ->
-        DeleteProviderConfirmationDialog(
-            provider = provider,
-            onConfirm = {
-                actions.onDeleteProvider(provider.id)
-                providerToDelete = null
-                // Clear selection if we're deleting the selected provider
-                if (selectedProvider?.id == provider.id) {
-                    selectedProvider = null
-                }
-            },
-            onDismiss = { providerToDelete = null }
-        )
+        is ProvidersDialogState.AddNewProvider -> {
+            AddProviderDialog(
+                formState = dialogState.formState,
+                onNameChange = { name -> actions.onUpdateProviderForm { it.copy(name = name) } },
+                onTypeChange = { type -> actions.onUpdateProviderForm { it.copy(type = type) } },
+                onBaseUrlChange = { baseUrl -> actions.onUpdateProviderForm { it.copy(baseUrl = baseUrl) } },
+                onDescriptionChange = { description -> actions.onUpdateProviderForm { it.copy(description = description) } },
+                onCredentialChange = { credential -> actions.onUpdateProviderForm { it.copy(credential = credential) } },
+                onConfirm = { actions.onSaveProvider() },
+                onDismiss = { actions.onCancelDialog() }
+            )
+        }
+
+        is ProvidersDialogState.EditProvider -> {
+            EditProviderDialog(
+                originalProviderName = dialogState.provider.name,
+                formState = dialogState.formState,
+                credentialUpdateLoading = dialogState.isUpdatingCredential,
+                onNameChange = { name -> actions.onUpdateProviderForm { it.copy(name = name) } },
+                onTypeChange = { type -> actions.onUpdateProviderForm { it.copy(type = type) } },
+                onBaseUrlChange = { baseUrl -> actions.onUpdateProviderForm { it.copy(baseUrl = baseUrl) } },
+                onDescriptionChange = { description -> actions.onUpdateProviderForm { it.copy(description = description) } },
+                onNewCredentialInputChange = { credential -> actions.onUpdateProviderForm { it.copy(credential = credential) } },
+                onUpdateProvider = { actions.onSaveProvider() },
+                onUpdateCredential = { actions.onUpdateProviderCredential() },
+                onDismiss = { actions.onCancelDialog() }
+            )
+        }
+
+        is ProvidersDialogState.DeleteProvider -> {
+            DeleteProviderConfirmationDialog(
+                provider = dialogState.provider,
+                onConfirm = {
+                    actions.onDeleteProvider(dialogState.provider.id)
+                },
+                onDismiss = { actions.onCancelDialog() }
+            )
+        }
     }
 }

@@ -48,10 +48,8 @@ fun SettingsScreen(
 
     // Collect states from ViewModels
     val providersState by providerConfigViewModel.providersState.collectAsState()
-    val isEditingProvider by providerConfigViewModel.isEditingProvider.collectAsState()
-    val editingProvider by providerConfigViewModel.editingProvider.collectAsState()
-    val providerForm by providerConfigViewModel.providerForm.collectAsState()
-    val credentialUpdateLoading by providerConfigViewModel.credentialUpdateLoading.collectAsState()
+    val selectedProvider by providerConfigViewModel.selectedProvider.collectAsState()
+    val providersDialogState by providerConfigViewModel.dialogState.collectAsState()
 
     val modelConfigState by modelConfigViewModel.modelConfigState.collectAsState()
     val selectedModel by modelConfigViewModel.selectedModel.collectAsState()
@@ -64,10 +62,8 @@ fun SettingsScreen(
     // Create state objects
     val providersTabState = ProvidersTabState(
         providersUiState = providersState,
-        isEditingProvider = isEditingProvider,
-        editingProvider = editingProvider,
-        providerForm = providerForm,
-        credentialUpdateLoading = credentialUpdateLoading
+        selectedProvider = selectedProvider,
+        dialogState = providersDialogState
     )
 
     val modelsTabState = ModelsTabState(
@@ -85,11 +81,14 @@ fun SettingsScreen(
     // Create action implementations
     val providersTabActions = object : ProvidersTabActions {
         override fun onLoadProviders() = providerConfigViewModel.loadProviders()
+        override fun onSelectProvider(provider: LLMProvider?) = providerConfigViewModel.selectProvider(provider)
         override fun onStartAddingNewProvider() = providerConfigViewModel.startAddingNewProvider()
-        override fun onCancelProviderForm() = providerConfigViewModel.cancelProviderForm()
-        override fun onSaveProviderForm() = providerConfigViewModel.saveProviderForm()
+        override fun onCancelDialog() = providerConfigViewModel.cancelDialog()
+        override fun onSaveProvider() = providerConfigViewModel.saveProvider()
         override fun onStartEditingProvider(provider: LLMProvider) =
             providerConfigViewModel.startEditingProvider(provider)
+        override fun onStartDeletingProvider(provider: LLMProvider) =
+            providerConfigViewModel.startDeletingProvider(provider)
         override fun onDeleteProvider(providerId: Long) = providerConfigViewModel.deleteProvider(providerId)
         override fun onUpdateProviderCredential() = providerConfigViewModel.updateProviderCredential()
         override fun onUpdateProviderForm(update: (ProviderFormState) -> ProviderFormState) =
