@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.app.domain.contracts
 
 import eu.torvian.chatbot.common.models.LLMModelType
+import eu.torvian.chatbot.common.models.LLMModel
 
 /**
  * Data class representing the state of model configuration forms.
@@ -19,4 +20,18 @@ data class ModelFormState(
      * Creates a copy of this form state with the error message cleared.
      */
     fun withError(errorMessage: String?): ModelFormState = copy(errorMessage = errorMessage)
+
+    companion object {
+        /**
+         * Creates a ModelFormState from an existing LLMModel for editing.
+         */
+        fun fromModel(model: LLMModel): ModelFormState = ModelFormState(
+            mode = FormMode.EDIT,
+            name = model.name,
+            providerId = model.providerId,
+            type = model.type,
+            active = model.active,
+            displayName = model.displayName ?: ""
+        )
+    }
 }

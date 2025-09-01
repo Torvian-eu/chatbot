@@ -54,10 +54,8 @@ fun SettingsScreen(
     val credentialUpdateLoading by providerConfigViewModel.credentialUpdateLoading.collectAsState()
 
     val modelConfigState by modelConfigViewModel.modelConfigState.collectAsState()
-    val isAddingNewModel by modelConfigViewModel.isAddingNewModel.collectAsState()
-    val modelForm by modelConfigViewModel.modelForm.collectAsState()
-    val editingModel by modelConfigViewModel.editingModel.collectAsState()
     val selectedModel by modelConfigViewModel.selectedModel.collectAsState()
+    val dialogState by modelConfigViewModel.dialogState.collectAsState()
 
     val modelsForSelection by settingsConfigViewModel.modelsForSelection.collectAsState()
     val selectedModelId by settingsConfigViewModel.selectedModelId.collectAsState()
@@ -74,10 +72,8 @@ fun SettingsScreen(
 
     val modelsTabState = ModelsTabState(
         modelConfigUiState = modelConfigState,
-        isAddingNewModel = isAddingNewModel,
-        modelForm = modelForm,
-        editingModel = editingModel,
-        selectedModel = selectedModel
+        selectedModel = selectedModel,
+        dialogState = dialogState
     )
 
     val settingsConfigTabState = SettingsConfigTabState(
@@ -103,14 +99,14 @@ fun SettingsScreen(
     val modelsTabActions = object : ModelsTabActions {
         override fun onLoadModelsAndProviders() = modelConfigViewModel.loadModelsAndProviders()
         override fun onStartAddingNewModel() = modelConfigViewModel.startAddingNewModel()
-        override fun onCancelAddingNewModel() = modelConfigViewModel.cancelAddingNewModel()
         override fun onSaveModel() = modelConfigViewModel.saveModel()
         override fun onStartEditingModel(model: LLMModel) = modelConfigViewModel.startEditingModel(model)
-        override fun onCancelEditingModel() = modelConfigViewModel.cancelEditingModel()
+        override fun onStartDeletingModel(model: LLMModel) = modelConfigViewModel.startDeletingModel(model)
         override fun onDeleteModel(modelId: Long) = modelConfigViewModel.deleteModel(modelId)
+        override fun onSelectModel(model: LLMModel?) = modelConfigViewModel.selectModel(model)
         override fun onUpdateModelForm(update: (ModelFormState) -> ModelFormState) =
             modelConfigViewModel.updateModelForm(update)
-        override fun onSelectModel(model: LLMModel?) = modelConfigViewModel.selectModel(model)
+        override fun onCancelDialog() = modelConfigViewModel.cancelDialog()
     }
 
     val settingsConfigTabActions = object : SettingsConfigTabActions {

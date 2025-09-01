@@ -1,15 +1,16 @@
 package eu.torvian.chatbot.app.compose.settings
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ErrorStateDisplay
 import eu.torvian.chatbot.app.compose.common.LoadingStateDisplay
 import eu.torvian.chatbot.app.domain.contracts.UiState
-import eu.torvian.chatbot.common.models.LLMModel
 
 /**
  * Models management tab with master-detail layout.
@@ -21,8 +22,6 @@ fun ModelsTab(
     actions: ModelsTabActions,
     modifier: Modifier = Modifier
 ) {
-    var modelToDelete by remember { mutableStateOf<LLMModel?>(null) }
-
     Box(modifier = modifier.fillMaxSize()) {
         when (val uiState = state.modelConfigUiState) {
             is UiState.Loading -> {
@@ -62,7 +61,9 @@ fun ModelsTab(
                     ModelDetailPanel(
                         model = state.selectedModel,
                         onEditModel = { actions.onStartEditingModel(it) },
-                        onDeleteModel = { modelToDelete = it },
+                        onDeleteModel = { model ->
+                            actions.onStartDeletingModel(model)
+                        },
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
@@ -94,69 +95,11 @@ fun ModelsTab(
                 }
             }
         }
-
-        // Add New Model Dialog
-        if (state.isAddingNewModel) {
-            when (val uiState = state.modelConfigUiState) {
-                is UiState.Success -> {
-                    ModelFormDialog(
-                        title = "Add New Model",
-                        form = state.modelForm,
-                        modelConfigData = uiState.data,
-                        onFormUpdate = { update -> actions.onUpdateModelForm(update) },
-                        onSave = { actions.onSaveModel() },
-                        onCancel = { actions.onCancelAddingNewModel() }
-                    )
-                }
-                else -> {
-                    // Don't show dialog if data isn't loaded
-                }
-            }
-        }
-
-        // Edit Model Dialog
-        if (state.editingModel != null) {
-            when (val uiState = state.modelConfigUiState) {
-                is UiState.Success -> {
-                    ModelFormDialog(
-                        title = "Edit Model",
-                        form = state.modelForm,
-                        modelConfigData = uiState.data,
-                        onFormUpdate = { update -> actions.onUpdateModelForm(update) },
-                        onSave = { actions.onSaveModel() },
-                        onCancel = { actions.onCancelEditingModel() }
-                    )
-                }
-                else -> {
-                    // Don't show dialog if data isn't loaded
-                }
-            }
-        }
-
-        // Delete Confirmation Dialog
-        modelToDelete?.let { model ->
-            AlertDialog(
-                onDismissRequest = { modelToDelete = null },
-                title = { Text("Delete Model") },
-                text = {
-                    Text("Are you sure you want to delete the model '${model.displayName ?: model.name}'? This action cannot be undone.")
-                },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            actions.onDeleteModel(model.id)
-                            modelToDelete = null
-                        }
-                    ) {
-                        Text("Delete")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { modelToDelete = null }) {
-                        Text("Cancel")
-                    }
-                }
-            )
-        }
     }
+
+    ModelsDialogs(
+        dialogState = state.dialogState,
+        state = state,
+        actions = actions
+    )
 }

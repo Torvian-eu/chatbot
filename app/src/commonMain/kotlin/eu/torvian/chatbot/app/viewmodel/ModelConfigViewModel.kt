@@ -3,10 +3,7 @@ package eu.torvian.chatbot.app.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import arrow.fx.coroutines.parZip
-import eu.torvian.chatbot.app.domain.contracts.FormMode
-import eu.torvian.chatbot.app.domain.contracts.ModelConfigData
-import eu.torvian.chatbot.app.domain.contracts.ModelFormState
-import eu.torvian.chatbot.app.domain.contracts.UiState
+import eu.torvian.chatbot.app.domain.contracts.*
 import eu.torvian.chatbot.app.service.api.ModelApi
 import eu.torvian.chatbot.app.service.api.ProviderApi
 import eu.torvian.chatbot.app.utils.misc.ioDispatcher
@@ -39,9 +36,8 @@ import kotlinx.coroutines.launch
  * @param uiDispatcher The dispatcher to use for UI-related coroutines. Defaults to Main.
  *
  * @property modelConfigState The unified state containing both models and providers data.
- * @property isAddingNewModel UI state indicating if the "Add New Model" form is visible (E4.S1).
- * @property modelForm The unified state of the model form (for both adding and editing).
- * @property editingModel The model currently being edited (E4.S3). Null if no model is being edited.
+ * @property selectedModel The currently selected model in the master-detail UI.
+ * @property dialogState The current dialog state for the models tab.
  */
 class ModelConfigViewModel(
     private val modelApi: ModelApi,
@@ -49,74 +45,52 @@ class ModelConfigViewModel(
     private val uiDispatcher: CoroutineDispatcher = Dispatchers.Main
 ) : ViewModel() {
 
-    // --- Observable State for Compose UI ---
+    // --- Private State Properties ---
 
     private val _modelConfigState = MutableStateFlow<UiState<ApiError, ModelConfigData>>(UiState.Idle)
+    private val _selectedModel = MutableStateFlow<LLMModel?>(null)
+    private val _dialogState = MutableStateFlow<ModelsDialogState>(ModelsDialogState.None)
+
+    // --- Public State Properties ---
 
     /**
-     * The unified state containing both models and providers data.
-     * This replaces the separate modelsState and providersForSelection properties.
+     * The state containing both models and providers data.
      */
     val modelConfigState: StateFlow<UiState<ApiError, ModelConfigData>> = _modelConfigState.asStateFlow()
-
-    /**
-     * Helper property to get the current config data if in success state, null otherwise.
-     * Follows the Law of Demeter and provides a clean way to check for success state.
-     */
-    private val currentConfigData: ModelConfigData?
-        get() = _modelConfigState.value.dataOrNull
-
-    /**
-     * Helper property to check if the model config state is successfully loaded.
-     * More descriptive than checking for null data.
-     */
-    private val isConfigDataLoaded: Boolean
-        get() = _modelConfigState.value is UiState.Success
-
-    private val _isAddingNewModel = MutableStateFlow(false)
-
-    /**
-     * Controls the visibility of the "Add New Model" form (E4.S1).
-     */
-    val isAddingNewModel: StateFlow<Boolean> = _isAddingNewModel.asStateFlow()
-
-    private val _modelForm = MutableStateFlow(ModelFormState())
-
-    /**
-     * Holds the unified form state for model configuration (both adding new and editing existing).
-     */
-    val modelForm: StateFlow<ModelFormState> = _modelForm.asStateFlow()
-
-    private val _editingModel = MutableStateFlow<LLMModel?>(null)
-
-    /**
-     * The model currently being edited (E4.S3). Null if no model is being edited.
-     */
-    val editingModel: StateFlow<LLMModel?> = _editingModel.asStateFlow()
-
-    private val _selectedModel = MutableStateFlow<LLMModel?>(null)
 
     /**
      * The currently selected model in the master-detail UI.
      */
     val selectedModel: StateFlow<LLMModel?> = _selectedModel.asStateFlow()
 
+    /**
+     * The current dialog state for the models tab.
+     * Manages which dialog (if any) should be displayed and contains dialog-specific form state.
+     */
+    val dialogState: StateFlow<ModelsDialogState> = _dialogState.asStateFlow()
 
-    // --- Public Action Functions ---
+    // --- Helper Properties ---
 
     /**
-     * Selects a model (or clears selection when null).
+     * Helper property to get the current config data if in success state, null otherwise.
      */
-    fun selectModel(model: LLMModel?) {
-        _selectedModel.value = model
-    }
+    private val currentConfigData: ModelConfigData?
+        get() = _modelConfigState.value.dataOrNull
+
+    /**
+     * Helper property to check if the model config state is successfully loaded.
+     */
+    private val isConfigDataLoaded: Boolean
+        get() = _modelConfigState.value is UiState.Success
+
+    // --- Public Action Functions ---
 
     /**
      * Loads all configured LLM models (E4.S2) and providers (for selection dropdown).
      * Uses parZip for concurrent loading.
      */
     fun loadModelsAndProviders() {
-        if (_modelConfigState.value.isLoading) return // Prevent duplicate loading
+        if (_modelConfigState.value.isLoading) return
 
         viewModelScope.launch(uiDispatcher) {
             _modelConfigState.value = UiState.Loading
@@ -160,83 +134,27 @@ class ModelConfigViewModel(
     }
 
     /**
+     * Selects a model (or clears selection when null).
+     */
+    fun selectModel(model: LLMModel?) {
+        _selectedModel.value = model
+    }
+
+    /**
      * Initiates the process of adding a new model by showing the form (E4.S1).
      */
     fun startAddingNewModel() {
-        // Only allow adding new models if we have successfully loaded data
+        // Only proceed if we have successfully loaded config data
         val configData = currentConfigData ?: return
 
-        _isAddingNewModel.value = true
-        _editingModel.value = null
-        _modelForm.value = ModelFormState(
-            mode = FormMode.NEW,
-            // Pre-select first provider if available, otherwise null
-            providerId = configData.providers.firstOrNull()?.id
+        _dialogState.value = ModelsDialogState.AddNewModel(
+            formState = ModelFormState(
+                mode = FormMode.NEW,
+                // Pre-select first provider if available, otherwise null
+                providerId = configData.providers.firstOrNull()?.id
+            ),
+            providers = configData.providers
         )
-    }
-
-    /**
-     * Cancels the new model addition process.
-     */
-    fun cancelAddingNewModel() {
-        _isAddingNewModel.value = false
-        _modelForm.value = ModelFormState() // Clear form
-    }
-
-    /**
-     * Updates any field in the model form using a lambda function.
-     * This replaces all the individual update functions with a single, flexible approach.
-     */
-    fun updateModelForm(update: (ModelFormState) -> ModelFormState) {
-        _modelForm.update { update(it).withError(null) }
-    }
-
-    /**
-     * Saves the model configuration - either creates new or updates existing based on form mode.
-     */
-    fun saveModel() {
-        // Only proceed if we have successfully loaded config data
-        if (!isConfigDataLoaded) return
-
-        val form = _modelForm.value
-        if (form.name.isBlank() || form.providerId == null) {
-            _modelForm.update { it.copy(errorMessage = "Model Name and Provider must be selected.") }
-            return
-        }
-
-        when (form.mode) {
-            FormMode.NEW -> addNewModel(form)
-            FormMode.EDIT -> saveEditedModel(form)
-        }
-    }
-
-    /**
-     * Saves the new LLM model configuration to the backend (E4.S1).
-     */
-    private fun addNewModel(form: ModelFormState) {
-        viewModelScope.launch(uiDispatcher) {
-            val request = AddModelRequest(
-                name = form.name.trim(),
-                providerId = form.providerId!!, // Already validated as non-null
-                type = form.type,
-                active = form.active,
-                displayName = form.displayName.trim().takeIf { it.isNotBlank() }
-            )
-
-            modelApi.addModel(request)
-                .fold(
-                    ifLeft = { error ->
-                        _modelForm.update { it.copy(errorMessage = "Error adding model: ${error.message}") }
-                        println("Error adding model: ${error.code} - ${error.message}")
-                    },
-                    ifRight = { newModel ->
-                        // Add the new model to the list, maintaining the Success state (E4.S1)
-                        updateModels { it + newModel }
-                        cancelAddingNewModel() // Hide form and reset
-                        selectModel(newModel)
-                    }
-                )
-        }
     }
 
     /**
@@ -245,67 +163,62 @@ class ModelConfigViewModel(
      * @param model The [LLMModel] to be edited.
      */
     fun startEditingModel(model: LLMModel) {
-        // Only allow editing if we have successfully loaded data (for provider validation)
-        if (!isConfigDataLoaded) return
+        // Only proceed if we have successfully loaded config data
+        val configData = currentConfigData ?: return
 
-        _editingModel.value = model
-        _isAddingNewModel.value = false
-        _modelForm.value = ModelFormState(
-            mode = FormMode.EDIT,
-            name = model.name,
-            providerId = model.providerId,
-            type = model.type,
-            active = model.active,
-            displayName = model.displayName ?: ""
+        // Set the dialog state to show the edit form
+        _dialogState.value = ModelsDialogState.EditModel(
+            model = model,
+            formState = ModelFormState.fromModel(model),
+            providers = configData.providers
         )
     }
 
     /**
-     * Cancels the editing process for a model.
+     * Initiates the deletion process for a model by showing the confirmation dialog.
+     *
+     * @param model The [LLMModel] to be deleted.
      */
-    fun cancelEditingModel() {
-        _editingModel.value = null
-        _modelForm.value = ModelFormState() // Clear form
+    fun startDeletingModel(model: LLMModel) {
+        // Only proceed if we have successfully loaded config data
+        if (!isConfigDataLoaded) return
+
+        // Set the dialog state to show the delete confirmation dialog
+        _dialogState.value = ModelsDialogState.DeleteModel(model)
     }
 
     /**
-     * Saves the details of an edited model (E4.S3).
+     * Updates any field in the model form using a lambda function.
      */
-    private fun saveEditedModel(form: ModelFormState) {
-        val originalModel = _editingModel.value ?: return
-
-        viewModelScope.launch(uiDispatcher) {
-            val updatedModel = originalModel.copy(
-                name = form.name.trim(),
-                providerId = form.providerId!!, // Already validated as non-null
-                type = form.type,
-                active = form.active,
-                displayName = form.displayName.trim().takeIf { it.isNotBlank() }
-            )
-
-            modelApi.updateModel(updatedModel)
-                .fold(
-                    ifLeft = { error ->
-                        _modelForm.update { it.copy(errorMessage = "Error updating model: ${error.message}") }
-                        println("Error updating model: ${error.code} - ${error.message}")
-                    },
-                    ifRight = {
-                        // Update the model in the list (E4.S3)
-                        updateModels { models ->
-                            models.map { model ->
-                                if (model.id == updatedModel.id) updatedModel else model
-                            }
-                        }
-                        // Sync the selected model instance if it's the one updated
-                        if (_selectedModel.value?.id == updatedModel.id) {
-                            _selectedModel.value = updatedModel
-                        }
-                        // Clear error messages related to this save
-                        _modelForm.update { it.copy(errorMessage = null) }
-                        // Close the edit dialog after successful save
-                        cancelEditingModel()
-                    }
+    fun updateModelForm(update: (ModelFormState) -> ModelFormState) {
+        // Update the form state within the dialog state
+        _dialogState.update { dialogState ->
+            when (dialogState) {
+                is ModelsDialogState.AddNewModel -> dialogState.copy(
+                    formState = update(dialogState.formState)
                 )
+
+                is ModelsDialogState.EditModel -> dialogState.copy(
+                    formState = update(dialogState.formState)
+                )
+
+                else -> dialogState // No change for other states
+            }
+        }
+    }
+
+    /**
+     * Saves the model configuration - either creates new or updates existing based on the dialog state.
+     */
+    fun saveModel() {
+        // Only proceed if we have successfully loaded config data
+        if (!isConfigDataLoaded) return
+
+        // Pass the entire dialog state instead of just the form
+        when (val dialogState = _dialogState.value) {
+            is ModelsDialogState.AddNewModel -> addNewModel(dialogState)
+            is ModelsDialogState.EditModel -> saveEditedModel(dialogState)
+            else -> return
         }
     }
 
@@ -315,7 +228,7 @@ class ModelConfigViewModel(
      * @param modelId The ID of the model to delete.
      */
     fun deleteModel(modelId: Long) {
-        // Only proceed if we have successfully loaded models
+        // Only proceed if we have successfully loaded config data
         if (!isConfigDataLoaded) return
 
         viewModelScope.launch(uiDispatcher) {
@@ -337,10 +250,8 @@ class ModelConfigViewModel(
                     ifRight = {
                         // Remove the deleted model from the list (E4.S4)
                         updateModels { it.filter { model -> model.id != modelId } }
-                        // If the deleted model was being edited, clear the editing state
-                        if (_editingModel.value?.id == modelId) {
-                            cancelEditingModel()
-                        }
+                        // Close the delete confirmation dialog after successful deletion
+                        cancelDialog()
                         // If the deleted model was selected, clear the selection
                         if (_selectedModel.value?.id == modelId) {
                             _selectedModel.value = null
@@ -350,7 +261,99 @@ class ModelConfigViewModel(
         }
     }
 
-    // --- Internal helpers ---
+    /**
+     * Closes any open dialog by setting state to None.
+     */
+    fun cancelDialog() {
+        _dialogState.value = ModelsDialogState.None
+    }
+
+    // --- Private Helper Functions ---
+
+    /**
+     * Saves the new LLM model configuration to the backend (E4.S1).
+     */
+    private fun addNewModel(dialogState: ModelsDialogState.AddNewModel) {
+        val form = dialogState.formState
+
+        if (form.name.isBlank() || form.providerId == null) {
+            // Update error message in the form state
+            updateModelForm { it.copy(errorMessage = "Model Name and Provider must be selected.") }
+            return
+        }
+
+        viewModelScope.launch(uiDispatcher) {
+            val request = AddModelRequest(
+                name = form.name.trim(),
+                providerId = form.providerId,
+                type = form.type,
+                active = form.active,
+                displayName = form.displayName.trim().takeIf { it.isNotBlank() }
+            )
+
+            modelApi.addModel(request)
+                .fold(
+                    ifLeft = { error ->
+                        // Update the error message in the form state
+                        updateModelForm { it.copy(errorMessage = "Error adding model: ${error.message}") }
+                        println("Error adding model: ${error.code} - ${error.message}")
+                    },
+                    ifRight = { newModel ->
+                        // Add the new model to the list, maintaining the Success state (E4.S1)
+                        updateModels { it + newModel }
+                        cancelDialog() // Hide form and reset
+                        selectModel(newModel)
+                    }
+                )
+        }
+    }
+
+    /**
+     * Saves the details of an edited model (E4.S3).
+     */
+    private fun saveEditedModel(dialogState: ModelsDialogState.EditModel) {
+        val form = dialogState.formState
+        val originalModel = dialogState.model
+
+        if (form.name.isBlank() || form.providerId == null) {
+            // Update error message in the form state
+            updateModelForm { it.copy(errorMessage = "Model Name and Provider must be selected.") }
+            return
+        }
+
+        viewModelScope.launch(uiDispatcher) {
+            val updatedModel = originalModel.copy(
+                name = form.name.trim(),
+                providerId = form.providerId,
+                type = form.type,
+                active = form.active,
+                displayName = form.displayName.trim().takeIf { it.isNotBlank() }
+            )
+
+            modelApi.updateModel(updatedModel)
+                .fold(
+                    ifLeft = { error ->
+                        // Update the error message in the form state
+                        updateModelForm { it.copy(errorMessage = "Error updating model: ${error.message}") }
+                        println("Error updating model: ${error.code} - ${error.message}")
+                    },
+                    ifRight = {
+                        // Update the model in the list (E4.S3)
+                        updateModels { models ->
+                            models.map { model ->
+                                if (model.id == updatedModel.id) updatedModel else model
+                            }
+                        }
+                        // Sync the selected model instance if it's the one updated
+                        if (_selectedModel.value?.id == updatedModel.id) {
+                            _selectedModel.value = updatedModel
+                        }
+                        // Close the edit dialog after successful save
+                        cancelDialog()
+                    }
+                )
+        }
+    }
 
     /**
      * Convenience function to update only the models list in the config state.

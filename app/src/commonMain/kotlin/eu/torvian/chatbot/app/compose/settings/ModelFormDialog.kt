@@ -8,10 +8,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import eu.torvian.chatbot.app.compose.common.*
+import eu.torvian.chatbot.app.compose.common.ConfigCheckbox
+import eu.torvian.chatbot.app.compose.common.ConfigDropdown
+import eu.torvian.chatbot.app.compose.common.ConfigTextField
 import eu.torvian.chatbot.app.domain.contracts.FormMode
 import eu.torvian.chatbot.app.domain.contracts.ModelFormState
-import eu.torvian.chatbot.app.domain.contracts.ModelConfigData
 import eu.torvian.chatbot.common.models.LLMModelType
 import eu.torvian.chatbot.common.models.LLMProvider
 
@@ -24,7 +25,7 @@ import eu.torvian.chatbot.common.models.LLMProvider
 fun ModelFormDialog(
     title: String,
     form: ModelFormState,
-    modelConfigData: ModelConfigData,
+    providers: List<LLMProvider>,
     onFormUpdate: ((ModelFormState) -> ModelFormState) -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit,
@@ -53,7 +54,7 @@ fun ModelFormDialog(
                 // Form Content
                 ModelFormContent(
                     form = form,
-                    providers = modelConfigData.providers,
+                    providers = providers,
                     onFormUpdate = onFormUpdate
                 )
 
@@ -102,7 +103,6 @@ fun ModelFormDialog(
 /**
  * Form content for model configuration.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ModelFormContent(
     form: ModelFormState,

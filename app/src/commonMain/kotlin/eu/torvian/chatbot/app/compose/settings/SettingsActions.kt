@@ -27,15 +27,16 @@ interface ProvidersTabActions {
 interface ModelsTabActions {
     fun onLoadModelsAndProviders()
     fun onStartAddingNewModel()
-    fun onCancelAddingNewModel()
     fun onSaveModel()
     fun onStartEditingModel(model: LLMModel)
-    fun onCancelEditingModel()
+    fun onStartDeletingModel(model: LLMModel)
     fun onDeleteModel(modelId: Long)
     fun onSelectModel(model: LLMModel?)
 
     // Unified form field updates
     fun onUpdateModelForm(update: (ModelFormState) -> ModelFormState)
+
+    fun onCancelDialog()
 }
 
 /**

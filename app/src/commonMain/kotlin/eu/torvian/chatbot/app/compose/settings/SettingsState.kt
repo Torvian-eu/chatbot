@@ -1,8 +1,8 @@
 package eu.torvian.chatbot.app.compose.settings
 
 import eu.torvian.chatbot.app.domain.contracts.ProviderFormState
-import eu.torvian.chatbot.app.domain.contracts.ModelFormState
 import eu.torvian.chatbot.app.domain.contracts.ModelConfigData
+import eu.torvian.chatbot.app.domain.contracts.ModelsDialogState
 import eu.torvian.chatbot.app.domain.contracts.UiState
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.models.LLMModel
@@ -25,10 +25,8 @@ data class ProvidersTabState(
  */
 data class ModelsTabState(
     val modelConfigUiState: UiState<ApiError, ModelConfigData>,
-    val isAddingNewModel: Boolean,
-    val modelForm: ModelFormState,
-    val editingModel: LLMModel?,
-    val selectedModel: LLMModel?
+    val selectedModel: LLMModel?,
+    val dialogState: ModelsDialogState
 )
 
 /**
