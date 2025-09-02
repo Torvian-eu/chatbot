@@ -14,7 +14,6 @@ import io.ktor.client.statement.*
 import io.ktor.serialization.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.io.IOException
-import kotlinx.serialization.SerializationException
 
 /**
  * Abstract base class for frontend API clients.
@@ -96,9 +95,9 @@ abstract class BaseApiClient(protected val client: HttpClient) {
         return try {
             // Attempt to read the body as ApiError
             response.body<ApiError>().left()
-        } catch (se: SerializationException) {
+        } catch (e: NoTransformationFoundException) {
             // If reading the body as ApiError fails, map the original exception
-            logger.warn("SerializationException reading error body for status ${response.status.value}: ${se.message}")
+            logger.warn("NoTransformationFoundException reading error body for status ${response.status.value}: ${e.message}")
             mapToGenericApiError(originalException, "HTTP Response Error (Malformed Error Body)")
         } catch (e: Exception) {
             // Catch any other exception during body reading (e.g., I/O error)
