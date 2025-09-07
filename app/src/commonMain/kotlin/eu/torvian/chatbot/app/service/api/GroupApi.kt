@@ -1,7 +1,6 @@
 package eu.torvian.chatbot.app.service.api
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.models.ChatGroup
 import eu.torvian.chatbot.common.models.CreateGroupRequest
 import eu.torvian.chatbot.common.models.RenameGroupRequest
@@ -11,7 +10,7 @@ import eu.torvian.chatbot.common.models.RenameGroupRequest
  *
  * This interface defines the operations available for managing chat session groups.
  * Implementations use the internal HTTP API. All methods are suspend functions
- * and return [Either<ApiError, T>] to explicitly handle potential API errors.
+ * and return [Either<ApiResourceError, T>] to explicitly handle potential API errors.
  */
 interface GroupApi {
     /**
@@ -21,9 +20,9 @@ interface GroupApi {
      * (E6.S4)
      *
      * @return [Either.Right] containing a list of [ChatGroup] on success,
-     *         or [Either.Left] containing an [ApiError] on failure.
+     *         or [Either.Left] containing an [ApiResourceError] on failure.
      */
-    suspend fun getAllGroups(): Either<ApiError, List<ChatGroup>>
+    suspend fun getAllGroups(): Either<ApiResourceError, List<ChatGroup>>
 
     /**
      * Creates a new chat session group.
@@ -33,9 +32,9 @@ interface GroupApi {
      *
      * @param request The request body containing the name for the new group.
      * @return [Either.Right] containing the newly created [ChatGroup] object on success,
-     *         or [Either.Left] containing an [ApiError] on failure.
+     *         or [Either.Left] containing an [ApiResourceError] on failure.
      */
-    suspend fun createGroup(request: CreateGroupRequest): Either<ApiError, ChatGroup>
+    suspend fun createGroup(request: CreateGroupRequest): Either<ApiResourceError, ChatGroup>
 
     /**
      * Renames an existing chat session group.
@@ -46,9 +45,9 @@ interface GroupApi {
      * @param groupId The ID of the group to rename.
      * @param request The request body containing the new name.
      * @return [Either.Right] with [Unit] on successful update,
-     *         or [Either.Left] containing an [ApiError] on failure.
+     *         or [Either.Left] containing an [ApiResourceError] on failure.
      */
-    suspend fun renameGroup(groupId: Long, request: RenameGroupRequest): Either<ApiError, Unit>
+    suspend fun renameGroup(groupId: Long, request: RenameGroupRequest): Either<ApiResourceError, Unit>
 
     /**
      * Deletes a chat session group.
@@ -59,7 +58,7 @@ interface GroupApi {
      *
      * @param groupId The ID of the group to delete.
      * @return [Either.Right] with [Unit] on successful deletion (typically HTTP 204 No Content),
-     *         or [Either.Left] containing an [ApiError] on failure (e.g., not found).
+     *         or [Either.Left] containing an [ApiResourceError] on failure (e.g., not found).
      */
-    suspend fun deleteGroup(groupId: Long): Either<ApiError, Unit>
+    suspend fun deleteGroup(groupId: Long): Either<ApiResourceError, Unit>
 }

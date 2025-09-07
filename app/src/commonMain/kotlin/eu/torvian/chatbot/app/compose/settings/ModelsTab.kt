@@ -10,7 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ErrorStateDisplay
 import eu.torvian.chatbot.app.compose.common.LoadingStateDisplay
-import eu.torvian.chatbot.app.domain.contracts.UiState
+import eu.torvian.chatbot.app.domain.contracts.DataState
 
 /**
  * Models management tab with master-detail layout.
@@ -24,14 +24,14 @@ fun ModelsTab(
 ) {
     Box(modifier = modifier.fillMaxSize()) {
         when (val uiState = state.modelConfigUiState) {
-            is UiState.Loading -> {
+            is DataState.Loading -> {
                 LoadingStateDisplay(
                     message = "Loading models...",
                     modifier = Modifier.fillMaxSize()
                 )
             }
 
-            is UiState.Error -> {
+            is DataState.Error -> {
                 ErrorStateDisplay(
                     title = "Failed to load models",
                     error = uiState.error,
@@ -40,7 +40,7 @@ fun ModelsTab(
                 )
             }
 
-            is UiState.Success -> {
+            is DataState.Success -> {
                 val configData = uiState.data
                 val models = configData.models
                 val providers = configData.providers
@@ -73,7 +73,7 @@ fun ModelsTab(
                 }
             }
 
-            is UiState.Idle -> {
+            is DataState.Idle -> {
                 // Idle state
                 Box(
                     modifier = Modifier.fillMaxSize(),

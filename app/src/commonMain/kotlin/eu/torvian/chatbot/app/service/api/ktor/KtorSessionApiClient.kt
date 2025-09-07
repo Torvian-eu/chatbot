@@ -1,8 +1,8 @@
 package eu.torvian.chatbot.app.service.api.ktor
 
 import arrow.core.Either
+import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.SessionApi
-import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.models.*
 import io.ktor.client.*
@@ -13,15 +13,15 @@ import io.ktor.client.request.*
 /**
  * Ktor HttpClient implementation of the [SessionApi] interface.
  *
- * Uses the configured [HttpClient] and the [BaseApiClient.safeApiCall] helper
+ * Uses the configured [HttpClient] and the [BaseApiResourceClient.safeApiCall] helper
  * to interact with the backend's session endpoints, mapping responses
- * to [Either<ApiError, T>].
+ * to [Either<ApiResourceError, T>].
  *
  * @property client The Ktor HttpClient instance injected for making requests.
  */
-class KtorSessionApiClient(client: HttpClient) : BaseApiClient(client), SessionApi {
+class KtorSessionApiClient(client: HttpClient) : BaseApiResourceClient(client), SessionApi {
 
-    override suspend fun getAllSessions(): Either<ApiError, List<ChatSessionSummary>> {
+    override suspend fun getAllSessions(): Either<ApiResourceError, List<ChatSessionSummary>> {
         // Use safeApiCall to wrap the Ktor request
         return safeApiCall {
             // Use Ktor resources to build the URL: /api/v1/sessions
@@ -30,7 +30,7 @@ class KtorSessionApiClient(client: HttpClient) : BaseApiClient(client), SessionA
         }
     }
 
-    override suspend fun createSession(request: CreateSessionRequest): Either<ApiError, ChatSession> {
+    override suspend fun createSession(request: CreateSessionRequest): Either<ApiResourceError, ChatSession> {
         // Use safeApiCall to wrap the Ktor request
         return safeApiCall {
             // Use Ktor resources to build the URL: /api/v1/sessions
@@ -41,7 +41,7 @@ class KtorSessionApiClient(client: HttpClient) : BaseApiClient(client), SessionA
         }
     }
 
-    override suspend fun getSessionDetails(sessionId: Long): Either<ApiError, ChatSession> {
+    override suspend fun getSessionDetails(sessionId: Long): Either<ApiResourceError, ChatSession> {
         // Use safeApiCall to wrap the Ktor request
         return safeApiCall {
             // Use Ktor resources to build the URL: /api/v1/sessions/{sessionId}
@@ -50,7 +50,7 @@ class KtorSessionApiClient(client: HttpClient) : BaseApiClient(client), SessionA
         }
     }
 
-    override suspend fun deleteSession(sessionId: Long): Either<ApiError, Unit> {
+    override suspend fun deleteSession(sessionId: Long): Either<ApiResourceError, Unit> {
         // Use safeApiCall to wrap the Ktor request
         return safeApiCall {
             // Use Ktor resources to build the URL: /api/v1/sessions/{sessionId}
@@ -59,7 +59,7 @@ class KtorSessionApiClient(client: HttpClient) : BaseApiClient(client), SessionA
         }
     }
 
-    override suspend fun updateSessionName(sessionId: Long, request: UpdateSessionNameRequest): Either<ApiError, Unit> {
+    override suspend fun updateSessionName(sessionId: Long, request: UpdateSessionNameRequest): Either<ApiResourceError, Unit> {
         // Use safeApiCall to wrap the Ktor request
         return safeApiCall {
             // Use Ktor resources: /api/v1/sessions/{sessionId}/name
@@ -72,7 +72,7 @@ class KtorSessionApiClient(client: HttpClient) : BaseApiClient(client), SessionA
     override suspend fun updateSessionModel(
         sessionId: Long,
         request: UpdateSessionModelRequest
-    ): Either<ApiError, Unit> {
+    ): Either<ApiResourceError, Unit> {
         // Use safeApiCall to wrap the Ktor request
         return safeApiCall {
             // Use Ktor resources: /api/v1/sessions/{sessionId}/model
@@ -85,7 +85,7 @@ class KtorSessionApiClient(client: HttpClient) : BaseApiClient(client), SessionA
     override suspend fun updateSessionSettings(
         sessionId: Long,
         request: UpdateSessionSettingsRequest
-    ): Either<ApiError, Unit> {
+    ): Either<ApiResourceError, Unit> {
         // Use safeApiCall to wrap the Ktor request
         return safeApiCall {
             // Use Ktor resources: /api/v1/sessions/{sessionId}/settings
@@ -98,7 +98,7 @@ class KtorSessionApiClient(client: HttpClient) : BaseApiClient(client), SessionA
     override suspend fun updateSessionLeafMessage(
         sessionId: Long,
         request: UpdateSessionLeafMessageRequest
-    ): Either<ApiError, Unit> {
+    ): Either<ApiResourceError, Unit> {
         // Use safeApiCall to wrap the Ktor request
         return safeApiCall {
             // Use Ktor resources: /api/v1/sessions/{sessionId}/leafMessage
@@ -111,7 +111,7 @@ class KtorSessionApiClient(client: HttpClient) : BaseApiClient(client), SessionA
     override suspend fun updateSessionGroup(
         sessionId: Long,
         request: UpdateSessionGroupRequest
-    ): Either<ApiError, Unit> {
+    ): Either<ApiResourceError, Unit> {
         // Use safeApiCall to wrap the Ktor request
         return safeApiCall {
             // Use Ktor resources: /api/v1/sessions/{sessionId}/group

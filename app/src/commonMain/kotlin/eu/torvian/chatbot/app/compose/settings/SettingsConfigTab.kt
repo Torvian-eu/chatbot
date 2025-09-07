@@ -13,7 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ErrorStateDisplay
 import eu.torvian.chatbot.app.compose.common.LoadingStateDisplay
-import eu.torvian.chatbot.app.domain.contracts.UiState
+import eu.torvian.chatbot.app.domain.contracts.DataState
 
 /**
  * Settings management tab with ViewModel integration.
@@ -34,15 +34,15 @@ fun SettingsConfigTab(
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
-        when (val uiState = state.settingsConfigState) {
-            is UiState.Loading -> {
+        when (val uiState = state.modelsUiState) {
+            is DataState.Loading -> {
                 LoadingStateDisplay(
                     message = "Loading models and settings...",
                     modifier = Modifier.fillMaxSize()
                 )
             }
 
-            is UiState.Error -> {
+            is DataState.Error -> {
                 val error = uiState.error
                 ErrorStateDisplay(
                     title = "Failed to load models and settings",
@@ -52,10 +52,9 @@ fun SettingsConfigTab(
                 )
             }
 
-            is UiState.Success -> {
-                val configData = uiState.data
-                val models = configData.models
-                val settings = configData.settings
+            is DataState.Success -> {
+                val models = uiState.data
+                val settingsListForSelectedModel = state.settingsListForSelectedModel
 
                 if (models.isEmpty()) {
                     Text(
@@ -67,7 +66,7 @@ fun SettingsConfigTab(
                     Text(
                         text = "Selected Model ID: ${state.selectedModel?.id ?: "None"}\n" +
                                 "Available models: ${models.size}\n" +
-                                "Settings profiles: ${settings.size}\n\n" +
+                                "Settings profiles for selected model: ${settingsListForSelectedModel?.size ?: "N/A"}\n\n" +
                                 "Full settings management UI will be implemented in Phase 4.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onBackground
@@ -75,7 +74,7 @@ fun SettingsConfigTab(
                 }
             }
 
-            is UiState.Idle -> {
+            is DataState.Idle -> {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center

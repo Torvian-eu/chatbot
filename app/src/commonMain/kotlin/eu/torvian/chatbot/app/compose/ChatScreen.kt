@@ -34,7 +34,7 @@ fun ChatScreen(
 ) {
     // --- Collect States for SessionListPanel ---
     val sessionListUiState by sessionListViewModel.listState.collectAsState()
-    val selectedSessionId by sessionListViewModel.selectedSessionId.collectAsState()
+    val selectedSession by sessionListViewModel.selectedSession.collectAsState()
     val isCreatingNewGroup by sessionListViewModel.isCreatingNewGroup.collectAsState()
     val newGroupNameInput by sessionListViewModel.newGroupNameInput.collectAsState()
     val editingGroup by sessionListViewModel.editingGroup.collectAsState()
@@ -51,12 +51,12 @@ fun ChatScreen(
 
     // --- SessionListPanel Contract Construction ---
     val sessionListPanelUiState = remember(
-        sessionListUiState, selectedSessionId, isCreatingNewGroup,
+        sessionListUiState, selectedSession, isCreatingNewGroup,
         newGroupNameInput, editingGroup, editingGroupNameInput
     ) {
         SessionListState(
             listUiState = sessionListUiState,
-            selectedSessionId = selectedSessionId,
+            selectedSessionId = selectedSession?.id,
             isCreatingNewGroup = isCreatingNewGroup,
             newGroupNameInput = newGroupNameInput,
             editingGroup = editingGroup,
@@ -116,7 +116,7 @@ fun ChatScreen(
             isSendingMessage = chatIsSendingMessage
         )
     }
-    val chatAreaActions = remember(chatViewModel, selectedSessionId) {
+    val chatAreaActions = remember(chatViewModel, selectedSession) {
         object : ChatAreaActions {
             override fun onUpdateInput(newText: String) = chatViewModel.updateInput(newText)
             override fun onSendMessage() = chatViewModel.sendMessage()
@@ -131,7 +131,7 @@ fun ChatScreen(
             override fun onSelectModel(modelId: Long?) = chatViewModel.selectModel(modelId)
             override fun onSelectSettings(settingsId: Long?) = chatViewModel.selectSettings(settingsId)
             override fun onRetryLoadingSession() {
-                selectedSessionId?.let { sessionId ->
+                selectedSession?.id?.let { sessionId ->
                     chatViewModel.loadSession(sessionId, forceReload = true)
                 }
             }

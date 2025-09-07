@@ -1,7 +1,8 @@
 package eu.torvian.chatbot.app.compose.chatarea
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -11,7 +12,7 @@ import eu.torvian.chatbot.app.compose.common.ErrorStateDisplay
 import eu.torvian.chatbot.app.compose.common.LoadingOverlay
 import eu.torvian.chatbot.app.domain.contracts.ChatAreaActions
 import eu.torvian.chatbot.app.domain.contracts.ChatAreaState
-import eu.torvian.chatbot.app.domain.contracts.UiState
+import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.common.models.ChatSession
 
@@ -30,16 +31,16 @@ fun ChatArea(
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         when (state.sessionUiState) {
-            UiState.Loading -> LoadingStateDisplay(modifier = Modifier.fillMaxSize())
-            is UiState.Error -> ErrorStateDisplay(
+            DataState.Loading -> LoadingStateDisplay(modifier = Modifier.fillMaxSize())
+            is DataState.Error -> ErrorStateDisplay(
                 error = state.sessionUiState.error,
                 onRetry = actions::onRetryLoadingSession,
                 title = "Failed to load chat session",
                 modifier = Modifier.align(Alignment.Center)
             )
 
-            UiState.Idle -> IdleStateDisplay(modifier = Modifier.align(Alignment.Center))
-            is UiState.Success -> SuccessStateDisplay(
+            DataState.Idle -> IdleStateDisplay(modifier = Modifier.align(Alignment.Center))
+            is DataState.Success -> SuccessStateDisplay(
                 chatSession = state.sessionUiState.data.session,
                 displayedMessages = state.displayedMessages,
                 actions = actions,
@@ -110,6 +111,7 @@ private fun SuccessStateDisplay(
     editingMessage: ChatMessage?,
     editingContent: String?
 ) {
+    // TODO: Move dialog state to viewmodel
     var dialogState by remember { mutableStateOf<DialogState>(DialogState.None) }
 
     // Prepare message actions to pass down

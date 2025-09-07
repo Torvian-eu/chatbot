@@ -1,0 +1,210 @@
+package eu.torvian.chatbot.app.repository
+import arrow.core.Either
+import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.common.models.ChatSession
+import eu.torvian.chatbot.common.models.ChatSessionSummary
+import eu.torvian.chatbot.common.models.ChatStreamEvent
+import eu.torvian.chatbot.common.models.CreateSessionRequest
+import eu.torvian.chatbot.common.models.ProcessNewMessageRequest
+import eu.torvian.chatbot.common.models.UpdateMessageRequest
+import eu.torvian.chatbot.common.models.UpdateSessionGroupRequest
+import eu.torvian.chatbot.common.models.UpdateSessionLeafMessageRequest
+import eu.torvian.chatbot.common.models.UpdateSessionModelRequest
+import eu.torvian.chatbot.common.models.UpdateSessionNameRequest
+import eu.torvian.chatbot.common.models.UpdateSessionSettingsRequest
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
+/**
+ * Repository interface for managing chat sessions.
+ *
+ * This repository serves as the single source of truth for session data in the application,
+ * providing reactive data streams through StateFlow and handling all session-related operations.
+ * It abstracts the underlying API layer and provides comprehensive error handling through
+ * the RepositoryError hierarchy.
+ *
+ * The repository maintains an internal cache of session data and automatically updates
+ * all observers when changes occur, ensuring data consistency across the application.
+ */
+interface SessionRepository {
+
+    /**
+     * Reactive stream of all chat session summaries.
+     *
+     * This StateFlow provides real-time updates whenever the session data changes,
+     * allowing ViewModels and other consumers to automatically react to data changes
+     * without manual refresh operations.
+     *
+     * @return StateFlow containing the current state of all session summaries wrapped in DataState
+     */
+    val sessions: StateFlow<DataState<RepositoryError, List<ChatSessionSummary>>>
+
+    /**
+     * Retrieves a reactive stream for the detailed state of a specific chat session.
+     *
+     * This method always returns a non-nullable StateFlow. If the session details
+     * have not yet been loaded or are not in the cache, the returned flow will
+     * initially emit `DataState.Idle`. Consumers should then call `loadSessionDetails(sessionId)`
+     * to trigger the actual data fetch and update the flow.
+     *
+     * @param sessionId The unique identifier of the session.
+     * @return A StateFlow containing the current state of the session details wrapped in DataState.
+     *         It will initially be `DataState.Idle` if the session's details have not been loaded.
+     */
+    suspend fun getSessionDetailsFlow(sessionId: Long): StateFlow<DataState<RepositoryError, ChatSession>>
+
+    /**
+     * Loads all chat session summaries from the backend.
+     *
+     * This operation fetches the latest session data and updates the internal StateFlow.
+     * If a load operation is already in progress, this method returns immediately
+     * without starting a duplicate operation.
+     *
+     * @return Either.Right with Unit on successful load, or Either.Left with RepositoryError on failure
+     */
+    suspend fun loadSessions(): Either<RepositoryError, Unit>
+
+    /**
+     * Creates a new chat session.
+     *
+     * Upon successful creation, the new session is automatically added to the internal
+     * StateFlow, triggering updates to all observers.
+     *
+     * @param request The session creation request containing optional name and other details
+     * @return Either.Right with the created ChatSession on success, or Either.Left with RepositoryError on failure
+     */
+    suspend fun createSession(request: CreateSessionRequest): Either<RepositoryError, ChatSession>
+
+    /**
+     * Loads the full details of a specific chat session, including all its messages.
+     *
+     * This operation fetches the session details and updates the internal cache of
+     * individual session detail flows. The specific flow for the `sessionId` will
+     * emit the loading, success, or error state.
+     *
+     * @param sessionId The unique identifier of the session to load
+     * @return Either.Right with the ChatSession on success, or Either.Left with RepositoryError on failure
+     */
+    suspend fun loadSessionDetails(sessionId: Long): Either<RepositoryError, ChatSession>
+
+    /**
+     * Deletes a chat session and all its associated messages.
+     *
+     * Upon successful deletion, the session is automatically removed from the internal
+     * StateFlows, triggering updates to all observers.
+     *
+     * @param sessionId The unique identifier of the session to delete
+     * @return Either.Right with Unit on successful deletion, or Either.Left with RepositoryError on failure
+     */
+    suspend fun deleteSession(sessionId: Long): Either<RepositoryError, Unit>
+
+    /**
+     * Updates the name of a specific chat session.
+     *
+     * Upon successful update, the modified session replaces the existing one in the
+     * internal StateFlow, triggering updates to all observers.
+     *
+     * @param sessionId The unique identifier of the session to rename
+     * @param request The update request containing the new name
+     * @return Either.Right with Unit on successful update, or Either.Left with RepositoryError on failure
+     */
+    suspend fun updateSessionName(sessionId: Long, request: UpdateSessionNameRequest): Either<RepositoryError, Unit>
+
+    /**
+     * Updates the currently selected LLM model for a specific chat session.
+     *
+     * Upon successful update, the modified session's details flow in the cache
+     * will emit the updated session, triggering updates to all its observers.
+     *
+     * @param sessionId The unique identifier of the session
+     * @param request The update request containing the new optional model ID
+     * @return Either.Right with Unit on successful update, or Either.Left with RepositoryError on failure
+     */
+    suspend fun updateSessionModel(sessionId: Long, request: UpdateSessionModelRequest): Either<RepositoryError, Unit>
+
+    /**
+     * Updates the currently selected settings profile for a specific chat session.
+     *
+     * Upon successful update, the modified session's details flow in the cache
+     * will emit the updated session, triggering updates to all its observers.
+     *
+     * @param sessionId The unique identifier of the session
+     * @param request The update request containing the new optional settings ID
+     * @return Either.Right with Unit on successful update, or Either.Left with RepositoryError on failure
+     */
+    suspend fun updateSessionSettings(sessionId: Long, request: UpdateSessionSettingsRequest): Either<RepositoryError, Unit>
+
+    /**
+     * Sets the current "active" leaf message for a session, affecting which branch is displayed.
+     *
+     * Upon successful update, the modified session's details flow in the cache
+     * will emit the updated session, triggering updates to all its observers.
+     *
+     * @param sessionId The unique identifier of the session
+     * @param request The update request containing the new optional leaf message ID
+     * @return Either.Right with Unit on successful update, or Either.Left with RepositoryError on failure
+     */
+    suspend fun updateSessionLeafMessage(sessionId: Long, request: UpdateSessionLeafMessageRequest): Either<RepositoryError, Unit>
+
+    /**
+     * Assigns a specific chat session to a chat group, or ungroups it.
+     *
+     * Upon successful update, the modified session replaces the existing one in the
+     * internal StateFlow, triggering updates to all observers.
+     *
+     * @param sessionId The unique identifier of the session to assign
+     * @param request The update request containing the new optional group ID
+     * @return Either.Right with Unit on successful update, or Either.Left with RepositoryError on failure
+     */
+    suspend fun updateSessionGroup(sessionId: Long, request: UpdateSessionGroupRequest): Either<RepositoryError, Unit>
+
+    // --- Chat Message Operations ---
+
+    /**
+     * Processes a new user message in a session and gets the LLM response (non-streaming).
+     *
+     * This operation sends the message to the backend and updates the cached ChatSession
+     * with both the user message and the assistant's response.
+     *
+     * @param sessionId The ID of the session to send the message to
+     * @param request The message processing request containing content and optional parent ID
+     * @return Either.Right with Unit on success, or Either.Left with RepositoryError on failure
+     */
+    suspend fun processNewMessage(sessionId: Long, request: ProcessNewMessageRequest): Either<RepositoryError, Unit>
+
+    /**
+     * Processes a new user message in a session with streaming LLM response.
+     *
+     * This operation sends the message to the backend and returns a Flow of streaming events.
+     * The repository will update the cached ChatSession as the streaming progresses.
+     *
+     * @param sessionId The ID of the session to send the message to
+     * @param request The message processing request containing content and optional parent ID
+     * @return Flow of Either containing ChatStreamEvent updates or RepositoryError on failure
+     */
+    fun processNewMessageStreaming(sessionId: Long, request: ProcessNewMessageRequest): Flow<Either<RepositoryError, ChatStreamEvent>>
+
+    /**
+     * Updates the content of a specific message.
+     *
+     * Upon successful update, the message is automatically updated in the cached ChatSession,
+     * triggering updates to all observers.
+     *
+     * @param messageId The ID of the message to update
+     * @param sessionId The ID of the session containing the message
+     * @param request The update request containing the new content
+     * @return Either.Right with Unit on successful update, or Either.Left with RepositoryError on failure
+     */
+    suspend fun updateMessageContent(messageId: Long, sessionId: Long, request: UpdateMessageRequest): Either<RepositoryError, Unit>
+
+    /**
+     * Deletes a specific message and its children.
+     *
+     * Upon successful deletion, the message is automatically removed from the cached ChatSession,
+     * triggering updates to all observers.
+     *
+     * @param messageId The ID of the message to delete
+     * @param sessionId The ID of the session containing the message
+     * @return Either.Right with Unit on successful deletion, or Either.Left with RepositoryError on failure
+     */
+    suspend fun deleteMessage(messageId: Long, sessionId: Long): Either<RepositoryError, Unit>
+}

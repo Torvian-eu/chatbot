@@ -1,27 +1,37 @@
 package eu.torvian.chatbot.app.viewmodel.chat.state
 
-import eu.torvian.chatbot.app.domain.contracts.UiState
+import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.app.repository.ModelRepository
+import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.app.repository.SessionRepository
+import eu.torvian.chatbot.app.repository.SettingsRepository
 import eu.torvian.chatbot.app.viewmodel.chat.util.ThreadBuilder
-import eu.torvian.chatbot.common.api.ApiError
-import eu.torvian.chatbot.common.models.ChatMessage
+import eu.torvian.chatbot.common.models.*
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
-import kotlinx.datetime.Clock
 
 /**
- * Shared state holder for chat-related UI state.
- * Owns all MutableStateFlows and provides read-only StateFlows to consumers.
- * Encapsulates state mutations through the ChatState interface.
+ * Reactive implementation of ChatState that derives all state from repository flows.
+ *
+ * This implementation follows the reactive architecture pattern where:
+ * - Repositories are the single source of truth
+ * - State is observed, not duplicated
+ * - All UI state is derived reactively from activeSessionId and repository flows
+ * - No manual state setters for derived data
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class ChatStateImpl(
+    private val sessionRepository: SessionRepository,
+    private val settingsRepository: SettingsRepository,
+    private val modelRepository: ModelRepository,
     private val threadBuilder: ThreadBuilder,
-    private val clock: Clock,
-    backgroundScope: CoroutineScope
+    private val backgroundScope: CoroutineScope
 ) : ChatState {
 
-    // --- Private MutableStateFlows ---
+    // --- Private MutableStateFlows for Direct User Input ---
 
-    private val _sessionDataState = MutableStateFlow<UiState<ApiError, ChatSessionData>>(UiState.Idle)
+    private val _activeSessionId = MutableStateFlow<Long?>(null)
     private val _inputContent = MutableStateFlow("")
     private val _replyTargetMessage = MutableStateFlow<ChatMessage?>(null)
     private val _editingMessage = MutableStateFlow<ChatMessage?>(null)
@@ -32,7 +42,7 @@ class ChatStateImpl(
 
     // --- Public Read-Only StateFlows ---
 
-    override val sessionDataState: StateFlow<UiState<ApiError, ChatSessionData>> = _sessionDataState.asStateFlow()
+    override val activeSessionId: StateFlow<Long?> = _activeSessionId.asStateFlow()
     override val inputContent: StateFlow<String> = _inputContent.asStateFlow()
     override val replyTargetMessage: StateFlow<ChatMessage?> = _replyTargetMessage.asStateFlow()
     override val editingMessage: StateFlow<ChatMessage?> = _editingMessage.asStateFlow()
@@ -41,10 +51,77 @@ class ChatStateImpl(
     override val lastAttemptedSessionId: StateFlow<Long?> = _lastAttemptedSessionId.asStateFlow()
     override val lastFailedLoadEventId: StateFlow<String?> = _lastFailedLoadEventId.asStateFlow()
 
-    // --- Computed StateFlows ---
+    // --- Reactive State Derivation ---
 
+    // Intermediate flow for the active session
+    private val activeChatSessionState: StateFlow<DataState<RepositoryError, ChatSession>> =
+        _activeSessionId.flatMapLatest { id ->
+            if (id == null) flowOf(DataState.Idle)
+            else sessionRepository.getSessionDetailsFlow(id)
+        }.stateIn(
+            scope = backgroundScope,
+            started = SharingStarted.WhileSubscribed(),
+            initialValue = DataState.Idle
+        )
+
+    // Intermediate flow for the active model
+    private val llmModelForActiveSession: StateFlow<DataState<RepositoryError, LLMModel?>> =
+        activeChatSessionState.flatMapLatest { sessionState ->
+            val modelId = sessionState.dataOrNull?.currentModelId
+            if (modelId == null) flowOf(DataState.Success(null))
+            else modelRepository.getModelFlow(modelId)
+        }.stateIn(
+            scope = backgroundScope,
+            started = SharingStarted.WhileSubscribed(),
+            initialValue = DataState.Idle
+        )
+
+    // Intermediate flow for the active settings
+    private val modelSettingsForActiveSession: StateFlow<DataState<RepositoryError, ModelSettings?>> =
+        activeChatSessionState.flatMapLatest { sessionState ->
+            val settingsId = sessionState.dataOrNull?.currentSettingsId
+            if (settingsId == null) flowOf(DataState.Success(null))
+            else settingsRepository.getSettingsFlow(settingsId)
+        }.stateIn(
+            scope = backgroundScope,
+            started = SharingStarted.WhileSubscribed(),
+            initialValue = DataState.Idle
+        )
+
+    // Final combined sessionDataState
+    override val sessionDataState: StateFlow<DataState<RepositoryError, ChatSessionData>> =
+        combine(
+            activeChatSessionState,
+            llmModelForActiveSession,
+            modelSettingsForActiveSession
+        ) { sessionState, modelState, settingsState ->
+            when (sessionState) {
+                is DataState.Idle -> DataState.Idle
+                is DataState.Loading -> DataState.Loading
+                is DataState.Error -> sessionState
+                is DataState.Success -> {
+                    val session = sessionState.data
+                    val model = modelState.dataOrNull
+                    val settings = settingsState.dataOrNull
+                    val chatModelSettings = settings as? ChatModelSettings
+                    DataState.Success(
+                        ChatSessionData(
+                            session = session,
+                            llmModel = model,
+                            modelSettings = chatModelSettings
+                        )
+                    )
+                }
+            }
+        }.stateIn(
+            scope = backgroundScope,
+            started = SharingStarted.Eagerly,
+            initialValue = DataState.Idle
+        )
+
+    // Derived displayedMessages from sessionDataState
     override val displayedMessages: StateFlow<List<ChatMessage>> =
-        _sessionDataState.filterIsInstance<UiState.Success<ChatSessionData>>()
+        sessionDataState.filterIsInstance<DataState.Success<ChatSessionData>>()
             .map { it.data.session }
             .map { threadBuilder.buildThreadBranch(it.messages, it.currentLeafMessageId) }
             .stateIn(
@@ -55,16 +132,8 @@ class ChatStateImpl(
 
     // --- Public State Mutation Methods ---
 
-    override fun setSessionDataLoading() {
-        _sessionDataState.value = UiState.Loading
-    }
-
-    override fun setSessionDataError(error: ApiError) {
-        _sessionDataState.value = UiState.Error(error)
-    }
-
-    override fun setSessionDataSuccess(sessionData: ChatSessionData) {
-        _sessionDataState.value = UiState.Success(sessionData)
+    override fun setActiveSessionId(sessionId: Long?) {
+        _activeSessionId.value = sessionId
     }
 
     override fun setInputContent(content: String) {
@@ -97,47 +166,8 @@ class ChatStateImpl(
         _lastFailedLoadEventId.value = null
     }
 
-    override fun updateSessionMessages(messages: List<ChatMessage>) {
-        val currentSessionData = _sessionDataState.value.dataOrNull ?: return
-        _sessionDataState.value = UiState.Success(
-            currentSessionData.copy(
-                session = currentSessionData.session.copy(
-                    messages = messages,
-                    updatedAt = clock.now()
-                )
-            )
-        )
-    }
-
-    override fun updateSessionLeafId(leafId: Long?) {
-        val currentSessionData = _sessionDataState.value.dataOrNull ?: return
-        _sessionDataState.value = UiState.Success(
-            currentSessionData.copy(
-                session = currentSessionData.session.copy(currentLeafMessageId = leafId)
-            )
-        )
-    }
-
-    override fun updateSessionModelId(modelId: Long?) {
-        val currentSessionData = _sessionDataState.value.dataOrNull ?: return
-        _sessionDataState.value = UiState.Success(
-            currentSessionData.copy(
-                session = currentSessionData.session.copy(currentModelId = modelId)
-            )
-        )
-    }
-
-    override fun updateSessionSettingsId(settingsId: Long?) {
-        val currentSessionData = _sessionDataState.value.dataOrNull ?: return
-        _sessionDataState.value = UiState.Success(
-            currentSessionData.copy(
-                session = currentSessionData.session.copy(currentSettingsId = settingsId)
-            )
-        )
-    }
-
     override fun resetState() {
-        _sessionDataState.value = UiState.Idle
+        _activeSessionId.value = null
         _inputContent.value = ""
         _replyTargetMessage.value = null
         _editingMessage.value = null

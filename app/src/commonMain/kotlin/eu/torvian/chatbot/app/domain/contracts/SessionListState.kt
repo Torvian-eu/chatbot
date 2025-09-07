@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.app.domain.contracts
 
-import eu.torvian.chatbot.common.api.ApiError
+import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.common.models.ChatGroup
 
 /**
@@ -14,7 +14,7 @@ import eu.torvian.chatbot.common.models.ChatGroup
  * @property editingGroupNameInput Content of the editing group name input field.
  */
 data class SessionListState(
-    val listUiState: UiState<ApiError, SessionListData> = UiState.Idle,
+    val listUiState: DataState<RepositoryError, SessionListData> = DataState.Idle,
     val selectedSessionId: Long? = null,
     val isCreatingNewGroup: Boolean = false,
     val newGroupNameInput: String = "",

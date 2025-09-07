@@ -2,18 +2,16 @@ package eu.torvian.chatbot.app.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import arrow.fx.coroutines.parZip
 import eu.torvian.chatbot.app.domain.contracts.*
-import eu.torvian.chatbot.app.service.api.ModelApi
-import eu.torvian.chatbot.app.service.api.SettingsApi
-import eu.torvian.chatbot.common.api.ApiError
+import eu.torvian.chatbot.app.repository.ModelRepository
+import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.app.repository.SettingsRepository
 import eu.torvian.chatbot.common.models.LLMModel
 import eu.torvian.chatbot.common.models.ModelSettings
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 /**
@@ -28,47 +26,89 @@ import kotlinx.coroutines.launch
  * - Managing the state for adding new settings profiles (E4.S5).
  * - Managing the state for editing existing settings profiles (E4.S6).
  * - Deleting settings profiles (E4.S5).
- * - Communicating with the backend via [SettingsApi] and [ModelApi].
+ * - Communicating with the backend via [SettingsRepository] and [ModelRepository].
  *
  * @constructor
- * @param settingsApi The API client for Settings-related operations.
- * @param modelApi The API client for Model-related operations (needed for model selection).
+ * @param settingsRepository The repository for Settings-related operations.
+ * @param modelRepository The repository for Model-related operations (needed for model selection).
  * @param uiDispatcher The dispatcher to use for UI-related coroutines. Defaults to Main.
  *
- * @property settingsConfigState The state containing both models and settings data for unified state management.
- * @property selectedModel The currently selected LLM model. Settings profiles will be loaded for this model.
+ * @property modelsState The state of the list of all configured LLM models.
+ * @property settingsListForSelectedModel The list of settings profiles for the selected model, or null if no model selected.
+ * @property selectedModel The currently selected LLM model, or null if no model selected.
+ * @property selectedSettings The currently selected settings profile in the master-detail UI, or null if no settings selected.
  * @property dialogState The current dialog state for the settings tab.
+ *
+ * TODO: Add logging
+ * TODO: send error messages to UI, using EventBus.
  */
 class SettingsConfigViewModel(
-    private val settingsApi: SettingsApi,
-    private val modelApi: ModelApi,
+    private val settingsRepository: SettingsRepository,
+    private val modelRepository: ModelRepository,
     private val uiDispatcher: CoroutineDispatcher = Dispatchers.Main
 ) : ViewModel() {
 
     // --- Private State Properties ---
 
-    private val _settingsConfigState = MutableStateFlow<UiState<ApiError, SettingsConfigData>>(UiState.Idle)
-    private val _selectedModel = MutableStateFlow<LLMModel?>(null)
-    private val _selectedSettings = MutableStateFlow<ModelSettings?>(null)
+    /**
+     * The ID of the model the user has explicitly selected.
+     */
+    private val userSelectedModelId = MutableStateFlow<Long?>(null)
+
+    /**
+     * The ID of the settings profile the user has explicitly selected.
+     */
+    private val userSelectedSettingsId = MutableStateFlow<Long?>(null)
     private val _dialogState = MutableStateFlow<SettingsDialogState>(SettingsDialogState.None)
 
     // --- Public State Properties ---
 
     /**
-     * The state containing both models and settings data for unified state management.
+     * The state of the list of all configured LLM models.
      */
-    val settingsConfigState: StateFlow<UiState<ApiError, SettingsConfigData>> = _settingsConfigState.asStateFlow()
+    val modelsState: StateFlow<DataState<RepositoryError, List<LLMModel>>> = modelRepository.models
+
+    /**
+     * The state of the list of all configured settings profiles for the selected model.
+     */
+    val settingsListForSelectedModel: StateFlow<List<ModelSettings>?> = settingsRepository.settings
+        .map { it.dataOrNull }
+        .onEach { allSettingsList ->
+            val supportedSettingsList = allSettingsList?.filter {
+                isModelSettingsSupported(it)
+            }
+            if (supportedSettingsList?.size != allSettingsList?.size) {
+                println("Warning: Found unsupported ModelSettings types. Only supported types are displayed.")
+            }
+        }
+        .combine(userSelectedModelId) { allSettingsList, currentSelectedId ->
+            allSettingsList?.filter {
+                isModelSettingsSupported(it) && it.modelId == currentSelectedId
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), null)
 
     /**
      * The currently selected LLM model. Settings profiles will be loaded for this model.
      * If null, no model is selected and no settings are displayed.
      */
-    val selectedModel: StateFlow<LLMModel?> = _selectedModel.asStateFlow()
+    val selectedModel: StateFlow<LLMModel?> = combine(
+        modelsState.map { it.dataOrNull },
+        userSelectedModelId
+    ) { modelsList, currentSelectedId ->
+        modelsList?.find { it.id == currentSelectedId }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), null)
 
     /**
      * The currently selected settings profile in the master-detail UI.
+     * If null, no settings profile is selected and no detail is displayed.
      */
-    val selectedSettings: StateFlow<ModelSettings?> = _selectedSettings.asStateFlow()
+    val selectedSettings: StateFlow<ModelSettings?> = combine(
+        settingsListForSelectedModel,
+        userSelectedSettingsId
+    ) { settingsList, currentSelectedId ->
+        settingsList?.find { it.id == currentSelectedId }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), null)
 
     /**
      * The current dialog state for the settings tab.
@@ -76,88 +116,59 @@ class SettingsConfigViewModel(
      */
     val dialogState: StateFlow<SettingsDialogState> = _dialogState.asStateFlow()
 
-    // --- Helper Properties ---
+    // --- Initialization ---
 
-    /**
-     * Helper property to get the current config data if in success state, null otherwise.
-     */
-    private val currentConfigData: SettingsConfigData?
-        get() = _settingsConfigState.value.dataOrNull
+    init {
+        // Automatically select the first model on first load
+        modelsState
+            .filter { it is DataState.Success }
+            .map { (it as DataState.Success).data.firstOrNull() }
+            .onEach { firstModel ->
+                selectModel(firstModel)
+            }
+            .launchIn(viewModelScope)
+    }
 
     // --- Public Action Functions ---
 
     /**
-     * Loads all configured LLM models to populate the model selection dropdown.
+     * Loads all configured LLM models and settings profiles.
      */
-    fun loadModels() {
-        if (_settingsConfigState.value.isLoading) return
+    fun loadModelsAndSettings() {
         viewModelScope.launch(uiDispatcher) {
-            _settingsConfigState.value = UiState.Loading
-            modelApi.getAllModels()
-                .fold(
-                    ifLeft = { error ->
-                        _settingsConfigState.value = UiState.Error(error)
-                        println("Error loading models for settings selection: ${error.code} - ${error.message}")
-                    },
-                    ifRight = { models ->
-                        val configData = SettingsConfigData(
-                            models = models,
-                            settings = emptyList()
-                        )
-                        _settingsConfigState.value = UiState.Success(configData)
-                        if (_selectedModel.value == null && models.isNotEmpty()) {
-                            selectModel(models.first())
-                        }
-                        syncSelectedInstances()
-                    }
-                )
+            parZip(
+                { modelRepository.loadModels() },
+                { settingsRepository.loadSettings() }
+            ) { modelsResult, settingsResult ->
+                modelsResult.mapLeft { error ->
+                    println("Error loading models for settings selection: ${error.message}")
+                }
+                settingsResult.mapLeft { error ->
+                    println("Error loading settings: ${error.message}")
+                }
+            }
         }
     }
 
     /**
-     * Selects an LLM model and loads its associated settings profiles.
+     * Selects an LLM model or clears selection when null.
      */
     fun selectModel(model: LLMModel?) {
-        _selectedModel.value = model
-
-        if (model == null) {
-            // Clear settings when no model is selected
-            updateSettingsInState { emptyList() }
-            return
-        }
-
-        viewModelScope.launch(uiDispatcher) {
-            settingsApi.getSettingsByModelId(model.id)
-                .fold(
-                    ifLeft = { error ->
-                        _settingsConfigState.value = UiState.Error(error)
-                        println("Error loading settings for model ${model.id}: ${error.code} - ${error.message}")
-                    },
-                    ifRight = { settingsList ->
-                        // Filter to only supported types
-                        val supportedSettings = settingsList.filter { isModelSettingsSupported(it) }
-                        updateSettingsInState { supportedSettings }
-                        if (supportedSettings.size != settingsList.size) {
-                            println("Warning: Found unsupported ModelSettings types for model ${model.id}. Only supported types are displayed.")
-                        }
-                        syncSelectedInstances()
-                    }
-                )
-        }
+        userSelectedModelId.value = model?.id
     }
 
     /**
      * Selects a settings profile or clears selection when null.
      */
     fun selectSettings(settings: ModelSettings?) {
-        _selectedSettings.value = settings
+        userSelectedSettingsId.value = settings?.id
     }
 
     /**
      * Initiates the process of adding a new settings profile by showing the form.
      */
     fun startAddingNewSettings() {
-        val selectedModel = _selectedModel.value ?: return
+        val selectedModel = selectedModel.value ?: return
         if (selectedModel.type !in getSupportedSettingsTypes()) {
             println("Cannot add new settings: Model type ${selectedModel.type} is not supported.")
             return
@@ -175,7 +186,6 @@ class SettingsConfigViewModel(
             println("Cannot edit: Settings with ID ${settings.id} is of unsupported type ${settings::class.simpleName}.")
             return
         }
-
         _dialogState.value = SettingsDialogState.EditSettings(
             settings = settings,
             formState = settings.toEditFormState()
@@ -224,25 +234,12 @@ class SettingsConfigViewModel(
      */
     fun deleteSettings(settingsId: Long) {
         viewModelScope.launch(uiDispatcher) {
-            val currentSettings = currentConfigData?.settings
-            if (currentSettings == null) {
-                println("Cannot delete settings: settings list is not available.")
-                return@launch
-            }
-
-            settingsApi.deleteSettings(settingsId)
+            settingsRepository.deleteSettings(settingsId)
                 .fold(
                     ifLeft = { error ->
-                        println("Error deleting settings: ${error.code} - ${error.message}")
+                        println("Error deleting settings: ${error.message}")
                     },
                     ifRight = {
-                        updateSettingsInState { currentSettings ->
-                            currentSettings.filter { it.id != settingsId }
-                        }
-                        // If the deleted settings was selected, clear the selection
-                        if (_selectedSettings.value?.id == settingsId) {
-                            _selectedSettings.value = null
-                        }
                         cancelDialog()
                     }
                 )
@@ -258,23 +255,6 @@ class SettingsConfigViewModel(
 
     // --- Private Helper Functions ---
 
-    /**
-     * Helper function to update the settings part of the unified state while preserving models.
-     * Only updates if the current state is Success, otherwise returns the state unchanged.
-     */
-    private fun updateSettingsInState(updateSettings: (List<ModelSettings>) -> List<ModelSettings>) {
-        _settingsConfigState.update { state ->
-            when (state) {
-                is UiState.Success -> {
-                    val updatedSettings = updateSettings(state.data.settings)
-                    UiState.Success(state.data.copy(settings = updatedSettings))
-                }
-
-                else -> state
-            }
-        }
-    }
-
     private fun saveNewSettings(dialogState: SettingsDialogState.AddNewSettings) {
         val form = dialogState.formState
         val validationError = form.validate()
@@ -285,16 +265,13 @@ class SettingsConfigViewModel(
         val modelId = form.modelId ?: return
         val newSettings = form.toModelSettings(0L, modelId)
         viewModelScope.launch(uiDispatcher) {
-            settingsApi.addModelSettings(newSettings)
+            settingsRepository.addModelSettings(newSettings)
                 .fold(
                     ifLeft = { error ->
                         updateSettingsFormError("Error adding settings: ${error.message}")
-                        println("Error adding settings: ${error.code} - ${error.message}")
+                        println("Error adding settings: ${error.message}")
                     },
                     ifRight = { createdSettings ->
-                        updateSettingsInState { currentSettings ->
-                            currentSettings + createdSettings
-                        }
                         cancelDialog()
                         selectSettings(createdSettings)
                     }
@@ -315,22 +292,13 @@ class SettingsConfigViewModel(
             val originalSettings = dialogState.settings
             val updatedSettings = form.toModelSettings(originalSettings.id, modelId)
 
-            settingsApi.updateSettings(updatedSettings)
+            settingsRepository.updateSettings(updatedSettings)
                 .fold(
                     ifLeft = { error ->
                         updateSettingsFormError("Error updating settings: ${error.message}")
-                        println("Error updating settings: ${error.code} - ${error.message}")
+                        println("Error updating settings: ${error.message}")
                     },
                     ifRight = {
-                        updateSettingsInState { currentSettings ->
-                            currentSettings.map {
-                                if (it.id == updatedSettings.id) updatedSettings else it
-                            }
-                        }
-                        // Sync the selected settings instance if it's the one updated
-                        if (_selectedSettings.value?.id == updatedSettings.id) {
-                            _selectedSettings.value = updatedSettings
-                        }
                         cancelDialog()
                     }
                 )
@@ -351,18 +319,5 @@ class SettingsConfigViewModel(
                 else -> dialogState
             }
         }
-    }
-
-    /**
-     * Ensures that the currently selected settings and model instances are synchronized with the latest loaded data.
-     * This is important after operations that refresh the model or settings list.
-     */
-    private fun syncSelectedInstances() {
-        val settingsList = _settingsConfigState.value.dataOrNull?.settings
-        val modelsList = _settingsConfigState.value.dataOrNull?.models
-        val selectedSettings = _selectedSettings.value
-        val selectedModel = _selectedModel.value
-        _selectedSettings.value = settingsList?.find { it.id == selectedSettings?.id }
-        _selectedModel.value = modelsList?.find { it.id == selectedModel?.id }
     }
 }

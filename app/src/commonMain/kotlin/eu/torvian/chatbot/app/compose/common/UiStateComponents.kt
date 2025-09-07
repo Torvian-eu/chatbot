@@ -7,8 +7,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import eu.torvian.chatbot.app.domain.contracts.UiState
-import eu.torvian.chatbot.common.api.ApiError
+import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.app.repository.RepositoryError
 
 /**
  * Composable that displays content based on UiState with proper loading and error handling.
@@ -23,7 +23,7 @@ import eu.torvian.chatbot.common.api.ApiError
  */
 @Composable
 fun <T> UiStateContent(
-    uiState: UiState<ApiError, T>,
+    uiState: DataState<RepositoryError, T>,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
     loadingMessage: String = "Loading...",
@@ -32,18 +32,18 @@ fun <T> UiStateContent(
 ) {
     Box(modifier = modifier.fillMaxSize()) {
         when (uiState) {
-            is UiState.Idle -> {
+            is DataState.Idle -> {
                 // Show nothing or a placeholder
             }
 
-            is UiState.Loading -> {
+            is DataState.Loading -> {
                 LoadingStateDisplay(
                     message = loadingMessage,
                     modifier = Modifier.align(Alignment.Center)
                 )
             }
 
-            is UiState.Error -> {
+            is DataState.Error -> {
                 ErrorStateDisplay(
                     error = uiState.error,
                     onRetry = onRetry,
@@ -52,7 +52,7 @@ fun <T> UiStateContent(
                 )
             }
 
-            is UiState.Success -> {
+            is DataState.Success -> {
                 content(uiState.data)
             }
         }

@@ -4,10 +4,10 @@ import androidx.compose.runtime.Composable
 import eu.torvian.chatbot.app.compose.chatarea.ChatArea
 import eu.torvian.chatbot.app.domain.contracts.ChatAreaActions
 import eu.torvian.chatbot.app.domain.contracts.ChatAreaState
-import eu.torvian.chatbot.app.domain.contracts.UiState
+import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.app.viewmodel.chat.state.ChatSessionData
 import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.common.models.ChatSession
-import eu.torvian.chatbot.app.viewmodel.chat.state.ChatSessionData
 import kotlinx.datetime.Instant
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -49,7 +49,7 @@ fun ChatAreaPreview() {
     )
     ChatArea(
         state = ChatAreaState(
-            sessionUiState = UiState.Success(ChatSessionData(session = mockChatSession)),
+            sessionUiState = DataState.Success(ChatSessionData(session = mockChatSession)),
             displayedMessages = mockChatSession.messages
         ),
         actions = object : ChatAreaActions {

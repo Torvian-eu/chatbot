@@ -13,8 +13,8 @@ import eu.torvian.chatbot.app.compose.common.ErrorStateDisplay
 import eu.torvian.chatbot.app.compose.common.LoadingOverlay
 import eu.torvian.chatbot.app.domain.contracts.SessionListActions
 import eu.torvian.chatbot.app.domain.contracts.SessionListData
+import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.contracts.SessionListState
-import eu.torvian.chatbot.app.domain.contracts.UiState
 import eu.torvian.chatbot.common.models.ChatGroup
 
 /**
@@ -33,11 +33,11 @@ fun SessionListPanel(
     actions: SessionListActions
 ) {
     when (val listUiState = state.listUiState) {
-        UiState.Loading -> {
+        DataState.Loading -> {
             LoadingOverlay(Modifier.fillMaxSize())
         }
 
-        is UiState.Error -> {
+        is DataState.Error -> {
             ErrorStateDisplay(
                 error = listUiState.error,
                 onRetry = actions::onRetryLoadingSessions,
@@ -46,7 +46,7 @@ fun SessionListPanel(
             )
         }
 
-        UiState.Idle -> { // Should not happen, but just in case
+        DataState.Idle -> { // Should not happen, but just in case
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
                     "No sessions loaded.",
@@ -56,7 +56,7 @@ fun SessionListPanel(
             }
         }
 
-        is UiState.Success -> {
+        is DataState.Success -> {
             val sessionListData = listUiState.data
             SessionListSuccessPanelContent(
                 sessionListData = sessionListData,
@@ -95,6 +95,7 @@ private fun SessionListSuccessPanelContent(
     sessionListActions: SessionListActions
 ) {
     // Consolidated dialog state management
+    // TODO: Move dialogState to viewmodel
     var dialogState by remember { mutableStateOf<DialogState>(DialogState.None) }
 
     // Group editing actions

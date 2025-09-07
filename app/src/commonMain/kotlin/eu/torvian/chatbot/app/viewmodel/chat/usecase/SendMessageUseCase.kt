@@ -2,11 +2,11 @@ package eu.torvian.chatbot.app.viewmodel.chat.usecase
 
 import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.error_sending_message_short
-import eu.torvian.chatbot.app.service.api.ChatApi
-import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
+import eu.torvian.chatbot.app.repository.SessionRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
-import eu.torvian.chatbot.common.models.ChatSession
+import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
+import eu.torvian.chatbot.common.models.ChatStreamEvent
 import eu.torvian.chatbot.common.models.ProcessNewMessageRequest
 
 /**
@@ -14,9 +14,8 @@ import eu.torvian.chatbot.common.models.ProcessNewMessageRequest
  * Handles both streaming and non-streaming message sending based on settings.
  */
 class SendMessageUseCase(
-    private val chatApi: ChatApi,
+    private val sessionRepository: SessionRepository,
     private val state: ChatState,
-    private val streamingCoordinator: StreamingCoordinator,
     private val errorNotifier: ErrorNotifier
 ) {
 
@@ -33,7 +32,7 @@ class SendMessageUseCase(
         val content = state.inputContent.value.trim()
         if (content.isBlank()) return // Cannot send empty message
 
-        val parentId = state.replyTargetMessage.value?.id ?: state.currentBranchLeafId
+        val parentId = state.replyTargetMessage.value?.id ?: currentSession.currentLeafMessageId
 
         logger.info("Sending message to session ${currentSession.id}, parent: $parentId")
 
@@ -43,10 +42,12 @@ class SendMessageUseCase(
             // Check if streaming is enabled in settings, default to true if no settings available
             val isStreamingEnabled = currentSessionData.modelSettings?.stream ?: true
 
+            val request = ProcessNewMessageRequest(content = content, parentMessageId = parentId)
+
             if (isStreamingEnabled) {
-                handleStreamingMessage(currentSession, content, parentId)
+                handleStreamingMessage(currentSession.id, request)
             } else {
-                handleNonStreamingMessage(currentSession, content, parentId)
+                handleNonStreamingMessage(currentSession.id, request)
             }
         } finally {
             state.setIsSending(false) // Always reset sending state
@@ -54,45 +55,65 @@ class SendMessageUseCase(
     }
 
     /**
-     * Handles streaming message processing by delegating to StreamingCoordinator.
+     * Handles streaming message processing using SessionRepository.
      */
     private suspend fun handleStreamingMessage(
-        currentSession: ChatSession,
-        content: String,
-        parentId: Long?
+        sessionId: Long,
+        request: ProcessNewMessageRequest
     ) {
-        streamingCoordinator.execute(currentSession, content, parentId)
+        sessionRepository.processNewMessageStreaming(sessionId, request).collect { eitherUpdate ->
+            eitherUpdate.fold(
+                ifLeft = { repositoryError ->
+                    logger.error("Streaming message repository error: ${repositoryError.message}")
+                    errorNotifier.repositoryError(
+                        error = repositoryError,
+                        shortMessageRes = Res.string.error_sending_message_short
+                    )
+                },
+                ifRight = { chatUpdate ->
+                    // Handle specific events that require UI state updates
+                    when (chatUpdate) {
+                        is ChatStreamEvent.UserMessageSaved -> {
+                            // Clear input and reply target after user message is confirmed
+                            state.setInputContent("")
+                            state.setReplyTarget(null)
+                        }
+
+                        is ChatStreamEvent.ErrorOccurred -> {
+                            errorNotifier.apiError(
+                                error = chatUpdate.error,
+                                shortMessageRes = Res.string.error_sending_message_short
+                            )
+                        }
+
+                        else -> {
+                            // Other events are handled by the repository's applyStreamEvent method
+                            // No additional UI state updates needed
+                        }
+                    }
+                }
+            )
+        }
     }
 
     /**
-     * Handles non-streaming message processing.
+     * Handles non-streaming message processing using SessionRepository.
      */
     private suspend fun handleNonStreamingMessage(
-        currentSession: ChatSession,
-        content: String,
-        parentId: Long?
+        sessionId: Long,
+        request: ProcessNewMessageRequest
     ) {
-        chatApi.processNewMessage(
-            sessionId = currentSession.id,
-            request = ProcessNewMessageRequest(content = content, parentMessageId = parentId)
-        ).fold(
-            ifLeft = { error ->
-                logger.error("Send message API error: ${error.code} - ${error.message}")
-                errorNotifier.apiError(
-                    error = error,
+        sessionRepository.processNewMessage(sessionId, request).fold(
+            ifLeft = { repositoryError ->
+                logger.error("Send message repository error: ${repositoryError.message}")
+                errorNotifier.repositoryError(
+                    error = repositoryError,
                     shortMessageRes = Res.string.error_sending_message_short
                 )
             },
-            ifRight = { newMessages ->
-                logger.info("Successfully sent non-streaming message, received ${newMessages.size} messages")
-                // Add the new messages to the current session's messages
-                val updatedMessages = currentSession.messages + newMessages
-                val newLeafId = newMessages.lastOrNull()?.id
-
-                // Update the session state with new messages
-                // TODO: Update parent's children list (parent of the user message)
-                state.updateSessionMessages(updatedMessages)
-                state.updateSessionLeafId(newLeafId)
+            ifRight = {
+                logger.info("Successfully sent non-streaming message")
+                // Clear input and reply state
                 state.setReplyTarget(null)
                 state.setInputContent("")
             }

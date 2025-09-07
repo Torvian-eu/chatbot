@@ -1,8 +1,8 @@
 package eu.torvian.chatbot.app.domain.contracts
 
-import eu.torvian.chatbot.common.api.ApiError
-import eu.torvian.chatbot.common.models.ChatMessage
+import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatSessionData
+import eu.torvian.chatbot.common.models.ChatMessage
 
 /**
  * Encapsulates all UI state relevant to the main Chat Area.
@@ -17,7 +17,7 @@ import eu.torvian.chatbot.app.viewmodel.chat.state.ChatSessionData
  * @property isSendingMessage Indicates whether a message is currently in the process of being sent (E1.S3).
  */
 data class ChatAreaState(
-    val sessionUiState: UiState<ApiError, ChatSessionData> = UiState.Idle,
+    val sessionUiState: DataState<RepositoryError, ChatSessionData> = DataState.Idle,
     val displayedMessages: List<ChatMessage> = emptyList(),
     val inputContent: String = "",
     val replyTargetMessage: ChatMessage? = null,

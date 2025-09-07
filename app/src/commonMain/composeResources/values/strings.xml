@@ -15,6 +15,7 @@
 
     <!-- Error Messages -->
     <string name="error_api_request">An API error occurred: %1$s\nCause: %2$s</string>
+    <string name="error_repository">A data access error occurred: %1$s\nCause: %2$s</string>
     <string name="error_unknown">An unexpected error occurred.</string>
     <string name="error_loading_sessions_groups">Failed to load sessions or groups.</string>
     <string name="error_loading_session">Failed to load session.</string>

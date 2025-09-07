@@ -5,7 +5,7 @@ import eu.torvian.chatbot.app.compose.sessionlist.SessionListPanel
 import eu.torvian.chatbot.app.domain.contracts.SessionListState
 import eu.torvian.chatbot.app.domain.contracts.SessionListActions
 import eu.torvian.chatbot.app.domain.contracts.SessionListData
-import eu.torvian.chatbot.app.domain.contracts.UiState
+import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.common.models.ChatGroup
 import eu.torvian.chatbot.common.models.ChatSessionSummary
 import kotlinx.datetime.Instant
@@ -16,7 +16,7 @@ import org.jetbrains.compose.ui.tooling.preview.Preview
 fun SessionListPanelPreview() {
     // Mock data for preview
     val mockState = SessionListState(
-        listUiState = UiState.Success(
+        listUiState = DataState.Success(
             SessionListData(
                 allSessions = listOf(
                     ChatSessionSummary(

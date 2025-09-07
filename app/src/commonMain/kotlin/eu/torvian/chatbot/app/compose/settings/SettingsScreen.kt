@@ -28,6 +28,9 @@ import org.koin.compose.viewmodel.koinViewModel
  *
  * It obtains its own ViewModels and manages the overall layout and navigation
  * between the different configuration sections.
+ *
+ * TODO: Refactor to use the Route pattern for better modularity and testability.
+ *       (See temp/refactor_plan_for_SettingsScreen.md)
  */
 @Composable
 fun SettingsScreen(
@@ -43,7 +46,7 @@ fun SettingsScreen(
     LaunchedEffect(Unit) {
         providerConfigViewModel.loadProviders()
         modelConfigViewModel.loadModelsAndProviders()
-        settingsConfigViewModel.loadModels()
+        settingsConfigViewModel.loadModelsAndSettings()
     }
 
     // Collect states from ViewModels
@@ -55,9 +58,10 @@ fun SettingsScreen(
     val selectedModel by modelConfigViewModel.selectedModel.collectAsState()
     val dialogState by modelConfigViewModel.dialogState.collectAsState()
 
+    val modelsForSettings by settingsConfigViewModel.modelsState.collectAsState()
+    val settingsListForSelectedModel by settingsConfigViewModel.settingsListForSelectedModel.collectAsState()
     val selectedModelForSettings by settingsConfigViewModel.selectedModel.collectAsState()
     val selectedSettings by settingsConfigViewModel.selectedSettings.collectAsState()
-    val settingsConfigState by settingsConfigViewModel.settingsConfigState.collectAsState()
     val settingsDialogState by settingsConfigViewModel.dialogState.collectAsState()
 
     // Create state objects
@@ -74,7 +78,8 @@ fun SettingsScreen(
     )
 
     val settingsConfigTabState = SettingsConfigTabState(
-        settingsConfigState = settingsConfigState,
+        modelsUiState = modelsForSettings,
+        settingsListForSelectedModel = settingsListForSelectedModel,
         selectedModel= selectedModelForSettings,
         selectedSettings = selectedSettings,
         dialogState = settingsDialogState
@@ -114,7 +119,7 @@ fun SettingsScreen(
     }
 
     val settingsConfigTabActions = object : SettingsConfigTabActions {
-        override fun onLoadModels() = settingsConfigViewModel.loadModels()
+        override fun onLoadModels() = settingsConfigViewModel.loadModelsAndSettings()
     }
 
     Column(

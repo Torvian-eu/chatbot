@@ -1,32 +1,28 @@
 package eu.torvian.chatbot.app.viewmodel.chat.usecase
 
-import arrow.core.raise.Raise
 import arrow.core.raise.either
-import arrow.core.raise.ensure
 import arrow.fx.coroutines.parZip
 import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.error_loading_session
-import eu.torvian.chatbot.app.service.api.ModelApi
-import eu.torvian.chatbot.app.service.api.SessionApi
-import eu.torvian.chatbot.app.service.api.SettingsApi
+import eu.torvian.chatbot.app.repository.ModelRepository
+import eu.torvian.chatbot.app.repository.SessionRepository
+import eu.torvian.chatbot.app.repository.SettingsRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
-import eu.torvian.chatbot.app.viewmodel.chat.state.ChatSessionData
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
-import eu.torvian.chatbot.common.api.ApiError
-import eu.torvian.chatbot.common.api.CommonApiErrorCodes
-import eu.torvian.chatbot.common.api.apiError
-import eu.torvian.chatbot.common.models.ChatModelSettings
-import eu.torvian.chatbot.common.models.LLMModel
 
 /**
- * Use case for loading chat sessions from the API.
- * Handles session loading and error handling.
+ * Use case for loading chat sessions in the reactive architecture.
+ *
+ * This use case follows the action-only pattern where it:
+ * 1. Sets the activeSessionId to trigger reactive state updates
+ * 2. Triggers repository load operations
+ * 3. Lets the reactive system handle all state updates automatically
  */
 class LoadSessionUseCase(
-    private val sessionApi: SessionApi,
-    private val settingsApi: SettingsApi,
-    private val modelApi: ModelApi,
+    private val sessionRepository: SessionRepository,
+    private val settingsRepository: SettingsRepository,
+    private val modelRepository: ModelRepository,
     private val state: ChatState,
     private val errorNotifier: ErrorNotifier
 ) {
@@ -34,9 +30,13 @@ class LoadSessionUseCase(
     private val logger = kmpLogger<LoadSessionUseCase>()
 
     /**
-     * Loads a chat session and its messages by ID.
+     * Loads a chat session and its messages by ID in the reactive architecture.
      *
-     * @param sessionId The ID of the session to load, or null to clear the session
+     * This method sets the activeSessionId and triggers repository load operations.
+     * The reactive system automatically handles state updates through ChatStateImpl's
+     * reactive flows.
+     *
+     * @param sessionId The ID of the session to load
      * @param forceReload If true, reloads the session even if it's already loaded successfully
      */
     suspend fun execute(sessionId: Long, forceReload: Boolean = false) {
@@ -47,76 +47,43 @@ class LoadSessionUseCase(
         // Store the session ID for potential retry
         state.setRetryState(sessionId, null)
 
-        state.setSessionDataLoading()
+        // Clear interaction state
         state.setReplyTarget(null)
         state.setEditingMessage(null)
 
-        // Load session and related data
-        either {
-            val session = sessionApi.getSessionDetails(sessionId).bind()
+        // Set the active session ID - this triggers the reactive chain
+        state.setActiveSessionId(sessionId)
 
-            // Load LLM model and model settings in parallel
-            val (llmModel, modelSettings) = parZip(
-                { session.currentModelId?.let { modelId -> loadLLMModel(modelId) } },
-                { session.currentSettingsId?.let { settingsId -> loadModelSettings(settingsId) } }
-            ) { llmModel, modelSettings ->
-                llmModel to modelSettings
+        // Trigger repository load operations
+        either {
+            // Load session details
+            val session = sessionRepository.loadSessionDetails(sessionId).bind()
+
+            // Load model and settings details in parallel if they exist
+            parZip(
+                { session.currentModelId?.let { modelId -> modelRepository.loadModelDetails(modelId) } },
+                { session.currentSettingsId?.let { settingsId -> settingsRepository.loadSettingsDetails(settingsId) } }
+            ) { modelResult, settingsResult ->
+                modelResult?.bind()
+                settingsResult?.bind()
+                Unit
             }
-            ChatSessionData(session = session, modelSettings = modelSettings, llmModel = llmModel)
         }.fold(
-            ifLeft = { error ->
-                state.setSessionDataError(error)
-                val eventId = errorNotifier.apiError(
-                    error = error,
+            ifLeft = { repositoryError ->
+                val eventId = errorNotifier.repositoryError(
+                    error = repositoryError,
                     shortMessageRes = Res.string.error_loading_session,
                     isRetryable = true
                 )
                 state.setRetryState(sessionId, eventId)
             },
-            ifRight = { data ->
-                logger.info("Successfully loaded session: ${data.session.id}")
-                if (data.llmModel == null) {
-                    logger.debug("Session ${data.session.id} has no LLM model configured")
-                } else {
-                    logger.info("Successfully loaded LLM model: ${data.llmModel.name} (ID: ${data.llmModel.id})")
-                }
-                if (data.modelSettings == null) {
-                    logger.debug("Session ${data.session.id} has no model settings configured")
-                } else {
-                    logger.info("Successfully loaded model settings: ${data.modelSettings.name} (ID: ${data.modelSettings.id})")
-                }
-                state.setSessionDataSuccess(data)
+            ifRight = { _ ->
+                logger.info("Successfully triggered load for session $sessionId")
                 state.clearRetryState()
             }
         )
     }
 
-    /**
-     * Loads model settings by ID.
-     *
-     * @param settingsId The ID of the model settings to load
-     * @return Either an ApiError or the loaded ChatModelSettings
-     */
-    private suspend fun Raise<ApiError>.loadModelSettings(settingsId: Long): ChatModelSettings {
-        val modelSettings = settingsApi.getSettingsById(settingsId).bind()
-        ensure(modelSettings is ChatModelSettings) {
-            val errorMessage =
-                "Unexpected model settings type: ${modelSettings::class.simpleName}. Expected ChatModelSettings."
-            logger.warn(errorMessage)
-            apiError(CommonApiErrorCodes.INTERNAL, errorMessage)
-        }
-        return modelSettings
-    }
-
-    /**
-     * Loads the LLM model by ID.
-     *
-     * @param modelId The ID of the LLM model to load
-     * @return Either an ApiError or the loaded LLMModel
-     */
-    private suspend fun Raise<ApiError>.loadLLMModel(modelId: Long): LLMModel {
-        return modelApi.getModelById(modelId).bind()
-    }
 
     /**
      * Handles retry requests by checking if the event ID matches and retrying if so.

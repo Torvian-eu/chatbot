@@ -6,6 +6,8 @@ import kotlin.uuid.ExperimentalUuidApi
  * Represents a global success notification.
  *
  * @property message The success message to display. (or string resource ID for localization)
+ *
+ * TODO: Rename to GlobalAppSuccess, or just AppSuccess
  */
 @OptIn(ExperimentalUuidApi::class)
 abstract class GlobalSuccess(
