@@ -12,7 +12,7 @@ class GenericAppError(
     val originalThrowable: Throwable? = null,
     message: String,
     isRetryable: Boolean = false
-) : GlobalError(
+) : AppError(
     message = message,
     isRetryable = isRetryable
 )

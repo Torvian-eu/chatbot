@@ -19,7 +19,7 @@ class RepositoryAppError(
     message: String,
     shortMessage: String? = null,
     isRetryable: Boolean = false
-) : GlobalError(
+) : AppError(
     message = message,
     shortMessage = shortMessage,
     isRetryable = isRetryable
