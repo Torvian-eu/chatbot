@@ -6,6 +6,7 @@ import arrow.core.Either
 import arrow.fx.coroutines.parZip
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.contracts.SessionListData
+import eu.torvian.chatbot.app.domain.contracts.SessionListDialogState
 import eu.torvian.chatbot.app.domain.events.SnackbarInteractionEvent
 import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.error_loading_sessions_groups
@@ -46,6 +47,7 @@ import kotlinx.coroutines.launch
  * @property newGroupNameInput Content of the new group input field.
  * @property editingGroup The group currently being edited/renamed. Null if none.
  * @property editingGroupNameInput Content of the editing group name input field.
+ * @property dialogState The current dialog state for the session list panel.
  */
 class SessionListViewModel(
     private val sessionRepository: SessionRepository,
@@ -75,6 +77,7 @@ class SessionListViewModel(
     private val _newGroupNameInput = MutableStateFlow("")
     private val _editingGroup = MutableStateFlow<ChatGroup?>(null)
     private val _editingGroupNameInput = MutableStateFlow("")
+    private val _dialogState = MutableStateFlow<SessionListDialogState>(SessionListDialogState.None)
 
     // --- Public State Properties ---
 
@@ -135,6 +138,12 @@ class SessionListViewModel(
      * Content of the editing group name input field.
      */
     val editingGroupNameInput: StateFlow<String> = _editingGroupNameInput.asStateFlow()
+
+    /**
+     * The current dialog state for the session list panel.
+     * Manages which dialog (if any) should be displayed and contains dialog-specific form state.
+     */
+    val dialogState: StateFlow<SessionListDialogState> = _dialogState.asStateFlow()
 
     // --- Initialization ---
 
@@ -200,87 +209,6 @@ class SessionListViewModel(
      */
     fun selectSession(sessionId: Long?) {
         userSelectedSessionId.value = sessionId
-    }
-
-    /**
-     * Creates a new chat session (E2.S1).
-     *
-     * @param initialName Optional initial name.
-     */
-    fun createNewSession(initialName: String? = null) {
-        viewModelScope.launch(uiDispatcher) {
-            sessionRepository.createSession(CreateSessionRequest(name = initialName))
-                .fold(
-                    ifLeft = { repositoryError ->
-                        errorNotifier.repositoryError(
-                            error = repositoryError,
-                            shortMessage = "Failed to create new session"
-                        )
-                    },
-                    ifRight = { newSession ->
-                        selectSession(newSession.id)
-                    }
-                )
-        }
-    }
-
-    /**
-     * Renames a session (E2.S5).
-     *
-     * @param session The session summary to rename.
-     * @param newName The new name for the session.
-     */
-    fun renameSession(session: ChatSessionSummary, newName: String) {
-        val trimmedName = newName.trim()
-        if (trimmedName.isBlank()) {
-            // Show inline validation error (UI concern) or update state with error
-            println("Validation Error: Session name cannot be empty.")
-            return
-        }
-        viewModelScope.launch(uiDispatcher) {
-            sessionRepository.updateSessionName(session.id, UpdateSessionNameRequest(trimmedName))
-                .mapLeft { repositoryError ->
-                    errorNotifier.repositoryError(
-                        error = repositoryError,
-                        shortMessage = "Failed to rename session"
-                    )
-                }
-        }
-    }
-
-    /**
-     * Deletes a chat session (E2.S6).
-     *
-     * @param sessionId The ID of the session to delete.
-     */
-    fun deleteSession(sessionId: Long) {
-        viewModelScope.launch(uiDispatcher) {
-            sessionRepository.deleteSession(sessionId)
-                .mapLeft { repositoryError ->
-                    errorNotifier.repositoryError(
-                        error = repositoryError,
-                        shortMessage = "Failed to delete session"
-                    )
-                }
-        }
-    }
-
-    /**
-     * Assigns a session to a group or ungroups it (E6.S1, E6.S7).
-     *
-     * @param sessionId The ID of the session to move.
-     * @param groupId The ID of the target group, or null to ungroup.
-     */
-    fun assignSessionToGroup(sessionId: Long, groupId: Long?) {
-        viewModelScope.launch(uiDispatcher) {
-            sessionRepository.updateSessionGroup(sessionId, UpdateSessionGroupRequest(groupId))
-                .mapLeft { repositoryError ->
-                    errorNotifier.repositoryError(
-                        error = repositoryError,
-                        shortMessage = "Failed to assign session to group"
-                    )
-                }
-        }
     }
 
     /**
@@ -386,19 +314,222 @@ class SessionListViewModel(
     }
 
     /**
+     * Shows the new session dialog with pre-bound actions.
+     */
+    fun showNewSessionDialog() {
+        _dialogState.value = SessionListDialogState.NewSession(
+            sessionNameInput = "",
+            onNameInputChange = { name -> updateDialogSessionName(name) },
+            onCreateSession = { sessionName ->
+                createNewSession(sessionName)
+            },
+            onDismiss = { cancelDialog() }
+        )
+    }
+
+    /**
+     * Shows the rename session dialog with pre-bound actions.
+     *
+     * @param session The session to rename.
+     */
+    fun showRenameSessionDialog(session: ChatSessionSummary) {
+        _dialogState.value = SessionListDialogState.RenameSession(
+            session = session,
+            newSessionNameInput = session.name,
+            onNameInputChange = { name -> updateDialogSessionName(name) },
+            onRenameSession = { newName ->
+                renameSession(session, newName)
+            },
+            onDismiss = { cancelDialog() }
+        )
+    }
+
+    /**
+     * Shows the delete session dialog with pre-bound actions.
+     *
+     * @param sessionId The ID of the session to delete.
+     */
+    fun showDeleteSessionDialog(sessionId: Long) {
+        _dialogState.value = SessionListDialogState.DeleteSession(
+            sessionId = sessionId,
+            onDeleteConfirm = {
+                deleteSession(sessionId)
+            },
+            onDismiss = { cancelDialog() }
+        )
+    }
+
+    /**
+     * Shows the assign group dialog with pre-bound actions.
+     *
+     * @param session The session to assign to a group.
+     */
+    fun showAssignGroupDialog(session: ChatSessionSummary) {
+        _dialogState.value = SessionListDialogState.AssignGroup(
+            sessionId = session.id,
+            groupId = session.groupId,
+            onAssignToGroup = { sessionId, groupId ->
+                assignSessionToGroup(sessionId, groupId)
+            },
+            onDismiss = { cancelDialog() }
+        )
+    }
+
+    /**
+     * Shows the delete group dialog with pre-bound actions.
+     *
+     * @param groupId The ID of the group to delete.
+     */
+    fun showDeleteGroupDialog(groupId: Long) {
+        _dialogState.value = SessionListDialogState.DeleteGroup(
+            groupId = groupId,
+            onDeleteConfirm = {
+                deleteGroup(groupId)
+            },
+            onDismiss = { cancelDialog() }
+        )
+    }
+
+    /**
+     * Cancels/closes any dialog by setting state to None.
+     */
+    fun cancelDialog() {
+        _dialogState.value = SessionListDialogState.None
+    }
+
+    // --- Private Helper Functions (Internal Logic) ---
+
+    /**
+     * Creates a new chat session (E2.S1).
+     *
+     * @param initialName Optional initial name.
+     */
+    private fun createNewSession(initialName: String? = null) {
+        // If initialName is blank, pass null to use default name
+        val sanitizedName = initialName?.ifBlank { null }
+
+        viewModelScope.launch(uiDispatcher) {
+            sessionRepository.createSession(CreateSessionRequest(name = sanitizedName))
+                .fold(
+                    ifLeft = { repositoryError ->
+                        errorNotifier.repositoryError(
+                            error = repositoryError,
+                            shortMessage = "Failed to create new session"
+                        )
+                    },
+                    ifRight = { newSession ->
+                        cancelDialog()
+                        selectSession(newSession.id)
+                    }
+                )
+        }
+    }
+
+    /**
+     * Renames a session (E2.S5).
+     *
+     * @param session The session summary to rename.
+     * @param newName The new name for the session.
+     */
+    private fun renameSession(session: ChatSessionSummary, newName: String) {
+        val trimmedName = newName.trim()
+        if (trimmedName.isBlank()) {
+            // Show inline validation error (UI concern) or update state with error
+            println("Validation Error: Session name cannot be empty.")
+            return
+        }
+        viewModelScope.launch(uiDispatcher) {
+            sessionRepository.updateSessionName(session.id, UpdateSessionNameRequest(trimmedName)).fold(
+                ifLeft = { repositoryError ->
+                    errorNotifier.repositoryError(
+                        error = repositoryError,
+                        shortMessage = "Failed to rename session"
+                    )
+                },
+                ifRight = {
+                    cancelDialog()
+                }
+            )
+        }
+    }
+
+    /**
+     * Deletes a chat session (E2.S6).
+     *
+     * @param sessionId The ID of the session to delete.
+     */
+    private fun deleteSession(sessionId: Long) {
+        viewModelScope.launch(uiDispatcher) {
+            sessionRepository.deleteSession(sessionId).fold(
+                ifLeft = { repositoryError ->
+                    errorNotifier.repositoryError(
+                        error = repositoryError,
+                        shortMessage = "Failed to delete session"
+                    )
+                },
+                ifRight = {
+                    cancelDialog()
+                }
+            )
+        }
+    }
+
+    /**
+     * Assigns a session to a group or ungroups it (E6.S1, E6.S7).
+     *
+     * @param sessionId The ID of the session to move.
+     * @param groupId The ID of the target group, or null to ungroup.
+     */
+    private fun assignSessionToGroup(sessionId: Long, groupId: Long?) {
+        viewModelScope.launch(uiDispatcher) {
+            sessionRepository.updateSessionGroup(sessionId, UpdateSessionGroupRequest(groupId)).fold(
+                ifLeft = { repositoryError ->
+                    errorNotifier.repositoryError(
+                        error = repositoryError,
+                        shortMessage = "Failed to assign session to group"
+                    )
+                },
+                ifRight = {
+                    cancelDialog()
+                }
+            )
+        }
+    }
+
+    /**
      * Deletes a chat session group (E6.S6).
      *
      * @param groupId The ID of the group to delete.
      */
-    fun deleteGroup(groupId: Long) {
+    private fun deleteGroup(groupId: Long) {
         viewModelScope.launch(uiDispatcher) {
-            groupRepository.deleteGroup(groupId)
-                .mapLeft { repositoryError ->
+            groupRepository.deleteGroup(groupId).fold(
+                ifLeft = { repositoryError ->
                     errorNotifier.repositoryError(
                         error = repositoryError,
                         shortMessage = "Failed to delete group"
-                    )
-                }
+                        )
+                    },
+                    ifRight = {
+                        cancelDialog()
+                    }
+                )
+        }
+    }
+
+    /**
+     * Updates the session name input in dialogs.
+     * This is a private method used by the pre-bound dialog actions.
+     *
+     * @param newName The new session name input.
+     */
+    private fun updateDialogSessionName(newName: String) {
+        _dialogState.update { dialogState ->
+            when (dialogState) {
+                is SessionListDialogState.NewSession -> dialogState.copy(sessionNameInput = newName)
+                is SessionListDialogState.RenameSession -> dialogState.copy(newSessionNameInput = newName)
+                else -> dialogState // No change for other states
+            }
         }
     }
 }

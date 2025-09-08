@@ -39,6 +39,7 @@ fun ChatScreen(
     val newGroupNameInput by sessionListViewModel.newGroupNameInput.collectAsState()
     val editingGroup by sessionListViewModel.editingGroup.collectAsState()
     val editingGroupNameInput by sessionListViewModel.editingGroupNameInput.collectAsState()
+    val dialogState by sessionListViewModel.dialogState.collectAsState()
 
     // --- Collect States for ChatArea ---
     val chatSessionUiState by chatViewModel.sessionDataState.collectAsState()
@@ -52,7 +53,7 @@ fun ChatScreen(
     // --- SessionListPanel Contract Construction ---
     val sessionListPanelUiState = remember(
         sessionListUiState, selectedSession, isCreatingNewGroup,
-        newGroupNameInput, editingGroup, editingGroupNameInput
+        newGroupNameInput, editingGroup, editingGroupNameInput, dialogState
     ) {
         SessionListState(
             listUiState = sessionListUiState,
@@ -60,7 +61,8 @@ fun ChatScreen(
             isCreatingNewGroup = isCreatingNewGroup,
             newGroupNameInput = newGroupNameInput,
             editingGroup = editingGroup,
-            editingGroupNameInput = editingGroupNameInput
+            editingGroupNameInput = editingGroupNameInput,
+            dialogState = dialogState
         )
     }
     val sessionListPanelActions = remember(sessionListViewModel) {
@@ -75,14 +77,6 @@ fun ChatScreen(
                 }
             }
 
-            override fun onCreateNewSession(name: String?) = sessionListViewModel.createNewSession(name)
-            override fun onRenameSession(session: ChatSessionSummary, newName: String) =
-                sessionListViewModel.renameSession(session, newName)
-
-            override fun onDeleteSession(sessionId: Long) = sessionListViewModel.deleteSession(sessionId)
-            override fun onAssignSessionToGroup(sessionId: Long, groupId: Long?) =
-                sessionListViewModel.assignSessionToGroup(sessionId, groupId)
-
             override fun onStartCreatingNewGroup() = sessionListViewModel.startCreatingNewGroup()
             override fun onUpdateNewGroupNameInput(newText: String) =
                 sessionListViewModel.updateNewGroupNameInput(newText)
@@ -95,8 +89,18 @@ fun ChatScreen(
 
             override fun onSaveRenamedGroup() = sessionListViewModel.saveRenamedGroup()
             override fun onCancelRenamingGroup() = sessionListViewModel.cancelRenamingGroup()
-            override fun onDeleteGroup(groupId: Long) = sessionListViewModel.deleteGroup(groupId)
             override fun onRetryLoadingSessions() = sessionListViewModel.loadSessionsAndGroups()
+
+            // Dialog management actions
+            override fun onShowNewSessionDialog() = sessionListViewModel.showNewSessionDialog()
+            override fun onShowRenameSessionDialog(session: ChatSessionSummary) =
+                sessionListViewModel.showRenameSessionDialog(session)
+            override fun onShowDeleteSessionDialog(sessionId: Long) =
+                sessionListViewModel.showDeleteSessionDialog(sessionId)
+            override fun onShowAssignGroupDialog(session: ChatSessionSummary) =
+                sessionListViewModel.showAssignGroupDialog(session)
+            override fun onShowDeleteGroupDialog(groupId: Long) =
+                sessionListViewModel.showDeleteGroupDialog(groupId)
         }
     }
 

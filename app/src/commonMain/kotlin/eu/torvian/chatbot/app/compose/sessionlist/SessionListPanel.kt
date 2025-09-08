@@ -15,6 +15,7 @@ import eu.torvian.chatbot.app.domain.contracts.SessionListActions
 import eu.torvian.chatbot.app.domain.contracts.SessionListData
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.contracts.SessionListState
+import eu.torvian.chatbot.app.domain.contracts.SessionListDialogState
 import eu.torvian.chatbot.common.models.ChatGroup
 
 /**
@@ -65,6 +66,7 @@ fun SessionListPanel(
                 editingGroup = state.editingGroup,
                 editingGroupNameInput = state.editingGroupNameInput,
                 selectedSessionId = state.selectedSessionId,
+                dialogState = state.dialogState,
                 sessionListActions = actions
             )
         }
@@ -82,6 +84,7 @@ fun SessionListPanel(
  * @param editingGroup The group being edited, if any.
  * @param editingGroupNameInput The current input for editing group name.
  * @param selectedSessionId The ID of the currently selected session.
+ * @param dialogState The current dialog state from the ViewModel.
  * @param sessionListActions The actions contract for the session list panel.
  */
 @Composable
@@ -92,11 +95,9 @@ private fun SessionListSuccessPanelContent(
     editingGroup: ChatGroup?,
     editingGroupNameInput: String,
     selectedSessionId: Long?,
+    dialogState: SessionListDialogState,
     sessionListActions: SessionListActions
 ) {
-    // Consolidated dialog state management
-    // TODO: Move dialogState to viewmodel
-    var dialogState by remember { mutableStateOf<DialogState>(DialogState.None) }
 
     // Group editing actions
     val groupEditingActions = remember(sessionListActions) {
@@ -111,36 +112,16 @@ private fun SessionListSuccessPanelContent(
     // Dialog request actions
     val dialogRequestActions = remember(sessionListActions) {
         DialogActions(
-            onRenameSessionRequested = { session ->
-                dialogState = DialogState.RenameSession(
-                    session = session,
-                    newSessionNameInput = session.name
-                )
-            },
-            onDeleteSessionRequested = { sessionId ->
-                dialogState = DialogState.DeleteSession(
-                    sessionId = sessionId
-                )
-            },
-            onAssignToGroupRequested = { session ->
-                dialogState = DialogState.AssignGroup(
-                    sessionId = session.id,
-                    groupId = session.groupId
-                )
-            },
-            onDeleteGroupRequested = { group ->
-                dialogState = DialogState.DeleteGroup(
-                    groupId = group.id
-                )
-            }
+            onRenameSessionRequested = sessionListActions::onShowRenameSessionDialog,
+            onDeleteSessionRequested = sessionListActions::onShowDeleteSessionDialog,
+            onAssignToGroupRequested = sessionListActions::onShowAssignGroupDialog,
+            onDeleteGroupRequested = sessionListActions::onShowDeleteGroupDialog
         )
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
         SessionListHeader(
-            onNewSessionClick = {
-                dialogState = DialogState.NewSession()
-            },
+            onNewSessionClick = sessionListActions::onShowNewSessionDialog,
             onNewGroupClick = sessionListActions::onStartCreatingNewGroup
         )
         // --- New Group Input (E6.S3) ---
@@ -166,8 +147,6 @@ private fun SessionListSuccessPanelContent(
     Dialogs(
         dialogState = dialogState,
         allSessions = sessionListData.allSessions,
-        allGroups = sessionListData.allGroups,
-        sessionListActions = sessionListActions,
-        onDialogStateChange = { dialogState = it }
+        allGroups = sessionListData.allGroups
     )
 }

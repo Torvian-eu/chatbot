@@ -12,6 +12,7 @@ import eu.torvian.chatbot.common.models.ChatGroup
  * @property newGroupNameInput Content of the new group input field.
  * @property editingGroup The group currently being edited/renamed. Null if none.
  * @property editingGroupNameInput Content of the editing group name input field.
+ * @property dialogState The current dialog state for the session list panel.
  */
 data class SessionListState(
     val listUiState: DataState<RepositoryError, SessionListData> = DataState.Idle,
@@ -19,5 +20,6 @@ data class SessionListState(
     val isCreatingNewGroup: Boolean = false,
     val newGroupNameInput: String = "",
     val editingGroup: ChatGroup? = null,
-    val editingGroupNameInput: String = ""
+    val editingGroupNameInput: String = "",
+    val dialogState: SessionListDialogState = SessionListDialogState.None
 )
