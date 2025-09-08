@@ -13,7 +13,6 @@ import io.ktor.client.call.*
 import io.ktor.client.plugins.*
 import io.ktor.client.statement.*
 import io.ktor.serialization.*
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import kotlinx.io.IOException
 
@@ -49,7 +48,6 @@ abstract class BaseApiResourceClient(protected val client: HttpClient) {
      * - Network I/O errors are wrapped in [ApiResourceError.NetworkError]
      * - Serialization/deserialization errors are wrapped in [ApiResourceError.SerializationError]
      * - All other unexpected errors are wrapped in [ApiResourceError.UnknownError]
-     * - [CancellationException] is re-thrown to preserve coroutine cancellation semantics
      *
      * @param T The expected type of the successful result.
      * @param block The suspend function block containing the Ktor HttpClient call.
@@ -84,9 +82,6 @@ abstract class BaseApiResourceClient(protected val client: HttpClient) {
                 // Serialization/deserialization errors
                 logger.warn("ContentConvertException (Serialization Error): ${e.message}")
                 ApiResourceError.SerializationError.from(e).left()
-            } catch (e: CancellationException) { // TODO: Should we catch CancellationException?
-                logger.warn("Request cancelled: ${e.message}")
-                throw e // Re-throw cancellation to preserve coroutine cancellation semantics
             } catch (e: Exception) {
                 logger.error("Unexpected Exception during API call: ${e.message}", e)
                 ApiResourceError.UnknownError.from(e).left()
