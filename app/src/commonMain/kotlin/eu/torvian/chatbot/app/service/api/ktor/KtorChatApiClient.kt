@@ -5,6 +5,7 @@ import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.ChatApi
+import eu.torvian.chatbot.app.utils.misc.ioDispatcher
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.resources.MessageResource
@@ -24,6 +25,7 @@ import io.ktor.client.statement.*
 import io.ktor.http.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.serializer
 
@@ -62,7 +64,6 @@ class KtorChatApiClient(client: HttpClient) : BaseApiResourceClient(client), Cha
         }
     }
 
-    // TODO: Add withContext(ioDispatcher)
     override fun processNewMessageStreaming(
         sessionId: Long,
         request: ProcessNewMessageRequest
@@ -127,7 +128,7 @@ class KtorChatApiClient(client: HttpClient) : BaseApiResourceClient(client), Cha
             }
             emit(apiResourceError.left())
         }
-    }
+    }.flowOn(ioDispatcher)
 
     override suspend fun updateMessageContent(
         messageId: Long,
