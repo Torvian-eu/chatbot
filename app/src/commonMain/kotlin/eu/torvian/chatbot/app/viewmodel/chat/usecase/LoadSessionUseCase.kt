@@ -47,13 +47,6 @@ class LoadSessionUseCase(
         // Store the session ID for potential retry
         state.setRetryState(sessionId, null)
 
-        // Clear interaction state
-        state.setReplyTarget(null)
-        state.setEditingMessage(null)
-
-        // Set the active session ID - this triggers the reactive chain
-        state.setActiveSessionId(sessionId)
-
         // Trigger repository load operations
         either {
             // Load session details
@@ -79,7 +72,8 @@ class LoadSessionUseCase(
             },
             ifRight = { _ ->
                 logger.info("Successfully triggered load for session $sessionId")
-                state.clearRetryState()
+                state.resetState()
+                state.setActiveSessionId(sessionId)
             }
         )
     }
