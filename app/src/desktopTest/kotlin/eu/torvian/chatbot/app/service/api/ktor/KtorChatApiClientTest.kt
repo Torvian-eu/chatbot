@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.app.service.api.ktor
 
 import arrow.core.Either
+import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.ChatApi
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
@@ -106,10 +107,10 @@ class KtorChatApiClientTest {
             }
 
             is Either.Left -> {
-                val error = result.value
-                assertEquals(400, error.statusCode)
-                assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.code)
-                assertEquals("Invalid message content", error.message)
+                val error = result.value as ApiResourceError.ServerError
+                assertEquals(400, error.apiError.statusCode)
+                assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.apiError.code)
+                assertEquals("Invalid message content", error.apiError.message)
             }
         }
     }
@@ -141,10 +142,10 @@ class KtorChatApiClientTest {
             }
 
             is Either.Left -> {
-                val error = result.value
-                assertEquals(500, error.statusCode)
-                assertEquals(CommonApiErrorCodes.INTERNAL.code, error.code)
-                assertEquals("Internal Server Error", error.message)
+                val error = result.value as ApiResourceError.ServerError
+                assertEquals(500, error.apiError.statusCode)
+                assertEquals(CommonApiErrorCodes.INTERNAL.code, error.apiError.code)
+                assertEquals("Internal Server Error", error.apiError.message)
             }
         }
     }
@@ -175,10 +176,9 @@ class KtorChatApiClientTest {
             }
 
             is Either.Left -> {
-                val error = result.value
-                assertEquals(500, error.statusCode)
-                assertEquals(CommonApiErrorCodes.INTERNAL.code, error.code)
-                assertTrue(error.message.contains("Data Serialization/Deserialization Error"))
+                val error = result.value as ApiResourceError.SerializationError
+                assertTrue(error.message.contains("Serialization Error"))
+                assertTrue(error.description.contains("Failed to parse API response"))
             }
         }
     }
@@ -244,10 +244,10 @@ class KtorChatApiClientTest {
             }
 
             is Either.Left -> {
-                val error = result.value
-                assertEquals(400, error.statusCode)
-                assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.code)
-                assertEquals("Invalid content", error.message)
+                val error = result.value as ApiResourceError.ServerError
+                assertEquals(400, error.apiError.statusCode)
+                assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.apiError.code)
+                assertEquals("Invalid content", error.apiError.message)
             }
         }
     }

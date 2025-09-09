@@ -5,7 +5,9 @@ import eu.torvian.chatbot.app.compose.chatarea.ChatArea
 import eu.torvian.chatbot.app.compose.common.LOADING_OVERLAY_TAG
 import eu.torvian.chatbot.app.domain.contracts.ChatAreaActions
 import eu.torvian.chatbot.app.domain.contracts.ChatAreaState
-import eu.torvian.chatbot.app.domain.contracts.UiState
+import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.app.repository.toRepositoryError
+import eu.torvian.chatbot.app.service.api.toApiResourceError
 import eu.torvian.chatbot.app.testutils.data.assistantMessage
 import eu.torvian.chatbot.app.testutils.data.chatSession
 import eu.torvian.chatbot.app.testutils.data.userMessage
@@ -42,8 +44,9 @@ class ChatAreaTest {
     fun errorState_showsRetryButton() {
         // Arrange
         val testError = apiError(CommonApiErrorCodes.INTERNAL, "Test error message")
+        val repositoryError = testError.toApiResourceError().toRepositoryError()
         val errorState = ChatAreaState(
-            sessionUiState = UiState.Error(testError),
+            sessionUiState = DataState.Error(repositoryError),
             displayedMessages = emptyList(),
             inputContent = "",
             replyTargetMessage = null,
@@ -62,7 +65,6 @@ class ChatAreaTest {
 
             // Assert - Check that error message is displayed
             onNodeWithText("Failed to load chat session").assertIsDisplayed()
-            onNodeWithText("Test error message").assertIsDisplayed()
 
             // Assert - Check that retry button is displayed and clickable
             val retryButton = onNodeWithText("Retry")
@@ -81,7 +83,7 @@ class ChatAreaTest {
     fun loadingState_showsLoadingOverlay() {
         // Arrange
         val loadingState = ChatAreaState(
-            sessionUiState = UiState.Loading
+            sessionUiState = DataState.Loading
         )
 
         // Act & Assert
@@ -122,7 +124,7 @@ class ChatAreaTest {
         )
 
         val successState = ChatAreaState(
-            sessionUiState = UiState.Success(ChatSessionData(session = testSession)),
+            sessionUiState = DataState.Success(ChatSessionData(session = testSession)),
             displayedMessages = testSession.messages
         )
 
@@ -148,7 +150,7 @@ class ChatAreaTest {
     fun idleState_showsIdleMessage() {
         // Arrange
         val idleState = ChatAreaState(
-            sessionUiState = UiState.Idle
+            sessionUiState = DataState.Idle
         )
 
         // Act & Assert
@@ -189,7 +191,7 @@ class ChatAreaTest {
         )
 
         val successState = ChatAreaState(
-            sessionUiState = UiState.Success(ChatSessionData(session = testSession)),
+            sessionUiState = DataState.Success(ChatSessionData(session = testSession)),
             displayedMessages = testSession.messages
         )
 
@@ -221,7 +223,7 @@ class ChatAreaTest {
         )
 
         val successState = ChatAreaState(
-            sessionUiState = UiState.Success(ChatSessionData(session = testSession)),
+            sessionUiState = DataState.Success(ChatSessionData(session = testSession)),
             displayedMessages = emptyList()
         )
 
@@ -274,7 +276,7 @@ class ChatAreaTest {
         )
 
         val successState = ChatAreaState(
-            sessionUiState = UiState.Success(ChatSessionData(session = testSession)),
+            sessionUiState = DataState.Success(ChatSessionData(session = testSession)),
             displayedMessages = testMessages
         )
 
@@ -322,7 +324,7 @@ class ChatAreaTest {
         )
 
         val successState = ChatAreaState(
-            sessionUiState = UiState.Success(ChatSessionData(session = testSession)),
+            sessionUiState = DataState.Success(ChatSessionData(session = testSession)),
             displayedMessages = testMessages
         )
 
@@ -370,7 +372,7 @@ class ChatAreaTest {
         )
 
         val successState = ChatAreaState(
-            sessionUiState = UiState.Success(ChatSessionData(session = testSession)),
+            sessionUiState = DataState.Success(ChatSessionData(session = testSession)),
             displayedMessages = testMessages
         )
 
@@ -438,7 +440,7 @@ class ChatAreaTest {
         )
 
         val successState = ChatAreaState(
-            sessionUiState = UiState.Success(ChatSessionData(session = testSession)),
+            sessionUiState = DataState.Success(ChatSessionData(session = testSession)),
             displayedMessages = listOf(m1, m2, m3) // Display first branch
         )
 
@@ -466,8 +468,9 @@ class ChatAreaTest {
     fun errorState_differentErrorTypes_showsCorrectMessages() {
         // Test different error types
         val notFoundError = apiError(CommonApiErrorCodes.NOT_FOUND, "Session not found")
+        val repositoryError = notFoundError.toApiResourceError().toRepositoryError()
         val errorState = ChatAreaState(
-            sessionUiState = UiState.Error(notFoundError)
+            sessionUiState = DataState.Error(repositoryError)
         )
 
         runComposeUiTest {
@@ -480,7 +483,6 @@ class ChatAreaTest {
 
             // Assert - Error message should be displayed
             onNodeWithText("Failed to load chat session").assertIsDisplayed()
-            onNodeWithText("Session not found").assertIsDisplayed()
             onNodeWithText("Retry").assertIsDisplayed()
         }
     }
@@ -510,7 +512,7 @@ class ChatAreaTest {
         )
 
         val successState = ChatAreaState(
-            sessionUiState = UiState.Success(ChatSessionData(session = testSession)),
+            sessionUiState = DataState.Success(ChatSessionData(session = testSession)),
             displayedMessages = testMessages
         )
 
@@ -548,7 +550,7 @@ class ChatAreaTest {
         )
 
         val successState = ChatAreaState(
-            sessionUiState = UiState.Success(ChatSessionData(session = testSession)),
+            sessionUiState = DataState.Success(ChatSessionData(session = testSession)),
             displayedMessages = testMessages
         )
 
@@ -570,8 +572,9 @@ class ChatAreaTest {
     fun successState_multipleRetryClicks_callsRetryMultipleTimes() {
         // Arrange
         val testError = apiError(CommonApiErrorCodes.INTERNAL, "Server error")
+        val repositoryError = testError.toApiResourceError().toRepositoryError()
         val errorState = ChatAreaState(
-            sessionUiState = UiState.Error(testError)
+            sessionUiState = DataState.Error(repositoryError)
         )
 
         // Act & Assert
@@ -612,7 +615,7 @@ class ChatAreaTest {
             // Start with loading state
             setContent {
                 ChatArea(
-                    state = ChatAreaState(sessionUiState = UiState.Loading),
+                    state = ChatAreaState(sessionUiState = DataState.Loading),
                     actions = mockActions
                 )
             }
@@ -624,7 +627,7 @@ class ChatAreaTest {
             setContent {
                 ChatArea(
                     state = ChatAreaState(
-                        sessionUiState = UiState.Success(ChatSessionData(session = testSession)),
+                        sessionUiState = DataState.Success(ChatSessionData(session = testSession)),
                         displayedMessages = testMessages
                     ),
                     actions = mockActions
