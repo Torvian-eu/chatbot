@@ -42,7 +42,11 @@ class SendMessageUseCase(
             // Check if streaming is enabled in settings, default to true if no settings available
             val isStreamingEnabled = currentSessionData.modelSettings?.stream ?: true
 
-            val request = ProcessNewMessageRequest(content = content, parentMessageId = parentId)
+            val request = ProcessNewMessageRequest(
+                content = content,
+                parentMessageId = parentId,
+                isStreaming = isStreamingEnabled
+            )
 
             if (isStreamingEnabled) {
                 handleStreamingMessage(currentSession.id, request)

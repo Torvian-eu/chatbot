@@ -7,7 +7,6 @@ import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.ChatApi
 import eu.torvian.chatbot.app.utils.misc.ioDispatcher
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
-import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.resources.MessageResource
 import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.api.resources.href
@@ -21,7 +20,6 @@ import io.ktor.client.plugins.*
 import io.ktor.client.plugins.resources.*
 import io.ktor.client.plugins.sse.*
 import io.ktor.client.request.*
-import io.ktor.client.statement.*
 import io.ktor.http.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -97,32 +95,15 @@ class KtorChatApiClient(client: HttpClient) : BaseApiResourceClient(client), Cha
                 }
             }
         } catch (e: Exception) {
-            // TODO: always seems to throw SSEClientException
             logger.error("Network or streaming error during processNewMessageStreaming for session $sessionId", e)
-            // Map common Ktor exceptions to ApiResourceError type
             val apiResourceError = when (e) {
-                // ClientRequestException and ServerResponseException indicate
-                // a non-2xx status on the *initial* connection attempt for SSE.
-                is ClientRequestException -> ApiResourceError.ServerError(
-                    ApiError(
-                        e.response.status.value,
-                        "client-error",
-                        "HTTP Client Error: ${e.response.status.description}",
-                        mapOf("details" to (e.response.bodyAsText()))
-                    )
+                is SSEClientException -> ApiResourceError.NetworkError(
+                    "SSE Client Error: ${e.message}",
+                    e
                 )
 
-                is ServerResponseException -> ApiResourceError.ServerError(
-                    ApiError(
-                        e.response.status.value,
-                        "server-error",
-                        "HTTP Server Error: ${e.response.status.description}",
-                        mapOf("details" to (e.response.bodyAsText()))
-                    )
-                )
-
-                else -> ApiResourceError.NetworkError(
-                    "Network or communication error during streaming: ${e.message}",
+                else -> ApiResourceError.UnknownError(
+                    "Unexpected error during SSE request: ${e.message}",
                     e
                 )
             }
