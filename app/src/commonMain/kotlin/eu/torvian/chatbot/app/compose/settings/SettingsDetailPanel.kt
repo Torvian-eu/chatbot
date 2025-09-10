@@ -52,7 +52,10 @@ fun SettingsDetailPanel(
                 Spacer(modifier = Modifier.height(24.dp))
                 
                 // Details Section
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
                     item { DetailRow("Profile Name", settings.name) }
                     item { DetailRow("Profile ID", settings.id.toString()) }
                     item { DetailRow("Model Type", settings.modelType.name) }

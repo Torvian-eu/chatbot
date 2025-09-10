@@ -1,6 +1,8 @@
 package eu.torvian.chatbot.app.compose.settings
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -89,8 +91,14 @@ fun ModelDetailPanel(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Model information
-                ModelDetailsContent(model = model, providers = providers)
+                // Model information - now wrapped in scrollable Column
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    ModelDetailsContent(model = model, providers = providers)
+                }
             }
         }
     }

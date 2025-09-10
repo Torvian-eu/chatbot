@@ -1,6 +1,8 @@
 package eu.torvian.chatbot.app.compose.settings
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -96,8 +98,14 @@ fun ProviderDetailPanel(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Provider details
-                ProviderDetailsSection(provider = provider)
+                // Provider details - now wrapped in scrollable Column
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    ProviderDetailsSection(provider = provider)
+                }
             }
         }
     }
