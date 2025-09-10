@@ -184,10 +184,10 @@ fun SettingsFormState.withError(errorMessage: String?): SettingsFormState {
 /**
  * Creates an empty form state for a new settings profile of the specified type.
  */
-fun createEmptyNewSettingsForm(modelType: LLMModelType): SettingsFormState {
+fun createEmptyNewSettingsForm(modelType: LLMModelType, modelId: Long): SettingsFormState {
     return when (modelType) {
-        LLMModelType.CHAT -> SettingsFormState.Chat(mode = FormMode.NEW)
-        LLMModelType.EMBEDDING -> SettingsFormState.Embedding(mode = FormMode.NEW)
+        LLMModelType.CHAT -> SettingsFormState.Chat(mode = FormMode.NEW, modelId = modelId)
+        LLMModelType.EMBEDDING -> SettingsFormState.Embedding(mode = FormMode.NEW, modelId = modelId)
         else -> throw IllegalArgumentException("Unsupported model type for settings form: $modelType")
     }
 }

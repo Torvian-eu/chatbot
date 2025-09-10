@@ -11,10 +11,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.domain.contracts.ModelFormState
 import eu.torvian.chatbot.app.domain.contracts.ProviderFormState
+import eu.torvian.chatbot.app.domain.contracts.SettingsFormState
 import eu.torvian.chatbot.app.viewmodel.ModelConfigViewModel
 import eu.torvian.chatbot.app.viewmodel.ProviderConfigViewModel
 import eu.torvian.chatbot.app.viewmodel.SettingsConfigViewModel
 import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.common.models.ModelSettings
 import eu.torvian.chatbot.common.models.LLMProvider
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -119,7 +121,16 @@ fun SettingsScreen(
     }
 
     val settingsConfigTabActions = object : SettingsConfigTabActions {
-        override fun onLoadModels() = settingsConfigViewModel.loadModelsAndSettings()
+        override fun onLoadModelsAndSettings() = settingsConfigViewModel.loadModelsAndSettings()
+        override fun onSelectModel(model: LLMModel?) = settingsConfigViewModel.selectModel(model)
+        override fun onSelectSettings(settings: ModelSettings?) = settingsConfigViewModel.selectSettings(settings)
+        override fun onStartAddingNewSettings() = settingsConfigViewModel.startAddingNewSettings()
+        override fun onStartEditingSettings(settings: ModelSettings) = settingsConfigViewModel.startEditingSettings(settings)
+        override fun onStartDeletingSettings(settings: ModelSettings) = settingsConfigViewModel.startDeletingSettings(settings)
+        override fun onUpdateSettingsForm(update: (SettingsFormState) -> SettingsFormState) = settingsConfigViewModel.updateSettingsForm(update)
+        override fun onSaveSettings() = settingsConfigViewModel.saveSettings()
+        override fun onDeleteSettings(settingsId: Long) = settingsConfigViewModel.deleteSettings(settingsId)
+        override fun onCancelDialog() = settingsConfigViewModel.cancelDialog()
     }
 
     Column(

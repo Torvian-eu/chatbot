@@ -2,8 +2,10 @@ package eu.torvian.chatbot.app.compose.settings
 
 import eu.torvian.chatbot.app.domain.contracts.ProviderFormState
 import eu.torvian.chatbot.app.domain.contracts.ModelFormState
+import eu.torvian.chatbot.app.domain.contracts.SettingsFormState
 import eu.torvian.chatbot.common.models.LLMProvider
 import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.common.models.ModelSettings
 
 /**
  * Action callbacks for the Providers tab.
@@ -45,5 +47,14 @@ interface ModelsTabActions {
  * Action callbacks for the Settings Config tab.
  */
 interface SettingsConfigTabActions {
-    fun onLoadModels()
+    fun onLoadModelsAndSettings()
+    fun onSelectModel(model: LLMModel?)
+    fun onSelectSettings(settings: ModelSettings?)
+    fun onStartAddingNewSettings()
+    fun onStartEditingSettings(settings: ModelSettings)
+    fun onStartDeletingSettings(settings: ModelSettings)
+    fun onUpdateSettingsForm(update: (SettingsFormState) -> SettingsFormState)
+    fun onSaveSettings()
+    fun onDeleteSettings(settingsId: Long)
+    fun onCancelDialog()
 }

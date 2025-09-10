@@ -174,7 +174,7 @@ class SettingsConfigViewModel(
             return
         }
         _dialogState.value = SettingsDialogState.AddNewSettings(
-            formState = createEmptyNewSettingsForm(selectedModel.type),
+            formState = createEmptyNewSettingsForm(selectedModel.type, selectedModel.id),
         )
     }
 
