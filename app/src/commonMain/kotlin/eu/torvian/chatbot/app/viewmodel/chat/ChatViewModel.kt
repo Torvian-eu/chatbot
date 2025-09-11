@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.app.viewmodel.chat
 
 import androidx.lifecycle.ViewModel
+import eu.torvian.chatbot.app.domain.contracts.ChatAreaDialogState
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.events.SnackbarInteractionEvent
 import eu.torvian.chatbot.app.repository.RepositoryError
@@ -99,6 +100,11 @@ class ChatViewModel(
      */
     val isSendingMessage: StateFlow<Boolean> = state.isSendingMessage
 
+    /**
+     * The current dialog state for the chat area (e.g., delete confirmation).
+     */
+    val dialogState: StateFlow<ChatAreaDialogState> = state.dialogState
+
     init {
         // Handle retry functionality via EventBus using background scope
         backgroundScope.launch {
@@ -192,9 +198,9 @@ class ChatViewModel(
     }
 
     /**
-     * Deletes a specific message and its children from the session.
+     * Deletes a specific message.
      */
-    fun deleteMessage(messageId: Long) {
+    private fun deleteMessage(messageId: Long) {
         normalScope.launch {
             deleteMessageUC.execute(messageId)
         }
@@ -225,6 +231,31 @@ class ChatViewModel(
         normalScope.launch {
             selectSettingsUC.execute(settingsId)
         }
+    }
+
+    // --- Dialog Management ---
+
+    /**
+     * Shows the delete message confirmation dialog with pre-bound actions.
+     * This is called when the user signals an intent to delete.
+     */
+    fun requestDeleteMessage(message: ChatMessage) {
+        state.setDialogState(ChatAreaDialogState.DeleteMessage(
+            message = message,
+            onDeleteConfirm = {
+                deleteMessage(message.id)
+            },
+            onDismiss = {
+                cancelDialog()
+            }
+        ))
+    }
+
+    /**
+     * Cancels/closes any dialog by setting state to None.
+     */
+    fun cancelDialog() {
+        state.cancelDialog()
     }
 
     /**

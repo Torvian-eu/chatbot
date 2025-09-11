@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.app.viewmodel.chat.state
 
+import eu.torvian.chatbot.app.domain.contracts.ChatAreaDialogState
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.ModelRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
@@ -37,6 +38,7 @@ class ChatStateImpl(
     private val _editingMessage = MutableStateFlow<ChatMessage?>(null)
     private val _editingContent = MutableStateFlow("")
     private val _isSendingMessage = MutableStateFlow(false)
+    private val _dialogState = MutableStateFlow<ChatAreaDialogState>(ChatAreaDialogState.None)
     private val _lastAttemptedSessionId = MutableStateFlow<Long?>(null)
     private val _lastFailedLoadEventId = MutableStateFlow<String?>(null)
 
@@ -48,6 +50,7 @@ class ChatStateImpl(
     override val editingMessage: StateFlow<ChatMessage?> = _editingMessage.asStateFlow()
     override val editingContent: StateFlow<String> = _editingContent.asStateFlow()
     override val isSendingMessage: StateFlow<Boolean> = _isSendingMessage.asStateFlow()
+    override val dialogState: StateFlow<ChatAreaDialogState> = _dialogState.asStateFlow()
     override val lastAttemptedSessionId: StateFlow<Long?> = _lastAttemptedSessionId.asStateFlow()
     override val lastFailedLoadEventId: StateFlow<String?> = _lastFailedLoadEventId.asStateFlow()
 
@@ -156,6 +159,14 @@ class ChatStateImpl(
         _isSendingMessage.value = isSending
     }
 
+    override fun setDialogState(dialogState: ChatAreaDialogState) {
+        _dialogState.value = dialogState
+    }
+
+    override fun cancelDialog() {
+        _dialogState.value = ChatAreaDialogState.None
+    }
+
     override fun setRetryState(sessionId: Long?, eventId: String?) {
         _lastAttemptedSessionId.value = sessionId
         _lastFailedLoadEventId.value = eventId
@@ -173,7 +184,7 @@ class ChatStateImpl(
         _editingMessage.value = null
         _editingContent.value = ""
         _isSendingMessage.value = false
-        _lastAttemptedSessionId.value = null
-        _lastFailedLoadEventId.value = null
+        _dialogState.value = ChatAreaDialogState.None
+        clearRetryState()
     }
 }

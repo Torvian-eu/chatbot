@@ -1,16 +1,12 @@
 package eu.torvian.chatbot.app.viewmodel.chat.usecase
 
 import eu.torvian.chatbot.app.repository.SessionRepository
-import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
+import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
 
 /**
- * Use case for deleting chat messages in the reactive architecture.
- *
- * This use case follows the action-only pattern where it:
- * 1. Deletes the message via repository
- * 2. The repository automatically updates the cached session
+ * Use case for deleting a chat message.
  */
 class DeleteMessageUseCase(
     private val sessionRepository: SessionRepository,
@@ -21,8 +17,7 @@ class DeleteMessageUseCase(
     private val logger = kmpLogger<DeleteMessageUseCase>()
 
     /**
-     * Deletes a specific message and its children from the session.
-     * The repository automatically updates the cached session.
+     * Deletes a specific message from the session.
      *
      * @param messageId The ID of the message to delete
      */
@@ -41,6 +36,7 @@ class DeleteMessageUseCase(
                 },
                 ifRight = {
                     logger.info("Successfully deleted message $messageId")
+                    state.cancelDialog()
                 }
             )
     }

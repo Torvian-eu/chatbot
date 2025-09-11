@@ -47,6 +47,7 @@ fun ChatScreen(
     val chatEditingContent by chatViewModel.editingContent.collectAsState()
     val chatDisplayedMessages by chatViewModel.displayedMessages.collectAsState()
     val chatIsSendingMessage by chatViewModel.isSendingMessage.collectAsState()
+    val chatDialogState by chatViewModel.dialogState.collectAsState()
 
     // --- State-Driven Effect to Load Sessions ---
     LaunchedEffect(selectedSession) {
@@ -110,7 +111,7 @@ fun ChatScreen(
     val chatAreaState = remember(
         chatSessionUiState, chatInputContent, chatReplyTargetMessage,
         chatEditingMessage, chatEditingContent, chatDisplayedMessages,
-        chatIsSendingMessage
+        chatIsSendingMessage, chatDialogState
     ) {
         ChatAreaState(
             sessionUiState = chatSessionUiState,
@@ -119,7 +120,8 @@ fun ChatScreen(
             editingMessage = chatEditingMessage,
             editingContent = chatEditingContent,
             displayedMessages = chatDisplayedMessages,
-            isSendingMessage = chatIsSendingMessage
+            isSendingMessage = chatIsSendingMessage,
+            dialogState = chatDialogState
         )
     }
     val chatAreaActions = remember(chatViewModel, selectedSession) {
@@ -132,7 +134,8 @@ fun ChatScreen(
             override fun onUpdateEditingContent(newText: String) = chatViewModel.updateEditingContent(newText)
             override fun onSaveEditing() = chatViewModel.saveEditing()
             override fun onCancelEditing() = chatViewModel.cancelEditing()
-            override fun onDeleteMessage(messageId: Long) = chatViewModel.deleteMessage(messageId)
+            override fun onRequestDeleteMessage(message: ChatMessage) = chatViewModel.requestDeleteMessage(message)
+            override fun onCancelDialog() = chatViewModel.cancelDialog()
             override fun onSwitchBranchToMessage(messageId: Long) = chatViewModel.switchBranchToMessage(messageId)
             override fun onSelectModel(modelId: Long?) = chatViewModel.selectModel(modelId)
             override fun onSelectSettings(settingsId: Long?) = chatViewModel.selectSettings(settingsId)

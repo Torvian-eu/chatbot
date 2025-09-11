@@ -15,6 +15,7 @@ import eu.torvian.chatbot.common.models.ChatMessage
  * @property editingMessage The message currently being edited (E3.S1, E3.S2).
  * @property editingContent The content of the message currently being edited (E3.S1, E3.S2).
  * @property isSendingMessage Indicates whether a message is currently in the process of being sent (E1.S3).
+ * @property dialogState The current dialog state for the chat area (e.g., delete confirmation).
  */
 data class ChatAreaState(
     val sessionUiState: DataState<RepositoryError, ChatSessionData> = DataState.Idle,
@@ -23,7 +24,8 @@ data class ChatAreaState(
     val replyTargetMessage: ChatMessage? = null,
     val editingMessage: ChatMessage? = null,
     val editingContent: String = "",
-    val isSendingMessage: Boolean = false
+    val isSendingMessage: Boolean = false,
+    val dialogState: ChatAreaDialogState = ChatAreaDialogState.None
 
     // Will include model/settings selection states from ChatViewModel in future PRs
 )

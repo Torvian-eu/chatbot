@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.app.viewmodel.chat.state
 
+import eu.torvian.chatbot.app.domain.contracts.ChatAreaDialogState
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.common.models.ChatMessage
@@ -62,6 +63,11 @@ interface ChatState {
     val isSendingMessage: StateFlow<Boolean>
 
     /**
+     * The current dialog state for the chat area (e.g., delete confirmation).
+     */
+    val dialogState: StateFlow<ChatAreaDialogState>
+
+    /**
      * The ID of the session that was last attempted to be loaded.
      * Used for retry functionality.
      */
@@ -111,6 +117,16 @@ interface ChatState {
      * Sets the sending message flag.
      */
     fun setIsSending(isSending: Boolean)
+
+    /**
+     * Sets the dialog state.
+     */
+    fun setDialogState(dialogState: ChatAreaDialogState)
+
+    /**
+     * Cancels/closes any dialog by setting state to None.
+     */
+    fun cancelDialog()
 
     /**
      * Sets retry state for failed operations.

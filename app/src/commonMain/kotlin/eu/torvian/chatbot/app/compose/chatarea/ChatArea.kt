@@ -11,6 +11,7 @@ import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ErrorStateDisplay
 import eu.torvian.chatbot.app.compose.common.LoadingOverlay
 import eu.torvian.chatbot.app.domain.contracts.ChatAreaActions
+import eu.torvian.chatbot.app.domain.contracts.ChatAreaDialogState
 import eu.torvian.chatbot.app.domain.contracts.ChatAreaState
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.common.models.ChatMessage
@@ -48,7 +49,8 @@ fun ChatArea(
                 replyTargetMessage = state.replyTargetMessage,
                 isSendingMessage = state.isSendingMessage,
                 editingMessage = state.editingMessage,
-                editingContent = state.editingContent
+                editingContent = state.editingContent,
+                dialogState = state.dialogState
             )
         }
     }
@@ -99,6 +101,7 @@ private fun IdleStateDisplay(modifier: Modifier = Modifier) {
  * @param isSendingMessage Indicates whether a message is currently in the process of being sent.
  * @param editingMessage The message currently being edited (E3.S1, E3.S2).
  * @param editingContent The content of the message currently being edited (E3.S1, E3.S2).
+ * @param dialogState The current dialog state from the ViewModel.
  */
 @Composable
 private fun SuccessStateDisplay(
@@ -109,20 +112,16 @@ private fun SuccessStateDisplay(
     replyTargetMessage: ChatMessage?,
     isSendingMessage: Boolean,
     editingMessage: ChatMessage?,
-    editingContent: String?
+    editingContent: String?,
+    dialogState: ChatAreaDialogState
 ) {
-    // TODO: Move dialog state to viewmodel
-    var dialogState by remember { mutableStateOf<DialogState>(DialogState.None) }
-
     // Prepare message actions to pass down
     val messageActions = remember(actions) {
         MessageActions(
             onSwitchBranchToMessage = actions::onSwitchBranchToMessage,
             onEditMessage = actions::onStartEditing,
             onReplyMessage = actions::onStartReplyTo,
-            onDeleteMessage = { message ->
-                dialogState = DialogState.DeleteMessage(message)
-            },
+            onDeleteMessage = actions::onRequestDeleteMessage,
             // Keep onCopyMessage as null until PR 25 - Copy to Clipboard implementation
             onCopyMessage = null,
             // TODO: Wire up regenerate action when available
@@ -154,8 +153,6 @@ private fun SuccessStateDisplay(
     }
 
     Dialogs(
-        dialogState = dialogState,
-        actions = actions,
-        onDialogStateChange = { dialogState = it }
+        dialogState = dialogState
     )
 }

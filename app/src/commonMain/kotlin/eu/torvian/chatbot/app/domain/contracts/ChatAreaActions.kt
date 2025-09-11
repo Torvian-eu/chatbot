@@ -52,10 +52,16 @@ interface ChatAreaActions {
     fun onCancelEditing()
 
     /**
-     * Callback for when the user deletes a specific message.
-     * @param messageId The ID of the message to delete.
+     * Callback for when the user requests to show the delete message dialog.
+     * This signals the intent to delete, which the ViewModel will handle by showing a dialog.
+     * @param message The message to be deleted.
      */
-    fun onDeleteMessage(messageId: Long)
+    fun onRequestDeleteMessage(message: ChatMessage)
+
+    /**
+     * Callback to dismiss any active dialog.
+     */
+    fun onCancelDialog()
 
     /**
      * Callback for when the user switches the displayed thread branch to a specific message.

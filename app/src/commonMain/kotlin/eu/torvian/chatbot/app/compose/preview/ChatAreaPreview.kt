@@ -61,7 +61,8 @@ fun ChatAreaPreview() {
             override fun onUpdateEditingContent(newText: String) {}
             override fun onSaveEditing() {}
             override fun onCancelEditing() {}
-            override fun onDeleteMessage(messageId: Long) {}
+            override fun onRequestDeleteMessage(message: ChatMessage) {}
+            override fun onCancelDialog() {}
             override fun onSwitchBranchToMessage(messageId: Long) {}
             override fun onSelectModel(modelId: Long?) {}
             override fun onSelectSettings(settingsId: Long?) {}
