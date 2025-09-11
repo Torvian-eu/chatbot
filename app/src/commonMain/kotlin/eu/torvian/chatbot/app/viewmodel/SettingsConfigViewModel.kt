@@ -4,9 +4,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import arrow.fx.coroutines.parZip
 import eu.torvian.chatbot.app.domain.contracts.*
+import eu.torvian.chatbot.app.generated.resources.Res
+import eu.torvian.chatbot.app.generated.resources.error_unsupported_model_type
 import eu.torvian.chatbot.app.repository.ModelRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.SettingsRepository
+import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
 import eu.torvian.chatbot.common.models.LLMModel
 import eu.torvian.chatbot.common.models.ModelSettings
 import kotlinx.coroutines.CoroutineDispatcher
@@ -31,6 +34,7 @@ import kotlinx.coroutines.launch
  * @constructor
  * @param settingsRepository The repository for Settings-related operations.
  * @param modelRepository The repository for Model-related operations (needed for model selection).
+ * @param errorNotifier The service for handling and notifying about errors.
  * @param uiDispatcher The dispatcher to use for UI-related coroutines. Defaults to Main.
  *
  * @property modelsState The state of the list of all configured LLM models.
@@ -40,11 +44,11 @@ import kotlinx.coroutines.launch
  * @property dialogState The current dialog state for the settings tab.
  *
  * TODO: Add logging
- * TODO: send error messages to UI, using EventBus.
  */
 class SettingsConfigViewModel(
     private val settingsRepository: SettingsRepository,
     private val modelRepository: ModelRepository,
+    private val errorNotifier: ErrorNotifier,
     private val uiDispatcher: CoroutineDispatcher = Dispatchers.Main
 ) : ViewModel() {
 
@@ -170,7 +174,12 @@ class SettingsConfigViewModel(
     fun startAddingNewSettings() {
         val selectedModel = selectedModel.value ?: return
         if (selectedModel.type !in getSupportedSettingsTypes()) {
-            println("Cannot add new settings: Model type ${selectedModel.type} is not supported.")
+            viewModelScope.launch {
+                errorNotifier.genericWarning(
+                    shortMessageRes = Res.string.error_unsupported_model_type,
+                    detailedMessage = "Cannot add new settings: Model type ${selectedModel.type} is not supported."
+                )
+            }
             return
         }
         _dialogState.value = SettingsDialogState.AddNewSettings(
