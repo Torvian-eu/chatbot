@@ -9,6 +9,7 @@ import eu.torvian.chatbot.app.generated.resources.error_unsupported_model_type
 import eu.torvian.chatbot.app.repository.ModelRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.SettingsRepository
+import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
 import eu.torvian.chatbot.common.models.LLMModel
 import eu.torvian.chatbot.common.models.ModelSettings
@@ -42,8 +43,6 @@ import kotlinx.coroutines.launch
  * @property selectedModel The currently selected LLM model, or null if no model selected.
  * @property selectedSettings The currently selected settings profile in the master-detail UI, or null if no settings selected.
  * @property dialogState The current dialog state for the settings tab.
- *
- * TODO: Add logging
  */
 class SettingsConfigViewModel(
     private val settingsRepository: SettingsRepository,
@@ -51,6 +50,10 @@ class SettingsConfigViewModel(
     private val errorNotifier: ErrorNotifier,
     private val uiDispatcher: CoroutineDispatcher = Dispatchers.Main
 ) : ViewModel() {
+
+    companion object {
+        private val logger = kmpLogger<SettingsConfigViewModel>()
+    }
 
     // --- Private State Properties ---
 
@@ -82,7 +85,7 @@ class SettingsConfigViewModel(
                 isModelSettingsSupported(it)
             }
             if (supportedSettingsList?.size != allSettingsList?.size) {
-                println("Warning: Found unsupported ModelSettings types. Only supported types are displayed.")
+                logger.warn("Found unsupported ModelSettings types. Only supported types are displayed.")
             }
         }
         .combine(userSelectedModelId) { allSettingsList, currentSelectedId ->
@@ -145,10 +148,16 @@ class SettingsConfigViewModel(
                 { settingsRepository.loadSettings() }
             ) { modelsResult, settingsResult ->
                 modelsResult.mapLeft { error ->
-                    println("Error loading models for settings selection: ${error.message}")
+                    errorNotifier.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to load models"
+                    )
                 }
                 settingsResult.mapLeft { error ->
-                    println("Error loading settings: ${error.message}")
+                    errorNotifier.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to load settings"
+                    )
                 }
             }
         }
@@ -192,7 +201,7 @@ class SettingsConfigViewModel(
      */
     fun startEditingSettings(settings: ModelSettings) {
         if (!isModelSettingsSupported(settings)) {
-            println("Cannot edit: Settings with ID ${settings.id} is of unsupported type ${settings::class.simpleName}.")
+            logger.warn("Cannot edit: Settings with ID ${settings.id} is of unsupported type ${settings::class.simpleName}.")
             return
         }
         _dialogState.value = SettingsDialogState.EditSettings(
@@ -246,7 +255,10 @@ class SettingsConfigViewModel(
             settingsRepository.deleteSettings(settingsId)
                 .fold(
                     ifLeft = { error ->
-                        println("Error deleting settings: ${error.message}")
+                        errorNotifier.repositoryError(
+                            error = error,
+                            shortMessage = "Failed to delete settings"
+                        )
                     },
                     ifRight = {
                         cancelDialog()
@@ -277,8 +289,11 @@ class SettingsConfigViewModel(
             settingsRepository.addModelSettings(newSettings)
                 .fold(
                     ifLeft = { error ->
+                        errorNotifier.repositoryError(
+                            error = error,
+                            shortMessage = "Failed to add settings"
+                        )
                         updateSettingsFormError("Error adding settings: ${error.message}")
-                        println("Error adding settings: ${error.message}")
                     },
                     ifRight = { createdSettings ->
                         cancelDialog()
@@ -304,8 +319,11 @@ class SettingsConfigViewModel(
             settingsRepository.updateSettings(updatedSettings)
                 .fold(
                     ifLeft = { error ->
+                        errorNotifier.repositoryError(
+                            error = error,
+                            shortMessage = "Failed to update settings"
+                        )
                         updateSettingsFormError("Error updating settings: ${error.message}")
-                        println("Error updating settings: ${error.message}")
                     },
                     ifRight = {
                         cancelDialog()
