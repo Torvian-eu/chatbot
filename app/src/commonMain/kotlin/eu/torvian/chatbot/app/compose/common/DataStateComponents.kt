@@ -11,18 +11,20 @@ import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
 
 /**
- * Composable that displays content based on UiState with proper loading and error handling.
+ * Composable that displays content based on DataState with proper loading and error handling.
  *
- * @param T The type of data in the UiState
- * @param uiState The current UI state
+ * @param T The type of data in the DataState
+ * @param uiState The current Data state
  * @param onRetry Callback for retry action when in error state
  * @param loadingMessage Optional custom loading message
  * @param errorTitle Optional custom error title
  * @param modifier Modifier for styling
  * @param content Composable to display when state is Success
+ *
+ * TODO: Refactoring required: Unused components; Overlap with existing components (e.g., LoadingStateDisplay & LoadingOverlay)
  */
 @Composable
-fun <T> UiStateContent(
+fun <T> DataStateContent(
     uiState: DataState<RepositoryError, T>,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,

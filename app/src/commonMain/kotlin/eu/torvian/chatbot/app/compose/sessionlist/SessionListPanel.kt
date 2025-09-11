@@ -21,7 +21,7 @@ import eu.torvian.chatbot.common.models.ChatGroup
 /**
  * Stateless Composable for the session list panel.
  * This component is responsible for:
- * - Displaying the list of chat sessions and groups based on `UiState`.
+ * - Displaying the list of chat sessions and groups based on `DataState`.
  * - Delegating to `SessionListSuccessPanelContent` when data is available.
  * - Displaying loading, error, or idle states.
  *
@@ -75,7 +75,7 @@ fun SessionListPanel(
 
 /**
  * Composable that displays the main content of the SessionListPanel
- * when the UI state is `UiState.Success`.
+ * when the Data state is `DataState.Success`.
  * This includes the header, new group input, session list, and dialogs.
  *
  * @param sessionListData The successfully loaded session and group data (kept for allSessions/allGroups for dialogs).
