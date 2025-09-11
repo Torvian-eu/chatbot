@@ -175,7 +175,7 @@ fun appModule(baseUri: String): Module = module {
         )
     }
     viewModel { SessionListViewModel(get<SessionRepository>(), get<GroupRepository>(), get<EventBus>(), get()) }
-    viewModel { ProviderConfigViewModel(get<ProviderRepository>()) }
-    viewModel { ModelConfigViewModel(get<ModelRepository>(), get<ProviderRepository>()) }
+    viewModel { ProviderConfigViewModel(get<ProviderRepository>(), get<ErrorNotifier>()) }
+    viewModel { ModelConfigViewModel(get<ModelRepository>(), get<ProviderRepository>(), get<ErrorNotifier>()) }
     viewModel { SettingsConfigViewModel(get<SettingsRepository>(), get<ModelRepository>(), get<ErrorNotifier>()) }
 }

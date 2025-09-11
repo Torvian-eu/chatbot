@@ -7,6 +7,7 @@ import eu.torvian.chatbot.app.domain.contracts.ProviderFormState
 import eu.torvian.chatbot.app.domain.contracts.ProvidersDialogState
 import eu.torvian.chatbot.app.repository.ProviderRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
 import eu.torvian.chatbot.common.models.AddProviderRequest
 import eu.torvian.chatbot.common.models.LLMProvider
 import eu.torvian.chatbot.common.models.UpdateProviderCredentialRequest
@@ -35,16 +36,16 @@ import kotlinx.coroutines.launch
  *
  * @constructor
  * @param providerRepository The repository for provider-related operations.
+ * @param errorNotifier The service for handling and notifying about errors.
  * @param uiDispatcher The dispatcher to use for UI-related coroutines. Defaults to Main.
  *
  * @property providersState The state of the list of all configured LLM providers (E4.S9).
  * @property selectedProvider The currently selected provider in the master-detail UI.
  * @property dialogState The current dialog state for the providers tab.
- *
- * TODO: send error messages to UI, using EventBus.
  */
 class ProviderConfigViewModel(
     private val providerRepository: ProviderRepository,
+    private val errorNotifier: ErrorNotifier,
     private val uiDispatcher: CoroutineDispatcher = Dispatchers.Main
 ) : ViewModel() {
 
@@ -89,9 +90,11 @@ class ProviderConfigViewModel(
         viewModelScope.launch(uiDispatcher) {
             providerRepository.loadProviders()
                 .mapLeft { error ->
-                    println("Error loading providers: ${error.message}")
+                    errorNotifier.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to load providers"
+                    )
                 }
-
         }
     }
 
@@ -191,7 +194,10 @@ class ProviderConfigViewModel(
                                 )
                             } else state
                         }
-                        println("Error updating provider credential: ${error.message}")
+                        errorNotifier.repositoryError(
+                            error = error,
+                            shortMessage = "Failed to update provider credential"
+                        )
                     },
                     ifRight = {
                         // Credential updated successfully. With repository pattern, we don't need to manually refresh
@@ -220,7 +226,10 @@ class ProviderConfigViewModel(
             providerRepository.deleteProvider(providerId)
                 .fold(
                     ifLeft = { error ->
-                        println(error.message)
+                        errorNotifier.repositoryError(
+                            error = error,
+                            shortMessage = "Failed to delete provider"
+                        )
                     },
                     ifRight = {
                         cancelDialog()
@@ -261,7 +270,10 @@ class ProviderConfigViewModel(
                 .fold(
                     ifLeft = { error ->
                         updateProviderForm { it.withError("Error adding provider: ${error.message}") }
-                        println("Error adding provider: ${error.message}")
+                        errorNotifier.repositoryError(
+                            error = error,
+                            shortMessage = "Failed to add provider"
+                        )
                     },
                     ifRight = { newProvider ->
                         cancelDialog()
@@ -295,7 +307,10 @@ class ProviderConfigViewModel(
                 .fold(
                     ifLeft = { error ->
                         updateProviderForm { it.withError("Error updating provider: ${error.message}") }
-                        println("Error updating provider: ${error.message}")
+                        errorNotifier.repositoryError(
+                            error = error,
+                            shortMessage = "Failed to update provider"
+                        )
                     },
                     ifRight = {
                         cancelDialog()

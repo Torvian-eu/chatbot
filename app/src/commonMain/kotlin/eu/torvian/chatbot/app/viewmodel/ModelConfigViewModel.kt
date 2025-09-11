@@ -7,6 +7,7 @@ import eu.torvian.chatbot.app.domain.contracts.*
 import eu.torvian.chatbot.app.repository.ModelRepository
 import eu.torvian.chatbot.app.repository.ProviderRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
 import eu.torvian.chatbot.common.models.AddModelRequest
 import eu.torvian.chatbot.common.models.LLMModel
 import kotlinx.coroutines.CoroutineDispatcher
@@ -28,17 +29,17 @@ import kotlinx.coroutines.launch
  * @constructor
  * @param modelRepository The repository for LLM Model-related operations.
  * @param providerRepository The repository for LLM Provider-related operations.
+ * @param errorNotifier The service for handling and notifying about errors.
  * @param uiDispatcher The dispatcher to use for UI-related coroutines. Defaults to Main.
  *
  * @property modelConfigState The unified state containing both models and providers data.
  * @property selectedModel The currently selected model in the master-detail UI.
  * @property dialogState The current dialog state for the models tab.
- *
- * TODO: send error messages to UI, using EventBus.
  */
 class ModelConfigViewModel(
     private val modelRepository: ModelRepository,
     private val providerRepository: ProviderRepository, // Needed to populate provider dropdown for model config
+    private val errorNotifier: ErrorNotifier,
     private val uiDispatcher: CoroutineDispatcher = Dispatchers.Main
 ) : ViewModel() {
 
@@ -114,10 +115,16 @@ class ModelConfigViewModel(
                 { providerRepository.loadProviders() }
             ) { modelsResult, providersResult ->
                 modelsResult.mapLeft { error ->
-                    println("Error loading models: ${error.message}")
+                    errorNotifier.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to load models"
+                    )
                 }
                 providersResult.mapLeft { error ->
-                    println("Error loading providers for model selection: ${error.message}")
+                    errorNotifier.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to load providers for model selection"
+                    )
                 }
             }
         }
@@ -210,7 +217,10 @@ class ModelConfigViewModel(
             modelRepository.deleteModel(modelId)
                 .fold(
                     ifLeft = { error ->
-                        println(error.message)
+                        errorNotifier.repositoryError(
+                            error = error,
+                            shortMessage = "Failed to delete model"
+                        )
                     },
                     ifRight = {
                         cancelDialog()
@@ -251,8 +261,11 @@ class ModelConfigViewModel(
             modelRepository.addModel(request)
                 .fold(
                     ifLeft = { error ->
+                        errorNotifier.repositoryError(
+                            error = error,
+                            shortMessage = "Failed to add model"
+                        )
                         updateModelForm { it.copy(errorMessage = "Error adding model: ${error.message}") }
-                        println("Error adding model: ${error.message}")
                     },
                     ifRight = { newModel ->
                         cancelDialog()
@@ -286,8 +299,11 @@ class ModelConfigViewModel(
             modelRepository.updateModel(updatedModel)
                 .fold(
                     ifLeft = { error ->
+                        errorNotifier.repositoryError(
+                            error = error,
+                            shortMessage = "Failed to update model"
+                        )
                         updateModelForm { it.copy(errorMessage = "Error updating model: ${error.message}") }
-                        println("Error updating model: ${error.message}")
                     },
                     ifRight = {
                         cancelDialog()
