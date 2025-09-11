@@ -9,129 +9,23 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import eu.torvian.chatbot.app.domain.contracts.ModelFormState
-import eu.torvian.chatbot.app.domain.contracts.ProviderFormState
-import eu.torvian.chatbot.app.domain.contracts.SettingsFormState
-import eu.torvian.chatbot.app.viewmodel.ModelConfigViewModel
-import eu.torvian.chatbot.app.viewmodel.ProviderConfigViewModel
-import eu.torvian.chatbot.app.viewmodel.SettingsConfigViewModel
-import eu.torvian.chatbot.common.models.LLMModel
-import eu.torvian.chatbot.common.models.ModelSettings
-import eu.torvian.chatbot.common.models.LLMProvider
-import org.koin.compose.viewmodel.koinViewModel
 
 /**
- * A stateful wrapper Composable for the Settings screen UI.
+ * A tabbed interface for the Settings screen UI.
  *
  * This screen provides a tabbed interface for managing:
- * - LLM Providers (E4.S8-S12, E5.S4)
- * - LLM Models (E4.S1-S4)
- * - Model Settings Profiles (E4.S5-S6)
+ * - LLM Providers (E4.S8-S12, E5.S4) - Handled by ProvidersTabRoute
+ * - LLM Models (E4.S1-S4) - Handled by ModelsTabRoute
+ * - Model Settings Profiles (E4.S5-S6) - Handled by SettingsConfigTabRoute
  *
- * It obtains its own ViewModels and manages the overall layout and navigation
- * between the different configuration sections.
- *
- * TODO: Refactor to use the Route pattern for better modularity and testability.
- *       (See temp/refactor_plan_for_SettingsScreen.md)
+ * Each tab is now managed by its own Route component following the Route pattern
+ * for better modularity, testability, and separation of concerns.
  */
 @Composable
-fun SettingsScreen(
-    providerConfigViewModel: ProviderConfigViewModel = koinViewModel(),
-    modelConfigViewModel: ModelConfigViewModel = koinViewModel(),
-    settingsConfigViewModel: SettingsConfigViewModel = koinViewModel()
-) {
+fun SettingsScreen() {
     // Tab state management
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     val tabTitles = listOf("Providers", "Models", "Settings")
-
-    // Load initial data for all ViewModels
-    LaunchedEffect(Unit) {
-        providerConfigViewModel.loadProviders()
-        modelConfigViewModel.loadModelsAndProviders()
-        settingsConfigViewModel.loadModelsAndSettings()
-    }
-
-    // Collect states from ViewModels
-    val providersState by providerConfigViewModel.providersState.collectAsState()
-    val selectedProvider by providerConfigViewModel.selectedProvider.collectAsState()
-    val providersDialogState by providerConfigViewModel.dialogState.collectAsState()
-
-    val modelConfigState by modelConfigViewModel.modelConfigState.collectAsState()
-    val selectedModel by modelConfigViewModel.selectedModel.collectAsState()
-    val dialogState by modelConfigViewModel.dialogState.collectAsState()
-
-    val modelsForSettings by settingsConfigViewModel.modelsState.collectAsState()
-    val settingsListForSelectedModel by settingsConfigViewModel.settingsListForSelectedModel.collectAsState()
-    val selectedModelForSettings by settingsConfigViewModel.selectedModel.collectAsState()
-    val selectedSettings by settingsConfigViewModel.selectedSettings.collectAsState()
-    val settingsDialogState by settingsConfigViewModel.dialogState.collectAsState()
-
-    // Create state objects
-    val providersTabState = ProvidersTabState(
-        providersUiState = providersState,
-        selectedProvider = selectedProvider,
-        dialogState = providersDialogState
-    )
-
-    val modelsTabState = ModelsTabState(
-        modelConfigUiState = modelConfigState,
-        selectedModel = selectedModel,
-        dialogState = dialogState
-    )
-
-    val settingsConfigTabState = SettingsConfigTabState(
-        modelsUiState = modelsForSettings,
-        settingsListForSelectedModel = settingsListForSelectedModel,
-        selectedModel= selectedModelForSettings,
-        selectedSettings = selectedSettings,
-        dialogState = settingsDialogState
-    )
-
-    // Create action implementations
-    val providersTabActions = object : ProvidersTabActions {
-        override fun onLoadProviders() = providerConfigViewModel.loadProviders()
-        override fun onSelectProvider(provider: LLMProvider?) = providerConfigViewModel.selectProvider(provider)
-        override fun onStartAddingNewProvider() = providerConfigViewModel.startAddingNewProvider()
-        override fun onCancelDialog() = providerConfigViewModel.cancelDialog()
-        override fun onSaveProvider() = providerConfigViewModel.saveProvider()
-        override fun onStartEditingProvider(provider: LLMProvider) =
-            providerConfigViewModel.startEditingProvider(provider)
-
-        override fun onStartDeletingProvider(provider: LLMProvider) =
-            providerConfigViewModel.startDeletingProvider(provider)
-
-        override fun onDeleteProvider(providerId: Long) = providerConfigViewModel.deleteProvider(providerId)
-        override fun onUpdateProviderCredential() = providerConfigViewModel.updateProviderCredential()
-        override fun onUpdateProviderForm(update: (ProviderFormState) -> ProviderFormState) =
-            providerConfigViewModel.updateProviderForm(update)
-    }
-
-    val modelsTabActions = object : ModelsTabActions {
-        override fun onLoadModelsAndProviders() = modelConfigViewModel.loadModelsAndProviders()
-        override fun onStartAddingNewModel() = modelConfigViewModel.startAddingNewModel()
-        override fun onSaveModel() = modelConfigViewModel.saveModel()
-        override fun onStartEditingModel(model: LLMModel) = modelConfigViewModel.startEditingModel(model)
-        override fun onStartDeletingModel(model: LLMModel) = modelConfigViewModel.startDeletingModel(model)
-        override fun onDeleteModel(modelId: Long) = modelConfigViewModel.deleteModel(modelId)
-        override fun onSelectModel(model: LLMModel?) = modelConfigViewModel.selectModel(model)
-        override fun onUpdateModelForm(update: (ModelFormState) -> ModelFormState) =
-            modelConfigViewModel.updateModelForm(update)
-
-        override fun onCancelDialog() = modelConfigViewModel.cancelDialog()
-    }
-
-    val settingsConfigTabActions = object : SettingsConfigTabActions {
-        override fun onLoadModelsAndSettings() = settingsConfigViewModel.loadModelsAndSettings()
-        override fun onSelectModel(model: LLMModel?) = settingsConfigViewModel.selectModel(model)
-        override fun onSelectSettings(settings: ModelSettings?) = settingsConfigViewModel.selectSettings(settings)
-        override fun onStartAddingNewSettings() = settingsConfigViewModel.startAddingNewSettings()
-        override fun onStartEditingSettings(settings: ModelSettings) = settingsConfigViewModel.startEditingSettings(settings)
-        override fun onStartDeletingSettings(settings: ModelSettings) = settingsConfigViewModel.startDeletingSettings(settings)
-        override fun onUpdateSettingsForm(update: (SettingsFormState) -> SettingsFormState) = settingsConfigViewModel.updateSettingsForm(update)
-        override fun onSaveSettings() = settingsConfigViewModel.saveSettings()
-        override fun onDeleteSettings(settingsId: Long) = settingsConfigViewModel.deleteSettings(settingsId)
-        override fun onCancelDialog() = settingsConfigViewModel.cancelDialog()
-    }
 
     Column(
         modifier = Modifier
@@ -159,27 +53,16 @@ fun SettingsScreen(
             }
         }
 
-        // Tab content
+        // Tab content - each route handles its own ViewModel and state management
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
             when (selectedTabIndex) {
-                0 -> ProvidersTab(
-                    state = providersTabState,
-                    actions = providersTabActions
-                )
-
-                1 -> ModelsTab(
-                    state = modelsTabState,
-                    actions = modelsTabActions
-                )
-
-                2 -> SettingsConfigTab(
-                    state = settingsConfigTabState,
-                    actions = settingsConfigTabActions
-                )
+                0 -> ProvidersTabRoute()
+                1 -> ModelsTabRoute()
+                2 -> SettingsConfigTabRoute()
             }
         }
     }
