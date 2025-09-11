@@ -1,15 +1,12 @@
 package eu.torvian.chatbot.app.compose
 
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import eu.torvian.chatbot.app.domain.contracts.ChatAreaActions
 import eu.torvian.chatbot.app.domain.contracts.ChatAreaState
 import eu.torvian.chatbot.app.domain.contracts.SessionListActions
 import eu.torvian.chatbot.app.domain.contracts.SessionListState
-import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
+import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
 import eu.torvian.chatbot.common.models.ChatGroup
 import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.common.models.ChatSessionSummary
@@ -43,12 +40,23 @@ fun ChatScreen(
 
     // --- Collect States for ChatArea ---
     val chatSessionUiState by chatViewModel.sessionDataState.collectAsState()
+    val activeSessionId by chatViewModel.activeSessionId.collectAsState() // Collect active ID for comparison
     val chatInputContent by chatViewModel.inputContent.collectAsState()
     val chatReplyTargetMessage by chatViewModel.replyTargetMessage.collectAsState()
     val chatEditingMessage by chatViewModel.editingMessage.collectAsState()
     val chatEditingContent by chatViewModel.editingContent.collectAsState()
     val chatDisplayedMessages by chatViewModel.displayedMessages.collectAsState()
     val chatIsSendingMessage by chatViewModel.isSendingMessage.collectAsState()
+
+    // --- State-Driven Effect to Load Sessions ---
+    LaunchedEffect(selectedSession) {
+        val newSessionId = selectedSession?.id
+        if (newSessionId != null && newSessionId != activeSessionId) {
+            chatViewModel.loadSession(newSessionId)
+        } else if (newSessionId == null && activeSessionId != null) {
+            chatViewModel.clearSession()
+        }
+    }
 
     // --- SessionListPanel Contract Construction ---
     val sessionListPanelUiState = remember(
@@ -67,16 +75,7 @@ fun ChatScreen(
     }
     val sessionListPanelActions = remember(sessionListViewModel) {
         object : SessionListActions {
-            override fun onSessionSelected(sessionId: Long?) {
-                sessionListViewModel.selectSession(sessionId)
-                // Load the session if a valid ID is provided, otherwise clear the session
-                if (sessionId != null) {
-                    chatViewModel.loadSession(sessionId)
-                } else {
-                    chatViewModel.clearSession()
-                }
-            }
-
+            override fun onSessionSelected(sessionId: Long?) = sessionListViewModel.selectSession(sessionId)
             override fun onStartCreatingNewGroup() = sessionListViewModel.startCreatingNewGroup()
             override fun onUpdateNewGroupNameInput(newText: String) =
                 sessionListViewModel.updateNewGroupNameInput(newText)
@@ -95,10 +94,13 @@ fun ChatScreen(
             override fun onShowNewSessionDialog() = sessionListViewModel.showNewSessionDialog()
             override fun onShowRenameSessionDialog(session: ChatSessionSummary) =
                 sessionListViewModel.showRenameSessionDialog(session)
+
             override fun onShowDeleteSessionDialog(sessionId: Long) =
                 sessionListViewModel.showDeleteSessionDialog(sessionId)
+
             override fun onShowAssignGroupDialog(session: ChatSessionSummary) =
                 sessionListViewModel.showAssignGroupDialog(session)
+
             override fun onShowDeleteGroupDialog(groupId: Long) =
                 sessionListViewModel.showDeleteGroupDialog(groupId)
         }

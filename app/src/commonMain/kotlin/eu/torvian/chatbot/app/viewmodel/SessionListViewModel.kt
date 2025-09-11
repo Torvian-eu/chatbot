@@ -108,9 +108,6 @@ class SessionListViewModel(
     /**
      * The currently selected session.
      * This should be observed by the main chat UI to load the session details.
-     *
-     * TODO: This does not trigger selection of the session in the Chat area. Find a solution. Unify the two ViewModels?
-     *       One viewmodel for chatscreen, and two plain state holder classes for session list and chat area?
      */
     val selectedSession: StateFlow<ChatSessionSummary?> = combine(
         listState.map { it.dataOrNull?.allSessions },
