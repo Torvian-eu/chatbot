@@ -19,6 +19,7 @@ import eu.torvian.chatbot.app.compose.common.OverflowTooltipText
 import eu.torvian.chatbot.app.compose.settings.SettingsScreen
 import eu.torvian.chatbot.app.domain.events.AppError
 import eu.torvian.chatbot.app.domain.events.AppSuccess
+import eu.torvian.chatbot.app.domain.events.AppWarning
 import eu.torvian.chatbot.app.domain.events.SnackbarInteractionEvent
 import eu.torvian.chatbot.app.domain.navigation.Chat
 import eu.torvian.chatbot.app.domain.navigation.Settings
@@ -54,7 +55,7 @@ fun AppShell() {
     // Collect events from EventBus and show them in Snackbar
     LaunchedEffect(eventBus) {
         eventBus.events.collect { event ->
-            if (event !is AppError && event !is AppSuccess) {
+            if (event !is AppError && event !is AppWarning && event !is AppSuccess) {
                 return@collect
             }
 
@@ -69,6 +70,12 @@ fun AppShell() {
                         message = event.message
                         actionLabel = if (event.isRetryable) getString(Res.string.action_retry) else null
                         duration = if (event.isRetryable) SnackbarDuration.Indefinite else SnackbarDuration.Long
+                    }
+
+                    is AppWarning -> {
+                        message = event.message
+                        actionLabel = null
+                        duration = SnackbarDuration.Long
                     }
 
                     is AppSuccess -> {

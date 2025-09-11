@@ -1,5 +1,7 @@
 package eu.torvian.chatbot.app.viewmodel.common
 
+import eu.torvian.chatbot.app.domain.events.GenericAppError
+import eu.torvian.chatbot.app.domain.events.GenericAppWarning
 import eu.torvian.chatbot.app.domain.events.apiRequestError
 import eu.torvian.chatbot.app.domain.events.repositoryAppError
 import eu.torvian.chatbot.app.repository.RepositoryError
@@ -98,5 +100,88 @@ class ErrorNotifier(
     ): String {
         val shortMessage = getString(shortMessageRes)
         return repositoryError(error, shortMessage, isRetryable)
+    }
+
+    /**
+     * Handles a generic application error by creating a standardized error event and emitting it.
+     * Used for business logic errors, validation errors, and other application-specific errors.
+     *
+     * @param shortMessage The short, user-friendly error message (can be internationalized)
+     * @param detailedMessage Optional detailed technical error message in English for developers
+     * @param originalThrowable Optional original exception that caused this error
+     * @param isRetryable Whether this error can be retried
+     * @return The event ID of the emitted error event
+     */
+    suspend fun genericError(
+        shortMessage: String,
+        detailedMessage: String? = null,
+        originalThrowable: Throwable? = null,
+        isRetryable: Boolean = false
+    ): String {
+        val message =
+            shortMessage + (detailedMessage?.let { " - $it" } ?: "") + (originalThrowable?.let { " - ${it.message}" }
+                ?: "")
+        logger.error("Generic error: $message", originalThrowable)
+        val errorEvent = GenericAppError(
+            message = message,
+            isRetryable = isRetryable
+        )
+        eventBus.emitEvent(errorEvent)
+        return errorEvent.eventId
+    }
+
+    /**
+     * Handles a generic application error by creating a standardized error event and emitting it.
+     * Used for business logic errors, validation errors, and other application-specific errors.
+     *
+     * @param shortMessageRes The resource ID for the short, user-friendly error message
+     * @param detailedMessage Optional detailed technical error message in English for developers
+     * @param originalThrowable Optional original exception that caused this error
+     * @param isRetryable Whether this error can be retried
+     * @return The event ID of the emitted error event
+     */
+    suspend fun genericError(
+        shortMessageRes: StringResource,
+        detailedMessage: String? = null,
+        originalThrowable: Throwable? = null,
+        isRetryable: Boolean = false
+    ): String {
+        val shortMessage = getString(shortMessageRes)
+        return genericError(shortMessage, detailedMessage, originalThrowable, isRetryable)
+    }
+
+    /**
+     * Handles a generic application warning by creating a standardized warning event and emitting it.
+     * Used for non-critical issues that don't require user action.
+     *
+     * @param shortMessage The short, user-friendly warning message (can be internationalized)
+     * @param detailedMessage Optional detailed technical warning message in English for developers
+     * @return The event ID of the emitted warning event
+     */
+    suspend fun genericWarning(
+        shortMessage: String,
+        detailedMessage: String? = null
+    ): String {
+        val message = shortMessage + detailedMessage?.let { " - $it" }
+        logger.warn("Generic warning: $message")
+        val warningEvent = GenericAppWarning(message)
+        eventBus.emitEvent(warningEvent)
+        return warningEvent.eventId
+    }
+
+    /**
+     * Handles a generic application warning by creating a standardized warning event and emitting it.
+     * Used for non-critical issues that don't require user action.
+     *
+     * @param shortMessageRes The resource ID for the short, user-friendly warning message
+     * @param detailedMessage Optional detailed technical warning message in English for developers
+     * @return The event ID of the emitted warning event
+     */
+    suspend fun genericWarning(
+        shortMessageRes: StringResource,
+        detailedMessage: String? = null
+    ): String {
+        val shortMessage = getString(shortMessageRes)
+        return genericWarning(shortMessage, detailedMessage)
     }
 }

@@ -11,17 +11,14 @@ import org.jetbrains.compose.resources.getString
  *
  * @property apiError The structured API error object
  * @param message A human-readable message for display to the user
- * @param shortMessage A short version of the error message
  * @param isRetryable Whether the error is retryable (defaults to false)
  */
 class ApiRequestError(
     val apiError: ApiError,
     message: String,
-    shortMessage: String? = null,
     isRetryable: Boolean = false
 ) : AppError(
     message = message,
-    shortMessage = shortMessage,
     isRetryable = isRetryable
 )
 
@@ -38,5 +35,5 @@ suspend fun apiRequestError(
     isRetryable: Boolean = false
 ): ApiRequestError {
     val message = getString(Res.string.error_api_request,shortMessage, apiError.message)
-    return ApiRequestError(apiError, message, shortMessage, isRetryable)
+    return ApiRequestError(apiError, message, isRetryable)
 }

@@ -11,17 +11,14 @@ import org.jetbrains.compose.resources.getString
  *
  * @property repositoryError The repository error object
  * @param message A human-readable message for display to the user
- * @param shortMessage A short version of the error message
  * @param isRetryable Whether the error is retryable (defaults to false)
  */
 class RepositoryAppError(
     val repositoryError: RepositoryError,
     message: String,
-    shortMessage: String? = null,
     isRetryable: Boolean = false
 ) : AppError(
     message = message,
-    shortMessage = shortMessage,
     isRetryable = isRetryable
 )
 
@@ -38,5 +35,5 @@ suspend fun repositoryAppError(
     isRetryable: Boolean = false
 ): RepositoryAppError {
     val message = getString(Res.string.error_repository, shortMessage, repositoryError.message)
-    return RepositoryAppError(repositoryError, message, shortMessage, isRetryable)
+    return RepositoryAppError(repositoryError, message, isRetryable)
 }
