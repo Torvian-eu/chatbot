@@ -1,4 +1,4 @@
-package eu.torvian.chatbot.app.domain.contracts
+package eu.torvian.chatbot.app.viewmodel.chat.state
 
 import eu.torvian.chatbot.common.models.ChatMessage
 

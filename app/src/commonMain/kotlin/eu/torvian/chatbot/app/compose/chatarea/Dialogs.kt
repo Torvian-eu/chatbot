@@ -2,7 +2,7 @@ package eu.torvian.chatbot.app.compose.chatarea
 
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import eu.torvian.chatbot.app.domain.contracts.ChatAreaDialogState
+import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
 
 /**
  * Manages displaying dialogs for the Chat Area based on the ViewModel's state.
@@ -18,7 +18,9 @@ fun Dialogs(dialogState: ChatAreaDialogState) {
                 onDismiss = dialogState.onDismiss
             )
         }
-        ChatAreaDialogState.None -> { /* No dialog to show */ }
+
+        ChatAreaDialogState.None -> { /* No dialog to show */
+        }
     }
 }
 

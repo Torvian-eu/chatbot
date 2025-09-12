@@ -1,8 +1,8 @@
 package eu.torvian.chatbot.app.compose.chatarea
 
-import eu.torvian.chatbot.app.domain.contracts.ChatAreaDialogState
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatSessionData
 import eu.torvian.chatbot.common.models.ChatMessage
 

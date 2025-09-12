@@ -1,12 +1,12 @@
 package eu.torvian.chatbot.app.viewmodel.chat
 
 import androidx.lifecycle.ViewModel
-import eu.torvian.chatbot.app.domain.contracts.ChatAreaDialogState
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.events.SnackbarInteractionEvent
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
+import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatSessionData
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.usecase.*
@@ -240,7 +240,8 @@ class ChatViewModel(
      * This is called when the user signals an intent to delete.
      */
     fun requestDeleteMessage(message: ChatMessage) {
-        state.setDialogState(ChatAreaDialogState.DeleteMessage(
+        state.setDialogState(
+            ChatAreaDialogState.DeleteMessage(
             message = message,
             onDeleteConfirm = {
                 deleteMessage(message.id)
