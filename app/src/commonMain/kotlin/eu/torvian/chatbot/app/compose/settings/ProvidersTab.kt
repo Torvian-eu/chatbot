@@ -1,8 +1,6 @@
 package eu.torvian.chatbot.app.compose.settings
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -50,6 +48,7 @@ fun ProvidersTab(
                         providers = providers,
                         selectedProvider = state.selectedProvider,
                         onProviderSelected = { actions.onSelectProvider(it) },
+                        onAddNewProvider = { actions.onStartAddingNewProvider() },
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
@@ -90,65 +89,50 @@ fun ProvidersTab(
             }
         }
 
-        // Floating Action Button for adding new provider (only show when we have data)
-        if (state.providersUiState.isSuccess) {
-            FloatingActionButton(
-                onClick = { actions.onStartAddingNewProvider() },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(16.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "Add Provider"
+        // Dialog handling based on dialog state
+        when (val dialogState = state.dialogState) {
+            is ProvidersDialogState.None -> {
+                // No dialog open
+            }
+
+            is ProvidersDialogState.AddNewProvider -> {
+                AddProviderDialog(
+                    formState = dialogState.formState,
+                    onNameChange = { name -> actions.onUpdateProviderForm { it.copy(name = name) } },
+                    onTypeChange = { type -> actions.onUpdateProviderForm { it.copy(type = type) } },
+                    onBaseUrlChange = { baseUrl -> actions.onUpdateProviderForm { it.copy(baseUrl = baseUrl) } },
+                    onDescriptionChange = { description -> actions.onUpdateProviderForm { it.copy(description = description) } },
+                    onCredentialChange = { credential -> actions.onUpdateProviderForm { it.copy(credential = credential) } },
+                    onConfirm = { actions.onSaveProvider() },
+                    onDismiss = { actions.onCancelDialog() }
                 )
             }
-        }
-    }
 
-    // Dialog handling based on dialog state
-    when (val dialogState = state.dialogState) {
-        is ProvidersDialogState.None -> {
-            // No dialog open
-        }
+            is ProvidersDialogState.EditProvider -> {
+                EditProviderDialog(
+                    originalProviderName = dialogState.provider.name,
+                    formState = dialogState.formState,
+                    credentialUpdateLoading = dialogState.isUpdatingCredential,
+                    onNameChange = { name -> actions.onUpdateProviderForm { it.copy(name = name) } },
+                    onTypeChange = { type -> actions.onUpdateProviderForm { it.copy(type = type) } },
+                    onBaseUrlChange = { baseUrl -> actions.onUpdateProviderForm { it.copy(baseUrl = baseUrl) } },
+                    onDescriptionChange = { description -> actions.onUpdateProviderForm { it.copy(description = description) } },
+                    onNewCredentialInputChange = { credential -> actions.onUpdateProviderForm { it.copy(credential = credential) } },
+                    onUpdateProvider = { actions.onSaveProvider() },
+                    onUpdateCredential = { actions.onUpdateProviderCredential() },
+                    onDismiss = { actions.onCancelDialog() }
+                )
+            }
 
-        is ProvidersDialogState.AddNewProvider -> {
-            AddProviderDialog(
-                formState = dialogState.formState,
-                onNameChange = { name -> actions.onUpdateProviderForm { it.copy(name = name) } },
-                onTypeChange = { type -> actions.onUpdateProviderForm { it.copy(type = type) } },
-                onBaseUrlChange = { baseUrl -> actions.onUpdateProviderForm { it.copy(baseUrl = baseUrl) } },
-                onDescriptionChange = { description -> actions.onUpdateProviderForm { it.copy(description = description) } },
-                onCredentialChange = { credential -> actions.onUpdateProviderForm { it.copy(credential = credential) } },
-                onConfirm = { actions.onSaveProvider() },
-                onDismiss = { actions.onCancelDialog() }
-            )
-        }
-
-        is ProvidersDialogState.EditProvider -> {
-            EditProviderDialog(
-                originalProviderName = dialogState.provider.name,
-                formState = dialogState.formState,
-                credentialUpdateLoading = dialogState.isUpdatingCredential,
-                onNameChange = { name -> actions.onUpdateProviderForm { it.copy(name = name) } },
-                onTypeChange = { type -> actions.onUpdateProviderForm { it.copy(type = type) } },
-                onBaseUrlChange = { baseUrl -> actions.onUpdateProviderForm { it.copy(baseUrl = baseUrl) } },
-                onDescriptionChange = { description -> actions.onUpdateProviderForm { it.copy(description = description) } },
-                onNewCredentialInputChange = { credential -> actions.onUpdateProviderForm { it.copy(credential = credential) } },
-                onUpdateProvider = { actions.onSaveProvider() },
-                onUpdateCredential = { actions.onUpdateProviderCredential() },
-                onDismiss = { actions.onCancelDialog() }
-            )
-        }
-
-        is ProvidersDialogState.DeleteProvider -> {
-            DeleteProviderConfirmationDialog(
-                provider = dialogState.provider,
-                onConfirm = {
-                    actions.onDeleteProvider(dialogState.provider.id)
-                },
-                onDismiss = { actions.onCancelDialog() }
-            )
+            is ProvidersDialogState.DeleteProvider -> {
+                DeleteProviderConfirmationDialog(
+                    provider = dialogState.provider,
+                    onConfirm = {
+                        actions.onDeleteProvider(dialogState.provider.id)
+                    },
+                    onDismiss = { actions.onCancelDialog() }
+                )
+            }
         }
     }
 }
