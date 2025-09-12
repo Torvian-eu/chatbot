@@ -5,6 +5,7 @@ import arrow.core.right
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.service.api.ChatApi
 import eu.torvian.chatbot.app.service.api.SessionApi
+import eu.torvian.chatbot.app.utils.misc.LruCache
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.models.*
 import kotlinx.coroutines.flow.*
@@ -32,6 +33,7 @@ class DefaultSessionRepository(
 
     companion object {
         private val logger = kmpLogger<DefaultSessionRepository>()
+        private const val SESSION_DETAILS_CACHE_SIZE = 10
     }
 
     private val _sessions = MutableStateFlow<DataState<RepositoryError, List<ChatSessionSummary>>>(DataState.Idle)
@@ -39,9 +41,7 @@ class DefaultSessionRepository(
 
     // Cache for individual detailed session flows, guarded by a Mutex for thread safety
     private val _sessionDetailsFlowsMutex = Mutex()
-    private val _sessionDetailsFlows: MutableMap<Long, MutableStateFlow<DataState<RepositoryError, ChatSession>>> =
-        mutableMapOf()
-    // TODO: Limit amount of cached flows to 10?
+    private val _sessionDetailsFlows = LruCache<Long, MutableStateFlow<DataState<RepositoryError, ChatSession>>>(SESSION_DETAILS_CACHE_SIZE)
 
     override suspend fun getSessionDetailsFlow(sessionId: Long): StateFlow<DataState<RepositoryError, ChatSession>> {
         return _sessionDetailsFlowsMutex.withLock {
