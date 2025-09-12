@@ -1,10 +1,10 @@
 package eu.torvian.chatbot.app.compose
 
 import androidx.compose.runtime.*
-import eu.torvian.chatbot.app.domain.contracts.ChatAreaActions
-import eu.torvian.chatbot.app.domain.contracts.ChatAreaState
-import eu.torvian.chatbot.app.domain.contracts.SessionListActions
-import eu.torvian.chatbot.app.domain.contracts.SessionListState
+import eu.torvian.chatbot.app.compose.chatarea.ChatAreaActions
+import eu.torvian.chatbot.app.compose.chatarea.ChatAreaState
+import eu.torvian.chatbot.app.compose.sessionlist.SessionListActions
+import eu.torvian.chatbot.app.compose.sessionlist.SessionListState
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
 import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
 import eu.torvian.chatbot.common.models.ChatGroup

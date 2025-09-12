@@ -6,15 +6,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import eu.torvian.chatbot.app.compose.common.ErrorStateDisplay
 import eu.torvian.chatbot.app.compose.common.LoadingOverlay
-import eu.torvian.chatbot.app.domain.contracts.SessionListActions
-import eu.torvian.chatbot.app.domain.contracts.SessionListData
 import eu.torvian.chatbot.app.domain.contracts.DataState
-import eu.torvian.chatbot.app.domain.contracts.SessionListState
+import eu.torvian.chatbot.app.domain.contracts.SessionListData
 import eu.torvian.chatbot.app.domain.contracts.SessionListDialogState
 import eu.torvian.chatbot.common.models.ChatGroup
 

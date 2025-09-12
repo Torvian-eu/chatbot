@@ -1,4 +1,4 @@
-package eu.torvian.chatbot.app.domain.contracts
+package eu.torvian.chatbot.app.compose.sessionlist
 
 import eu.torvian.chatbot.common.models.ChatGroup
 import eu.torvian.chatbot.common.models.ChatSessionSummary

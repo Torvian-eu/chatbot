@@ -2,8 +2,8 @@ package eu.torvian.chatbot.app.compose.preview
 
 import androidx.compose.runtime.Composable
 import eu.torvian.chatbot.app.compose.chatarea.ChatArea
-import eu.torvian.chatbot.app.domain.contracts.ChatAreaActions
-import eu.torvian.chatbot.app.domain.contracts.ChatAreaState
+import eu.torvian.chatbot.app.compose.chatarea.ChatAreaActions
+import eu.torvian.chatbot.app.compose.chatarea.ChatAreaState
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatSessionData
 import eu.torvian.chatbot.common.models.ChatMessage
