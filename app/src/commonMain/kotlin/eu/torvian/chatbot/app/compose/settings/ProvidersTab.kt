@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ErrorStateDisplay
 import eu.torvian.chatbot.app.compose.common.LoadingStateDisplay
+import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.contracts.ProvidersDialogState
 
 /**
@@ -23,35 +24,25 @@ fun ProvidersTab(
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxSize()) {
-        when {
-            state.providersUiState.isLoading -> {
+        when (val uiState = state.providersUiState) {
+            is DataState.Loading -> {
                 LoadingStateDisplay(
                     message = "Loading providers...",
                     modifier = Modifier.fillMaxSize()
                 )
             }
 
-            state.providersUiState.isError -> {
-                val error = state.providersUiState.errorOrNull
-                if (error != null) {
-                    ErrorStateDisplay(
-                        title = "Failed to load providers",
-                        error = error,
-                        onRetry = { actions.onLoadProviders() },
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else {
-                    Text(
-                        text = "Unknown error occurred",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
+            is DataState.Error -> {
+                ErrorStateDisplay(
+                    title = "Failed to load providers",
+                    error = uiState.error,
+                    onRetry = { actions.onLoadProviders() },
+                    modifier = Modifier.fillMaxSize()
+                )
             }
 
-            state.providersUiState.isSuccess -> {
-                val providers = state.providersUiState.dataOrNull ?: emptyList()
+            is DataState.Success -> {
+                val providers = uiState.data
 
                 Row(modifier = Modifier.fillMaxSize()) {
                     // Master: Providers List
@@ -77,14 +68,23 @@ fun ProvidersTab(
                 }
             }
 
-            else -> {
-                // Idle state
+            is DataState.Idle -> {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Button(onClick = { actions.onLoadProviders() }) {
-                        Text("Load Providers")
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = "Click to load providers",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(onClick = { actions.onLoadProviders() }) {
+                            Text("Load Providers")
+                        }
                     }
                 }
             }
