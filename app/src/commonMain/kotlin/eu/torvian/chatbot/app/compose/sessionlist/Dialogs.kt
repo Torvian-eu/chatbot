@@ -7,83 +7,63 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import eu.torvian.chatbot.app.domain.contracts.SessionListActions
+import eu.torvian.chatbot.app.domain.contracts.SessionListDialogState
 import eu.torvian.chatbot.common.models.ChatGroup
 import eu.torvian.chatbot.common.models.ChatSessionSummary
 
 /**
  * Consolidated dialog management for the session list panel.
+ * Now uses pre-bound actions from dialog states to eliminate UI coupling.
  */
 @Composable
 fun Dialogs(
-    dialogState: DialogState,
+    dialogState: SessionListDialogState,
     allSessions: List<ChatSessionSummary>,
-    allGroups: List<ChatGroup>,
-    sessionListActions: SessionListActions,
-    onDialogStateChange: (DialogState) -> Unit
+    allGroups: List<ChatGroup>
 ) {
     when (dialogState) {
-        is DialogState.NewSession -> {
+        is SessionListDialogState.NewSession -> {
             NewSessionDialog(
                 nameInput = dialogState.sessionNameInput,
-                onNameInputChange = {
-                    onDialogStateChange(dialogState.copy(sessionNameInput = it))
-                },
-                onCreateSession = {
-                    sessionListActions.onCreateNewSession(dialogState.sessionNameInput.ifBlank { null })
-                    onDialogStateChange(DialogState.None)
-                },
-                onDismiss = { onDialogStateChange(DialogState.None) }
+                onNameInputChange = dialogState.onNameInputChange,
+                onCreateSession = dialogState.onCreateSession,
+                onDismiss = dialogState.onDismiss
             )
         }
 
-        is DialogState.RenameSession -> {
+        is SessionListDialogState.RenameSession -> {
             RenameSessionDialog(
                 nameInput = dialogState.newSessionNameInput,
-                onNameInputChange = {
-                    onDialogStateChange(dialogState.copy(newSessionNameInput = it))
-                },
-                onRenameSession = {
-                    sessionListActions.onRenameSession(dialogState.session, dialogState.newSessionNameInput)
-                    onDialogStateChange(DialogState.None)
-                },
-                onDismiss = { onDialogStateChange(DialogState.None) }
+                onNameInputChange = dialogState.onNameInputChange,
+                onRenameSession = dialogState.onRenameSession,
+                onDismiss = dialogState.onDismiss
             )
         }
 
-        is DialogState.DeleteSession -> {
+        is SessionListDialogState.DeleteSession -> {
             DeleteSessionDialog(
-                onDeleteConfirm = {
-                    sessionListActions.onDeleteSession(dialogState.sessionId)
-                    onDialogStateChange(DialogState.None)
-                },
-                onDismiss = { onDialogStateChange(DialogState.None) }
+                onDeleteConfirm = dialogState.onDeleteConfirm,
+                onDismiss = dialogState.onDismiss
             )
         }
 
-        is DialogState.AssignGroup -> {
+        is SessionListDialogState.AssignGroup -> {
             AssignSessionToGroupDialog(
                 session = allSessions.find { it.id == dialogState.sessionId },
                 groups = allGroups,
-                onAssignToGroup = { sessionId, groupId ->
-                    sessionListActions.onAssignSessionToGroup(sessionId, groupId)
-                    onDialogStateChange(DialogState.None)
-                },
-                onDismiss = { onDialogStateChange(DialogState.None) }
+                onAssignToGroup = dialogState.onAssignToGroup,
+                onDismiss = dialogState.onDismiss
             )
         }
 
-        is DialogState.DeleteGroup -> {
+        is SessionListDialogState.DeleteGroup -> {
             DeleteGroupDialog(
-                onDeleteConfirm = {
-                    sessionListActions.onDeleteGroup(dialogState.groupId)
-                    onDialogStateChange(DialogState.None)
-                },
-                onDismiss = { onDialogStateChange(DialogState.None) }
+                onDeleteConfirm = dialogState.onDeleteConfirm,
+                onDismiss = dialogState.onDismiss
             )
         }
 
-        DialogState.None -> { /* No dialog to show */
+        SessionListDialogState.None -> { /* No dialog to show */
         }
     }
 }
@@ -95,7 +75,7 @@ fun Dialogs(
 private fun NewSessionDialog(
     nameInput: String,
     onNameInputChange: (String) -> Unit,
-    onCreateSession: () -> Unit,
+    onCreateSession: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
@@ -111,7 +91,7 @@ private fun NewSessionDialog(
             )
         },
         confirmButton = {
-            Button(onClick = onCreateSession) {
+            Button(onClick = { onCreateSession(nameInput) }) {
                 Text("Create")
             }
         },
@@ -130,7 +110,7 @@ private fun NewSessionDialog(
 private fun RenameSessionDialog(
     nameInput: String,
     onNameInputChange: (String) -> Unit,
-    onRenameSession: () -> Unit,
+    onRenameSession: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
     val isValid = nameInput.trim().isNotBlank()
@@ -153,7 +133,7 @@ private fun RenameSessionDialog(
         },
         confirmButton = {
             Button(
-                onClick = onRenameSession,
+                onClick = { onRenameSession(nameInput) },
                 enabled = isValid
             ) { Text("Rename") }
         },

@@ -1,6 +1,5 @@
 package eu.torvian.chatbot.app.compose.sessionlist
 
-import eu.torvian.chatbot.common.models.ChatGroup
 import eu.torvian.chatbot.common.models.ChatSessionSummary
 
 /**
@@ -10,5 +9,5 @@ data class DialogActions(
     val onRenameSessionRequested: (ChatSessionSummary) -> Unit,
     val onDeleteSessionRequested: (Long) -> Unit,
     val onAssignToGroupRequested: (ChatSessionSummary) -> Unit,
-    val onDeleteGroupRequested: (ChatGroup) -> Unit
+    val onDeleteGroupRequested: (Long) -> Unit
 )

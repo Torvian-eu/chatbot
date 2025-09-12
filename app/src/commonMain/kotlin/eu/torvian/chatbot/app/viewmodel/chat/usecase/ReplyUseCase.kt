@@ -1,13 +1,13 @@
 package eu.torvian.chatbot.app.viewmodel.chat.usecase
 
-import eu.torvian.chatbot.app.viewmodel.chat.state.InteractionState
+import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.common.models.ChatMessage
 
 /**
  * Use case for managing reply functionality in chat.
  */
 class ReplyUseCase(
-    private val state: InteractionState
+    private val state: ChatState
 ) {
 
     /**

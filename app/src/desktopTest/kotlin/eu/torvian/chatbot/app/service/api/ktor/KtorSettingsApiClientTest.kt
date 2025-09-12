@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.app.service.api.ktor
 
 import arrow.core.Either
+import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.SettingsApi
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
@@ -124,10 +125,10 @@ class KtorSettingsApiClientTest {
         when (result) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
-                val error = result.value
-                assertEquals(500, error.statusCode)
-                assertEquals(CommonApiErrorCodes.INTERNAL.code, error.code)
-                assertEquals("Database error", error.message)
+                val error = result.value as ApiResourceError.ServerError
+                assertEquals(500, error.apiError.statusCode)
+                assertEquals(CommonApiErrorCodes.INTERNAL.code, error.apiError.code)
+                assertEquals("Database error", error.apiError.message)
             }
         }
     }
@@ -152,10 +153,9 @@ class KtorSettingsApiClientTest {
         when (result) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
-                val error = result.value
-                assertEquals(500, error.statusCode)
-                assertEquals(CommonApiErrorCodes.INTERNAL.code, error.code)
-                assertTrue(error.message.contains("Data Serialization/Deserialization Error"))
+                val error = result.value as ApiResourceError.SerializationError
+                assertTrue(error.message.contains("Serialization Error"))
+                assertTrue(error.description.contains("Failed to parse API response"))
             }
         }
     }
@@ -215,10 +215,10 @@ class KtorSettingsApiClientTest {
         when (result) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
-                val error = result.value
-                assertEquals(400, error.statusCode)
-                assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.code)
-                assertEquals("Model not found", error.message)
+                val error = result.value as ApiResourceError.ServerError
+                assertEquals(400, error.apiError.statusCode)
+                assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.apiError.code)
+                assertEquals("Model not found", error.apiError.message)
             }
         }
     }
@@ -244,10 +244,10 @@ class KtorSettingsApiClientTest {
         when (result) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
-                val error = result.value
-                assertEquals(500, error.statusCode)
-                assertEquals(CommonApiErrorCodes.INTERNAL.code, error.code)
-                assertEquals("Database error", error.message)
+                val error = result.value as ApiResourceError.ServerError
+                assertEquals(500, error.apiError.statusCode)
+                assertEquals(CommonApiErrorCodes.INTERNAL.code, error.apiError.code)
+                assertEquals("Database error", error.apiError.message)
             }
         }
     }
@@ -273,10 +273,9 @@ class KtorSettingsApiClientTest {
         when (result) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
-                val error = result.value
-                assertEquals(500, error.statusCode)
-                assertEquals(CommonApiErrorCodes.INTERNAL.code, error.code)
-                assertTrue(error.message.contains("Data Serialization/Deserialization Error"))
+                val error = result.value as ApiResourceError.SerializationError
+                assertTrue(error.message.contains("Serialization Error"))
+                assertTrue(error.description.contains("Failed to parse API response"))
             }
         }
     }
@@ -333,10 +332,10 @@ class KtorSettingsApiClientTest {
         when (result) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
-                val error = result.value
-                assertEquals(404, error.statusCode)
-                assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
-                assertEquals("Settings profile not found", error.message)
+                val error = result.value as ApiResourceError.ServerError
+                assertEquals(404, error.apiError.statusCode)
+                assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.apiError.code)
+                assertEquals("Settings profile not found", error.apiError.message)
             }
         }
     }
@@ -361,10 +360,9 @@ class KtorSettingsApiClientTest {
         when (result) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
-                val error = result.value
-                assertEquals(500, error.statusCode)
-                assertEquals(CommonApiErrorCodes.INTERNAL.code, error.code)
-                assertTrue(error.message.contains("Data Serialization/Deserialization Error"))
+                val error = result.value as ApiResourceError.SerializationError
+                assertTrue(error.message.contains("Serialization Error"))
+                assertTrue(error.description.contains("Failed to parse API response"))
             }
         }
     }
@@ -416,10 +414,10 @@ class KtorSettingsApiClientTest {
         when (result) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
-                val error = result.value
-                assertEquals(404, error.statusCode)
-                assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
-                assertEquals("Settings profile not found", error.message)
+                val error = result.value as ApiResourceError.ServerError
+                assertEquals(404, error.apiError.statusCode)
+                assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.apiError.code)
+                assertEquals("Settings profile not found", error.apiError.message)
             }
         }
     }
@@ -445,10 +443,10 @@ class KtorSettingsApiClientTest {
         when (result) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
-                val error = result.value
-                assertEquals(500, error.statusCode)
-                assertEquals(CommonApiErrorCodes.INTERNAL.code, error.code)
-                assertEquals("Database error", error.message)
+                val error = result.value as ApiResourceError.ServerError
+                assertEquals(500, error.apiError.statusCode)
+                assertEquals(CommonApiErrorCodes.INTERNAL.code, error.apiError.code)
+                assertEquals("Database error", error.apiError.message)
             }
         }
     }
@@ -496,10 +494,10 @@ class KtorSettingsApiClientTest {
         when (result) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
-                val error = result.value
-                assertEquals(404, error.statusCode)
-                assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
-                assertEquals("Settings profile not found", error.message)
+                val error = result.value as ApiResourceError.ServerError
+                assertEquals(404, error.apiError.statusCode)
+                assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.apiError.code)
+                assertEquals("Settings profile not found", error.apiError.message)
             }
         }
     }

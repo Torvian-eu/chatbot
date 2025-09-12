@@ -6,21 +6,21 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import eu.torvian.chatbot.app.compose.common.ErrorStateDisplay
 import eu.torvian.chatbot.app.compose.common.LoadingOverlay
-import eu.torvian.chatbot.app.domain.contracts.SessionListActions
+import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.contracts.SessionListData
-import eu.torvian.chatbot.app.domain.contracts.SessionListState
-import eu.torvian.chatbot.app.domain.contracts.UiState
+import eu.torvian.chatbot.app.domain.contracts.SessionListDialogState
 import eu.torvian.chatbot.common.models.ChatGroup
 
 /**
  * Stateless Composable for the session list panel.
  * This component is responsible for:
- * - Displaying the list of chat sessions and groups based on `UiState`.
+ * - Displaying the list of chat sessions and groups based on `DataState`.
  * - Delegating to `SessionListSuccessPanelContent` when data is available.
  * - Displaying loading, error, or idle states.
  *
@@ -33,11 +33,11 @@ fun SessionListPanel(
     actions: SessionListActions
 ) {
     when (val listUiState = state.listUiState) {
-        UiState.Loading -> {
+        DataState.Loading -> {
             LoadingOverlay(Modifier.fillMaxSize())
         }
 
-        is UiState.Error -> {
+        is DataState.Error -> {
             ErrorStateDisplay(
                 error = listUiState.error,
                 onRetry = actions::onRetryLoadingSessions,
@@ -46,7 +46,7 @@ fun SessionListPanel(
             )
         }
 
-        UiState.Idle -> { // Should not happen, but just in case
+        DataState.Idle -> { // Should not happen, but just in case
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
                     "No sessions loaded.",
@@ -56,7 +56,7 @@ fun SessionListPanel(
             }
         }
 
-        is UiState.Success -> {
+        is DataState.Success -> {
             val sessionListData = listUiState.data
             SessionListSuccessPanelContent(
                 sessionListData = sessionListData,
@@ -65,6 +65,7 @@ fun SessionListPanel(
                 editingGroup = state.editingGroup,
                 editingGroupNameInput = state.editingGroupNameInput,
                 selectedSessionId = state.selectedSessionId,
+                dialogState = state.dialogState,
                 sessionListActions = actions
             )
         }
@@ -73,7 +74,7 @@ fun SessionListPanel(
 
 /**
  * Composable that displays the main content of the SessionListPanel
- * when the UI state is `UiState.Success`.
+ * when the Data state is `DataState.Success`.
  * This includes the header, new group input, session list, and dialogs.
  *
  * @param sessionListData The successfully loaded session and group data (kept for allSessions/allGroups for dialogs).
@@ -82,6 +83,7 @@ fun SessionListPanel(
  * @param editingGroup The group being edited, if any.
  * @param editingGroupNameInput The current input for editing group name.
  * @param selectedSessionId The ID of the currently selected session.
+ * @param dialogState The current dialog state from the ViewModel.
  * @param sessionListActions The actions contract for the session list panel.
  */
 @Composable
@@ -92,10 +94,9 @@ private fun SessionListSuccessPanelContent(
     editingGroup: ChatGroup?,
     editingGroupNameInput: String,
     selectedSessionId: Long?,
+    dialogState: SessionListDialogState,
     sessionListActions: SessionListActions
 ) {
-    // Consolidated dialog state management
-    var dialogState by remember { mutableStateOf<DialogState>(DialogState.None) }
 
     // Group editing actions
     val groupEditingActions = remember(sessionListActions) {
@@ -110,36 +111,16 @@ private fun SessionListSuccessPanelContent(
     // Dialog request actions
     val dialogRequestActions = remember(sessionListActions) {
         DialogActions(
-            onRenameSessionRequested = { session ->
-                dialogState = DialogState.RenameSession(
-                    session = session,
-                    newSessionNameInput = session.name
-                )
-            },
-            onDeleteSessionRequested = { sessionId ->
-                dialogState = DialogState.DeleteSession(
-                    sessionId = sessionId
-                )
-            },
-            onAssignToGroupRequested = { session ->
-                dialogState = DialogState.AssignGroup(
-                    sessionId = session.id,
-                    groupId = session.groupId
-                )
-            },
-            onDeleteGroupRequested = { group ->
-                dialogState = DialogState.DeleteGroup(
-                    groupId = group.id
-                )
-            }
+            onRenameSessionRequested = sessionListActions::onShowRenameSessionDialog,
+            onDeleteSessionRequested = sessionListActions::onShowDeleteSessionDialog,
+            onAssignToGroupRequested = sessionListActions::onShowAssignGroupDialog,
+            onDeleteGroupRequested = sessionListActions::onShowDeleteGroupDialog
         )
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
         SessionListHeader(
-            onNewSessionClick = {
-                dialogState = DialogState.NewSession()
-            },
+            onNewSessionClick = sessionListActions::onShowNewSessionDialog,
             onNewGroupClick = sessionListActions::onStartCreatingNewGroup
         )
         // --- New Group Input (E6.S3) ---
@@ -165,8 +146,6 @@ private fun SessionListSuccessPanelContent(
     Dialogs(
         dialogState = dialogState,
         allSessions = sessionListData.allSessions,
-        allGroups = sessionListData.allGroups,
-        sessionListActions = sessionListActions,
-        onDialogStateChange = { dialogState = it }
+        allGroups = sessionListData.allGroups
     )
 }

@@ -1,21 +1,19 @@
 package eu.torvian.chatbot.app.viewmodel.chat.usecase
 
-import eu.torvian.chatbot.app.service.api.ChatApi
-import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
+import eu.torvian.chatbot.app.repository.SessionRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
+import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
 import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.common.models.UpdateMessageRequest
-import kotlinx.datetime.Clock
 
 /**
  * Use case for editing chat messages.
- * Handles the editing workflow including validation, API calls, and state updates.
+ * Handles the editing workflow including validation, repository calls, and state updates.
  */
 class EditMessageUseCase(
-    private val chatApi: ChatApi,
+    private val sessionRepository: SessionRepository,
     private val state: ChatState,
-    private val clock: Clock,
     private val errorNotifier: ErrorNotifier
 ) {
 
@@ -51,40 +49,26 @@ class EditMessageUseCase(
 
         if (newContent.isBlank()) {
             logger.warn("Validation Error: Message content cannot be empty.")
-            // TODO: Consider emitting a validation error event
             return
         }
 
-        val currentSessionData = state.currentSessionData ?: return
-
         logger.info("Saving edited message ${messageToEdit.id}")
 
-        chatApi.updateMessageContent(messageToEdit.id, UpdateMessageRequest(newContent))
+        sessionRepository.updateMessageContent(
+            messageToEdit.id,
+            messageToEdit.sessionId,
+            UpdateMessageRequest(newContent)
+        )
             .fold(
-                ifLeft = { error ->
-                    logger.error("Edit message API error: ${error.code} - ${error.message}")
-                    // TODO: Consider showing inline error for the edited message
-                    errorNotifier.apiError(
-                        error = error,
+                ifLeft = { repositoryError ->
+                    logger.error("Edit message repository error: ${repositoryError.message}")
+                    errorNotifier.repositoryError(
+                        error = repositoryError,
                         shortMessage = "Failed to save message edit"
                     )
                 },
-                ifRight = { updatedMessage ->
-                    logger.info("Successfully saved edited message ${updatedMessage.id}")
-                    // Update the message in the messages list within the current session
-                    val updatedAllMessages = currentSessionData.session.messages.map {
-                        if (it.id == updatedMessage.id) updatedMessage else it
-                    }
-
-                    // Update session with new messages and timestamp
-                    val updatedSessionData = currentSessionData.copy(
-                        session = currentSessionData.session.copy(
-                            messages = updatedAllMessages,
-                            updatedAt = clock.now()
-                        )
-                    )
-                    state.setSessionDataSuccess(updatedSessionData)
-
+                ifRight = {
+                    logger.info("Successfully saved edited message ${messageToEdit.id}")
                     // Clear editing state on success
                     cancel()
                 }

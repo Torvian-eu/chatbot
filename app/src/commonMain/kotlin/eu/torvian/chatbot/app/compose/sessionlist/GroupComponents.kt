@@ -30,7 +30,7 @@ fun GroupHeader(
     onSaveRename: () -> Unit,
     onCancelRename: () -> Unit,
     onStartRename: (ChatGroup) -> Unit,
-    onDeleteRequested: (ChatGroup) -> Unit,
+    onDeleteRequested: (Long) -> Unit,
     isExpanded: Boolean,
     onToggleExpand: () -> Unit,
     hasItems: Boolean
@@ -137,7 +137,7 @@ private fun GroupHeaderActionsDropdown(
     expanded: Boolean,
     onDismissRequest: () -> Unit,
     onStartRename: (ChatGroup) -> Unit,
-    onDeleteRequested: (ChatGroup) -> Unit
+    onDeleteRequested: (Long) -> Unit
 ) {
     DropdownMenu(
         expanded = expanded,
@@ -156,7 +156,7 @@ private fun GroupHeaderActionsDropdown(
             DropdownMenuItem(
                 text = { Text("Delete Group") },
                 onClick = {
-                    onDeleteRequested(group)
+                    onDeleteRequested(group.id)
                     onDismissRequest()
                 },
                 leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },

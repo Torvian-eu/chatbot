@@ -16,8 +16,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import eu.torvian.chatbot.app.compose.common.OverflowTooltipText
-import eu.torvian.chatbot.app.domain.events.GlobalError
-import eu.torvian.chatbot.app.domain.events.GlobalSuccess
+import eu.torvian.chatbot.app.compose.settings.SettingsScreen
+import eu.torvian.chatbot.app.domain.events.AppError
+import eu.torvian.chatbot.app.domain.events.AppSuccess
+import eu.torvian.chatbot.app.domain.events.AppWarning
 import eu.torvian.chatbot.app.domain.events.SnackbarInteractionEvent
 import eu.torvian.chatbot.app.domain.navigation.Chat
 import eu.torvian.chatbot.app.domain.navigation.Settings
@@ -25,8 +27,8 @@ import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.action_retry
 import eu.torvian.chatbot.app.generated.resources.app_name
 import eu.torvian.chatbot.app.service.misc.EventBus
-import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
+import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
@@ -53,7 +55,7 @@ fun AppShell() {
     // Collect events from EventBus and show them in Snackbar
     LaunchedEffect(eventBus) {
         eventBus.events.collect { event ->
-            if (event !is GlobalError && event !is GlobalSuccess) {
+            if (event !is AppError && event !is AppWarning && event !is AppSuccess) {
                 return@collect
             }
 
@@ -64,13 +66,19 @@ fun AppShell() {
                 val duration: SnackbarDuration
 
                 when (event) {
-                    is GlobalError -> {
+                    is AppError -> {
                         message = event.message
                         actionLabel = if (event.isRetryable) getString(Res.string.action_retry) else null
                         duration = if (event.isRetryable) SnackbarDuration.Indefinite else SnackbarDuration.Long
                     }
 
-                    is GlobalSuccess -> {
+                    is AppWarning -> {
+                        message = event.message
+                        actionLabel = null
+                        duration = SnackbarDuration.Long
+                    }
+
+                    is AppSuccess -> {
                         message = event.message
                         actionLabel = null
                         duration = SnackbarDuration.Short
@@ -81,7 +89,7 @@ fun AppShell() {
 
                 // Show the Snackbar with custom visuals
                 val visuals = SnackbarVisualsWithError(
-                    isError = event is GlobalError,
+                    isError = event is AppError,
                     message = message,
                     actionLabel = actionLabel,
                     duration = duration

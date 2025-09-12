@@ -1,7 +1,6 @@
 package eu.torvian.chatbot.app.service.api
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.models.AddModelRequest
 import eu.torvian.chatbot.common.models.ApiKeyStatusResponse
 import eu.torvian.chatbot.common.models.LLMModel
@@ -11,7 +10,7 @@ import eu.torvian.chatbot.common.models.LLMModel
  *
  * This interface defines the operations for managing specific LLM model configurations.
  * Implementations use the internal HTTP API. All methods are suspend functions
- * and return [Either<ApiError, T>].
+ * and return [Either<ApiResourceError, T>].
  */
 interface ModelApi {
     /**
@@ -21,9 +20,9 @@ interface ModelApi {
      * (E4.S2)
      *
      * @return [Either.Right] containing a list of [LLMModel] on success,
-     *         or [Either.Left] containing an [ApiError] on failure.
+     *         or [Either.Left] containing a [ApiResourceError] on failure.
      */
-    suspend fun getAllModels(): Either<ApiError, List<LLMModel>>
+    suspend fun getAllModels(): Either<ApiResourceError, List<LLMModel>>
 
     /**
      * Adds a new LLM model configuration linked to an existing provider.
@@ -33,9 +32,9 @@ interface ModelApi {
      *
      * @param request The request body with model details.
      * @return [Either.Right] containing the newly created [LLMModel] object on success,
-     *         or [Either.Left] containing an [ApiError] on failure (e.g., invalid input, provider not found, model name already exists).
+     *         or [Either.Left] containing a [ApiResourceError] on failure (e.g., invalid input, provider not found, model name already exists).
      */
-    suspend fun addModel(request: AddModelRequest): Either<ApiError, LLMModel>
+    suspend fun addModel(request: AddModelRequest): Either<ApiResourceError, LLMModel>
 
     /**
      * Retrieves details for a specific LLM model configuration.
@@ -44,9 +43,9 @@ interface ModelApi {
      *
      * @param modelId The ID of the model to retrieve.
      * @return [Either.Right] containing the requested [LLMModel] on success,
-     *         or [Either.Left] containing an [ApiError] on failure (e.g., not found).
+     *         or [Either.Left] containing a [ApiResourceError] on failure (e.g., not found).
      */
-    suspend fun getModelById(modelId: Long): Either<ApiError, LLMModel>
+    suspend fun getModelById(modelId: Long): Either<ApiResourceError, LLMModel>
 
     /**
      * Updates details for a specific LLM model configuration.
@@ -56,9 +55,9 @@ interface ModelApi {
      *
      * @param model The [LLMModel] object with updated details. The ID must match the path.
      * @return [Either.Right] with [Unit] on successful update,
-     *         or [Either.Left] containing an [ApiError] on failure (e.g., not found, invalid input, model name already exists).
+     *         or [Either.Left] containing a [ApiResourceError] on failure (e.g., not found, invalid input, model name already exists).
      */
-    suspend fun updateModel(model: LLMModel): Either<ApiError, Unit>
+    suspend fun updateModel(model: LLMModel): Either<ApiResourceError, Unit>
 
     /**
      * Deletes an LLM model configuration.
@@ -68,9 +67,9 @@ interface ModelApi {
      *
      * @param modelId The ID of the model to delete.
      * @return [Either.Right] with [Unit] on successful deletion (typically HTTP 204 No Content),
-     *         or [Either.Left] containing an [ApiError] on failure (e.g., not found).
+     *         or [Either.Left] containing a [ApiResourceError] on failure (e.g., not found).
      */
-    suspend fun deleteModel(modelId: Long): Either<ApiError, Unit>
+    suspend fun deleteModel(modelId: Long): Either<ApiResourceError, Unit>
 
     /**
      * Checks if an API key credential has been configured for the provider linked to this model.
@@ -81,7 +80,7 @@ interface ModelApi {
      *
      * @param modelId The ID of the model.
      * @return [Either.Right] containing an [ApiKeyStatusResponse] on success,
-     *         or [Either.Left] containing an [ApiError] on failure (e.g., not found).
+     *         or [Either.Left] containing a [ApiResourceError] on failure (e.g., not found).
      */
-    suspend fun getModelApiKeyStatus(modelId: Long): Either<ApiError, ApiKeyStatusResponse>
+    suspend fun getModelApiKeyStatus(modelId: Long): Either<ApiResourceError, ApiKeyStatusResponse>
 }

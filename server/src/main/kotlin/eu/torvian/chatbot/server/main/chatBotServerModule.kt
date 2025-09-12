@@ -56,7 +56,7 @@ fun Application.configureKoin() {
     )
     val encryptionConfig = EncryptionConfig(
         keyVersion = 1,
-        masterKey = "default-master-key-change-in-production" // **IMPORTANT:** Change this in production!
+        masterKey = "G2CgJOQQtIC+yfz+LLoDp/osBLUVzW9JE9BrQA0dQFo=" // TODO: **IMPORTANT:** Change this in production!
     )
 
     // Initialize Koin plugin with defined modules

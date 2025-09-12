@@ -20,6 +20,12 @@ import kotlin.to
  * Configures routes related to Settings (/api/v1/settings) using Ktor Resources.
  */
 fun Route.configureSettingsRoutes(modelSettingsService: ModelSettingsService) {
+    // GET /api/v1/settings - Get all settings
+    get<SettingsResource> {
+        val allSettings = modelSettingsService.getAllSettings()
+        call.respond(allSettings)
+    }
+
     // GET /api/v1/settings/{settingsId} - Get settings by ID
     get<SettingsResource.ById> { resource ->
         val settingsId = resource.settingsId

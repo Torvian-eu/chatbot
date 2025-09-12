@@ -1,23 +1,16 @@
 package eu.torvian.chatbot.app.viewmodel.chat
 
 import androidx.lifecycle.ViewModel
-import eu.torvian.chatbot.app.domain.contracts.UiState
+import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.events.SnackbarInteractionEvent
+import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
-import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
-import eu.torvian.chatbot.app.viewmodel.chat.usecase.DeleteMessageUseCase
-import eu.torvian.chatbot.app.viewmodel.chat.usecase.EditMessageUseCase
-import eu.torvian.chatbot.app.viewmodel.chat.usecase.LoadSessionUseCase
-import eu.torvian.chatbot.app.viewmodel.chat.usecase.ReplyUseCase
-import eu.torvian.chatbot.app.viewmodel.chat.usecase.SelectModelUseCase
-import eu.torvian.chatbot.app.viewmodel.chat.usecase.SelectSettingsUseCase
-import eu.torvian.chatbot.app.viewmodel.chat.usecase.SendMessageUseCase
-import eu.torvian.chatbot.app.viewmodel.chat.usecase.SwitchBranchUseCase
-import eu.torvian.chatbot.app.viewmodel.chat.usecase.UpdateInputUseCase
-import eu.torvian.chatbot.common.api.ApiError
-import eu.torvian.chatbot.common.models.ChatMessage
+import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatSessionData
+import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
+import eu.torvian.chatbot.app.viewmodel.chat.usecase.*
+import eu.torvian.chatbot.common.models.ChatMessage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.StateFlow
@@ -64,13 +57,18 @@ class ChatViewModel(
 
     private val logger = kmpLogger<ChatViewModel>()
 
-    // --- Public State Properties (delegated to SharedChatState) ---
+    // --- Public State Properties (delegated to Reactive ChatState) ---
+
+    /**
+     * The ID of the currently active session.
+     */
+    val activeSessionId: StateFlow<Long?> = state.activeSessionId
 
     /**
      * The state of the currently loaded chat session combined with its model settings.
      * When in Success state, provides the ChatSessionData object containing both session and settings.
      */
-    val sessionDataState: StateFlow<UiState<ApiError, ChatSessionData>> = state.sessionDataState
+    val sessionDataState: StateFlow<DataState<RepositoryError, ChatSessionData>> = state.sessionDataState
 
     /**
      * The list of messages to display in the UI, representing the currently selected thread branch.
@@ -101,6 +99,11 @@ class ChatViewModel(
      * Indicates whether a message is currently in the process of being sent.
      */
     val isSendingMessage: StateFlow<Boolean> = state.isSendingMessage
+
+    /**
+     * The current dialog state for the chat area (e.g., delete confirmation).
+     */
+    val dialogState: StateFlow<ChatAreaDialogState> = state.dialogState
 
     init {
         // Handle retry functionality via EventBus using background scope
@@ -195,9 +198,9 @@ class ChatViewModel(
     }
 
     /**
-     * Deletes a specific message and its children from the session.
+     * Deletes a specific message.
      */
-    fun deleteMessage(messageId: Long) {
+    private fun deleteMessage(messageId: Long) {
         normalScope.launch {
             deleteMessageUC.execute(messageId)
         }
@@ -228,6 +231,32 @@ class ChatViewModel(
         normalScope.launch {
             selectSettingsUC.execute(settingsId)
         }
+    }
+
+    // --- Dialog Management ---
+
+    /**
+     * Shows the delete message confirmation dialog with pre-bound actions.
+     * This is called when the user signals an intent to delete.
+     */
+    fun requestDeleteMessage(message: ChatMessage) {
+        state.setDialogState(
+            ChatAreaDialogState.DeleteMessage(
+            message = message,
+            onDeleteConfirm = {
+                deleteMessage(message.id)
+            },
+            onDismiss = {
+                cancelDialog()
+            }
+        ))
+    }
+
+    /**
+     * Cancels/closes any dialog by setting state to None.
+     */
+    fun cancelDialog() {
+        state.cancelDialog()
     }
 
     /**

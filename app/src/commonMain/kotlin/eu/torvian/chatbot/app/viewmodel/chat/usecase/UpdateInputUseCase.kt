@@ -1,12 +1,12 @@
 package eu.torvian.chatbot.app.viewmodel.chat.usecase
 
-import eu.torvian.chatbot.app.viewmodel.chat.state.InteractionState
+import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 
 /**
  * Use case for updating the input content in the chat.
  */
 class UpdateInputUseCase(
-    private val state: InteractionState
+    private val state: ChatState
 ) {
     
     /**

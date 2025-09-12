@@ -71,6 +71,9 @@ A level 2 query for "John" could return:
   - New York has a population of 8.4 million
   - etc.
 
+### AI Everywhere
+Alow LLM agent to control the app itself. For instance: modifying a chat session, Summarizing it, or creating a new session.
+
 ---
 
 ## Performance improvements

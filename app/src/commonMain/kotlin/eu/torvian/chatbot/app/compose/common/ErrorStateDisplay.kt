@@ -10,19 +10,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import eu.torvian.chatbot.common.api.ApiError
+import eu.torvian.chatbot.app.repository.RepositoryError
 
 /**
  * Composable that displays an error state with a retry button.
  *
- * @param error The API error to display.
+ * @param error The repository error to display.
  * @param onRetry Callback for when the retry button is clicked.
  * @param title The title text to display above the error message.
  * @param modifier Modifier to be applied to the component.
  */
 @Composable
 fun ErrorStateDisplay(
-    error: ApiError,
+    error: RepositoryError,
     onRetry: () -> Unit,
     title: String,
     modifier: Modifier = Modifier

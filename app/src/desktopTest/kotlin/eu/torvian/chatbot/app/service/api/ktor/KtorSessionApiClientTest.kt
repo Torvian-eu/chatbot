@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.app.service.api.ktor
 
 import arrow.core.Either
+import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.SessionApi
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
@@ -125,10 +126,10 @@ class KtorSessionApiClientTest {
         when (result) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
-                val error = result.value
-                assertEquals(500, error.statusCode)
-                assertEquals(CommonApiErrorCodes.INTERNAL.code, error.code)
-                assertEquals("Database error", error.message)
+                val error = result.value as ApiResourceError.ServerError
+                assertEquals(500, error.apiError.statusCode)
+                assertEquals(CommonApiErrorCodes.INTERNAL.code, error.apiError.code)
+                assertEquals("Database error", error.apiError.message)
             }
         }
     }
@@ -148,10 +149,9 @@ class KtorSessionApiClientTest {
         when (result) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
-                val error = result.value
-                assertEquals(500, error.statusCode)
-                assertEquals(CommonApiErrorCodes.INTERNAL.code, error.code)
-                assertTrue(error.message.contains("Data Serialization/Deserialization Error"))
+                val error = result.value as ApiResourceError.SerializationError
+                assertTrue(error.message.contains("Serialization Error"))
+                assertTrue(error.description.contains("Failed to parse API response"))
             }
         }
     }
@@ -231,10 +231,10 @@ class KtorSessionApiClientTest {
         when (result) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
-                val error = result.value
-                assertEquals(400, error.statusCode)
-                assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.code)
-                assertEquals("Name cannot be empty", error.message)
+                val error = result.value as ApiResourceError.ServerError
+                assertEquals(400, error.apiError.statusCode)
+                assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.apiError.code)
+                assertEquals("Name cannot be empty", error.apiError.message)
             }
         }
     }
@@ -255,10 +255,9 @@ class KtorSessionApiClientTest {
         when (result) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
-                val error = result.value
-                assertEquals(500, error.statusCode)
-                assertEquals(CommonApiErrorCodes.INTERNAL.code, error.code)
-                assertTrue(error.message.contains("Data Serialization/Deserialization Error"))
+                val error = result.value as ApiResourceError.SerializationError
+                assertTrue(error.message.contains("Serialization Error"))
+                assertTrue(error.description.contains("Failed to parse API response"))
             }
         }
     }
@@ -323,10 +322,10 @@ class KtorSessionApiClientTest {
         when (result) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
-                val error = result.value
-                assertEquals(404, error.statusCode)
-                assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
-                assertEquals("Session not found", error.message)
+                val error = result.value as ApiResourceError.ServerError
+                assertEquals(404, error.apiError.statusCode)
+                assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.apiError.code)
+                assertEquals("Session not found", error.apiError.message)
             }
         }
     }
@@ -347,10 +346,9 @@ class KtorSessionApiClientTest {
         when (result) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
-                val error = result.value
-                assertEquals(500, error.statusCode)
-                assertEquals(CommonApiErrorCodes.INTERNAL.code, error.code)
-                assertTrue(error.message.contains("Data Serialization/Deserialization Error"))
+                val error = result.value as ApiResourceError.SerializationError
+                assertTrue(error.message.contains("Serialization Error"))
+                assertTrue(error.description.contains("Failed to parse API response"))
             }
         }
     }
@@ -401,10 +399,10 @@ class KtorSessionApiClientTest {
         when (result) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
-                val error = result.value
-                assertEquals(404, error.statusCode)
-                assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
-                assertEquals("Session not found", error.message)
+                val error = result.value as ApiResourceError.ServerError
+                assertEquals(404, error.apiError.statusCode)
+                assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.apiError.code)
+                assertEquals("Session not found", error.apiError.message)
             }
         }
     }
@@ -452,10 +450,10 @@ class KtorSessionApiClientTest {
         when (result) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
-                val error = result.value
-                assertEquals(400, error.statusCode)
-                assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.code)
-                assertEquals("Name cannot be empty", error.message)
+                val error = result.value as ApiResourceError.ServerError
+                assertEquals(400, error.apiError.statusCode)
+                assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.apiError.code)
+                assertEquals("Name cannot be empty", error.apiError.message)
             }
         }
     }
@@ -477,10 +475,10 @@ class KtorSessionApiClientTest {
         when (result) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
-                val error = result.value
-                assertEquals(404, error.statusCode)
-                assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
-                assertEquals("Session not found", error.message)
+                val error = result.value as ApiResourceError.ServerError
+                assertEquals(404, error.apiError.statusCode)
+                assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.apiError.code)
+                assertEquals("Session not found", error.apiError.message)
             }
         }
     }
@@ -559,11 +557,11 @@ class KtorSessionApiClientTest {
         when (result) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
-                val error = result.value
-                assertEquals(400, error.statusCode)
-                assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.code)
-                assertEquals("Model ID not found", error.message)
-                assertEquals("999", error.details?.get("modelId"))
+                val error = result.value as ApiResourceError.ServerError
+                assertEquals(400, error.apiError.statusCode)
+                assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.apiError.code)
+                assertEquals("Model ID not found", error.apiError.message)
+                assertEquals("999", error.apiError.details?.get("modelId"))
             }
         }
     }
@@ -585,10 +583,10 @@ class KtorSessionApiClientTest {
         when (result) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
-                val error = result.value
-                assertEquals(404, error.statusCode)
-                assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
-                assertEquals("Session not found", error.message)
+                val error = result.value as ApiResourceError.ServerError
+                assertEquals(404, error.apiError.statusCode)
+                assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.apiError.code)
+                assertEquals("Session not found", error.apiError.message)
             }
         }
     }
@@ -667,11 +665,11 @@ class KtorSessionApiClientTest {
         when (result) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
-                val error = result.value
-                assertEquals(400, error.statusCode)
-                assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.code)
-                assertEquals("Settings ID not found", error.message)
-                assertEquals("999", error.details?.get("settingsId"))
+                val error = result.value as ApiResourceError.ServerError
+                assertEquals(400, error.apiError.statusCode)
+                assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.apiError.code)
+                assertEquals("Settings ID not found", error.apiError.message)
+                assertEquals("999", error.apiError.details?.get("settingsId"))
             }
         }
     }
@@ -693,10 +691,10 @@ class KtorSessionApiClientTest {
         when (result) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
-                val error = result.value
-                assertEquals(404, error.statusCode)
-                assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
-                assertEquals("Session not found", error.message)
+                val error = result.value as ApiResourceError.ServerError
+                assertEquals(404, error.apiError.statusCode)
+                assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.apiError.code)
+                assertEquals("Session not found", error.apiError.message)
             }
         }
     }
@@ -775,11 +773,11 @@ class KtorSessionApiClientTest {
         when (result) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
-                val error = result.value
-                assertEquals(400, error.statusCode)
-                assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.code)
-                assertEquals("Leaf message ID not found or not in session", error.message)
-                assertEquals("999", error.details?.get("leafMessageId"))
+                val error = result.value as ApiResourceError.ServerError
+                assertEquals(400, error.apiError.statusCode)
+                assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.apiError.code)
+                assertEquals("Leaf message ID not found or not in session", error.apiError.message)
+                assertEquals("999", error.apiError.details?.get("leafMessageId"))
             }
         }
     }
@@ -801,10 +799,10 @@ class KtorSessionApiClientTest {
         when (result) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
-                val error = result.value
-                assertEquals(404, error.statusCode)
-                assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
-                assertEquals("Session not found", error.message)
+                val error = result.value as ApiResourceError.ServerError
+                assertEquals(404, error.apiError.statusCode)
+                assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.apiError.code)
+                assertEquals("Session not found", error.apiError.message)
             }
         }
     }
@@ -883,11 +881,11 @@ class KtorSessionApiClientTest {
         when (result) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
-                val error = result.value
-                assertEquals(400, error.statusCode)
-                assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.code)
-                assertEquals("Group ID not found", error.message)
-                assertEquals("999", error.details?.get("groupId"))
+                val error = result.value as ApiResourceError.ServerError
+                assertEquals(400, error.apiError.statusCode)
+                assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.apiError.code)
+                assertEquals("Group ID not found", error.apiError.message)
+                assertEquals("999", error.apiError.details?.get("groupId"))
             }
         }
     }
@@ -909,10 +907,10 @@ class KtorSessionApiClientTest {
         when (result) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
-                val error = result.value
-                assertEquals(404, error.statusCode)
-                assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
-                assertEquals("Session not found", error.message)
+                val error = result.value as ApiResourceError.ServerError
+                assertEquals(404, error.apiError.statusCode)
+                assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.apiError.code)
+                assertEquals("Session not found", error.apiError.message)
             }
         }
     }

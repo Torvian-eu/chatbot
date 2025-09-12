@@ -2,21 +2,21 @@ package eu.torvian.chatbot.app.viewmodel.chat.usecase
 
 import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.error_switching_branch
-import eu.torvian.chatbot.app.service.api.SessionApi
+import eu.torvian.chatbot.app.repository.SessionRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
-import eu.torvian.chatbot.app.viewmodel.chat.state.SessionState
+import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.util.ThreadBuilder
 import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
 import eu.torvian.chatbot.common.models.UpdateSessionLeafMessageRequest
 
 /**
  * Use case for switching the currently displayed chat branch.
- * Finds the leaf message of the target branch and persists the change via API.
+ * Finds the leaf message of the target branch and persists the change via SessionRepository.
  */
 class SwitchBranchUseCase(
-    private val sessionApi: SessionApi,
+    private val sessionRepository: SessionRepository,
     private val threadBuilder: ThreadBuilder,
-    private val state: SessionState,
+    private val state: ChatState,
     private val errorNotifier: ErrorNotifier
 ) {
 
@@ -33,8 +33,9 @@ class SwitchBranchUseCase(
      *                        a root, middle, or leaf message in the conversation tree.
      */
     suspend fun execute(targetMessageId: Long) {
-        val currentSession = state.currentSession ?: return
-        if (state.currentBranchLeafId == targetMessageId) return
+        val currentSessionData = state.currentSessionData ?: return
+        val currentSession = currentSessionData.session
+        if (currentSession.currentLeafMessageId == targetMessageId) return
 
         val messageMap = currentSession.messages.associateBy { it.id }
 
@@ -45,24 +46,23 @@ class SwitchBranchUseCase(
             return
         }
 
-        if (state.currentBranchLeafId == finalLeafId) return // Already on this exact branch
+        if (currentSession.currentLeafMessageId == finalLeafId) return // Already on this exact branch
 
         logger.info("Switching branch to message $targetMessageId (leaf: $finalLeafId) for session ${currentSession.id}")
 
-        sessionApi.updateSessionLeafMessage(
+        sessionRepository.updateSessionLeafMessage(
             sessionId = currentSession.id,
             request = UpdateSessionLeafMessageRequest(leafMessageId = finalLeafId)
         ).fold(
-            ifLeft = { error ->
-                logger.error("Switch branch API error: ${error.code} - ${error.message}")
-                errorNotifier.apiError(
-                    error = error,
+            ifLeft = { repositoryError ->
+                logger.error("Switch branch repository error: ${repositoryError.message}")
+                errorNotifier.repositoryError(
+                    error = repositoryError,
                     shortMessageRes = Res.string.error_switching_branch
                 )
             },
             ifRight = {
                 logger.info("Successfully switched branch to $finalLeafId")
-                state.updateSessionLeafId(finalLeafId)
             }
         )
     }

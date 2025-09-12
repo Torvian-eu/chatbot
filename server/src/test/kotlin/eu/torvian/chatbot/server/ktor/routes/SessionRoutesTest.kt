@@ -480,7 +480,7 @@ class SessionRoutesTest {
         // Arrange
         testDataManager.insertChatSession(testNonStreamingSession)
         val messageContent = "Test message content"
-        val processRequest = ProcessNewMessageRequest(content = messageContent)
+        val processRequest = ProcessNewMessageRequest(content = messageContent, isStreaming = false)
 
         // Act
         val response = client.post(href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = testNonStreamingSession.id)))) {
@@ -523,7 +523,7 @@ class SessionRoutesTest {
     fun `POST session message should return 404 for non-existent session`() = sessionTestApplication {
         // Arrange
         val nonExistentId = 999L
-        val processRequest = ProcessNewMessageRequest(content = "Test message")
+        val processRequest = ProcessNewMessageRequest(content = "Test message", isStreaming = false)
 
         // Act
         val response = client.post(href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = nonExistentId)))) {
@@ -544,7 +544,7 @@ class SessionRoutesTest {
     fun `POST session message should return 400 for missing model`() = sessionTestApplication {
         // Arrange
         testDataManager.insertChatSession(testSession.copy(currentModelId = null))
-        val processRequest = ProcessNewMessageRequest(content = "Test message")
+        val processRequest = ProcessNewMessageRequest(content = "Test message", isStreaming = false)
 
         // Act
         val response = client.post(href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = testSession.id)))) {

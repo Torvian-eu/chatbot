@@ -1,5 +1,11 @@
 package eu.torvian.chatbot.app.koin
 
+import eu.torvian.chatbot.app.repository.*
+import eu.torvian.chatbot.app.repository.impl.DefaultGroupRepository
+import eu.torvian.chatbot.app.repository.impl.DefaultModelRepository
+import eu.torvian.chatbot.app.repository.impl.DefaultProviderRepository
+import eu.torvian.chatbot.app.repository.impl.DefaultSessionRepository
+import eu.torvian.chatbot.app.repository.impl.DefaultSettingsRepository
 import eu.torvian.chatbot.app.service.api.*
 import eu.torvian.chatbot.app.service.api.ktor.*
 import eu.torvian.chatbot.app.service.misc.*
@@ -84,19 +90,38 @@ fun appModule(baseUri: String): Module = module {
         KtorSettingsApiClient(get())
     }
 
+    // Provide Repository implementations, injecting the API clients
+    single<ModelRepository> {
+        DefaultModelRepository(get())
+    }
+    single<ProviderRepository> {
+        DefaultProviderRepository(get())
+    }
+    single<SettingsRepository> {
+        DefaultSettingsRepository(get())
+    }
+    single<SessionRepository> {
+        DefaultSessionRepository(get(), get())
+    }
+    single<GroupRepository> {
+        DefaultGroupRepository(get())
+    }
+
     // Provide shared chat state with background scope for computed state flows
     factory<ChatState> { (backgroundScope: CoroutineScope) ->
         ChatStateImpl(
+            sessionRepository = get(),
+            settingsRepository = get(),
+            modelRepository = get(),
             threadBuilder = get(),
-            clock = get(),
             backgroundScope = backgroundScope
         )
     }
 
 
-    // Provide use cases with updated dependencies (no more uiDispatcher parameters)
+    // Provide use cases with updated dependencies (now using repositories)
     factory<LoadSessionUseCase> { (chatState: ChatState) ->
-        LoadSessionUseCase(get(), get(), get(), chatState, get())
+        LoadSessionUseCase(get<SessionRepository>(), get<SettingsRepository>(), get<ModelRepository>(), chatState, get())
     }
 
     factory<UpdateInputUseCase> { (chatState: ChatState) ->
@@ -108,36 +133,27 @@ fun appModule(baseUri: String): Module = module {
     }
 
     factory<SelectModelUseCase> { (chatState: ChatState) ->
-        SelectModelUseCase(get(), get(), chatState, get())
+        SelectModelUseCase(get<SessionRepository>(), chatState, get())
     }
 
     factory<SelectSettingsUseCase> { (chatState: ChatState) ->
-        SelectSettingsUseCase(get(), get(), chatState, get())
+        SelectSettingsUseCase(get<SessionRepository>(), chatState, get())
     }
 
     factory<SwitchBranchUseCase> { (chatState: ChatState) ->
-        SwitchBranchUseCase(get(), get(), chatState, get())
-    }
-
-    factory<StreamingCoordinator> { (chatState: ChatState) ->
-        StreamingCoordinator(get(), chatState, get())
+        SwitchBranchUseCase(get<SessionRepository>(), get(), chatState, get())
     }
 
     factory<SendMessageUseCase> { (chatState: ChatState) ->
-        SendMessageUseCase(
-            get(),
-            chatState,
-            get { parametersOf(chatState) },
-            get()
-        )
+        SendMessageUseCase(get<SessionRepository>(), chatState, get())
     }
 
     factory<EditMessageUseCase> { (chatState: ChatState) ->
-        EditMessageUseCase(get(), chatState, get(), get())
+        EditMessageUseCase(get<SessionRepository>(), chatState, get())
     }
 
     factory<DeleteMessageUseCase> { (chatState: ChatState) ->
-        DeleteMessageUseCase(get(), chatState, get { parametersOf(chatState) }, get())
+        DeleteMessageUseCase(get<SessionRepository>(), chatState, get())
     }
 
     // Provide ViewModels, injecting the required dependencies
@@ -163,8 +179,8 @@ fun appModule(baseUri: String): Module = module {
             backgroundScope = backgroundScope
         )
     }
-    viewModel { SessionListViewModel(get(), get(), get()) }
-    viewModel { ProviderConfigViewModel(get()) }
-    viewModel { ModelConfigViewModel(get(), get()) }
-    viewModel { SettingsConfigViewModel(get(), get()) }
+    viewModel { SessionListViewModel(get<SessionRepository>(), get<GroupRepository>(), get<EventBus>(), get()) }
+    viewModel { ProviderConfigViewModel(get<ProviderRepository>(), get<ErrorNotifier>()) }
+    viewModel { ModelConfigViewModel(get<ModelRepository>(), get<ProviderRepository>(), get<ErrorNotifier>()) }
+    viewModel { SettingsConfigViewModel(get<SettingsRepository>(), get<ModelRepository>(), get<ErrorNotifier>()) }
 }

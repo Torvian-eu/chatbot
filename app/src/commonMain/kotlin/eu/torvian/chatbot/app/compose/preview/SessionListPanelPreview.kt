@@ -2,10 +2,10 @@ package eu.torvian.chatbot.app.compose.preview
 
 import androidx.compose.runtime.Composable
 import eu.torvian.chatbot.app.compose.sessionlist.SessionListPanel
-import eu.torvian.chatbot.app.domain.contracts.SessionListState
-import eu.torvian.chatbot.app.domain.contracts.SessionListActions
+import eu.torvian.chatbot.app.compose.sessionlist.SessionListState
+import eu.torvian.chatbot.app.compose.sessionlist.SessionListActions
 import eu.torvian.chatbot.app.domain.contracts.SessionListData
-import eu.torvian.chatbot.app.domain.contracts.UiState
+import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.common.models.ChatGroup
 import eu.torvian.chatbot.common.models.ChatSessionSummary
 import kotlinx.datetime.Instant
@@ -16,7 +16,7 @@ import org.jetbrains.compose.ui.tooling.preview.Preview
 fun SessionListPanelPreview() {
     // Mock data for preview
     val mockState = SessionListState(
-        listUiState = UiState.Success(
+        listUiState = DataState.Success(
             SessionListData(
                 allSessions = listOf(
                     ChatSessionSummary(
@@ -36,10 +36,6 @@ fun SessionListPanelPreview() {
     )
     val mockActions = object : SessionListActions {
         override fun onSessionSelected(sessionId: Long?) {}
-        override fun onCreateNewSession(name: String?) {}
-        override fun onRenameSession(session: ChatSessionSummary, newName: String) {}
-        override fun onDeleteSession(sessionId: Long) {}
-        override fun onAssignSessionToGroup(sessionId: Long, groupId: Long?) {}
         override fun onStartCreatingNewGroup() {}
         override fun onUpdateNewGroupNameInput(newText: String) {}
         override fun onCreateNewGroup() {}
@@ -48,8 +44,12 @@ fun SessionListPanelPreview() {
         override fun onUpdateEditingGroupNameInput(newText: String) {}
         override fun onSaveRenamedGroup() {}
         override fun onCancelRenamingGroup() {}
-        override fun onDeleteGroup(groupId: Long) {}
         override fun onRetryLoadingSessions() {}
+        override fun onShowNewSessionDialog() {}
+        override fun onShowRenameSessionDialog(session: ChatSessionSummary) {}
+        override fun onShowDeleteSessionDialog(sessionId: Long) {}
+        override fun onShowAssignGroupDialog(session: ChatSessionSummary) {}
+        override fun onShowDeleteGroupDialog(groupId: Long) {}
     }
 
     SessionListPanel(

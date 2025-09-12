@@ -1,6 +1,5 @@
 package eu.torvian.chatbot.server.ktor.routes
 
-import arrow.core.getOrElse
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.SessionResource
@@ -18,9 +17,9 @@ import io.ktor.server.routing.Route
 import io.ktor.server.sse.*
 import io.ktor.sse.*
 import kotlinx.serialization.json.Json
-import org.koin.ktor.ext.inject
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
+import org.koin.ktor.ext.inject
 
 /**
  * Configures routes related to Sessions (/api/v1/sessions) using Ktor Resources.
@@ -210,101 +209,119 @@ fun Route.configureSessionRoutes(
 
     // POST /api/v1/sessions/{sessionId}/messages - Process a new message for a session
     post<SessionResource.ById.Messages> { resource ->
-        val sessionId = resource.parent.sessionId // Access sessionId directly from the resource object
+        val sessionId = resource.parent.sessionId
         val request = call.receive<ProcessNewMessageRequest>()
 
-        // Validate request before proceeding
-        val (session, llmConfig) = messageService.validateProcessNewMessageRequest(
+        // Step 1: Perform validation.
+        val validationResult = messageService.validateProcessNewMessageRequest(
             sessionId,
             request.parentMessageId
-        ).getOrElse { error ->
-            val apiError = error.toApiError()
-            return@post call.respond(HttpStatusCode.fromValue(apiError.statusCode), apiError)
-        }
+        )
 
-        if ((llmConfig.settings as ChatModelSettings).stream) {
-            // Handle Streaming Request using SSE
+        // Step 2: Based on the request flag, handle the validation result appropriately.
+        if (request.isStreaming) {
+            // --- Handle Streaming Path ---
             call.respond(SSEServerContent(call, handle = {
-                try {
-                    messageService.processNewMessageStreaming(
-                        session,
-                        llmConfig,
-                        request.content,
-                        request.parentMessageId
-                    ).collect { eitherStreamEvent ->
-                        eitherStreamEvent.fold(
-                            ifLeft = { error ->
-                                // Convert ProcessNewMessageError to ApiError and send as ChatStreamEvent.ErrorOccurred
-                                val apiError = error.toApiError()
-                                val chatStreamEvent = ChatStreamEvent.ErrorOccurred(apiError)
-                                send(ServerSentEvent(event = "error", data = json.encodeToString(chatStreamEvent)))
-                            },
-                            ifRight = { streamEvent ->
-                                // Map MessageStreamEvent to ChatStreamEvent and determine SSE event type
-                                val chatStreamEvent = when (streamEvent) {
-                                    is MessageStreamEvent.UserMessageSaved ->
-                                        ChatStreamEvent.UserMessageSaved(streamEvent.message)
-
-                                    is MessageStreamEvent.AssistantMessageStarted ->
-                                        ChatStreamEvent.AssistantMessageStart(streamEvent.assistantMessage)
-
-                                    is MessageStreamEvent.AssistantMessageDelta ->
-                                        ChatStreamEvent.AssistantMessageDelta(
-                                            streamEvent.messageId,
-                                            streamEvent.deltaContent
+                // Process the pre-computed validation result.
+                validationResult.fold(
+                    ifLeft = { error ->
+                        // Validation failed: Send a single SSE 'error' event and close the stream.
+                        val apiError = error.toApiError()
+                        val errorEvent = ChatStreamEvent.ErrorOccurred(apiError)
+                        send(ServerSentEvent(event = errorEvent.eventType, data = json.encodeToString(errorEvent)))
+                    },
+                    ifRight = { (session, llmConfig) ->
+                        try {
+                            messageService.processNewMessageStreaming(
+                                session,
+                                llmConfig,
+                                request.content,
+                                request.parentMessageId
+                            ).collect { eitherStreamEvent ->
+                                eitherStreamEvent.fold(
+                                    ifLeft = { streamError ->
+                                        val apiError = streamError.toApiError()
+                                        val chatStreamEvent = ChatStreamEvent.ErrorOccurred(apiError)
+                                        send(
+                                            ServerSentEvent(
+                                                event = "error",
+                                                data = json.encodeToString(chatStreamEvent)
+                                            )
                                         )
+                                    },
+                                    ifRight = { streamEvent ->
+                                        val chatStreamEvent = when (streamEvent) {
+                                            is MessageStreamEvent.UserMessageSaved -> ChatStreamEvent.UserMessageSaved(
+                                                streamEvent.message
+                                            )
 
-                                    is MessageStreamEvent.AssistantMessageCompleted ->
-                                        ChatStreamEvent.AssistantMessageEnd(
-                                            streamEvent.tempMessageId,
-                                            streamEvent.finalAssistantMessage,
-                                            streamEvent.finalUserMessage
+                                            is MessageStreamEvent.AssistantMessageStarted -> ChatStreamEvent.AssistantMessageStart(
+                                                streamEvent.assistantMessage
+                                            )
+
+                                            is MessageStreamEvent.AssistantMessageDelta -> ChatStreamEvent.AssistantMessageDelta(
+                                                streamEvent.messageId,
+                                                streamEvent.deltaContent
+                                            )
+
+                                            is MessageStreamEvent.AssistantMessageCompleted -> ChatStreamEvent.AssistantMessageEnd(
+                                                streamEvent.tempMessageId,
+                                                streamEvent.finalAssistantMessage,
+                                                streamEvent.finalUserMessage
+                                            )
+
+                                            is MessageStreamEvent.StreamCompleted -> ChatStreamEvent.StreamCompleted
+                                        }
+                                        send(
+                                            ServerSentEvent(
+                                                event = chatStreamEvent.eventType,
+                                                data = json.encodeToString(chatStreamEvent)
+                                            )
                                         )
-
-                                    is MessageStreamEvent.StreamCompleted ->
-                                        ChatStreamEvent.StreamCompleted
-                                }
-                                // Send the ChatStreamEvent object serialized as JSON
-                                send(
-                                    ServerSentEvent(
-                                        event = chatStreamEvent.eventType,
-                                        data = json.encodeToString(chatStreamEvent)
-                                    )
+                                    }
                                 )
                             }
-                        )
-                    }
-                } catch (e: Exception) {
-                    logger.error("Unexpected error during streaming message processing for session $sessionId: ${e.message}", e)
-                    // Send a generic error event to the client
-                    send(
-                        ServerSentEvent(
-                            event = "error",
-                            data = json.encodeToString(
-                                ChatStreamEvent.ErrorOccurred(
-                                    apiError(
-                                        CommonApiErrorCodes.INTERNAL,
-                                        "An unexpected error occurred during streaming.",
-                                        "details" to e.message.toString()
+                        } catch (e: Exception) {
+                            logger.error("Unexpected error during streaming for session $sessionId: ${e.message}", e)
+                            send(
+                                ServerSentEvent(
+                                    event = "error",
+                                    data = json.encodeToString(
+                                        ChatStreamEvent.ErrorOccurred(
+                                            apiError(
+                                                CommonApiErrorCodes.INTERNAL,
+                                                "An unexpected error occurred during streaming.",
+                                                "details" to e.message.toString()
+                                            )
+                                        )
                                     )
                                 )
                             )
-                        )
-                    )
-                }
+                        }
+                    }
+                )
             }))
         } else {
-            // Handle Non-Streaming Request
-            call.respondEither(
-                messageService.processNewMessage(
-                    session,
-                    llmConfig,
-                    request.content,
-                    request.parentMessageId
-                ), HttpStatusCode.Created
-            ) { error ->
-                error.toApiError()
-            }
+            // --- Handle Non-Streaming Path ---
+            validationResult.fold(
+                ifLeft = { error ->
+                    val apiError = error.toApiError()
+                    call.respond(HttpStatusCode.fromValue(apiError.statusCode), apiError)
+                },
+                ifRight = { (session, llmConfig) ->
+                    call.respondEither(
+                        messageService.processNewMessage(
+                            session,
+                            llmConfig,
+                            request.content,
+                            request.parentMessageId
+                        ),
+                        HttpStatusCode.Created
+                    ) { processError ->
+                        processError.toApiError()
+                    }
+                }
+            )
         }
     }
 }

@@ -269,6 +269,7 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   │   ├── ChatArea.kt
 │   │   └── ... other chat area components ...
 │   ├── common/       # Common compose components
+│   │   ├── ConfigFormComponents.kt # Reusable form components
 │   │   ├── ErrorStateDisplay.kt # Error state display component
 │   │   ├── LoadingOverlay.kt  # Loading overlay component
 │   │   ├── OverflowTooltipText.kt # Text with overflow tooltip
@@ -278,25 +279,44 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   ├── sessionlist/  # Session list components
 │   │   ├── SessionListPanel.kt
 │   │   └── ... other session list components ...
+│   └── settings/    # Settings components
+│       ├── SettingsScreen.kt
+│       └── ... other settings components ...
 ├── domain/          # Domain models specific to the *application's presentation layer*
 │   ├── contracts/    # UI State and Action contracts (interfaces between UI and ViewModels)
-│   │   ├── ChatAreaActions.kt  # Chat area user actions contract
-│   │   ├── ChatAreaState.kt    # Chat area UI state contract
-│   │   ├── SessionListActions.kt # Session list user actions contract
+│   │   ├── DataState.kt  # Data state contract
+│   │   ├── FormMode.kt  # Form mode enum
+│   │   ├── ModelConfigData.kt  # Model configuration data
+│   │   ├── ModelFormState.kt  # Model form state
+│   │   ├── ModelsDialogState.kt  # Models dialog state
+│   │   ├── ProvidersDialogState.kt  # Providers dialog state
 │   │   ├── SessionListData.kt    # Session list data structure
-│   │   ├── SessionListState.kt   # Session list UI state contract
-│   │   └── UiState.kt           # Generic UI state wrapper
+│   │   ├── SessionListDialogState.kt  # Session list dialog state
+│   │   ├── SettingsConfigData.kt  # Settings configuration data
+│   │   ├── SettingsDialogState.kt  # Settings dialog state
+│   │   └── SettingsFormState.kt  # Settings form state
 │   ├── events/        # Domain events (e.g., user actions, system responses)
 │   │   ├── ApiRequestError.kt # API request error event
+│   │   ├── AppError.kt  # Global error event
 │   │   ├── AppEvent.kt  # Base event class
+│   │   ├── AppSuccess.kt # Global success event
+│   │   ├── AppWarning.kt # Global warning event
 │   │   ├── GenericAppError.kt # Generic application error event
-│   │   ├── GlobalError.kt  # Global error event
-│   │   ├── GlobalSuccess.kt # Global success event
+│   │   ├── GenericAppWarning.kt # Generic application warning event
+│   │   ├── RepositoryAppError.kt # Repository error event
 │   │   └── SnackbarInteractionEvent.kt # Snackbar interaction event
 │   └── navigation/   # Navigation related classes
 │       └── AppRoute.kt  # Application routes
 ├── koin/            # Koin modules 
 │   └── appModule.kt  # main app DI module
+├── repository/      # Data repository for frontend
+│   ├── GroupRepository.kt  # Group repository
+│   ├── ModelRepository.kt  # Model repository
+│   ├── ProviderRepository.kt # Provider repository
+│   ├── RepositoryError.kt  # Repository error hierarchy
+│   ├── SessionRepository.kt  # Session repository
+│   ├── SettingsRepository.kt # Settings repository
+│   └── impl/             # Repository implementations
 ├── service/          # Frontend services (API clients)
 │   ├── api/          # API interfaces
 │   │   ├── ChatApi.kt  
@@ -318,7 +338,6 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │       ├── ioDispatcher.kt  # IO dispatcher (expect/actual)
 │       └── KmpLogger.kt  # KMP-compatible logger
 └── viewmodel/        # ViewModels for UI state management
-    ├── ChatViewModel.kt  # Chat ViewModel (manages chat session state)
     ├── ModelConfigViewModel.kt # Model Config ViewModel (manages LLM model state)
     ├── ProviderConfigViewModel.kt # Provider Config ViewModel (manages LLM provider state)
     ├── SessionListViewModel.kt # Session List ViewModel (manages session list state)
@@ -326,11 +345,10 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
     ├── chat/
     │   ├── ChatViewModel.kt  # Chat ViewModel (manages chat session state)
     │   ├── state/  # Chat ViewModel state
+    │   │   ├── ChatAreaDialogState.kt  # Chat area dialog state
     │   │   ├── ChatSessionData.kt  # Chat session data class
     │   │   ├── ChatState.kt  # Chat state data class
-    │   │   ├── ChatStateImpl.kt  # Chat state implementation
-    │   │   ├── InteractionState.kt  # User interaction state data class
-    │   │   └── SessionState.kt  # Chat session state data class
+    │   │   └── ChatStateImpl.kt  # Chat state implementation
     │   ├── usecase/  # Chat ViewModel use cases
     │   │   ├── LoadSessionUseCase.kt  # Load session use case
     │   │   ├── SendMessageUseCase.kt  # Send message use case

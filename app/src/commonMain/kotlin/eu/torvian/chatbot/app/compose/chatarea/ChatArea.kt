@@ -1,17 +1,18 @@
 package eu.torvian.chatbot.app.compose.chatarea
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ErrorStateDisplay
 import eu.torvian.chatbot.app.compose.common.LoadingOverlay
-import eu.torvian.chatbot.app.domain.contracts.ChatAreaActions
-import eu.torvian.chatbot.app.domain.contracts.ChatAreaState
-import eu.torvian.chatbot.app.domain.contracts.UiState
+import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
 import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.common.models.ChatSession
 
@@ -30,16 +31,16 @@ fun ChatArea(
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         when (state.sessionUiState) {
-            UiState.Loading -> LoadingStateDisplay(modifier = Modifier.fillMaxSize())
-            is UiState.Error -> ErrorStateDisplay(
+            DataState.Loading -> LoadingStateDisplay(modifier = Modifier.fillMaxSize())
+            is DataState.Error -> ErrorStateDisplay(
                 error = state.sessionUiState.error,
                 onRetry = actions::onRetryLoadingSession,
                 title = "Failed to load chat session",
                 modifier = Modifier.align(Alignment.Center)
             )
 
-            UiState.Idle -> IdleStateDisplay(modifier = Modifier.align(Alignment.Center))
-            is UiState.Success -> SuccessStateDisplay(
+            DataState.Idle -> IdleStateDisplay(modifier = Modifier.align(Alignment.Center))
+            is DataState.Success -> SuccessStateDisplay(
                 chatSession = state.sessionUiState.data.session,
                 displayedMessages = state.displayedMessages,
                 actions = actions,
@@ -47,7 +48,8 @@ fun ChatArea(
                 replyTargetMessage = state.replyTargetMessage,
                 isSendingMessage = state.isSendingMessage,
                 editingMessage = state.editingMessage,
-                editingContent = state.editingContent
+                editingContent = state.editingContent,
+                dialogState = state.dialogState
             )
         }
     }
@@ -98,6 +100,7 @@ private fun IdleStateDisplay(modifier: Modifier = Modifier) {
  * @param isSendingMessage Indicates whether a message is currently in the process of being sent.
  * @param editingMessage The message currently being edited (E3.S1, E3.S2).
  * @param editingContent The content of the message currently being edited (E3.S1, E3.S2).
+ * @param dialogState The current dialog state from the ViewModel.
  */
 @Composable
 private fun SuccessStateDisplay(
@@ -108,19 +111,16 @@ private fun SuccessStateDisplay(
     replyTargetMessage: ChatMessage?,
     isSendingMessage: Boolean,
     editingMessage: ChatMessage?,
-    editingContent: String?
+    editingContent: String?,
+    dialogState: ChatAreaDialogState
 ) {
-    var dialogState by remember { mutableStateOf<DialogState>(DialogState.None) }
-
     // Prepare message actions to pass down
     val messageActions = remember(actions) {
         MessageActions(
             onSwitchBranchToMessage = actions::onSwitchBranchToMessage,
             onEditMessage = actions::onStartEditing,
             onReplyMessage = actions::onStartReplyTo,
-            onDeleteMessage = { message ->
-                dialogState = DialogState.DeleteMessage(message)
-            },
+            onDeleteMessage = actions::onRequestDeleteMessage,
             // Keep onCopyMessage as null until PR 25 - Copy to Clipboard implementation
             onCopyMessage = null,
             // TODO: Wire up regenerate action when available
@@ -152,8 +152,6 @@ private fun SuccessStateDisplay(
     }
 
     Dialogs(
-        dialogState = dialogState,
-        actions = actions,
-        onDialogStateChange = { dialogState = it }
+        dialogState = dialogState
     )
 }

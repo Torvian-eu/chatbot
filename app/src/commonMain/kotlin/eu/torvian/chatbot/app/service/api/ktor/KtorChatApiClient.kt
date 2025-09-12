@@ -3,11 +3,10 @@ package eu.torvian.chatbot.app.service.api.ktor
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
+import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.ChatApi
+import eu.torvian.chatbot.app.utils.misc.ioDispatcher
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
-import eu.torvian.chatbot.common.api.ApiError
-import eu.torvian.chatbot.common.api.CommonApiErrorCodes
-import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.MessageResource
 import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.api.resources.href
@@ -21,23 +20,23 @@ import io.ktor.client.plugins.*
 import io.ktor.client.plugins.resources.*
 import io.ktor.client.plugins.sse.*
 import io.ktor.client.request.*
-import io.ktor.client.statement.*
 import io.ktor.http.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.serializer
 
 /**
  * Ktor HttpClient implementation of the [ChatApi] interface.
  *
- * Uses the configured [HttpClient] and the [BaseApiClient.safeApiCall] helper
+ * Uses the configured [HttpClient] and the [BaseApiResourceClient.safeApiCall] helper
  * to interact with the backend's chat message endpoints, mapping responses
- * to [Either<ApiError, T>].
+ * to [Either<ApiResourceError, T>].
  *
  * @property client The Ktor HttpClient instance injected for making requests.
  */
-class KtorChatApiClient(client: HttpClient) : BaseApiClient(client), ChatApi {
+class KtorChatApiClient(client: HttpClient) : BaseApiResourceClient(client), ChatApi {
     companion object {
         private val logger = kmpLogger<KtorChatApiClient>()
     }
@@ -47,7 +46,7 @@ class KtorChatApiClient(client: HttpClient) : BaseApiClient(client), ChatApi {
     override suspend fun processNewMessage(
         sessionId: Long,
         request: ProcessNewMessageRequest
-    ): Either<ApiError, List<ChatMessage>> {
+    ): Either<ApiResourceError, List<ChatMessage>> {
         // Use safeApiCall to wrap the Ktor request
         return safeApiCall {
             // Use Ktor resources to build the URL: /api/v1/sessions/{sessionId}/messages
@@ -55,7 +54,8 @@ class KtorChatApiClient(client: HttpClient) : BaseApiClient(client), ChatApi {
                 // Set the request body with the ProcessNewMessageRequest DTO
                 setBody(request)
                 timeout {
-                    requestTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS // Allow indefinite timeout (for long LLM responses)
+                    requestTimeoutMillis =
+                        HttpTimeoutConfig.INFINITE_TIMEOUT_MS // Allow indefinite timeout (for long LLM responses)
                     socketTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS
                 }
             }.body<List<ChatMessage>>() // Expect a List<ChatMessage> in the response body on success (HTTP 201)
@@ -65,7 +65,7 @@ class KtorChatApiClient(client: HttpClient) : BaseApiClient(client), ChatApi {
     override fun processNewMessageStreaming(
         sessionId: Long,
         request: ProcessNewMessageRequest
-    ): Flow<Either<ApiError, ChatStreamEvent>> = flow {
+    ): Flow<Either<ApiResourceError, ChatStreamEvent>> = flow {
         try {
             client.sse(
                 urlString = href(SessionResource.ById.Messages(SessionResource.ById(SessionResource(), sessionId))),
@@ -83,10 +83,9 @@ class KtorChatApiClient(client: HttpClient) : BaseApiClient(client), ChatApi {
                     if (chatStreamEvent == null) {
                         logger.error("Failed to deserialize SSE data chunk for session $sessionId: '${event.data}'")
                         emit(
-                            apiError(
-                                apiCode = CommonApiErrorCodes.INTERNAL,
-                                message = "Failed to parse SSE data chunk",
-                                "originalData" to event.data.toString()
+                            ApiResourceError.SerializationError(
+                                "Failed to parse SSE data chunk: ${event.data}",
+                                null
                             ).left()
                         )
                         return@collect
@@ -96,41 +95,26 @@ class KtorChatApiClient(client: HttpClient) : BaseApiClient(client), ChatApi {
                 }
             }
         } catch (e: Exception) {
-            // TODO: always seems to throw SSEClientException
             logger.error("Network or streaming error during processNewMessageStreaming for session $sessionId", e)
-            // Map common Ktor exceptions to ApiError type
-            val apiError = when (e) {
-                // ClientRequestException and ServerResponseException indicate
-                // a non-2xx status on the *initial* connection attempt for SSE.
-                is ClientRequestException -> ApiError(
-                    e.response.status.value,
-                    "client-error",
-                    "HTTP Client Error: ${e.response.status.description}",
-                    mapOf("details" to (e.response.bodyAsText()))
+            val apiResourceError = when (e) {
+                is SSEClientException -> ApiResourceError.NetworkError(
+                    "SSE Client Error: ${e.message}",
+                    e
                 )
 
-                is ServerResponseException -> ApiError(
-                    e.response.status.value,
-                    "server-error",
-                    "HTTP Server Error: ${e.response.status.description}",
-                    mapOf("details" to (e.response.bodyAsText()))
-                )
-
-                else -> apiError(
-                    500,
-                    "network-error",
-                    "Network or communication error during streaming: ${e.message}",
-                    "error" to (e.message ?: "Unknown network error")
+                else -> ApiResourceError.UnknownError(
+                    "Unexpected error during SSE request: ${e.message}",
+                    e
                 )
             }
-            emit(apiError.left())
+            emit(apiResourceError.left())
         }
-    }
+    }.flowOn(ioDispatcher)
 
     override suspend fun updateMessageContent(
         messageId: Long,
         request: UpdateMessageRequest
-    ): Either<ApiError, ChatMessage> {
+    ): Either<ApiResourceError, ChatMessage> {
         // Use safeApiCall to wrap the Ktor request
         return safeApiCall {
             // Use Ktor resources to build the URL: /api/v1/messages/{messageId}/content
@@ -141,7 +125,7 @@ class KtorChatApiClient(client: HttpClient) : BaseApiClient(client), ChatApi {
         }
     }
 
-    override suspend fun deleteMessage(messageId: Long): Either<ApiError, Unit> {
+    override suspend fun deleteMessage(messageId: Long): Either<ApiResourceError, Unit> {
         // Use safeApiCall to wrap the Ktor request
         return safeApiCall {
             // Use Ktor resources to build the URL: /api/v1/messages/{messageId}

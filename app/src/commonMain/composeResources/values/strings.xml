@@ -15,6 +15,7 @@
 
     <!-- Error Messages -->
     <string name="error_api_request">An API error occurred: %1$s\nCause: %2$s</string>
+    <string name="error_repository">A data access error occurred: %1$s\nCause: %2$s</string>
     <string name="error_unknown">An unexpected error occurred.</string>
     <string name="error_loading_sessions_groups">Failed to load sessions or groups.</string>
     <string name="error_loading_session">Failed to load session.</string>
@@ -22,6 +23,7 @@
     <string name="error_updating_session_model">Failed to update session model</string>
     <string name="error_updating_session_settings">Failed to update session settings</string>
     <string name="error_switching_branch">Failed to switch conversation branch</string>
+    <string name="error_unsupported_model_type">Unsupported model type</string>
 
     <!-- Input Area -->
     <string name="replying_to_prefix">Replying to:</string>

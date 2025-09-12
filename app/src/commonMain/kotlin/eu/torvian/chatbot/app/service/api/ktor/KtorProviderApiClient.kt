@@ -1,8 +1,8 @@
 package eu.torvian.chatbot.app.service.api.ktor
 
 import arrow.core.Either
+import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.ProviderApi
-import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.resources.ProviderResource
 import eu.torvian.chatbot.common.api.resources.ProviderResource.ById
 import eu.torvian.chatbot.common.api.resources.ProviderResource.ById.Credential
@@ -19,21 +19,21 @@ import io.ktor.client.request.*
 /**
  * Ktor HttpClient implementation of the [ProviderApi] interface.
  *
- * Uses the configured [HttpClient] and the [BaseApiClient.safeApiCall] helper
+ * Uses the configured [HttpClient] and the [BaseApiResourceClient.safeApiCall] helper
  * to interact with the backend's provider endpoints, mapping responses
- * to [Either<ApiError, T>].
+ * to [Either<ApiResourceError, T>].
  *
  * @property client The Ktor HttpClient instance injected for making requests.
  */
-class KtorProviderApiClient(client: HttpClient) : BaseApiClient(client), ProviderApi {
+class KtorProviderApiClient(client: HttpClient) : BaseApiResourceClient(client), ProviderApi {
 
-    override suspend fun getAllProviders(): Either<ApiError, List<LLMProvider>> {
+    override suspend fun getAllProviders(): Either<ApiResourceError, List<LLMProvider>> {
         return safeApiCall {
             client.get(ProviderResource()).body<List<LLMProvider>>()
         }
     }
 
-    override suspend fun addProvider(request: AddProviderRequest): Either<ApiError, LLMProvider> {
+    override suspend fun addProvider(request: AddProviderRequest): Either<ApiResourceError, LLMProvider> {
         return safeApiCall {
             client.post(ProviderResource()) {
                 setBody(request)
@@ -41,13 +41,13 @@ class KtorProviderApiClient(client: HttpClient) : BaseApiClient(client), Provide
         }
     }
 
-    override suspend fun getProviderById(providerId: Long): Either<ApiError, LLMProvider> {
+    override suspend fun getProviderById(providerId: Long): Either<ApiResourceError, LLMProvider> {
         return safeApiCall {
             client.get(ById(providerId = providerId)).body<LLMProvider>()
         }
     }
 
-    override suspend fun updateProvider(provider: LLMProvider): Either<ApiError, Unit> {
+    override suspend fun updateProvider(provider: LLMProvider): Either<ApiResourceError, Unit> {
         return safeApiCall {
             // Note: OpenAPI specifies the body is the full LLMProvider object,
             // and the path ID must match the body ID.
@@ -58,7 +58,7 @@ class KtorProviderApiClient(client: HttpClient) : BaseApiClient(client), Provide
         }
     }
 
-    override suspend fun deleteProvider(providerId: Long): Either<ApiError, Unit> {
+    override suspend fun deleteProvider(providerId: Long): Either<ApiResourceError, Unit> {
         return safeApiCall {
             client.delete(ById(providerId = providerId)).body<Unit>()
         }
@@ -67,7 +67,7 @@ class KtorProviderApiClient(client: HttpClient) : BaseApiClient(client), Provide
     override suspend fun updateProviderCredential(
         providerId: Long,
         request: UpdateProviderCredentialRequest
-    ): Either<ApiError, Unit> {
+    ): Either<ApiResourceError, Unit> {
         return safeApiCall {
             client.put(Credential(ById(providerId = providerId))) {
                 setBody(request)
@@ -75,7 +75,7 @@ class KtorProviderApiClient(client: HttpClient) : BaseApiClient(client), Provide
         }
     }
 
-    override suspend fun getModelsByProviderId(providerId: Long): Either<ApiError, List<LLMModel>> {
+    override suspend fun getModelsByProviderId(providerId: Long): Either<ApiResourceError, List<LLMModel>> {
         return safeApiCall {
             client.get(Models(ById(providerId = providerId))).body<List<LLMModel>>()
         }
