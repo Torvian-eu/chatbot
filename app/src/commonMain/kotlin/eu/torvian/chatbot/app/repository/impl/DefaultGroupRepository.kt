@@ -1,8 +1,11 @@
-package eu.torvian.chatbot.app.repository
+package eu.torvian.chatbot.app.repository.impl
 
 import arrow.core.Either
 import arrow.core.right
 import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.app.repository.GroupRepository
+import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.service.api.GroupApi
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.models.ChatGroup

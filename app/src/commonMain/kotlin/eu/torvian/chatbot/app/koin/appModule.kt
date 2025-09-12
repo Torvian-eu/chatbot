@@ -1,6 +1,11 @@
 package eu.torvian.chatbot.app.koin
 
 import eu.torvian.chatbot.app.repository.*
+import eu.torvian.chatbot.app.repository.impl.DefaultGroupRepository
+import eu.torvian.chatbot.app.repository.impl.DefaultModelRepository
+import eu.torvian.chatbot.app.repository.impl.DefaultProviderRepository
+import eu.torvian.chatbot.app.repository.impl.DefaultSessionRepository
+import eu.torvian.chatbot.app.repository.impl.DefaultSettingsRepository
 import eu.torvian.chatbot.app.service.api.*
 import eu.torvian.chatbot.app.service.api.ktor.*
 import eu.torvian.chatbot.app.service.misc.*

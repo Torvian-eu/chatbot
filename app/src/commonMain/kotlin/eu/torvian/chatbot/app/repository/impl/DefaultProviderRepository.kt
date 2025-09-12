@@ -1,8 +1,11 @@
-package eu.torvian.chatbot.app.repository
+package eu.torvian.chatbot.app.repository.impl
 
 import arrow.core.Either
 import arrow.core.right
 import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.app.repository.ProviderRepository
+import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.service.api.ProviderApi
 import eu.torvian.chatbot.common.models.AddProviderRequest
 import eu.torvian.chatbot.common.models.LLMModel

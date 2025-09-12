@@ -1,7 +1,10 @@
-package eu.torvian.chatbot.app.repository
+package eu.torvian.chatbot.app.repository.impl
 
 import arrow.core.Either
 import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.app.repository.ModelRepository
+import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.service.api.ModelApi
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.models.AddModelRequest
@@ -10,7 +13,7 @@ import eu.torvian.chatbot.common.models.LLMModel
 import kotlinx.coroutines.flow.*
 
 /**
- * Default implementation of [ModelRepository] that follows the Single Source of Truth principle.
+ * Default implementation of [eu.torvian.chatbot.app.repository.ModelRepository] that follows the Single Source of Truth principle.
  *
  * This repository maintains a single StateFlow of all models and provides derived cold Flows
  * for individual models. It delegates state management responsibility to consumers (ViewModels),
