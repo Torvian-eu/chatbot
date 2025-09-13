@@ -123,6 +123,21 @@ fun Route.configureSessionRoutes(
                         "Invalid model ID provided",
                         "modelId" to request.modelId.toString()
                     )
+
+                is UpdateSessionCurrentModelIdError.InvalidModelType ->
+                    apiError(
+                        CommonApiErrorCodes.INVALID_ARGUMENT,
+                        "Model type must be CHAT",
+                        "modelId" to error.modelId.toString(),
+                        "actualType" to error.actualType
+                    )
+
+                is UpdateSessionCurrentModelIdError.DeprecatedModel ->
+                    apiError(
+                        CommonApiErrorCodes.INVALID_ARGUMENT,
+                        "Model is deprecated and cannot be used",
+                        "modelId" to error.modelId.toString()
+                    )
             }
         }
     }

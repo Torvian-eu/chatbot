@@ -1,14 +1,18 @@
 package eu.torvian.chatbot.server.service.core.impl
-import arrow.core.*
-import arrow.core.raise.*
+
+import arrow.core.Either
+import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.raise.ensureNotNull
+import arrow.core.raise.withError
 import eu.torvian.chatbot.common.models.ChatModelSettings
 import eu.torvian.chatbot.common.models.ChatSession
 import eu.torvian.chatbot.common.models.ChatSessionSummary
+import eu.torvian.chatbot.common.models.LLMModelType
 import eu.torvian.chatbot.server.data.dao.ModelDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
 import eu.torvian.chatbot.server.data.dao.SettingsDao
+import eu.torvian.chatbot.server.data.dao.error.ModelError
 import eu.torvian.chatbot.server.data.dao.error.SessionError
 import eu.torvian.chatbot.server.data.dao.error.SettingsError
 import eu.torvian.chatbot.server.service.core.SessionService
@@ -75,7 +79,7 @@ class SessionServiceImpl(
         transactionScope.transaction {
             either {
                 withError({ daoError: SessionError ->
-                    when(daoError) {
+                    when (daoError) {
                         is SessionError.SessionNotFound -> UpdateSessionGroupIdError.SessionNotFound(daoError.id)
                         is SessionError.ForeignKeyViolation -> UpdateSessionGroupIdError.InvalidRelatedEntity(daoError.message)
                     }
@@ -85,13 +89,35 @@ class SessionServiceImpl(
             }
         }
 
-    override suspend fun updateSessionCurrentModelId(id: Long, modelId: Long?): Either<UpdateSessionCurrentModelIdError, Unit> =
+    override suspend fun updateSessionCurrentModelId(
+        id: Long,
+        modelId: Long?
+    ): Either<UpdateSessionCurrentModelIdError, Unit> =
         transactionScope.transaction {
             either {
+                // If modelId is provided, validate that the model exists, is active, and is of CHAT type
+                if (modelId != null) {
+                    val model = withError({ _: ModelError.ModelNotFound ->
+                        UpdateSessionCurrentModelIdError.InvalidRelatedEntity("Model with ID $modelId not found")
+                    }) {
+                        modelDao.getModelById(modelId).bind()
+                    }
+                    // Verify that the model is of CHAT type
+                    ensure(model.type == LLMModelType.CHAT) {
+                        UpdateSessionCurrentModelIdError.InvalidModelType(modelId, model.type.name)
+                    }
+                    // Guard against setting a deprecated (inactive) model
+                    ensure(model.active) {
+                        UpdateSessionCurrentModelIdError.DeprecatedModel(modelId)
+                    }
+                }
+
                 withError({ daoError: SessionError ->
-                    when(daoError) {
+                    when (daoError) {
                         is SessionError.SessionNotFound -> UpdateSessionCurrentModelIdError.SessionNotFound(daoError.id)
-                        is SessionError.ForeignKeyViolation -> UpdateSessionCurrentModelIdError.InvalidRelatedEntity(daoError.message)
+                        is SessionError.ForeignKeyViolation -> UpdateSessionCurrentModelIdError.InvalidRelatedEntity(
+                            daoError.message
+                        )
                     }
                 }) {
                     // Update the model ID
@@ -103,7 +129,10 @@ class SessionServiceImpl(
             }
         }
 
-    override suspend fun updateSessionCurrentSettingsId(id: Long, settingsId: Long?): Either<UpdateSessionCurrentSettingsIdError, Unit> =
+    override suspend fun updateSessionCurrentSettingsId(
+        id: Long,
+        settingsId: Long?
+    ): Either<UpdateSessionCurrentSettingsIdError, Unit> =
         transactionScope.transaction {
             either {
                 if (settingsId != null) {
@@ -115,7 +144,7 @@ class SessionServiceImpl(
                     }
 
                     // Then get the settings to check its model ID and type
-                    val settings = withError({ daoError: SettingsError.SettingsNotFound ->
+                    val settings = withError({ _: SettingsError.SettingsNotFound ->
                         UpdateSessionCurrentSettingsIdError.InvalidRelatedEntity("Settings with ID $settingsId not found")
                     }) {
                         settingsDao.getSettingsById(settingsId).bind()
@@ -141,9 +170,11 @@ class SessionServiceImpl(
 
                 // If validation passes (or settingsId is null), update the settings ID
                 withError({ daoError: SessionError ->
-                    when(daoError) {
+                    when (daoError) {
                         is SessionError.SessionNotFound -> UpdateSessionCurrentSettingsIdError.SessionNotFound(daoError.id)
-                        is SessionError.ForeignKeyViolation -> UpdateSessionCurrentSettingsIdError.InvalidRelatedEntity(daoError.message)
+                        is SessionError.ForeignKeyViolation -> UpdateSessionCurrentSettingsIdError.InvalidRelatedEntity(
+                            daoError.message
+                        )
                     }
                 }) {
                     sessionDao.updateSessionCurrentSettingsId(id, settingsId).bind()
@@ -176,12 +207,20 @@ class SessionServiceImpl(
                     sessionDao.getSessionById(id).bind()
                 }
 
-                // If modelId is provided, validate it exists
+                // If modelId is provided, validate it exists, is active, and is of CHAT type
                 if (modelId != null) {
-                    withError({ _: eu.torvian.chatbot.server.data.dao.error.ModelError.ModelNotFound ->
+                    val model = withError({ _: ModelError.ModelNotFound ->
                         UpdateSessionCurrentModelAndSettingsIdError.ModelNotFound(modelId)
                     }) {
                         modelDao.getModelById(modelId).bind()
+                    }
+                    // Verify that the model is of CHAT type
+                    ensure(model.type == LLMModelType.CHAT) {
+                        UpdateSessionCurrentModelAndSettingsIdError.InvalidModelType(modelId, model.type.name)
+                    }
+                    // Guard against setting a deprecated (inactive) model
+                    ensure(model.active) {
+                        UpdateSessionCurrentModelAndSettingsIdError.DeprecatedModel(modelId)
                     }
                 }
 
@@ -218,9 +257,14 @@ class SessionServiceImpl(
 
                 // All validations passed, perform the updates
                 withError({ daoError: SessionError ->
-                    when(daoError) {
-                        is SessionError.SessionNotFound -> UpdateSessionCurrentModelAndSettingsIdError.SessionNotFound(daoError.id)
-                        is SessionError.ForeignKeyViolation -> UpdateSessionCurrentModelAndSettingsIdError.InvalidRelatedEntity(daoError.message)
+                    when (daoError) {
+                        is SessionError.SessionNotFound -> UpdateSessionCurrentModelAndSettingsIdError.SessionNotFound(
+                            daoError.id
+                        )
+
+                        is SessionError.ForeignKeyViolation -> UpdateSessionCurrentModelAndSettingsIdError.InvalidRelatedEntity(
+                            daoError.message
+                        )
                     }
                 }) {
                     // Update model ID first
@@ -233,13 +277,18 @@ class SessionServiceImpl(
             }
         }
 
-    override suspend fun updateSessionLeafMessageId(id: Long, messageId: Long?): Either<UpdateSessionLeafMessageIdError, Unit> =
+    override suspend fun updateSessionLeafMessageId(
+        id: Long,
+        messageId: Long?
+    ): Either<UpdateSessionLeafMessageIdError, Unit> =
         transactionScope.transaction {
             either {
                 withError({ daoError: SessionError ->
-                    when(daoError) {
+                    when (daoError) {
                         is SessionError.SessionNotFound -> UpdateSessionLeafMessageIdError.SessionNotFound(daoError.id)
-                        is SessionError.ForeignKeyViolation -> UpdateSessionLeafMessageIdError.InvalidRelatedEntity(daoError.message)
+                        is SessionError.ForeignKeyViolation -> UpdateSessionLeafMessageIdError.InvalidRelatedEntity(
+                            daoError.message
+                        )
                     }
                 }) {
                     sessionDao.updateSessionLeafMessageId(id, messageId).bind()

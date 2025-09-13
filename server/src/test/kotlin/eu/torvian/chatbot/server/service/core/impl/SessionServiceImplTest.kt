@@ -4,6 +4,8 @@ import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.models.ChatSession
 import eu.torvian.chatbot.common.models.ChatSessionSummary
+import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.common.models.LLMModelType
 import eu.torvian.chatbot.server.data.dao.SessionDao
 import eu.torvian.chatbot.server.data.dao.SettingsDao
 import eu.torvian.chatbot.server.data.dao.ModelDao
@@ -368,10 +370,19 @@ class SessionServiceImplTest {
     // --- updateSessionCurrentModelId Tests ---
 
     @Test
-    fun `updateSessionCurrentModelId should update session model ID successfully`() = runTest {
+    fun `updateSessionCurrentModelId should update session model ID successfully when model is CHAT type`() = runTest {
         // Arrange
         val sessionId = 1L
         val modelId = 2L
+        val chatModel = LLMModel(
+            id = modelId,
+            name = "gpt-3.5-turbo",
+            providerId = 1L,
+            type = LLMModelType.CHAT,
+            active = true
+        )
+
+        coEvery { modelDao.getModelById(modelId) } returns chatModel.right()
         coEvery { sessionDao.updateSessionCurrentModelId(sessionId, modelId) } returns Unit.right()
         coEvery { sessionDao.updateSessionCurrentSettingsId(sessionId, null) } returns Unit.right()
 
@@ -379,10 +390,63 @@ class SessionServiceImplTest {
         val result = sessionService.updateSessionCurrentModelId(sessionId, modelId)
 
         // Assert
-        assertTrue(result.isRight(), "Should return Right for successful update")
+        assertTrue(result.isRight(), "Should return Right for successful update with CHAT model")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+        coVerify(exactly = 1) { modelDao.getModelById(modelId) }
         coVerify(exactly = 1) { sessionDao.updateSessionCurrentModelId(sessionId, modelId) }
         coVerify(exactly = 1) { sessionDao.updateSessionCurrentSettingsId(sessionId, null) }
+    }
+
+    @Test
+    fun `updateSessionCurrentModelId should update session model ID successfully when modelId is null`() = runTest {
+        // Arrange
+        val sessionId = 1L
+        val modelId: Long? = null
+
+        coEvery { sessionDao.updateSessionCurrentModelId(sessionId, null) } returns Unit.right()
+        coEvery { sessionDao.updateSessionCurrentSettingsId(sessionId, null) } returns Unit.right()
+
+        // Act
+        val result = sessionService.updateSessionCurrentModelId(sessionId, modelId)
+
+        // Assert
+        assertTrue(result.isRight(), "Should return Right for successful update with null model")
+        coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+        coVerify(exactly = 0) { modelDao.getModelById(any()) }
+        coVerify(exactly = 1) { sessionDao.updateSessionCurrentModelId(sessionId, null) }
+        coVerify(exactly = 1) { sessionDao.updateSessionCurrentSettingsId(sessionId, null) }
+    }
+
+    @Test
+    fun `updateSessionCurrentModelId should return InvalidModelType error when model is not CHAT type`() = runTest {
+        // Arrange
+        val sessionId = 1L
+        val modelId = 2L
+        val embeddingModel = LLMModel(
+            id = modelId,
+            name = "text-embedding-ada-002",
+            providerId = 1L,
+            type = LLMModelType.EMBEDDING,
+            active = true
+        )
+
+        coEvery { modelDao.getModelById(modelId) } returns embeddingModel.right()
+
+        // Act
+        val result = sessionService.updateSessionCurrentModelId(sessionId, modelId)
+
+        // Assert
+        assertTrue(result.isLeft(), "Should return Left for non-CHAT model type")
+        val error = result.leftOrNull()
+        assertNotNull(error, "Error should not be null")
+        assertTrue(error is UpdateSessionCurrentModelIdError.InvalidModelType, "Should be InvalidModelType error")
+        val invalidTypeError = error as UpdateSessionCurrentModelIdError.InvalidModelType
+        assertEquals(modelId, invalidTypeError.modelId)
+        assertEquals("EMBEDDING", invalidTypeError.actualType)
+        coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+        coVerify(exactly = 1) { modelDao.getModelById(modelId) }
+        coVerify(exactly = 0) { sessionDao.updateSessionCurrentModelId(any(), any()) }
+        coVerify(exactly = 0) { sessionDao.updateSessionCurrentSettingsId(any(), any()) }
     }
 
     @Test
@@ -391,6 +455,15 @@ class SessionServiceImplTest {
         val sessionId = 999L
         val modelId = 1L
         val daoError = SessionError.SessionNotFound(sessionId)
+
+        val chatModel = LLMModel(
+            id = modelId,
+            name = "gpt-3.5-turbo",
+            providerId = 1L,
+            type = LLMModelType.CHAT,
+            active = true
+        )
+        coEvery { modelDao.getModelById(modelId) } returns chatModel.right()
         coEvery { sessionDao.updateSessionCurrentModelId(sessionId, modelId) } returns daoError.left()
 
         // Act
@@ -403,6 +476,7 @@ class SessionServiceImplTest {
         assertTrue(error is UpdateSessionCurrentModelIdError.SessionNotFound, "Should be SessionNotFound error")
         assertEquals(sessionId, (error as UpdateSessionCurrentModelIdError.SessionNotFound).id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+        coVerify(exactly = 1) { modelDao.getModelById(modelId) }
         coVerify(exactly = 1) { sessionDao.updateSessionCurrentModelId(sessionId, modelId) }
     }
 
@@ -412,6 +486,15 @@ class SessionServiceImplTest {
         val sessionId = 1L
         val modelId = 999L
         val daoError = SessionError.ForeignKeyViolation("Invalid model ID")
+
+        val chatModel = LLMModel(
+            id = modelId,
+            name = "gpt-3.5-turbo",
+            providerId = 1L,
+            type = LLMModelType.CHAT,
+            active = true
+        )
+        coEvery { modelDao.getModelById(modelId) } returns chatModel.right()
         coEvery { sessionDao.updateSessionCurrentModelId(sessionId, modelId) } returns daoError.left()
 
         // Act
@@ -424,6 +507,7 @@ class SessionServiceImplTest {
         assertTrue(error is UpdateSessionCurrentModelIdError.InvalidRelatedEntity, "Should be InvalidRelatedEntity error")
         assertEquals("Invalid model ID", (error as UpdateSessionCurrentModelIdError.InvalidRelatedEntity).message)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+        coVerify(exactly = 1) { modelDao.getModelById(modelId) }
         coVerify(exactly = 1) { sessionDao.updateSessionCurrentModelId(sessionId, modelId) }
     }
 
