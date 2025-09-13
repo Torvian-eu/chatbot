@@ -25,6 +25,9 @@
     <string name="error_switching_branch">Failed to switch conversation branch</string>
     <string name="error_unsupported_model_type">Unsupported model type</string>
 
+    <!-- Warning Messages -->
+    <string name="warning_model_or_settings_unavailable">Cannot send message: model or settings are not available</string>
+
     <!-- Input Area -->
     <string name="replying_to_prefix">Replying to:</string>
     <string name="send_message_button_description">Send message</string>

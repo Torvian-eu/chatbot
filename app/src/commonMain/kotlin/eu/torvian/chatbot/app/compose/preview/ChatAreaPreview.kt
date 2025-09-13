@@ -5,9 +5,10 @@ import eu.torvian.chatbot.app.compose.chatarea.ChatArea
 import eu.torvian.chatbot.app.compose.chatarea.ChatAreaActions
 import eu.torvian.chatbot.app.compose.chatarea.ChatAreaState
 import eu.torvian.chatbot.app.domain.contracts.DataState
-import eu.torvian.chatbot.app.viewmodel.chat.state.ChatSessionData
-import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.common.models.ChatSession
+import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.common.models.ChatMessage
+import eu.torvian.chatbot.common.models.LLMModelType
 import kotlinx.datetime.Instant
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -47,10 +48,24 @@ fun ChatAreaPreview() {
             )
         )
     )
+    val mockModel = LLMModel(
+        id = 1L,
+        name = "gpt-4",
+        providerId = 1L,
+        active = true,
+        displayName = "GPT-4",
+        type = LLMModelType.CHAT
+    )
+
     ChatArea(
         state = ChatAreaState(
-            sessionUiState = DataState.Success(ChatSessionData(session = mockChatSession)),
-            displayedMessages = mockChatSession.messages
+            sessionUiState = DataState.Success(mockChatSession),
+            displayedMessages = mockChatSession.messages,
+            availableModels = DataState.Success(listOf(mockModel)),
+            availableSettingsForCurrentModel = DataState.Success(emptyList()),
+            currentModel = mockModel,
+            currentSettings = null,
+            modelsById = mapOf(1L to mockModel)
         ),
         actions = object : ChatAreaActions {
             override fun onUpdateInput(newText: String) {}

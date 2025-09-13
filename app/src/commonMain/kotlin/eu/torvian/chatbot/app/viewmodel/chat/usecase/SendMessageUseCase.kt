@@ -2,6 +2,7 @@ package eu.torvian.chatbot.app.viewmodel.chat.usecase
 
 import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.error_sending_message_short
+import eu.torvian.chatbot.app.generated.resources.warning_model_or_settings_unavailable
 import eu.torvian.chatbot.app.repository.SessionRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
@@ -27,10 +28,21 @@ class SendMessageUseCase(
      * Branches on streaming settings to use appropriate processing method.
      */
     suspend fun execute() {
-        val currentSessionData = state.currentSessionData ?: return
-        val currentSession = currentSessionData.session
+        val currentSession = state.currentSession.value ?: return
         val content = state.inputContent.value.trim()
         if (content.isBlank()) return // Cannot send empty message
+
+        // Check if model or model settings are available
+        val currentModel = state.currentModel.value
+        val currentSettings = state.currentSettings.value
+
+        if (currentModel == null || currentSettings == null) {
+            errorNotifier.genericWarning(
+                shortMessageRes = Res.string.warning_model_or_settings_unavailable,
+                detailedMessage = "Model: ${currentModel?.name ?: "not available"}, Settings: ${if (currentSettings != null) "available" else "not available"}"
+            )
+            return
+        }
 
         val parentId = state.replyTargetMessage.value?.id ?: currentSession.currentLeafMessageId
 
@@ -39,8 +51,8 @@ class SendMessageUseCase(
         state.setIsSending(true) // Set sending state to true
 
         try {
-            // Check if streaming is enabled in settings, default to true if no settings available
-            val isStreamingEnabled = currentSessionData.modelSettings?.stream ?: true
+            // Check if streaming is enabled in settings
+            val isStreamingEnabled = currentSettings.stream
 
             val request = ProcessNewMessageRequest(
                 content = content,

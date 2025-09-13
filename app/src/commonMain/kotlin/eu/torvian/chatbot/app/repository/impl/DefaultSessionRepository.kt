@@ -44,7 +44,8 @@ class DefaultSessionRepository(
 
     // Cache for individual detailed session flows, guarded by a Mutex for thread safety
     private val _sessionDetailsFlowsMutex = Mutex()
-    private val _sessionDetailsFlows = LruCache<Long, MutableStateFlow<DataState<RepositoryError, ChatSession>>>(SESSION_DETAILS_CACHE_SIZE)
+    private val _sessionDetailsFlows =
+        LruCache<Long, MutableStateFlow<DataState<RepositoryError, ChatSession>>>(SESSION_DETAILS_CACHE_SIZE)
 
     override suspend fun getSessionDetailsFlow(sessionId: Long): StateFlow<DataState<RepositoryError, ChatSession>> {
         return _sessionDetailsFlowsMutex.withLock {
@@ -182,7 +183,7 @@ class DefaultSessionRepository(
         return sessionApi.updateSessionModel(sessionId, request)
             .map {
                 updateSessionDetailsInCache(sessionId) { session ->
-                    session.copy(currentModelId = request.modelId)
+                    session.copy(currentModelId = request.modelId, currentSettingsId = null)
                 }
             }
             .mapLeft { apiResourceError ->

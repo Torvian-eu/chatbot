@@ -33,8 +33,7 @@ class SwitchBranchUseCase(
      *                        a root, middle, or leaf message in the conversation tree.
      */
     suspend fun execute(targetMessageId: Long) {
-        val currentSessionData = state.currentSessionData ?: return
-        val currentSession = currentSessionData.session
+        val currentSession = state.currentSession.value ?: return
         if (currentSession.currentLeafMessageId == targetMessageId) return
 
         val messageMap = currentSession.messages.associateBy { it.id }

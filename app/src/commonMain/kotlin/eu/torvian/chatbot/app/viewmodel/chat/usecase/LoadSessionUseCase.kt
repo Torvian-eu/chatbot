@@ -1,6 +1,5 @@
 package eu.torvian.chatbot.app.viewmodel.chat.usecase
 
-import arrow.core.raise.either
 import arrow.fx.coroutines.parZip
 import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.error_loading_session
@@ -42,25 +41,18 @@ class LoadSessionUseCase(
     suspend fun execute(sessionId: Long, forceReload: Boolean = false) {
         // Prevent reloading if already loading or if the session is already loaded successfully
         val currentState = state.sessionDataState.value
-        if (!forceReload && (currentState.isLoading || (currentState.dataOrNull?.session?.id == sessionId))) return
+        if (!forceReload && (currentState.isLoading || (currentState.dataOrNull?.id == sessionId))) return
 
         // Store the session ID for potential retry
         state.setRetryState(sessionId, null)
 
-        // Trigger repository load operations
-        either {
-            // Load session details
-            val session = sessionRepository.loadSessionDetails(sessionId).bind()
+        parZip(
+            { sessionRepository.loadSessionDetails(sessionId) },
+            { modelRepository.loadModels() },
+            { settingsRepository.loadSettings() }
 
-            // Load model and settings details in parallel if they exist
-            parZip(
-                { session.currentModelId?.let { modelId -> modelRepository.loadModelDetails(modelId) } },
-                { session.currentSettingsId?.let { settingsId -> settingsRepository.loadSettingsDetails(settingsId) } }
-            ) { modelResult, settingsResult ->
-                modelResult?.bind()
-                settingsResult?.bind()
-                Unit
-            }
+        ) { sessionResult, _, _ ->
+            sessionResult
         }.fold(
             ifLeft = { repositoryError ->
                 val eventId = errorNotifier.repositoryError(
@@ -70,14 +62,13 @@ class LoadSessionUseCase(
                 )
                 state.setRetryState(sessionId, eventId)
             },
-            ifRight = { _ ->
-                logger.info("Successfully triggered load for session $sessionId")
+            ifRight = { session ->
+                logger.info("Successfully loaded session $sessionId. Dependencies are loading in background.")
                 state.resetState()
                 state.setActiveSessionId(sessionId)
             }
         )
     }
-
 
     /**
      * Handles retry requests by checking if the event ID matches and retrying if so.
