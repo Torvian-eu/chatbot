@@ -402,7 +402,7 @@ class DefaultSessionRepository(
             }
 
             is ChatStreamEvent.ErrorOccurred -> {
-                logger.error("Streaming error: ${event.error.message}")
+                logger.error("Streaming error: ${event.error}")
             }
 
             ChatStreamEvent.StreamCompleted -> {

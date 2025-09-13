@@ -24,6 +24,7 @@ import io.ktor.http.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.serializer
 
@@ -79,19 +80,28 @@ class KtorChatApiClient(client: HttpClient) : BaseApiResourceClient(client), Cha
                 }
             ) {
                 incoming.collect { event ->
-                    val chatStreamEvent = deserialize<ChatStreamEvent>(event.data)
-                    if (chatStreamEvent == null) {
-                        logger.error("Failed to deserialize SSE data chunk for session $sessionId: '${event.data}'")
+                    try {
+                        val chatStreamEvent = deserialize<ChatStreamEvent>(event.data)
+                        if (chatStreamEvent == null) {
+                            logger.error("Failed to deserialize SSE data chunk for session $sessionId: '${event.data}'")
+                            emit(
+                                ApiResourceError.SerializationError(
+                                    "Failed to parse SSE data chunk: ${event.data}",
+                                    null
+                                ).left()
+                            )
+                            return@collect
+                        }
+                        emit(chatStreamEvent.right())
+                    } catch (e: SerializationException) {
+                        logger.error("SerializationException during SSE deserialization for session $sessionId: '${event.data}'", e)
                         emit(
                             ApiResourceError.SerializationError(
-                                "Failed to parse SSE data chunk: ${event.data}",
+                                "Serialization error: ${e.message} for data: ${event.data}",
                                 null
                             ).left()
                         )
-                        return@collect
                     }
-                    // Emit the deserialized ChatStreamEvent
-                    emit(chatStreamEvent.right())
                 }
             }
         } catch (e: Exception) {

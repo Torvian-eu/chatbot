@@ -227,7 +227,7 @@ fun Route.configureSessionRoutes(
                     ifLeft = { error ->
                         // Validation failed: Send a single SSE 'error' event and close the stream.
                         val apiError = error.toApiError()
-                        val errorEvent = ChatStreamEvent.ErrorOccurred(apiError)
+                        val errorEvent: ChatStreamEvent = ChatStreamEvent.ErrorOccurred(apiError)
                         send(ServerSentEvent(event = errorEvent.eventType, data = json.encodeToString(errorEvent)))
                     },
                     ifRight = { (session, llmConfig) ->
@@ -241,7 +241,7 @@ fun Route.configureSessionRoutes(
                                 eitherStreamEvent.fold(
                                     ifLeft = { streamError ->
                                         val apiError = streamError.toApiError()
-                                        val chatStreamEvent = ChatStreamEvent.ErrorOccurred(apiError)
+                                        val chatStreamEvent: ChatStreamEvent = ChatStreamEvent.ErrorOccurred(apiError)
                                         send(
                                             ServerSentEvent(
                                                 event = "error",
@@ -293,7 +293,7 @@ fun Route.configureSessionRoutes(
                                                 "An unexpected error occurred during streaming.",
                                                 "details" to e.message.toString()
                                             )
-                                        )
+                                        ) as ChatStreamEvent
                                     )
                                 )
                             )
