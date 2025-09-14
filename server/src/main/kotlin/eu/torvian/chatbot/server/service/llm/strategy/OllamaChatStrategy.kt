@@ -60,43 +60,43 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
         }
 
         // 3. Map ModelSettings to Ollama API request parameters
-        val customParams: JsonObject? = settings.customParams
+        // Build the nested 'options' object first.
+        // Start with customParams, then overwrite with specific settings for precedence.
+        val optionsJson = buildJsonObject {
+            settings.customParams?.let { params ->
+                params.forEach { (key, value) -> put(key, value) }
+            }
 
-        // Safely extract parameters using JsonObject accessors
-        val topP = customParams?.get("top_p")?.jsonPrimitive?.floatOrNull
-        val topK = customParams?.get("top_k")?.jsonPrimitive?.intOrNull
-        val stop = customParams?.get("stop")?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull }
-        val seed = customParams?.get("seed")?.jsonPrimitive?.intOrNull
+            // Add/overwrite with specific parameters from ChatModelSettings
+            settings.temperature?.let { put("temperature", JsonPrimitive(it)) }
+            settings.maxTokens?.let { put("num_predict", JsonPrimitive(it)) } // Mapping maxTokens to num_predict
+            settings.topP?.let { put("top_p", JsonPrimitive(it)) }
+            settings.stopSequences?.takeIf { it.isNotEmpty() }?.let {
+                put("stop", json.encodeToJsonElement(it))
+            }
+        }
 
-        // Build the Ollama specific options
-        val options = OllamaApiModels.ChatCompletionRequest.Options(
-            temperature = settings.temperature,
-            num_predict = settings.maxTokens,
-            top_p = topP,
-            top_k = topK,
-            stop = stop,
-            seed = seed
-        )
-
-        // Build the Ollama specific request DTO (@Serializable object)
-        val requestBodyDto = OllamaApiModels.ChatCompletionRequest(
-            model = modelConfig.name,
-            messages = apiMessages,
-            stream = settings.stream,
-            options = options
-        )
+        // Build the main request body as a flexible JsonObject.
+        val requestBodyJson = buildJsonObject {
+            put("model", JsonPrimitive(modelConfig.name))
+            put("messages", json.encodeToJsonElement(apiMessages))
+            put("stream", JsonPrimitive(settings.stream))
+            if (optionsJson.isNotEmpty()) {
+                put("options", optionsJson)
+            }
+        }
 
         // 4. Determine API specific path and headers
         val path = "/api/chat"
         val customHeaders = mutableMapOf<String, String>()
 
         // Ollama typically doesn't require authorization headers for local instances
-        // If an API key is provided, we could add it, but it's not standard for Ollama
         logger.debug("OllamaChatStrategy: No authorization header needed for local Ollama instance")
 
+        val requestBodyString = json.encodeToString(requestBodyJson)
         logger.debug(
             "OllamaChatStrategy: Prepared request body: ${
-                json.encodeToString(requestBodyDto).take(500)
+                requestBodyString.take(500)
             }..."
         ) // Log part of the body
 
@@ -104,7 +104,7 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
         return ApiRequestConfig(
             path = path,
             method = GenericHttpMethod.POST,
-            body = requestBodyDto,
+            body = requestBodyString, // Pass the pre-serialized JSON string
             contentType = GenericContentType.APPLICATION_JSON,
             customHeaders = customHeaders
         ).right()
