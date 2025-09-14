@@ -270,7 +270,10 @@ class DefaultSessionRepository(
             .map { newMessages ->
                 // Update the cached ChatSession with the new messages
                 updateSessionDetailsInCache(sessionId) { session ->
-                    session.copy(messages = session.messages + newMessages)
+                    session.copy(
+                        messages = session.messages + newMessages,
+                        currentLeafMessageId = newMessages.last().id
+                    )
                 }
             }
             .mapLeft { apiResourceError ->
