@@ -74,29 +74,34 @@ object OpenAiApiModels {
 
     /**
      * Represents a chat completion request to an OpenAI-compatible API.
-     * Matches the structure documented by OpenAI for non-streaming requests.
      *
-     * @property model The specific model name string (e.g., "gpt-4o")
-     * @property messages The conversation history
+     * Note: The OpenAIChatStrategy now builds a JsonObject dynamically to support
+     * any custom parameter via ChatModelSettings.customParams, rather than being
+     * limited to this DTO's fields. This DTO is kept for reference and potential other uses.
+     *
+     * @property model Model name/identifier to use
+     * @property messages List of conversation messages
+     * @property stream Whether to stream the response
      * @property temperature Sampling temperature
      * @property max_tokens Max tokens to generate
      * @property top_p Nucleus sampling
-     * @property frequency_penalty Penalty for token frequency
-     * @property presence_penalty Penalty for token presence
+     * @property frequency_penalty Frequency penalty parameter
+     * @property presence_penalty Presence penalty parameter
      * @property stop Stop sequences
+     * @property seed Seed for deterministic generation
      */
     @Serializable
     data class ChatCompletionRequest(
         val model: String,
         val messages: List<RequestMessage>,
+        val stream: Boolean = false, // Added for completeness
         val temperature: Float? = null,
         val max_tokens: Int? = null,
         val top_p: Float? = null,
         val frequency_penalty: Float? = null,
         val presence_penalty: Float? = null,
         val stop: List<String>? = null,
-        // Other OpenAI params like `stream`, `seed`, `response_format`, etc. can be added here
-        // Or handled via customParamsJson in ModelSettings and mapped by the strategy
+        val seed: Int? = null // Added for completeness
     ) {
         /**
          * Represents a message in the chat completion request.

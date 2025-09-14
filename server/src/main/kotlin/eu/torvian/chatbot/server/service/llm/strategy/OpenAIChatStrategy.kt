@@ -66,30 +66,28 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
             addAll(messages.map { it.toOpenAiApiMessage() })
         }
 
+        // 3. Build the request body as a flexible JsonObject.
+        // This allows passing any parameter from customParams to the OpenAI API.
+        // Specific settings (e.g., temperature) will override any values from customParams.
+        val requestBodyJson = buildJsonObject {
+            // Start with custom parameters from settings.
+            settings.customParams?.let { params ->
+                params.forEach { (key, value) -> put(key, value) }
+            }
 
-        // 3. Map ModelSettings to OpenAI API request parameters
-        val customParams: JsonObject? = settings.customParams
+            // Add/overwrite with standard and required parameters.
+            put("model", JsonPrimitive(modelConfig.name))
+            put("messages", json.encodeToJsonElement(apiMessages))
+            put("stream", JsonPrimitive(settings.stream))
 
-        // Safely extract parameters using JsonObject accessors.
-        // These accessors handle cases where keys are missing or values have wrong types by returning null.
-        val topP = customParams?.get("top_p")?.jsonPrimitive?.floatOrNull
-        val frequencyPenalty = customParams?.get("frequency_penalty")?.jsonPrimitive?.floatOrNull
-        val presencePenalty = customParams?.get("presence_penalty")?.jsonPrimitive?.floatOrNull
-        val stop = customParams?.get("stop")?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull }
-
-        // Build the OpenAI specific request DTO (@Serializable object)
-        val requestBodyDto = OpenAiApiModels.ChatCompletionRequest(
-            model = modelConfig.name,
-            messages = apiMessages,
-            temperature = settings.temperature,
-            max_tokens = settings.maxTokens,
-            top_p = topP,
-            frequency_penalty = frequencyPenalty,
-            presence_penalty = presencePenalty,
-            stop = stop
-            // Additional OpenAI parameters can be added here as needed
-            // E.g., seed = customParams?.get("seed")?.jsonPrimitive?.intOrNull
-        )
+            // Add/overwrite with specific parameters from ChatModelSettings
+            settings.temperature?.let { put("temperature", JsonPrimitive(it)) }
+            settings.maxTokens?.let { put("max_tokens", JsonPrimitive(it)) }
+            settings.topP?.let { put("top_p", JsonPrimitive(it)) }
+            settings.stopSequences?.takeIf { it.isNotEmpty() }?.let {
+                put("stop", json.encodeToJsonElement(it))
+            }
+        }
 
         // 4. Determine API specific path and headers
         val path = "/chat/completions"
@@ -97,13 +95,15 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
 
         // Add Authorization header ONLY if API key is required AND provided
         if (apiKey != null) {
-            // OpenAI uses "Bearer" token authentication
             customHeaders[HttpHeaders.Authorization] = "Bearer $apiKey"
         }
 
+        // Pre-serialize the JsonObject to avoid Ktor serialization issues
+        val requestBodyString = json.encodeToString(requestBodyJson)
+
         logger.debug(
             "OpenAIChatStrategy: Prepared request body: ${
-                json.encodeToString(requestBodyDto).take(500)
+                requestBodyString.take(500)
             }..."
         ) // Log part of the body
 
@@ -111,7 +111,7 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
         return ApiRequestConfig(
             path = path,
             method = GenericHttpMethod.POST,
-            body = requestBodyDto,
+            body = requestBodyString,
             contentType = GenericContentType.APPLICATION_JSON,
             customHeaders = customHeaders
         ).right()

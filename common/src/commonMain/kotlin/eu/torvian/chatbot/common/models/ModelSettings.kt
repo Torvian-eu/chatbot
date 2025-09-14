@@ -53,6 +53,7 @@ sealed class ModelSettings {
  * @property stream Whether to stream the response back as it's generated.
  * @property customParams Arbitrary model-specific or provider-specific parameters not covered
  *                        by strongly-typed fields, stored as a [JsonObject].
+ * TODO: Remove topK parameter, as it's not supported by all providers. (e.g. OpenAI)
  */
 @Serializable
 @SerialName("chat")
