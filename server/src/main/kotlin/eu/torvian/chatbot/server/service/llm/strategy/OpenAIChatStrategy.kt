@@ -80,6 +80,13 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
             put("messages", json.encodeToJsonElement(apiMessages))
             put("stream", JsonPrimitive(settings.stream))
 
+            // Add stream_options when streaming is enabled to request usage statistics
+            if (settings.stream) {
+                put("stream_options", buildJsonObject {
+                    put("include_usage", JsonPrimitive(true))
+                })
+            }
+
             // Add/overwrite with specific parameters from ChatModelSettings
             settings.temperature?.let { put("temperature", JsonPrimitive(it)) }
             settings.maxTokens?.let { put("max_tokens", JsonPrimitive(it)) }
@@ -196,9 +203,62 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
     override fun processStreamingResponse(
         responseStream: Flow<String>
     ): Flow<Either<LLMCompletionError.InvalidResponseError, LLMStreamChunk>> = flow {
-        // TODO: Implement OpenAI streaming response processing
-        // OpenAI uses Server-Sent Events (SSE) format for streaming
-        // This is a placeholder implementation
-        emit(LLMCompletionError.InvalidResponseError("OpenAI streaming not yet implemented", null).left())
+        responseStream.collect { line ->
+            if (line.isBlank()) return@collect // Ignore empty lines
+
+            if (!line.startsWith("data: ")) {
+                logger.trace("OpenAIChatStrategy: Ignoring non-data SSE line: $line")
+                return@collect
+            }
+
+            // Extract JSON payload, removing the "data: " prefix and any leading space
+            val jsonData = line.substringAfter("data: ").trim()
+
+            // Check for the termination signal from the API
+            if (jsonData == "[DONE]") {
+                logger.debug("OpenAIChatStrategy: Received [DONE] signal, stream finished by API.")
+                return@collect // Exit the collector, the flow will proceed to the final 'Done' chunk emission.
+            }
+
+            try {
+                val streamChunk = json.decodeFromString<OpenAiApiModels.ChatCompletionStreamChunk>(jsonData)
+
+                // 1. CHECK FOR AND EMIT USAGE STATS
+                streamChunk.usage?.let { usage ->
+                    logger.trace("OpenAIChatStrategy: Received usage stats chunk")
+                    emit(
+                        LLMStreamChunk.UsageChunk(
+                            promptTokens = usage.prompt_tokens,
+                            completionTokens = usage.completion_tokens,
+                            totalTokens = usage.total_tokens
+                        ).right()
+                    )
+                }
+
+                // 2. PROCESS CONTENT DELTAS (as before)
+                streamChunk.choices.forEach { choice ->
+                    // Extract content and finish reason from the choice
+                    val contentDelta = choice.delta.content
+                    val finishReason = choice.finish_reason
+
+                    // Emit a content chunk if there is new text or if this chunk signals the end
+                    if (!contentDelta.isNullOrEmpty() || finishReason != null) {
+                        emit(LLMStreamChunk.ContentChunk(contentDelta ?: "", finishReason).right())
+                    }
+                    // Note: We ignore chunks with neither content nor a finish reason (e.g., the first chunk that only has a role).
+                }
+
+            } catch (e: Exception) {
+                logger.error("OpenAIChatStrategy: Failed to parse OpenAI streaming JSON chunk: $jsonData", e)
+                val error = LLMCompletionError.InvalidResponseError(
+                    "Failed to parse OpenAI stream JSON chunk: ${e.message}",
+                    e
+                )
+                emit(error.left())
+            }
+        }
+        // After the stream has been fully collected (or the [DONE] signal was received),
+        // emit the final Done chunk to signal completion to the consumer.
+        emit(LLMStreamChunk.Done.right())
     }
 }
