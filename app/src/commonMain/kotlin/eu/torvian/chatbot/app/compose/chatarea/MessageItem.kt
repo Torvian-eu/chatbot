@@ -16,6 +16,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.common.models.ChatMessage
+import eu.torvian.chatbot.common.models.LLMModel
 
 /**
  * Composable for the main chat message display area.
@@ -29,6 +30,7 @@ import eu.torvian.chatbot.common.models.ChatMessage
  * @param editingMessage The message currently being edited (E3.S1, E3.S2).
  * @param editingContent The content of the message currently being edited (E3.S1, E3.S2).
  * @param actions The actions contract for the chat area.
+ * @param modelsById Map of model IDs to LLMModel objects for displaying model names with graceful degradation.
  */
 @Composable
 fun MessageItem(
@@ -38,7 +40,8 @@ fun MessageItem(
     messageActions: MessageActions,
     editingMessage: ChatMessage?,
     editingContent: String?,
-    actions: ChatAreaActions
+    actions: ChatAreaActions,
+    modelsById: Map<Long, LLMModel> = emptyMap()
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val hovered by interactionSource.collectIsHoveredAsState()
@@ -60,9 +63,20 @@ fun MessageItem(
             .hoverable(interactionSource)
             .padding(12.dp)
     ) {
-        // Role and Name (e.g., "You:" or "AI:")
+        // Role and Name (e.g., "You:" or "AI:" or model name)
+        val displayName = when (message.role) {
+            ChatMessage.Role.USER -> "You"
+            ChatMessage.Role.ASSISTANT -> {
+                // Try to get model name from modelsById, fallback to "AI" or model ID
+                (message as? ChatMessage.AssistantMessage)?.modelId?.let { modelId ->
+                    modelsById[modelId]?.let { model ->
+                        model.displayName ?: model.name
+                    } ?: "Model ID: $modelId" // Graceful degradation
+                } ?: "AI" // No model ID available
+            }
+        }
         Text(
-            text = "${if (message.role == ChatMessage.Role.USER) "You" else "AI"}:",
+            text = "$displayName:",
             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
             color = contentColor.copy(alpha = 0.8f)
         )

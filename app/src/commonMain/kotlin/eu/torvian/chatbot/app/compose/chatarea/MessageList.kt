@@ -12,6 +12,7 @@ import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ScrollbarWrapper
 import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.common.models.ChatSession
+import eu.torvian.chatbot.common.models.LLMModel
 
 /**
  * Displays the list of messages in a scrollable column.
@@ -24,6 +25,7 @@ fun MessageList(
     editingMessage: ChatMessage?,
     editingContent: String?,
     actions: ChatAreaActions,
+    modelsById: Map<Long, LLMModel> = emptyMap(),
     modifier: Modifier = Modifier.Companion
 ) {
     // Create LazyListState for scrollbar integration
@@ -59,7 +61,8 @@ fun MessageList(
                     messageActions = messageActions,
                     editingMessage = editingMessage,
                     editingContent = editingContent,
-                    actions = actions // Pass actions for editing state access
+                    actions = actions, // Pass actions for editing state access
+                    modelsById = modelsById // Pass map for graceful degradation
                 )
             }
         }

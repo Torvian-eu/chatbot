@@ -79,8 +79,10 @@ class OllamaChatStrategyTest {
         assertEquals(GenericContentType.APPLICATION_JSON, config.contentType)
         assertTrue(config.customHeaders.isEmpty(), "Ollama should not require custom headers")
 
-        // Verify the request body structure
-        val requestBody = config.body as OllamaApiModels.ChatCompletionRequest
+        // Verify the request body structure by parsing the JSON string
+        val requestBodyString = config.body as String
+        val requestBody = json.decodeFromString<OllamaApiModels.ChatCompletionRequest>(requestBodyString)
+
         assertEquals("llama3.2", requestBody.model)
         assertEquals(false, requestBody.stream)
         assertEquals(2, requestBody.messages.size) // System message + user message
@@ -116,7 +118,11 @@ class OllamaChatStrategyTest {
         // Assert
         assertTrue(result.isRight())
         val config = result.getOrElse { throw AssertionError("Expected ApiRequestConfig") }
-        val requestBody = config.body as OllamaApiModels.ChatCompletionRequest
+
+        // Verify the request body structure by parsing the JSON string
+        val requestBodyString = config.body as String
+        val requestBody = json.decodeFromString<OllamaApiModels.ChatCompletionRequest>(requestBodyString)
+
         assertEquals(1, requestBody.messages.size) // Only user message
         assertEquals("user", requestBody.messages[0].role)
     }
@@ -179,10 +185,9 @@ class OllamaChatStrategyTest {
 
         // Assert
         assertTrue(result is LLMCompletionError.ApiError)
-        val apiError = result
-        assertEquals(404, apiError.statusCode)
-        assertTrue(apiError.message!!.contains("model 'nonexistent' not found"))
-        assertEquals(errorBody, apiError.errorBody)
+        assertEquals(404, result.statusCode)
+        assertTrue(result.message!!.contains("model 'nonexistent' not found"))
+        assertEquals(errorBody, result.errorBody)
     }
 
     @Test
@@ -196,9 +201,8 @@ class OllamaChatStrategyTest {
 
         // Assert
         assertTrue(result is LLMCompletionError.ApiError)
-        val apiError = result
-        assertEquals(500, apiError.statusCode)
-        assertTrue(apiError.message!!.contains("Invalid JSON response"))
+        assertEquals(500, result.statusCode)
+        assertTrue(result.message!!.contains("Invalid JSON response"))
     }
 
     @Test

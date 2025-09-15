@@ -44,7 +44,8 @@ class DefaultSessionRepository(
 
     // Cache for individual detailed session flows, guarded by a Mutex for thread safety
     private val _sessionDetailsFlowsMutex = Mutex()
-    private val _sessionDetailsFlows = LruCache<Long, MutableStateFlow<DataState<RepositoryError, ChatSession>>>(SESSION_DETAILS_CACHE_SIZE)
+    private val _sessionDetailsFlows =
+        LruCache<Long, MutableStateFlow<DataState<RepositoryError, ChatSession>>>(SESSION_DETAILS_CACHE_SIZE)
 
     override suspend fun getSessionDetailsFlow(sessionId: Long): StateFlow<DataState<RepositoryError, ChatSession>> {
         return _sessionDetailsFlowsMutex.withLock {
@@ -182,7 +183,7 @@ class DefaultSessionRepository(
         return sessionApi.updateSessionModel(sessionId, request)
             .map {
                 updateSessionDetailsInCache(sessionId) { session ->
-                    session.copy(currentModelId = request.modelId)
+                    session.copy(currentModelId = request.modelId, currentSettingsId = null)
                 }
             }
             .mapLeft { apiResourceError ->
@@ -269,7 +270,10 @@ class DefaultSessionRepository(
             .map { newMessages ->
                 // Update the cached ChatSession with the new messages
                 updateSessionDetailsInCache(sessionId) { session ->
-                    session.copy(messages = session.messages + newMessages)
+                    session.copy(
+                        messages = session.messages + newMessages,
+                        currentLeafMessageId = newMessages.last().id
+                    )
                 }
             }
             .mapLeft { apiResourceError ->
@@ -402,7 +406,7 @@ class DefaultSessionRepository(
             }
 
             is ChatStreamEvent.ErrorOccurred -> {
-                logger.error("Streaming error: ${event.error.message}")
+                logger.error("Streaming error: ${event.error}")
             }
 
             ChatStreamEvent.StreamCompleted -> {

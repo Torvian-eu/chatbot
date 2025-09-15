@@ -3,6 +3,9 @@ package eu.torvian.chatbot.app.viewmodel.chat.state
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.common.models.ChatMessage
+import eu.torvian.chatbot.common.models.ChatModelSettings
+import eu.torvian.chatbot.common.models.ChatSession
+import eu.torvian.chatbot.common.models.LLMModel
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -23,11 +26,52 @@ interface ChatState {
     val activeSessionId: StateFlow<Long?>
 
     /**
-     * The state of the currently loaded chat session combined with its model settings.
-     * This is reactively derived from the activeSessionId and repository flows.
-     * When in Success state, provides the ChatSessionData object containing both session and settings.
+     * The state of the currently loaded chat session.
      */
-    val sessionDataState: StateFlow<DataState<RepositoryError, ChatSessionData>>
+    val sessionDataState: StateFlow<DataState<RepositoryError, ChatSession>>
+
+    /**
+     * The list of all currently configured LLM models available for selection.
+     */
+    val availableModels: StateFlow<DataState<RepositoryError, List<LLMModel>>>
+
+    /**
+     * The list of settings profiles available for the currently selected model.
+     */
+    val availableSettingsForCurrentModel: StateFlow<DataState<RepositoryError, List<ChatModelSettings>>>
+
+    // --- Derived Lookup Maps (for performance & graceful degradation) ---
+    /**
+     * A map of model IDs to LLMModel objects, derived from `availableModels`.
+     * This is optimized for quick lookups (e.g., rendering message metadata).
+     * It will be an empty map if models are loading or failed to load.
+     */
+    val modelsById: StateFlow<Map<Long, LLMModel>>
+
+    /**
+     * A map of settings IDs to ChatModelSettings objects, derived from the global settings list.
+     * Optimized for quick lookups.
+     */
+    val settingsById: StateFlow<Map<Long, ChatModelSettings>>
+
+    // --- Derived "Current Item" States (for UI convenience) ---
+    /**
+     * The currently active ChatSession object, or null if not loaded.
+     * Derived from sessionDataState.
+     */
+    val currentSession: StateFlow<ChatSession?>
+
+    /**
+     * The fully resolved LLMModel object for the current session, or null.
+     * Derived by combining currentSession and modelsById.
+     */
+    val currentModel: StateFlow<LLMModel?>
+
+    /**
+     * The fully resolved ChatModelSettings object for the current session, or null.
+     * Derived by combining currentSession and settingsById.
+     */
+    val currentSettings: StateFlow<ChatModelSettings?>
 
     /**
      * The list of messages to display in the UI, representing the currently selected thread branch.
@@ -77,13 +121,6 @@ interface ChatState {
      * Used for retry functionality.
      */
     val lastFailedLoadEventId: StateFlow<String?>
-
-    /**
-     * Convenience property to get the current session data if available.
-     * Returns null if the session data state is not in Success state.
-     */
-    val currentSessionData: ChatSessionData?
-        get() = sessionDataState.value.dataOrNull
 
     // --- State Mutation Methods ---
 

@@ -41,6 +41,11 @@ fun ChatScreen(
     // --- Collect States for ChatArea ---
     val chatSessionUiState by chatViewModel.sessionDataState.collectAsState()
     val activeSessionId by chatViewModel.activeSessionId.collectAsState() // Collect active ID for comparison
+    val availableModels by chatViewModel.availableModels.collectAsState()
+    val availableSettings by chatViewModel.availableSettingsForCurrentModel.collectAsState()
+    val currentModel by chatViewModel.currentModel.collectAsState()
+    val currentSettings by chatViewModel.currentSettings.collectAsState()
+    val modelsById by chatViewModel.modelsById.collectAsState()
     val chatInputContent by chatViewModel.inputContent.collectAsState()
     val chatReplyTargetMessage by chatViewModel.replyTargetMessage.collectAsState()
     val chatEditingMessage by chatViewModel.editingMessage.collectAsState()
@@ -109,12 +114,17 @@ fun ChatScreen(
 
     // --- ChatArea Contract Construction ---
     val chatAreaState = remember(
-        chatSessionUiState, chatInputContent, chatReplyTargetMessage,
-        chatEditingMessage, chatEditingContent, chatDisplayedMessages,
-        chatIsSendingMessage, chatDialogState
+        chatSessionUiState, availableModels, availableSettings, currentModel, currentSettings, modelsById,
+        chatInputContent, chatReplyTargetMessage, chatEditingMessage, chatEditingContent,
+        chatDisplayedMessages, chatIsSendingMessage, chatDialogState
     ) {
         ChatAreaState(
             sessionUiState = chatSessionUiState,
+            availableModels = availableModels,
+            availableSettingsForCurrentModel = availableSettings,
+            currentModel = currentModel,
+            currentSettings = currentSettings,
+            modelsById = modelsById,
             inputContent = chatInputContent,
             replyTargetMessage = chatReplyTargetMessage,
             editingMessage = chatEditingMessage,

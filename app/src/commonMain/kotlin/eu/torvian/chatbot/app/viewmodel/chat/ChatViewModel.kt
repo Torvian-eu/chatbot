@@ -7,10 +7,12 @@ import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
-import eu.torvian.chatbot.app.viewmodel.chat.state.ChatSessionData
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.usecase.*
 import eu.torvian.chatbot.common.models.ChatMessage
+import eu.torvian.chatbot.common.models.ChatSession
+import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.common.models.ModelSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.StateFlow
@@ -65,10 +67,44 @@ class ChatViewModel(
     val activeSessionId: StateFlow<Long?> = state.activeSessionId
 
     /**
-     * The state of the currently loaded chat session combined with its model settings.
-     * When in Success state, provides the ChatSessionData object containing both session and settings.
+     * The state of the currently loaded chat session.
      */
-    val sessionDataState: StateFlow<DataState<RepositoryError, ChatSessionData>> = state.sessionDataState
+    val sessionDataState: StateFlow<DataState<RepositoryError, ChatSession>> = state.sessionDataState
+
+    /**
+     * The list of all currently configured LLM models available for selection.
+     */
+    val availableModels: StateFlow<DataState<RepositoryError, List<LLMModel>>> = state.availableModels
+
+    /**
+     * The list of settings profiles available for the currently selected model.
+     */
+    val availableSettingsForCurrentModel: StateFlow<DataState<RepositoryError, List<ModelSettings>>> = state.availableSettingsForCurrentModel
+
+    /**
+     * A map of model IDs to LLMModel objects for quick lookups.
+     */
+    val modelsById: StateFlow<Map<Long, LLMModel>> = state.modelsById
+
+    /**
+     * A map of settings IDs to ModelSettings objects for quick lookups.
+     */
+    val settingsById: StateFlow<Map<Long, ModelSettings>> = state.settingsById
+
+    /**
+     * The currently active ChatSession object, or null if not loaded.
+     */
+    val currentSession: StateFlow<ChatSession?> = state.currentSession
+
+    /**
+     * The fully resolved LLMModel object for the current session, or null.
+     */
+    val currentModel: StateFlow<LLMModel?> = state.currentModel
+
+    /**
+     * The fully resolved ModelSettings object for the current session, or null.
+     */
+    val currentSettings: StateFlow<ModelSettings?> = state.currentSettings
 
     /**
      * The list of messages to display in the UI, representing the currently selected thread branch.

@@ -66,30 +66,35 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
             addAll(messages.map { it.toOpenAiApiMessage() })
         }
 
+        // 3. Build the request body as a flexible JsonObject.
+        // This allows passing any parameter from customParams to the OpenAI API.
+        // Specific settings (e.g., temperature) will override any values from customParams.
+        val requestBodyJson = buildJsonObject {
+            // Start with custom parameters from settings.
+            settings.customParams?.let { params ->
+                params.forEach { (key, value) -> put(key, value) }
+            }
 
-        // 3. Map ModelSettings to OpenAI API request parameters
-        val customParams: JsonObject? = settings.customParams
+            // Add/overwrite with standard and required parameters.
+            put("model", JsonPrimitive(modelConfig.name))
+            put("messages", json.encodeToJsonElement(apiMessages))
+            put("stream", JsonPrimitive(settings.stream))
 
-        // Safely extract parameters using JsonObject accessors.
-        // These accessors handle cases where keys are missing or values have wrong types by returning null.
-        val topP = customParams?.get("top_p")?.jsonPrimitive?.floatOrNull
-        val frequencyPenalty = customParams?.get("frequency_penalty")?.jsonPrimitive?.floatOrNull
-        val presencePenalty = customParams?.get("presence_penalty")?.jsonPrimitive?.floatOrNull
-        val stop = customParams?.get("stop")?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull }
+            // Add stream_options when streaming is enabled to request usage statistics
+            if (settings.stream) {
+                put("stream_options", buildJsonObject {
+                    put("include_usage", JsonPrimitive(true))
+                })
+            }
 
-        // Build the OpenAI specific request DTO (@Serializable object)
-        val requestBodyDto = OpenAiApiModels.ChatCompletionRequest(
-            model = modelConfig.name,
-            messages = apiMessages,
-            temperature = settings.temperature,
-            max_tokens = settings.maxTokens,
-            top_p = topP,
-            frequency_penalty = frequencyPenalty,
-            presence_penalty = presencePenalty,
-            stop = stop
-            // Additional OpenAI parameters can be added here as needed
-            // E.g., seed = customParams?.get("seed")?.jsonPrimitive?.intOrNull
-        )
+            // Add/overwrite with specific parameters from ChatModelSettings
+            settings.temperature?.let { put("temperature", JsonPrimitive(it)) }
+            settings.maxTokens?.let { put("max_tokens", JsonPrimitive(it)) }
+            settings.topP?.let { put("top_p", JsonPrimitive(it)) }
+            settings.stopSequences?.takeIf { it.isNotEmpty() }?.let {
+                put("stop", json.encodeToJsonElement(it))
+            }
+        }
 
         // 4. Determine API specific path and headers
         val path = "/chat/completions"
@@ -97,13 +102,15 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
 
         // Add Authorization header ONLY if API key is required AND provided
         if (apiKey != null) {
-            // OpenAI uses "Bearer" token authentication
             customHeaders[HttpHeaders.Authorization] = "Bearer $apiKey"
         }
 
+        // Pre-serialize the JsonObject to avoid Ktor serialization issues
+        val requestBodyString = json.encodeToString(requestBodyJson)
+
         logger.debug(
             "OpenAIChatStrategy: Prepared request body: ${
-                json.encodeToString(requestBodyDto).take(500)
+                requestBodyString.take(500)
             }..."
         ) // Log part of the body
 
@@ -111,7 +118,7 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
         return ApiRequestConfig(
             path = path,
             method = GenericHttpMethod.POST,
-            body = requestBodyDto,
+            body = requestBodyString,
             contentType = GenericContentType.APPLICATION_JSON,
             customHeaders = customHeaders
         ).right()
@@ -196,9 +203,62 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
     override fun processStreamingResponse(
         responseStream: Flow<String>
     ): Flow<Either<LLMCompletionError.InvalidResponseError, LLMStreamChunk>> = flow {
-        // TODO: Implement OpenAI streaming response processing
-        // OpenAI uses Server-Sent Events (SSE) format for streaming
-        // This is a placeholder implementation
-        emit(LLMCompletionError.InvalidResponseError("OpenAI streaming not yet implemented", null).left())
+        responseStream.collect { line ->
+            if (line.isBlank()) return@collect // Ignore empty lines
+
+            if (!line.startsWith("data: ")) {
+                logger.trace("OpenAIChatStrategy: Ignoring non-data SSE line: $line")
+                return@collect
+            }
+
+            // Extract JSON payload, removing the "data: " prefix and any leading space
+            val jsonData = line.substringAfter("data: ").trim()
+
+            // Check for the termination signal from the API
+            if (jsonData == "[DONE]") {
+                logger.debug("OpenAIChatStrategy: Received [DONE] signal, stream finished by API.")
+                return@collect // Exit the collector, the flow will proceed to the final 'Done' chunk emission.
+            }
+
+            try {
+                val streamChunk = json.decodeFromString<OpenAiApiModels.ChatCompletionStreamChunk>(jsonData)
+
+                // 1. CHECK FOR AND EMIT USAGE STATS
+                streamChunk.usage?.let { usage ->
+                    logger.trace("OpenAIChatStrategy: Received usage stats chunk")
+                    emit(
+                        LLMStreamChunk.UsageChunk(
+                            promptTokens = usage.prompt_tokens,
+                            completionTokens = usage.completion_tokens,
+                            totalTokens = usage.total_tokens
+                        ).right()
+                    )
+                }
+
+                // 2. PROCESS CONTENT DELTAS (as before)
+                streamChunk.choices.forEach { choice ->
+                    // Extract content and finish reason from the choice
+                    val contentDelta = choice.delta.content
+                    val finishReason = choice.finish_reason
+
+                    // Emit a content chunk if there is new text or if this chunk signals the end
+                    if (!contentDelta.isNullOrEmpty() || finishReason != null) {
+                        emit(LLMStreamChunk.ContentChunk(contentDelta ?: "", finishReason).right())
+                    }
+                    // Note: We ignore chunks with neither content nor a finish reason (e.g., the first chunk that only has a role).
+                }
+
+            } catch (e: Exception) {
+                logger.error("OpenAIChatStrategy: Failed to parse OpenAI streaming JSON chunk: $jsonData", e)
+                val error = LLMCompletionError.InvalidResponseError(
+                    "Failed to parse OpenAI stream JSON chunk: ${e.message}",
+                    e
+                )
+                emit(error.left())
+            }
+        }
+        // After the stream has been fully collected (or the [DONE] signal was received),
+        // emit the final Done chunk to signal completion to the consumer.
+        emit(LLMStreamChunk.Done.right())
     }
 }

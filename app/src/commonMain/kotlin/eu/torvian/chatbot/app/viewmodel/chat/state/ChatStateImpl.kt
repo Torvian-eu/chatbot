@@ -55,76 +55,109 @@ class ChatStateImpl(
 
     // --- Reactive State Derivation ---
 
-    // Intermediate flow for the active session
-    private val activeChatSessionState: StateFlow<DataState<RepositoryError, ChatSession>> =
+    // Core session state
+    override val sessionDataState: StateFlow<DataState<RepositoryError, ChatSession>> =
         _activeSessionId.flatMapLatest { id ->
             if (id == null) flowOf(DataState.Idle)
             else sessionRepository.getSessionDetailsFlow(id)
         }.stateIn(
             scope = backgroundScope,
-            started = SharingStarted.WhileSubscribed(),
+            started = SharingStarted.WhileSubscribed(5000),
             initialValue = DataState.Idle
         )
 
-    // Intermediate flow for the active model
-    private val llmModelForActiveSession: StateFlow<DataState<RepositoryError, LLMModel?>> =
-        activeChatSessionState.flatMapLatest { sessionState ->
-            val modelId = sessionState.dataOrNull?.currentModelId
-            if (modelId == null) flowOf(DataState.Success(null))
-            else modelRepository.getModelFlow(modelId)
-        }.stateIn(
-            scope = backgroundScope,
-            started = SharingStarted.WhileSubscribed(),
-            initialValue = DataState.Idle
-        )
-
-    // Intermediate flow for the active settings
-    private val modelSettingsForActiveSession: StateFlow<DataState<RepositoryError, ModelSettings?>> =
-        activeChatSessionState.flatMapLatest { sessionState ->
-            val settingsId = sessionState.dataOrNull?.currentSettingsId
-            if (settingsId == null) flowOf(DataState.Success(null))
-            else settingsRepository.getSettingsFlow(settingsId)
-        }.stateIn(
-            scope = backgroundScope,
-            started = SharingStarted.WhileSubscribed(),
-            initialValue = DataState.Idle
-        )
-
-    // Final combined sessionDataState
-    override val sessionDataState: StateFlow<DataState<RepositoryError, ChatSessionData>> =
-        combine(
-            activeChatSessionState,
-            llmModelForActiveSession,
-            modelSettingsForActiveSession
-        ) { sessionState, modelState, settingsState ->
-            when (sessionState) {
-                is DataState.Idle -> DataState.Idle
-                is DataState.Loading -> DataState.Loading
-                is DataState.Error -> sessionState
+    // Available models from repository, filtered for chat models and active models only
+    override val availableModels: StateFlow<DataState<RepositoryError, List<LLMModel>>> =
+        modelRepository.models.map { dataState ->
+            when (dataState) {
                 is DataState.Success -> {
-                    val session = sessionState.data
-                    val model = modelState.dataOrNull
-                    val settings = settingsState.dataOrNull
-                    val chatModelSettings = settings as? ChatModelSettings
-                    DataState.Success(
-                        ChatSessionData(
-                            session = session,
-                            llmModel = model,
-                            modelSettings = chatModelSettings
-                        )
-                    )
+                    val filteredModels = dataState.data.filter { model ->
+                        model.type == LLMModelType.CHAT && model.active
+                    }
+                    DataState.Success(filteredModels)
                 }
+
+                is DataState.Error -> dataState
+                is DataState.Loading -> dataState
+                is DataState.Idle -> dataState
             }
         }.stateIn(
             scope = backgroundScope,
-            started = SharingStarted.Eagerly,
+            started = SharingStarted.WhileSubscribed(5000),
             initialValue = DataState.Idle
         )
 
+    private val allModels: StateFlow<DataState<RepositoryError, List<LLMModel>>> = modelRepository.models
+
+    // All settings from repository, filtered for chat model settings only
+    private val allSettings: StateFlow<DataState<RepositoryError, List<ChatModelSettings>>> =
+        settingsRepository.settings.map { dataState ->
+            when (dataState) {
+                is DataState.Success -> {
+                    val filteredSettings = dataState.data.filterIsInstance<ChatModelSettings>()
+                    DataState.Success(filteredSettings)
+                }
+
+                is DataState.Error -> dataState
+                is DataState.Loading -> dataState
+                is DataState.Idle -> dataState
+            }
+        }.stateIn(
+            scope = backgroundScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = DataState.Idle
+        )
+
+    // --- Derived Lookup Maps ---
+    override val modelsById: StateFlow<Map<Long, LLMModel>> =
+        allModels.map { it.dataOrNull?.associateBy { model -> model.id } ?: emptyMap() }
+            .stateIn(backgroundScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
+    override val settingsById: StateFlow<Map<Long, ChatModelSettings>> =
+        allSettings.map { it.dataOrNull?.associateBy { settings -> settings.id } ?: emptyMap() }
+            .stateIn(backgroundScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
+    // --- Derived "Current Item" States ---
+    override val currentSession: StateFlow<ChatSession?> =
+        sessionDataState.map { it.dataOrNull }
+            .stateIn(backgroundScope, SharingStarted.WhileSubscribed(5000), null)
+
+    override val currentModel: StateFlow<LLMModel?> = currentSession
+        .map { session -> session?.currentModelId }
+        .combine(modelsById) { currentModelId, modelsMap ->
+            currentModelId?.let { modelsMap[it] }
+        }.stateIn(backgroundScope, SharingStarted.WhileSubscribed(5000), null)
+
+    override val currentSettings: StateFlow<ChatModelSettings?> = currentSession
+        .map { session -> session?.currentSettingsId }
+        .combine(settingsById) { currentSettingsId, settingsMap ->
+            currentSettingsId?.let { settingsMap[it] }
+        }.stateIn(backgroundScope, SharingStarted.WhileSubscribed(5000), null)
+
+    // --- Derived Filtered List for UI ---
+    override val availableSettingsForCurrentModel: StateFlow<DataState<RepositoryError, List<ChatModelSettings>>> =
+        combine(currentModel, allSettings) { model, settingsState ->
+            val currentModelId = model?.id
+            when (settingsState) {
+                is DataState.Success -> {
+                    val filtered = if (currentModelId != null) {
+                        settingsState.data.filter { it.modelId == currentModelId }
+                    } else {
+                        emptyList()
+                    }
+                    DataState.Success(filtered)
+                }
+                // Pass through Error, Loading, Idle states directly
+                is DataState.Error -> settingsState
+                is DataState.Loading -> DataState.Loading
+                is DataState.Idle -> DataState.Idle
+            }
+        }.stateIn(backgroundScope, SharingStarted.WhileSubscribed(5000), DataState.Idle)
+
     // Derived displayedMessages from sessionDataState
     override val displayedMessages: StateFlow<List<ChatMessage>> =
-        sessionDataState.filterIsInstance<DataState.Success<ChatSessionData>>()
-            .map { it.data.session }
+        sessionDataState.filterIsInstance<DataState.Success<ChatSession>>()
+            .map { it.data }
             .map { threadBuilder.buildThreadBranch(it.messages, it.currentLeafMessageId) }
             .stateIn(
                 scope = backgroundScope,

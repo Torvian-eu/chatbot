@@ -100,7 +100,6 @@ private fun LazyListScope.ChatSettingsDetails(settings: ChatModelSettings) {
     item { DetailRow("Temperature", settings.temperature?.toString() ?: "Default") }
     item { DetailRow("Max Tokens", settings.maxTokens?.toString() ?: "Default") }
     item { DetailRow("Top P", settings.topP?.toString() ?: "Default") }
-    item { DetailRow("Top K", settings.topK?.toString() ?: "Default") }
     item { DetailRow("Stream", settings.stream.toString()) }
     item { DetailRow("Stop Sequences", settings.stopSequences?.joinToString(", ") ?: "None") }
 }

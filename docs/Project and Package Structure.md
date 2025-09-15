@@ -346,7 +346,6 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
     │   ├── ChatViewModel.kt  # Chat ViewModel (manages chat session state)
     │   ├── state/  # Chat ViewModel state
     │   │   ├── ChatAreaDialogState.kt  # Chat area dialog state
-    │   │   ├── ChatSessionData.kt  # Chat session data class
     │   │   ├── ChatState.kt  # Chat state data class
     │   │   └── ChatStateImpl.kt  # Chat state implementation
     │   ├── usecase/  # Chat ViewModel use cases

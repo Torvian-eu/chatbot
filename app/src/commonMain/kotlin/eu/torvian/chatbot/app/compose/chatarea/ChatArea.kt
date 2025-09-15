@@ -12,9 +12,12 @@ import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ErrorStateDisplay
 import eu.torvian.chatbot.app.compose.common.LoadingOverlay
 import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
 import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.common.models.ChatSession
+import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.common.models.ModelSettings
 
 /**
  * Composable for the main chat message display area.
@@ -41,7 +44,7 @@ fun ChatArea(
 
             DataState.Idle -> IdleStateDisplay(modifier = Modifier.align(Alignment.Center))
             is DataState.Success -> SuccessStateDisplay(
-                chatSession = state.sessionUiState.data.session,
+                chatSession = state.sessionUiState.data,
                 displayedMessages = state.displayedMessages,
                 actions = actions,
                 inputContent = state.inputContent,
@@ -49,7 +52,12 @@ fun ChatArea(
                 isSendingMessage = state.isSendingMessage,
                 editingMessage = state.editingMessage,
                 editingContent = state.editingContent,
-                dialogState = state.dialogState
+                dialogState = state.dialogState,
+                currentModel = state.currentModel,
+                currentSettings = state.currentSettings,
+                availableModels = state.availableModels,
+                availableSettingsForCurrentModel = state.availableSettingsForCurrentModel,
+                modelsById = state.modelsById
             )
         }
     }
@@ -101,6 +109,11 @@ private fun IdleStateDisplay(modifier: Modifier = Modifier) {
  * @param editingMessage The message currently being edited (E3.S1, E3.S2).
  * @param editingContent The content of the message currently being edited (E3.S1, E3.S2).
  * @param dialogState The current dialog state from the ViewModel.
+ * @param currentModel The currently selected LLM model.
+ * @param currentSettings The currently selected settings profile.
+ * @param availableModels The state of all available LLM models.
+ * @param availableSettingsForCurrentModel The state of settings available for the current model.
+ * @param modelsById Map of model IDs to LLMModel objects for quick lookups.
  */
 @Composable
 private fun SuccessStateDisplay(
@@ -112,7 +125,12 @@ private fun SuccessStateDisplay(
     isSendingMessage: Boolean,
     editingMessage: ChatMessage?,
     editingContent: String?,
-    dialogState: ChatAreaDialogState
+    dialogState: ChatAreaDialogState,
+    currentModel: LLMModel?,
+    currentSettings: ModelSettings?,
+    availableModels: DataState<RepositoryError, List<LLMModel>>,
+    availableSettingsForCurrentModel: DataState<RepositoryError, List<ModelSettings>>,
+    modelsById: Map<Long, LLMModel>
 ) {
     // Prepare message actions to pass down
     val messageActions = remember(actions) {
@@ -129,6 +147,18 @@ private fun SuccessStateDisplay(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
+        ModelSettingsSelector(
+            currentModel = currentModel,
+            currentSettings = currentSettings,
+            availableModels = availableModels,
+            availableSettings = availableSettingsForCurrentModel,
+            onSelectModel = { modelId -> actions.onSelectModel(modelId) },
+            onSelectSettings = { settingsId -> actions.onSelectSettings(settingsId) },
+            onRetryLoadModels = { /* TODO: Wire up to ViewModel action */ },
+            onRetryLoadSettings = { /* TODO: Wire up to ViewModel action */ },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+
         MessageList(
             chatSession = chatSession,
             displayedMessages = displayedMessages,
@@ -136,8 +166,10 @@ private fun SuccessStateDisplay(
             editingMessage = editingMessage,
             editingContent = editingContent,
             actions = actions,
+            modelsById = modelsById, // Pass map for graceful degradation
             modifier = Modifier.weight(1f) // Messages take up most space
         )
+
         InputArea(
             inputContent = inputContent,
             onUpdateInput = actions::onUpdateInput,

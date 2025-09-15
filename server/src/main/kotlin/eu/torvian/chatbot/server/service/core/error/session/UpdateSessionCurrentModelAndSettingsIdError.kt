@@ -40,4 +40,14 @@ sealed interface UpdateSessionCurrentModelAndSettingsIdError {
      * This occurs when trying to assign settings that are not suitable for chat sessions.
      */
     data class InvalidSettingsType(val settingsId: Long, val actualType: String) : UpdateSessionCurrentModelAndSettingsIdError
+
+    /**
+     * Indicates that the model exists but doesn't have the required CHAT type.
+     */
+    data class InvalidModelType(val modelId: Long, val actualType: String) : UpdateSessionCurrentModelAndSettingsIdError
+
+    /**
+     * Indicates that the model exists but is deprecated (not active).
+     */
+    data class DeprecatedModel(val modelId: Long) : UpdateSessionCurrentModelAndSettingsIdError
 }

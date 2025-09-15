@@ -126,20 +126,11 @@ private fun ChatFormContent(
             modifier = Modifier.weight(1f)
         )
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        ConfigTextField(
-            value = formState.topP,
-            onValueChange = { value -> onFormUpdate { (it as SettingsFormState.Chat).copy(topP = value) } },
-            label = "Top P",
-            modifier = Modifier.weight(1f)
-        )
-        ConfigTextField(
-            value = formState.topK,
-            onValueChange = { value -> onFormUpdate { (it as SettingsFormState.Chat).copy(topK = value) } },
-            label = "Top K",
-            modifier = Modifier.weight(1f)
-        )
-    }
+    ConfigTextField(
+        value = formState.topP,
+        onValueChange = { value -> onFormUpdate { (it as SettingsFormState.Chat).copy(topP = value) } },
+        label = "Top P"
+    )
     ConfigTextField(
         value = formState.stopSequences,
         onValueChange = { value -> onFormUpdate { (it as SettingsFormState.Chat).copy(stopSequences = value) } },

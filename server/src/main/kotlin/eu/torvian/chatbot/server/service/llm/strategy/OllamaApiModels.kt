@@ -81,6 +81,10 @@ object OllamaApiModels {
      * Represents a chat completion request to Ollama API.
      * Matches the structure documented by Ollama for non-streaming requests.
      *
+     * Note: The OllamaChatStrategy now builds requests dynamically using JsonObject.
+     * This DTO is kept for reference and for parsing responses which may share this structure,
+     * but request creation uses a more flexible JsonObject approach.
+     *
      * @property model The specific model name string (e.g., "llama3.2")
      * @property messages The conversation history
      * @property stream Whether to stream the response

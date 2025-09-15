@@ -74,29 +74,34 @@ object OpenAiApiModels {
 
     /**
      * Represents a chat completion request to an OpenAI-compatible API.
-     * Matches the structure documented by OpenAI for non-streaming requests.
      *
-     * @property model The specific model name string (e.g., "gpt-4o")
-     * @property messages The conversation history
+     * Note: The OpenAIChatStrategy now builds a JsonObject dynamically to support
+     * any custom parameter via ChatModelSettings.customParams, rather than being
+     * limited to this DTO's fields. This DTO is kept for reference and potential other uses.
+     *
+     * @property model Model name/identifier to use
+     * @property messages List of conversation messages
+     * @property stream Whether to stream the response
      * @property temperature Sampling temperature
      * @property max_tokens Max tokens to generate
      * @property top_p Nucleus sampling
-     * @property frequency_penalty Penalty for token frequency
-     * @property presence_penalty Penalty for token presence
+     * @property frequency_penalty Frequency penalty parameter
+     * @property presence_penalty Presence penalty parameter
      * @property stop Stop sequences
+     * @property seed Seed for deterministic generation
      */
     @Serializable
     data class ChatCompletionRequest(
         val model: String,
         val messages: List<RequestMessage>,
+        val stream: Boolean = false, // Added for completeness
         val temperature: Float? = null,
         val max_tokens: Int? = null,
         val top_p: Float? = null,
         val frequency_penalty: Float? = null,
         val presence_penalty: Float? = null,
         val stop: List<String>? = null,
-        // Other OpenAI params like `stream`, `seed`, `response_format`, etc. can be added here
-        // Or handled via customParamsJson in ModelSettings and mapped by the strategy
+        val seed: Int? = null // Added for completeness
     ) {
         /**
          * Represents a message in the chat completion request.
@@ -109,6 +114,70 @@ object OpenAiApiModels {
         data class RequestMessage(
             val role: String,
             val content: String
+        )
+    }
+
+    /**
+     * Represents a single chunk received during a streaming chat completion from an OpenAI-compatible API.
+     * This follows the Server-Sent Events (SSE) format where each 'data:' line contains a JSON object
+     * matching this structure.
+     *
+     * @property id The unique identifier for the chat completion.
+     * @property object The object type, typically "chat.completion.chunk".
+     * @property created Unix timestamp for when the chunk was created.
+     * @property model The model that generated the response.
+     * @property choices A list of choices, each containing a delta of the response.
+     * @property usage Token usage statistics.
+     */
+    @Serializable
+    data class ChatCompletionStreamChunk(
+        val id: String,
+        @SerialName("object")
+        val `object`: String,
+        val created: Long,
+        val model: String,
+        val choices: List<StreamChoice>,
+        val usage: StreamUsage? = null
+    ) {
+        /**
+         * Represents a single choice within a stream chunk.
+         *
+         * @property index The index of the choice.
+         * @property delta The incremental update to the message.
+         * @property finish_reason The reason the model stopped generating tokens, present in the final delta for a choice.
+         */
+        @Serializable
+        data class StreamChoice(
+            val index: Int,
+            val delta: Delta,
+            val finish_reason: String? = null
+        ) {
+            /**
+             * The actual content delta. One of these fields will typically be non-null in any given chunk.
+             *
+             * @property role The role of the author of this message, usually "assistant" and present only in the first chunk.
+             * @property content The text content delta.
+             */
+            @Serializable
+            data class Delta(
+                val role: String? = null,
+                val content: String? = null
+            )
+        }
+
+        /**
+         * Represents token usage statistics in a streaming chunk.
+         * This can appear in any chunk when stream_options.include_usage is true.
+         *
+         * @property completion_tokens Number of tokens in the generated completion
+         * @property prompt_tokens Number of tokens in the prompt/context
+         * @property total_tokens Total tokens used (prompt + completion)
+         */
+        @Serializable
+        data class StreamUsage(
+            val completion_tokens: Int,
+            val prompt_tokens: Int,
+            val total_tokens: Int
         )
     }
 

@@ -1,4 +1,5 @@
 <!-- Spanish strings -->
 <resources>
     <string name="app_name">Aplicación de chatbot</string>
+    <string name="warning_model_or_settings_unavailable">No se puede enviar el mensaje: modelo o configuraciones no están disponibles</string>
 </resources>

@@ -27,7 +27,6 @@ sealed class SettingsFormState {
         val temperature: String = "",
         val maxTokens: String = "",
         val topP: String = "",
-        val topK: String = "",
         val stopSequences: String = "",
         val stream: Boolean = true,
         override val customParamsJson: String = "",
@@ -62,7 +61,6 @@ fun ModelSettings.toEditFormState(): SettingsFormState {
             temperature = this.temperature?.toString() ?: "",
             maxTokens = this.maxTokens?.toString() ?: "",
             topP = this.topP?.toString() ?: "",
-            topK = this.topK?.toString() ?: "",
             stopSequences = this.stopSequences?.joinToString(",") ?: "",
             stream = this.stream,
             customParamsJson = this.customParams?.let { Json.encodeToString(JsonObject.serializer(), it) } ?: ""
@@ -107,7 +105,6 @@ fun SettingsFormState.toModelSettings(
                 temperature = this.temperature.toFloatOrNull(),
                 maxTokens = this.maxTokens.toIntOrNull(),
                 topP = this.topP.toFloatOrNull(),
-                topK = this.topK.toIntOrNull(),
                 stopSequences = stopSequencesList,
                 stream = this.stream,
                 customParams = customParams
@@ -155,9 +152,6 @@ fun SettingsFormState.validate(): String? {
             }
             if (this.topP.isNotBlank() && this.topP.toFloatOrNull() == null) {
                 return "Top P must be a number."
-            }
-            if (this.topK.isNotBlank() && this.topK.toIntOrNull() == null) {
-                return "Top K must be an integer."
             }
         }
 

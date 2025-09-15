@@ -30,7 +30,6 @@ fun ModelSettings.toEntity(): ModelSettingsEntity {
                 temperature?.let { put("temperature", it) }
                 maxTokens?.let { put("maxTokens", it) }
                 topP?.let { put("topP", it) }
-                topK?.let { put("topK", it) }
                 stopSequences?.let { putJsonArray("stopSequences") { it.forEach(::add) } }
                 put("stream", stream)
             }
@@ -40,7 +39,6 @@ fun ModelSettings.toEntity(): ModelSettingsEntity {
                 temperature?.let { put("temperature", it) }
                 maxTokens?.let { put("maxTokens", it) }
                 topP?.let { put("topP", it) }
-                topK?.let { put("topK", it) }
                 stopSequences?.let { putJsonArray("stopSequences") { it.forEach(::add) } }
             }
 
@@ -110,7 +108,6 @@ fun ModelSettingsEntity.toDomain(): ModelSettings {
             temperature = parsedVariableParams["temperature"]?.jsonPrimitive?.floatOrNull,
             maxTokens = parsedVariableParams["maxTokens"]?.jsonPrimitive?.intOrNull,
             topP = parsedVariableParams["topP"]?.jsonPrimitive?.floatOrNull,
-            topK = parsedVariableParams["topK"]?.jsonPrimitive?.intOrNull,
             stopSequences = parsedVariableParams["stopSequences"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull },
             stream = parsedVariableParams["stream"]?.jsonPrimitive?.booleanOrNull ?: true,
             customParams = parsedCustomParams
@@ -124,7 +121,6 @@ fun ModelSettingsEntity.toDomain(): ModelSettings {
             temperature = parsedVariableParams["temperature"]?.jsonPrimitive?.floatOrNull,
             maxTokens = parsedVariableParams["maxTokens"]?.jsonPrimitive?.intOrNull,
             topP = parsedVariableParams["topP"]?.jsonPrimitive?.floatOrNull,
-            topK = parsedVariableParams["topK"]?.jsonPrimitive?.intOrNull,
             stopSequences = parsedVariableParams["stopSequences"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull },
             customParams = parsedCustomParams
         )
