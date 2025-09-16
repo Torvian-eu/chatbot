@@ -43,6 +43,8 @@ The user should be able to configure this in their profile. (Requires: user acco
 
 ### Allow user to see LLM metadata for assistant responses
 
+### Allow user to quickly scroll to the bottom of the messages list
+
 ---
 
 ## Intermediate features
@@ -239,6 +241,16 @@ Here are detailed user stories for the new feature ideas, following the format a
     *   Metadata (e.g., model name, settings profile, tokens used, latency) is stored with each assistant message.
     *   A "Show Metadata" button or similar UI element is available for assistant messages.
     *   Clicking the button displays a panel or dialog with the assistant message's metadata.
+
+### NF.S17 - Quickly scroll to the bottom of the messages list
+*   **Description:** As a user, I want to be able to quickly scroll to the bottom of the messages list to see the latest messages, so I can easily follow the conversation.
+*   **Estimate:** S
+*   **Acceptance Criteria:**
+    *   A "Scroll to Bottom" button or similar UI element is available.
+    *   Clicking the button smoothly scrolls the messages list to the bottom.
+    *   The button is only visible when the messages list is not already at the bottom.
+
+---
 
 ## New Features: Intermediate
 
