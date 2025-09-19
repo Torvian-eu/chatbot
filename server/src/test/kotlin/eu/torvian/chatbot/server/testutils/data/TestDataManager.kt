@@ -8,6 +8,7 @@ import eu.torvian.chatbot.common.models.ModelSettings
 import eu.torvian.chatbot.server.data.entities.ApiSecretEntity
 import eu.torvian.chatbot.server.data.entities.ChatSessionEntity
 import eu.torvian.chatbot.server.data.entities.SessionCurrentLeafEntity
+import eu.torvian.chatbot.server.data.entities.UserEntity
 
 /**
  * Manager interface for inserting and cleaning up test data in the chatbot database.
@@ -220,6 +221,21 @@ interface TestDataManager {
      * @return The LLM provider if found, null otherwise.
      */
     suspend fun getLLMProvider(id: Long): LLMProvider?
+
+    /**
+     * Inserts a user into the database. Creates the table if it does not exist.
+     *
+     * @param user The user entity to insert.
+     */
+    suspend fun insertUser(user: UserEntity)
+
+    /**
+     * Retrieves a user from the database.
+     *
+     * @param id The ID of the user to retrieve.
+     * @return The user entity if found, null otherwise.
+     */
+    suspend fun getUser(id: Long): UserEntity?
 
     // Add other individual insert functions here as your chatbot project grows
 }

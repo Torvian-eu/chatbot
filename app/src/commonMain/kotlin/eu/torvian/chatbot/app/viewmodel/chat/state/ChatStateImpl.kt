@@ -124,12 +124,14 @@ class ChatStateImpl(
 
     override val currentModel: StateFlow<LLMModel?> = currentSession
         .map { session -> session?.currentModelId }
+        .distinctUntilChanged()
         .combine(modelsById) { currentModelId, modelsMap ->
             currentModelId?.let { modelsMap[it] }
         }.stateIn(backgroundScope, SharingStarted.WhileSubscribed(5000), null)
 
     override val currentSettings: StateFlow<ChatModelSettings?> = currentSession
         .map { session -> session?.currentSettingsId }
+        .distinctUntilChanged()
         .combine(settingsById) { currentSettingsId, settingsMap ->
             currentSettingsId?.let { settingsMap[it] }
         }.stateIn(backgroundScope, SharingStarted.WhileSubscribed(5000), null)

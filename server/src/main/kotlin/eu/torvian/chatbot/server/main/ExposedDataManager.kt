@@ -26,6 +26,17 @@ class ExposedDataManager(
          * This is important for foreign key constraints.
          */
         private val tables = listOf(
+            // Core user management tables (must come first)
+            UsersTable,
+            RolesTable,
+            PermissionsTable,
+            RolePermissionsTable,
+            UserRoleAssignmentsTable,
+            UserSessionsTable,
+            UserGroupsTable,
+            UserGroupMembershipsTable,
+
+            // Existing core tables
             ApiSecretTable,
             LLMProviderTable,
             LLMModelTable,
@@ -34,7 +45,20 @@ class ExposedDataManager(
             ChatSessionTable,
             ChatMessageTable,
             AssistantMessageTable,
-            SessionCurrentLeafTable
+            SessionCurrentLeafTable,
+
+            // Ownership tables (must come after the resources they reference)
+            ChatSessionOwnersTable,
+            ChatGroupOwnersTable,
+            LLMProviderOwnersTable,
+            LLMModelOwnersTable,
+            ModelSettingsOwnersTable,
+            ApiSecretOwnersTable,
+
+            // Access tables (must come after both resources and user groups)
+            LLMProviderAccessTable,
+            LLMModelAccessTable,
+            ModelSettingsAccessTable
         )
     }
 
