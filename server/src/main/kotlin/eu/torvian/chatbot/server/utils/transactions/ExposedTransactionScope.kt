@@ -2,10 +2,10 @@ package eu.torvian.chatbot.server.utils.transactions
 
 import arrow.core.Either
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
-import kotlin.coroutines.coroutineContext
 
 /**
  * Exposed-based implementation of [TransactionScope] using coroutine-safe transactions.
@@ -21,7 +21,7 @@ import kotlin.coroutines.coroutineContext
  */
 class ExposedTransactionScope(private val db: Database) : TransactionScope {
     override suspend fun <T> transaction(block: suspend () -> T): T {
-        return if (coroutineContext[TransactionMarker] != null) {
+        return if (currentCoroutineContext()[TransactionMarker] != null) {
             // Already in a transaction managed by this scope; avoid creating a new nested one.
             // The existing TransactionMarker in context confirms we are in a suspend transaction initiated by THIS scope.
             block()
