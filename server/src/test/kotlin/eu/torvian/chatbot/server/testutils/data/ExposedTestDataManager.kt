@@ -4,6 +4,7 @@ import eu.torvian.chatbot.common.models.*
 import eu.torvian.chatbot.server.data.entities.ApiSecretEntity
 import eu.torvian.chatbot.server.data.entities.ChatSessionEntity
 import eu.torvian.chatbot.server.data.entities.SessionCurrentLeafEntity
+import eu.torvian.chatbot.server.data.entities.UserEntity
 import eu.torvian.chatbot.server.data.tables.*
 import eu.torvian.chatbot.server.data.tables.mappers.*
 import eu.torvian.chatbot.server.data.toEntity
@@ -39,6 +40,17 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
          * This is important for foreign key constraints.
          */
         private val tableMappings = listOf(
+            // Core user management tables (must come first)
+            Table.USERS to UsersTable,
+            Table.ROLES to RolesTable,
+            Table.PERMISSIONS to PermissionsTable,
+            Table.ROLE_PERMISSIONS to RolePermissionsTable,
+            Table.USER_ROLE_ASSIGNMENTS to UserRoleAssignmentsTable,
+            Table.USER_SESSIONS to UserSessionsTable,
+            Table.USER_GROUPS to UserGroupsTable,
+            Table.USER_GROUP_MEMBERSHIPS to UserGroupMembershipsTable,
+
+            // Existing core tables
             Table.API_SECRETS to ApiSecretTable,
             Table.LLM_PROVIDERS to LLMProviderTable,
             Table.LLM_MODELS to LLMModelTable,
@@ -47,7 +59,20 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
             Table.CHAT_SESSIONS to ChatSessionTable,
             Table.CHAT_MESSAGES to ChatMessageTable,
             Table.ASSISTANT_MESSAGES to AssistantMessageTable,
-            Table.SESSION_CURRENT_LEAF to SessionCurrentLeafTable
+            Table.SESSION_CURRENT_LEAF to SessionCurrentLeafTable,
+
+            // Ownership tables (must come after the resources they reference)
+            Table.CHAT_SESSION_OWNERS to ChatSessionOwnersTable,
+            Table.CHAT_GROUP_OWNERS to ChatGroupOwnersTable,
+            Table.LLM_PROVIDER_OWNERS to LLMProviderOwnersTable,
+            Table.LLM_MODEL_OWNERS to LLMModelOwnersTable,
+            Table.MODEL_SETTINGS_OWNERS to ModelSettingsOwnersTable,
+            Table.API_SECRET_OWNERS to ApiSecretOwnersTable,
+
+            // Access tables (must come after both resources and user groups)
+            Table.LLM_PROVIDER_ACCESS to LLMProviderAccessTable,
+            Table.LLM_MODEL_ACCESS to LLMModelAccessTable,
+            Table.MODEL_SETTINGS_ACCESS to ModelSettingsAccessTable
         )
 
         /**
@@ -346,6 +371,29 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
             ensureTableCreated(Table.MODEL_SETTINGS)
             ModelSettingsTable.selectAll().where { ModelSettingsTable.id eq id }
                 .map { it.toModelSettings() }
+                .singleOrNull()
+        }
+
+    override suspend fun insertUser(user: UserEntity) =
+        transactionScope.transaction {
+            ensureTableCreated(Table.USERS)
+            UsersTable.insert {
+                it[id] = user.id
+                it[username] = user.username
+                it[passwordHash] = user.passwordHash
+                it[email] = user.email
+                it[createdAt] = user.createdAt.toEpochMilliseconds()
+                it[updatedAt] = user.updatedAt.toEpochMilliseconds()
+                it[lastLogin] = user.lastLogin?.toEpochMilliseconds()
+            }
+            return@transaction
+        }
+
+    override suspend fun getUser(id: Long): UserEntity? =
+        transactionScope.transaction {
+            ensureTableCreated(Table.USERS)
+            UsersTable.selectAll().where { UsersTable.id eq id }
+                .map { it.toUserEntity() }
                 .singleOrNull()
         }
 

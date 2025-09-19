@@ -49,4 +49,92 @@ enum class Table {
      * This table breaks the circular dependency between sessions and messages.
      */
     SESSION_CURRENT_LEAF,
+
+    // User management tables
+    /**
+     * Table for storing user accounts.
+     */
+    USERS,
+
+    /**
+     * Table for storing user roles.
+     */
+    ROLES,
+
+    /**
+     * Table for storing permissions.
+     */
+    PERMISSIONS,
+
+    /**
+     * Table for linking roles to permissions.
+     */
+    ROLE_PERMISSIONS,
+
+    /**
+     * Table for assigning roles to users.
+     */
+    USER_ROLE_ASSIGNMENTS,
+
+    /**
+     * Table for storing user authentication sessions.
+     */
+    USER_SESSIONS,
+
+    /**
+     * Table for storing user-defined groups.
+     */
+    USER_GROUPS,
+
+    /**
+     * Table for linking users to groups.
+     */
+    USER_GROUP_MEMBERSHIPS,
+
+    // Ownership tables
+    /**
+     * Table for linking chat sessions to their owners.
+     */
+    CHAT_SESSION_OWNERS,
+
+    /**
+     * Table for linking chat groups to their owners.
+     */
+    CHAT_GROUP_OWNERS,
+
+    /**
+     * Table for linking LLM providers to their owners.
+     */
+    LLM_PROVIDER_OWNERS,
+
+    /**
+     * Table for linking LLM models to their owners.
+     */
+    LLM_MODEL_OWNERS,
+
+    /**
+     * Table for linking model settings to their owners.
+     */
+    MODEL_SETTINGS_OWNERS,
+
+    /**
+     * Table for linking API secrets to their owners.
+     */
+    API_SECRET_OWNERS,
+
+    // Access tables
+    /**
+     * Table for granting group access to LLM providers.
+     */
+    LLM_PROVIDER_ACCESS,
+
+    /**
+     * Table for granting group access to LLM models.
+     */
+    LLM_MODEL_ACCESS,
+
+    /**
+     * Table for granting group access to model settings.
+     */
+    MODEL_SETTINGS_ACCESS,
 }
