@@ -102,26 +102,23 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   ├── dao/                      # Data Access Objects (interfaces)
 │   │   ├── ApiSecretDao.kt       # API secret management interface
 │   │   ├── GroupDao.kt           # Group operations interface
+│   │   ├── GroupOwnershipDao.kt  # Group ownership management interface
 │   │   ├── MessageDao.kt         # Message operations interface
 │   │   ├── ModelDao.kt           # Model management interface
 │   │   ├── SessionDao.kt         # Session operations interface
+│   │   ├── SessionOwnershipDao.kt # Session ownership management interface
 │   │   ├── SettingsDao.kt        # Settings management interface
-│   │   ├── error/                # Domain-specific error types
+│   │   ├── UserDao.kt            # User account management interface
+│   │   ├── UserSessionDao.kt     # User session management interface
+│   │   ├── error/                # DAO-specific error types
 │   │   └── exposed/              # Exposed ORM implementations
 │   ├── entities/                 # Database entity mappings
 │   │   ├── ApiSecretEntity.kt    # API secret entity
 │   │   ├── ChatSessionEntity.kt  # Chat session entity
-│   │   └── SessionCurrentLeafEntity.kt # Session current leaf entity
+│   │   ├── SessionCurrentLeafEntity.kt # Session current leaf entity
+│   │   ├── UserEntity.kt         # User account entity
+│   │   └── UserSessionEntity.kt  # User session entity
 │   └── tables/                   # Exposed table definitions
-│       ├── ApiSecretTable.kt     # API secrets table
-│       ├── AssistantMessageTable.kt # Assistant messages table
-│       ├── ChatGroupTable.kt     # Chat groups table
-│       ├── ChatMessageTable.kt   # Chat messages table
-│       ├── ChatSessionTable.kt   # Chat sessions table
-│       ├── LLMModelTable.kt      # LLM models table
-│       ├── LLMProviderTable.kt   # LLM providers table
-│       ├── ModelSettingsTable.kt # Model settings table
-│       ├── SessionCurrentLeafTable.kt # Session current leaf tracking
 │       └── mappers/              # Entity mapping utilities
 ├── domain/                       # Domain models and configuration
 │   ├── config/                   # Configuration classes
@@ -181,13 +178,15 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   │       ├── OllamaChatStrategy.kt # Ollama chat completion strategy
 │   │       ├── OpenAiApiModels.kt # OpenAI API models (DTOs)
 │   │       └── OpenAIChatStrategy.kt # OpenAI chat completion strategy
-│   └── security/                 # Security services
-│       ├── AESCryptoProvider.kt  # AES encryption provider
-│       ├── CredentialManager.kt  # Credential management interface
-│       ├── CryptoProvider.kt     # Crypto provider interface
-│       ├── DbEncryptedCredentialManager.kt # Database-backed credential manager
-│       ├── EncryptionService.kt  # Encryption service interface
-│       └── error/                # Domain-specific error types
+│   ├── security/                 # Security services
+│   │   ├── AESCryptoProvider.kt  # AES encryption provider
+│   │   ├── CredentialManager.kt  # Credential management interface
+│   │   ├── CryptoProvider.kt     # Crypto provider interface
+│   │   ├── DbEncryptedCredentialManager.kt # Database-backed credential manager
+│   │   ├── EncryptionService.kt  # Encryption service interface
+│   │   └── error/                # Domain-specific error types
+│   └── setup/                    # Initial setup services
+│       └── InitialSetupService.kt # Service for initial database and user setup
 └── utils/                        # Utility classes
     └── transactions/             # Transaction management
         ├── ExposedTransactionScope.kt # Exposed-specific transaction scope
@@ -199,20 +198,7 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 server/src/test/kotlin/eu/torvian/chatbot/server/
 ├── data/                         # Data layer tests
 │   └── exposed/                  # Exposed DAO tests
-│       ├── ApiSecretDaoExposedTest.kt
-│       ├── GroupDaoExposedTest.kt
-│       ├── LLMProviderDaoExposedTest.kt
-│       ├── MessageDaoExposedTest.kt
-│       ├── ModelDaoExposedTest.kt
-│       ├── SessionDaoExposedTest.kt
-│       └── SettingsDaoExposedTest.kt
 ├── ktor/routes/                  # Ktor route tests
-│   ├── GroupRoutesTest.kt
-│   ├── MessageRoutesTest.kt
-│   ├── ModelRoutesTest.kt
-│   ├── ProviderRoutesTest.kt
-│   ├── SessionRoutesTest.kt
-│   └── SettingsRoutesTest.kt
 ├── service                      # Service layer tests
 │   ├── core/impl/               # Core service tests
 │   │   ├── GroupServiceImplTest.kt
@@ -227,10 +213,12 @@ server/src/test/kotlin/eu/torvian/chatbot/server/
 │   │   └── strategy/             # LLM strategy tests
 │   │       ├── OllamaChatStrategyTest.kt
 │   │       └── OpenAIChatStrategyTest.kt
-│   └── security/                 # Security service tests
-│       ├── AESCryptoProviderTest.kt
-│       ├── DbEncryptedCredentialManagerTest.kt
-│       └── EncryptionServiceTest.kt
+│   ├── security/                 # Security service tests
+│   │   ├── AESCryptoProviderTest.kt
+│   │   ├── DbEncryptedCredentialManagerTest.kt
+│   │   └── EncryptionServiceTest.kt
+│   └── setup/                    # Setup service tests
+│       └── InitialSetupServiceTest.kt
 └── testutils/                    # Test utilities
     ├── data/                     # Data test utilities
     │   ├── ExposedTestDataManager.kt # Test data management
