@@ -7,6 +7,7 @@ import eu.torvian.chatbot.server.service.security.CredentialManager
 import eu.torvian.chatbot.server.service.security.CryptoProvider
 import eu.torvian.chatbot.server.service.security.DbEncryptedCredentialManager
 import eu.torvian.chatbot.server.service.security.EncryptionService
+import eu.torvian.chatbot.server.service.setup.InitialSetupService
 import org.koin.dsl.module
 
 /**
@@ -29,5 +30,8 @@ fun serviceModule() = module {
     single<CryptoProvider> { AESCryptoProvider(get()) }
     single<EncryptionService> { EncryptionService(get()) }
     single<CredentialManager> { DbEncryptedCredentialManager(get(), get()) }
+
+    // --- Setup Services ---
+    single<InitialSetupService> { InitialSetupService(get(), get()) }
 
 }
