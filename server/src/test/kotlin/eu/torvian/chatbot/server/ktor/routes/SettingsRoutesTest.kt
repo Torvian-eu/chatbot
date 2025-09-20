@@ -8,6 +8,8 @@ import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.ChatModelSettings
 import eu.torvian.chatbot.common.models.ModelSettings
+import eu.torvian.chatbot.server.testutils.auth.TestAuthHelper
+import eu.torvian.chatbot.server.testutils.auth.authenticate
 import eu.torvian.chatbot.server.testutils.data.Table
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
 import eu.torvian.chatbot.server.testutils.data.TestDataSet
@@ -39,6 +41,8 @@ class SettingsRoutesTest {
     private lateinit var container: DIContainer
     private lateinit var settingsTestApplication: KtorTestApp
     private lateinit var testDataManager: TestDataManager
+    private lateinit var authHelper: TestAuthHelper
+    private lateinit var authToken: String
 
     // Test data
     private val testSettings1 = ChatModelSettings(
@@ -70,7 +74,18 @@ class SettingsRoutesTest {
                 llmModels = listOf(TestDefaults.llmModel1)
             )
         )
-        testDataManager.createTables(setOf(Table.MODEL_SETTINGS))
+        testDataManager.createTables(
+            setOf(
+                Table.MODEL_SETTINGS,
+                Table.USERS,
+                Table.USER_SESSIONS,
+                Table.CHAT_SESSION_OWNERS
+            )
+        )
+
+        // Set up authentication
+        authHelper = TestAuthHelper(container)
+        authToken = authHelper.createUserAndGetToken()
     }
 
     @AfterEach
@@ -135,6 +150,8 @@ class SettingsRoutesTest {
         val response = client.put(href(SettingsResource.ById(settingsId = testSettings1.id))) {
             contentType(ContentType.Application.Json)
             setBody(updatedSettings as ModelSettings)
+
+            authenticate(authToken)
         }
 
         // Assert
@@ -159,6 +176,8 @@ class SettingsRoutesTest {
         val response = client.put(href(SettingsResource.ById(settingsId = nonExistentId))) {
             contentType(ContentType.Application.Json)
             setBody(updatedSettings as ModelSettings)
+
+            authenticate(authToken)
         }
 
         // Assert
@@ -182,6 +201,8 @@ class SettingsRoutesTest {
         val response = client.put(href(SettingsResource.ById(settingsId = testSettings1.id))) {
             contentType(ContentType.Application.Json)
             setBody(updatedSettings as ModelSettings)
+
+            authenticate(authToken)
         }
 
         // Assert
@@ -207,6 +228,8 @@ class SettingsRoutesTest {
         val response = client.put(href(SettingsResource.ById(settingsId = testSettings1.id))) {
             contentType(ContentType.Application.Json)
             setBody(updatedSettings as ModelSettings)
+
+            authenticate(authToken)
         }
 
         // Assert

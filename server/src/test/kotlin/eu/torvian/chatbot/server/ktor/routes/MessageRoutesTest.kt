@@ -9,6 +9,8 @@ import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.common.models.UpdateMessageRequest
 import eu.torvian.chatbot.server.data.entities.SessionCurrentLeafEntity
+import eu.torvian.chatbot.server.testutils.auth.TestAuthHelper
+import eu.torvian.chatbot.server.testutils.auth.authenticate
 import eu.torvian.chatbot.server.testutils.data.Table
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
 import eu.torvian.chatbot.server.testutils.data.TestDataSet
@@ -38,6 +40,8 @@ class MessageRoutesTest {
     private lateinit var container: DIContainer
     private lateinit var messageTestApplication: KtorTestApp
     private lateinit var testDataManager: TestDataManager
+    private lateinit var authHelper: TestAuthHelper
+    private lateinit var authToken: String
 
     // Test data
     private val testSession = TestDefaults.chatSession1.copy(id = 1L)
@@ -89,7 +93,22 @@ class MessageRoutesTest {
                 chatGroups = listOf(TestDefaults.chatGroup1)
             )
         )
-        testDataManager.createTables(setOf(Table.CHAT_MESSAGES, Table.ASSISTANT_MESSAGES)) // Messages table is created separately
+        testDataManager.createTables(
+            setOf(
+                Table.CHAT_MESSAGES, Table.ASSISTANT_MESSAGES,
+                Table.USERS,
+                Table.USER_SESSIONS,
+                Table.CHAT_SESSION_OWNERS
+            )
+        )
+
+        // Set up authentication
+        authHelper = TestAuthHelper(container)
+        authToken = authHelper.createUserAndGetToken()
+
+        // Establish ownership relationship between the test user and test session
+        // This is crucial for the new authentication/authorization to work
+        testDataManager.insertSessionOwnership(testSession.id, authHelper.defaultTestUser.id)
     }
 
     @AfterEach
@@ -108,10 +127,12 @@ class MessageRoutesTest {
         val updateRequest = UpdateMessageRequest(content = newContent)
 
         // Act
-        val response = client.put(href(MessageResource.ById.Content(parent = MessageResource.ById(messageId = testUserMessage.id)))) {
-            contentType(ContentType.Application.Json)
-            setBody(updateRequest)
-        }
+        val response =
+            client.put(href(MessageResource.ById.Content(parent = MessageResource.ById(messageId = testUserMessage.id)))) {
+                contentType(ContentType.Application.Json)
+                setBody(updateRequest)
+                authenticate(authToken)
+            }
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
@@ -132,10 +153,12 @@ class MessageRoutesTest {
         val updateRequest = UpdateMessageRequest(content = "Some content")
 
         // Act
-        val response = client.put(href(MessageResource.ById.Content(parent = MessageResource.ById(messageId = nonExistentId)))) {
-            contentType(ContentType.Application.Json)
-            setBody(updateRequest)
-        }
+        val response =
+            client.put(href(MessageResource.ById.Content(parent = MessageResource.ById(messageId = nonExistentId)))) {
+                contentType(ContentType.Application.Json)
+                setBody(updateRequest)
+                authenticate(authToken)
+            }
 
         // Assert
         assertEquals(HttpStatusCode.NotFound, response.status)
@@ -165,7 +188,9 @@ class MessageRoutesTest {
         )
 
         // Act
-        val response = client.delete(href(MessageResource.ById(messageId = testUserMessage.id)))
+        val response = client.delete(href(MessageResource.ById(messageId = testUserMessage.id))) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.NoContent, response.status)
@@ -181,7 +206,9 @@ class MessageRoutesTest {
     fun `DELETE message with non-existent ID should return 404`() = messageTestApplication {
         // Act
         val nonExistentId = 999L
-        val response = client.delete(href(MessageResource.ById(messageId = nonExistentId)))
+        val response = client.delete(href(MessageResource.ById(messageId = nonExistentId))) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.NotFound, response.status)

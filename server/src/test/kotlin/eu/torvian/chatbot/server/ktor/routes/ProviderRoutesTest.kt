@@ -14,6 +14,8 @@ import eu.torvian.chatbot.server.testutils.data.TestDefaults
 import eu.torvian.chatbot.server.testutils.koin.defaultTestContainer
 import eu.torvian.chatbot.server.testutils.ktor.KtorTestApp
 import eu.torvian.chatbot.server.testutils.ktor.myTestApplication
+import eu.torvian.chatbot.server.testutils.auth.TestAuthHelper
+import eu.torvian.chatbot.server.testutils.auth.authenticate
 import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.http.*
@@ -41,6 +43,8 @@ class ProviderRoutesTest {
     private lateinit var container: DIContainer
     private lateinit var providerTestApplication: KtorTestApp
     private lateinit var testDataManager: TestDataManager
+    private lateinit var authHelper: TestAuthHelper
+    private lateinit var authToken: String
 
     // Test data
     private val testProvider1 = TestDefaults.llmProvider1
@@ -62,7 +66,14 @@ class ProviderRoutesTest {
 
         testDataManager = container.get()
         // Need ApiSecrets table for credentials, LLMProviders for providers, LLMModels for provider-in-use check
-        testDataManager.createTables(setOf(Table.API_SECRETS, Table.LLM_PROVIDERS, Table.LLM_MODELS))
+        testDataManager.createTables(setOf(Table.API_SECRETS, Table.LLM_PROVIDERS, Table.LLM_MODELS,
+            Table.USERS,
+            Table.USER_SESSIONS,
+            Table.CHAT_SESSION_OWNERS))
+        
+        // Set up authentication
+        authHelper = TestAuthHelper(container)
+        authToken = authHelper.createUserAndGetToken()
     }
 
     @AfterEach
@@ -121,7 +132,7 @@ class ProviderRoutesTest {
         val response = client.post(href(ProviderResource())) {
             contentType(ContentType.Application.Json)
             setBody(createRequest)
-        }
+            authenticate(authToken)}
 
         // Assert
         assertEquals(HttpStatusCode.Created, response.status)
@@ -162,7 +173,7 @@ class ProviderRoutesTest {
         val response = client.post(href(ProviderResource())) {
             contentType(ContentType.Application.Json)
             setBody(createRequest)
-        }
+            authenticate(authToken)}
 
         // Assert
         assertEquals(HttpStatusCode.Created, response.status)
@@ -194,7 +205,7 @@ class ProviderRoutesTest {
         val response = client.post(href(ProviderResource())) {
             contentType(ContentType.Application.Json)
             setBody(createRequest)
-        }
+            authenticate(authToken)}
 
         // Assert
         assertEquals(HttpStatusCode.BadRequest, response.status)
@@ -221,7 +232,7 @@ class ProviderRoutesTest {
         val response = client.post(href(ProviderResource())) {
             contentType(ContentType.Application.Json)
             setBody(createRequest)
-        }
+            authenticate(authToken)}
 
         // Assert
         assertEquals(HttpStatusCode.BadRequest, response.status)
@@ -248,7 +259,7 @@ class ProviderRoutesTest {
         val response = client.post(href(ProviderResource())) {
             contentType(ContentType.Application.Json)
             setBody(createRequest)
-        }
+            authenticate(authToken)}
 
         // Assert
         assertEquals(HttpStatusCode.BadRequest, response.status)
@@ -311,7 +322,7 @@ class ProviderRoutesTest {
         val response = client.put(href(ProviderResource.ById(providerId = testProvider1.id))) {
             contentType(ContentType.Application.Json)
             setBody(updatedProvider)
-        }
+            authenticate(authToken)}
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
@@ -338,7 +349,7 @@ class ProviderRoutesTest {
         val response = client.put(href(ProviderResource.ById(providerId = nonExistentId))) {
             contentType(ContentType.Application.Json)
             setBody(updatedProvider)
-        }
+            authenticate(authToken)}
 
         // Assert
         assertEquals(HttpStatusCode.NotFound, response.status)
@@ -361,7 +372,7 @@ class ProviderRoutesTest {
         val response = client.put(href(ProviderResource.ById(providerId = testProvider1.id))) {
             contentType(ContentType.Application.Json)
             setBody(updatedProvider)
-        }
+            authenticate(authToken)}
 
         // Assert
         assertEquals(HttpStatusCode.BadRequest, response.status)
@@ -385,7 +396,7 @@ class ProviderRoutesTest {
         val response = client.put(href(ProviderResource.ById(providerId = testProvider1.id))) {
             contentType(ContentType.Application.Json)
             setBody(updatedProvider)
-        }
+            authenticate(authToken)}
 
         // Assert
         assertEquals(HttpStatusCode.BadRequest, response.status)
@@ -407,7 +418,7 @@ class ProviderRoutesTest {
         val response = client.put(href(ProviderResource.ById(providerId = testProvider1.id))) {
             contentType(ContentType.Application.Json)
             setBody(updatedProvider)
-        }
+            authenticate(authToken)}
 
         // Assert
         assertEquals(HttpStatusCode.BadRequest, response.status)

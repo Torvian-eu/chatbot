@@ -9,6 +9,7 @@ import eu.torvian.chatbot.server.data.entities.ApiSecretEntity
 import eu.torvian.chatbot.server.data.entities.ChatSessionEntity
 import eu.torvian.chatbot.server.data.entities.SessionCurrentLeafEntity
 import eu.torvian.chatbot.server.data.entities.UserEntity
+import eu.torvian.chatbot.server.data.entities.UserSessionEntity
 
 /**
  * Manager interface for inserting and cleaning up test data in the chatbot database.
@@ -236,6 +237,37 @@ interface TestDataManager {
      * @return The user entity if found, null otherwise.
      */
     suspend fun getUser(id: Long): UserEntity?
+
+    /**
+     * Inserts a user session into the database. Creates the table if it does not exist.
+     *
+     * @param userSession The user session entity to insert.
+     */
+    suspend fun insertUserSession(userSession: UserSessionEntity)
+
+    /**
+     * Retrieves a user session from the database.
+     *
+     * @param id The ID of the user session to retrieve.
+     * @return The user session entity if found, null otherwise.
+     */
+    suspend fun getUserSession(id: Long): UserSessionEntity?
+
+    /**
+     * Inserts a group ownership record into the database. Creates the table if it does not exist.
+     *
+     * @param groupId The ID of the group.
+     * @param userId The ID of the user who owns the group.
+     */
+    suspend fun insertGroupOwnership(groupId: Long, userId: Long)
+
+    /**
+     * Inserts a session ownership record into the database. Creates the table if it does not exist.
+     *
+     * @param sessionId The ID of the session.
+     * @param userId The ID of the user who owns the session.
+     */
+    suspend fun insertSessionOwnership(sessionId: Long, userId: Long)
 
     // Add other individual insert functions here as your chatbot project grows
 }

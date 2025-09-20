@@ -6,19 +6,26 @@ import eu.torvian.chatbot.common.models.ChatSession
 import eu.torvian.chatbot.common.models.ChatSessionSummary
 import eu.torvian.chatbot.common.models.LLMModel
 import eu.torvian.chatbot.common.models.LLMModelType
-import eu.torvian.chatbot.server.data.dao.SessionDao
-import eu.torvian.chatbot.server.data.dao.SettingsDao
 import eu.torvian.chatbot.server.data.dao.ModelDao
+import eu.torvian.chatbot.server.data.dao.SessionDao
+import eu.torvian.chatbot.server.data.dao.SessionOwnershipDao
+import eu.torvian.chatbot.server.data.dao.SettingsDao
+import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
 import eu.torvian.chatbot.server.data.dao.error.SessionError
 import eu.torvian.chatbot.server.service.core.error.session.*
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
-import io.mockk.*
+import io.mockk.clearMocks
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Instant
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import kotlin.test.*
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 /**
  * Unit tests for [SessionServiceImpl].
@@ -31,6 +38,7 @@ class SessionServiceImplTest {
 
     // Mocked dependencies
     private lateinit var sessionDao: SessionDao
+    private lateinit var sessionOwnershipDao: SessionOwnershipDao
     private lateinit var settingsDao: SettingsDao
     private lateinit var modelDao: ModelDao
     private lateinit var transactionScope: TransactionScope
@@ -73,12 +81,13 @@ class SessionServiceImplTest {
     fun setUp() {
         // Create mocks for all dependencies
         sessionDao = mockk()
+        sessionOwnershipDao = mockk()
         settingsDao = mockk()
         modelDao = mockk()
         transactionScope = mockk()
 
         // Create the service instance with mocked dependencies
-        sessionService = SessionServiceImpl(sessionDao, settingsDao, modelDao, transactionScope)
+        sessionService = SessionServiceImpl(sessionDao, sessionOwnershipDao, settingsDao, modelDao, transactionScope)
 
         // Mock the transaction scope to execute blocks directly
         coEvery { transactionScope.transaction(any<suspend () -> Any>()) } coAnswers {
@@ -90,7 +99,7 @@ class SessionServiceImplTest {
     @AfterEach
     fun tearDown() {
         // Clear all mocks after each test to ensure isolation
-        clearMocks(sessionDao, settingsDao, modelDao, transactionScope)
+        clearMocks(sessionDao, sessionOwnershipDao, settingsDao, modelDao, transactionScope)
     }
 
     // --- getAllSessionsSummaries Tests ---
@@ -98,30 +107,32 @@ class SessionServiceImplTest {
     @Test
     fun `getAllSessionsSummaries should return list of session summaries from DAO`() = runTest {
         // Arrange
+        val userId = 1L
         val expectedSummaries = listOf(testSessionSummary1, testSessionSummary2)
-        coEvery { sessionDao.getAllSessions() } returns expectedSummaries
+        coEvery { sessionOwnershipDao.getAllSessionsForUser(userId) } returns expectedSummaries
 
         // Act
-        val result = sessionService.getAllSessionsSummaries()
+        val result = sessionService.getAllSessionsSummaries(userId)
 
         // Assert
         assertEquals(expectedSummaries, result, "Should return the session summaries from DAO")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { sessionDao.getAllSessions() }
+        coVerify(exactly = 1) { sessionOwnershipDao.getAllSessionsForUser(userId) }
     }
 
     @Test
     fun `getAllSessionsSummaries should return empty list when no sessions exist`() = runTest {
         // Arrange
-        coEvery { sessionDao.getAllSessions() } returns emptyList()
+        val userId = 1L
+        coEvery { sessionOwnershipDao.getAllSessionsForUser(userId) } returns emptyList()
 
         // Act
-        val result = sessionService.getAllSessionsSummaries()
+        val result = sessionService.getAllSessionsSummaries(userId)
 
         // Assert
         assertTrue(result.isEmpty(), "Should return empty list when no sessions exist")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { sessionDao.getAllSessions() }
+        coVerify(exactly = 1) { sessionOwnershipDao.getAllSessionsForUser(userId) }
     }
 
     // --- createSession Tests ---
@@ -129,42 +140,49 @@ class SessionServiceImplTest {
     @Test
     fun `createSession should create session successfully with valid name`() = runTest {
         // Arrange
+        val userId = 1L
         val sessionName = "New Session"
         coEvery { sessionDao.insertSession(sessionName) } returns testSession.right()
+        coEvery { sessionOwnershipDao.setOwner(testSession.id, userId) } returns Unit.right()
 
         // Act
-        val result = sessionService.createSession(sessionName)
+        val result = sessionService.createSession(userId, sessionName)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful creation")
         assertEquals(testSession, result.getOrNull(), "Should return the created session")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { sessionDao.insertSession(sessionName) }
+        coVerify(exactly = 1) { sessionOwnershipDao.setOwner(testSession.id, userId) }
     }
 
     @Test
     fun `createSession should create session successfully with null name using default`() = runTest {
         // Arrange
+        val userId = 1L
         val defaultName = "New Chat"
         coEvery { sessionDao.insertSession(defaultName) } returns testSession.right()
+        coEvery { sessionOwnershipDao.setOwner(testSession.id, userId) } returns Unit.right()
 
         // Act
-        val result = sessionService.createSession(null)
+        val result = sessionService.createSession(userId, null)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful creation")
         assertEquals(testSession, result.getOrNull(), "Should return the created session")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { sessionDao.insertSession(defaultName) }
+        coVerify(exactly = 1) { sessionOwnershipDao.setOwner(testSession.id, userId) }
     }
 
     @Test
     fun `createSession should return InvalidName error for blank name`() = runTest {
         // Arrange
+        val userId = 1L
         val blankName = "   "
 
         // Act
-        val result = sessionService.createSession(blankName)
+        val result = sessionService.createSession(userId, blankName)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for blank name")
@@ -179,12 +197,13 @@ class SessionServiceImplTest {
     @Test
     fun `createSession should return InvalidRelatedEntity error for foreign key violation`() = runTest {
         // Arrange
+        val userId = 1L
         val sessionName = "New Session"
         val daoError = SessionError.ForeignKeyViolation("Invalid group ID")
         coEvery { sessionDao.insertSession(sessionName) } returns daoError.left()
 
         // Act
-        val result = sessionService.createSession(sessionName)
+        val result = sessionService.createSession(userId, sessionName)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for foreign key violation")
@@ -201,28 +220,32 @@ class SessionServiceImplTest {
     @Test
     fun `getSessionDetails should return session when it exists`() = runTest {
         // Arrange
+        val userId = 1L
         val sessionId = 1L
+        coEvery { sessionOwnershipDao.getOwner(sessionId) } returns userId.right()
         coEvery { sessionDao.getSessionById(sessionId) } returns testSession.right()
 
         // Act
-        val result = sessionService.getSessionDetails(sessionId)
+        val result = sessionService.getSessionDetails(userId, sessionId)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for existing session")
         assertEquals(testSession, result.getOrNull(), "Should return the correct session")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+        coVerify(exactly = 1) { sessionOwnershipDao.getOwner(sessionId) }
         coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
     }
 
     @Test
     fun `getSessionDetails should return SessionNotFound error when session does not exist`() = runTest {
         // Arrange
+        val userId = 1L
         val sessionId = 999L
-        val daoError = SessionError.SessionNotFound(sessionId)
-        coEvery { sessionDao.getSessionById(sessionId) } returns daoError.left()
+        val ownershipError = GetOwnerError.ResourceNotFound(sessionId.toString())
+        coEvery { sessionOwnershipDao.getOwner(sessionId) } returns ownershipError.left()
 
         // Act
-        val result = sessionService.getSessionDetails(sessionId)
+        val result = sessionService.getSessionDetails(userId, sessionId)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for non-existent session")
@@ -231,7 +254,8 @@ class SessionServiceImplTest {
         assertTrue(error is GetSessionDetailsError.SessionNotFound, "Should be SessionNotFound error")
         assertEquals(sessionId, (error as GetSessionDetailsError.SessionNotFound).id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
+        coVerify(exactly = 1) { sessionOwnershipDao.getOwner(sessionId) }
+        coVerify(exactly = 0) { sessionDao.getSessionById(any()) }
     }
 
     // --- updateSessionName Tests ---
@@ -239,27 +263,31 @@ class SessionServiceImplTest {
     @Test
     fun `updateSessionName should update session name successfully`() = runTest {
         // Arrange
+        val userId = 1L
         val sessionId = 1L
         val newName = "Updated Session Name"
+        coEvery { sessionOwnershipDao.getOwner(sessionId) } returns userId.right()
         coEvery { sessionDao.updateSessionName(sessionId, newName) } returns Unit.right()
 
         // Act
-        val result = sessionService.updateSessionName(sessionId, newName)
+        val result = sessionService.updateSessionName(userId, sessionId, newName)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful update")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+        coVerify(exactly = 1) { sessionOwnershipDao.getOwner(sessionId) }
         coVerify(exactly = 1) { sessionDao.updateSessionName(sessionId, newName) }
     }
 
     @Test
     fun `updateSessionName should return InvalidName error for blank name`() = runTest {
         // Arrange
+        val userId = 1L
         val sessionId = 1L
         val blankName = "  "
 
         // Act
-        val result = sessionService.updateSessionName(sessionId, blankName)
+        val result = sessionService.updateSessionName(userId, sessionId, blankName)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for blank name")
@@ -274,13 +302,14 @@ class SessionServiceImplTest {
     @Test
     fun `updateSessionName should return SessionNotFound error when session does not exist`() = runTest {
         // Arrange
+        val userId = 1L
         val sessionId = 999L
         val newName = "Updated Name"
-        val daoError = SessionError.SessionNotFound(sessionId)
-        coEvery { sessionDao.updateSessionName(sessionId, newName) } returns daoError.left()
+        val ownershipError = GetOwnerError.ResourceNotFound(sessionId.toString())
+        coEvery { sessionOwnershipDao.getOwner(sessionId) } returns ownershipError.left()
 
         // Act
-        val result = sessionService.updateSessionName(sessionId, newName)
+        val result = sessionService.updateSessionName(userId, sessionId, newName)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for non-existent session")
@@ -289,7 +318,8 @@ class SessionServiceImplTest {
         assertTrue(error is UpdateSessionNameError.SessionNotFound, "Should be SessionNotFound error")
         assertEquals(sessionId, (error as UpdateSessionNameError.SessionNotFound).id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { sessionDao.updateSessionName(sessionId, newName) }
+        coVerify(exactly = 1) { sessionOwnershipDao.getOwner(sessionId) }
+        coVerify(exactly = 0) { sessionDao.updateSessionName(any(), any()) }
     }
 
     // --- updateSessionGroupId Tests ---
@@ -297,44 +327,74 @@ class SessionServiceImplTest {
     @Test
     fun `updateSessionGroupId should update session group ID successfully`() = runTest {
         // Arrange
+        val userId = 1L
         val sessionId = 1L
         val groupId = 2L
+        coEvery { sessionOwnershipDao.getOwner(sessionId) } returns userId.right()
         coEvery { sessionDao.updateSessionGroupId(sessionId, groupId) } returns Unit.right()
 
         // Act
-        val result = sessionService.updateSessionGroupId(sessionId, groupId)
+        val result = sessionService.updateSessionGroupId(userId, sessionId, groupId)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful update")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+        coVerify(exactly = 1) { sessionOwnershipDao.getOwner(sessionId) }
         coVerify(exactly = 1) { sessionDao.updateSessionGroupId(sessionId, groupId) }
     }
 
     @Test
     fun `updateSessionGroupId should update session group ID to null successfully`() = runTest {
         // Arrange
+        val userId = 1L
         val sessionId = 1L
+        coEvery { sessionOwnershipDao.getOwner(sessionId) } returns userId.right()
         coEvery { sessionDao.updateSessionGroupId(sessionId, null) } returns Unit.right()
 
         // Act
-        val result = sessionService.updateSessionGroupId(sessionId, null)
+        val result = sessionService.updateSessionGroupId(userId, sessionId, null)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful update to null")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+        coVerify(exactly = 1) { sessionOwnershipDao.getOwner(sessionId) }
         coVerify(exactly = 1) { sessionDao.updateSessionGroupId(sessionId, null) }
+    }
+
+    @Test
+    fun `updateSessionGroupId should return AccessDenied error when user does not own session`() = runTest {
+        // Arrange
+        val userId = 1L
+        val sessionId = 1L
+        val groupId = 2L
+        val ownerId = 2L // Different user owns the session
+        coEvery { sessionOwnershipDao.getOwner(sessionId) } returns ownerId.right()
+
+        // Act
+        val result = sessionService.updateSessionGroupId(userId, sessionId, groupId)
+
+        // Assert
+        assertTrue(result.isLeft(), "Should return Left for access denied")
+        val error = result.leftOrNull()
+        assertNotNull(error, "Error should not be null")
+        assertTrue(error is UpdateSessionGroupIdError.AccessDenied, "Should be AccessDenied error")
+        assertEquals("User does not own this session", (error as UpdateSessionGroupIdError.AccessDenied).message)
+        coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+        coVerify(exactly = 1) { sessionOwnershipDao.getOwner(sessionId) }
+        coVerify(exactly = 0) { sessionDao.updateSessionGroupId(any(), any()) }
     }
 
     @Test
     fun `updateSessionGroupId should return SessionNotFound error when session does not exist`() = runTest {
         // Arrange
+        val userId = 1L
         val sessionId = 999L
         val groupId = 1L
-        val daoError = SessionError.SessionNotFound(sessionId)
-        coEvery { sessionDao.updateSessionGroupId(sessionId, groupId) } returns daoError.left()
+        val ownershipError = GetOwnerError.ResourceNotFound(sessionId.toString())
+        coEvery { sessionOwnershipDao.getOwner(sessionId) } returns ownershipError.left()
 
         // Act
-        val result = sessionService.updateSessionGroupId(sessionId, groupId)
+        val result = sessionService.updateSessionGroupId(userId, sessionId, groupId)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for non-existent session")
@@ -343,28 +403,8 @@ class SessionServiceImplTest {
         assertTrue(error is UpdateSessionGroupIdError.SessionNotFound, "Should be SessionNotFound error")
         assertEquals(sessionId, (error as UpdateSessionGroupIdError.SessionNotFound).id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { sessionDao.updateSessionGroupId(sessionId, groupId) }
-    }
-
-    @Test
-    fun `updateSessionGroupId should return InvalidRelatedEntity error for foreign key violation`() = runTest {
-        // Arrange
-        val sessionId = 1L
-        val groupId = 999L
-        val daoError = SessionError.ForeignKeyViolation("Invalid group ID")
-        coEvery { sessionDao.updateSessionGroupId(sessionId, groupId) } returns daoError.left()
-
-        // Act
-        val result = sessionService.updateSessionGroupId(sessionId, groupId)
-
-        // Assert
-        assertTrue(result.isLeft(), "Should return Left for foreign key violation")
-        val error = result.leftOrNull()
-        assertNotNull(error, "Error should not be null")
-        assertTrue(error is UpdateSessionGroupIdError.InvalidRelatedEntity, "Should be InvalidRelatedEntity error")
-        assertEquals("Invalid group ID", (error as UpdateSessionGroupIdError.InvalidRelatedEntity).message)
-        coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { sessionDao.updateSessionGroupId(sessionId, groupId) }
+        coVerify(exactly = 1) { sessionOwnershipDao.getOwner(sessionId) }
+        coVerify(exactly = 0) { sessionDao.updateSessionGroupId(any(), any()) }
     }
 
     // --- updateSessionCurrentModelId Tests ---
@@ -372,6 +412,7 @@ class SessionServiceImplTest {
     @Test
     fun `updateSessionCurrentModelId should update session model ID successfully when model is CHAT type`() = runTest {
         // Arrange
+        val userId = 1L
         val sessionId = 1L
         val modelId = 2L
         val chatModel = LLMModel(
@@ -382,16 +423,18 @@ class SessionServiceImplTest {
             active = true
         )
 
+        coEvery { sessionOwnershipDao.getOwner(sessionId) } returns userId.right()
         coEvery { modelDao.getModelById(modelId) } returns chatModel.right()
         coEvery { sessionDao.updateSessionCurrentModelId(sessionId, modelId) } returns Unit.right()
         coEvery { sessionDao.updateSessionCurrentSettingsId(sessionId, null) } returns Unit.right()
 
         // Act
-        val result = sessionService.updateSessionCurrentModelId(sessionId, modelId)
+        val result = sessionService.updateSessionCurrentModelId(userId, sessionId, modelId)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful update with CHAT model")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+        coVerify(exactly = 1) { sessionOwnershipDao.getOwner(sessionId) }
         coVerify(exactly = 1) { modelDao.getModelById(modelId) }
         coVerify(exactly = 1) { sessionDao.updateSessionCurrentModelId(sessionId, modelId) }
         coVerify(exactly = 1) { sessionDao.updateSessionCurrentSettingsId(sessionId, null) }
@@ -400,26 +443,55 @@ class SessionServiceImplTest {
     @Test
     fun `updateSessionCurrentModelId should update session model ID successfully when modelId is null`() = runTest {
         // Arrange
+        val userId = 1L
         val sessionId = 1L
         val modelId: Long? = null
 
+        coEvery { sessionOwnershipDao.getOwner(sessionId) } returns userId.right()
         coEvery { sessionDao.updateSessionCurrentModelId(sessionId, null) } returns Unit.right()
         coEvery { sessionDao.updateSessionCurrentSettingsId(sessionId, null) } returns Unit.right()
 
         // Act
-        val result = sessionService.updateSessionCurrentModelId(sessionId, modelId)
+        val result = sessionService.updateSessionCurrentModelId(userId, sessionId, modelId)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful update with null model")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+        coVerify(exactly = 1) { sessionOwnershipDao.getOwner(sessionId) }
         coVerify(exactly = 0) { modelDao.getModelById(any()) }
         coVerify(exactly = 1) { sessionDao.updateSessionCurrentModelId(sessionId, null) }
         coVerify(exactly = 1) { sessionDao.updateSessionCurrentSettingsId(sessionId, null) }
     }
 
     @Test
+    fun `updateSessionCurrentModelId should return AccessDenied error when user does not own session`() = runTest {
+        // Arrange
+        val userId = 1L
+        val sessionId = 1L
+        val modelId = 2L
+        val ownerId = 2L // Different user owns the session
+        coEvery { sessionOwnershipDao.getOwner(sessionId) } returns ownerId.right()
+
+        // Act
+        val result = sessionService.updateSessionCurrentModelId(userId, sessionId, modelId)
+
+        // Assert
+        assertTrue(result.isLeft(), "Should return Left for access denied")
+        val error = result.leftOrNull()
+        assertNotNull(error, "Error should not be null")
+        assertTrue(error is UpdateSessionCurrentModelIdError.AccessDenied, "Should be AccessDenied error")
+        assertEquals("User does not own this session", (error as UpdateSessionCurrentModelIdError.AccessDenied).message)
+        coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+        coVerify(exactly = 1) { sessionOwnershipDao.getOwner(sessionId) }
+        coVerify(exactly = 0) { modelDao.getModelById(any()) }
+        coVerify(exactly = 0) { sessionDao.updateSessionCurrentModelId(any(), any()) }
+        coVerify(exactly = 0) { sessionDao.updateSessionCurrentSettingsId(any(), any()) }
+    }
+
+    @Test
     fun `updateSessionCurrentModelId should return InvalidModelType error when model is not CHAT type`() = runTest {
         // Arrange
+        val userId = 1L
         val sessionId = 1L
         val modelId = 2L
         val embeddingModel = LLMModel(
@@ -430,10 +502,11 @@ class SessionServiceImplTest {
             active = true
         )
 
+        coEvery { sessionOwnershipDao.getOwner(sessionId) } returns userId.right()
         coEvery { modelDao.getModelById(modelId) } returns embeddingModel.right()
 
         // Act
-        val result = sessionService.updateSessionCurrentModelId(sessionId, modelId)
+        val result = sessionService.updateSessionCurrentModelId(userId, sessionId, modelId)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for non-CHAT model type")
@@ -444,6 +517,7 @@ class SessionServiceImplTest {
         assertEquals(modelId, invalidTypeError.modelId)
         assertEquals("EMBEDDING", invalidTypeError.actualType)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+        coVerify(exactly = 1) { sessionOwnershipDao.getOwner(sessionId) }
         coVerify(exactly = 1) { modelDao.getModelById(modelId) }
         coVerify(exactly = 0) { sessionDao.updateSessionCurrentModelId(any(), any()) }
         coVerify(exactly = 0) { sessionDao.updateSessionCurrentSettingsId(any(), any()) }
@@ -452,22 +526,15 @@ class SessionServiceImplTest {
     @Test
     fun `updateSessionCurrentModelId should return SessionNotFound error when session does not exist`() = runTest {
         // Arrange
+        val userId = 1L
         val sessionId = 999L
         val modelId = 1L
-        val daoError = SessionError.SessionNotFound(sessionId)
+        val ownershipError = GetOwnerError.ResourceNotFound(sessionId.toString())
 
-        val chatModel = LLMModel(
-            id = modelId,
-            name = "gpt-3.5-turbo",
-            providerId = 1L,
-            type = LLMModelType.CHAT,
-            active = true
-        )
-        coEvery { modelDao.getModelById(modelId) } returns chatModel.right()
-        coEvery { sessionDao.updateSessionCurrentModelId(sessionId, modelId) } returns daoError.left()
+        coEvery { sessionOwnershipDao.getOwner(sessionId) } returns ownershipError.left()
 
         // Act
-        val result = sessionService.updateSessionCurrentModelId(sessionId, modelId)
+        val result = sessionService.updateSessionCurrentModelId(userId, sessionId, modelId)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for non-existent session")
@@ -476,13 +543,15 @@ class SessionServiceImplTest {
         assertTrue(error is UpdateSessionCurrentModelIdError.SessionNotFound, "Should be SessionNotFound error")
         assertEquals(sessionId, (error as UpdateSessionCurrentModelIdError.SessionNotFound).id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { modelDao.getModelById(modelId) }
-        coVerify(exactly = 1) { sessionDao.updateSessionCurrentModelId(sessionId, modelId) }
+        coVerify(exactly = 1) { sessionOwnershipDao.getOwner(sessionId) }
+        coVerify(exactly = 0) { modelDao.getModelById(any()) }
+        coVerify(exactly = 0) { sessionDao.updateSessionCurrentModelId(any(), any()) }
     }
 
     @Test
     fun `updateSessionCurrentModelId should return InvalidRelatedEntity error for foreign key violation`() = runTest {
         // Arrange
+        val userId = 1L
         val sessionId = 1L
         val modelId = 999L
         val daoError = SessionError.ForeignKeyViolation("Invalid model ID")
@@ -494,19 +563,24 @@ class SessionServiceImplTest {
             type = LLMModelType.CHAT,
             active = true
         )
+        coEvery { sessionOwnershipDao.getOwner(sessionId) } returns userId.right()
         coEvery { modelDao.getModelById(modelId) } returns chatModel.right()
         coEvery { sessionDao.updateSessionCurrentModelId(sessionId, modelId) } returns daoError.left()
 
         // Act
-        val result = sessionService.updateSessionCurrentModelId(sessionId, modelId)
+        val result = sessionService.updateSessionCurrentModelId(userId, sessionId, modelId)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for foreign key violation")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is UpdateSessionCurrentModelIdError.InvalidRelatedEntity, "Should be InvalidRelatedEntity error")
+        assertTrue(
+            error is UpdateSessionCurrentModelIdError.InvalidRelatedEntity,
+            "Should be InvalidRelatedEntity error"
+        )
         assertEquals("Invalid model ID", (error as UpdateSessionCurrentModelIdError.InvalidRelatedEntity).message)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+        coVerify(exactly = 1) { sessionOwnershipDao.getOwner(sessionId) }
         coVerify(exactly = 1) { modelDao.getModelById(modelId) }
         coVerify(exactly = 1) { sessionDao.updateSessionCurrentModelId(sessionId, modelId) }
     }
@@ -516,6 +590,7 @@ class SessionServiceImplTest {
     @Test
     fun `updateSessionCurrentSettingsId should update session settings ID successfully`() = runTest {
         // Arrange
+        val userId = 1L
         val sessionId = 1L
         val settingsId = 2L
         val modelId = 1L
@@ -531,17 +606,19 @@ class SessionServiceImplTest {
             systemMessage = "Test system message"
         )
 
-        // Mock the validation calls
+        // Mock the access control and validation calls
+        coEvery { sessionOwnershipDao.getOwner(sessionId) } returns userId.right()
         coEvery { sessionDao.getSessionById(sessionId) } returns sessionWithModel.right()
         coEvery { settingsDao.getSettingsById(settingsId) } returns testSettings.right()
         coEvery { sessionDao.updateSessionCurrentSettingsId(sessionId, settingsId) } returns Unit.right()
 
         // Act
-        val result = sessionService.updateSessionCurrentSettingsId(sessionId, settingsId)
+        val result = sessionService.updateSessionCurrentSettingsId(userId, sessionId, settingsId)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful update")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+        coVerify(exactly = 1) { sessionOwnershipDao.getOwner(sessionId) }
         coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
         coVerify(exactly = 1) { settingsDao.getSettingsById(settingsId) }
         coVerify(exactly = 1) { sessionDao.updateSessionCurrentSettingsId(sessionId, settingsId) }
@@ -550,35 +627,67 @@ class SessionServiceImplTest {
     @Test
     fun `updateSessionCurrentSettingsId should update to null settings ID successfully`() = runTest {
         // Arrange
+        val userId = 1L
         val sessionId = 1L
         val settingsId: Long? = null
 
-        // When settingsId is null, no validation calls should be made
+        // When settingsId is null, only access control check is made
+        coEvery { sessionOwnershipDao.getOwner(sessionId) } returns userId.right()
         coEvery { sessionDao.updateSessionCurrentSettingsId(sessionId, null) } returns Unit.right()
 
         // Act
-        val result = sessionService.updateSessionCurrentSettingsId(sessionId, settingsId)
+        val result = sessionService.updateSessionCurrentSettingsId(userId, sessionId, settingsId)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful update to null")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+        coVerify(exactly = 1) { sessionOwnershipDao.getOwner(sessionId) }
         coVerify(exactly = 0) { sessionDao.getSessionById(any()) }
         coVerify(exactly = 0) { settingsDao.getSettingsById(any()) }
         coVerify(exactly = 1) { sessionDao.updateSessionCurrentSettingsId(sessionId, null) }
     }
 
     @Test
-    fun `updateSessionCurrentSettingsId should return SessionNotFound error when session does not exist`() = runTest {
+    fun `updateSessionCurrentSettingsId should return AccessDenied error when user does not own session`() = runTest {
         // Arrange
-        val sessionId = 999L
-        val settingsId = 1L
-        val daoError = SessionError.SessionNotFound(sessionId)
-
-        // Mock the session lookup (which will fail first)
-        coEvery { sessionDao.getSessionById(sessionId) } returns daoError.left()
+        val userId = 1L
+        val sessionId = 1L
+        val settingsId = 2L
+        val ownerId = 2L // Different user owns the session
+        coEvery { sessionOwnershipDao.getOwner(sessionId) } returns ownerId.right()
 
         // Act
-        val result = sessionService.updateSessionCurrentSettingsId(sessionId, settingsId)
+        val result = sessionService.updateSessionCurrentSettingsId(userId, sessionId, settingsId)
+
+        // Assert
+        assertTrue(result.isLeft(), "Should return Left for access denied")
+        val error = result.leftOrNull()
+        assertNotNull(error, "Error should not be null")
+        assertTrue(error is UpdateSessionCurrentSettingsIdError.AccessDenied, "Should be AccessDenied error")
+        assertEquals(
+            "User does not own this session",
+            (error as UpdateSessionCurrentSettingsIdError.AccessDenied).message
+        )
+        coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+        coVerify(exactly = 1) { sessionOwnershipDao.getOwner(sessionId) }
+        coVerify(exactly = 0) { sessionDao.getSessionById(any()) }
+        coVerify(exactly = 0) { settingsDao.getSettingsById(any()) }
+        coVerify(exactly = 0) { sessionDao.updateSessionCurrentSettingsId(any(), any()) }
+    }
+
+    @Test
+    fun `updateSessionCurrentSettingsId should return SessionNotFound error when session does not exist`() = runTest {
+        // Arrange
+        val userId = 1L
+        val sessionId = 999L
+        val settingsId = 1L
+        val ownershipError = GetOwnerError.ResourceNotFound(sessionId.toString())
+
+        // Mock the ownership check (which will fail first)
+        coEvery { sessionOwnershipDao.getOwner(sessionId) } returns ownershipError.left()
+
+        // Act
+        val result = sessionService.updateSessionCurrentSettingsId(userId, sessionId, settingsId)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for non-existent session")
@@ -587,112 +696,159 @@ class SessionServiceImplTest {
         assertTrue(error is UpdateSessionCurrentSettingsIdError.SessionNotFound, "Should be SessionNotFound error")
         assertEquals(sessionId, (error as UpdateSessionCurrentSettingsIdError.SessionNotFound).id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
-        // Should not get to settings validation or update
+        coVerify(exactly = 1) { sessionOwnershipDao.getOwner(sessionId) }
+        // Should not get to further validation or update
+        coVerify(exactly = 0) { sessionDao.getSessionById(any()) }
         coVerify(exactly = 0) { settingsDao.getSettingsById(any()) }
         coVerify(exactly = 0) { sessionDao.updateSessionCurrentSettingsId(any(), any()) }
     }
 
     @Test
-    fun `updateSessionCurrentSettingsId should return InvalidRelatedEntity error for foreign key violation`() = runTest {
-        // Arrange
-        val sessionId = 1L
-        val settingsId = 999L
-        val modelId = 1L
+    fun `updateSessionCurrentSettingsId should return InvalidRelatedEntity error for foreign key violation`() =
+        runTest {
+            // Arrange
+            val userId = 1L
+            val sessionId = 1L
+            val settingsId = 999L
+            val modelId = 1L
 
-        // Create test session with current model
-        val sessionWithModel = testSession.copy(currentModelId = modelId)
+            // Create test session with current model
+            val sessionWithModel = testSession.copy(currentModelId = modelId)
 
-        // Mock session lookup success but settings lookup failure
-        coEvery { sessionDao.getSessionById(sessionId) } returns sessionWithModel.right()
-        coEvery { settingsDao.getSettingsById(settingsId) } returns eu.torvian.chatbot.server.data.dao.error.SettingsError.SettingsNotFound(settingsId).left()
+            // Mock ownership check success, session lookup success but settings lookup failure
+            coEvery { sessionOwnershipDao.getOwner(sessionId) } returns userId.right()
+            coEvery { sessionDao.getSessionById(sessionId) } returns sessionWithModel.right()
+            coEvery { settingsDao.getSettingsById(settingsId) } returns eu.torvian.chatbot.server.data.dao.error.SettingsError.SettingsNotFound(
+                settingsId
+            ).left()
 
-        // Act
-        val result = sessionService.updateSessionCurrentSettingsId(sessionId, settingsId)
+            // Act
+            val result = sessionService.updateSessionCurrentSettingsId(userId, sessionId, settingsId)
 
-        // Assert
-        assertTrue(result.isLeft(), "Should return Left for non-existent settings")
-        val error = result.leftOrNull()
-        assertNotNull(error, "Error should not be null")
-        assertTrue(error is UpdateSessionCurrentSettingsIdError.InvalidRelatedEntity, "Should be InvalidRelatedEntity error")
-        assertEquals("Settings with ID $settingsId not found", (error as UpdateSessionCurrentSettingsIdError.InvalidRelatedEntity).message)
-        coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
-        coVerify(exactly = 1) { settingsDao.getSettingsById(settingsId) }
-        // Should not get to the final update
-        coVerify(exactly = 0) { sessionDao.updateSessionCurrentSettingsId(any(), any()) }
-    }
+            // Assert
+            assertTrue(result.isLeft(), "Should return Left for non-existent settings")
+            val error = result.leftOrNull()
+            assertNotNull(error, "Error should not be null")
+            assertTrue(
+                error is UpdateSessionCurrentSettingsIdError.InvalidRelatedEntity,
+                "Should be InvalidRelatedEntity error"
+            )
+            assertEquals(
+                "Settings with ID $settingsId not found",
+                (error as UpdateSessionCurrentSettingsIdError.InvalidRelatedEntity).message
+            )
+            coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+            coVerify(exactly = 1) { sessionOwnershipDao.getOwner(sessionId) }
+            coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
+            coVerify(exactly = 1) { settingsDao.getSettingsById(settingsId) }
+            // Should not get to the final update
+            coVerify(exactly = 0) { sessionDao.updateSessionCurrentSettingsId(any(), any()) }
+        }
 
     @Test
-    fun `updateSessionCurrentSettingsId should return SettingsModelMismatch error when settings belong to different model`() = runTest {
-        // Arrange
-        val sessionId = 1L
-        val settingsId = 2L
-        val sessionModelId = 1L
-        val settingsModelId = 3L // Different model
+    fun `updateSessionCurrentSettingsId should return SettingsModelMismatch error when settings belong to different model`() =
+        runTest {
+            // Arrange
+            val userId = 1L
+            val sessionId = 1L
+            val settingsId = 2L
+            val sessionModelId = 1L
+            val settingsModelId = 3L // Different model
 
-        // Create test session with one model
-        val sessionWithModel = testSession.copy(currentModelId = sessionModelId)
+            // Create test session with one model
+            val sessionWithModel = testSession.copy(currentModelId = sessionModelId)
 
-        // Create test settings that belong to a different model
-        val testSettings = eu.torvian.chatbot.common.models.ChatModelSettings(
-            id = settingsId,
-            modelId = settingsModelId, // Different from session model
-            name = "Test Settings",
-            systemMessage = "Test system message"
-        )
+            // Create test settings that belong to a different model
+            val testSettings = eu.torvian.chatbot.common.models.ChatModelSettings(
+                id = settingsId,
+                modelId = settingsModelId, // Different from session model
+                name = "Test Settings",
+                systemMessage = "Test system message"
+            )
 
-        // Mock the validation calls
-        coEvery { sessionDao.getSessionById(sessionId) } returns sessionWithModel.right()
-        coEvery { settingsDao.getSettingsById(settingsId) } returns testSettings.right()
+            // Mock the access control and validation calls
+            coEvery { sessionOwnershipDao.getOwner(sessionId) } returns userId.right()
+            coEvery { sessionDao.getSessionById(sessionId) } returns sessionWithModel.right()
+            coEvery { settingsDao.getSettingsById(settingsId) } returns testSettings.right()
 
-        // Act
-        val result = sessionService.updateSessionCurrentSettingsId(sessionId, settingsId)
+            // Act
+            val result = sessionService.updateSessionCurrentSettingsId(userId, sessionId, settingsId)
 
-        // Assert
-        assertTrue(result.isLeft(), "Should return Left for model mismatch")
-        val error = result.leftOrNull()
-        assertNotNull(error, "Error should not be null")
-        assertTrue(error is UpdateSessionCurrentSettingsIdError.SettingsModelMismatch, "Should be SettingsModelMismatch error")
-        val mismatchError = error as UpdateSessionCurrentSettingsIdError.SettingsModelMismatch
-        assertEquals(settingsId, mismatchError.settingsId)
-        assertEquals(settingsModelId, mismatchError.settingsModelId)
-        assertEquals(sessionModelId, mismatchError.sessionModelId)
-        coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
-        coVerify(exactly = 1) { settingsDao.getSettingsById(settingsId) }
-        // Should not get to the final update due to validation failure
-        coVerify(exactly = 0) { sessionDao.updateSessionCurrentSettingsId(any(), any()) }
-    }
+            // Assert
+            assertTrue(result.isLeft(), "Should return Left for model mismatch")
+            val error = result.leftOrNull()
+            assertNotNull(error, "Error should not be null")
+            assertTrue(
+                error is UpdateSessionCurrentSettingsIdError.SettingsModelMismatch,
+                "Should be SettingsModelMismatch error"
+            )
+            val mismatchError = error as UpdateSessionCurrentSettingsIdError.SettingsModelMismatch
+            assertEquals(settingsId, mismatchError.settingsId)
+            assertEquals(settingsModelId, mismatchError.settingsModelId)
+            assertEquals(sessionModelId, mismatchError.sessionModelId)
+            coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+            coVerify(exactly = 1) { sessionOwnershipDao.getOwner(sessionId) }
+            coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
+            coVerify(exactly = 1) { settingsDao.getSettingsById(settingsId) }
+            // Should not get to the final update due to validation failure
+            coVerify(exactly = 0) { sessionDao.updateSessionCurrentSettingsId(any(), any()) }
+        }
 
     // --- updateSessionLeafMessageId Tests ---
 
     @Test
     fun `updateSessionLeafMessageId should update session leaf message ID successfully`() = runTest {
         // Arrange
+        val userId = 1L
         val sessionId = 1L
         val messageId = 2L
+        coEvery { sessionOwnershipDao.getOwner(sessionId) } returns userId.right()
         coEvery { sessionDao.updateSessionLeafMessageId(sessionId, messageId) } returns Unit.right()
 
         // Act
-        val result = sessionService.updateSessionLeafMessageId(sessionId, messageId)
+        val result = sessionService.updateSessionLeafMessageId(userId, sessionId, messageId)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful update")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+        coVerify(exactly = 1) { sessionOwnershipDao.getOwner(sessionId) }
         coVerify(exactly = 1) { sessionDao.updateSessionLeafMessageId(sessionId, messageId) }
+    }
+
+    @Test
+    fun `updateSessionLeafMessageId should return AccessDenied error when user does not own session`() = runTest {
+        // Arrange
+        val userId = 1L
+        val sessionId = 1L
+        val messageId = 2L
+        val ownerId = 2L // Different user owns the session
+        coEvery { sessionOwnershipDao.getOwner(sessionId) } returns ownerId.right()
+
+        // Act
+        val result = sessionService.updateSessionLeafMessageId(userId, sessionId, messageId)
+
+        // Assert
+        assertTrue(result.isLeft(), "Should return Left for access denied")
+        val error = result.leftOrNull()
+        assertNotNull(error, "Error should not be null")
+        assertTrue(error is UpdateSessionLeafMessageIdError.AccessDenied, "Should be AccessDenied error")
+        assertEquals("User does not own this session", (error as UpdateSessionLeafMessageIdError.AccessDenied).message)
+        coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+        coVerify(exactly = 1) { sessionOwnershipDao.getOwner(sessionId) }
+        coVerify(exactly = 0) { sessionDao.updateSessionLeafMessageId(any(), any()) }
     }
 
     @Test
     fun `updateSessionLeafMessageId should return SessionNotFound error when session does not exist`() = runTest {
         // Arrange
+        val userId = 1L
         val sessionId = 999L
         val messageId = 1L
-        val daoError = SessionError.SessionNotFound(sessionId)
-        coEvery { sessionDao.updateSessionLeafMessageId(sessionId, messageId) } returns daoError.left()
+        val ownershipError = GetOwnerError.ResourceNotFound(sessionId.toString())
+        coEvery { sessionOwnershipDao.getOwner(sessionId) } returns ownershipError.left()
 
         // Act
-        val result = sessionService.updateSessionLeafMessageId(sessionId, messageId)
+        val result = sessionService.updateSessionLeafMessageId(userId, sessionId, messageId)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for non-existent session")
@@ -701,27 +857,34 @@ class SessionServiceImplTest {
         assertTrue(error is UpdateSessionLeafMessageIdError.SessionNotFound, "Should be SessionNotFound error")
         assertEquals(sessionId, (error as UpdateSessionLeafMessageIdError.SessionNotFound).id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { sessionDao.updateSessionLeafMessageId(sessionId, messageId) }
+        coVerify(exactly = 1) { sessionOwnershipDao.getOwner(sessionId) }
+        coVerify(exactly = 0) { sessionDao.updateSessionLeafMessageId(any(), any()) }
     }
 
     @Test
     fun `updateSessionLeafMessageId should return InvalidRelatedEntity error for foreign key violation`() = runTest {
         // Arrange
+        val userId = 1L
         val sessionId = 1L
         val messageId = 999L
         val daoError = SessionError.ForeignKeyViolation("Invalid message ID")
+        coEvery { sessionOwnershipDao.getOwner(sessionId) } returns userId.right()
         coEvery { sessionDao.updateSessionLeafMessageId(sessionId, messageId) } returns daoError.left()
 
         // Act
-        val result = sessionService.updateSessionLeafMessageId(sessionId, messageId)
+        val result = sessionService.updateSessionLeafMessageId(userId, sessionId, messageId)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for foreign key violation")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is UpdateSessionLeafMessageIdError.InvalidRelatedEntity, "Should be InvalidRelatedEntity error")
+        assertTrue(
+            error is UpdateSessionLeafMessageIdError.InvalidRelatedEntity,
+            "Should be InvalidRelatedEntity error"
+        )
         assertEquals("Invalid message ID", (error as UpdateSessionLeafMessageIdError.InvalidRelatedEntity).message)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+        coVerify(exactly = 1) { sessionOwnershipDao.getOwner(sessionId) }
         coVerify(exactly = 1) { sessionDao.updateSessionLeafMessageId(sessionId, messageId) }
     }
 
@@ -730,27 +893,31 @@ class SessionServiceImplTest {
     @Test
     fun `deleteSession should delete session successfully`() = runTest {
         // Arrange
+        val userId = 1L
         val sessionId = 1L
+        coEvery { sessionOwnershipDao.getOwner(sessionId) } returns userId.right()
         coEvery { sessionDao.deleteSession(sessionId) } returns Unit.right()
 
         // Act
-        val result = sessionService.deleteSession(sessionId)
+        val result = sessionService.deleteSession(userId, sessionId)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful deletion")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+        coVerify(exactly = 1) { sessionOwnershipDao.getOwner(sessionId) }
         coVerify(exactly = 1) { sessionDao.deleteSession(sessionId) }
     }
 
     @Test
     fun `deleteSession should return SessionNotFound error when session does not exist`() = runTest {
         // Arrange
+        val userId = 1L
         val sessionId = 999L
-        val daoError = SessionError.SessionNotFound(sessionId)
-        coEvery { sessionDao.deleteSession(sessionId) } returns daoError.left()
+        val ownershipError = GetOwnerError.ResourceNotFound(sessionId.toString())
+        coEvery { sessionOwnershipDao.getOwner(sessionId) } returns ownershipError.left()
 
         // Act
-        val result = sessionService.deleteSession(sessionId)
+        val result = sessionService.deleteSession(userId, sessionId)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for non-existent session")
@@ -759,6 +926,7 @@ class SessionServiceImplTest {
         assertTrue(error is DeleteSessionError.SessionNotFound, "Should be SessionNotFound error")
         assertEquals(sessionId, (error as DeleteSessionError.SessionNotFound).id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { sessionDao.deleteSession(sessionId) }
+        coVerify(exactly = 1) { sessionOwnershipDao.getOwner(sessionId) }
+        coVerify(exactly = 0) { sessionDao.deleteSession(any()) }
     }
 }
