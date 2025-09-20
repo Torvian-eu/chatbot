@@ -9,4 +9,9 @@ sealed interface UpdateMessageContentError {
      * Maps from MessageError.MessageNotFound in the DAO layer.
      */
     data class MessageNotFound(val id: Long) : UpdateMessageContentError
+
+    /**
+     * Indicates that the user does not have permission to update this message.
+     */
+    data class AccessDenied(val reason: String) : UpdateMessageContentError
 }

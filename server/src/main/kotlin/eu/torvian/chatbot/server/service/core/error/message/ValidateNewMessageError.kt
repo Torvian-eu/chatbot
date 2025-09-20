@@ -18,6 +18,13 @@ sealed interface ValidateNewMessageError {
     data class SessionNotFound(val sessionId: Long) : ValidateNewMessageError
 
     /**
+     * Indicates that the user does not have access to the specified session.
+     *
+     * @property reason The reason for access denial
+     */
+    data class AccessDenied(val reason: String) : ValidateNewMessageError
+
+    /**
      * Indicates that the parent message does not belong to the specified session (business logic validation).
      *
      * @property sessionId The ID of the session
@@ -40,6 +47,8 @@ sealed interface ValidateNewMessageError {
 fun ValidateNewMessageError.toApiError(): ApiError = when (this) {
     is ValidateNewMessageError.SessionNotFound ->
         apiError(CommonApiErrorCodes.NOT_FOUND, "Session not found", "sessionId" to sessionId.toString())
+    is ValidateNewMessageError.AccessDenied ->
+        apiError(CommonApiErrorCodes.PERMISSION_DENIED, "Access to the session is denied", "reason" to reason)
     is ValidateNewMessageError.ParentNotInSession ->
         apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Parent message does not belong to this session", "sessionId" to sessionId.toString(), "parentId" to parentId.toString())
     is ValidateNewMessageError.ModelConfigurationError ->
