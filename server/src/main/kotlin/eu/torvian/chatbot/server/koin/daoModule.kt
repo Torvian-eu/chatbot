@@ -11,6 +11,7 @@ import eu.torvian.chatbot.server.data.dao.exposed.SessionDaoExposed
 import eu.torvian.chatbot.server.data.dao.exposed.SessionOwnershipDaoExposed
 import eu.torvian.chatbot.server.data.dao.exposed.SettingsDaoExposed
 import eu.torvian.chatbot.server.data.dao.exposed.UserDaoExposed
+import eu.torvian.chatbot.server.data.dao.exposed.UserGroupDaoExposed
 import eu.torvian.chatbot.server.data.dao.exposed.UserSessionDaoExposed
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
 import org.koin.dsl.module
@@ -34,6 +35,7 @@ fun daoModule() = module {
 
     // New user management DAOs
     single<UserDao> { UserDaoExposed(get()) }
+    single<UserGroupDao> { UserGroupDaoExposed(get()) }
     single<UserSessionDao> { UserSessionDaoExposed(get()) }
 
     // New ownership DAOs

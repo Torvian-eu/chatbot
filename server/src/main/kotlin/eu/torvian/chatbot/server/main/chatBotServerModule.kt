@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.main
 import eu.torvian.chatbot.common.misc.di.KoinDIContainer
 import eu.torvian.chatbot.server.domain.config.DatabaseConfig
 import eu.torvian.chatbot.server.domain.security.EncryptionConfig
+import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.koin.*
 import eu.torvian.chatbot.server.ktor.configureKtor
 import eu.torvian.chatbot.server.ktor.routes.ApiRoutesKtor
@@ -58,11 +59,14 @@ fun Application.configureKoin() {
         keyVersion = 1,
         masterKey = "G2CgJOQQtIC+yfz+LLoDp/osBLUVzW9JE9BrQA0dQFo=" // TODO: **IMPORTANT:** Change this in production!
     )
+    val jwtConfig = JwtConfig(
+        secret = "your-jwt-secret-key-change-in-production-make-it-long-and-secure" // TODO: **IMPORTANT:** Change this in production!
+    )
 
     // Initialize Koin plugin with defined modules
     install(Koin) {
         modules(
-            configModule(databaseConfig, encryptionConfig),
+            configModule(databaseConfig, encryptionConfig, jwtConfig),
             databaseModule(),
             miscModule(),
             daoModule(),
