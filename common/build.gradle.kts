@@ -62,7 +62,7 @@ kotlin {
             implementation(libs.ktor.resources)      // Ktor resources for type-safe routing
             implementation(libs.serialization.json)  // KotlinX Serialization JSON
             implementation(libs.kotlinx.datetime)    // KotlinX DateTime
-
+            implementation(libs.arrow.core)           // Arrow Core for functional programming
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
