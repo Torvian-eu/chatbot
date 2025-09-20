@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.server.service.core
 
 import arrow.core.Either
-import eu.torvian.chatbot.server.data.entities.UserEntity
+import eu.torvian.chatbot.common.models.User
 import eu.torvian.chatbot.server.service.core.error.auth.RegisterUserError
 import eu.torvian.chatbot.server.service.core.error.auth.UserNotFoundError
 
@@ -25,30 +25,30 @@ interface UserService {
      * @param username Unique username for the new user
      * @param password Plaintext password (will be hashed)
      * @param email Optional email address (must be unique if provided)
-     * @return Either [RegisterUserError] if registration fails, or the newly created [UserEntity]
+     * @return Either [RegisterUserError] if registration fails, or the newly created [User]
      */
     suspend fun registerUser(
         username: String, 
         password: String, 
         email: String? = null
-    ): Either<RegisterUserError, UserEntity>
-    
+    ): Either<RegisterUserError, User>
+
     /**
      * Retrieves a user by their username.
      * 
      * @param username The username to search for
-     * @return Either [UserNotFoundError.ByUsername] if not found, or the [UserEntity]
+     * @return Either [UserNotFoundError.ByUsername] if not found, or the [User]
      */
-    suspend fun getUserByUsername(username: String): Either<UserNotFoundError.ByUsername, UserEntity>
-    
+    suspend fun getUserByUsername(username: String): Either<UserNotFoundError.ByUsername, User>
+
     /**
      * Retrieves a user by their unique ID.
      * 
      * @param id The user ID to search for
-     * @return Either [UserNotFoundError.ById] if not found, or the [UserEntity]
+     * @return Either [UserNotFoundError.ById] if not found, or the [User]
      */
-    suspend fun getUserById(id: Long): Either<UserNotFoundError.ById, UserEntity>
-    
+    suspend fun getUserById(id: Long): Either<UserNotFoundError.ById, User>
+
     /**
      * Updates a user's last login timestamp.
      * 
@@ -62,7 +62,7 @@ interface UserService {
      * 
      * Note: This method is typically restricted to administrators.
      * 
-     * @return List of all [UserEntity] objects; empty list if no users exist
+     * @return List of all [User] objects; empty list if no users exist
      */
-    suspend fun getAllUsers(): List<UserEntity>
+    suspend fun getAllUsers(): List<User>
 }

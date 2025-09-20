@@ -5,7 +5,6 @@ import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.AuthResource
 import eu.torvian.chatbot.common.models.auth.LoginRequest
 import eu.torvian.chatbot.common.models.auth.RegisterRequest
-import eu.torvian.chatbot.server.data.entities.mappers.toUser
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.domain.security.mappers.toLoginResponse
 import eu.torvian.chatbot.server.ktor.auth.getUserId
@@ -106,7 +105,6 @@ fun Route.configureAuthRoutes(
             val userId = call.getUserId()
             call.respondEither(
                 userService.getUserById(userId)
-                    .map { it.toUser() }
             ) { error ->
                 when (error) {
                     is UserNotFoundError.ById ->

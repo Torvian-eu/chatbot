@@ -2,13 +2,15 @@ package eu.torvian.chatbot.server.service.security
 
 import arrow.core.left
 import arrow.core.right
+import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.UserSessionDao
+import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.dao.error.UserSessionError
 import eu.torvian.chatbot.server.data.entities.UserEntity
 import eu.torvian.chatbot.server.data.entities.UserSessionEntity
+import eu.torvian.chatbot.server.data.entities.mappers.toUser
 import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.service.core.UserService
-import eu.torvian.chatbot.server.service.core.error.auth.UserNotFoundError
 import eu.torvian.chatbot.server.service.security.error.LoginError
 import eu.torvian.chatbot.server.service.security.error.LogoutError
 import eu.torvian.chatbot.server.service.security.error.RefreshTokenError
@@ -27,14 +29,15 @@ class AuthenticationServiceImplTest {
     private val userService = mockk<UserService>()
     private val passwordService = mockk<PasswordService>()
     private val userSessionDao = mockk<UserSessionDao>()
+    private val userDao = mockk<UserDao>()
     private val transactionScope = mockk<TransactionScope>()
-    
+
     private val jwtConfig = JwtConfig(
         secret = "test-secret-key-for-testing-purposes-only"
     )
-    
+
     private val authService = AuthenticationServiceImpl(
-        userService, passwordService, jwtConfig, userSessionDao, transactionScope
+        userService, passwordService, jwtConfig, userSessionDao, userDao, transactionScope
     )
 
     private val testUser = UserEntity(
@@ -57,7 +60,7 @@ class AuthenticationServiceImplTest {
 
     @BeforeEach
     fun setUp() {
-        clearMocks(userService, passwordService, userSessionDao, transactionScope)
+        clearMocks(userService, passwordService, userSessionDao, userDao, transactionScope)
 
         coEvery { transactionScope.transaction<Any>(any()) } coAnswers {
             val block = firstArg<suspend () -> Any>()
@@ -71,7 +74,7 @@ class AuthenticationServiceImplTest {
         val username = "testuser"
         val password = "correctpassword"
 
-        coEvery { userService.getUserByUsername(username) } returns testUser.right()
+        coEvery { userDao.getUserByUsername(username) } returns testUser.right()
         every { passwordService.verifyPassword(password, testUser.passwordHash) } returns true
 
         coEvery { userSessionDao.insertSession(testUser.id, any()) } returns testSession.right()
@@ -83,11 +86,11 @@ class AuthenticationServiceImplTest {
         // Then
         assertTrue(result.isRight())
         val loginResult = result.getOrNull()!!
-        assertEquals(testUser, loginResult.user)
+        assertEquals(testUser.toUser(), loginResult.user)
         assertTrue(loginResult.accessToken.isNotEmpty())
         assertEquals(loginResult.refreshToken?.isNotEmpty(), true)
 
-        coVerify { userService.getUserByUsername(username) }
+        coVerify { userDao.getUserByUsername(username) }
         verify { passwordService.verifyPassword(password, testUser.passwordHash) }
         coVerify { userSessionDao.insertSession(testUser.id, any()) }
         coVerify { userService.updateLastLogin(testUser.id) }
@@ -99,8 +102,7 @@ class AuthenticationServiceImplTest {
         val username = "nonexistent"
         val password = "password"
 
-        coEvery { userService.getUserByUsername(username) } returns 
-            UserNotFoundError.ByUsername(username).left()
+        coEvery { userDao.getUserByUsername(username) } returns UserError.UserNotFoundByUsername(username).left()
 
         // When
         val result = authService.login(username, password)
@@ -116,7 +118,7 @@ class AuthenticationServiceImplTest {
         val username = "testuser"
         val password = "wrongpassword"
 
-        coEvery { userService.getUserByUsername(username) } returns testUser.right()
+        coEvery { userDao.getUserByUsername(username) } returns testUser.right()
         every { passwordService.verifyPassword(password, testUser.passwordHash) } returns false
 
         // When
@@ -133,11 +135,11 @@ class AuthenticationServiceImplTest {
         val username = "testuser"
         val password = "correctpassword"
 
-        coEvery { userService.getUserByUsername(username) } returns testUser.right()
+        coEvery { userDao.getUserByUsername(username) } returns testUser.right()
         every { passwordService.verifyPassword(password, testUser.passwordHash) } returns true
 
-        coEvery { userSessionDao.insertSession(testUser.id, any()) } returns 
-            UserSessionError.ForeignKeyViolation("User not found").left()
+        coEvery { userSessionDao.insertSession(testUser.id, any()) } returns
+                UserSessionError.ForeignKeyViolation("User not found").left()
 
         // When
         val result = authService.login(username, password)
@@ -179,9 +181,9 @@ class AuthenticationServiceImplTest {
     fun `validateToken should successfully validate valid token`() = runTest {
         // Given
         val token = jwtConfig.generateAccessToken(testUser.id, testSession.id)
-        
+
         coEvery { userSessionDao.getSessionById(testSession.id) } returns testSession.right()
-        coEvery { userService.getUserById(testUser.id) } returns testUser.right()
+        coEvery { userService.getUserById(testUser.id) } returns testUser.toUser().right()
         coEvery { userSessionDao.updateLastAccessed(testSession.id, any()) } returns Unit.right()
 
         // When
@@ -190,7 +192,7 @@ class AuthenticationServiceImplTest {
         // Then
         assertTrue(result.isRight())
         val userContext = result.getOrNull()!!
-        assertEquals(testUser, userContext.user)
+        assertEquals(testUser.toUser(), userContext.user)
         assertEquals(testSession.id, userContext.sessionId)
     }
 
@@ -225,9 +227,9 @@ class AuthenticationServiceImplTest {
     fun `validateToken should return InvalidSession when session not found`() = runTest {
         // Given
         val token = jwtConfig.generateAccessToken(testUser.id, testSession.id)
-        
-        coEvery { userSessionDao.getSessionById(testSession.id) } returns 
-            UserSessionError.SessionNotFound(testSession.id).left()
+
+        coEvery { userSessionDao.getSessionById(testSession.id) } returns
+                UserSessionError.SessionNotFound(testSession.id).left()
 
         // When
         val result = authService.validateToken(token)
@@ -242,9 +244,10 @@ class AuthenticationServiceImplTest {
     @Test
     fun `validateToken should return InvalidSession when session expired`() = runTest {
         // Given
-        val expiredSession = testSession.copy(expiresAt = Instant.fromEpochMilliseconds(System.currentTimeMillis() - 1000))
+        val expiredSession =
+            testSession.copy(expiresAt = Instant.fromEpochMilliseconds(System.currentTimeMillis() - 1000))
         val token = jwtConfig.generateAccessToken(testUser.id, expiredSession.id)
-        
+
         coEvery { userSessionDao.getSessionById(expiredSession.id) } returns expiredSession.right()
 
         // When
@@ -261,9 +264,9 @@ class AuthenticationServiceImplTest {
     fun `refreshToken should successfully generate new tokens`() = runTest {
         // Given
         val refreshToken = jwtConfig.generateRefreshToken(testUser.id, testSession.id)
-        
+
         coEvery { userSessionDao.getSessionById(testSession.id) } returns testSession.right()
-        coEvery { userService.getUserById(testUser.id) } returns testUser.right()
+        coEvery { userService.getUserById(testUser.id) } returns testUser.toUser().right()
         coEvery { userSessionDao.updateLastAccessed(testSession.id, any()) } returns Unit.right()
 
         // When
@@ -272,7 +275,7 @@ class AuthenticationServiceImplTest {
         // Then
         assertTrue(result.isRight())
         val loginResult = result.getOrNull()!!
-        assertEquals(testUser, loginResult.user)
+        assertEquals(testUser.toUser(), loginResult.user)
         assertTrue(loginResult.accessToken.isNotEmpty())
         assertEquals(loginResult.refreshToken?.isNotEmpty(), true)
     }

@@ -38,7 +38,7 @@ fun serviceModule() = module {
     // --- Authentication Services ---
     single<PasswordService> { BCryptPasswordService() }
     single<UserService> { UserServiceImpl(get(), get(), get()) }
-    single<AuthenticationService> { AuthenticationServiceImpl(get(), get(), get(), get(), get()) }
+    single<AuthenticationService> { AuthenticationServiceImpl(get(), get(), get(), get(), get(), get()) }
 
     // --- Setup Services ---
     single<InitialSetupService> { InitialSetupService(get(), get()) }

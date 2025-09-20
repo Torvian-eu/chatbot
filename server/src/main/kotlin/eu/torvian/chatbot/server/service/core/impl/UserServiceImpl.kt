@@ -6,14 +6,16 @@ import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.error.UserError
-import eu.torvian.chatbot.server.data.entities.UserEntity
+import eu.torvian.chatbot.common.models.User
 import eu.torvian.chatbot.server.service.core.UserService
 import eu.torvian.chatbot.server.service.core.error.auth.RegisterUserError
 import eu.torvian.chatbot.server.service.core.error.auth.UserNotFoundError
 import eu.torvian.chatbot.server.service.security.PasswordService
 import eu.torvian.chatbot.common.security.error.PasswordValidationError
 import eu.torvian.chatbot.common.security.error.CharacterType
+import eu.torvian.chatbot.server.data.entities.mappers.toUser
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import kotlinx.datetime.Clock
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 
@@ -38,7 +40,7 @@ class UserServiceImpl(
         username: String,
         password: String,
         email: String?
-    ): Either<RegisterUserError, UserEntity> = transactionScope.transaction {
+    ): Either<RegisterUserError, User> = transactionScope.transaction {
         either {
             logger.info("Registering new user: $username")
 
@@ -102,25 +104,19 @@ class UserServiceImpl(
             }
 
             logger.info("Successfully registered user: $username (ID: ${newUser.id})")
-            newUser
+            newUser.toUser()
         }
     }
 
-    override suspend fun getUserByUsername(username: String): Either<UserNotFoundError.ByUsername, UserEntity> =
-        userDao.getUserByUsername(username).mapLeft {
-            UserNotFoundError.ByUsername(username)
-        }
+    override suspend fun getUserByUsername(username: String): Either<UserNotFoundError.ByUsername, User> =
+        userDao.getUserByUsername(username).mapLeft { UserNotFoundError.ByUsername(username) }.map { it.toUser() }
 
-    override suspend fun getUserById(id: Long): Either<UserNotFoundError.ById, UserEntity> =
-        userDao.getUserById(id).mapLeft {
-            UserNotFoundError.ById(id)
-        }
+    override suspend fun getUserById(id: Long): Either<UserNotFoundError.ById, User> =
+        userDao.getUserById(id).mapLeft { UserNotFoundError.ById(id) }.map { it.toUser() }
 
     override suspend fun updateLastLogin(userId: Long): Either<UserNotFoundError.ById, Unit> =
-        userDao.updateLastLogin(userId, System.currentTimeMillis()).mapLeft {
-            UserNotFoundError.ById(userId)
-        }
+        userDao.updateLastLogin(userId, Clock.System.now().toEpochMilliseconds()).mapLeft { UserNotFoundError.ById(userId) }
 
-    override suspend fun getAllUsers(): List<UserEntity> =
-        userDao.getAllUsers()
+    override suspend fun getAllUsers(): List<User> =
+        userDao.getAllUsers().map { it.toUser() }
 }

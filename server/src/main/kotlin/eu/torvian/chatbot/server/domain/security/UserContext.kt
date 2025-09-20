@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.server.domain.security
 
-import eu.torvian.chatbot.server.data.entities.UserEntity
+import eu.torvian.chatbot.common.models.User
 import kotlinx.datetime.Instant
 
 /**
@@ -9,13 +9,13 @@ import kotlinx.datetime.Instant
  * This class contains all the information needed to identify and authorize
  * an authenticated user for API operations.
  * 
- * @property user The authenticated user entity
+ * @property user The authenticated user
  * @property sessionId The ID of the user's current session
  * @property tokenIssuedAt When the current token was issued
  * @property tokenExpiresAt When the current token expires
  */
 data class UserContext(
-    val user: UserEntity,
+    val user: User,
     val sessionId: Long,
     val tokenIssuedAt: Instant,
     val tokenExpiresAt: Instant

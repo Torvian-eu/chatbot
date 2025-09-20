@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.server.domain.security
 
-import eu.torvian.chatbot.server.data.entities.UserEntity
+import eu.torvian.chatbot.common.models.User
 import kotlinx.datetime.Instant
 
 /**
@@ -9,13 +9,13 @@ import kotlinx.datetime.Instant
  * This class contains all the information returned to the client after
  * successful authentication, including the user details and authentication tokens.
  * 
- * @property user The authenticated user entity
+ * @property user The authenticated user
  * @property accessToken The JWT access token for API authentication
  * @property refreshToken Optional JWT refresh token for obtaining new access tokens
  * @property expiresAt When the access token expires
  */
 data class LoginResult(
-    val user: UserEntity,
+    val user: User,
     val accessToken: String,
     val refreshToken: String?,
     val expiresAt: Instant

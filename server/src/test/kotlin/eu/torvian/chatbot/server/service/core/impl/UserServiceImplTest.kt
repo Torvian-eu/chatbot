@@ -2,13 +2,14 @@ package eu.torvian.chatbot.server.service.core.impl
 
 import arrow.core.left
 import arrow.core.right
+import eu.torvian.chatbot.common.models.User
+import eu.torvian.chatbot.common.security.error.PasswordValidationError
 import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.entities.UserEntity
 import eu.torvian.chatbot.server.service.core.error.auth.RegisterUserError
 import eu.torvian.chatbot.server.service.core.error.auth.UserNotFoundError
 import eu.torvian.chatbot.server.service.security.PasswordService
-import eu.torvian.chatbot.common.security.error.PasswordValidationError
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
 import io.mockk.*
 import kotlinx.coroutines.test.runTest
@@ -26,13 +27,21 @@ class UserServiceImplTest {
 
     private val userService = UserServiceImpl(userDao, passwordService, transactionScope)
 
-    private val testUser = UserEntity(
+    private val testUserEntity = UserEntity(
         id = 1L,
         username = "testuser",
         passwordHash = "hashedpassword",
         email = "test@example.com",
         createdAt = Instant.fromEpochMilliseconds(System.currentTimeMillis()),
         updatedAt = Instant.fromEpochMilliseconds(System.currentTimeMillis()),
+        lastLogin = null
+    )
+
+    private val testUser = User(
+        id = 1L,
+        username = "testuser",
+        email = "test@example.com",
+        createdAt = Instant.fromEpochMilliseconds(System.currentTimeMillis()),
         lastLogin = null
     )
 
@@ -57,7 +66,7 @@ class UserServiceImplTest {
         every { passwordService.validatePasswordStrength(password) } returns Unit.right()
         every { passwordService.hashPassword(password) } returns hashedPassword
 
-        coEvery { userDao.insertUser(username, hashedPassword, email) } returns testUser.copy(
+        coEvery { userDao.insertUser(username, hashedPassword, email) } returns testUserEntity.copy(
             username = username,
             passwordHash = hashedPassword,
             email = email
@@ -70,8 +79,8 @@ class UserServiceImplTest {
         assertTrue(result.isRight())
         val user = result.getOrNull()!!
         assertEquals(username, user.username)
-        assertEquals(hashedPassword, user.passwordHash)
         assertEquals(email, user.email)
+        // Note: User model doesn't expose passwordHash for security
 
         verify { passwordService.validatePasswordStrength(password) }
         verify { passwordService.hashPassword(password) }
@@ -176,14 +185,17 @@ class UserServiceImplTest {
     fun `getUserByUsername should return user when found`() = runTest {
         // Given
         val username = "testuser"
-        coEvery { userDao.getUserByUsername(username) } returns testUser.right()
+        coEvery { userDao.getUserByUsername(username) } returns testUserEntity.right()
 
         // When
         val result = userService.getUserByUsername(username)
 
         // Then
         assertTrue(result.isRight())
-        assertEquals(testUser, result.getOrNull())
+        val user = result.getOrNull()!!
+        assertEquals(testUser.id, user.id)
+        assertEquals(testUser.username, user.username)
+        assertEquals(testUser.email, user.email)
     }
 
     @Test
@@ -204,14 +216,17 @@ class UserServiceImplTest {
     fun `getUserById should return user when found`() = runTest {
         // Given
         val userId = 1L
-        coEvery { userDao.getUserById(userId) } returns testUser.right()
+        coEvery { userDao.getUserById(userId) } returns testUserEntity.right()
 
         // When
         val result = userService.getUserById(userId)
 
         // Then
         assertTrue(result.isRight())
-        assertEquals(testUser, result.getOrNull())
+        val user = result.getOrNull()!!
+        assertEquals(testUser.id, user.id)
+        assertEquals(testUser.username, user.username)
+        assertEquals(testUser.email, user.email)
     }
 
     @Test
@@ -259,13 +274,15 @@ class UserServiceImplTest {
     @Test
     fun `getAllUsers should return all users`() = runTest {
         // Given
-        val users = listOf(testUser, testUser.copy(id = 2L, username = "user2"))
-        coEvery { userDao.getAllUsers() } returns users
+        val userEntities = listOf(testUserEntity, testUserEntity.copy(id = 2L, username = "user2"))
+        coEvery { userDao.getAllUsers() } returns userEntities
 
         // When
         val result = userService.getAllUsers()
 
         // Then
-        assertEquals(users, result)
+        assertEquals(2, result.size)
+        assertEquals(testUser.username, result[0].username)
+        assertEquals("user2", result[1].username)
     }
 }

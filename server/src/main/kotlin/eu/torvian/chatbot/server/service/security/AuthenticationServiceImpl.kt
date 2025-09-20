@@ -8,8 +8,11 @@ import arrow.core.raise.withError
 import com.auth0.jwt.exceptions.JWTDecodeException
 import com.auth0.jwt.exceptions.JWTVerificationException
 import eu.torvian.chatbot.server.data.dao.UserSessionDao
+import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.error.UserSessionError
+import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.entities.UserSessionEntity
+import eu.torvian.chatbot.server.data.entities.mappers.toUser
 import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.domain.security.LoginResult
 import eu.torvian.chatbot.server.domain.security.UserContext
@@ -21,6 +24,7 @@ import eu.torvian.chatbot.server.service.security.error.RefreshTokenError
 import eu.torvian.chatbot.server.service.security.error.TokenValidationError
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
 import kotlinx.datetime.Instant
+import kotlinx.datetime.Clock
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 
@@ -38,6 +42,7 @@ class AuthenticationServiceImpl(
     private val passwordService: PasswordService,
     private val jwtConfig: JwtConfig,
     private val userSessionDao: UserSessionDao,
+    private val userDao: UserDao,
     private val transactionScope: TransactionScope
 ) : AuthenticationService {
 
@@ -52,44 +57,42 @@ class AuthenticationServiceImpl(
                 logger.info("Attempting login for user: $username")
 
                 // Get user by username
-                val user = withError({ _: UserNotFoundError.ByUsername ->
+                val userEntity = withError({ _: UserError.UserNotFoundByUsername ->
                     LoginError.UserNotFound
                 }) {
-                    userService.getUserByUsername(username).bind()
+                    userDao.getUserByUsername(username).bind()
                 }
 
                 // Verify password
-                if (!passwordService.verifyPassword(password, user.passwordHash)) {
+                if (!passwordService.verifyPassword(password, userEntity.passwordHash)) {
                     logger.warn("Invalid password for user: $username")
                     raise(LoginError.InvalidCredentials)
                 }
 
                 // Create new session
-                val sessionExpiresAt = System.currentTimeMillis() + (SESSION_EXTENSION_HOURS * 60 * 60 * 1000)
+                val sessionExpiresAt = Clock.System.now().toEpochMilliseconds() + (SESSION_EXTENSION_HOURS * 60 * 60 * 1000)
                 val session: UserSessionEntity = withError({ _: UserSessionError.ForeignKeyViolation ->
                     LoginError.UserNotFound
                 }) {
-                    userSessionDao.insertSession(user.id, sessionExpiresAt).bind()
+                    userSessionDao.insertSession(userEntity.id, sessionExpiresAt).bind()
                 }
 
                 // Generate tokens
-                val accessToken = jwtConfig.generateAccessToken(user.id, session.id)
-                val refreshToken = jwtConfig.generateRefreshToken(user.id, session.id)
-                val tokenExpiresAt = jwtConfig.getTokenExpirationInstant()
+                val accessToken = jwtConfig.generateAccessToken(userEntity.id, session.id)
+                val refreshToken = jwtConfig.generateRefreshToken(userEntity.id, session.id)
 
                 // Update last login
-                userService.updateLastLogin(user.id).mapLeft {
-                    // Log warning but don't fail the login
+                userService.updateLastLogin(userEntity.id).mapLeft {
                     logger.warn("Failed to update last login for user: $username")
+                    // Don't fail the login if updating last login fails
                 }
 
-                logger.info("Successfully logged in user: $username (ID: ${user.id})")
-
+                logger.info("Successful login for user: $username")
                 LoginResult(
-                    user = user,
+                    user = userEntity.toUser(),
                     accessToken = accessToken,
                     refreshToken = refreshToken,
-                    expiresAt = tokenExpiresAt
+                    expiresAt = jwtConfig.getTokenExpirationInstant()
                 )
             }
         }
