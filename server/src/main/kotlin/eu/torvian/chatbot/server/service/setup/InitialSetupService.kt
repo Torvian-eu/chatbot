@@ -16,9 +16,11 @@ import org.mindrot.jbcrypt.BCrypt
  * Service responsible for performing initial database setup for the user accounts system.
  *
  * This service creates the essential data required for the multi-user system to function:
- * - The special "All Users" group that all users belong to
- * - The initial administrator user account
- * - Basic roles and permissions
+ * - The initial administrator user account with full system access
+ * - Basic roles and permissions for the authorization system
+ *
+ * Note: All users automatically belong to the virtual "All Users" group which requires
+ * no database storage or explicit membership management.
  */
 class InitialSetupService(
     private val userDao: UserDao,
@@ -47,40 +49,25 @@ class InitialSetupService(
                     return@transaction existingUsers.first().right()
                 }
 
-                // 1. Create the special "All Users" group
-                val allUsersGroupId = createAllUsersGroup()
-
-                // 2. Create basic roles
+                // 1. Create basic roles
                 val adminRoleId = createRole(ADMIN_ROLE_NAME, "Administrator with full system access")
                 val standardUserRoleId = createRole(STANDARD_USER_ROLE_NAME, "Standard user with basic access")
 
-                // 3. Create basic permissions and assign to roles
+                // 2. Create basic permissions and assign to roles
                 createBasicPermissions(adminRoleId, standardUserRoleId)
 
-                // 4. Create the initial admin user
+                // 3. Create the initial admin user
                 val adminUser = createInitialAdminUser().bind()
 
-                // 5. Assign admin role to the admin user
+                // 4. Assign admin role to the admin user
                 assignRoleToUser(adminUser.id, adminRoleId)
 
-                // 6. Add admin user to the "All Users" group
-                addUserToGroup(adminUser.id, allUsersGroupId)
+                // Note: Admin user is automatically a member of the virtual "All Users" group
 
                 adminUser
             }
         }
 
-
-    /**
-     * Creates the special "All Users" group that all users will belong to.
-     */
-    private fun createAllUsersGroup(): Long {
-        val insertStatement = UserGroupsTable.insert {
-            it[name] = ALL_USERS_GROUP_NAME
-            it[description] = "Special group that contains all users. Used for public resource sharing."
-        }
-        return insertStatement[UserGroupsTable.id].value
-    }
 
     /**
      * Creates a role with the given name and description.
@@ -96,7 +83,7 @@ class InitialSetupService(
     /**
      * Creates basic permissions and assigns them to roles.
      */
-    private suspend fun createBasicPermissions(adminRoleId: Long, standardUserRoleId: Long) {
+    private fun createBasicPermissions(adminRoleId: Long, standardUserRoleId: Long) {
         // Create permissions
         val manageUsersPermId = createPermission("manage", "users")
         val createPublicProviderPermId = createPermission("create", "public_provider")
@@ -110,6 +97,7 @@ class InitialSetupService(
         assignPermissionToRole(adminRoleId, createPublicSettingsPermId)
 
         // Standard users get no special permissions by default
+        // standardUserRoleId parameter kept for future extensibility
     }
 
     /**
@@ -160,16 +148,6 @@ class InitialSetupService(
         UserRoleAssignmentsTable.insert {
             it[UserRoleAssignmentsTable.userId] = userId
             it[UserRoleAssignmentsTable.roleId] = roleId
-        }
-    }
-
-    /**
-     * Adds a user to a group.
-     */
-    private fun addUserToGroup(userId: Long, groupId: Long) {
-        UserGroupMembershipsTable.insert {
-            it[UserGroupMembershipsTable.userId] = userId
-            it[UserGroupMembershipsTable.groupId] = groupId
         }
     }
 
