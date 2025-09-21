@@ -8,10 +8,10 @@ import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import com.auth0.jwt.exceptions.JWTDecodeException
 import com.auth0.jwt.exceptions.JWTVerificationException
-import eu.torvian.chatbot.server.data.dao.UserSessionDao
 import eu.torvian.chatbot.server.data.dao.UserDao
-import eu.torvian.chatbot.server.data.dao.error.UserSessionError
+import eu.torvian.chatbot.server.data.dao.UserSessionDao
 import eu.torvian.chatbot.server.data.dao.error.UserError
+import eu.torvian.chatbot.server.data.dao.error.UserSessionError
 import eu.torvian.chatbot.server.data.entities.UserSessionEntity
 import eu.torvian.chatbot.server.data.entities.mappers.toUser
 import eu.torvian.chatbot.server.domain.security.JwtConfig
@@ -24,11 +24,12 @@ import eu.torvian.chatbot.server.service.security.error.LogoutError
 import eu.torvian.chatbot.server.service.security.error.RefreshTokenError
 import eu.torvian.chatbot.server.service.security.error.TokenValidationError
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
-import io.ktor.server.auth.jwt.JWTCredential
-import kotlinx.datetime.Instant
+import io.ktor.server.auth.jwt.*
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Implementation of [AuthenticationService] with JWT token generation and validation.
@@ -50,7 +51,6 @@ class AuthenticationServiceImpl(
 
     companion object {
         private val logger: Logger = LogManager.getLogger(AuthenticationServiceImpl::class.java)
-        private const val SESSION_EXTENSION_HOURS = 24L * 7 // 7 days
     }
 
     override suspend fun login(username: String, password: String): Either<LoginError, LoginResult> =
@@ -72,7 +72,9 @@ class AuthenticationServiceImpl(
                 }
 
                 // Create new session
-                val sessionExpiresAt = Clock.System.now().toEpochMilliseconds() + (SESSION_EXTENSION_HOURS * 60 * 60 * 1000)
+                val currentTime = Clock.System.now()
+                val sessionExpirationMs = jwtConfig.refreshExpirationMs
+                val sessionExpiresAt = currentTime.toEpochMilliseconds() + sessionExpirationMs
                 val session: UserSessionEntity = withError({ _: UserSessionError.ForeignKeyViolation ->
                     LoginError.UserNotFound
                 }) {
@@ -80,8 +82,16 @@ class AuthenticationServiceImpl(
                 }
 
                 // Generate tokens
-                val accessToken = jwtConfig.generateAccessToken(userEntity.id, session.id)
-                val refreshToken = jwtConfig.generateRefreshToken(userEntity.id, session.id)
+                val accessToken = jwtConfig.generateAccessToken(
+                    userId = userEntity.id,
+                    sessionId = session.id,
+                    currentTime = currentTime.toEpochMilliseconds()
+                )
+                val refreshToken = jwtConfig.generateRefreshToken(
+                    userId = userEntity.id,
+                    sessionId = session.id,
+                    currentTime = currentTime.toEpochMilliseconds()
+                )
 
                 // Update last login
                 userService.updateLastLogin(userEntity.id).mapLeft {
@@ -94,7 +104,7 @@ class AuthenticationServiceImpl(
                     user = userEntity.toUser(),
                     accessToken = accessToken,
                     refreshToken = refreshToken,
-                    expiresAt = jwtConfig.getTokenExpirationInstant()
+                    expiresAt = Instant.fromEpochMilliseconds(sessionExpiresAt)
                 )
             }
         }
@@ -175,13 +185,33 @@ class AuthenticationServiceImpl(
                     userService.getUserById(userId).bind()
                 }
 
-                // Generate new tokens
-                val newAccessToken = jwtConfig.generateAccessToken(userId, sessionId)
-                val newRefreshToken = jwtConfig.generateRefreshToken(userId, sessionId)
-                val tokenExpiresAt = jwtConfig.getTokenExpirationInstant()
+                // Delete old session
+                withError({ _: UserSessionError.SessionNotFound ->
+                    RefreshTokenError.InvalidSession("Session not found")
+                }) {
+                    userSessionDao.deleteSession(sessionId).bind()
+                }
 
-                // Update session last accessed time
-                userSessionDao.updateLastAccessed(sessionId, currentTime.toEpochMilliseconds())
+                // Create new session
+                val newSessionExpirationMs = jwtConfig.refreshExpirationMs
+                val newSessionExpiresAt = currentTime.toEpochMilliseconds() + newSessionExpirationMs
+                val newSession = withError({ _: UserSessionError.ForeignKeyViolation ->
+                    RefreshTokenError.InvalidSession("User not found")
+                }) {
+                    userSessionDao.insertSession(userId, newSessionExpiresAt).bind()
+                }
+
+                // Generate new tokens
+                val newAccessToken = jwtConfig.generateAccessToken(
+                    userId = userId,
+                    sessionId = newSession.id,
+                    currentTime = currentTime.toEpochMilliseconds()
+                )
+                val newRefreshToken = jwtConfig.generateRefreshToken(
+                    userId = userId,
+                    sessionId = newSession.id,
+                    currentTime = currentTime.toEpochMilliseconds())
+                val tokenExpiresAt = currentTime.plus(jwtConfig.tokenExpirationMs.milliseconds)
 
                 logger.info("Successfully refreshed tokens for user: $userId")
 

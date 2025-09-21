@@ -129,27 +129,6 @@ class JwtConfigTest {
     }
 
     @Test
-    fun `generateRefreshToken should use custom expiration time`() {
-        // Given
-        val userId = 123L
-        val sessionId = 456L
-        val customExpirationMs = 60 * 60 * 1000L // 1 hour
-
-        // When
-        val token = jwtConfig.generateRefreshToken(userId, sessionId, customExpirationMs)
-
-        // Then
-        val decodedJWT = jwtConfig.verifier.verify(token)
-        val issuedAt = decodedJWT.issuedAt.time
-        val expiresAt = decodedJWT.expiresAt.time
-        val actualExpirationMs = expiresAt - issuedAt
-
-        // Allow small tolerance for execution time
-        assertTrue(actualExpirationMs >= customExpirationMs - 1000)
-        assertTrue(actualExpirationMs <= customExpirationMs + 1000)
-    }
-
-    @Test
     fun `default configuration should have reasonable values`() {
         // Given
         val defaultConfig = JwtConfig(secret = "test-secret")

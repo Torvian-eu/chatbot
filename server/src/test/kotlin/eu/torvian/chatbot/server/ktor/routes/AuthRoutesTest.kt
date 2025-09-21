@@ -9,6 +9,7 @@ import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.User
 import eu.torvian.chatbot.common.models.auth.LoginRequest
 import eu.torvian.chatbot.common.models.auth.LoginResponse
+import eu.torvian.chatbot.common.models.auth.RefreshTokenRequest
 import eu.torvian.chatbot.common.models.auth.RegisterRequest
 import eu.torvian.chatbot.server.data.entities.UserEntity
 import eu.torvian.chatbot.server.service.security.PasswordService
@@ -29,6 +30,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 
 /**
@@ -368,6 +370,101 @@ class AuthRoutesTest {
 
         // Assert
         assertEquals(HttpStatusCode.Unauthorized, response.status)
+    }
+
+    // ========== Refresh Token Tests ==========
+
+    @Test
+    fun `POST auth refresh - successful refresh returns 200 with new tokens`() = authTestApplication {
+        // Arrange
+        testDataManager.setup(
+            TestDataSet(
+                chatGroups = listOf(testGroup)
+            )
+        )
+
+        // Get the password service from DI container and hash the password properly
+        val passwordService: PasswordService = container.get()
+        val plainPassword = "correctPassword"
+        val hashedPassword = passwordService.hashPassword(plainPassword)
+
+        val testUserWithHashedPassword = testUser.copy(passwordHash = hashedPassword)
+        testDataManager.insertUser(testUserWithHashedPassword)
+
+        // Login to get a refresh token
+        val loginRequest = LoginRequest(
+            username = testUser.username,
+            password = plainPassword
+        )
+
+        val loginResponse = client.post(href(AuthResource.Login())) {
+            contentType(ContentType.Application.Json)
+            setBody(loginRequest)
+        }
+        assertEquals(HttpStatusCode.OK, loginResponse.status) // Ensure login succeeds
+        val loginResult = loginResponse.body<LoginResponse>()
+        val refreshRequest = RefreshTokenRequest(refreshToken = loginResult.refreshToken)
+
+        // Act
+        val response = client.post(href(AuthResource.Refresh())) {
+            contentType(ContentType.Application.Json)
+            setBody(refreshRequest)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.OK, response.status)
+        val refreshResponse = response.body<LoginResponse>()
+        assertEquals(testUser.username, refreshResponse.user.username)
+        assertEquals(testUser.email, refreshResponse.user.email)
+        assertNotNull(refreshResponse.accessToken)
+        assertNotNull(refreshResponse.refreshToken)
+        assertNotNull(refreshResponse.expiresAt)
+        // The new tokens should be different from the original ones
+        assertNotEquals(loginResult.accessToken, refreshResponse.accessToken)
+        assertNotEquals(loginResult.refreshToken, refreshResponse.refreshToken)
+    }
+
+    @Test
+    fun `POST auth refresh - with invalid refresh token returns 401`() = authTestApplication {
+        // Arrange
+        val refreshRequest = RefreshTokenRequest(refreshToken = "invalid.refresh.token")
+
+        // Act
+        val response = client.post(href(AuthResource.Refresh())) {
+            contentType(ContentType.Application.Json)
+            setBody(refreshRequest)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.INVALID_CREDENTIALS.code, error.code)
+        assertEquals("Invalid refresh token", error.message)
+    }
+
+    @Test
+    fun `POST auth refresh - with access token instead of refresh token returns 401`() = authTestApplication {
+        // Arrange
+        testDataManager.setup(
+            TestDataSet(
+                chatGroups = listOf(testGroup)
+            )
+        )
+
+        val authToken = authHelper.createUserAndGetToken(testUser)
+        val refreshRequest = RefreshTokenRequest(refreshToken = authToken) // Using access token instead
+
+        // Act
+        val response = client.post(href(AuthResource.Refresh())) {
+            contentType(ContentType.Application.Json)
+            setBody(refreshRequest)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.INVALID_CREDENTIALS.code, error.code)
+        assertEquals("Invalid refresh token", error.message)
     }
 
     // ========== Get Current User Tests ==========

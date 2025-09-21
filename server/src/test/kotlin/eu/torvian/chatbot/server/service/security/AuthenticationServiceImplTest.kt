@@ -18,7 +18,7 @@ import eu.torvian.chatbot.server.service.security.error.LoginError
 import eu.torvian.chatbot.server.service.security.error.LogoutError
 import eu.torvian.chatbot.server.service.security.error.RefreshTokenError
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
-import io.ktor.server.auth.jwt.JWTCredential
+import io.ktor.server.auth.jwt.*
 import io.mockk.*
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Instant
@@ -93,7 +93,7 @@ class AuthenticationServiceImplTest {
         val loginResult = result.getOrNull()!!
         assertEquals(testUser.toUser(), loginResult.user)
         assertTrue(loginResult.accessToken.isNotEmpty())
-        assertEquals(loginResult.refreshToken?.isNotEmpty(), true)
+        assertEquals(loginResult.refreshToken.isNotEmpty(), true)
 
         coVerify { userDao.getUserByUsername(username) }
         verify { passwordService.verifyPassword(password, testUser.passwordHash) }
@@ -264,9 +264,6 @@ class AuthenticationServiceImplTest {
 
     @Test
     fun `validateCredential should return null for credential with invalid claims`() = runTest {
-        // Given - create a token with missing sessionId claim using JwtConfig's public interface
-        val validToken = jwtConfig.generateAccessToken(testUser.id, testSession.id)
-
         // Create a new token without sessionId by manually creating it
         // We'll use a completely invalid subject to simulate invalid claims
         val tokenWithInvalidClaims = JWT.create()
@@ -296,6 +293,8 @@ class AuthenticationServiceImplTest {
         coEvery { userSessionDao.getSessionById(testSession.id) } returns testSession.right()
         coEvery { userService.getUserById(testUser.id) } returns testUser.toUser().right()
         coEvery { userSessionDao.updateLastAccessed(testSession.id, any()) } returns Unit.right()
+        coEvery { userSessionDao.deleteSession(testSession.id) } returns Unit.right()
+        coEvery { userSessionDao.insertSession(testUser.id, any()) } returns testSession.right()
 
         // When
         val result = authService.refreshToken(refreshToken)
@@ -305,7 +304,7 @@ class AuthenticationServiceImplTest {
         val loginResult = result.getOrNull()!!
         assertEquals(testUser.toUser(), loginResult.user)
         assertTrue(loginResult.accessToken.isNotEmpty())
-        assertEquals(loginResult.refreshToken?.isNotEmpty(), true)
+        assertEquals(loginResult.refreshToken.isNotEmpty(), true)
     }
 
     @Test

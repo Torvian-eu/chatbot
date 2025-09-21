@@ -11,12 +11,12 @@ import kotlinx.datetime.Instant
  * 
  * @property user The authenticated user
  * @property accessToken The JWT access token for API authentication
- * @property refreshToken Optional JWT refresh token for obtaining new access tokens
+ * @property refreshToken The JWT refresh token for obtaining new access tokens
  * @property expiresAt When the access token expires
  */
 data class LoginResult(
     val user: User,
     val accessToken: String,
-    val refreshToken: String?,
+    val refreshToken: String,
     val expiresAt: Instant
 )

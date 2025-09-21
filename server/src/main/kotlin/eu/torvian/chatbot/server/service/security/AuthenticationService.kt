@@ -63,6 +63,7 @@ interface AuthenticationService {
      * 1. Validates the refresh token
      * 2. Checks if the associated session is still valid
      * 3. Generates new access and refresh tokens
+     * 4. Deletes the old session and creates a new one
      *
      * @param refreshToken The JWT refresh token
      * @return Either [RefreshTokenError] if refresh fails, or [LoginResult] with new tokens

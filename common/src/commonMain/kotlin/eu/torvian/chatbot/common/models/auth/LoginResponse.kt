@@ -9,13 +9,13 @@ import kotlinx.serialization.Serializable
  *
  * @property user The authenticated user information
  * @property accessToken JWT access token for API authentication
- * @property refreshToken Optional JWT refresh token for obtaining new access tokens
+ * @property refreshToken The JWT refresh token for obtaining new access tokens
  * @property expiresAt When the access token expires
  */
 @Serializable
 data class LoginResponse(
     val user: User,
     val accessToken: String,
-    val refreshToken: String? = null,
+    val refreshToken: String,
     val expiresAt: Instant
 )

@@ -23,7 +23,8 @@ data class JwtConfig(
     val audience: String = "chatbot-users", 
     val realm: String = "chatbot-realm",
     val secret: String,
-    val tokenExpirationMs: Long = 24 * 60 * 60 * 1000L // 24 hours
+    val tokenExpirationMs: Long = 24 * 60 * 60 * 1000L, // 24 hours
+    val refreshExpirationMs: Long = 7 * 24 * 60 * 60 * 1000L // 7 days
 ) {
     private val algorithm: Algorithm = Algorithm.HMAC256(secret)
 
@@ -41,17 +42,21 @@ data class JwtConfig(
      * 
      * @param userId The unique identifier of the user
      * @param sessionId The unique identifier of the user session (for token revocation)
+     * @param currentTime The current timestamp (epoch milliseconds)
      * @return A signed JWT token string
      */
-    fun generateAccessToken(userId: Long, sessionId: Long): String {
-        val now = System.currentTimeMillis()
+    fun generateAccessToken(
+        userId: Long,
+        sessionId: Long,
+        currentTime: Long = System.currentTimeMillis()
+    ): String {
         return JWT.create()
             .withIssuer(issuer)
             .withAudience(audience)
             .withSubject(userId.toString())
             .withClaim("sessionId", sessionId)
-            .withIssuedAt(Date(now))
-            .withExpiresAt(Date(now + tokenExpirationMs))
+            .withIssuedAt(Date(currentTime))
+            .withExpiresAt(Date(currentTime + tokenExpirationMs))
             .sign(algorithm)
     }
 
@@ -62,23 +67,22 @@ data class JwtConfig(
      * 
      * @param userId The unique identifier of the user
      * @param sessionId The unique identifier of the user session
-     * @param refreshExpirationMs Custom expiration time for refresh token (defaults to 7 days)
+     * @param currentTime The current timestamp (epoch milliseconds)
      * @return A signed JWT refresh token string
      */
     fun generateRefreshToken(
         userId: Long, 
         sessionId: Long,
-        refreshExpirationMs: Long = 7 * 24 * 60 * 60 * 1000L // 7 days
+        currentTime: Long = System.currentTimeMillis()
     ): String {
-        val now = System.currentTimeMillis()
         return JWT.create()
             .withIssuer(issuer)
             .withAudience(audience)
             .withSubject(userId.toString())
             .withClaim("sessionId", sessionId)
             .withClaim("tokenType", "refresh")
-            .withIssuedAt(Date(now))
-            .withExpiresAt(Date(now + refreshExpirationMs))
+            .withIssuedAt(Date(currentTime))
+            .withExpiresAt(Date(currentTime + refreshExpirationMs))
             .sign(algorithm)
     }
 
