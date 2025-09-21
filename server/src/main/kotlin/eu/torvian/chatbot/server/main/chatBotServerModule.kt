@@ -26,7 +26,7 @@ fun Application.chatBotServerModule() {
     configureKoin()
 
     // Configure Ktor (general plugins like content negotiation, status pages, etc.)
-    configureKtor(get())
+    configureKtor(get(), get())
 
     // Configure CORS
     // This allows the WASM app to make requests to the server.

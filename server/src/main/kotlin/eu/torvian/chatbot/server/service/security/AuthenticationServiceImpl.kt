@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.service.security
 
 import arrow.core.Either
+import arrow.core.getOrElse
 import arrow.core.raise.catch
 import arrow.core.raise.either
 import arrow.core.raise.ensure
@@ -23,6 +24,7 @@ import eu.torvian.chatbot.server.service.security.error.LogoutError
 import eu.torvian.chatbot.server.service.security.error.RefreshTokenError
 import eu.torvian.chatbot.server.service.security.error.TokenValidationError
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import io.ktor.server.auth.jwt.JWTCredential
 import kotlinx.datetime.Instant
 import kotlinx.datetime.Clock
 import org.apache.logging.log4j.LogManager
@@ -114,74 +116,6 @@ class AuthenticationServiceImpl(
             }
         }
 
-    override suspend fun validateToken(token: String): Either<TokenValidationError, UserContext> =
-        transactionScope.transaction {
-            either {
-                // First, decode and verify the JWT token
-                val decodedJWT = catch({
-                    jwtConfig.verifier.verify(token)
-                }) { e ->
-                    when (e) {
-                        is JWTDecodeException -> {
-                            logger.debug("JWT decode failed", e)
-                            raise(TokenValidationError.MalformedToken)
-                        }
-
-                        is JWTVerificationException -> {
-                            logger.debug("JWT verification failed", e)
-                            raise(TokenValidationError.InvalidSignature)
-                        }
-
-                        else -> {
-                            logger.error("Unexpected error during token validation", e)
-                            raise(TokenValidationError.InvalidToken)
-                        }
-                    }
-                }
-
-                // Extract claims
-                val userId = decodedJWT.subject?.toLongOrNull()
-                    ?: raise(TokenValidationError.InvalidClaims)
-
-                val sessionId = decodedJWT.getClaim("sessionId")?.asLong()
-                    ?: raise(TokenValidationError.InvalidClaims)
-
-                val issuedAt = Instant.fromEpochMilliseconds(decodedJWT.issuedAt?.time ?: 0L)
-                val expiresAt = Instant.fromEpochMilliseconds(decodedJWT.expiresAt?.time ?: 0L)
-
-                // Validate session exists
-                val session = withError({ _: UserSessionError.SessionNotFound ->
-                    TokenValidationError.InvalidSession("Session not found")
-                }) {
-                    userSessionDao.getSessionById(sessionId).bind()
-                }
-
-                // Validate session is not expired
-                val currentTime = Instant.fromEpochMilliseconds(System.currentTimeMillis())
-                ensure(session.expiresAt > currentTime) {
-                    TokenValidationError.InvalidSession("Session expired")
-                }
-
-                // Get user details
-                val user = withError({ _: UserNotFoundError.ById ->
-                    TokenValidationError.InvalidSession("User not found")
-                }) {
-                    userService.getUserById(userId).bind()
-                }
-
-                // Update session last accessed time
-                userSessionDao.updateLastAccessed(sessionId, currentTime.toEpochMilliseconds())
-
-                UserContext(
-                    user = user,
-                    sessionId = sessionId,
-                    tokenIssuedAt = issuedAt,
-                    tokenExpiresAt = expiresAt
-                )
-            }
-        }
-
-
     override suspend fun refreshToken(refreshToken: String): Either<RefreshTokenError, LoginResult> =
         transactionScope.transaction {
             either {
@@ -259,4 +193,55 @@ class AuthenticationServiceImpl(
                 )
             }
         }
+
+    override suspend fun validateCredential(credential: JWTCredential): UserContext? = transactionScope.transaction {
+        either {
+            logger.debug("Validating JWT credential for subject: ${credential.payload.subject}")
+            // Ktor already verified the signature and expiration. We validate the business logic.
+
+            // Extract claims from the payload
+            val userId = credential.payload.subject?.toLongOrNull()
+                ?: raise(TokenValidationError.InvalidClaims)
+            val sessionId = credential.payload.getClaim("sessionId")?.asLong()
+                ?: raise(TokenValidationError.InvalidClaims)
+            val issuedAt = Instant.fromEpochMilliseconds(credential.payload.issuedAt?.time ?: 0L)
+            val expiresAt = Instant.fromEpochMilliseconds(credential.payload.expiresAt?.time ?: 0L)
+
+            // Validate session exists in the database
+            val session = withError({ _: UserSessionError.SessionNotFound ->
+                TokenValidationError.InvalidSession("Session not found")
+            }) {
+                userSessionDao.getSessionById(sessionId).bind()
+            }
+
+            // Validate session is not expired
+            val currentTime = Instant.fromEpochMilliseconds(System.currentTimeMillis())
+            ensure(session.expiresAt > currentTime) {
+                TokenValidationError.InvalidSession("Session expired")
+            }
+
+            // Get user details
+            val user = withError({ _: UserNotFoundError.ById ->
+                TokenValidationError.InvalidSession("User not found for session")
+            }) {
+                userService.getUserById(userId).bind()
+            }
+
+            // Update session last accessed time
+            userSessionDao.updateLastAccessed(sessionId, currentTime.toEpochMilliseconds())
+
+            val userContext = UserContext(
+                user = user,
+                sessionId = sessionId,
+                tokenIssuedAt = issuedAt,
+                tokenExpiresAt = expiresAt
+            )
+
+            logger.debug("Credential validation successful for user: ${user.username}")
+            userContext
+        }.getOrElse {  // Return UserContext on success, null on any validation error
+            logger.debug("Credential validation failed: {}", it)
+            null
+        }
+    }
 }

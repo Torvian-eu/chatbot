@@ -7,6 +7,7 @@ import eu.torvian.chatbot.common.models.auth.LoginRequest
 import eu.torvian.chatbot.common.models.auth.RegisterRequest
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.domain.security.mappers.toLoginResponse
+import eu.torvian.chatbot.server.ktor.auth.getUserContext
 import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.service.core.UserService
 import eu.torvian.chatbot.server.service.core.error.auth.RegisterUserError
@@ -17,6 +18,7 @@ import eu.torvian.chatbot.server.service.security.error.LogoutError
 import io.ktor.http.*
 import io.ktor.server.auth.*
 import io.ktor.server.request.*
+import io.ktor.server.response.*
 import io.ktor.server.resources.*
 import io.ktor.server.routing.Route
 
@@ -102,15 +104,7 @@ fun Route.configureAuthRoutes(
     // GET /api/v1/auth/me - Get current user profile
     authenticate(AuthSchemes.USER_JWT) {
         get<AuthResource.Me> {
-            val userId = call.getUserId()
-            call.respondEither(
-                userService.getUserById(userId)
-            ) { error ->
-                when (error) {
-                    is UserNotFoundError.ById ->
-                        apiError(CommonApiErrorCodes.NOT_FOUND, "User not found")
-                }
-            }
+            call.respond(call.getUserContext().user)
         }
     }
 }

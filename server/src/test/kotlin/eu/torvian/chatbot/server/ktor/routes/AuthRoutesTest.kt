@@ -417,7 +417,7 @@ class AuthRoutesTest {
     }
 
     @Test
-    fun `GET auth me - with token for non-existent user returns 404`() = authTestApplication {
+    fun `GET auth me - with token for non-existent user returns 401`() = authTestApplication {
         // Arrange - Create token for user that doesn't exist in database
         val authToken = authHelper.generateToken(999L, 1L)
 
@@ -427,9 +427,6 @@ class AuthRoutesTest {
         }
 
         // Assert
-        assertEquals(HttpStatusCode.NotFound, response.status)
-        val error = response.body<ApiError>()
-        assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
-        assertEquals("User not found", error.message)
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
     }
 }

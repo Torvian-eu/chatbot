@@ -2,6 +2,8 @@ package eu.torvian.chatbot.server.service.security
 
 import arrow.core.left
 import arrow.core.right
+import com.auth0.jwt.JWT
+import com.auth0.jwt.algorithms.Algorithm
 import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.UserSessionDao
 import eu.torvian.chatbot.server.data.dao.error.UserError
@@ -11,17 +13,20 @@ import eu.torvian.chatbot.server.data.entities.UserSessionEntity
 import eu.torvian.chatbot.server.data.entities.mappers.toUser
 import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.service.core.UserService
+import eu.torvian.chatbot.server.service.core.error.auth.UserNotFoundError
 import eu.torvian.chatbot.server.service.security.error.LoginError
 import eu.torvian.chatbot.server.service.security.error.LogoutError
 import eu.torvian.chatbot.server.service.security.error.RefreshTokenError
-import eu.torvian.chatbot.server.service.security.error.TokenValidationError
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import io.ktor.server.auth.jwt.JWTCredential
 import io.mockk.*
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Instant
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class AuthenticationServiceImplTest {
@@ -178,86 +183,109 @@ class AuthenticationServiceImplTest {
     }
 
     @Test
-    fun `validateToken should successfully validate valid token`() = runTest {
+    fun `validateCredential should successfully validate valid credential`() = runTest {
         // Given
         val token = jwtConfig.generateAccessToken(testUser.id, testSession.id)
+        val decodedJWT = JWT.decode(token)
+        val credential = JWTCredential(decodedJWT)
 
         coEvery { userSessionDao.getSessionById(testSession.id) } returns testSession.right()
         coEvery { userService.getUserById(testUser.id) } returns testUser.toUser().right()
         coEvery { userSessionDao.updateLastAccessed(testSession.id, any()) } returns Unit.right()
 
         // When
-        val result = authService.validateToken(token)
+        val result = authService.validateCredential(credential)
 
         // Then
-        assertTrue(result.isRight())
-        val userContext = result.getOrNull()!!
-        assertEquals(testUser.toUser(), userContext.user)
-        assertEquals(testSession.id, userContext.sessionId)
+        assertNotNull(result)
+        assertEquals(testUser.toUser(), result.user)
+        assertEquals(testSession.id, result.sessionId)
+
+        coVerify { userSessionDao.getSessionById(testSession.id) }
+        coVerify { userService.getUserById(testUser.id) }
+        coVerify { userSessionDao.updateLastAccessed(testSession.id, any()) }
     }
 
     @Test
-    fun `validateToken should return InvalidSignature for token with wrong signature`() = runTest {
-        // Given - create token with different secret
-        val wrongJwtConfig = JwtConfig(secret = "wrong-secret")
-        val token = wrongJwtConfig.generateAccessToken(testUser.id, testSession.id)
-
-        // When
-        val result = authService.validateToken(token)
-
-        // Then
-        assertTrue(result.isLeft())
-        assertEquals(TokenValidationError.InvalidSignature, result.leftOrNull())
-    }
-
-    @Test
-    fun `validateToken should return MalformedToken for invalid token format`() = runTest {
-        // Given
-        val invalidToken = "not.a.valid.jwt.token"
-
-        // When
-        val result = authService.validateToken(invalidToken)
-
-        // Then
-        assertTrue(result.isLeft())
-        assertEquals(TokenValidationError.MalformedToken, result.leftOrNull())
-    }
-
-    @Test
-    fun `validateToken should return InvalidSession when session not found`() = runTest {
+    fun `validateCredential should return null when session not found`() = runTest {
         // Given
         val token = jwtConfig.generateAccessToken(testUser.id, testSession.id)
+        val decodedJWT = JWT.decode(token)
+        val credential = JWTCredential(decodedJWT)
 
         coEvery { userSessionDao.getSessionById(testSession.id) } returns
                 UserSessionError.SessionNotFound(testSession.id).left()
 
         // When
-        val result = authService.validateToken(token)
+        val result = authService.validateCredential(credential)
 
         // Then
-        assertTrue(result.isLeft())
-        val error = result.leftOrNull()
-        assertTrue(error is TokenValidationError.InvalidSession)
-        assertTrue(error.reason.contains("Session not found"))
+        assertNull(result)
+        coVerify { userSessionDao.getSessionById(testSession.id) }
     }
 
     @Test
-    fun `validateToken should return InvalidSession when session expired`() = runTest {
+    fun `validateCredential should return null when session expired`() = runTest {
         // Given
         val expiredSession =
             testSession.copy(expiresAt = Instant.fromEpochMilliseconds(System.currentTimeMillis() - 1000))
         val token = jwtConfig.generateAccessToken(testUser.id, expiredSession.id)
+        val decodedJWT = JWT.decode(token)
+        val credential = JWTCredential(decodedJWT)
 
         coEvery { userSessionDao.getSessionById(expiredSession.id) } returns expiredSession.right()
 
         // When
-        val result = authService.validateToken(token)
+        val result = authService.validateCredential(credential)
 
         // Then
-        assertTrue(result.isLeft())
-        val error = result.leftOrNull()
-        assertTrue(error is TokenValidationError.InvalidSession)
-        assertTrue(error.reason.contains("Session expired"))
+        assertNull(result)
+        coVerify { userSessionDao.getSessionById(expiredSession.id) }
+    }
+
+    @Test
+    fun `validateCredential should return null when user not found`() = runTest {
+        // Given
+        val token = jwtConfig.generateAccessToken(testUser.id, testSession.id)
+        val decodedJWT = JWT.decode(token)
+        val credential = JWTCredential(decodedJWT)
+
+        coEvery { userSessionDao.getSessionById(testSession.id) } returns testSession.right()
+        coEvery { userService.getUserById(testUser.id) } returns UserNotFoundError.ById(testUser.id).left()
+
+        // When
+        val result = authService.validateCredential(credential)
+
+        // Then
+        assertNull(result)
+        coVerify { userSessionDao.getSessionById(testSession.id) }
+        coVerify { userService.getUserById(testUser.id) }
+    }
+
+    @Test
+    fun `validateCredential should return null for credential with invalid claims`() = runTest {
+        // Given - create a token with missing sessionId claim using JwtConfig's public interface
+        val validToken = jwtConfig.generateAccessToken(testUser.id, testSession.id)
+
+        // Create a new token without sessionId by manually creating it
+        // We'll use a completely invalid subject to simulate invalid claims
+        val tokenWithInvalidClaims = JWT.create()
+            .withSubject("invalid-subject") // This will cause toLongOrNull() to return null
+            .withIssuedAt(java.util.Date())
+            .withExpiresAt(java.util.Date(System.currentTimeMillis() + 3600000))
+            .withClaim("sessionId", testSession.id)
+            .withIssuer("chatbot-server")
+            .withAudience("chatbot-users")
+            .sign(Algorithm.HMAC256(jwtConfig.secret))
+
+        val decodedJWT = JWT.decode(tokenWithInvalidClaims)
+        val credential = JWTCredential(decodedJWT)
+
+        // When
+        val result = authService.validateCredential(credential)
+
+        // Then
+        assertNull(result)
     }
 
     @Test

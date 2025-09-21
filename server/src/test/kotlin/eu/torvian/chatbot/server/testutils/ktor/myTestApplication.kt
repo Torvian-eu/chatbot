@@ -44,7 +44,7 @@ fun myTestApplication(
                 attributes.put(DIContainerKey, container)
 
                 // Configure Ktor
-                configureKtor(container.get())
+                configureKtor(container.get(), container.get())
 
                 // Additional Ktor configuration
                 app()
