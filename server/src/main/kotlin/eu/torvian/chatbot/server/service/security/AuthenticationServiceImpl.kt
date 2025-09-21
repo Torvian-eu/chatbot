@@ -21,6 +21,7 @@ import eu.torvian.chatbot.server.service.core.UserService
 import eu.torvian.chatbot.server.service.core.error.auth.UserNotFoundError
 import eu.torvian.chatbot.server.service.security.error.LoginError
 import eu.torvian.chatbot.server.service.security.error.LogoutError
+import eu.torvian.chatbot.server.service.security.error.LogoutAllError
 import eu.torvian.chatbot.server.service.security.error.RefreshTokenError
 import eu.torvian.chatbot.server.service.security.error.TokenValidationError
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
@@ -109,17 +110,33 @@ class AuthenticationServiceImpl(
             }
         }
 
-    override suspend fun logout(userId: Long): Either<LogoutError, Unit> =
+    override suspend fun logout(sessionId: Long): Either<LogoutError, Unit> =
         transactionScope.transaction {
             either {
-                logger.info("Logging out user: $userId")
+                logger.info("Logging out session: $sessionId")
+
+                // Delete the specific session
+                withError({ _: UserSessionError.SessionNotFound ->
+                    LogoutError.SessionNotFound(sessionId)
+                }) {
+                    userSessionDao.deleteSession(sessionId).bind()
+                }
+
+                logger.info("Successfully logged out session: $sessionId")
+            }
+        }
+
+    override suspend fun logoutAll(userId: Long): Either<LogoutAllError, Unit> =
+        transactionScope.transaction {
+            either {
+                logger.info("Logging out all sessions for user: $userId")
 
                 // Delete all sessions for the user
                 val deletedCount = userSessionDao.deleteSessionsByUserId(userId)
 
                 if (deletedCount == 0) {
                     logger.warn("No sessions found for user: $userId")
-                    raise(LogoutError.SessionNotFound(userId))
+                    raise(LogoutAllError.NoSessionsFound(userId))
                 }
 
                 logger.info("Successfully logged out user: $userId (deleted $deletedCount sessions)")

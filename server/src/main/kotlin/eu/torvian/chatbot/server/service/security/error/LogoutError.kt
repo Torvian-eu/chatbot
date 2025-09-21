@@ -1,20 +1,25 @@
 package eu.torvian.chatbot.server.service.security.error
 
 /**
- * Sealed interface representing errors that can occur during user logout.
+ * Sealed interface representing errors that can occur during single session logout.
  */
 sealed interface LogoutError {
     /**
-     * User session was not found.
-     * 
-     * @property userId The user ID whose session was not found
+     * Session was not found.
+     *
+     * @property sessionId The session ID that was not found
      */
-    data class SessionNotFound(val userId: Long) : LogoutError
-    
+    data class SessionNotFound(val sessionId: Long) : LogoutError
+}
+
+/**
+ * Sealed interface representing errors that can occur during logout from all sessions.
+ */
+sealed interface LogoutAllError {
     /**
-     * Failed to invalidate the user session.
-     * 
-     * @property reason Description of the failure
+     * User has no sessions to log out from.
+     *
+     * @property userId The user ID who has no active sessions
      */
-    data class SessionInvalidationFailed(val reason: String) : LogoutError
+    data class NoSessionsFound(val userId: Long) : LogoutAllError
 }

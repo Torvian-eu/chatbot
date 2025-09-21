@@ -16,6 +16,7 @@ import eu.torvian.chatbot.server.service.core.UserService
 import eu.torvian.chatbot.server.service.core.error.auth.UserNotFoundError
 import eu.torvian.chatbot.server.service.security.error.LoginError
 import eu.torvian.chatbot.server.service.security.error.LogoutError
+import eu.torvian.chatbot.server.service.security.error.LogoutAllError
 import eu.torvian.chatbot.server.service.security.error.RefreshTokenError
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
 import io.ktor.server.auth.jwt.*
@@ -155,13 +156,41 @@ class AuthenticationServiceImplTest {
     }
 
     @Test
-    fun `logout should successfully delete user sessions`() = runTest {
+    fun `logout should successfully delete specific session`() = runTest {
+        // Given
+        val sessionId = 100L
+        coEvery { userSessionDao.deleteSession(sessionId) } returns Unit.right()
+
+        // When
+        val result = authService.logout(sessionId)
+
+        // Then
+        assertTrue(result.isRight())
+        coVerify { userSessionDao.deleteSession(sessionId) }
+    }
+
+    @Test
+    fun `logout should return SessionNotFound when session does not exist`() = runTest {
+        // Given
+        val sessionId = 100L
+        coEvery { userSessionDao.deleteSession(sessionId) } returns UserSessionError.SessionNotFound(sessionId).left()
+
+        // When
+        val result = authService.logout(sessionId)
+
+        // Then
+        assertTrue(result.isLeft())
+        assertEquals(LogoutError.SessionNotFound(sessionId), result.leftOrNull())
+    }
+
+    @Test
+    fun `logoutAll should successfully delete all user sessions`() = runTest {
         // Given
         val userId = 1L
         coEvery { userSessionDao.deleteSessionsByUserId(userId) } returns 2
 
         // When
-        val result = authService.logout(userId)
+        val result = authService.logoutAll(userId)
 
         // Then
         assertTrue(result.isRight())
@@ -169,17 +198,17 @@ class AuthenticationServiceImplTest {
     }
 
     @Test
-    fun `logout should return SessionNotFound when no sessions exist`() = runTest {
+    fun `logoutAll should return NoSessionsFound when no sessions exist for user`() = runTest {
         // Given
         val userId = 1L
         coEvery { userSessionDao.deleteSessionsByUserId(userId) } returns 0
 
         // When
-        val result = authService.logout(userId)
+        val result = authService.logoutAll(userId)
 
         // Then
         assertTrue(result.isLeft())
-        assertEquals(LogoutError.SessionNotFound(userId), result.leftOrNull())
+        assertEquals(LogoutAllError.NoSessionsFound(userId), result.leftOrNull())
     }
 
     @Test

@@ -372,6 +372,48 @@ class AuthRoutesTest {
         assertEquals(HttpStatusCode.Unauthorized, response.status)
     }
 
+    // ========== Logout All Tests ==========
+
+    @Test
+    fun `POST auth logout-all - successful logout from all sessions returns 204`() = authTestApplication {
+        // Arrange
+        testDataManager.setup(
+            TestDataSet(
+                chatGroups = listOf(testGroup)
+            )
+        )
+
+        val authToken = authHelper.createUserAndGetToken(testUser)
+
+        // Act
+        val response = client.post(href(AuthResource.LogoutAll())) {
+            authenticate(authToken)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.NoContent, response.status)
+    }
+
+    @Test
+    fun `POST auth logout-all - without authentication returns 401`() = authTestApplication {
+        // Act
+        val response = client.post(href(AuthResource.LogoutAll()))
+
+        // Assert
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
+    }
+
+    @Test
+    fun `POST auth logout-all - with invalid token returns 401`() = authTestApplication {
+        // Act
+        val response = client.post(href(AuthResource.LogoutAll())) {
+            authenticate("invalid.token.here")
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
+    }
+
     // ========== Refresh Token Tests ==========
 
     @Test

@@ -5,6 +5,7 @@ import eu.torvian.chatbot.server.domain.security.LoginResult
 import eu.torvian.chatbot.server.domain.security.UserContext
 import eu.torvian.chatbot.server.service.security.error.LoginError
 import eu.torvian.chatbot.server.service.security.error.LogoutError
+import eu.torvian.chatbot.server.service.security.error.LogoutAllError
 import eu.torvian.chatbot.server.service.security.error.RefreshTokenError
 import io.ktor.server.auth.jwt.*
 
@@ -32,15 +33,26 @@ interface AuthenticationService {
     suspend fun login(username: String, password: String): Either<LoginError, LoginResult>
 
     /**
-     * Logs out a user by invalidating their session.
+     * Logs out a user from their current session.
      *
-     * This method invalidates the user's current session, making all tokens
-     * associated with that session invalid.
+     * This method invalidates only the user's current session (from which the request originates),
+     * allowing other sessions on different devices to remain active.
      *
-     * @param userId The unique identifier of the user to log out
+     * @param sessionId The unique identifier of the session to log out
      * @return Either [LogoutError] if logout fails, or Unit on success
      */
-    suspend fun logout(userId: Long): Either<LogoutError, Unit>
+    suspend fun logout(sessionId: Long): Either<LogoutError, Unit>
+
+    /**
+     * Logs out a user from all their active sessions.
+     *
+     * This method invalidates all sessions for the user, effectively logging them out
+     * from all devices and applications.
+     *
+     * @param userId The unique identifier of the user to log out from all sessions
+     * @return Either [LogoutAllError] if logout fails, or Unit on success
+     */
+    suspend fun logoutAll(userId: Long): Either<LogoutAllError, Unit>
 
     /**
      * Validates JWT credentials from Ktor's auth pipeline.
