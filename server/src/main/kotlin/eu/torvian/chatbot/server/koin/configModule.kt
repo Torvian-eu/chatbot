@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.koin
 
 import eu.torvian.chatbot.server.domain.config.DatabaseConfig
 import eu.torvian.chatbot.server.domain.security.EncryptionConfig
+import eu.torvian.chatbot.server.domain.security.JwtConfig
 
 import org.koin.dsl.module
 
@@ -11,11 +12,14 @@ import org.koin.dsl.module
  * This module provides:
  * - The application's database configuration.
  * - The application's encryption configuration.
+ * - The application's JWT configuration.
  */
 fun configModule(
     databaseConfig: DatabaseConfig,
-    encryptionConfig: EncryptionConfig
+    encryptionConfig: EncryptionConfig,
+    jwtConfig: JwtConfig
 ) = module {
     single { databaseConfig }
     single { encryptionConfig }
+    single { jwtConfig }
 }

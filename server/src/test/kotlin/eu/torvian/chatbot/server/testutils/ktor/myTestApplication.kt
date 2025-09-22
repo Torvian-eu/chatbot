@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.testutils.ktor
 
 import eu.torvian.chatbot.common.misc.di.DIContainer
+import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.server.ktor.configureKtor
 import eu.torvian.chatbot.server.utils.misc.DIContainerKey
 import io.ktor.client.*
@@ -43,7 +44,7 @@ fun myTestApplication(
                 attributes.put(DIContainerKey, container)
 
                 // Configure Ktor
-                configureKtor()
+                configureKtor(container.get(), container.get())
 
                 // Additional Ktor configuration
                 app()
@@ -121,5 +122,3 @@ class CustomApplicationTestBuilder(
     fun externalServices(block: ExternalServicesBuilder.() -> Unit) = delegate.externalServices(block)
     fun environment(block: ApplicationEnvironmentBuilder.() -> Unit) = delegate.environment(block)
 }
-
-

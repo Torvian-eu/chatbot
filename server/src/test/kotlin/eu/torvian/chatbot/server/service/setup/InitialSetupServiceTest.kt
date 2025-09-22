@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.service.setup
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.server.data.dao.UserDao
+import eu.torvian.chatbot.server.data.dao.UserGroupDao
 import eu.torvian.chatbot.server.data.tables.*
 import eu.torvian.chatbot.server.testutils.data.Table
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
@@ -18,10 +19,9 @@ import kotlin.test.*
  * Tests for [InitialSetupService].
  *
  * This test suite verifies the initial database setup functionality:
- * - Creating the "All Users" group
  * - Creating basic roles and permissions
  * - Creating the initial admin user
- * - Assigning roles and group memberships
+ * - Assigning roles and virtual group memberships
  * - Handling repeated setup calls
  *
  * The tests rely on an in-memory SQLite database managed by [TestDataManager].
@@ -88,23 +88,6 @@ class InitialSetupServiceTest {
     }
 
     @Test
-    fun `performInitialSetup should create All Users group`() = runTest {
-        val result = initialSetupService.performInitialSetup()
-        assertTrue(result.isRight(), "Expected successful initial setup")
-
-        // Verify the "All Users" group was created
-        val transactionScope = container.get<eu.torvian.chatbot.server.utils.transactions.TransactionScope>()
-        val allUsersGroups = transactionScope.transaction {
-            UserGroupsTable.selectAll()
-                .where { UserGroupsTable.name eq InitialSetupService.ALL_USERS_GROUP_NAME }
-                .toList()
-        }
-        
-        assertEquals(1, allUsersGroups.size, "Expected exactly one 'All Users' group")
-        assertEquals(InitialSetupService.ALL_USERS_GROUP_NAME, allUsersGroups[0][UserGroupsTable.name], "Expected correct group name")
-    }
-
-    @Test
     fun `performInitialSetup should create basic roles`() = runTest {
         val result = initialSetupService.performInitialSetup()
         assertTrue(result.isRight(), "Expected successful initial setup")
@@ -168,35 +151,6 @@ class InitialSetupServiceTest {
     }
 
     @Test
-    fun `performInitialSetup should add admin user to All Users group`() = runTest {
-        val result = initialSetupService.performInitialSetup()
-        assertTrue(result.isRight(), "Expected successful initial setup")
-        val adminUser = result.getOrNull()!!
-
-        // Verify admin user is in "All Users" group
-        val transactionScope = container.get<eu.torvian.chatbot.server.utils.transactions.TransactionScope>()
-        val userGroupMemberships = transactionScope.transaction {
-            UserGroupMembershipsTable.selectAll()
-                .where { UserGroupMembershipsTable.userId eq adminUser.id }
-                .toList()
-        }
-        
-        assertTrue(userGroupMemberships.isNotEmpty(), "Expected admin user to have group memberships")
-        
-        // Check if admin user is in the "All Users" group
-        val allUsersGroupId = transactionScope.transaction {
-            UserGroupsTable.selectAll()
-                .where { UserGroupsTable.name eq InitialSetupService.ALL_USERS_GROUP_NAME }
-                .single()[UserGroupsTable.id].value
-        }
-        
-        val isInAllUsersGroup = userGroupMemberships.any { 
-            it[UserGroupMembershipsTable.groupId].value == allUsersGroupId 
-        }
-        assertTrue(isInAllUsersGroup, "Expected admin user to be in 'All Users' group")
-    }
-
-    @Test
     fun `performInitialSetup should return existing user when setup already completed`() = runTest {
         // Perform initial setup first time
         val firstResult = initialSetupService.performInitialSetup()
@@ -224,15 +178,7 @@ class InitialSetupServiceTest {
         // Verify only one admin user exists
         val users = userDao.getAllUsers()
         assertEquals(1, users.size, "Expected exactly one user after repeated setup")
-        
-        // Verify only one "All Users" group exists
-        val allUsersGroups = transactionScope.transaction {
-            UserGroupsTable.selectAll()
-                .where { UserGroupsTable.name eq InitialSetupService.ALL_USERS_GROUP_NAME }
-                .count()
-        }
-        assertEquals(1, allUsersGroups, "Expected exactly one 'All Users' group after repeated setup")
-        
+
         // Verify roles are not duplicated
         val adminRoles = transactionScope.transaction {
             RolesTable.selectAll()

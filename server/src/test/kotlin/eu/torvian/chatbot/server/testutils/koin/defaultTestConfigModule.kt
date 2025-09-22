@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.server.testutils.koin
 
+import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.koin.configModule
 import eu.torvian.chatbot.server.testutils.data.TestDefaults
 
@@ -11,5 +12,6 @@ import eu.torvian.chatbot.server.testutils.data.TestDefaults
  */
 fun defaultTestConfigModule() = configModule(
     databaseConfig = TestDefaults.getDefaultDatabaseConfig(),
-    encryptionConfig = TestDefaults.DEFAULT_ENCRYPTION_CONFIG
+    encryptionConfig = TestDefaults.DEFAULT_ENCRYPTION_CONFIG,
+    jwtConfig = JwtConfig(secret = "test-secret-key-for-testing-purposes-only")
 )

@@ -3,10 +3,14 @@ package eu.torvian.chatbot.server.koin
 import eu.torvian.chatbot.server.service.core.*
 import eu.torvian.chatbot.server.service.core.impl.*
 import eu.torvian.chatbot.server.service.security.AESCryptoProvider
+import eu.torvian.chatbot.server.service.security.AuthenticationService
+import eu.torvian.chatbot.server.service.security.AuthenticationServiceImpl
+import eu.torvian.chatbot.server.service.security.BCryptPasswordService
 import eu.torvian.chatbot.server.service.security.CredentialManager
 import eu.torvian.chatbot.server.service.security.CryptoProvider
 import eu.torvian.chatbot.server.service.security.DbEncryptedCredentialManager
 import eu.torvian.chatbot.server.service.security.EncryptionService
+import eu.torvian.chatbot.server.service.security.PasswordService
 import eu.torvian.chatbot.server.service.setup.InitialSetupService
 import org.koin.dsl.module
 
@@ -19,17 +23,22 @@ import org.koin.dsl.module
  */
 fun serviceModule() = module {
     // --- Core Services ---
-    single<SessionService> { SessionServiceImpl(get(), get(), get(), get()) }
-    single<GroupService> { GroupServiceImpl(get(), get(), get()) }
+    single<SessionService> { SessionServiceImpl(get(), get(), get(), get(), get()) }
+    single<GroupService> { GroupServiceImpl(get(), get(), get(), get()) }
     single<LLMModelService> { LLMModelServiceImpl(get(), get(), get()) }
     single<ModelSettingsService> { ModelSettingsServiceImpl(get(), get(), get()) }
     single<LLMProviderService> { LLMProviderServiceImpl(get(), get(), get(), get()) }
-    single<MessageService> { MessageServiceImpl(get(), get(), get(), get(), get(), get(), get(), get()) }
+    single<MessageService> { MessageServiceImpl(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
 
     // --- Security Services ---
     single<CryptoProvider> { AESCryptoProvider(get()) }
     single<EncryptionService> { EncryptionService(get()) }
     single<CredentialManager> { DbEncryptedCredentialManager(get(), get()) }
+
+    // --- Authentication Services ---
+    single<PasswordService> { BCryptPasswordService() }
+    single<UserService> { UserServiceImpl(get(), get(), get()) }
+    single<AuthenticationService> { AuthenticationServiceImpl(get(), get(), get(), get(), get(), get()) }
 
     // --- Setup Services ---
     single<InitialSetupService> { InitialSetupService(get(), get()) }

@@ -8,6 +8,8 @@ import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.*
+import eu.torvian.chatbot.server.testutils.auth.TestAuthHelper
+import eu.torvian.chatbot.server.testutils.auth.authenticate
 import eu.torvian.chatbot.server.testutils.data.Table
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
 import eu.torvian.chatbot.server.testutils.data.TestDataSet
@@ -22,11 +24,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
-import kotlin.test.fail
+import kotlin.test.*
 
 /**
  * Integration tests for Session API routes.
@@ -47,6 +45,8 @@ class SessionRoutesTest {
     private lateinit var container: DIContainer
     private lateinit var sessionTestApplication: KtorTestApp
     private lateinit var testDataManager: TestDataManager
+    private lateinit var authHelper: TestAuthHelper
+    private lateinit var authToken: String
 
     // Test data
     private val testGroup = TestDefaults.chatGroup1.copy(id = 1L)
@@ -55,12 +55,14 @@ class SessionRoutesTest {
     private val testModel2 = TestDefaults.llmModel2.copy(id = 2L)
     private val testSettings = TestDefaults.modelSettings1.copy(id = 1L)
     private val testSettings2 = TestDefaults.modelSettings2.copy(id = 2L)
+
     // Create additional settings that belong to the same model as testSession for testing
     private val testSettings3 = TestDefaults.modelSettings1.copy(
         id = 3L,
         modelId = testModel.id, // Same model as testSession
         name = "Alternative Settings for Model 1"
     )
+
     // Create non-streaming settings for testing non-streaming message processing
     private val testNonStreamingSettings = TestDefaults.modelSettings1.copy(
         id = 4L,
@@ -82,6 +84,7 @@ class SessionRoutesTest {
         currentModelId = testModel.id,
         currentSettingsId = testSettings.id
     )
+
     // Create a test session configured for non-streaming
     private val testNonStreamingSession = TestDefaults.chatSession1.copy(
         id = 3L,
@@ -123,12 +126,21 @@ class SessionRoutesTest {
                 modelSettings = listOf(testSettings, testSettings2, testSettings3, testNonStreamingSettings)
             )
         )
-        testDataManager.createTables(setOf(
-            Table.CHAT_SESSIONS,
-            Table.CHAT_MESSAGES,
-            Table.ASSISTANT_MESSAGES,
-            Table.SESSION_CURRENT_LEAF
-        ))
+        testDataManager.createTables(
+            setOf(
+                Table.CHAT_SESSIONS,
+                Table.CHAT_MESSAGES,
+                Table.ASSISTANT_MESSAGES,
+                Table.SESSION_CURRENT_LEAF,
+                Table.USERS,
+                Table.USER_SESSIONS,
+                Table.CHAT_SESSION_OWNERS,
+            )
+        )
+
+        // Set up authentication
+        authHelper = TestAuthHelper(container)
+        authToken = authHelper.createUserAndGetToken()
     }
 
     @AfterEach
@@ -143,10 +155,14 @@ class SessionRoutesTest {
     fun `GET sessions should return list of sessions successfully`() = sessionTestApplication {
         // Arrange
         testDataManager.insertChatSession(testSession)
+        testDataManager.insertSessionOwnership(testSession.id, authHelper.defaultTestUser.id)
         testDataManager.insertChatSession(testSession2)
+        testDataManager.insertSessionOwnership(testSession2.id, authHelper.defaultTestUser.id)
 
         // Act
-        val response = client.get(href(SessionResource()))
+        val response = client.get(href(SessionResource())) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
@@ -161,7 +177,9 @@ class SessionRoutesTest {
     @Test
     fun `GET sessions should return empty list when no sessions exist`() = sessionTestApplication {
         // Act
-        val response = client.get(href(SessionResource()))
+        val response = client.get(href(SessionResource())) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
@@ -181,6 +199,7 @@ class SessionRoutesTest {
         val response = client.post(href(SessionResource())) {
             contentType(ContentType.Application.Json)
             setBody(createRequest)
+            authenticate(authToken)
         }
 
         // Assert
@@ -195,26 +214,28 @@ class SessionRoutesTest {
     }
 
     @Test
-    fun `POST sessions should create a new session successfully with default name when name is null`() = sessionTestApplication {
-        // Arrange
-        val createRequest = CreateSessionRequest(name = null)
+    fun `POST sessions should create a new session successfully with default name when name is null`() =
+        sessionTestApplication {
+            // Arrange
+            val createRequest = CreateSessionRequest(name = null)
 
-        // Act
-        val response = client.post(href(SessionResource())) {
-            contentType(ContentType.Application.Json)
-            setBody(createRequest)
+            // Act
+            val response = client.post(href(SessionResource())) {
+                contentType(ContentType.Application.Json)
+                setBody(createRequest)
+                authenticate(authToken)
+            }
+
+            // Assert
+            assertEquals(HttpStatusCode.Created, response.status)
+            val createdSession = response.body<ChatSession>()
+            assertEquals("New Chat", createdSession.name) // Default name from SessionServiceImpl
+
+            // Verify the session was actually created in the database
+            val retrievedSession = testDataManager.getChatSession(createdSession.id)
+            assertNotNull(retrievedSession)
+            assertEquals("New Chat", retrievedSession.name)
         }
-
-        // Assert
-        assertEquals(HttpStatusCode.Created, response.status)
-        val createdSession = response.body<ChatSession>()
-        assertEquals("New Chat", createdSession.name) // Default name from SessionServiceImpl
-
-        // Verify the session was actually created in the database
-        val retrievedSession = testDataManager.getChatSession(createdSession.id)
-        assertNotNull(retrievedSession)
-        assertEquals("New Chat", retrievedSession.name)
-    }
 
     @Test
     fun `POST sessions should return 400 for blank name`() = sessionTestApplication {
@@ -226,6 +247,7 @@ class SessionRoutesTest {
         val response = client.post(href(SessionResource())) {
             contentType(ContentType.Application.Json)
             setBody(createRequest)
+            authenticate(authToken)
         }
 
         // Assert
@@ -243,9 +265,12 @@ class SessionRoutesTest {
     fun `GET session by ID should return session details successfully`() = sessionTestApplication {
         // Arrange
         testDataManager.insertChatSession(testSession)
+        testDataManager.insertSessionOwnership(testSession.id, authHelper.defaultTestUser.id)
 
         // Act
-        val response = client.get(href(SessionResource.ById(sessionId = testSession.id)))
+        val response = client.get(href(SessionResource.ById(sessionId = testSession.id))) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
@@ -263,7 +288,9 @@ class SessionRoutesTest {
         val nonExistentId = 999L
 
         // Act
-        val response = client.get(href(SessionResource.ById(sessionId = nonExistentId)))
+        val response = client.get(href(SessionResource.ById(sessionId = nonExistentId))) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.NotFound, response.status)
@@ -280,9 +307,12 @@ class SessionRoutesTest {
     fun `DELETE session should remove the session successfully`() = sessionTestApplication {
         // Arrange
         testDataManager.insertChatSession(testSession)
+        testDataManager.insertSessionOwnership(testSession.id, authHelper.defaultTestUser.id)
 
         // Act
-        val response = client.delete(href(SessionResource.ById(sessionId = testSession.id)))
+        val response = client.delete(href(SessionResource.ById(sessionId = testSession.id))) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.NoContent, response.status)
@@ -298,7 +328,9 @@ class SessionRoutesTest {
         val nonExistentId = 999L
 
         // Act
-        val response = client.delete(href(SessionResource.ById(sessionId = nonExistentId)))
+        val response = client.delete(href(SessionResource.ById(sessionId = nonExistentId))) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.NotFound, response.status)
@@ -315,14 +347,17 @@ class SessionRoutesTest {
     fun `PUT session name should update name successfully`() = sessionTestApplication {
         // Arrange
         testDataManager.insertChatSession(testSession)
+        testDataManager.insertSessionOwnership(testSession.id, authHelper.defaultTestUser.id)
         val newName = "Updated Session Name"
         val updateRequest = UpdateSessionNameRequest(name = newName)
 
         // Act
-        val response = client.put(href(SessionResource.ById.Name(parent = SessionResource.ById(sessionId = testSession.id)))) {
-            contentType(ContentType.Application.Json)
-            setBody(updateRequest)
-        }
+        val response =
+            client.put(href(SessionResource.ById.Name(parent = SessionResource.ById(sessionId = testSession.id)))) {
+                contentType(ContentType.Application.Json)
+                setBody(updateRequest)
+                authenticate(authToken)
+            }
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
@@ -340,10 +375,12 @@ class SessionRoutesTest {
         val updateRequest = UpdateSessionNameRequest(name = "New Name")
 
         // Act
-        val response = client.put(href(SessionResource.ById.Name(parent = SessionResource.ById(sessionId = nonExistentId)))) {
-            contentType(ContentType.Application.Json)
-            setBody(updateRequest)
-        }
+        val response =
+            client.put(href(SessionResource.ById.Name(parent = SessionResource.ById(sessionId = nonExistentId)))) {
+                contentType(ContentType.Application.Json)
+                setBody(updateRequest)
+                authenticate(authToken)
+            }
 
         // Assert
         assertEquals(HttpStatusCode.NotFound, response.status)
@@ -358,14 +395,17 @@ class SessionRoutesTest {
     fun `PUT session name should return 400 for blank name`() = sessionTestApplication {
         // Arrange
         testDataManager.insertChatSession(testSession)
+        testDataManager.insertSessionOwnership(testSession.id, authHelper.defaultTestUser.id)
         val blankName = "   "
         val updateRequest = UpdateSessionNameRequest(name = blankName)
 
         // Act
-        val response = client.put(href(SessionResource.ById.Name(parent = SessionResource.ById(sessionId = testSession.id)))) {
-            contentType(ContentType.Application.Json)
-            setBody(updateRequest)
-        }
+        val response =
+            client.put(href(SessionResource.ById.Name(parent = SessionResource.ById(sessionId = testSession.id)))) {
+                contentType(ContentType.Application.Json)
+                setBody(updateRequest)
+                authenticate(authToken)
+            }
 
         // Assert
         assertEquals(HttpStatusCode.BadRequest, response.status)
@@ -382,14 +422,17 @@ class SessionRoutesTest {
     fun `PUT session model should update model ID successfully`() = sessionTestApplication {
         // Arrange
         testDataManager.insertChatSession(testSession)
+        testDataManager.insertSessionOwnership(testSession.id, authHelper.defaultTestUser.id)
         val newModelId = 2L
         val updateRequest = UpdateSessionModelRequest(modelId = newModelId)
 
         // Act
-        val response = client.put(href(SessionResource.ById.Model(parent = SessionResource.ById(sessionId = testSession.id)))) {
-            contentType(ContentType.Application.Json)
-            setBody(updateRequest)
-        }
+        val response =
+            client.put(href(SessionResource.ById.Model(parent = SessionResource.ById(sessionId = testSession.id)))) {
+                contentType(ContentType.Application.Json)
+                setBody(updateRequest)
+                authenticate(authToken)
+            }
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
@@ -406,14 +449,17 @@ class SessionRoutesTest {
     fun `PUT session settings should update settings ID successfully`() = sessionTestApplication {
         // Arrange
         testDataManager.insertChatSession(testSession)
+        testDataManager.insertSessionOwnership(testSession.id, authHelper.defaultTestUser.id)
         val newSettingsId = testSettings3.id // Use settings that belong to the same model as the session
         val updateRequest = UpdateSessionSettingsRequest(settingsId = newSettingsId)
 
         // Act
-        val response = client.put(href(SessionResource.ById.Settings(parent = SessionResource.ById(sessionId = testSession.id)))) {
-            contentType(ContentType.Application.Json)
-            setBody(updateRequest)
-        }
+        val response =
+            client.put(href(SessionResource.ById.Settings(parent = SessionResource.ById(sessionId = testSession.id)))) {
+                contentType(ContentType.Application.Json)
+                setBody(updateRequest)
+                authenticate(authToken)
+            }
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
@@ -430,14 +476,17 @@ class SessionRoutesTest {
     fun `PUT session group should update group ID successfully`() = sessionTestApplication {
         // Arrange
         testDataManager.insertChatSession(testSession)
+        testDataManager.insertSessionOwnership(testSession.id, authHelper.defaultTestUser.id)
         val newGroupId = 2L
         val updateRequest = UpdateSessionGroupRequest(groupId = newGroupId)
 
         // Act
-        val response = client.put(href(SessionResource.ById.Group(parent = SessionResource.ById(sessionId = testSession.id)))) {
-            contentType(ContentType.Application.Json)
-            setBody(updateRequest)
-        }
+        val response =
+            client.put(href(SessionResource.ById.Group(parent = SessionResource.ById(sessionId = testSession.id)))) {
+                contentType(ContentType.Application.Json)
+                setBody(updateRequest)
+                authenticate(authToken)
+            }
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
@@ -454,15 +503,18 @@ class SessionRoutesTest {
     fun `PUT session leaf message should update leaf message ID successfully`() = sessionTestApplication {
         // Arrange
         testDataManager.insertChatSession(testSession)
+        testDataManager.insertSessionOwnership(testSession.id, authHelper.defaultTestUser.id)
         testDataManager.insertChatMessage(testUserMessage)
         testDataManager.insertChatMessage(testAssistantMessage)
         val updateRequest = UpdateSessionLeafMessageRequest(leafMessageId = testAssistantMessage.id)
 
         // Act
-        val response = client.put(href(SessionResource.ById.LeafMessage(parent = SessionResource.ById(sessionId = testSession.id)))) {
-            contentType(ContentType.Application.Json)
-            setBody(updateRequest)
-        }
+        val response =
+            client.put(href(SessionResource.ById.LeafMessage(parent = SessionResource.ById(sessionId = testSession.id)))) {
+                contentType(ContentType.Application.Json)
+                setBody(updateRequest)
+                authenticate(authToken)
+            }
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
@@ -479,14 +531,17 @@ class SessionRoutesTest {
     fun `POST session message should process new message successfully`() = sessionTestApplication {
         // Arrange
         testDataManager.insertChatSession(testNonStreamingSession)
+        testDataManager.insertSessionOwnership(testNonStreamingSession.id, authHelper.defaultTestUser.id)
         val messageContent = "Test message content"
         val processRequest = ProcessNewMessageRequest(content = messageContent, isStreaming = false)
 
         // Act
-        val response = client.post(href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = testNonStreamingSession.id)))) {
-            contentType(ContentType.Application.Json)
-            setBody(processRequest)
-        }
+        val response =
+            client.post(href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = testNonStreamingSession.id)))) {
+                contentType(ContentType.Application.Json)
+                setBody(processRequest)
+                authenticate(authToken)
+            }
 
         // Assert
         assertEquals(HttpStatusCode.Created, response.status)
@@ -526,10 +581,12 @@ class SessionRoutesTest {
         val processRequest = ProcessNewMessageRequest(content = "Test message", isStreaming = false)
 
         // Act
-        val response = client.post(href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = nonExistentId)))) {
-            contentType(ContentType.Application.Json)
-            setBody(processRequest)
-        }
+        val response =
+            client.post(href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = nonExistentId)))) {
+                contentType(ContentType.Application.Json)
+                setBody(processRequest)
+                authenticate(authToken)
+            }
 
         // Assert
         assertEquals(HttpStatusCode.NotFound, response.status)
@@ -539,18 +596,21 @@ class SessionRoutesTest {
         assert(error.details?.containsKey("sessionId") == true)
         assertEquals(nonExistentId.toString(), error.details?.get("sessionId"))
     }
-    
+
     @Test
     fun `POST session message should return 400 for missing model`() = sessionTestApplication {
         // Arrange
         testDataManager.insertChatSession(testSession.copy(currentModelId = null))
+        testDataManager.insertSessionOwnership(testSession.id, authHelper.defaultTestUser.id)
         val processRequest = ProcessNewMessageRequest(content = "Test message", isStreaming = false)
 
         // Act
-        val response = client.post(href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = testSession.id)))) {
-            contentType(ContentType.Application.Json)
-            setBody(processRequest)
-        }
+        val response =
+            client.post(href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = testSession.id)))) {
+                contentType(ContentType.Application.Json)
+                setBody(processRequest)
+                authenticate(authToken)
+            }
 
         // Assert
         assertEquals(HttpStatusCode.BadRequest, response.status)

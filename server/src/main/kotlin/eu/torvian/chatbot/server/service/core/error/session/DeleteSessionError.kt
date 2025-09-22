@@ -9,4 +9,9 @@ sealed interface DeleteSessionError {
      * Maps from SessionError.SessionNotFound in the DAO layer.
      */
     data class SessionNotFound(val id: Long) : DeleteSessionError
+
+    /**
+     * Indicates that the user does not have access to delete the requested session.
+     */
+    data class AccessDenied(val reason: String) : DeleteSessionError
 }

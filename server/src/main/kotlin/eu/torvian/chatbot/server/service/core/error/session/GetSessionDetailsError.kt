@@ -9,4 +9,9 @@ sealed interface GetSessionDetailsError {
      * Maps from SessionError.SessionNotFound in the DAO layer.
      */
     data class SessionNotFound(val id: Long) : GetSessionDetailsError
+
+    /**
+     * Indicates that the user does not have access to the requested session.
+     */
+    data class AccessDenied(val reason: String) : GetSessionDetailsError
 }

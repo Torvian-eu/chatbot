@@ -4,6 +4,7 @@ import arrow.core.Either
 import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.common.models.ChatSession
 import eu.torvian.chatbot.server.service.core.error.message.DeleteMessageError
+import eu.torvian.chatbot.server.service.core.error.message.GetMessagesError
 import eu.torvian.chatbot.server.service.core.error.message.ProcessNewMessageError
 import eu.torvian.chatbot.server.service.core.error.message.UpdateMessageContentError
 import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageError
@@ -16,12 +17,16 @@ import kotlinx.coroutines.flow.Flow
 interface MessageService {
     /**
      * Retrieves a list of all messages for a specific session, ordered by creation time.
+     * Verifies that the user owns the session before returning messages.
+     * @param userId The ID of the user requesting the messages.
      * @param sessionId The ID of the session.
-     * @return A list of [ChatMessage] objects.
+     * @return Either a [GetMessagesError] if the session doesn't exist or access is denied,
+     *         or a list of [ChatMessage] objects.
      */
-    suspend fun getMessagesBySessionId(sessionId: Long): List<ChatMessage>
+    suspend fun getMessagesBySessionId(userId: Long, sessionId: Long): Either<GetMessagesError, List<ChatMessage>>
 
     suspend fun validateProcessNewMessageRequest(
+        userId: Long,
         sessionId: Long,
         parentMessageId: Long?
     ): Either<ValidateNewMessageError, Pair<ChatSession, LLMConfig>>
@@ -65,15 +70,22 @@ interface MessageService {
 
     /**
      * Updates the content of an existing message.
+     * Verifies that the user owns the session containing the message before updating.
+     * @param userId The ID of the user requesting the update.
      * @param id The ID of the message to update.
      * @param content The new content.
-     * @return Either an [UpdateMessageContentError] if the message doesn't exist,
+     * @return Either an [UpdateMessageContentError] if the message doesn't exist or access is denied,
      *         or the updated [ChatMessage].
      */
-    suspend fun updateMessageContent(id: Long, content: String): Either<UpdateMessageContentError, ChatMessage>
+    suspend fun updateMessageContent(
+        userId: Long,
+        id: Long,
+        content: String
+    ): Either<UpdateMessageContentError, ChatMessage>
 
     /**
      * Deletes a specific message and its children recursively.
+     * Verifies that the user owns the session containing the message before deleting.
      * Updates the parent's children list and maintains session leaf message consistency.
      *
      * When a message is deleted, the session's currentLeafMessageId is automatically updated:
@@ -82,19 +94,22 @@ interface MessageService {
      * - If a root message is deleted, the oldest remaining root message's leaf becomes active
      * - If no messages remain, the session's leaf message ID is set to null
      *
+     * @param userId The ID of the user requesting the deletion.
      * @param id The ID of the message to delete.
-     * @return Either a [DeleteMessageError] if the message doesn't exist or session update fails,
+     * @return Either a [DeleteMessageError] if the message doesn't exist, access is denied, or session update fails,
      *         or Unit if successful.
      */
-    suspend fun deleteMessageRecursively(id: Long): Either<DeleteMessageError, Unit>
+    suspend fun deleteMessageRecursively(userId: Long, id: Long): Either<DeleteMessageError, Unit>
 
     /**
      * Deletes a single message (non-recursive) and promotes its children to the deleted message's parent.
+     * Verifies that the user owns the session containing the message before deleting.
      * Updates session currentLeafMessageId if needed.
      *
+     * @param userId The ID of the user requesting the deletion.
      * @param id The ID of the message to delete.
-     * @return Either a [DeleteMessageError] if the message doesn't exist or session update fails,
+     * @return Either a [DeleteMessageError] if the message doesn't exist, access is denied, or session update fails,
      *         or Unit if successful.
      */
-    suspend fun deleteMessage(id: Long): Either<DeleteMessageError, Unit>
+    suspend fun deleteMessage(userId: Long, id: Long): Either<DeleteMessageError, Unit>
 }

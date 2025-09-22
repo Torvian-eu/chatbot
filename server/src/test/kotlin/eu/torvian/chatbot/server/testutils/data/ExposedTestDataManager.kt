@@ -5,6 +5,7 @@ import eu.torvian.chatbot.server.data.entities.ApiSecretEntity
 import eu.torvian.chatbot.server.data.entities.ChatSessionEntity
 import eu.torvian.chatbot.server.data.entities.SessionCurrentLeafEntity
 import eu.torvian.chatbot.server.data.entities.UserEntity
+import eu.torvian.chatbot.server.data.entities.UserSessionEntity
 import eu.torvian.chatbot.server.data.tables.*
 import eu.torvian.chatbot.server.data.tables.mappers.*
 import eu.torvian.chatbot.server.data.toEntity
@@ -395,6 +396,47 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
             UsersTable.selectAll().where { UsersTable.id eq id }
                 .map { it.toUserEntity() }
                 .singleOrNull()
+        }
+
+    override suspend fun insertUserSession(userSession: UserSessionEntity) =
+        transactionScope.transaction {
+            ensureTableCreated(Table.USER_SESSIONS)
+            UserSessionsTable.insert {
+                it[id] = userSession.id
+                it[userId] = userSession.userId
+                it[expiresAt] = userSession.expiresAt.toEpochMilliseconds()
+                it[createdAt] = userSession.createdAt.toEpochMilliseconds()
+                it[lastAccessed] = userSession.lastAccessed.toEpochMilliseconds()
+            }
+            return@transaction
+        }
+
+    override suspend fun getUserSession(id: Long): UserSessionEntity? =
+        transactionScope.transaction {
+            ensureTableCreated(Table.USER_SESSIONS)
+            UserSessionsTable.selectAll().where { UserSessionsTable.id eq id }
+                .map { it.toUserSessionEntity() }
+                .singleOrNull()
+        }
+
+    override suspend fun insertGroupOwnership(groupId: Long, userId: Long) =
+        transactionScope.transaction {
+            ensureTableCreated(Table.CHAT_GROUP_OWNERS)
+            ChatGroupOwnersTable.insert {
+                it[ChatGroupOwnersTable.groupId] = groupId
+                it[ChatGroupOwnersTable.userId] = userId
+            }
+            return@transaction
+        }
+
+    override suspend fun insertSessionOwnership(sessionId: Long, userId: Long) =
+        transactionScope.transaction {
+            ensureTableCreated(Table.CHAT_SESSION_OWNERS)
+            ChatSessionOwnersTable.insert {
+                it[ChatSessionOwnersTable.sessionId] = sessionId
+                it[ChatSessionOwnersTable.userId] = userId
+            }
+            return@transaction
         }
 
     /**

@@ -77,11 +77,21 @@ common/src/commonMain/kotlin/eu/torvian/chatbot/common/
 │   ├── UpdateSessionLeafRequest.kt # Request DTO for updating session leaf message
 │   ├── UpdateSessionModelRequest.kt # Request DTO for updating session model
 │   ├── UpdateSessionNameRequest.kt # Request DTO for updating session name
-│   └── UpdateSessionSettingsRequest.kt # Request DTO for updating session settings
-└── misc/                         # Miscellaneous utilities
-    └── di/                       # Dependency injection abstractions
-        ├── DIContainer.kt        # Framework-agnostic DI interface
-        └── KoinDIContainer.kt    # Koin-specific DI implementation
+│   ├── UpdateSessionSettingsRequest.kt # Request DTO for updating session settings
+│   ├── User.kt                   # User account data model
+│   └── auth/                     # Authentication-related models
+│       ├── LoginRequest.kt       # Login request DTO
+│       ├── LoginResponse.kt      # Login response DTO
+│       ├── RefreshTokenRequest.kt # Refresh token request DTO
+│       └── RegisterRequest.kt    # User registration request DTO
+├── misc/                         # Miscellaneous utilities
+│   └── di/                       # Dependency injection abstractions
+│       ├── DIContainer.kt        # Framework-agnostic DI interface
+│       └── KoinDIContainer.kt    # Koin-specific DI implementation
+└── security/
+    ├── PasswordValidator.kt      # Password validation utility
+    └── error/                    # Security-related error types
+        └── PasswordValidationError.kt # Password validation error type
 ```
 
 **Key Features**:
@@ -109,6 +119,7 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   │   ├── SessionOwnershipDao.kt # Session ownership management interface
 │   │   ├── SettingsDao.kt        # Settings management interface
 │   │   ├── UserDao.kt            # User account management interface
+│   │   ├── UserGroupDao.kt       # User group management interface
 │   │   ├── UserSessionDao.kt     # User session management interface
 │   │   ├── error/                # DAO-specific error types
 │   │   └── exposed/              # Exposed ORM implementations
@@ -117,6 +128,7 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   │   ├── ChatSessionEntity.kt  # Chat session entity
 │   │   ├── SessionCurrentLeafEntity.kt # Session current leaf entity
 │   │   ├── UserEntity.kt         # User account entity
+│   │   ├── UserGroupEntity.kt    # User group entity
 │   │   └── UserSessionEntity.kt  # User session entity
 │   └── tables/                   # Exposed table definitions
 │       └── mappers/              # Entity mapping utilities
@@ -124,8 +136,12 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   ├── config/                   # Configuration classes
 │   │   └── DatabaseConfig.kt     # Database configuration
 │   └── security/                 # Security-related classes
+│       ├── AuthSchemes.kt        # Authentication schemes
 │       ├── EncryptedSecret.kt    # Encrypted secret data model
-│       └── EncryptionConfig.kt   # Encryption configuration
+│       ├── EncryptionConfig.kt   # Encryption configuration
+│       ├── JwtConfig.kt          # JWT configuration
+│       ├── LoginResult.kt        # Login result data model
+│       └── UserContext.kt        # User context data model
 ├── koin/                         # Dependency injection modules
 │   ├── configModule.kt           # Configuration DI module
 │   ├── daoModule.kt              # DAO implementations DI module
@@ -134,8 +150,11 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   └── serviceModule.kt          # Service implementations DI module
 ├── ktor/                         # Ktor server setup
 │   ├── configureKtor.kt          # Ktor server plugin configuration
+│   ├── auth/                     
+│   │   └── AuthUtils.kt          # Authentication utilities
 │   └── routes/                   # Ktor API routes
 │       ├── ApiRoutesKtor.kt      # Ktor route configuration using type-safe Resources plugin
+│       ├── configureAuthRoutes.kt
 │       ├── configureGroupRoutes.kt
 │       ├── configureMessageRoutes.kt
 │       ├── configureModelRoutes.kt
@@ -162,6 +181,8 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   │   ├── MessageStreamEvent.kt # Message stream event type
 │   │   ├── ModelSettingsService.kt # Model Settings management service interface
 │   │   ├── SessionService.kt     # Session management service interface
+│   │   ├── UserService.kt        # User account management service interface
+│   │   ├── error/                # Service-specific error types
 │   │   └── impl/                 # Core service implementations
 │   ├── llm/                      # LLM interaction services
 │   │   ├── ApiRequestConfig.kt   # Configuration details for making API requests
@@ -179,11 +200,14 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   │       ├── OpenAiApiModels.kt # OpenAI API models (DTOs)
 │   │       └── OpenAIChatStrategy.kt # OpenAI chat completion strategy
 │   ├── security/                 # Security services
+│   │   ├── AuthenticationService.kt # Authentication service interface
 │   │   ├── AESCryptoProvider.kt  # AES encryption provider
+│   │   ├── BCryptPasswordService.kt # BCrypt password service implementation
 │   │   ├── CredentialManager.kt  # Credential management interface
 │   │   ├── CryptoProvider.kt     # Crypto provider interface
 │   │   ├── DbEncryptedCredentialManager.kt # Database-backed credential manager
 │   │   ├── EncryptionService.kt  # Encryption service interface
+│   │   ├── PasswordService.kt    # Password service interface
 │   │   └── error/                # Domain-specific error types
 │   └── setup/                    # Initial setup services
 │       └── InitialSetupService.kt # Service for initial database and user setup
@@ -220,6 +244,8 @@ server/src/test/kotlin/eu/torvian/chatbot/server/
 │   └── setup/                    # Setup service tests
 │       └── InitialSetupServiceTest.kt
 └── testutils/                    # Test utilities
+    ├── auth/ 
+    │   └── TestAuthHelper.kt     # Test authentication helper
     ├── data/                     # Data test utilities
     │   ├── ExposedTestDataManager.kt # Test data management
     │   ├── Table.kt              # Table enumeration for tests

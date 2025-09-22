@@ -11,10 +11,9 @@ import eu.torvian.chatbot.common.models.ChatSessionSummary
 import eu.torvian.chatbot.common.models.LLMModelType
 import eu.torvian.chatbot.server.data.dao.ModelDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
+import eu.torvian.chatbot.server.data.dao.SessionOwnershipDao
 import eu.torvian.chatbot.server.data.dao.SettingsDao
-import eu.torvian.chatbot.server.data.dao.error.ModelError
-import eu.torvian.chatbot.server.data.dao.error.SessionError
-import eu.torvian.chatbot.server.data.dao.error.SettingsError
+import eu.torvian.chatbot.server.data.dao.error.*
 import eu.torvian.chatbot.server.service.core.SessionService
 import eu.torvian.chatbot.server.service.core.error.session.*
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
@@ -24,35 +23,66 @@ import eu.torvian.chatbot.server.utils.transactions.TransactionScope
  */
 class SessionServiceImpl(
     private val sessionDao: SessionDao,
+    private val sessionOwnershipDao: SessionOwnershipDao,
     private val settingsDao: SettingsDao,
     private val modelDao: ModelDao,
     private val transactionScope: TransactionScope,
 ) : SessionService {
 
-    override suspend fun getAllSessionsSummaries(): List<ChatSessionSummary> {
+    override suspend fun getAllSessionsSummaries(userId: Long): List<ChatSessionSummary> {
         return transactionScope.transaction {
-            sessionDao.getAllSessions()
+            sessionOwnershipDao.getAllSessionsForUser(userId)
         }
     }
 
-    override suspend fun createSession(name: String?): Either<CreateSessionError, ChatSession> =
+    override suspend fun createSession(userId: Long, name: String?): Either<CreateSessionError, ChatSession> =
         transactionScope.transaction {
             either {
                 ensure(!(name != null && name.isBlank())) {
                     CreateSessionError.InvalidName("Session name cannot be blank.")
                 }
 
-                withError({ daoError: SessionError.ForeignKeyViolation ->
+                val session = withError({ daoError: SessionError.ForeignKeyViolation ->
                     CreateSessionError.InvalidRelatedEntity(daoError.message)
                 }) {
                     sessionDao.insertSession(name ?: "New Chat").bind()
                 }
+
+                // Set ownership for the newly created session
+                withError({ ownershipError: SetOwnerError ->
+                    when (ownershipError) {
+                        is SetOwnerError.ForeignKeyViolation ->
+                            CreateSessionError.InvalidRelatedEntity("Failed to set session ownership")
+
+                        is SetOwnerError.AlreadyOwned ->
+                            CreateSessionError.InvalidRelatedEntity("Session ownership conflict")
+                    }
+                }) {
+                    sessionOwnershipDao.setOwner(session.id, userId).bind()
+                }
+
+                session
             }
         }
 
-    override suspend fun getSessionDetails(id: Long): Either<GetSessionDetailsError, ChatSession> =
+    override suspend fun getSessionDetails(userId: Long, id: Long): Either<GetSessionDetailsError, ChatSession> =
         transactionScope.transaction {
             either {
+                // First check ownership
+                val ownerId = withError({ ownershipError: GetOwnerError ->
+                    when (ownershipError) {
+                        is GetOwnerError.ResourceNotFound ->
+                            GetSessionDetailsError.SessionNotFound(id)
+                    }
+                }) {
+                    sessionOwnershipDao.getOwner(id).bind()
+                }
+
+                ensure(ownerId == userId) {
+                    GetSessionDetailsError.AccessDenied("User does not own this session")
+                }
+
+                // Then get session details
                 withError({ daoError: SessionError.SessionNotFound ->
                     GetSessionDetailsError.SessionNotFound(daoError.id)
                 }) {
@@ -61,12 +91,27 @@ class SessionServiceImpl(
             }
         }
 
-    override suspend fun updateSessionName(id: Long, name: String): Either<UpdateSessionNameError, Unit> =
+    override suspend fun updateSessionName(userId: Long, id: Long, name: String): Either<UpdateSessionNameError, Unit> =
         transactionScope.transaction {
             either {
                 ensure(!name.isBlank()) {
                     UpdateSessionNameError.InvalidName("Session name cannot be blank.")
                 }
+
+                // Check ownership first
+                val ownerId = withError({ ownershipError: GetOwnerError ->
+                    when (ownershipError) {
+                        is GetOwnerError.ResourceNotFound ->
+                            UpdateSessionNameError.SessionNotFound(id)
+                    }
+                }) {
+                    sessionOwnershipDao.getOwner(id).bind()
+                }
+
+                ensure(ownerId == userId) {
+                    UpdateSessionNameError.AccessDenied("User does not own this session")
+                }
+
                 withError({ daoError: SessionError.SessionNotFound ->
                     UpdateSessionNameError.SessionNotFound(daoError.id)
                 }) {
@@ -75,9 +120,27 @@ class SessionServiceImpl(
             }
         }
 
-    override suspend fun updateSessionGroupId(id: Long, groupId: Long?): Either<UpdateSessionGroupIdError, Unit> =
+    override suspend fun updateSessionGroupId(
+        userId: Long,
+        id: Long,
+        groupId: Long?
+    ): Either<UpdateSessionGroupIdError, Unit> =
         transactionScope.transaction {
             either {
+                // Check ownership first
+                val ownerId = withError({ ownershipError: GetOwnerError ->
+                    when (ownershipError) {
+                        is GetOwnerError.ResourceNotFound ->
+                            UpdateSessionGroupIdError.SessionNotFound(id)
+                    }
+                }) {
+                    sessionOwnershipDao.getOwner(id).bind()
+                }
+
+                ensure(ownerId == userId) {
+                    UpdateSessionGroupIdError.AccessDenied("User does not own this session")
+                }
+
                 withError({ daoError: SessionError ->
                     when (daoError) {
                         is SessionError.SessionNotFound -> UpdateSessionGroupIdError.SessionNotFound(daoError.id)
@@ -90,11 +153,26 @@ class SessionServiceImpl(
         }
 
     override suspend fun updateSessionCurrentModelId(
+        userId: Long,
         id: Long,
         modelId: Long?
     ): Either<UpdateSessionCurrentModelIdError, Unit> =
         transactionScope.transaction {
             either {
+                // Check ownership first
+                val ownerId = withError({ ownershipError: GetOwnerError ->
+                    when (ownershipError) {
+                        is GetOwnerError.ResourceNotFound ->
+                            UpdateSessionCurrentModelIdError.SessionNotFound(id)
+                    }
+                }) {
+                    sessionOwnershipDao.getOwner(id).bind()
+                }
+
+                ensure(ownerId == userId) {
+                    UpdateSessionCurrentModelIdError.AccessDenied("User does not own this session")
+                }
+
                 // If modelId is provided, validate that the model exists, is active, and is of CHAT type
                 if (modelId != null) {
                     val model = withError({ _: ModelError.ModelNotFound ->
@@ -130,11 +208,26 @@ class SessionServiceImpl(
         }
 
     override suspend fun updateSessionCurrentSettingsId(
+        userId: Long,
         id: Long,
         settingsId: Long?
     ): Either<UpdateSessionCurrentSettingsIdError, Unit> =
         transactionScope.transaction {
             either {
+                // Check ownership first
+                val ownerId = withError({ ownershipError: GetOwnerError ->
+                    when (ownershipError) {
+                        is GetOwnerError.ResourceNotFound ->
+                            UpdateSessionCurrentSettingsIdError.SessionNotFound(id)
+                    }
+                }) {
+                    sessionOwnershipDao.getOwner(id).bind()
+                }
+
+                ensure(ownerId == userId) {
+                    UpdateSessionCurrentSettingsIdError.AccessDenied("User does not own this session")
+                }
+
                 if (settingsId != null) {
                     // First get the current session to check its model ID
                     val session = withError({ daoError: SessionError.SessionNotFound ->
@@ -186,25 +279,35 @@ class SessionServiceImpl(
      * Updates both the current model ID and settings ID of an existing chat session atomically.
      * This ensures consistency between model and settings, and automatically clears settings
      * if they're incompatible with the new model.
+     * Verifies that the user owns the session before updating.
      *
+     * @param userId The ID of the user requesting the update.
      * @param id The ID of the session to update.
      * @param modelId The new optional model ID for the session.
      * @param settingsId The new optional settings ID for the session.
      * @return Either an error if the session, model, or settings are not found or incompatible,
-     *         or Unit if successful.
+     *         or access is denied, or Unit if successful.
      */
     override suspend fun updateSessionCurrentModelAndSettingsId(
+        userId: Long,
         id: Long,
         modelId: Long?,
         settingsId: Long?
     ): Either<UpdateSessionCurrentModelAndSettingsIdError, Unit> =
         transactionScope.transaction {
             either {
-                // First, verify the session exists
-                withError({ daoError: SessionError.SessionNotFound ->
-                    UpdateSessionCurrentModelAndSettingsIdError.SessionNotFound(daoError.id)
+                // Check ownership first
+                val ownerId = withError({ ownershipError: GetOwnerError ->
+                    when (ownershipError) {
+                        is GetOwnerError.ResourceNotFound ->
+                            UpdateSessionCurrentModelAndSettingsIdError.SessionNotFound(id)
+                    }
                 }) {
-                    sessionDao.getSessionById(id).bind()
+                    sessionOwnershipDao.getOwner(id).bind()
+                }
+
+                ensure(ownerId == userId) {
+                    UpdateSessionCurrentModelAndSettingsIdError.AccessDenied("User does not own this session")
                 }
 
                 // If modelId is provided, validate it exists, is active, and is of CHAT type
@@ -278,11 +381,26 @@ class SessionServiceImpl(
         }
 
     override suspend fun updateSessionLeafMessageId(
+        userId: Long,
         id: Long,
         messageId: Long?
     ): Either<UpdateSessionLeafMessageIdError, Unit> =
         transactionScope.transaction {
             either {
+                // Check ownership first
+                val ownerId = withError({ ownershipError: GetOwnerError ->
+                    when (ownershipError) {
+                        is GetOwnerError.ResourceNotFound ->
+                            UpdateSessionLeafMessageIdError.SessionNotFound(id)
+                    }
+                }) {
+                    sessionOwnershipDao.getOwner(id).bind()
+                }
+
+                ensure(ownerId == userId) {
+                    UpdateSessionLeafMessageIdError.AccessDenied("User does not own this session")
+                }
+
                 withError({ daoError: SessionError ->
                     when (daoError) {
                         is SessionError.SessionNotFound -> UpdateSessionLeafMessageIdError.SessionNotFound(daoError.id)
@@ -296,9 +414,23 @@ class SessionServiceImpl(
             }
         }
 
-    override suspend fun deleteSession(id: Long): Either<DeleteSessionError, Unit> =
+    override suspend fun deleteSession(userId: Long, id: Long): Either<DeleteSessionError, Unit> =
         transactionScope.transaction {
             either {
+                // Check ownership first
+                val ownerId = withError({ ownershipError: GetOwnerError ->
+                    when (ownershipError) {
+                        is GetOwnerError.ResourceNotFound ->
+                            DeleteSessionError.SessionNotFound(id)
+                    }
+                }) {
+                    sessionOwnershipDao.getOwner(id).bind()
+                }
+
+                ensure(ownerId == userId) {
+                    DeleteSessionError.AccessDenied("User does not own this session")
+                }
+
                 withError({ daoError: SessionError.SessionNotFound ->
                     DeleteSessionError.SessionNotFound(daoError.id)
                 }) {

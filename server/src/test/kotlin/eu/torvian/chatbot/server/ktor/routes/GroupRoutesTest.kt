@@ -9,6 +9,8 @@ import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.ChatGroup
 import eu.torvian.chatbot.common.models.CreateGroupRequest
 import eu.torvian.chatbot.common.models.RenameGroupRequest
+import eu.torvian.chatbot.server.testutils.auth.TestAuthHelper
+import eu.torvian.chatbot.server.testutils.auth.authenticate
 import eu.torvian.chatbot.server.testutils.data.Table
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
 import eu.torvian.chatbot.server.testutils.koin.defaultTestContainer
@@ -38,6 +40,8 @@ class GroupRoutesTest {
     private lateinit var container: DIContainer
     private lateinit var groupTestApplication: KtorTestApp
     private lateinit var testDataManager: TestDataManager
+    private lateinit var authHelper: TestAuthHelper
+    private lateinit var authToken: String
 
     // Test data
     private val testGroup1 = ChatGroup(
@@ -65,7 +69,11 @@ class GroupRoutesTest {
         )
 
         testDataManager = container.get()
-        testDataManager.createTables(setOf(Table.CHAT_GROUPS, Table.CHAT_SESSIONS))
+        testDataManager.createTables(setOf(Table.CHAT_GROUPS, Table.CHAT_SESSIONS, Table.USERS, Table.USER_SESSIONS, Table.CHAT_GROUP_OWNERS))
+
+        // Set up authentication
+        authHelper = TestAuthHelper(container)
+        authToken = authHelper.createUserAndGetToken()
     }
 
     @AfterEach
@@ -81,10 +89,15 @@ class GroupRoutesTest {
         // Arrange
         testDataManager.insertChatGroup(testGroup1)
         testDataManager.insertChatGroup(testGroup2)
+        // Insert ownership records for the test user
+        testDataManager.insertGroupOwnership(testGroup1.id, authHelper.defaultTestUser.id)
+        testDataManager.insertGroupOwnership(testGroup2.id, authHelper.defaultTestUser.id)
         val expectedGroups = listOf(testGroup1, testGroup2)
 
         // Act & Assert
-        val response = client.get(href(GroupResource()))
+        val response = client.get(href(GroupResource())) {
+            authenticate(authToken)
+        }
         assertEquals(HttpStatusCode.OK, response.status)
         val groups = response.body<List<ChatGroup>>()
         assertEquals(expectedGroups, groups)
@@ -102,6 +115,7 @@ class GroupRoutesTest {
         val response = client.post(href(GroupResource())) {
             contentType(ContentType.Application.Json)
             setBody<CreateGroupRequest>(createRequest)
+            authenticate(authToken)
         }
 
         // Assert
@@ -124,6 +138,7 @@ class GroupRoutesTest {
         val response = client.post(href(GroupResource())) {
             contentType(ContentType.Application.Json)
             setBody<CreateGroupRequest>(createRequest)
+            authenticate(authToken)
         }
 
         // Assert
@@ -146,6 +161,7 @@ class GroupRoutesTest {
         val response = client.post(href(GroupResource())) {
             contentType(ContentType.Application.Json)
             setBody<CreateGroupRequest>(createRequest)
+            authenticate(authToken)
         }
 
         // Assert
@@ -164,9 +180,12 @@ class GroupRoutesTest {
     fun `DELETE group should remove the group successfully`() = groupTestApplication {
         // Arrange
         testDataManager.insertChatGroup(testGroup1)
+        testDataManager.insertGroupOwnership(testGroup1.id, authHelper.defaultTestUser.id)
 
         // Act
-        val response = client.delete(href(GroupResource.ById(groupId = testGroup1.id)))
+        val response = client.delete(href(GroupResource.ById(groupId = testGroup1.id))) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.NoContent, response.status)
@@ -180,7 +199,9 @@ class GroupRoutesTest {
     fun `DELETE group with non-existent ID should return 404`() = groupTestApplication {
         // Act
         val nonExistentId = 999L
-        val response = client.delete(href(GroupResource.ById(groupId = nonExistentId)))
+        val response = client.delete(href(GroupResource.ById(groupId = nonExistentId))) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.NotFound, response.status)
@@ -198,6 +219,7 @@ class GroupRoutesTest {
     fun `PUT group should rename the group successfully`() = groupTestApplication {
         // Arrange
         testDataManager.insertChatGroup(testGroup1)
+        testDataManager.insertGroupOwnership(testGroup1.id, authHelper.defaultTestUser.id)
         val newName = "Renamed Group"
         val renameRequest = RenameGroupRequest(name = newName)
 
@@ -205,6 +227,7 @@ class GroupRoutesTest {
         val response = client.put(href(GroupResource.ById(groupId = testGroup1.id))) {
             contentType(ContentType.Application.Json)
             setBody<RenameGroupRequest>(renameRequest)
+            authenticate(authToken)
         }
 
         // Assert
@@ -225,6 +248,7 @@ class GroupRoutesTest {
         val response = client.put(href(GroupResource.ById(groupId = nonExistentId))) {
             contentType(ContentType.Application.Json)
             setBody<RenameGroupRequest>(renameRequest)
+            authenticate(authToken)
         }
 
         // Assert
@@ -241,6 +265,7 @@ class GroupRoutesTest {
     fun `PUT group should return 400 for blank name`() = groupTestApplication {
         // Arrange
         testDataManager.insertChatGroup(testGroup1)
+        testDataManager.insertGroupOwnership(testGroup1.id, authHelper.defaultTestUser.id)
         val blankName = "   "
         val renameRequest = RenameGroupRequest(name = blankName)
 
@@ -248,6 +273,7 @@ class GroupRoutesTest {
         val response = client.put(href(GroupResource.ById(groupId = testGroup1.id))) {
             contentType(ContentType.Application.Json)
             setBody<RenameGroupRequest>(renameRequest)
+            authenticate(authToken)
         }
 
         // Assert
@@ -264,6 +290,7 @@ class GroupRoutesTest {
     fun `PUT group should return 400 for empty name`() = groupTestApplication {
         // Arrange
         testDataManager.insertChatGroup(testGroup1)
+        testDataManager.insertGroupOwnership(testGroup1.id, authHelper.defaultTestUser.id)
         val emptyName = ""
         val renameRequest = RenameGroupRequest(name = emptyName)
 
@@ -271,6 +298,7 @@ class GroupRoutesTest {
         val response = client.put(href(GroupResource.ById(groupId = testGroup1.id))) {
             contentType(ContentType.Application.Json)
             setBody<RenameGroupRequest>(renameRequest)
+            authenticate(authToken)
         }
 
         // Assert

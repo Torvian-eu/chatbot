@@ -4,8 +4,10 @@ import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.models.ChatGroup
 import eu.torvian.chatbot.server.data.dao.GroupDao
+import eu.torvian.chatbot.server.data.dao.GroupOwnershipDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
 import eu.torvian.chatbot.server.data.dao.error.GroupError
+import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
 import eu.torvian.chatbot.server.service.core.error.group.*
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
 import io.mockk.*
@@ -27,6 +29,7 @@ class GroupServiceImplTest {
 
     // Mocked dependencies
     private lateinit var groupDao: GroupDao
+    private lateinit var groupOwnershipDao: GroupOwnershipDao
     private lateinit var sessionDao: SessionDao
     private lateinit var transactionScope: TransactionScope
 
@@ -50,11 +53,12 @@ class GroupServiceImplTest {
     fun setUp() {
         // Create mocks for all dependencies
         groupDao = mockk()
+        groupOwnershipDao = mockk()
         sessionDao = mockk()
         transactionScope = mockk()
 
         // Create the service instance with mocked dependencies
-        groupService = GroupServiceImpl(groupDao, sessionDao, transactionScope)
+        groupService = GroupServiceImpl(groupDao, groupOwnershipDao, sessionDao, transactionScope)
 
         // Mock the transaction scope to execute blocks directly
         coEvery { transactionScope.transaction(any<suspend () -> Any>()) } coAnswers {
@@ -66,7 +70,7 @@ class GroupServiceImplTest {
     @AfterEach
     fun tearDown() {
         // Clear all mocks after each test to ensure isolation
-        clearMocks(groupDao, sessionDao, transactionScope)
+        clearMocks(groupDao, groupOwnershipDao, sessionDao, transactionScope)
     }
 
     // --- getAllGroups Tests ---
@@ -74,30 +78,32 @@ class GroupServiceImplTest {
     @Test
     fun `getAllGroups should return list of groups from DAO`() = runTest {
         // Arrange
+        val userId = 1L
         val expectedGroups = listOf(testGroup1, testGroup2)
-        coEvery { groupDao.getAllGroups() } returns expectedGroups
+        coEvery { groupOwnershipDao.getAllGroupsForUser(userId) } returns expectedGroups
 
         // Act
-        val result = groupService.getAllGroups()
+        val result = groupService.getAllGroups(userId)
 
         // Assert
         assertEquals(expectedGroups, result, "Should return the groups from DAO")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { groupDao.getAllGroups() }
+        coVerify(exactly = 1) { groupOwnershipDao.getAllGroupsForUser(userId) }
     }
 
     @Test
     fun `getAllGroups should return empty list when no groups exist`() = runTest {
         // Arrange
-        coEvery { groupDao.getAllGroups() } returns emptyList()
+        val userId = 1L
+        coEvery { groupOwnershipDao.getAllGroupsForUser(userId) } returns emptyList()
 
         // Act
-        val result = groupService.getAllGroups()
+        val result = groupService.getAllGroups(userId)
 
         // Assert
         assertTrue(result.isEmpty(), "Should return empty list when no groups exist")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { groupDao.getAllGroups() }
+        coVerify(exactly = 1) { groupOwnershipDao.getAllGroupsForUser(userId) }
     }
 
     // --- createGroup Tests ---
@@ -105,26 +111,30 @@ class GroupServiceImplTest {
     @Test
     fun `createGroup should create group successfully with valid name`() = runTest {
         // Arrange
+        val userId = 1L
         val groupName = "New Group"
         coEvery { groupDao.insertGroup(groupName) } returns testGroup1
+        coEvery { groupOwnershipDao.setOwner(testGroup1.id, userId) } returns Unit.right()
 
         // Act
-        val result = groupService.createGroup(groupName)
+        val result = groupService.createGroup(userId, groupName)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful creation")
         assertEquals(testGroup1, result.getOrNull(), "Should return the created group")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { groupDao.insertGroup(groupName) }
+        coVerify(exactly = 1) { groupOwnershipDao.setOwner(testGroup1.id, userId) }
     }
 
     @Test
     fun `createGroup should return InvalidName error for blank name`() = runTest {
         // Arrange
+        val userId = 1L
         val blankName = "   "
 
         // Act
-        val result = groupService.createGroup(blankName)
+        val result = groupService.createGroup(userId, blankName)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for blank name")
@@ -139,10 +149,11 @@ class GroupServiceImplTest {
     @Test
     fun `createGroup should return InvalidName error for empty name`() = runTest {
         // Arrange
+        val userId = 1L
         val emptyName = ""
 
         // Act
-        val result = groupService.createGroup(emptyName)
+        val result = groupService.createGroup(userId, emptyName)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for empty name")
@@ -158,27 +169,31 @@ class GroupServiceImplTest {
     @Test
     fun `renameGroup should rename group successfully`() = runTest {
         // Arrange
+        val userId = 1L
         val groupId = 1L
         val newName = "Renamed Group"
+        coEvery { groupOwnershipDao.getOwner(groupId) } returns userId.right()
         coEvery { groupDao.renameGroup(groupId, newName) } returns Unit.right()
 
         // Act
-        val result = groupService.renameGroup(groupId, newName)
+        val result = groupService.renameGroup(userId, groupId, newName)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful rename")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+        coVerify(exactly = 1) { groupOwnershipDao.getOwner(groupId) }
         coVerify(exactly = 1) { groupDao.renameGroup(groupId, newName) }
     }
 
     @Test
     fun `renameGroup should return InvalidName error for blank new name`() = runTest {
         // Arrange
+        val userId = 1L
         val groupId = 1L
         val blankName = "  "
 
         // Act
-        val result = groupService.renameGroup(groupId, blankName)
+        val result = groupService.renameGroup(userId, groupId, blankName)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for blank name")
@@ -193,13 +208,14 @@ class GroupServiceImplTest {
     @Test
     fun `renameGroup should return GroupNotFound error when group does not exist`() = runTest {
         // Arrange
+        val userId = 1L
         val groupId = 999L
         val newName = "New Name"
-        val daoError = GroupError.GroupNotFound(groupId)
-        coEvery { groupDao.renameGroup(groupId, newName) } returns daoError.left()
+        val ownershipError = GetOwnerError.ResourceNotFound(groupId.toString())
+        coEvery { groupOwnershipDao.getOwner(groupId) } returns ownershipError.left()
 
         // Act
-        val result = groupService.renameGroup(groupId, newName)
+        val result = groupService.renameGroup(userId, groupId, newName)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for non-existent group")
@@ -208,7 +224,8 @@ class GroupServiceImplTest {
         assertTrue(error is RenameGroupError.GroupNotFound, "Should be GroupNotFound error")
         assertEquals(groupId, (error as RenameGroupError.GroupNotFound).id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { groupDao.renameGroup(groupId, newName) }
+        coVerify(exactly = 1) { groupOwnershipDao.getOwner(groupId) }
+        coVerify(exactly = 0) { groupDao.renameGroup(any(), any()) }
     }
 
     // --- deleteGroup Tests ---
@@ -216,16 +233,19 @@ class GroupServiceImplTest {
     @Test
     fun `deleteGroup should delete group successfully and ungroup sessions`() = runTest {
         // Arrange
+        val userId = 1L
         val groupId = 1L
+        coEvery { groupOwnershipDao.getOwner(groupId) } returns userId.right()
         coEvery { sessionDao.ungroupSessions(groupId) } returns Unit
         coEvery { groupDao.deleteGroup(groupId) } returns Unit.right()
 
         // Act
-        val result = groupService.deleteGroup(groupId)
+        val result = groupService.deleteGroup(userId, groupId)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful deletion")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+        coVerify(exactly = 1) { groupOwnershipDao.getOwner(groupId) }
         coVerify(exactly = 1) { sessionDao.ungroupSessions(groupId) }
         coVerify(exactly = 1) { groupDao.deleteGroup(groupId) }
     }
@@ -233,13 +253,13 @@ class GroupServiceImplTest {
     @Test
     fun `deleteGroup should return GroupNotFound error when group does not exist`() = runTest {
         // Arrange
+        val userId = 1L
         val groupId = 999L
-        val daoError = GroupError.GroupNotFound(groupId)
-        coEvery { sessionDao.ungroupSessions(groupId) } returns Unit
-        coEvery { groupDao.deleteGroup(groupId) } returns daoError.left()
+        val ownershipError = GetOwnerError.ResourceNotFound(groupId.toString())
+        coEvery { groupOwnershipDao.getOwner(groupId) } returns ownershipError.left()
 
         // Act
-        val result = groupService.deleteGroup(groupId)
+        val result = groupService.deleteGroup(userId, groupId)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for non-existent group")
@@ -248,25 +268,29 @@ class GroupServiceImplTest {
         assertTrue(error is DeleteGroupError.GroupNotFound, "Should be GroupNotFound error")
         assertEquals(groupId, (error as DeleteGroupError.GroupNotFound).id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { sessionDao.ungroupSessions(groupId) }
-        coVerify(exactly = 1) { groupDao.deleteGroup(groupId) }
+        coVerify(exactly = 1) { groupOwnershipDao.getOwner(groupId) }
+        coVerify(exactly = 0) { sessionDao.ungroupSessions(any()) }
+        coVerify(exactly = 0) { groupDao.deleteGroup(any()) }
     }
 
     @Test
     fun `deleteGroup should still ungroup sessions even when group deletion fails`() = runTest {
         // Arrange
+        val userId = 1L
         val groupId = 1L
         val daoError = GroupError.GroupNotFound(groupId)
+        coEvery { groupOwnershipDao.getOwner(groupId) } returns userId.right()
         coEvery { sessionDao.ungroupSessions(groupId) } returns Unit
         coEvery { groupDao.deleteGroup(groupId) } returns daoError.left()
 
         // Act
-        val result = groupService.deleteGroup(groupId)
+        val result = groupService.deleteGroup(userId, groupId)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left when deletion fails")
         // Verify that ungroupSessions was still called before attempting deletion
         coVerifyOrder {
+            groupOwnershipDao.getOwner(groupId)
             sessionDao.ungroupSessions(groupId)
             groupDao.deleteGroup(groupId)
         }
