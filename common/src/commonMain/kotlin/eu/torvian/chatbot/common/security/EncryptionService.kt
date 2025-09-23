@@ -1,6 +1,4 @@
-package eu.torvian.chatbot.server.service.security
-
-import eu.torvian.chatbot.server.domain.security.EncryptedSecret
+package eu.torvian.chatbot.common.security
 
 /**
  *   Service for handling encryption operations using envelope encryption.
@@ -46,18 +44,17 @@ class EncryptionService(private val cryptoProvider: CryptoProvider) {
     }
 
     /**
-     * Decrypts a secret using envelope encryption.
+     * Decrypts an encrypted secret using envelope encryption.
      *
      * This method:
-     * 1. Decrypts the DEK using the KEK
+     * 1. Decrypts the DEK using the KEK of the specified version
      * 2. Decrypts the secret using the DEK
      *
      * @param encrypted The [EncryptedSecret] containing the encrypted secret and DEK details.
      * @return The decrypted plaintext secret.
      */
     fun decrypt(encrypted: EncryptedSecret): String {
-        // You might add a check here for encrypted.keyVersion if you support multiple KEKs for decryption
-        val dek = cryptoProvider.unwrapDEK(encrypted.encryptedDEK)
+        val dek = cryptoProvider.unwrapDEK(encrypted.encryptedDEK, encrypted.keyVersion)
         return cryptoProvider.decryptData(encrypted.encryptedSecret, dek)
     }
 }

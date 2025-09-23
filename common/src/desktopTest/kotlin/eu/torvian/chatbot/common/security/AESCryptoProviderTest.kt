@@ -1,9 +1,9 @@
-package eu.torvian.chatbot.server.service.security
+package eu.torvian.chatbot.common.security
 
-import eu.torvian.chatbot.server.domain.security.EncryptionConfig
 import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.Test
-import java.util.Base64
+import java.security.SecureRandom
+import java.util.*
+import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
@@ -16,11 +16,11 @@ class AESCryptoProviderTest {
     @BeforeEach
     fun setup() {
         // Create a random test master key (Base64-encoded 256-bit key)
-        val random = java.security.SecureRandom()
+        val random = SecureRandom()
         val keyBytes = ByteArray(32)
         random.nextBytes(keyBytes)
         val masterKey = Base64.getEncoder().encodeToString(keyBytes)
-        config = EncryptionConfig(masterKey = masterKey, keyVersion = 1)
+        config = EncryptionConfig(masterKeys = mapOf(1 to masterKey), keyVersion = 1)
         cryptoProvider = AESCryptoProvider(config)
     }
 
@@ -57,7 +57,7 @@ class AESCryptoProviderTest {
 
         // Act
         val wrappedDek = cryptoProvider.wrapDEK(dek)
-        val unwrappedDek = cryptoProvider.unwrapDEK(wrappedDek)
+        val unwrappedDek = cryptoProvider.unwrapDEK(wrappedDek, 1)
 
         // Assert
         assertNotEquals(dek, wrappedDek, "Wrapped DEK should be different from original DEK")
@@ -84,8 +84,10 @@ class AESCryptoProviderTest {
         val cipherText2 = cryptoProvider.encryptData(plainText, dek)
 
         // Assert
-        assertNotEquals(cipherText1, cipherText2, 
-            "Encrypting the same plaintext twice should produce different ciphertexts due to random IV")
+        assertNotEquals(
+            cipherText1, cipherText2,
+            "Encrypting the same plaintext twice should produce different ciphertexts due to random IV"
+        )
     }
 
     @Test
@@ -98,8 +100,10 @@ class AESCryptoProviderTest {
         val wrappedDek2 = cryptoProvider.wrapDEK(dek)
 
         // Assert
-        assertNotEquals(wrappedDek1, wrappedDek2, 
-            "Wrapping the same DEK twice should produce different results due to random IV")
+        assertNotEquals(
+            wrappedDek1, wrappedDek2,
+            "Wrapping the same DEK twice should produce different results due to random IV"
+        )
     }
 
     @Test
@@ -130,4 +134,3 @@ class AESCryptoProviderTest {
         assertEquals(plainText, decryptedText, "Should correctly encrypt and decrypt large string")
     }
 }
-

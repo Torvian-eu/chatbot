@@ -1,4 +1,4 @@
-package eu.torvian.chatbot.server.service.security
+package eu.torvian.chatbot.common.security
 
 /**
  * Interface for cryptographic operations.
@@ -45,12 +45,13 @@ interface CryptoProvider {
     fun wrapDEK(dek: String): String
 
     /**
-     * Decrypts (unwraps) a DEK using the KEK.
+     * Decrypts (unwraps) a DEK using the KEK of a specific version.
      *
      * @param wrappedDek The Base64-encoded encrypted DEK.
+     * @param kekVersion The version of the KEK that was used to wrap this DEK.
      * @return The decrypted DEK as a Base64-encoded string.
      */
-    fun unwrapDEK(wrappedDek: String): String
+    fun unwrapDEK(wrappedDek: String, kekVersion: Int): String
 
     /**
      * Gets the current version of the KEK.

@@ -1,6 +1,5 @@
-package eu.torvian.chatbot.server.service.security
+package eu.torvian.chatbot.common.security
 
-import eu.torvian.chatbot.server.domain.security.EncryptionConfig
 import java.security.SecureRandom
 import java.util.Base64
 import javax.crypto.Cipher
@@ -10,16 +9,19 @@ import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 /**
- *   Implementation of [CryptoProvider] using AES encryption.
+ * JVM implementation of [CryptoProvider] using AES encryption with key rotation support.
  *
- *   This class provides a concrete implementation of envelope encryption using AES:
- *   Data is encrypted with a Data Encryption Key (DEK)
- *   The DEK is encrypted with a Key Encryption Key (KEK)
+ * This class provides a concrete implementation of envelope encryption using AES:
+ * Data is encrypted with a Data Encryption Key (DEK)
+ * The DEK is encrypted with a Key Encryption Key (KEK)
  *
- *   All methods work with Base64-encoded strings to hide implementation details
- *   and decouple the rest of the system from crypto-specific types.
+ * This implementation supports key rotation by maintaining multiple KEKs indexed by version.
+ * New encryptions use the current key version, while decryptions can use any available key version.
  *
- *   @property config The encryption configuration to use
+ * All methods work with Base64-encoded strings to hide implementation details
+ * and decouple the rest of the system from crypto-specific types.
+ *
+ * @property config The encryption configuration containing multiple versioned keys
  */
 class AESCryptoProvider(private val config: EncryptionConfig) : CryptoProvider {
 
@@ -36,17 +38,21 @@ class AESCryptoProvider(private val config: EncryptionConfig) : CryptoProvider {
     private val transformation: String = config.transformation ?: DEFAULT_TRANSFORMATION
     private val keySizeBits: Int = config.keySizeBits ?: DEFAULT_KEY_SIZE_BITS
 
-
-    // The KEK is stored internally as a SecretKey, constructed from the Base64-encoded masterKey
-    private val kek: SecretKey by lazy {
-        val keyBytes = Base64.getDecoder().decode(config.masterKey)
-        // Validate key size if necessary, e.g., if keyBytes.size * 8 != keySizeBits
-        if (keyBytes.size * 8 != keySizeBits) {
-             // Log a warning or throw an exception if the provided key doesn't match the configured size
-             // Using a fixed size spec might be safer if keySizeBits is derived from config
-            throw IllegalArgumentException("Master key size does not match the configured key size.")
+    // Store a map of all KEKs, indexed by version
+    private val keks: Map<Int, SecretKey> by lazy {
+        config.masterKeys.mapValues { (_, keyString) ->
+            val keyBytes = Base64.getDecoder().decode(keyString)
+            if (keyBytes.size * 8 != keySizeBits) {
+                throw IllegalArgumentException("Master key size does not match the configured key size.")
+            }
+            SecretKeySpec(keyBytes, algorithm)
         }
-        SecretKeySpec(keyBytes, algorithm)
+    }
+
+    // A specific reference to the current KEK for new encryptions
+    private val currentKek: SecretKey by lazy {
+        keks[config.keyVersion]
+            ?: throw IllegalStateException("Current key version ${config.keyVersion} not found in master keys map.")
     }
 
     /**
@@ -101,7 +107,7 @@ class AESCryptoProvider(private val config: EncryptionConfig) : CryptoProvider {
     }
 
     /**
-     * Encrypts (wraps) a DEK using the KEK.
+     * Encrypts (wraps) a DEK using the current KEK.
      *
      * @param dek The Base64-encoded DEK to encrypt.
      * @return A Base64-encoded string containing the encrypted DEK.
@@ -110,19 +116,23 @@ class AESCryptoProvider(private val config: EncryptionConfig) : CryptoProvider {
         val dekKey = secretKeyFromBase64(dek)
         val cipher = Cipher.getInstance(transformation)
         val iv = ByteArray(IV_SIZE).also { SecureRandom().nextBytes(it) }
-        cipher.init(Cipher.ENCRYPT_MODE, kek, IvParameterSpec(iv))
+        cipher.init(Cipher.ENCRYPT_MODE, currentKek, IvParameterSpec(iv)) // CHANGED: Use currentKek
         val encryptedDekBytes = cipher.doFinal(dekKey.encoded)
         val combined = iv + encryptedDekBytes
         return Base64.getEncoder().encodeToString(combined)
     }
 
     /**
-     * Decrypts (unwraps) a DEK using the KEK.
+     * Decrypts (unwraps) a DEK using the KEK of a specific version.
      *
      * @param wrappedDek The Base64-encoded encrypted DEK.
+     * @param kekVersion The version of the KEK that was used to wrap this DEK.
      * @return The decrypted DEK as a Base64-encoded string.
      */
-    override fun unwrapDEK(wrappedDek: String): String {
+    override fun unwrapDEK(wrappedDek: String, kekVersion: Int): String {
+        val kek = keks[kekVersion]
+            ?: throw IllegalArgumentException("KEK version $kekVersion not found in available keys.")
+
         val combined = Base64.getDecoder().decode(wrappedDek)
         // Ensure combined has enough bytes for IV and at least some data
          if (combined.size < IV_SIZE) {
@@ -131,7 +141,7 @@ class AESCryptoProvider(private val config: EncryptionConfig) : CryptoProvider {
         val iv = combined.copyOfRange(0, IV_SIZE)
         val encryptedDekBytes = combined.copyOfRange(IV_SIZE, combined.size)
         val cipher = Cipher.getInstance(transformation)
-        cipher.init(Cipher.DECRYPT_MODE, kek, IvParameterSpec(iv))
+        cipher.init(Cipher.DECRYPT_MODE, kek, IvParameterSpec(iv)) // CHANGED: Use specific kek version
         val dekBytes = cipher.doFinal(encryptedDekBytes)
         return Base64.getEncoder().encodeToString(dekBytes)
     }

@@ -3,20 +3,20 @@ package eu.torvian.chatbot.server.service.security
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
+import eu.torvian.chatbot.common.security.EncryptedSecret
+import eu.torvian.chatbot.common.security.EncryptionService
 import eu.torvian.chatbot.server.data.dao.ApiSecretDao
-import eu.torvian.chatbot.server.domain.security.EncryptedSecret
-import eu.torvian.chatbot.server.data.dao.error.ApiSecretError.SecretNotFound
 import eu.torvian.chatbot.server.data.dao.error.ApiSecretError.SecretAlreadyExists
+import eu.torvian.chatbot.server.data.dao.error.ApiSecretError.SecretNotFound
 import eu.torvian.chatbot.server.service.security.error.CredentialError.CredentialNotFound
 import io.mockk.*
 import kotlinx.coroutines.test.runTest
-import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.assertDoesNotThrow
-import org.junit.jupiter.api.assertThrows
+import org.junit.jupiter.api.*
 import java.util.*
-import kotlin.test.*
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 /**
  * Unit tests for [DbEncryptedCredentialManager].
@@ -145,7 +145,11 @@ class DbEncryptedCredentialManagerTest {
 
         // Assert
         assertTrue(result.isRight(), "getCredential should return Right with the credential on success")
-        assertEquals(testPlainCredential, result.getOrNull(), "Retrieved credential should match the original plaintext")
+        assertEquals(
+            testPlainCredential,
+            result.getOrNull(),
+            "Retrieved credential should match the original plaintext"
+        )
 
         // Verify apiSecretDao.getSecret was called correctly
         coVerify(exactly = 1) { apiSecretDao.getSecret(testAlias) }

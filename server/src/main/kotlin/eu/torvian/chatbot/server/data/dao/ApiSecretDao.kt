@@ -1,8 +1,8 @@
 package eu.torvian.chatbot.server.data.dao
 
 import arrow.core.Either
+import eu.torvian.chatbot.common.security.EncryptedSecret
 import eu.torvian.chatbot.server.data.dao.error.ApiSecretError
-import eu.torvian.chatbot.server.domain.security.EncryptedSecret
 
 /**
  * Repository interface for managing encrypted API secrets in the database.

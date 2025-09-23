@@ -1,11 +1,17 @@
-package eu.torvian.chatbot.server.service.security
+package eu.torvian.chatbot.common.security
 
-import eu.torvian.chatbot.server.domain.security.EncryptedSecret
-import io.mockk.*
+import io.mockk.clearMocks
+import io.mockk.confirmVerified
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.slot
+import io.mockk.verify
+import io.mockk.verifyOrder
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.Test
-import kotlin.test.*
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 /**
  * Unit tests for [EncryptionService].
@@ -95,7 +101,11 @@ class EncryptionServiceTest {
         }
 
         // Also verify that the same DEK generated was used for encryptData and wrapDEK
-        assertEquals(mockGeneratedDEK, dekSlotForDataEncrypt.captured, "The DEK used for encryptData should be the one generated")
+        assertEquals(
+            mockGeneratedDEK,
+            dekSlotForDataEncrypt.captured,
+            "The DEK used for encryptData should be the one generated"
+        )
         assertEquals(mockGeneratedDEK, dekSlotForWrap.captured, "The DEK used for wrapDEK should be the one generated")
 
         // Confirm no other calls were made on the mock besides the ones explicitly verified above
@@ -209,7 +219,12 @@ class EncryptionServiceTest {
         // Arrange
         // Configure the mock CryptoProvider methods for decryption
         // Note: The input to unwrapDEK is from testEncryptedSecretInput
-        every { cryptoProvider.unwrapDEK(testEncryptedSecretInput.encryptedDEK) } returns mockUnwrappedDEK
+        every {
+            cryptoProvider.unwrapDEK(
+                testEncryptedSecretInput.encryptedDEK,
+                testEncryptedSecretInput.keyVersion
+            )
+        } returns mockUnwrappedDEK
         // Note: The input to decryptData is from testEncryptedSecretInput (cipher) and the unwrapped DEK
         every { cryptoProvider.decryptData(testEncryptedSecretInput.encryptedSecret, mockUnwrappedDEK) } returns testPlaintext
 
@@ -222,8 +237,11 @@ class EncryptionServiceTest {
         // Verify that the CryptoProvider methods were called in the correct sequence and with correct arguments
         // Use ordered = true to verify the call order
         verifyOrder {
-            cryptoProvider.unwrapDEK(testEncryptedSecretInput.encryptedDEK)
-            cryptoProvider.decryptData(testEncryptedSecretInput.encryptedSecret, mockUnwrappedDEK) // Assert using the *expected* value
+            cryptoProvider.unwrapDEK(testEncryptedSecretInput.encryptedDEK, testEncryptedSecretInput.keyVersion)
+            cryptoProvider.decryptData(
+                testEncryptedSecretInput.encryptedSecret,
+                mockUnwrappedDEK
+            ) // Assert using the *expected* value
         }
 
         // Confirm no other calls were made on the mock besides the ones explicitly verified above
@@ -234,7 +252,12 @@ class EncryptionServiceTest {
     fun `decrypt should propagate exception if unwrapDEK fails`() {
         // Arrange
         val unwrapDekException = RuntimeException("DEK unwrapping failed")
-        every { cryptoProvider.unwrapDEK(testEncryptedSecretInput.encryptedDEK) } throws unwrapDekException
+        every {
+            cryptoProvider.unwrapDEK(
+                testEncryptedSecretInput.encryptedDEK,
+                testEncryptedSecretInput.keyVersion
+            )
+        } throws unwrapDekException
 
         // Act & Assert
         val thrown = assertFailsWith<RuntimeException>(
@@ -245,7 +268,12 @@ class EncryptionServiceTest {
         assertEquals(unwrapDekException, thrown, "The thrown exception should be the one from unwrapDEK")
 
         // Verify unwrapDEK was called (and threw)
-        verify(exactly = 1) { cryptoProvider.unwrapDEK(testEncryptedSecretInput.encryptedDEK) }
+        verify(exactly = 1) {
+            cryptoProvider.unwrapDEK(
+                testEncryptedSecretInput.encryptedDEK,
+                testEncryptedSecretInput.keyVersion
+            )
+        }
         // Confirm no other calls were made
         confirmVerified(cryptoProvider)
     }
@@ -254,7 +282,12 @@ class EncryptionServiceTest {
     fun `decrypt should propagate exception if decryptData fails`() {
         // Arrange
         val decryptDataException = RuntimeException("Data decryption failed")
-        every { cryptoProvider.unwrapDEK(testEncryptedSecretInput.encryptedDEK) } returns mockUnwrappedDEK
+        every {
+            cryptoProvider.unwrapDEK(
+                testEncryptedSecretInput.encryptedDEK,
+                testEncryptedSecretInput.keyVersion
+            )
+        } returns mockUnwrappedDEK
         every { cryptoProvider.decryptData(testEncryptedSecretInput.encryptedSecret, mockUnwrappedDEK) } throws decryptDataException // Setup with expected args
 
         // Act & Assert
@@ -267,7 +300,7 @@ class EncryptionServiceTest {
 
         // Verify unwrapDEK was called, and then decryptData was called (and threw)
         verifyOrder {
-            cryptoProvider.unwrapDEK(testEncryptedSecretInput.encryptedDEK)
+            cryptoProvider.unwrapDEK(testEncryptedSecretInput.encryptedDEK, testEncryptedSecretInput.keyVersion)
             cryptoProvider.decryptData(testEncryptedSecretInput.encryptedSecret, mockUnwrappedDEK)
         }
         // Confirm no other calls were made

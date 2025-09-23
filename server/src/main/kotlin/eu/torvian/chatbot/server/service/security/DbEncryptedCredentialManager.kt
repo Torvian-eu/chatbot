@@ -4,6 +4,7 @@ import arrow.core.Either
 import arrow.core.getOrElse
 import arrow.core.raise.either
 import arrow.core.raise.withError
+import eu.torvian.chatbot.common.security.EncryptionService
 import eu.torvian.chatbot.server.data.dao.ApiSecretDao
 import eu.torvian.chatbot.server.service.security.error.CredentialError.CredentialNotFound
 import org.apache.logging.log4j.LogManager

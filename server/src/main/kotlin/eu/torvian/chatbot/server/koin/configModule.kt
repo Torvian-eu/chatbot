@@ -1,9 +1,8 @@
 package eu.torvian.chatbot.server.koin
 
+import eu.torvian.chatbot.common.security.EncryptionConfig
 import eu.torvian.chatbot.server.domain.config.DatabaseConfig
-import eu.torvian.chatbot.server.domain.security.EncryptionConfig
 import eu.torvian.chatbot.server.domain.security.JwtConfig
-
 import org.koin.dsl.module
 
 /**
