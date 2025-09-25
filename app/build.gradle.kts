@@ -125,6 +125,7 @@ kotlin {
             implementation(libs.ktor.serialization.json)
             implementation(libs.ktor.client.resources)
             implementation(libs.ktor.client.logging)
+            implementation(libs.ktor.client.auth)
 
             // Arrow dependencies for Either
             implementation(libs.arrow.core)
@@ -133,6 +134,7 @@ kotlin {
             // KotlinX dependencies
             implementation(libs.coroutines.core)
             implementation(libs.kotlinx.datetime)
+            implementation(libs.kotlinx.io.core)
 
             // Koin dependency injection
             implementation(libs.koin.core)
