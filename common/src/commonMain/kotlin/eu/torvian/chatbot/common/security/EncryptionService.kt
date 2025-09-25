@@ -1,5 +1,8 @@
 package eu.torvian.chatbot.common.security
 
+import arrow.core.Either
+import arrow.core.raise.either
+
 /**
  *   Service for handling encryption operations using envelope encryption.
  *
@@ -29,14 +32,15 @@ class EncryptionService(private val cryptoProvider: CryptoProvider) {
      * 4. Returns an [EncryptedSecret] containing all the necessary information
      *
      * @param plainText The plaintext secret to encrypt.
-     * @return An [EncryptedSecret] containing the encrypted secret, encrypted DEK, and key version.
+     * @return Either a CryptoError or an [EncryptedSecret] containing the encrypted secret, encrypted DEK, and key version.
      */
-    fun encrypt(plainText: String): EncryptedSecret {
-        val dek = cryptoProvider.generateDEK()
-        val encryptedSecret = cryptoProvider.encryptData(plainText, dek)
-        val wrappedDek = cryptoProvider.wrapDEK(dek)
+    fun encrypt(plainText: String): Either<CryptoError, EncryptedSecret> = either {
+        val dek = cryptoProvider.generateDEK().bind()
+        val encryptedSecret = cryptoProvider.encryptData(plainText, dek).bind()
+        val wrappedDek = cryptoProvider.wrapDEK(dek).bind()
         val keyVersion = cryptoProvider.getKeyVersion()
-        return EncryptedSecret(
+
+        EncryptedSecret(
             encryptedSecret = encryptedSecret,
             encryptedDEK = wrappedDek,
             keyVersion = keyVersion
@@ -51,10 +55,10 @@ class EncryptionService(private val cryptoProvider: CryptoProvider) {
      * 2. Decrypts the secret using the DEK
      *
      * @param encrypted The [EncryptedSecret] containing the encrypted secret and DEK details.
-     * @return The decrypted plaintext secret.
+     * @return Either a CryptoError or the decrypted plaintext secret.
      */
-    fun decrypt(encrypted: EncryptedSecret): String {
-        val dek = cryptoProvider.unwrapDEK(encrypted.encryptedDEK, encrypted.keyVersion)
-        return cryptoProvider.decryptData(encrypted.encryptedSecret, dek)
+    fun decrypt(encrypted: EncryptedSecret): Either<CryptoError, String> = either {
+        val dek = cryptoProvider.unwrapDEK(encrypted.encryptedDEK, encrypted.keyVersion).bind()
+        cryptoProvider.decryptData(encrypted.encryptedSecret, dek).bind()
     }
 }

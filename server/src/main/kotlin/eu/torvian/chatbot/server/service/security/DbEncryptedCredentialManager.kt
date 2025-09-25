@@ -17,6 +17,8 @@ import java.util.*
  *
  * @property encryptionService The service for handling encryption operations
  * @property apiSecretDao The DAO for interacting with the database table
+ *
+ * TODO: Improve error handling
  */
 class DbEncryptedCredentialManager(
     private val encryptionService: EncryptionService,
@@ -32,7 +34,12 @@ class DbEncryptedCredentialManager(
         val alias = UUID.randomUUID().toString()
 
         // Use the encryption service to perform envelope encryption
-        val encryptedSecret = encryptionService.encrypt(credential)
+        val encryptedSecret = either {
+            encryptionService.encrypt(credential).bind()
+        }.getOrElse { error ->
+            logger.error("Failed to encrypt credential: $error")
+            throw IllegalStateException("Failed to encrypt credential: $error")
+        }
 
         // Save encrypted secret to database
         apiSecretDao.saveSecret(alias, encryptedSecret).getOrElse {
@@ -46,12 +53,10 @@ class DbEncryptedCredentialManager(
     override suspend fun getCredential(alias: String): Either<CredentialNotFound, String> =
         either {
             withError({ CredentialNotFound(alias) }) {
-                apiSecretDao.getSecret(alias).bind().let { encryptedSecret ->
-                    encryptionService.decrypt(encryptedSecret)
-                }
+                val encryptedSecret = apiSecretDao.getSecret(alias).bind()
+                encryptionService.decrypt(encryptedSecret).bind()
             }
         }
-
 
     override suspend fun deleteCredential(alias: String): Either<CredentialNotFound, Unit> =
         either {

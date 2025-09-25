@@ -1,7 +1,11 @@
 package eu.torvian.chatbot.common.security
 
+import arrow.core.Either
+import arrow.core.raise.catch
+import arrow.core.raise.either
+import arrow.core.raise.ensure
 import java.security.SecureRandom
-import java.util.Base64
+import java.util.*
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -31,6 +35,20 @@ class AESCryptoProvider(private val config: EncryptionConfig) : CryptoProvider {
         private const val DEFAULT_TRANSFORMATION = "AES/CBC/PKCS5Padding"
         private const val DEFAULT_KEY_SIZE_BITS = 256
         private const val IV_SIZE = 16
+
+        fun generateRandomKey(
+            algorithm: String = DEFAULT_ALGORITHM,
+            keySizeBits: Int = DEFAULT_KEY_SIZE_BITS
+        ): Either<CryptoError, String> = either {
+            catch({
+                val keyGenerator = KeyGenerator.getInstance(algorithm)
+                keyGenerator.init(keySizeBits, SecureRandom())
+                val key = keyGenerator.generateKey()
+                Base64.getEncoder().encodeToString(key.encoded)
+            }) { e: Exception ->
+                raise(CryptoError.KeyGenerationError("Failed to generate random key: ${e.message}"))
+            }
+        }
     }
 
     // Properties derived from config or defaults
@@ -39,49 +57,63 @@ class AESCryptoProvider(private val config: EncryptionConfig) : CryptoProvider {
     private val keySizeBits: Int = config.keySizeBits ?: DEFAULT_KEY_SIZE_BITS
 
     // Store a map of all KEKs, indexed by version
-    private val keks: Map<Int, SecretKey> by lazy {
-        config.masterKeys.mapValues { (_, keyString) ->
-            val keyBytes = Base64.getDecoder().decode(keyString)
-            if (keyBytes.size * 8 != keySizeBits) {
-                throw IllegalArgumentException("Master key size does not match the configured key size.")
+    private val keks: Either<CryptoError, Map<Int, SecretKey>> by lazy {
+        either {
+            catch({
+                config.masterKeys.mapValues { (_, keyString) ->
+                    val keyBytes = catch({
+                        Base64.getDecoder().decode(keyString)
+                    }) { e: IllegalArgumentException ->
+                        raise(CryptoError.InvalidKey("Invalid Base64 encoding for master key: ${e.message}"))
+                    }
+
+                    ensure(keyBytes.size * 8 == keySizeBits) {
+                        CryptoError.ConfigurationError(
+                            "Master key size (${keyBytes.size * 8} bits) does not match configured key size ($keySizeBits bits)"
+                        )
+                    }
+                    SecretKeySpec(keyBytes, algorithm)
+                }
+            }) { e: Exception ->
+                raise(CryptoError.ConfigurationError("Failed to initialize KEKs: ${e.message}"))
             }
-            SecretKeySpec(keyBytes, algorithm)
         }
     }
 
     // A specific reference to the current KEK for new encryptions
-    private val currentKek: SecretKey by lazy {
-        keks[config.keyVersion]
-            ?: throw IllegalStateException("Current key version ${config.keyVersion} not found in master keys map.")
+    private val currentKek: Either<CryptoError, SecretKey> by lazy {
+        either {
+            val keyMap = keks.bind()
+            keyMap[config.keyVersion] ?: raise(CryptoError.KeyVersionNotFound(config.keyVersion))
+        }
     }
 
     /**
      * Generates a new random Data Encryption Key (DEK).
      *
-     * @return A Base64-encoded string representation of the DEK.
+     * @return Either a CryptoError or a Base64-encoded string representation of the DEK.
      */
-    override fun generateDEK(): String {
-        val keyGenerator = KeyGenerator.getInstance(algorithm)
-        keyGenerator.init(keySizeBits, SecureRandom())
-        val dek = keyGenerator.generateKey()
-        return Base64.getEncoder().encodeToString(dek.encoded)
-    }
+    override fun generateDEK(): Either<CryptoError, String> = generateRandomKey(algorithm, keySizeBits)
 
     /**
      * Encrypts data using the provided DEK.
      *
      * @param plainText The plaintext data to encrypt.
      * @param dek The Base64-encoded DEK to use for encryption.
-     * @return A Base64-encoded string containing the encrypted data.
+     * @return Either a CryptoError or a Base64-encoded string containing the encrypted data.
      */
-    override fun encryptData(plainText: String, dek: String): String {
-        val dekKey = secretKeyFromBase64(dek)
-        val cipher = Cipher.getInstance(transformation)
-        val iv = ByteArray(IV_SIZE).also { SecureRandom().nextBytes(it) }
-        cipher.init(Cipher.ENCRYPT_MODE, dekKey, IvParameterSpec(iv))
-        val encryptedBytes = cipher.doFinal(plainText.toByteArray())
-        val combined = iv + encryptedBytes
-        return Base64.getEncoder().encodeToString(combined)
+    override fun encryptData(plainText: String, dek: String): Either<CryptoError, String> = either {
+        catch({
+            val dekKey = secretKeyFromBase64(dek).bind()
+            val cipher = Cipher.getInstance(transformation)
+            val iv = ByteArray(IV_SIZE).also { SecureRandom().nextBytes(it) }
+            cipher.init(Cipher.ENCRYPT_MODE, dekKey, IvParameterSpec(iv))
+            val encryptedBytes = cipher.doFinal(plainText.toByteArray())
+            val combined = iv + encryptedBytes
+            Base64.getEncoder().encodeToString(combined)
+        }) { e: Exception ->
+            raise(CryptoError.EncryptionError("Failed to encrypt data: ${e.message}"))
+        }
     }
 
     /**
@@ -89,37 +121,52 @@ class AESCryptoProvider(private val config: EncryptionConfig) : CryptoProvider {
      *
      * @param cipherText The Base64-encoded encrypted data.
      * @param dek The Base64-encoded DEK to use for decryption.
-     * @return The decrypted plaintext data.
+     * @return Either a CryptoError or the decrypted plaintext data.
      */
-    override fun decryptData(cipherText: String, dek: String): String {
-        val dekKey = secretKeyFromBase64(dek)
-        val combined = Base64.getDecoder().decode(cipherText)
-        // Ensure combined has enough bytes for IV and at least some data
-        if (combined.size < IV_SIZE) {
-             throw IllegalArgumentException("Ciphertext is too short to contain IV.")
+    override fun decryptData(cipherText: String, dek: String): Either<CryptoError, String> = either {
+        catch({
+            val dekKey = secretKeyFromBase64(dek).bind()
+            val combined = catch({
+                Base64.getDecoder().decode(cipherText)
+            }) { e: IllegalArgumentException ->
+                raise(CryptoError.InvalidCiphertext("Invalid Base64 encoding in ciphertext: ${e.message}"))
+            }
+
+            // Ensure combined has enough bytes for IV and at least some data
+            ensure(combined.size >= IV_SIZE) {
+                CryptoError.InvalidCiphertext("Ciphertext is too short to contain IV (minimum $IV_SIZE bytes required, got ${combined.size})")
+            }
+
+            val iv = combined.copyOfRange(0, IV_SIZE)
+            val encryptedBytes = combined.copyOfRange(IV_SIZE, combined.size)
+            val cipher = Cipher.getInstance(transformation)
+            cipher.init(Cipher.DECRYPT_MODE, dekKey, IvParameterSpec(iv))
+            val decryptedBytes = cipher.doFinal(encryptedBytes)
+            String(decryptedBytes)
+        }) { e: Exception ->
+            raise(CryptoError.DecryptionError("Failed to decrypt data: ${e.message}"))
         }
-        val iv = combined.copyOfRange(0, IV_SIZE)
-        val encryptedBytes = combined.copyOfRange(IV_SIZE, combined.size)
-        val cipher = Cipher.getInstance(transformation)
-        cipher.init(Cipher.DECRYPT_MODE, dekKey, IvParameterSpec(iv))
-        val decryptedBytes = cipher.doFinal(encryptedBytes)
-        return String(decryptedBytes)
     }
 
     /**
      * Encrypts (wraps) a DEK using the current KEK.
      *
      * @param dek The Base64-encoded DEK to encrypt.
-     * @return A Base64-encoded string containing the encrypted DEK.
+     * @return Either a CryptoError or a Base64-encoded string containing the encrypted DEK.
      */
-    override fun wrapDEK(dek: String): String {
-        val dekKey = secretKeyFromBase64(dek)
-        val cipher = Cipher.getInstance(transformation)
-        val iv = ByteArray(IV_SIZE).also { SecureRandom().nextBytes(it) }
-        cipher.init(Cipher.ENCRYPT_MODE, currentKek, IvParameterSpec(iv)) // CHANGED: Use currentKek
-        val encryptedDekBytes = cipher.doFinal(dekKey.encoded)
-        val combined = iv + encryptedDekBytes
-        return Base64.getEncoder().encodeToString(combined)
+    override fun wrapDEK(dek: String): Either<CryptoError, String> = either {
+        catch({
+            val dekKey = secretKeyFromBase64(dek).bind()
+            val kek = currentKek.bind()
+            val cipher = Cipher.getInstance(transformation)
+            val iv = ByteArray(IV_SIZE).also { SecureRandom().nextBytes(it) }
+            cipher.init(Cipher.ENCRYPT_MODE, kek, IvParameterSpec(iv))
+            val encryptedDekBytes = cipher.doFinal(dekKey.encoded)
+            val combined = iv + encryptedDekBytes
+            Base64.getEncoder().encodeToString(combined)
+        }) { e: Exception ->
+            raise(CryptoError.EncryptionError("Failed to wrap DEK: ${e.message}"))
+        }
     }
 
     /**
@@ -127,23 +174,33 @@ class AESCryptoProvider(private val config: EncryptionConfig) : CryptoProvider {
      *
      * @param wrappedDek The Base64-encoded encrypted DEK.
      * @param kekVersion The version of the KEK that was used to wrap this DEK.
-     * @return The decrypted DEK as a Base64-encoded string.
+     * @return Either a CryptoError or the decrypted DEK as a Base64-encoded string.
      */
-    override fun unwrapDEK(wrappedDek: String, kekVersion: Int): String {
-        val kek = keks[kekVersion]
-            ?: throw IllegalArgumentException("KEK version $kekVersion not found in available keys.")
+    override fun unwrapDEK(wrappedDek: String, kekVersion: Int): Either<CryptoError, String> = either {
+        catch({
+            val keyMap = keks.bind()
+            val kek = keyMap[kekVersion] ?: raise(CryptoError.KeyVersionNotFound(kekVersion))
 
-        val combined = Base64.getDecoder().decode(wrappedDek)
-        // Ensure combined has enough bytes for IV and at least some data
-         if (combined.size < IV_SIZE) {
-             throw IllegalArgumentException("Wrapped DEK is too short to contain IV.")
-         }
-        val iv = combined.copyOfRange(0, IV_SIZE)
-        val encryptedDekBytes = combined.copyOfRange(IV_SIZE, combined.size)
-        val cipher = Cipher.getInstance(transformation)
-        cipher.init(Cipher.DECRYPT_MODE, kek, IvParameterSpec(iv)) // CHANGED: Use specific kek version
-        val dekBytes = cipher.doFinal(encryptedDekBytes)
-        return Base64.getEncoder().encodeToString(dekBytes)
+            val combined = catch({
+                Base64.getDecoder().decode(wrappedDek)
+            }) { e: IllegalArgumentException ->
+                raise(CryptoError.InvalidCiphertext("Invalid Base64 encoding in wrapped DEK: ${e.message}"))
+            }
+
+            // Ensure combined has enough bytes for IV and at least some data
+            ensure(combined.size >= IV_SIZE) {
+                CryptoError.InvalidCiphertext("Wrapped DEK is too short to contain IV (minimum $IV_SIZE bytes required, got ${combined.size})")
+            }
+
+            val iv = combined.copyOfRange(0, IV_SIZE)
+            val encryptedDekBytes = combined.copyOfRange(IV_SIZE, combined.size)
+            val cipher = Cipher.getInstance(transformation)
+            cipher.init(Cipher.DECRYPT_MODE, kek, IvParameterSpec(iv))
+            val dekBytes = cipher.doFinal(encryptedDekBytes)
+            Base64.getEncoder().encodeToString(dekBytes)
+        }) { e: Exception ->
+            raise(CryptoError.DecryptionError("Failed to unwrap DEK: ${e.message}"))
+        }
     }
 
     /**
@@ -158,10 +215,18 @@ class AESCryptoProvider(private val config: EncryptionConfig) : CryptoProvider {
      * Converts a Base64-encoded key string to a SecretKey.
      *
      * @param encodedKey The Base64-encoded key string.
-     * @return The SecretKey.
+     * @return Either a CryptoError or the SecretKey.
      */
-    private fun secretKeyFromBase64(encodedKey: String): SecretKey {
-        val decoded = Base64.getDecoder().decode(encodedKey)
-        return SecretKeySpec(decoded, algorithm)
+    private fun secretKeyFromBase64(encodedKey: String): Either<CryptoError, SecretKey> = either {
+        catch({
+            val decoded = catch({
+                Base64.getDecoder().decode(encodedKey)
+            }) { e: IllegalArgumentException ->
+                raise(CryptoError.InvalidKey("Invalid Base64 encoding for key: ${e.message}"))
+            }
+            SecretKeySpec(decoded, algorithm)
+        }) { e: Exception ->
+            raise(CryptoError.InvalidKey("Failed to create secret key: ${e.message}"))
+        }
     }
 }
