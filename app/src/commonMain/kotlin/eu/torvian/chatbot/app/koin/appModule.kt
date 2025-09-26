@@ -1,21 +1,21 @@
 package eu.torvian.chatbot.app.koin
 
 import eu.torvian.chatbot.app.repository.*
-import eu.torvian.chatbot.app.repository.impl.DefaultGroupRepository
-import eu.torvian.chatbot.app.repository.impl.DefaultModelRepository
-import eu.torvian.chatbot.app.repository.impl.DefaultProviderRepository
-import eu.torvian.chatbot.app.repository.impl.DefaultSessionRepository
-import eu.torvian.chatbot.app.repository.impl.DefaultSettingsRepository
+import eu.torvian.chatbot.app.repository.impl.*
 import eu.torvian.chatbot.app.service.api.*
 import eu.torvian.chatbot.app.service.api.ktor.*
-import eu.torvian.chatbot.app.service.misc.*
-import eu.torvian.chatbot.app.viewmodel.*
+import eu.torvian.chatbot.app.service.auth.createAuthenticatedHttpClient
+import eu.torvian.chatbot.app.service.misc.EventBus
+import eu.torvian.chatbot.app.viewmodel.ModelConfigViewModel
+import eu.torvian.chatbot.app.viewmodel.ProviderConfigViewModel
+import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
+import eu.torvian.chatbot.app.viewmodel.SettingsConfigViewModel
 import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatStateImpl
+import eu.torvian.chatbot.app.viewmodel.chat.usecase.*
 import eu.torvian.chatbot.app.viewmodel.chat.util.DefaultThreadBuilder
 import eu.torvian.chatbot.app.viewmodel.chat.util.ThreadBuilder
-import eu.torvian.chatbot.app.viewmodel.chat.usecase.*
 import eu.torvian.chatbot.app.viewmodel.common.CoroutineScopeProvider
 import eu.torvian.chatbot.app.viewmodel.common.DefaultCoroutineScopeProvider
 import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
@@ -26,24 +26,53 @@ import kotlinx.serialization.json.Json
 import org.koin.core.module.Module
 import org.koin.core.module.dsl.viewModel
 import org.koin.core.parameter.parametersOf
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
 /**
  * Koin module for providing dependencies related to the application's frontend.
  *
  * This module includes:
- * - The Ktor [HttpClient] configured for communication with the backend.
- * - API client implementations for each backend API.
- * - ViewModels for managing the application's state.
+ * - Two Ktor [HttpClient] instances: authenticated and unauthenticated
+ * - API client implementations for each backend API
+ * - Authentication components (TokenStorage, AuthApi, AuthRepository)
+ * - ViewModels for managing the application's state
  *
- * @param baseUri The base URI for the API endpoint.
- * @return A Koin module with frontend dependencies.
+ * @param baseUri The base URI for the API endpoint
+ * @return A Koin module with frontend dependencies
  */
 fun appModule(baseUri: String): Module = module {
-
-    // Provide the Ktor HttpClient, configured with the base URI.
-    single<HttpClient> {
+    // Provide the unauthenticated Ktor HttpClient for auth operations
+    single<HttpClient>(named("unauthenticated")) {
         createHttpClient(baseUri, Json)
+    }
+
+    // Provide the authenticated Ktor HttpClient with Auth plugin
+    single<HttpClient>(named("authenticated")) {
+        createAuthenticatedHttpClient(
+            baseUri = baseUri,
+            json = Json,
+            tokenStorage = get(),
+            unauthenticatedHttpClient = get(named("unauthenticated")),
+            eventBus = get()
+        )
+    }
+
+    // Create AuthApi with both authenticated and unauthenticated clients
+    single<AuthApi> {
+        KtorAuthApiClient(
+            unauthenticatedClient = get(named("unauthenticated")),
+            authenticatedClient = get(named("authenticated"))
+        )
+    }
+
+    single<AuthRepository> {
+        DefaultAuthRepository(get(), get(), get())
+    }
+
+    // Default HttpClient (authenticated) for backward compatibility
+    single<HttpClient> {
+        get<HttpClient>(named("authenticated"))
     }
 
     // Provide the EventBus for cross-cutting concerns like global events
@@ -121,7 +150,13 @@ fun appModule(baseUri: String): Module = module {
 
     // Provide use cases with updated dependencies (now using repositories)
     factory<LoadSessionUseCase> { (chatState: ChatState) ->
-        LoadSessionUseCase(get<SessionRepository>(), get<SettingsRepository>(), get<ModelRepository>(), chatState, get())
+        LoadSessionUseCase(
+            get<SessionRepository>(),
+            get<SettingsRepository>(),
+            get<ModelRepository>(),
+            chatState,
+            get()
+        )
     }
 
     factory<UpdateInputUseCase> { (chatState: ChatState) ->
