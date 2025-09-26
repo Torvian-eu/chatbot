@@ -67,7 +67,7 @@ class DbEncryptedCredentialManagerTest {
     fun `storeCredential should encrypt and save credential successfully`() = runTest {
         // Arrange
         // Configure the mock encryption service to return specific encrypted data (now returns Either)
-        every { encryptionService.encrypt(testPlainCredential) } returns testEncryptedData.right()
+        coEvery { encryptionService.encrypt(testPlainCredential) } returns testEncryptedData.right()
 
         // Configure the mock apiSecretDao to succeed (return Unit.right() for a successful save)
         coEvery { apiSecretDao.saveSecret(any(), eq(testEncryptedData)) } returns Unit.right()
@@ -81,7 +81,7 @@ class DbEncryptedCredentialManagerTest {
         assertDoesNotThrow { UUID.fromString(resultAlias) }
 
         // Verify interactions with dependencies
-        verify(exactly = 1) { encryptionService.encrypt(testPlainCredential) }
+        coVerify(exactly = 1) { encryptionService.encrypt(testPlainCredential) }
         coVerify(exactly = 1) { apiSecretDao.saveSecret(any(), eq(testEncryptedData)) }
     }
 
@@ -89,7 +89,7 @@ class DbEncryptedCredentialManagerTest {
     fun `storeCredential should throw exception when encryption fails`() = runTest {
         // Arrange
         val encryptionError = CryptoError.EncryptionError("Failed to encrypt")
-        every { encryptionService.encrypt(testPlainCredential) } returns encryptionError.left()
+        coEvery { encryptionService.encrypt(testPlainCredential) } returns encryptionError.left()
 
         // Act & Assert
         val exception = assertThrows<IllegalStateException> {
@@ -99,14 +99,14 @@ class DbEncryptedCredentialManagerTest {
         assertEquals(exception.message?.contains("Failed to encrypt credential"), true)
 
         // Verify that encryption was attempted but DAO was never called
-        verify(exactly = 1) { encryptionService.encrypt(testPlainCredential) }
+        coVerify(exactly = 1) { encryptionService.encrypt(testPlainCredential) }
         coVerify(exactly = 0) { apiSecretDao.saveSecret(any(), any()) }
     }
 
     @Test
     fun `storeCredential should throw exception when DAO save fails`() = runTest {
         // Arrange
-        every { encryptionService.encrypt(testPlainCredential) } returns testEncryptedData.right()
+        coEvery { encryptionService.encrypt(testPlainCredential) } returns testEncryptedData.right()
         coEvery { apiSecretDao.saveSecret(any(), eq(testEncryptedData)) } returns SecretAlreadyExists("alias").left()
 
         // Act & Assert
@@ -117,7 +117,7 @@ class DbEncryptedCredentialManagerTest {
         assertEquals(exception.message?.contains("Failed to save secret to database"), true)
 
         // Verify interactions
-        verify(exactly = 1) { encryptionService.encrypt(testPlainCredential) }
+        coVerify(exactly = 1) { encryptionService.encrypt(testPlainCredential) }
         coVerify(exactly = 1) { apiSecretDao.saveSecret(any(), eq(testEncryptedData)) }
     }
 
@@ -127,7 +127,7 @@ class DbEncryptedCredentialManagerTest {
     fun `getCredential should retrieve and decrypt credential successfully`() = runTest {
         // Arrange
         coEvery { apiSecretDao.getSecret(testAlias) } returns testEncryptedData.right()
-        every { encryptionService.decrypt(testEncryptedData) } returns testPlainCredential.right()
+        coEvery { encryptionService.decrypt(testEncryptedData) } returns testPlainCredential.right()
 
         // Act
         val result = credentialManager.getCredential(testAlias)
@@ -138,7 +138,7 @@ class DbEncryptedCredentialManagerTest {
 
         // Verify interactions
         coVerify(exactly = 1) { apiSecretDao.getSecret(testAlias) }
-        verify(exactly = 1) { encryptionService.decrypt(testEncryptedData) }
+        coVerify(exactly = 1) { encryptionService.decrypt(testEncryptedData) }
     }
 
     @Test
@@ -155,7 +155,7 @@ class DbEncryptedCredentialManagerTest {
 
         // Verify that only the DAO was called, not the encryption service
         coVerify(exactly = 1) { apiSecretDao.getSecret(testAlias) }
-        verify(exactly = 0) { encryptionService.decrypt(any()) }
+        coVerify(exactly = 0) { encryptionService.decrypt(any()) }
     }
 
     @Test
@@ -163,7 +163,7 @@ class DbEncryptedCredentialManagerTest {
         // Arrange
         coEvery { apiSecretDao.getSecret(testAlias) } returns testEncryptedData.right()
         val decryptionError = CryptoError.DecryptionError("Failed to decrypt")
-        every { encryptionService.decrypt(testEncryptedData) } returns decryptionError.left()
+        coEvery { encryptionService.decrypt(testEncryptedData) } returns decryptionError.left()
 
         // Act
         val result = credentialManager.getCredential(testAlias)
@@ -174,7 +174,7 @@ class DbEncryptedCredentialManagerTest {
 
         // Verify interactions
         coVerify(exactly = 1) { apiSecretDao.getSecret(testAlias) }
-        verify(exactly = 1) { encryptionService.decrypt(testEncryptedData) }
+        coVerify(exactly = 1) { encryptionService.decrypt(testEncryptedData) }
     }
 
     // --- deleteCredential Tests ---

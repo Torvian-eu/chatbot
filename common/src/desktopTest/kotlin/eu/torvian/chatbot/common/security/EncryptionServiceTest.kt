@@ -4,10 +4,11 @@ import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
 import io.mockk.clearMocks
-import io.mockk.every
+import io.mockk.coEvery
+import io.mockk.coVerifyOrder
 import io.mockk.mockk
 import io.mockk.slot
-import io.mockk.verifyOrder
+import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import kotlin.test.Test
@@ -68,17 +69,17 @@ class EncryptionServiceTest {
     // --- encrypt Tests ---
 
     @Test
-    fun `encrypt should correctly orchestrate encryption steps and return EncryptedSecret`() {
+    fun `encrypt should correctly orchestrate encryption steps and return EncryptedSecret`() = runTest {
         // Arrange
         // Configure the mock CryptoProvider methods in the expected sequence (now returning Either types)
-        every { cryptoProvider.generateDEK() } returns mockGeneratedDEK.right()
+        coEvery { cryptoProvider.generateDEK() } returns mockGeneratedDEK.right()
         val dekSlotForDataEncrypt = slot<String>()
-        every { cryptoProvider.encryptData(testPlaintext, capture(dekSlotForDataEncrypt)) } returns mockEncryptedData.right()
+        coEvery { cryptoProvider.encryptData(testPlaintext, capture(dekSlotForDataEncrypt)) } returns mockEncryptedData.right()
 
         val dekSlotForWrap = slot<String>()
-        every { cryptoProvider.wrapDEK(capture(dekSlotForWrap)) } returns mockWrappedDEK.right()
+        coEvery { cryptoProvider.wrapDEK(capture(dekSlotForWrap)) } returns mockWrappedDEK.right()
 
-        every { cryptoProvider.getKeyVersion() } returns mockKeyVersion
+        coEvery { cryptoProvider.getKeyVersion() } returns mockKeyVersion
 
         // Act
         val result = encryptionService.encrypt(testPlaintext)
@@ -89,7 +90,7 @@ class EncryptionServiceTest {
         assertEquals(expectedEncryptedSecret, encryptedSecret, "Encryption result should match the expected EncryptedSecret")
 
         // Verify that the CryptoProvider methods were called in the correct sequence and with correct arguments
-        verifyOrder {
+        coVerifyOrder {
             cryptoProvider.generateDEK()
             cryptoProvider.encryptData(testPlaintext, mockGeneratedDEK)
             cryptoProvider.wrapDEK(mockGeneratedDEK)
@@ -102,10 +103,10 @@ class EncryptionServiceTest {
     }
 
     @Test
-    fun `encrypt should return error when DEK generation fails`() {
+    fun `encrypt should return error when DEK generation fails`() = runTest {
         // Arrange
         val error = CryptoError.KeyGenerationError("Failed to generate DEK")
-        every { cryptoProvider.generateDEK() } returns error.left()
+        coEvery { cryptoProvider.generateDEK() } returns error.left()
 
         // Act
         val result = encryptionService.encrypt(testPlaintext)
@@ -117,11 +118,11 @@ class EncryptionServiceTest {
     }
 
     @Test
-    fun `encrypt should return error when data encryption fails`() {
+    fun `encrypt should return error when data encryption fails`() = runTest {
         // Arrange
-        every { cryptoProvider.generateDEK() } returns mockGeneratedDEK.right()
+        coEvery { cryptoProvider.generateDEK() } returns mockGeneratedDEK.right()
         val error = CryptoError.EncryptionError("Failed to encrypt data")
-        every { cryptoProvider.encryptData(testPlaintext, mockGeneratedDEK) } returns error.left()
+        coEvery { cryptoProvider.encryptData(testPlaintext, mockGeneratedDEK) } returns error.left()
 
         // Act
         val result = encryptionService.encrypt(testPlaintext)
@@ -133,12 +134,12 @@ class EncryptionServiceTest {
     }
 
     @Test
-    fun `encrypt should return error when DEK wrapping fails`() {
+    fun `encrypt should return error when DEK wrapping fails`() = runTest {
         // Arrange
-        every { cryptoProvider.generateDEK() } returns mockGeneratedDEK.right()
-        every { cryptoProvider.encryptData(testPlaintext, mockGeneratedDEK) } returns mockEncryptedData.right()
+        coEvery { cryptoProvider.generateDEK() } returns mockGeneratedDEK.right()
+        coEvery { cryptoProvider.encryptData(testPlaintext, mockGeneratedDEK) } returns mockEncryptedData.right()
         val error = CryptoError.EncryptionError("Failed to wrap DEK")
-        every { cryptoProvider.wrapDEK(mockGeneratedDEK) } returns error.left()
+        coEvery { cryptoProvider.wrapDEK(mockGeneratedDEK) } returns error.left()
 
         // Act
         val result = encryptionService.encrypt(testPlaintext)
@@ -152,10 +153,10 @@ class EncryptionServiceTest {
     // --- decrypt Tests ---
 
     @Test
-    fun `decrypt should correctly orchestrate decryption steps and return plaintext`() {
+    fun `decrypt should correctly orchestrate decryption steps and return plaintext`() = runTest {
         // Arrange
-        every { cryptoProvider.unwrapDEK(testEncryptedSecretInput.encryptedDEK, testEncryptedSecretInput.keyVersion) } returns mockUnwrappedDEK.right()
-        every { cryptoProvider.decryptData(testEncryptedSecretInput.encryptedSecret, mockUnwrappedDEK) } returns testPlaintext.right()
+        coEvery { cryptoProvider.unwrapDEK(testEncryptedSecretInput.encryptedDEK, testEncryptedSecretInput.keyVersion) } returns mockUnwrappedDEK.right()
+        coEvery { cryptoProvider.decryptData(testEncryptedSecretInput.encryptedSecret, mockUnwrappedDEK) } returns testPlaintext.right()
 
         // Act
         val result = encryptionService.decrypt(testEncryptedSecretInput)
@@ -166,17 +167,17 @@ class EncryptionServiceTest {
         assertEquals(testPlaintext, decryptedText, "Decrypted text should match the expected plaintext")
 
         // Verify that the CryptoProvider methods were called in the correct sequence and with correct arguments
-        verifyOrder {
+        coVerifyOrder {
             cryptoProvider.unwrapDEK(testEncryptedSecretInput.encryptedDEK, testEncryptedSecretInput.keyVersion)
             cryptoProvider.decryptData(testEncryptedSecretInput.encryptedSecret, mockUnwrappedDEK)
         }
     }
 
     @Test
-    fun `decrypt should return error when DEK unwrapping fails`() {
+    fun `decrypt should return error when DEK unwrapping fails`() = runTest {
         // Arrange
         val error = CryptoError.KeyVersionNotFound(99)
-        every { cryptoProvider.unwrapDEK(testEncryptedSecretInput.encryptedDEK, testEncryptedSecretInput.keyVersion) } returns error.left()
+        coEvery { cryptoProvider.unwrapDEK(testEncryptedSecretInput.encryptedDEK, testEncryptedSecretInput.keyVersion) } returns error.left()
 
         // Act
         val result = encryptionService.decrypt(testEncryptedSecretInput)
@@ -188,11 +189,11 @@ class EncryptionServiceTest {
     }
 
     @Test
-    fun `decrypt should return error when data decryption fails`() {
+    fun `decrypt should return error when data decryption fails`() = runTest {
         // Arrange
-        every { cryptoProvider.unwrapDEK(testEncryptedSecretInput.encryptedDEK, testEncryptedSecretInput.keyVersion) } returns mockUnwrappedDEK.right()
+        coEvery { cryptoProvider.unwrapDEK(testEncryptedSecretInput.encryptedDEK, testEncryptedSecretInput.keyVersion) } returns mockUnwrappedDEK.right()
         val error = CryptoError.DecryptionError("Failed to decrypt data")
-        every { cryptoProvider.decryptData(testEncryptedSecretInput.encryptedSecret, mockUnwrappedDEK) } returns error.left()
+        coEvery { cryptoProvider.decryptData(testEncryptedSecretInput.encryptedSecret, mockUnwrappedDEK) } returns error.left()
 
         // Act
         val result = encryptionService.decrypt(testEncryptedSecretInput)

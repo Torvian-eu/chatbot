@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.common.security
 
 import arrow.core.Either
+import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import java.security.SecureRandom
 import java.util.*
@@ -26,7 +27,7 @@ class AESCryptoProviderTest {
     }
 
     @Test
-    fun `generateDEK should return a non-empty Base64 string`() {
+    fun `generateDEK should return a non-empty Base64 string`() = runTest {
         // Act
         val dekResult = cryptoProvider.generateDEK()
 
@@ -39,7 +40,7 @@ class AESCryptoProviderTest {
     }
 
     @Test
-    fun `encryptData and decryptData should form a complete cycle`() {
+    fun `encryptData and decryptData should form a complete cycle`() = runTest {
         // Arrange
         val plainText = "This is a secret message"
         val dekResult = cryptoProvider.generateDEK()
@@ -61,7 +62,7 @@ class AESCryptoProviderTest {
     }
 
     @Test
-    fun `wrapDEK and unwrapDEK should form a complete cycle`() {
+    fun `wrapDEK and unwrapDEK should form a complete cycle`() = runTest {
         // Arrange
         val dekResult = cryptoProvider.generateDEK()
         assertTrue(dekResult is Either.Right, "DEK generation should succeed")
@@ -81,7 +82,7 @@ class AESCryptoProviderTest {
     }
 
     @Test
-    fun `different KEK versions should work independently`() {
+    fun `different KEK versions should work independently`() = runTest {
         // Arrange - create config with multiple key versions
         val random = SecureRandom()
         val keyBytes1 = ByteArray(32)
@@ -115,7 +116,7 @@ class AESCryptoProviderTest {
     }
 
     @Test
-    fun `encryption with different DEKs should produce different results`() {
+    fun `encryption with different DEKs should produce different results`() = runTest {
         // Arrange
         val plainText = "This is a secret message"
         val dek1Result = cryptoProvider.generateDEK()
@@ -138,7 +139,7 @@ class AESCryptoProviderTest {
     }
 
     @Test
-    fun `invalid key version should return error`() {
+    fun `invalid key version should return error`() = runTest {
         // Arrange
         val dekResult = cryptoProvider.generateDEK()
         assertTrue(dekResult is Either.Right, "DEK generation should succeed")
@@ -158,7 +159,7 @@ class AESCryptoProviderTest {
     }
 
     @Test
-    fun `invalid Base64 input should return error`() {
+    fun `invalid Base64 input should return error`() = runTest {
         // Act
         val decryptResult = cryptoProvider.decryptData("invalid-base64!", "validkey")
 

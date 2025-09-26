@@ -470,7 +470,7 @@ private class FileSystemMockCryptoProvider : CryptoProvider {
     var reEncryptionShouldFail = false
     var returnCorruptedDecryptedData = false
 
-    override fun generateDEK(): Either<CryptoError, String> {
+    override suspend fun generateDEK(): Either<CryptoError, String> {
         return if (dekGenerationShouldFail) {
             CryptoError.KeyGenerationError("Mock DEK generation failure").left()
         } else {
@@ -478,7 +478,7 @@ private class FileSystemMockCryptoProvider : CryptoProvider {
         }
     }
 
-    override fun encryptData(plainText: String, dek: String): Either<CryptoError, String> {
+    override suspend fun encryptData(plainText: String, dek: String): Either<CryptoError, String> {
         return if (encryptionShouldFail) {
             CryptoError.EncryptionError("Mock encryption failure").left()
         } else {
@@ -487,7 +487,7 @@ private class FileSystemMockCryptoProvider : CryptoProvider {
         }
     }
 
-    override fun decryptData(cipherText: String, dek: String): Either<CryptoError, String> {
+    override suspend fun decryptData(cipherText: String, dek: String): Either<CryptoError, String> {
         return if (decryptionShouldFail) {
             CryptoError.DecryptionError("Mock decryption failure").left()
         } else if (returnCorruptedDecryptedData) {
@@ -506,7 +506,7 @@ private class FileSystemMockCryptoProvider : CryptoProvider {
         }
     }
 
-    override fun wrapDEK(dek: String): Either<CryptoError, String> {
+    override suspend fun wrapDEK(dek: String): Either<CryptoError, String> {
         return if (dekWrappingShouldFail) {
             CryptoError.EncryptionError("Mock DEK wrapping failure").left()
         } else if (reEncryptionShouldFail && dek.startsWith("mock-dek-")) {
@@ -521,7 +521,7 @@ private class FileSystemMockCryptoProvider : CryptoProvider {
         }
     }
 
-    override fun unwrapDEK(wrappedDek: String, kekVersion: Int): Either<CryptoError, String> {
+    override suspend fun unwrapDEK(wrappedDek: String, kekVersion: Int): Either<CryptoError, String> {
         return if (dekUnwrappingShouldFail) {
             CryptoError.KeyVersionNotFound(kekVersion).left()
         } else if (!wrappedDek.startsWith("wrapped:") || !wrappedDek.contains(":version:$kekVersion")) {

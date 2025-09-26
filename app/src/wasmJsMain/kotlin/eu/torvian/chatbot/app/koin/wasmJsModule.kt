@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.app.koin
 
 import eu.torvian.chatbot.app.main.AppConfig
+import eu.torvian.chatbot.app.security.WasmJsWebCryptoProvider
 import eu.torvian.chatbot.app.service.auth.FileSystemTokenStorage
 import eu.torvian.chatbot.app.service.auth.TokenStorage
 import eu.torvian.chatbot.common.security.CryptoProvider
@@ -19,8 +20,8 @@ import org.koin.dsl.module
  */
 fun wasmJsModule(appConfig: AppConfig, encryptionConfig: EncryptionConfig) = module {
     single<CryptoProvider> {
-        // TODO: Implement CryptoProvider for WASM/JS
-        throw NotImplementedError("CryptoProvider not implemented for WASM/JS")
+        // Use the simplified crypto provider for WASM/JS compatibility.
+        WasmJsWebCryptoProvider()
     }
 
     single<TokenStorage> {

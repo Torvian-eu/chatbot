@@ -75,15 +75,15 @@ open class FileSystemTokenStorage(
 
             // 2-4. Generate DEK, encrypt data, and wrap DEK using bind for sequential operations
             val dek = cryptoProvider.generateDEK()
-                .mapLeft { TokenStorageError.EncryptionError("Failed to generate DEK: $it", null) }
+                .mapLeft { TokenStorageError.EncryptionError("Failed to generate DEK: ${it.message}", it.cause) }
                 .bind()
 
             val encryptedData = cryptoProvider.encryptData(plainTextJson, dek)
-                .mapLeft { TokenStorageError.EncryptionError("Failed to encrypt data: $it", null) }
+                .mapLeft { TokenStorageError.EncryptionError("Failed to encrypt data: ${it.message}", it.cause) }
                 .bind()
 
             val wrappedDek = cryptoProvider.wrapDEK(dek)
-                .mapLeft { TokenStorageError.EncryptionError("Failed to wrap DEK: $it", null) }
+                .mapLeft { TokenStorageError.EncryptionError("Failed to wrap DEK: ${it.message}", it.cause) }
                 .bind()
 
             val kekVersion = cryptoProvider.getKeyVersion()
@@ -128,7 +128,7 @@ open class FileSystemTokenStorage(
         }
     }
 
-    private fun getTokenData(): Either<TokenStorageError, TokenData> = either {
+    private suspend fun getTokenData(): Either<TokenStorageError, TokenData> = either {
         catch({
             ensure(fileSystem.exists(keyFilePath) && fileSystem.exists(dataFilePath)) {
                 TokenStorageError.NotFound("Token storage files not found")
@@ -149,11 +149,11 @@ open class FileSystemTokenStorage(
 
             // 2-3. Unwrap DEK and decrypt data using bind for sequential operations
             val dek = cryptoProvider.unwrapDEK(dekMetadata.wrappedDek, dekMetadata.kekVersion)
-                .mapLeft { TokenStorageError.EncryptionError("Failed to unwrap DEK: $it", null) }
+                .mapLeft { TokenStorageError.EncryptionError("Failed to unwrap DEK: ${it.message}", it.cause) }
                 .bind()
 
             val decryptedJson = cryptoProvider.decryptData(encryptedData, dek)
-                .mapLeft { TokenStorageError.EncryptionError("Failed to decrypt data: $it", null) }
+                .mapLeft { TokenStorageError.EncryptionError("Failed to decrypt data: ${it.message}", it.cause) }
                 .bind()
 
             val tokenData = catch({
@@ -181,7 +181,7 @@ open class FileSystemTokenStorage(
      * Re-wraps the provided plaintext DEK with the current KEK and overwrites the metadata file.
      * This is a "self-healing" mechanism to migrate keys over time.
      */
-    private fun performActiveDekReEncryption(dek: String, oldKekVersion: Int, newKekVersion: Int) {
+    private suspend fun performActiveDekReEncryption(dek: String, oldKekVersion: Int, newKekVersion: Int) {
         logger.info("Performing active DEK re-encryption. Migrating from KEK version $oldKekVersion to $newKekVersion.")
 
         either {

@@ -11,6 +11,9 @@ import arrow.core.Either
  *
  * All methods in this interface work with Base64-encoded strings to hide
  * implementation details and decouple the rest of the system from crypto-specific types.
+ *
+ * NOTE: The methods are suspend functions to accommodate asynchronous cryptographic
+ * APIs like the Web Crypto API in browsers.
  */
 interface CryptoProvider {
     /**
@@ -18,7 +21,7 @@ interface CryptoProvider {
      *
      * @return Either a CryptoError or a Base64-encoded string representation of the DEK.
      */
-    fun generateDEK(): Either<CryptoError, String>
+    suspend fun generateDEK(): Either<CryptoError, String>
 
     /**
      * Encrypts data using the provided DEK.
@@ -27,7 +30,7 @@ interface CryptoProvider {
      * @param dek The Base64-encoded DEK to use for encryption.
      * @return Either a CryptoError or a Base64-encoded string containing the encrypted data.
      */
-    fun encryptData(plainText: String, dek: String): Either<CryptoError, String>
+    suspend fun encryptData(plainText: String, dek: String): Either<CryptoError, String>
 
     /**
      * Decrypts data using the provided DEK.
@@ -36,7 +39,7 @@ interface CryptoProvider {
      * @param dek The Base64-encoded DEK to use for decryption.
      * @return Either a CryptoError or the decrypted plaintext data.
      */
-    fun decryptData(cipherText: String, dek: String): Either<CryptoError, String>
+    suspend fun decryptData(cipherText: String, dek: String): Either<CryptoError, String>
 
     /**
      * Encrypts (wraps) a DEK using the KEK.
@@ -44,7 +47,7 @@ interface CryptoProvider {
      * @param dek The Base64-encoded DEK to encrypt.
      * @return Either a CryptoError or a Base64-encoded string containing the encrypted DEK.
      */
-    fun wrapDEK(dek: String): Either<CryptoError, String>
+    suspend fun wrapDEK(dek: String): Either<CryptoError, String>
 
     /**
      * Decrypts (unwraps) a DEK using the KEK of a specific version.
@@ -53,7 +56,7 @@ interface CryptoProvider {
      * @param kekVersion The version of the KEK that was used to wrap this DEK.
      * @return Either a CryptoError or the decrypted DEK as a Base64-encoded string.
      */
-    fun unwrapDEK(wrappedDek: String, kekVersion: Int): Either<CryptoError, String>
+    suspend fun unwrapDEK(wrappedDek: String, kekVersion: Int): Either<CryptoError, String>
 
     /**
      * Gets the current version of the KEK.

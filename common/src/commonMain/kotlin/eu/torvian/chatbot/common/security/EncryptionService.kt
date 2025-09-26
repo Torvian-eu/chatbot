@@ -34,7 +34,7 @@ class EncryptionService(private val cryptoProvider: CryptoProvider) {
      * @param plainText The plaintext secret to encrypt.
      * @return Either a CryptoError or an [EncryptedSecret] containing the encrypted secret, encrypted DEK, and key version.
      */
-    fun encrypt(plainText: String): Either<CryptoError, EncryptedSecret> = either {
+    suspend fun encrypt(plainText: String): Either<CryptoError, EncryptedSecret> = either {
         val dek = cryptoProvider.generateDEK().bind()
         val encryptedSecret = cryptoProvider.encryptData(plainText, dek).bind()
         val wrappedDek = cryptoProvider.wrapDEK(dek).bind()
@@ -57,7 +57,7 @@ class EncryptionService(private val cryptoProvider: CryptoProvider) {
      * @param encrypted The [EncryptedSecret] containing the encrypted secret and DEK details.
      * @return Either a CryptoError or the decrypted plaintext secret.
      */
-    fun decrypt(encrypted: EncryptedSecret): Either<CryptoError, String> = either {
+    suspend fun decrypt(encrypted: EncryptedSecret): Either<CryptoError, String> = either {
         val dek = cryptoProvider.unwrapDEK(encrypted.encryptedDEK, encrypted.keyVersion).bind()
         cryptoProvider.decryptData(encrypted.encryptedSecret, dek).bind()
     }
