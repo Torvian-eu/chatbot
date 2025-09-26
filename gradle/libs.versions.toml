@@ -23,7 +23,7 @@ compose-hot-reload = "1.0.0-beta04" # Compose Hot Reload version
 androidx-activity = "1.10.1" # For Compose Multiplatform Activity
 android-gradle-plugin = "8.10.0" # Android Gradle Plugin version
 android-compileSdk = "36"    # The API level to compile against: https://developer.android.com/studio/releases/platforms
-android-minSdk = "24"        # The minimum Android version supported
+android-minSdk = "26"        # The minimum Android version supported
 android-targetSdk = "36"     # The target Android version for testing
 slf4j = "2.0.17"             # SLF4J version used for logging
 

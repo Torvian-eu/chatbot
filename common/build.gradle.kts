@@ -76,8 +76,18 @@ kotlin {
     }
 
     sourceSets {
-        val desktopMain by getting
+        // Create a new source set for shared Android/Desktop code
+        val desktopAndroidMain by creating {
+            dependsOn(commonMain.get())
+        }
+        val desktopMain by getting {
+            dependsOn(desktopAndroidMain)
+        }
         val desktopTest by getting
+
+        androidMain {
+            dependsOn(desktopAndroidMain)
+        }
 
         commonMain.dependencies {
             implementation(libs.koin.core)           // Koin dependency injection
