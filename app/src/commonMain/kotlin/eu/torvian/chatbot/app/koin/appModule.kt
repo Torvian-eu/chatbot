@@ -10,6 +10,7 @@ import eu.torvian.chatbot.app.viewmodel.ModelConfigViewModel
 import eu.torvian.chatbot.app.viewmodel.ProviderConfigViewModel
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
 import eu.torvian.chatbot.app.viewmodel.SettingsConfigViewModel
+import eu.torvian.chatbot.app.viewmodel.auth.AuthViewModel
 import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatStateImpl
@@ -213,6 +214,11 @@ fun appModule(baseUri: String): Module = module {
             normalScope = normalScope,
             backgroundScope = backgroundScope
         )
+    }
+    viewModel {
+        val scopeProvider = get<CoroutineScopeProvider>()
+        val normalScope = scopeProvider.createNormalScope()
+        AuthViewModel(get<AuthRepository>(), get<ErrorNotifier>(), normalScope)
     }
     viewModel { SessionListViewModel(get<SessionRepository>(), get<GroupRepository>(), get<EventBus>(), get()) }
     viewModel { ProviderConfigViewModel(get<ProviderRepository>(), get<ErrorNotifier>()) }
