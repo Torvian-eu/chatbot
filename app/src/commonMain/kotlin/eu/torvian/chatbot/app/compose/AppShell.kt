@@ -5,6 +5,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -15,6 +20,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import eu.torvian.chatbot.app.compose.auth.AuthLoadingScreen
+import eu.torvian.chatbot.app.compose.auth.LoginScreen
+import eu.torvian.chatbot.app.compose.auth.RegisterScreen
 import eu.torvian.chatbot.app.compose.common.OverflowTooltipText
 import eu.torvian.chatbot.app.compose.settings.SettingsScreen
 import eu.torvian.chatbot.app.domain.events.AppError
@@ -22,12 +30,16 @@ import eu.torvian.chatbot.app.domain.events.AppSuccess
 import eu.torvian.chatbot.app.domain.events.AppWarning
 import eu.torvian.chatbot.app.domain.events.SnackbarInteractionEvent
 import eu.torvian.chatbot.app.domain.navigation.Chat
+import eu.torvian.chatbot.app.domain.navigation.Login
+import eu.torvian.chatbot.app.domain.navigation.Register
 import eu.torvian.chatbot.app.domain.navigation.Settings
 import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.action_retry
 import eu.torvian.chatbot.app.generated.resources.app_name
+import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
+import eu.torvian.chatbot.app.viewmodel.auth.AuthViewModel
 import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.getString
@@ -36,23 +48,29 @@ import org.koin.compose.currentKoinScope
 import org.koin.compose.viewmodel.koinViewModel
 
 /**
- * The main application shell responsible for top-level layout and screen navigation.
- * Uses `Scaffold` for consistent Material Design structure and `NavHost` for navigation.
- * (E7.S2: Implement Base App Layout & ViewModel Integration with proper navigation)
+ * The main application shell responsible for top-level layout and authentication-aware navigation.
+ *
+ * This component handles:
+ * - Authentication state checking and routing
+ * - Conditional navigation between auth flow and main app
+ * - Global error handling and snackbar display
+ * - User context management
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppShell() {
-    val navController = rememberNavController()
-    val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStackEntry?.destination?.route
+    val authViewModel: AuthViewModel = koinViewModel()
+    val authState by authViewModel.authState.collectAsState()
     val eventBus: EventBus = currentKoinScope().get()
-    val sessionListViewModel: SessionListViewModel = koinViewModel()
-    val chatViewModel: ChatViewModel = koinViewModel()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
-    // Collect events from EventBus and show them in Snackbar
+    // Check initial authentication state on app startup
+    LaunchedEffect(Unit) {
+        authViewModel.checkInitialAuthState()
+    }
+
+    // Global error handling (preserve existing superior logic)
     LaunchedEffect(eventBus) {
         eventBus.events.collect { event ->
             if (event !is AppError && event !is AppWarning && event !is AppSuccess) {
@@ -107,8 +125,103 @@ fun AppShell() {
         }
     }
 
-    // Initial loading of sessions and groups on app startup
-    LaunchedEffect(Unit) {
+    // Route based on authentication state
+    when (val currentAuthState = authState) {
+        is AuthState.Loading -> {
+            AuthLoadingScreen()
+        }
+
+        is AuthState.Unauthenticated -> {
+            AuthenticationFlow(
+                snackbarHostState = snackbarHostState,
+                authViewModel = authViewModel
+            )
+        }
+
+        is AuthState.Authenticated -> {
+            MainApplicationFlow(
+                authState = currentAuthState,
+                snackbarHostState = snackbarHostState,
+                authViewModel = authViewModel
+            )
+        }
+    }
+}
+
+/**
+ * Authentication flow navigation for unauthenticated users.
+ */
+@Composable
+private fun AuthenticationFlow(
+    snackbarHostState: SnackbarHostState,
+    authViewModel: AuthViewModel
+) {
+    val navController = rememberNavController()
+
+    Scaffold(
+        snackbarHost = {
+            SnackbarHost(hostState = snackbarHostState) { data ->
+                val visualsWithError = data.visuals as? SnackbarVisualsWithError
+                AuthSnackbar(data, visualsWithError)
+            }
+        }
+    ) { paddingValues ->
+        Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+            NavHost(
+                navController = navController,
+                startDestination = Login
+            ) {
+                composable<Login> {
+                    LoginScreen(
+                        onNavigateToRegister = {
+                            navController.navigate(Register) {
+                                // Don't add to back stack to prevent back navigation to login
+                                popUpTo(Login) { inclusive = true }
+                            }
+                        },
+                        authViewModel = authViewModel
+                    )
+                }
+
+                composable<Register> {
+                    RegisterScreen(
+                        onNavigateToLogin = {
+                            navController.navigate(Login) {
+                                popUpTo(Register) { inclusive = true }
+                            }
+                        },
+                        onRegistrationSuccess = {
+                            navController.navigate(Login) {
+                                popUpTo(Register) { inclusive = true }
+                            }
+                        },
+                        authViewModel = authViewModel
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Main application flow for authenticated users.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MainApplicationFlow(
+    authState: AuthState.Authenticated,
+    snackbarHostState: SnackbarHostState,
+    authViewModel: AuthViewModel
+) {
+    val navController = rememberNavController()
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+    val sessionListViewModel: SessionListViewModel = koinViewModel()
+    val chatViewModel: ChatViewModel = koinViewModel()
+    val scope = rememberCoroutineScope()
+
+    // Load initial data for authenticated user (improved data loading)
+    LaunchedEffect(authState.userId) {
         sessionListViewModel.loadSessionsAndGroups()
     }
 
@@ -118,81 +231,66 @@ fun AppShell() {
                 CenterAlignedTopAppBar(
                     title = {
                         OverflowTooltipText(
-                            text = stringResource(Res.string.app_name),
+                            text = "${stringResource(Res.string.app_name)} - ${authState.username}"
                         )
                     },
                     actions = {
-                        Button(
-                            onClick = {
-                                val targetRoute = if (currentRoute == Chat.name) Settings else Chat
-                                // This is the recommended pattern for "tab-like" navigation
-                                // It ensures that only one instance of a top-level screen exists
-                                // at any time, and its state is saved and restored.
-                                navController.navigate(targetRoute) {
-                                    // Pop up to the start destination of the graph to
-                                    // avoid building up a large stack of destinations
-                                    // when selecting items from a bottom navigation bar.
-                                    // This also ensures that the back button behavior
-                                    // is predictable (usually exiting the app from the root tab).
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true // Save the state of the popped destinations
-                                    }
-                                    // Avoid multiple copies of the same destination when
-                                    // reselecting the same item.
-                                    launchSingleTop = true
-                                    // Restore state when reselecting a previously selected item
-                                    restoreState = true
-                                }
+                        UserMenu(
+                            username = authState.username,
+                            onLogout = {
+                                scope.launch { authViewModel.logout() }
                             }
-                        ) {
-                            Text(if (currentRoute == Chat.name) "Settings" else "Chat")
-                        }
+                        )
                     },
                     modifier = Modifier.fillMaxWidth()
                         .background(MaterialTheme.colorScheme.primaryContainer)
                 )
             },
+            bottomBar = {
+                NavigationBar(
+                    modifier = Modifier.fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                ) {
+                    NavigationBarItem(
+                        icon = { Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "Chat") },
+                        label = { Text("Chat") },
+                        selected = currentRoute == Chat.route,
+                        onClick = {
+                            navController.navigate(Chat) {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    )
+                    NavigationBarItem(
+                        icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
+                        label = { Text("Settings") },
+                        selected = currentRoute == Settings.route,
+                        onClick = {
+                            navController.navigate(Settings) {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    )
+                }
+            },
             snackbarHost = {
                 SnackbarHost(hostState = snackbarHostState) { data ->
                     val visualsWithError = data.visuals as? SnackbarVisualsWithError
-
-                    val containerColor: Color
-                    val contentColor: Color
-                    val actionColor: Color
-                    val actionContentColor: Color
-                    val dismissActionContentColor: Color
-
-                    if (visualsWithError?.isError == true) {
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer
-                        actionColor = MaterialTheme.colorScheme.error
-                        actionContentColor = MaterialTheme.colorScheme.error
-                        dismissActionContentColor = MaterialTheme.colorScheme.onErrorContainer
-                    } else {
-                        containerColor = MaterialTheme.colorScheme.inverseSurface
-                        contentColor = MaterialTheme.colorScheme.inverseOnSurface
-                        actionColor = MaterialTheme.colorScheme.inversePrimary
-                        actionContentColor = MaterialTheme.colorScheme.inversePrimary
-                        dismissActionContentColor = MaterialTheme.colorScheme.inverseOnSurface
-                    }
-
-                    Snackbar(
-                        snackbarData = data,
-                        modifier = Modifier.padding(12.dp),
-                        containerColor = containerColor,
-                        contentColor = contentColor,
-                        actionColor = actionColor,
-                        actionContentColor = actionContentColor,
-                        dismissActionContentColor = dismissActionContentColor
-                    )
+                    MainAppSnackbar(data, visualsWithError)
                 }
             }
         ) { paddingValues ->
             Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
                 NavHost(navController = navController, startDestination = Chat) {
-                    composable<Chat> { // backStackEntry ->
-                        // this can be used to extract arguments from the route:
-//                        val route: Chat = backStackEntry.toRoute()
+                    composable<Chat> {
                         ChatScreen(sessionListViewModel, chatViewModel)
                     }
                     composable<Settings> {
@@ -202,6 +300,110 @@ fun AppShell() {
             }
         }
     }
+}
+
+/**
+ * User menu dropdown for authenticated users.
+ */
+@Composable
+private fun UserMenu(
+    username: String,
+    onLogout: () -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box {
+        IconButton(onClick = { expanded = true }) {
+            Icon(
+                imageVector = Icons.Default.AccountCircle,
+                contentDescription = "User menu"
+            )
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            // User info header
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = username,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                },
+                onClick = { /* Future: navigate to profile */ },
+                leadingIcon = {
+                    Icon(Icons.Default.AccountCircle, contentDescription = null)
+                }
+            )
+
+            HorizontalDivider()
+
+            // Logout option
+            DropdownMenuItem(
+                text = { Text("Logout") },
+                onClick = {
+                    expanded = false
+                    onLogout()
+                },
+                leadingIcon = {
+                    Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null)
+                }
+            )
+        }
+    }
+}
+
+/**
+ * Snackbar for authentication screens.
+ */
+@Composable
+private fun AuthSnackbar(
+    data: SnackbarData,
+    visualsWithError: SnackbarVisualsWithError?
+) {
+    val containerColor: Color
+    val contentColor: Color
+    val actionColor: Color
+    val actionContentColor: Color
+    val dismissActionContentColor: Color
+
+    if (visualsWithError?.isError == true) {
+        containerColor = MaterialTheme.colorScheme.errorContainer
+        contentColor = MaterialTheme.colorScheme.onErrorContainer
+        actionColor = MaterialTheme.colorScheme.error
+        actionContentColor = MaterialTheme.colorScheme.error
+        dismissActionContentColor = MaterialTheme.colorScheme.onErrorContainer
+    } else {
+        containerColor = MaterialTheme.colorScheme.inverseSurface
+        contentColor = MaterialTheme.colorScheme.inverseOnSurface
+        actionColor = MaterialTheme.colorScheme.inversePrimary
+        actionContentColor = MaterialTheme.colorScheme.inversePrimary
+        dismissActionContentColor = MaterialTheme.colorScheme.inverseOnSurface
+    }
+
+    Snackbar(
+        snackbarData = data,
+        modifier = Modifier.padding(12.dp),
+        containerColor = containerColor,
+        contentColor = contentColor,
+        actionColor = actionColor,
+        actionContentColor = actionContentColor,
+        dismissActionContentColor = dismissActionContentColor
+    )
+}
+
+/**
+ * Snackbar for main application screens.
+ */
+@Composable
+private fun MainAppSnackbar(
+    data: SnackbarData,
+    visualsWithError: SnackbarVisualsWithError?
+) {
+    // Same implementation as AuthSnackbar - could be extracted to shared component
+    AuthSnackbar(data, visualsWithError)
 }
 
 /**
