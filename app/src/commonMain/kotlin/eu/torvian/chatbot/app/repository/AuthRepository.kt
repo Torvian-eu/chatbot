@@ -52,4 +52,11 @@ interface AuthRepository {
      * @return true if the user has valid authentication tokens, false otherwise
      */
     suspend fun isAuthenticated(): Boolean
+
+    /**
+     * Checks the initial authentication state on app startup.
+     * Validates existing tokens with the server and updates the auth state accordingly.
+     * Sets state to Loading initially, then either Authenticated or Unauthenticated based on token validation.
+     */
+    suspend fun checkInitialAuthState()
 }

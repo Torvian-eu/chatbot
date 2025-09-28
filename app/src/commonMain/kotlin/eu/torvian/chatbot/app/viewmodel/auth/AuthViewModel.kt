@@ -213,8 +213,7 @@ class AuthViewModel(
      */
     suspend fun checkInitialAuthState() {
         logger.info("Checking initial authentication state")
-        // The repository should handle this internally when initialized
-        // This method can be used if we need to explicitly trigger a check
+        authRepository.checkInitialAuthState()
     }
 
     // --- Form State Updates ---

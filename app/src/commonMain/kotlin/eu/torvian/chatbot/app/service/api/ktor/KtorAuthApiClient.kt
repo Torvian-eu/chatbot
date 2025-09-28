@@ -56,4 +56,10 @@ class KtorAuthApiClient(
             authenticatedClient.post(AuthResource.Logout()).body<Unit>()
         }
     }
+
+    override suspend fun getCurrentUser(): Either<ApiResourceError, User> {
+        return safeApiCall {
+            authenticatedClient.get(AuthResource.Me()).body<User>()
+        }
+    }
 }

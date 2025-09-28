@@ -46,4 +46,12 @@ interface AuthApi {
      * @return Either an [ApiResourceError] on failure or Unit on success
      */
     suspend fun logout(): Either<ApiResourceError, Unit>
+
+    /**
+     * Gets the current authenticated user details.
+     * Used to validate tokens and restore authentication state.
+     *
+     * @return Either an [ApiResourceError] on failure or [User] with user details on success
+     */
+    suspend fun getCurrentUser(): Either<ApiResourceError, User>
 }

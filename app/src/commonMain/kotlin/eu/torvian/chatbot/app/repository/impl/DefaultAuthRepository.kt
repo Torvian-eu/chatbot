@@ -111,4 +111,33 @@ class DefaultAuthRepository(
     override suspend fun isAuthenticated(): Boolean {
         return _authState.value is AuthState.Authenticated
     }
+
+    override suspend fun checkInitialAuthState() {
+        logger.info("Checking initial authentication state on startup")
+        _authState.value = AuthState.Loading
+
+        // Check if we have valid tokens
+        val accessToken = tokenStorage.getAccessToken()
+        if (accessToken.isRight()) {
+            logger.debug("Found existing access token, validating with server")
+            // Validate token with server by calling /auth/me
+            authApi.getCurrentUser().fold(
+                ifLeft = { apiError ->
+                    // Token invalid, clear and set unauthenticated
+                    logger.warn("Token validation failed: ${apiError.message}. Clearing tokens.")
+                    tokenStorage.clearTokens()
+                        .onLeft { logger.warn("Failed to clear invalid tokens: ${it.message}") }
+                    _authState.value = AuthState.Unauthenticated
+                },
+                ifRight = { user ->
+                    // Token valid, set authenticated state
+                    logger.info("Token validation successful, user authenticated: ${user.username}")
+                    _authState.value = AuthState.Authenticated(user.id, user.username)
+                }
+            )
+        } else {
+            logger.debug("No access token found, setting unauthenticated state")
+            _authState.value = AuthState.Unauthenticated
+        }
+    }
 }
