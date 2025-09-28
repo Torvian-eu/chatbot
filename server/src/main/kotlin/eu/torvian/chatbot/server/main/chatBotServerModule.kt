@@ -7,6 +7,7 @@ import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.koin.*
 import eu.torvian.chatbot.server.ktor.configureKtor
 import eu.torvian.chatbot.server.ktor.routes.ApiRoutesKtor
+import eu.torvian.chatbot.server.service.setup.InitialSetupService
 import eu.torvian.chatbot.server.utils.misc.DIContainerKey
 import io.ktor.http.HttpHeaders
 import io.ktor.server.application.*
@@ -86,12 +87,26 @@ fun Application.configureKoin() {
 fun Application.configureDatabase() {
     runBlocking {
         val dataManager: DataManager = get()
-//        // Drop and create tables - adjust as needed for production
-//        dataManager.dropTables()
+        val initialSetupService: InitialSetupService = get()
+
         // Only create tables if the database is empty
-        if (dataManager.isDatabaseEmpty())
+        if (dataManager.isDatabaseEmpty()) {
             dataManager.createTables()
-        logger.info("Database initialized successfully.")
+            logger.info("Database tables created successfully.")
+
+            // Perform initial setup for user accounts system
+            initialSetupService.performInitialSetup().fold(
+                ifLeft = { error ->
+                    logger.error("Initial setup failed: $error")
+                    throw IllegalStateException("Failed to perform initial setup: $error")
+                },
+                ifRight = { adminUser ->
+                    logger.info("Initial setup completed successfully. Admin user created with ID: ${adminUser.id}")
+                }
+            )
+        } else {
+            logger.info("Database already exists, skipping table creation and initial setup.")
+        }
     }
 }
 
