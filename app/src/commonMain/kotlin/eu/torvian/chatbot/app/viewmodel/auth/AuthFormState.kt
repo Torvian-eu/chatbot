@@ -38,7 +38,8 @@ data class RegisterFormState(
     val emailError: String? = null,
     val passwordError: String? = null,
     val confirmPasswordError: String? = null,
-    val generalError: String? = null
+    val generalError: String? = null,
+    val registrationSuccessEvent: Boolean = false
 ) {
     val isValid: Boolean
         get() = username.isNotBlank() &&

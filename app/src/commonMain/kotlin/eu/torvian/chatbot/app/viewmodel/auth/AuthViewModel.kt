@@ -151,7 +151,8 @@ class AuthViewModel(
                     emailError = null,
                     passwordError = null,
                     confirmPasswordError = null,
-                    generalError = null
+                    generalError = null,
+                    registrationSuccessEvent = false
                 )
             }
 
@@ -174,11 +175,10 @@ class AuthViewModel(
                     _registerFormState.update { currentState ->
                         currentState.copy(
                             isLoading = false,
-                            generalError = null
+                            generalError = null,
+                            registrationSuccessEvent = true
                         )
                     }
-                    // Clear form on successful registration
-                    clearRegisterForm()
                 }
             )
         }
@@ -251,6 +251,14 @@ class AuthViewModel(
                 confirmPasswordError = if (confirmPassword != currentState.confirmPassword) null else currentState.confirmPasswordError
             )
         }
+    }
+
+    /**
+     * Resets the registration form state, typically called by the UI after
+     * successful navigation away from the registration success screen.
+     */
+    fun acknowledgeRegistrationSuccess() {
+        _registerFormState.value = RegisterFormState()
     }
 
     /**
