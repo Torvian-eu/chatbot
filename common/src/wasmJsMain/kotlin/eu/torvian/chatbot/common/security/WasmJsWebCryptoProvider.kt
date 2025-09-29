@@ -1,12 +1,9 @@
-package eu.torvian.chatbot.app.security
+package eu.torvian.chatbot.common.security
 
 import arrow.core.Either
 import arrow.core.raise.catch
 import arrow.core.raise.either
 import arrow.core.raise.ensure
-import eu.torvian.chatbot.common.security.CryptoError
-import eu.torvian.chatbot.common.security.CryptoProvider
-import eu.torvian.chatbot.common.security.EncryptionConfig
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.random.Random
@@ -36,7 +33,7 @@ class WasmJsWebCryptoProvider(private val config: EncryptionConfig) : CryptoProv
             // Generate a cryptographically strong 256-bit (32-byte) DEK
             // Use multiple entropy sources available in WASM/JS
             val key = ByteArray(32)
-            val entropy1 = Random.nextBytes(32)
+            val entropy1 = Random.Default.nextBytes(32)
             val entropy2 = Random(hashCode()).nextBytes(32)
             val entropy3 = Random(toString().hashCode()).nextBytes(32)
 
@@ -45,7 +42,7 @@ class WasmJsWebCryptoProvider(private val config: EncryptionConfig) : CryptoProv
                 key[i] = (entropy1[i].toInt() xor entropy2[i].toInt() xor entropy3[i].toInt()).toByte()
             }
 
-            Base64.encode(key)
+            Base64.Default.encode(key)
         }) { e: Exception ->
             raise(CryptoError.KeyGenerationError("Failed to generate DEK: ${e.message}", e))
         }
@@ -53,18 +50,18 @@ class WasmJsWebCryptoProvider(private val config: EncryptionConfig) : CryptoProv
 
     override suspend fun wrapDEK(dek: String): Either<CryptoError, String> = either {
         catch({
-            val dekBytes = Base64.decode(dek)
+            val dekBytes = Base64.Default.decode(dek)
             val kekString = config.masterKeys[keyVersion]
                 ?: raise(CryptoError.KeyVersionNotFound(keyVersion))
-            val kekBytes = Base64.decode(kekString)
+            val kekBytes = Base64.Default.decode(kekString)
 
             // Use authenticated encryption approach with HMAC-like protection
-            val nonce = Random.nextBytes(16)
+            val nonce = Random.Default.nextBytes(16)
             val wrappedDek = authenticatedEncrypt(dekBytes, kekBytes, nonce)
 
             // Combine nonce + wrapped DEK + version info
             val result = nonce + wrappedDek + byteArrayOf(keyVersion.toByte())
-            Base64.encode(result)
+            Base64.Default.encode(result)
         }) { e: Exception ->
             raise(CryptoError.EncryptionError("Failed to wrap DEK: ${e.message}", e))
         }
@@ -72,7 +69,7 @@ class WasmJsWebCryptoProvider(private val config: EncryptionConfig) : CryptoProv
 
     override suspend fun unwrapDEK(wrappedDek: String, kekVersion: Int): Either<CryptoError, String> = either {
         catch({
-            val combined = Base64.decode(wrappedDek)
+            val combined = Base64.Default.decode(wrappedDek)
             ensure(combined.size >= 17) { CryptoError.DecryptionError("Invalid wrapped DEK format", null) }
 
             // First check if the requested key version exists in config
@@ -85,10 +82,10 @@ class WasmJsWebCryptoProvider(private val config: EncryptionConfig) : CryptoProv
 
             ensure(versionByte == kekVersion) { CryptoError.DecryptionError("KEK version mismatch", null) }
 
-            val kekBytes = Base64.decode(kekString)
+            val kekBytes = Base64.Default.decode(kekString)
 
             val dekBytes = authenticatedDecrypt(encryptedDek, kekBytes, nonce)
-            Base64.encode(dekBytes)
+            Base64.Default.encode(dekBytes)
         }) { e: Exception ->
             raise(CryptoError.DecryptionError("Failed to unwrap DEK: ${e.message}", e))
         }
@@ -96,13 +93,13 @@ class WasmJsWebCryptoProvider(private val config: EncryptionConfig) : CryptoProv
 
     override suspend fun encryptData(plainText: String, dek: String): Either<CryptoError, String> = either {
         catch({
-            val dekBytes = Base64.decode(dek)
+            val dekBytes = Base64.Default.decode(dek)
             val plaintextBytes = plainText.encodeToByteArray()
-            val nonce = Random.nextBytes(12) // Standard AES-GCM nonce size
+            val nonce = Random.Default.nextBytes(12) // Standard AES-GCM nonce size
 
             val encrypted = authenticatedEncrypt(plaintextBytes, dekBytes, nonce)
             val result = nonce + encrypted
-            Base64.encode(result)
+            Base64.Default.encode(result)
         }) { e: Exception ->
             raise(CryptoError.EncryptionError("Failed to encrypt data: ${e.message}", e))
         }
@@ -110,12 +107,12 @@ class WasmJsWebCryptoProvider(private val config: EncryptionConfig) : CryptoProv
 
     override suspend fun decryptData(cipherText: String, dek: String): Either<CryptoError, String> = either {
         catch({
-            val combined = Base64.decode(cipherText)
+            val combined = Base64.Default.decode(cipherText)
             ensure(combined.size >= 13) { CryptoError.DecryptionError("Invalid ciphertext format", null) }
 
             val nonce = combined.copyOfRange(0, 12)
             val encrypted = combined.copyOfRange(12, combined.size)
-            val dekBytes = Base64.decode(dek)
+            val dekBytes = Base64.Default.decode(dek)
 
             val decrypted = authenticatedDecrypt(encrypted, dekBytes, nonce)
             decrypted.decodeToString()
@@ -211,9 +208,9 @@ class WasmJsWebCryptoProvider(private val config: EncryptionConfig) : CryptoProv
             for (i in temp.indices) {
                 val pos = (i + round) % hash.size
                 temp[i] = ((hash[pos].toInt() and 0xFF) xor
-                          (hash[(pos + 7) % hash.size].toInt() and 0xFF) xor
-                          (hash[(pos + 13) % hash.size].toInt() and 0xFF) xor
-                          round).toByte()
+                        (hash[(pos + 7) % hash.size].toInt() and 0xFF) xor
+                        (hash[(pos + 13) % hash.size].toInt() and 0xFF) xor
+                        round).toByte()
             }
             hash = temp
         }

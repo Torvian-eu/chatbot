@@ -1,8 +1,6 @@
-package eu.torvian.chatbot.app.security
+package eu.torvian.chatbot.common.security
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.security.CryptoError
-import eu.torvian.chatbot.common.security.EncryptionConfig
 import kotlinx.coroutines.test.runTest
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
@@ -13,7 +11,7 @@ import kotlin.test.assertTrue
 
 /**
  * Test suite for WasmJsWebCryptoProvider.
- * 
+ *
  * This tests the secure WASM crypto provider implementation that uses
  * authenticated encryption, proper key derivation, and envelope encryption.
  */
@@ -22,8 +20,8 @@ class WasmJsWebCryptoProviderTest {
 
     private val testConfig = EncryptionConfig(
         masterKeys = mapOf(
-            1 to Base64.encode(ByteArray(32) { it.toByte() }), // Test key v1
-            2 to Base64.encode(ByteArray(32) { (it + 50).toByte() }) // Test key v2
+            1 to Base64.Default.encode(ByteArray(32) { it.toByte() }), // Test key v1
+            2 to Base64.Default.encode(ByteArray(32) { (it + 50).toByte() }) // Test key v2
         ),
         keyVersion = 1
     )
@@ -50,7 +48,7 @@ class WasmJsWebCryptoProviderTest {
         assertTrue(dek.isNotEmpty(), "DEK should not be empty")
 
         // Verify it's valid Base64 and decodes to 32 bytes
-        val decoded = Base64.decode(dek)
+        val decoded = Base64.Default.decode(dek)
         assertEquals(32, decoded.size, "DEK should decode to 32 bytes (256 bits)")
     }
 
@@ -82,7 +80,7 @@ class WasmJsWebCryptoProviderTest {
         assertTrue(wrapped.isNotEmpty(), "Wrapped DEK should not be empty")
 
         // Verify it's valid Base64
-        val decoded = Base64.decode(wrapped)
+        val decoded = Base64.Default.decode(wrapped)
         assertTrue(decoded.size >= 17, "Wrapped DEK should have nonce(16) + data + version(1)")
         assertEquals(1, decoded.last().toInt(), "Version byte should match current version")
     }
@@ -93,7 +91,7 @@ class WasmJsWebCryptoProviderTest {
         val dekResult = cryptoProvider.generateDEK()
         assertTrue(dekResult is Either.Right, "DEK generation should succeed")
         val originalDek = dekResult.value
-        
+
         val wrappedResult = cryptoProvider.wrapDEK(originalDek)
         assertTrue(wrappedResult is Either.Right, "DEK wrapping should succeed")
         val wrappedDek = wrappedResult.value
@@ -193,7 +191,11 @@ class WasmJsWebCryptoProviderTest {
         // Assert
         assertTrue(encrypt1Result is Either.Right, "First encryption should succeed")
         assertTrue(encrypt2Result is Either.Right, "Second encryption should succeed")
-        assertNotEquals(encrypt1Result.value, encrypt2Result.value, "Should produce different ciphertext due to random nonce")
+        assertNotEquals(
+            encrypt1Result.value,
+            encrypt2Result.value,
+            "Should produce different ciphertext due to random nonce"
+        )
     }
 
     @Test
@@ -213,7 +215,7 @@ class WasmJsWebCryptoProviderTest {
         assertTrue(cipherText.isNotEmpty(), "Ciphertext should not be empty")
 
         // Verify it's valid Base64
-        val decoded = Base64.decode(cipherText)
+        val decoded = Base64.Default.decode(cipherText)
         assertTrue(decoded.size >= 13, "Ciphertext should have nonce(12) + encrypted data + auth tag")
     }
 
