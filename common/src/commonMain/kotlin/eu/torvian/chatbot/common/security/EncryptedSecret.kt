@@ -1,4 +1,4 @@
-package eu.torvian.chatbot.server.domain.security
+package eu.torvian.chatbot.common.security
 
 /**
  * Represents an encrypted secret using envelope encryption.

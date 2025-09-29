@@ -5,8 +5,8 @@ import eu.torvian.chatbot.server.data.entities.ApiSecretEntity
 import eu.torvian.chatbot.server.data.entities.ChatSessionEntity
 import eu.torvian.chatbot.server.data.entities.SessionCurrentLeafEntity
 import eu.torvian.chatbot.server.domain.config.DatabaseConfig
-import eu.torvian.chatbot.server.domain.security.EncryptedSecret
-import eu.torvian.chatbot.server.domain.security.EncryptionConfig
+import eu.torvian.chatbot.common.security.EncryptedSecret
+import eu.torvian.chatbot.common.security.EncryptionConfig
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
 
@@ -36,7 +36,7 @@ object TestDefaults {
     )
 
     val DEFAULT_ENCRYPTION_CONFIG = EncryptionConfig(
-        masterKey = "G2CgJOQQtIC+yfz+LLoDp/osBLUVzW9JE9BrQA0dQFo=",
+        masterKeys = mapOf(1 to "G2CgJOQQtIC+yfz+LLoDp/osBLUVzW9JE9BrQA0dQFo="),
         keyVersion = 1
     )
 

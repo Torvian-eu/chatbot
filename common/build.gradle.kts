@@ -24,9 +24,28 @@ repositories {
 }
 
 kotlin {
-    jvm {
+    jvm("desktop") {
         compilerOptions {
             jvmTarget = JvmTarget.JVM_21
+        }
+
+        testRuns["test"].executionTask.configure {
+            // Use JUnit 5 Platform for testing
+            useJUnitPlatform()
+
+            // Enable dynamic agent loading for MockK and disable class data sharing (JVM args)
+            jvmArgs("-XX:+EnableDynamicAgentLoading", "-Xshare:off")
+
+            // Enable parallel test execution (JVM system properties)
+            systemProperty("junit.jupiter.execution.parallel.enabled", "true")
+            // Run tests in parallel within a class
+            systemProperty("junit.jupiter.execution.parallel.mode.default", "concurrent")
+            // Run tests from the same class in the same thread to avoid concurrency issues
+            systemProperty("junit.jupiter.execution.parallel.mode.classes.default", "same_thread")
+            // Dynamic parallelism strategy
+            systemProperty("junit.jupiter.execution.parallel.config.strategy", "dynamic")
+            // Dynamic parallelism factor (50% of available processors)
+            systemProperty("junit.jupiter.execution.parallel.config.dynamic.factor", "0.5")
         }
     }
 
@@ -56,7 +75,23 @@ kotlin {
         }
     }
 
+    // Apply the default hierarchy template again. Needed for custom source sets to work correctly.
+    applyDefaultHierarchyTemplate()
+
     sourceSets {
+        // Create a new source set for shared Android/Desktop code
+        val desktopAndroidMain by creating {
+            dependsOn(commonMain.get())
+        }
+        val desktopMain by getting {
+            dependsOn(desktopAndroidMain)
+        }
+        val desktopTest by getting
+
+        androidMain {
+            dependsOn(desktopAndroidMain)
+        }
+
         commonMain.dependencies {
             implementation(libs.koin.core)           // Koin dependency injection
             implementation(libs.ktor.resources)      // Ktor resources for type-safe routing
@@ -66,6 +101,19 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
+            implementation(libs.kotlinx.coroutines.test)
+        }
+
+        desktopMain.dependencies {
+            // Logging (JVM-specific)
+            implementation(libs.log4j.api)
+            runtimeOnly(libs.log4j.core)
+            runtimeOnly(libs.log4j.slf4j2)
+        }
+
+        desktopTest.dependencies {
+            // Mocking library (JVM-specific)
+            implementation(libs.mockk)
         }
     }
 

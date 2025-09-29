@@ -36,6 +36,8 @@ class UserServiceImpl(
         private val logger: Logger = LogManager.getLogger(UserServiceImpl::class.java)
     }
 
+    // TODO: Add more comprehensive validation for username and email,
+    //       make it configurable, and centralized (in 'common' module)
     override suspend fun registerUser(
         username: String,
         password: String,

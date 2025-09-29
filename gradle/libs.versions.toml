@@ -7,6 +7,7 @@ sqlite = "3.50.3.0"          # SQLite JDBC driver version
 coroutines = "1.10.2"        # Kotlin Coroutines version
 serialization = "1.9.0"      # Kotlin Serialization version
 datetime = "0.6.2"           # Kotlin DateTime version
+kotlinx-io = "0.8.0"         # KotlinX IO version
 log4j = "2.25.1"             # Log4j version
 jbcrypt = "0.4"              # JBCrypt version
 bouncycastle = "1.81"        # BouncyCastle version
@@ -22,7 +23,7 @@ compose-hot-reload = "1.0.0-beta04" # Compose Hot Reload version
 androidx-activity = "1.10.1" # For Compose Multiplatform Activity
 android-gradle-plugin = "8.10.0" # Android Gradle Plugin version
 android-compileSdk = "36"    # The API level to compile against: https://developer.android.com/studio/releases/platforms
-android-minSdk = "24"        # The minimum Android version supported
+android-minSdk = "26"        # The minimum Android version supported
 android-targetSdk = "36"     # The target Android version for testing
 slf4j = "2.0.17"             # SLF4J version used for logging
 
@@ -35,6 +36,7 @@ kotlin-gradle-plugin-buildlogic = { module = "org.jetbrains.kotlin:kotlin-gradle
 serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
 coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "datetime" }
+kotlinx-io-core = { module = "org.jetbrains.kotlinx:kotlinx-io-core", version.ref = "kotlinx-io" }
 
 # Typesafe Config
 typesafe-config = { module = "com.typesafe:config", version.ref = "typesafe-config" }

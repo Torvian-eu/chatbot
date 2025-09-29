@@ -1,16 +1,11 @@
 package eu.torvian.chatbot.server.koin
 
+import eu.torvian.chatbot.common.security.AESCryptoProvider
+import eu.torvian.chatbot.common.security.CryptoProvider
+import eu.torvian.chatbot.common.security.EncryptionService
 import eu.torvian.chatbot.server.service.core.*
 import eu.torvian.chatbot.server.service.core.impl.*
-import eu.torvian.chatbot.server.service.security.AESCryptoProvider
-import eu.torvian.chatbot.server.service.security.AuthenticationService
-import eu.torvian.chatbot.server.service.security.AuthenticationServiceImpl
-import eu.torvian.chatbot.server.service.security.BCryptPasswordService
-import eu.torvian.chatbot.server.service.security.CredentialManager
-import eu.torvian.chatbot.server.service.security.CryptoProvider
-import eu.torvian.chatbot.server.service.security.DbEncryptedCredentialManager
-import eu.torvian.chatbot.server.service.security.EncryptionService
-import eu.torvian.chatbot.server.service.security.PasswordService
+import eu.torvian.chatbot.server.service.security.*
 import eu.torvian.chatbot.server.service.setup.InitialSetupService
 import org.koin.dsl.module
 

@@ -2,20 +2,21 @@ package eu.torvian.chatbot.server.data.dao.exposed
 
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
+import eu.torvian.chatbot.common.security.EncryptedSecret
 import eu.torvian.chatbot.server.data.dao.ApiSecretDao
 import eu.torvian.chatbot.server.data.dao.error.ApiSecretError
 import eu.torvian.chatbot.server.data.entities.ApiSecretEntity
-import eu.torvian.chatbot.server.domain.security.EncryptedSecret
 import eu.torvian.chatbot.server.testutils.data.Table
-import eu.torvian.chatbot.server.testutils.data.TestDataSet
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
+import eu.torvian.chatbot.server.testutils.data.TestDataSet
 import eu.torvian.chatbot.server.testutils.data.TestDefaults
 import eu.torvian.chatbot.server.testutils.koin.defaultTestContainer
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import kotlin.test.*
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * Tests for [ApiSecretDaoExposed].
@@ -94,17 +95,22 @@ class ApiSecretDaoExposedTest {
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for existing alias")
-        assertTrue(result.leftOrNull() is ApiSecretError.SecretAlreadyExists,
-                "Error should be SecretAlreadyExists")
-        assertEquals(apiSecret1.alias, (result.leftOrNull() as ApiSecretError.SecretAlreadyExists).alias,
-                "Error should contain the correct alias")
+        assertTrue(
+            result.leftOrNull() is ApiSecretError.SecretAlreadyExists,
+            "Error should be SecretAlreadyExists"
+        )
+        assertEquals(
+            apiSecret1.alias, (result.leftOrNull() as ApiSecretError.SecretAlreadyExists).alias,
+            "Error should contain the correct alias"
+        )
     }
 
     @Test
     fun `getSecret should return the correct secret for a given alias`() = runTest {
         // Arrange: Insert multiple secrets
         val entry1 = apiSecret1
-        val entry2 = apiSecret1.copy(alias = "alias2", encryptedCredential = "encrypted_secret2", wrappedDek = "encrypted_dek2")
+        val entry2 =
+            apiSecret1.copy(alias = "alias2", encryptedCredential = "encrypted_secret2", wrappedDek = "encrypted_dek2")
         testDataManager.setup(TestDataSet(apiSecrets = listOf(entry1, entry2)))
 
         // Create encrypted secret objects
@@ -140,10 +146,14 @@ class ApiSecretDaoExposedTest {
 
         // Assert
         assertTrue(result.isLeft(), "Finding a non-existent alias should return Left")
-        assertTrue(result.leftOrNull() is ApiSecretError.SecretNotFound,
-                "Error should be SecretNotFound")
-        assertEquals("non-existent-alias", (result.leftOrNull() as ApiSecretError.SecretNotFound).alias,
-                "Error should contain the queried alias")
+        assertTrue(
+            result.leftOrNull() is ApiSecretError.SecretNotFound,
+            "Error should be SecretNotFound"
+        )
+        assertEquals(
+            "non-existent-alias", (result.leftOrNull() as ApiSecretError.SecretNotFound).alias,
+            "Error should contain the queried alias"
+        )
     }
 
     @Test
@@ -174,7 +184,9 @@ class ApiSecretDaoExposedTest {
 
         // Assert
         assertTrue(result.isLeft(), "Deleting a non-existent alias should return Left")
-        assertTrue(result.leftOrNull() is ApiSecretError.SecretNotFound,
-                "Error should be SecretNotFound")
+        assertTrue(
+            result.leftOrNull() is ApiSecretError.SecretNotFound,
+            "Error should be SecretNotFound"
+        )
     }
 }
