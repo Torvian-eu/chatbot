@@ -3,10 +3,12 @@ package eu.torvian.chatbot.app.service.auth
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
+import eu.torvian.chatbot.common.models.User
 import eu.torvian.chatbot.common.security.CryptoError
 import eu.torvian.chatbot.common.security.CryptoProvider
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlinx.io.buffered
 import kotlinx.io.files.FileSystem
 import kotlinx.io.files.Path
@@ -37,6 +39,16 @@ class FileSystemTokenStorageTest {
         return TestFileSystemTokenStorage()
     }
 
+    private fun createTestUser(id: Long = 1L, username: String = "testuser"): User {
+        return User(
+            id = id,
+            username = username,
+            email = "$username@example.com",
+            createdAt = Clock.System.now(),
+            lastLogin = Clock.System.now()
+        )
+    }
+
     @AfterTest
     fun cleanup() {
         // Clean up any test files that might have been created
@@ -64,16 +76,17 @@ class FileSystemTokenStorageTest {
 
 
     @Test
-    fun `saveTokens should successfully save and encrypt tokens`() = runTest {
+    fun `saveAuthData should successfully save and encrypt tokens with user data`() = runTest {
         val tokenStorage = createTestTokenStorage()
 
         // Arrange
         val accessToken = "test.access.token"
         val refreshToken = "test.refresh.token"
         val expiresAt = Clock.System.now() + 1.hours
+        val user = createTestUser()
 
         // Act
-        val result = tokenStorage.saveTokens(accessToken, refreshToken, expiresAt)
+        val result = tokenStorage.saveAuthData(accessToken, refreshToken, expiresAt, user)
 
         // Assert
         assertTrue(result.isRight(), "Save operation should succeed")
@@ -89,9 +102,10 @@ class FileSystemTokenStorageTest {
         val accessToken = "test.access.token"
         val refreshToken = "test.refresh.token"
         val expiresAt = Clock.System.now() + 1.hours
+        val user = createTestUser()
 
         // Arrange - save tokens first
-        val saveResult = tokenStorage.saveTokens(accessToken, refreshToken, expiresAt)
+        val saveResult = tokenStorage.saveAuthData(accessToken, refreshToken, expiresAt, user)
         assertTrue(saveResult.isRight(), "Save operation should succeed")
 
         // Act
@@ -108,9 +122,10 @@ class FileSystemTokenStorageTest {
         val accessToken = "test.access.token"
         val refreshToken = "test.refresh.token"
         val expiresAt = Clock.System.now() + 1.hours
+        val user = createTestUser()
 
         // Arrange - save tokens first
-        tokenStorage.saveTokens(accessToken, refreshToken, expiresAt)
+        tokenStorage.saveAuthData(accessToken, refreshToken, expiresAt, user)
 
         // Act
         val result = tokenStorage.getRefreshToken()
@@ -126,9 +141,10 @@ class FileSystemTokenStorageTest {
         val accessToken = "test.access.token"
         val refreshToken = "test.refresh.token"
         val expiresAt = Clock.System.now() + 1.hours
+        val user = createTestUser()
 
         // Arrange - save tokens first
-        tokenStorage.saveTokens(accessToken, refreshToken, expiresAt)
+        tokenStorage.saveAuthData(accessToken, refreshToken, expiresAt, user)
 
         // Act
         val result = tokenStorage.getExpiry()
@@ -180,15 +196,16 @@ class FileSystemTokenStorageTest {
         val accessToken = "test.access.token"
         val refreshToken = "test.refresh.token"
         val expiresAt = Clock.System.now() + 1.hours
+        val user = createTestUser()
 
         // Arrange - save tokens first
-        tokenStorage.saveTokens(accessToken, refreshToken, expiresAt)
+        tokenStorage.saveAuthData(accessToken, refreshToken, expiresAt, user)
 
         // Verify tokens exist
         assertTrue(tokenStorage.getAccessToken().isRight())
 
         // Act
-        val clearResult = tokenStorage.clearTokens()
+        val clearResult = tokenStorage.clearAuthData()
 
         // Assert clear succeeded
         assertTrue(clearResult.isRight())
@@ -204,7 +221,7 @@ class FileSystemTokenStorageTest {
         val tokenStorage = createTestTokenStorage()
 
         // Act
-        val result = tokenStorage.clearTokens()
+        val result = tokenStorage.clearAuthData()
 
         // Assert
         assertTrue(result.isRight())
@@ -273,9 +290,10 @@ class FileSystemTokenStorageTest {
             dekGenerationShouldFail = true
         }
         val tokenStorage = TestFileSystemTokenStorage(mockCrypto)
+        val user = createTestUser()
 
         // Act
-        val result = tokenStorage.saveTokens("access", "refresh", Clock.System.now())
+        val result = tokenStorage.saveAuthData("access", "refresh", Clock.System.now(), user)
 
         // Assert
         assertTrue(result.isLeft())
@@ -289,9 +307,10 @@ class FileSystemTokenStorageTest {
             encryptionShouldFail = true
         }
         val tokenStorage = TestFileSystemTokenStorage(mockCrypto)
+        val user = createTestUser()
 
         // Act
-        val result = tokenStorage.saveTokens("access", "refresh", Clock.System.now())
+        val result = tokenStorage.saveAuthData("access", "refresh", Clock.System.now(), user)
 
         // Assert
         assertTrue(result.isLeft())
@@ -305,9 +324,10 @@ class FileSystemTokenStorageTest {
             dekWrappingShouldFail = true
         }
         val tokenStorage = TestFileSystemTokenStorage(mockCrypto)
+        val user = createTestUser()
 
         // Act
-        val result = tokenStorage.saveTokens("access", "refresh", Clock.System.now())
+        val result = tokenStorage.saveAuthData("access", "refresh", Clock.System.now(), user)
 
         // Assert
         assertTrue(result.isLeft())
@@ -318,9 +338,10 @@ class FileSystemTokenStorageTest {
     @Test
     fun `should handle crypto provider DEK unwrapping failure`() = runTest {
         val tokenStorage = createTestTokenStorage()
+        val user = createTestUser()
 
         // Save tokens first
-        tokenStorage.saveTokens("access", "refresh", Clock.System.now())
+        tokenStorage.saveAuthData("access", "refresh", Clock.System.now(), user)
 
         // Make unwrapping fail
         tokenStorage.mockCryptoProvider.dekUnwrappingShouldFail = true
@@ -337,9 +358,10 @@ class FileSystemTokenStorageTest {
     @Test
     fun `should handle crypto provider decryption failure`() = runTest {
         val tokenStorage = createTestTokenStorage()
+        val user = createTestUser()
 
         // Save tokens first
-        tokenStorage.saveTokens("access", "refresh", Clock.System.now())
+        tokenStorage.saveAuthData("access", "refresh", Clock.System.now(), user)
 
         // Make decryption fail
         tokenStorage.mockCryptoProvider.decryptionShouldFail = true
@@ -356,9 +378,10 @@ class FileSystemTokenStorageTest {
     @Test
     fun `should handle corrupted token data gracefully`() = runTest {
         val tokenStorage = createTestTokenStorage()
+        val user = createTestUser()
 
         // Save tokens first
-        tokenStorage.saveTokens("access", "refresh", Clock.System.now())
+        tokenStorage.saveAuthData("access", "refresh", Clock.System.now(), user)
 
         // Make JSON parsing fail by corrupting the decrypted data
         tokenStorage.mockCryptoProvider.returnCorruptedDecryptedData = true
@@ -380,8 +403,9 @@ class FileSystemTokenStorageTest {
         val accessToken = "test.access.token"
         val refreshToken = "test.refresh.token"
         val expiresAt = Clock.System.now() + 1.hours
+        val user = createTestUser()
 
-        tokenStorage.saveTokens(accessToken, refreshToken, expiresAt)
+        tokenStorage.saveAuthData(accessToken, refreshToken, expiresAt, user)
 
         // Simulate KEK version change
         tokenStorage.mockCryptoProvider.currentKekVersion = 2
@@ -405,8 +429,9 @@ class FileSystemTokenStorageTest {
         val accessToken = "test.access.token"
         val refreshToken = "test.refresh.token"
         val expiresAt = Clock.System.now() + 1.hours
+        val user = createTestUser()
 
-        tokenStorage.saveTokens(accessToken, refreshToken, expiresAt)
+        tokenStorage.saveAuthData(accessToken, refreshToken, expiresAt, user)
 
         // Simulate KEK version change and make re-encryption fail
         tokenStorage.mockCryptoProvider.currentKekVersion = 2
@@ -423,12 +448,13 @@ class FileSystemTokenStorageTest {
     @Test
     fun `should handle file system IO errors during save`() = runTest {
         val tokenStorage = createTestTokenStorage()
+        val user = createTestUser()
 
         // Make the crypto provider fail to simulate an IO error during save
         tokenStorage.mockCryptoProvider.dekGenerationShouldFail = true
 
         // Act
-        val result = tokenStorage.saveTokens("access", "refresh", Clock.System.now())
+        val result = tokenStorage.saveAuthData("access", "refresh", Clock.System.now(), user)
 
         // Assert
         assertTrue(result.isLeft())
@@ -438,6 +464,7 @@ class FileSystemTokenStorageTest {
     @Test
     fun `should create storage directory if it does not exist`() = runTest {
         val tokenStorage = createTestTokenStorage()
+        val user = createTestUser()
 
         // Ensure directory doesn't exist initially
         if (tokenStorage.testFileSystem.exists(tokenStorage.testStorageDir)) {
@@ -445,7 +472,7 @@ class FileSystemTokenStorageTest {
         }
 
         // Act
-        val result = tokenStorage.saveTokens("access", "refresh", Clock.System.now())
+        val result = tokenStorage.saveAuthData("access", "refresh", Clock.System.now(), user)
 
         // Assert
         assertTrue(result.isRight())
@@ -565,16 +592,16 @@ private class TestFileSystemTokenStorage(
     )
 
     // Delegate all TokenStorage methods to the actual implementation
-    suspend fun saveTokens(accessToken: String, refreshToken: String, expiresAt: kotlinx.datetime.Instant) =
-        tokenStorage.saveTokens(accessToken, refreshToken, expiresAt)
-
     suspend fun getAccessToken() = tokenStorage.getAccessToken()
 
     suspend fun getRefreshToken() = tokenStorage.getRefreshToken()
 
     suspend fun getExpiry() = tokenStorage.getExpiry()
 
-    suspend fun clearTokens() = tokenStorage.clearTokens()
+    suspend fun saveAuthData(accessToken: String, refreshToken: String, expiresAt: Instant, user: User) =
+        tokenStorage.saveAuthData(accessToken, refreshToken, expiresAt, user)
+
+    suspend fun clearAuthData() = tokenStorage.clearAuthData()
+
+    suspend fun getUserData() = tokenStorage.getUserData()
 }
-
-

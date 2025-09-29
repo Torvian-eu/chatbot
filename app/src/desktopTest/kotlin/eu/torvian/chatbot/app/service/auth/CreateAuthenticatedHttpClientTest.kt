@@ -54,8 +54,8 @@ class CreateAuthenticatedHttpClientTest {
         coEvery { mockTokenStorage.getAccessToken() } answers { "default-access-token".right() }
         coEvery { mockTokenStorage.getRefreshToken() } answers { "default-refresh-token".right() }
         coEvery { mockTokenStorage.getExpiry() } answers { Clock.System.now().right() }
-        coEvery { mockTokenStorage.saveTokens(any(), any(), any()) } answers { Unit.right() }
-        coEvery { mockTokenStorage.clearTokens() } answers { Unit.right() }
+        coEvery { mockTokenStorage.saveAuthData(any(), any(), any(), any()) } answers { Unit.right() }
+        coEvery { mockTokenStorage.clearAuthData() } answers { Unit.right() }
     }
 
     @AfterTest
@@ -336,7 +336,7 @@ class CreateAuthenticatedHttpClientTest {
         assertEquals("""{"message": "success with new token"}""", response.bodyAsText())
 
         // Verify tokens were saved after refresh
-        coVerify(exactly = 1) { mockTokenStorage.saveTokens(newAccessToken, newRefreshToken, newExpiresAt) }
+        coVerify(exactly = 1) { mockTokenStorage.saveAuthData(newAccessToken, newRefreshToken, newExpiresAt, any()) }
         coVerify(exactly = 0) { mockEventBus.emitEvent(any<AuthenticationFailureEvent>()) }
 
         client.close()
@@ -405,7 +405,7 @@ class CreateAuthenticatedHttpClientTest {
 
         // Verify authentication failure event was emitted due to refresh failure
         coVerify(atLeast = 1) { mockEventBus.emitEvent(any<AuthenticationFailureEvent>()) }
-        coVerify(exactly = 1) { mockTokenStorage.clearTokens() }
+        coVerify(exactly = 1) { mockTokenStorage.clearAuthData() }
 
         client.close()
         unauthenticatedHttpClient.close()

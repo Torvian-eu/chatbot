@@ -36,6 +36,7 @@ class AuthViewModelTest {
     fun setUp() {
         mockAuthRepository = mockk {
             every { authState } returns MutableStateFlow(AuthState.Unauthenticated)
+            coEvery { checkInitialAuthState() } returns Unit
         }
         mockErrorNotifier = mockk(relaxed = true)
 

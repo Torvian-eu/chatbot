@@ -82,14 +82,14 @@ private suspend fun RefreshTokensParams.refreshTokens(
     eventBus: EventBus
 ): BearerTokens? {
     val oldRefreshToken = oldTokens?.refreshToken ?: run {
-        tokenStorage.clearTokens()
+        tokenStorage.clearAuthData()
             .onLeft {
-                logger.warn("Failed to clear tokens: ${it.message}")
+                logger.warn("Failed to clear auth data: ${it.message}")
             }
-        logger.warn("No refresh token available, clearing tokens")
+        logger.warn("No refresh token available, clearing auth data")
         eventBus.emitEvent(
             AuthenticationFailureEvent(
-                "No refresh token available, clearing tokens"
+                "No refresh token available, clearing auth data"
             )
         )
         return null
@@ -102,39 +102,41 @@ private suspend fun RefreshTokensParams.refreshTokens(
             setBody(RefreshTokenRequest(oldRefreshToken))
         }.body()
 
-        // Save the new tokens
-        tokenStorage.saveTokens(
+        // Save the new tokens AND user data for optimistic authentication
+        tokenStorage.saveAuthData(
             refreshResponse.accessToken,
             refreshResponse.refreshToken,
-            refreshResponse.expiresAt
+            refreshResponse.expiresAt,
+            refreshResponse.user
         ).fold(
             ifLeft = { error ->
-                tokenStorage.clearTokens()
+                tokenStorage.clearAuthData()
                     .onLeft {
-                        logger.warn("Failed to clear tokens after failed save: ${it.message}")
+                        logger.warn("Failed to clear auth data after failed save: ${it.message}")
                     }
-                logger.warn("Failed to save tokens after refresh: ${error.message}")
+                logger.warn("Failed to save auth data after refresh: ${error.message}")
                 eventBus.emitEvent(
                     AuthenticationFailureEvent(
-                        "Failed to save tokens after refresh: ${error.message}"
+                        "Failed to save auth data after refresh: ${error.message}"
                     )
                 )
                 return null
             },
             ifRight = {
                 // Return new tokens for the auth plugin
+                logger.debug("Successfully refreshed tokens and saved user data for: ${refreshResponse.user.username}")
                 return BearerTokens(refreshResponse.accessToken, refreshResponse.refreshToken)
             }
         )
     } catch (e: Exception) {
-        tokenStorage.clearTokens()
+        tokenStorage.clearAuthData()
             .onLeft {
-                logger.warn("Failed to clear tokens after refresh exception: ${it.message}")
+                logger.warn("Failed to clear auth data after refresh exception: ${it.message}")
             }
-        logger.warn("Refresh token request failed, clearing tokens: ${e.message}")
+        logger.warn("Refresh token request failed, clearing auth data: ${e.message}")
         eventBus.emitEvent(
             AuthenticationFailureEvent(
-                "Refresh token request failed, clearing tokens: ${e.message}"
+                "Refresh token request failed, clearing auth data: ${e.message}"
             )
         )
         return null // Return null to signify refresh failure

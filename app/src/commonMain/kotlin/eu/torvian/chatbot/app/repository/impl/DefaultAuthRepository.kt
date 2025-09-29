@@ -68,15 +68,16 @@ class DefaultAuthRepository(
             authApi.login(request).bind()
         }
 
-        // Save tokens
+        // Save authentication data (tokens and user)
         withError({ tokenError ->
             _authState.value = AuthState.Unauthenticated
-            RepositoryError.OtherError("Failed to save tokens after successful login: ${tokenError.message}")
+            RepositoryError.OtherError("Failed to save authentication data after successful login: ${tokenError.message}")
         }) {
-            tokenStorage.saveTokens(
+            tokenStorage.saveAuthData(
                 accessToken = loginResponse.accessToken,
                 refreshToken = loginResponse.refreshToken,
-                expiresAt = loginResponse.expiresAt
+                expiresAt = loginResponse.expiresAt,
+                user = loginResponse.user
             ).bind()
         }
 
@@ -101,10 +102,9 @@ class DefaultAuthRepository(
         }) {
             authApi.logout().bind()
         }
-        tokenStorage.clearTokens()
-            .onLeft {
-                logger.warn("Failed to clear tokens on logout: ${it.message}")
-            }
+        tokenStorage.clearAuthData()
+            .onLeft { logger.warn("Failed to clear auth data on logout: ${it.message}") }
+
         _authState.value = AuthState.Unauthenticated
     }
 
@@ -114,30 +114,17 @@ class DefaultAuthRepository(
 
     override suspend fun checkInitialAuthState() {
         logger.info("Checking initial authentication state on startup")
-        _authState.value = AuthState.Loading
 
-        // Check if we have valid tokens
-        val accessToken = tokenStorage.getAccessToken()
-        if (accessToken.isRight()) {
-            logger.debug("Found existing access token, validating with server")
-            // Validate token with server by calling /auth/me
-            authApi.getCurrentUser().fold(
-                ifLeft = { apiError ->
-                    // Token invalid, clear and set unauthenticated
-                    logger.warn("Token validation failed: ${apiError.message}. Clearing tokens.")
-                    tokenStorage.clearTokens()
-                        .onLeft { logger.warn("Failed to clear invalid tokens: ${it.message}") }
-                    _authState.value = AuthState.Unauthenticated
-                },
-                ifRight = { user ->
-                    // Token valid, set authenticated state
-                    logger.info("Token validation successful, user authenticated: ${user.username}")
-                    _authState.value = AuthState.Authenticated(user.id, user.username)
-                }
-            )
-        } else {
-            logger.debug("No access token found, setting unauthenticated state")
-            _authState.value = AuthState.Unauthenticated
-        }
+        // Try to load cached user data - NO network calls for optimistic authentication
+        tokenStorage.getUserData().fold(
+            ifLeft = { error ->
+                logger.debug("Failed to load cached user data, setting unauthenticated state: ${error.message}")
+                _authState.value = AuthState.Unauthenticated
+            },
+            ifRight = { user ->
+                logger.info("Found cached user data, setting authenticated state: ${user.username}")
+                _authState.value = AuthState.Authenticated(user.id, user.username)
+            }
+        )
     }
 }

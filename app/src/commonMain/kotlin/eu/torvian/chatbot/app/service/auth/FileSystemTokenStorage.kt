@@ -5,6 +5,7 @@ import arrow.core.raise.catch
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
+import eu.torvian.chatbot.common.models.User
 import eu.torvian.chatbot.common.security.CryptoProvider
 import kotlinx.datetime.Instant
 import kotlinx.io.buffered
@@ -56,21 +57,23 @@ open class FileSystemTokenStorage(
     private data class TokenData(
         val accessToken: String,
         val refreshToken: String,
-        val expiresAt: Long // Instant as epoch seconds
+        val expiresAt: Long,
+        val user: User
     )
 
     private val storageDirPath = Path(storageDirectoryPath)
     protected open val keyFilePath: Path = Path(storageDirPath, "dek.json")
     protected open val dataFilePath: Path = Path(storageDirPath, "tokens.enc")
 
-    override suspend fun saveTokens(
+    override suspend fun saveAuthData(
         accessToken: String,
         refreshToken: String,
-        expiresAt: Instant
+        expiresAt: Instant,
+        user: User
     ): Either<TokenStorageError, Unit> = either {
         catch({
-            // 1. Prepare the plaintext token data.
-            val tokenData = TokenData(accessToken, refreshToken, expiresAt.epochSeconds)
+            // 1. Prepare the plaintext token data with user info.
+            val tokenData = TokenData(accessToken, refreshToken, expiresAt.epochSeconds, user)
             val plainTextJson = json.encodeToString(TokenData.serializer(), tokenData)
 
             // 2-4. Generate DEK, encrypt data, and wrap DEK using bind for sequential operations
@@ -99,36 +102,51 @@ open class FileSystemTokenStorage(
             }
             setSecureFilePermissions(dataFilePath)
 
-            // Write metadata file
+            // Write key metadata file
             fileSystem.sink(keyFilePath).buffered().use { sink ->
                 sink.writeString(metadataJson)
             }
             setSecureFilePermissions(keyFilePath)
         }) { e: Exception ->
             when (e) {
-                is kotlinx.io.IOException -> raise(TokenStorageError.IOError("Failed to save tokens to file", e))
-                else -> raise(TokenStorageError.EncryptionError("Failed to encrypt token data for storage", e))
+                is SerializationException -> TokenStorageError.InvalidTokenFormat(
+                    "Failed to serialize auth data: ${e.message}", e
+                )
+                else -> TokenStorageError.IOError(
+                    "Unexpected error during auth data save: ${e.message}", e
+                )
             }
         }
     }
 
-    override suspend fun getAccessToken(): Either<TokenStorageError, String> = getTokenData().map { it.accessToken }
+    override suspend fun getUserData(): Either<TokenStorageError, User> =
+        loadTokenData().map { it.user }
 
-    override suspend fun getRefreshToken(): Either<TokenStorageError, String> = getTokenData().map { it.refreshToken }
-
-    override suspend fun getExpiry(): Either<TokenStorageError, Instant> =
-        getTokenData().map { Instant.fromEpochSeconds(it.expiresAt) }
-
-    override suspend fun clearTokens(): Either<TokenStorageError, Unit> = either {
+    override suspend fun clearAuthData(): Either<TokenStorageError, Unit> = either {
         catch({
-            if (fileSystem.exists(keyFilePath)) fileSystem.delete(keyFilePath)
-            if (fileSystem.exists(dataFilePath)) fileSystem.delete(dataFilePath)
+            if (fileSystem.exists(dataFilePath)) {
+                fileSystem.delete(dataFilePath)
+            }
+            if (fileSystem.exists(keyFilePath)) {
+                fileSystem.delete(keyFilePath)
+            }
         }) { e: Exception ->
-            raise(TokenStorageError.IOError("Failed to clear tokens", e))
+            TokenStorageError.IOError(
+                "Failed to clear auth data: ${e.message}", e
+            )
         }
     }
 
-    private suspend fun getTokenData(): Either<TokenStorageError, TokenData> = either {
+    override suspend fun getAccessToken(): Either<TokenStorageError, String> =
+        loadTokenData().map { it.accessToken }
+
+    override suspend fun getRefreshToken(): Either<TokenStorageError, String> =
+        loadTokenData().map { it.refreshToken }
+
+    override suspend fun getExpiry(): Either<TokenStorageError, Instant> =
+        loadTokenData().map { Instant.fromEpochSeconds(it.expiresAt) }
+
+    private suspend fun loadTokenData(): Either<TokenStorageError, TokenData> = either {
         catch({
             ensure(fileSystem.exists(keyFilePath) && fileSystem.exists(dataFilePath)) {
                 TokenStorageError.NotFound("Token storage files not found")
@@ -141,7 +159,7 @@ open class FileSystemTokenStorage(
             val dekMetadata = catch({
                 json.decodeFromString<DekMetadata>(metadataJson)
             }) { e: SerializationException ->
-                raise(TokenStorageError.InvalidTokenFormat("Failed to parse stored token data", e))
+                raise(TokenStorageError.InvalidTokenFormat("Failed to parse stored token metadata", e))
             }
             val encryptedData = fileSystem.source(dataFilePath).buffered().use { source ->
                 source.readString()
