@@ -23,6 +23,8 @@
 - `./gradlew server:assemble` to build the server module
 - `./gradlew server:test` to run the server tests
 
+Note: Don't run `./gradlew build` as it takes too long.
+
 ## Tips
 - Console commands are run in PowerShell.
 - In Powershell several commands can be chained together with the character `;`. (Don't use `&&` for this, which only works in Windows Command prompt).
