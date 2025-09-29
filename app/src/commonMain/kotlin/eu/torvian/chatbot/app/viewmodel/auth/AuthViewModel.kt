@@ -58,10 +58,14 @@ class AuthViewModel(
     // --- Authentication Operations ---
 
     /**
-     * Attempts to log in the user with the provided credentials.
+     * Attempts to log in the user using the current login form state.
      */
-    fun login(username: String, password: String) {
+    fun login() {
         viewModelScope.launch {
+            val currentForm = _loginFormState.value
+            val username = currentForm.username
+            val password = currentForm.password
+
             logger.info("Attempting login for user: $username")
 
             // Validate form before submission
@@ -118,10 +122,16 @@ class AuthViewModel(
     }
 
     /**
-     * Attempts to register a new user with the provided information.
+     * Attempts to register a new user using the current registration form state.
      */
-    fun register(username: String, email: String, password: String, confirmPassword: String) {
+    fun register() {
         viewModelScope.launch {
+            val currentForm = _registerFormState.value
+            val username = currentForm.username
+            val email = currentForm.email
+            val password = currentForm.password
+            val confirmPassword = currentForm.confirmPassword
+
             logger.info("Attempting registration for user: $username")
 
             // Validate all form fields
@@ -179,6 +189,8 @@ class AuthViewModel(
                             registrationSuccessEvent = true
                         )
                     }
+                    // Clear form on successful registration
+                    clearRegisterForm()
                 }
             )
         }
@@ -219,35 +231,44 @@ class AuthViewModel(
     // --- Form State Updates ---
 
     /**
-     * Updates the login form state with new field values.
+     * Updates the login form state with optional named parameters for each field.
+     * Only the provided fields will be updated; others remain unchanged.
+     * Field-specific errors are cleared if the corresponding field is updated.
      */
-    fun updateLoginForm(username: String, password: String) {
+    fun updateLoginForm(username: String? = null, password: String? = null) {
         _loginFormState.update { currentState ->
             currentState.copy(
-                username = username,
-                password = password,
+                username = username ?: currentState.username,
+                password = password ?: currentState.password,
                 // Clear field-specific errors when user types
-                usernameError = if (username != currentState.username) null else currentState.usernameError,
-                passwordError = if (password != currentState.password) null else currentState.passwordError
+                usernameError = if (username != null && username != currentState.username) null else currentState.usernameError,
+                passwordError = if (password != null && password != currentState.password) null else currentState.passwordError
             )
         }
     }
 
     /**
-     * Updates the registration form state with new field values.
+     * Updates the registration form state with optional named parameters for each field.
+     * Only the provided fields will be updated; others remain unchanged.
+     * Field-specific errors are cleared if the corresponding field is updated.
      */
-    fun updateRegisterForm(username: String, email: String, password: String, confirmPassword: String) {
+    fun updateRegisterForm(
+        username: String? = null,
+        email: String? = null,
+        password: String? = null,
+        confirmPassword: String? = null
+    ) {
         _registerFormState.update { currentState ->
             currentState.copy(
-                username = username,
-                email = email,
-                password = password,
-                confirmPassword = confirmPassword,
+                username = username ?: currentState.username,
+                email = email ?: currentState.email,
+                password = password ?: currentState.password,
+                confirmPassword = confirmPassword ?: currentState.confirmPassword,
                 // Clear field-specific errors when user types
-                usernameError = if (username != currentState.username) null else currentState.usernameError,
-                emailError = if (email != currentState.email) null else currentState.emailError,
-                passwordError = if (password != currentState.password) null else currentState.passwordError,
-                confirmPasswordError = if (confirmPassword != currentState.confirmPassword) null else currentState.confirmPasswordError
+                usernameError = if (username != null && username != currentState.username) null else currentState.usernameError,
+                emailError = if (email != null && email != currentState.email) null else currentState.emailError,
+                passwordError = if (password != null && password != currentState.password) null else currentState.passwordError,
+                confirmPasswordError = if (confirmPassword != null && confirmPassword != currentState.confirmPassword) null else currentState.confirmPasswordError
             )
         }
     }

@@ -55,9 +55,10 @@ class AuthViewModelTest {
         val username = "testuser"
         val password = "ValidPass123!"
         coEvery { mockAuthRepository.login(LoginRequest(username, password)) } returns Unit.right()
+        authViewModel.updateLoginForm(username, password)
 
         // Act
-        authViewModel.login(username, password)
+        authViewModel.login()
         advanceUntilIdle()
 
         // Assert
@@ -81,9 +82,10 @@ class AuthViewModelTest {
             "Login failed"
         )
         coEvery { mockAuthRepository.login(LoginRequest(username, password)) } returns error.left()
+        authViewModel.updateLoginForm(username, password)
 
         // Act
-        authViewModel.login(username, password)
+        authViewModel.login()
         advanceUntilIdle()
 
         // Assert
@@ -96,8 +98,10 @@ class AuthViewModelTest {
 
     @Test
     fun `login with blank username should show validation error`() = runTest(testDispatcher) {
+        // Arrange
+        authViewModel.updateLoginForm("", "password")
         // Act
-        authViewModel.login("", "password")
+        authViewModel.login()
         advanceUntilIdle()
 
         // Assert
@@ -113,8 +117,10 @@ class AuthViewModelTest {
 
     @Test
     fun `login with blank password should show validation error`() = runTest(testDispatcher) {
+        // Arrange
+        authViewModel.updateLoginForm("testuser", "")
         // Act
-        authViewModel.login("testuser", "")
+        authViewModel.login()
         advanceUntilIdle()
 
         // Assert
@@ -136,9 +142,10 @@ class AuthViewModelTest {
         coEvery { mockAuthRepository.login(LoginRequest(username, password)) } coAnswers {
             deferredResult.await().right()
         }
+        authViewModel.updateLoginForm(username, password)
 
         // Act
-        authViewModel.login(username, password)
+        authViewModel.login()
         advanceTimeBy(1) // Let the coroutine start
 
         // Assert loading state
@@ -176,9 +183,10 @@ class AuthViewModelTest {
         coEvery {
             mockAuthRepository.register(RegisterRequest(username, password, email))
         } returns user.right()
+        authViewModel.updateRegisterForm(username, email, password, confirmPassword)
 
         // Act
-        authViewModel.register(username, email, password, confirmPassword)
+        authViewModel.register()
         advanceUntilIdle()
 
         // Assert
@@ -209,9 +217,10 @@ class AuthViewModelTest {
         coEvery {
             mockAuthRepository.register(RegisterRequest(username, password, email))
         } returns error.left()
+        authViewModel.updateRegisterForm(username, email, password, confirmPassword)
 
         // Act
-        authViewModel.register(username, email, password, confirmPassword)
+        authViewModel.register()
         advanceUntilIdle()
 
         // Assert
@@ -222,8 +231,10 @@ class AuthViewModelTest {
 
     @Test
     fun `register with mismatched passwords should show validation error`() = runTest(testDispatcher) {
+        // Arrange
+        authViewModel.updateRegisterForm("testuser", "test@example.com", "password1", "password2")
         // Act
-        authViewModel.register("testuser", "test@example.com", "password1", "password2")
+        authViewModel.register()
         advanceUntilIdle()
 
         // Assert
@@ -253,9 +264,10 @@ class AuthViewModelTest {
         coEvery {
             mockAuthRepository.register(RegisterRequest(username, password, null))
         } returns user.right()
+        authViewModel.updateRegisterForm(username, "", password, confirmPassword)
 
         // Act
-        authViewModel.register(username, "", password, confirmPassword)
+        authViewModel.register()
         advanceUntilIdle()
 
         // Assert
@@ -314,7 +326,8 @@ class AuthViewModelTest {
         // Arrange - Set some initial errors by updating the form state directly
         authViewModel.updateLoginForm("user", "pass")
         // Then simulate the form having errors by calling login with blank fields
-        authViewModel.login("", "")
+        authViewModel.updateLoginForm("", "")
+        authViewModel.login()
         advanceUntilIdle()
 
         // Act
@@ -393,7 +406,8 @@ class AuthViewModelTest {
         )
         coEvery { mockAuthRepository.login(any()) } returns invalidCredentialsError.left()
 
-        authViewModel.login("user", "pass")
+        authViewModel.updateLoginForm("user", "pass")
+        authViewModel.login()
         advanceUntilIdle()
 
         assertEquals("Invalid username or password", authViewModel.loginFormState.value.generalError)
@@ -408,7 +422,8 @@ class AuthViewModelTest {
         )
         coEvery { mockAuthRepository.register(any()) } returns usernameExistsError.left()
 
-        authViewModel.register("existinguser", "email@test.com", "ValidPass123!", "ValidPass123!")
+        authViewModel.updateRegisterForm("existinguser", "email@test.com", "ValidPass123!", "ValidPass123!")
+        authViewModel.register()
         advanceUntilIdle()
 
         assertEquals(
@@ -448,7 +463,8 @@ class AuthViewModelTest {
         coEvery { mockAuthRepository.login(any()) } returns networkError.left()
 
         // Act
-        authViewModel.login("user", "pass")
+        authViewModel.updateLoginForm("user", "pass")
+        authViewModel.login()
         advanceUntilIdle()
 
         // Assert
@@ -464,7 +480,8 @@ class AuthViewModelTest {
         coEvery { mockAuthRepository.register(any()) } returns networkError.left()
 
         // Act
-        authViewModel.register("user", "test@example.com", "ValidPass123!", "ValidPass123!")
+        authViewModel.updateRegisterForm("user", "test@example.com", "ValidPass123!", "ValidPass123!")
+        authViewModel.register()
         advanceUntilIdle()
 
         // Assert
@@ -481,7 +498,8 @@ class AuthViewModelTest {
         coEvery { mockAuthRepository.login(any()) } returns accountLockedError.left()
 
         // Act
-        authViewModel.login("user", "pass")
+        authViewModel.updateLoginForm("user", "pass")
+        authViewModel.login()
         advanceUntilIdle()
 
         // Assert
@@ -498,7 +516,8 @@ class AuthViewModelTest {
         coEvery { mockAuthRepository.register(any()) } returns emailExistsError.left()
 
         // Act
-        authViewModel.register("user", "test@example.com", "ValidPass123!", "ValidPass123!")
+        authViewModel.updateRegisterForm("user", "test@example.com", "ValidPass123!", "ValidPass123!")
+        authViewModel.register()
         advanceUntilIdle()
 
         // Assert

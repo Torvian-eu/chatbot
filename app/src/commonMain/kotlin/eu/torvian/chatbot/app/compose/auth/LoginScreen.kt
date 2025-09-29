@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.app.compose.auth
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -12,6 +13,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.viewmodel.auth.AuthViewModel
+import eu.torvian.chatbot.app.viewmodel.auth.LoginFormState
 import org.koin.compose.viewmodel.koinViewModel
 
 /**
@@ -28,6 +30,31 @@ fun LoginScreen(
     val loginFormState by authViewModel.loginFormState.collectAsState()
     val scrollState = rememberScrollState()
 
+    LoginScreenContent(
+        loginFormState = loginFormState,
+        scrollState = scrollState,
+        onUsernameChange = { username ->
+            authViewModel.updateLoginForm(username = username)
+        },
+        onPasswordChange = { password ->
+            authViewModel.updateLoginForm(password = password)
+        },
+        onLogin = {
+            authViewModel.login()
+        },
+        onNavigateToRegister = onNavigateToRegister
+    )
+}
+
+@Composable
+fun LoginScreenContent(
+    loginFormState: LoginFormState,
+    scrollState: ScrollState,
+    onUsernameChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onLogin: () -> Unit,
+    onNavigateToRegister: () -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -64,12 +91,7 @@ fun LoginScreen(
                 // Username Field
                 AuthTextField(
                     value = loginFormState.username,
-                    onValueChange = { username ->
-                        authViewModel.updateLoginForm(
-                            username = username,
-                            password = loginFormState.password
-                        )
-                    },
+                    onValueChange = onUsernameChange,
                     label = "Username or Email",
                     isError = loginFormState.usernameError != null,
                     errorMessage = loginFormState.usernameError,
@@ -81,22 +103,14 @@ fun LoginScreen(
                 // Password Field
                 PasswordTextField(
                     value = loginFormState.password,
-                    onValueChange = { password ->
-                        authViewModel.updateLoginForm(
-                            username = loginFormState.username,
-                            password = password
-                        )
-                    },
+                    onValueChange = onPasswordChange,
                     label = "Password",
                     isError = loginFormState.passwordError != null,
                     errorMessage = loginFormState.passwordError,
                     imeAction = ImeAction.Done,
                     onImeAction = {
                         if (loginFormState.isValid) {
-                            authViewModel.login(
-                                loginFormState.username,
-                                loginFormState.password
-                            )
+                            onLogin()
                         }
                     },
                     enabled = !loginFormState.isLoading
@@ -112,12 +126,7 @@ fun LoginScreen(
 
                 // Login Button
                 AuthButton(
-                    onClick = {
-                        authViewModel.login(
-                            loginFormState.username,
-                            loginFormState.password
-                        )
-                    },
+                    onClick = onLogin,
                     text = "Sign In",
                     isLoading = loginFormState.isLoading,
                     enabled = loginFormState.isValid,
