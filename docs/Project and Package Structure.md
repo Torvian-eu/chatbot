@@ -88,17 +88,33 @@ common/src/commonMain/kotlin/eu/torvian/chatbot/common/
 │   └── di/                       # Dependency injection abstractions
 │       ├── DIContainer.kt        # Framework-agnostic DI interface
 │       └── KoinDIContainer.kt    # Koin-specific DI implementation
-└── security/
+└── security/                     # Core security utilities
+    ├── CryptoError.kt            # Sealed class for cryptographic errors
+    ├── CryptoProvider.kt         # Interface for crypto operations
+    ├── EncryptedSecret.kt        # Data class for encrypted secrets
+    ├── EncryptionConfig.kt       # Configuration for encryption operations
+    ├── EncryptionService.kt      # Service for envelope encryption
     ├── PasswordValidator.kt      # Password validation utility
     └── error/                    # Security-related error types
         └── PasswordValidationError.kt # Password validation error type
+        
+common/src/desktopAndroidMain/kotlin/eu/torvian/chatbot/
+└── common/security/
+    └── AESCryptoProvider.kt # JVM implementation of CryptoProvider
+    
+common/src/desktopTest/kotlin/eu/torvian/chatbot/
+└── common/security/
+    ├── AESCryptoProviderTest.kt # JVM tests for AESCryptoProvider
+    └── EncryptionServiceTest.kt # JVM tests for EncryptionService
+    
+common/src/wasmJsMain/kotlin/eu/torvian/chatbot/
+└── common/security/
+    └── WasmJsWebCryptoProvider.kt # WASM/JS implementation of CryptoProvider
+    
+common/src/wasmJsTest/kotlin/eu/torvian/chatbot/
+└── common/security/
+    └── WasmJsWebCryptoProviderTest.kt # WASM/JS tests for WasmJsWebCryptoProvider
 ```
-
-**Key Features**:
-- All data models are serializable with kotlinx.serialization
-- Support for message threading and chat grouping
-- Framework-agnostic dependency injection abstractions
-- Shared between frontend and backend for API communication
 
 ### 2. Server Module (`server/`)
 
@@ -137,8 +153,6 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   │   └── DatabaseConfig.kt     # Database configuration
 │   └── security/                 # Security-related classes
 │       ├── AuthSchemes.kt        # Authentication schemes
-│       ├── EncryptedSecret.kt    # Encrypted secret data model
-│       ├── EncryptionConfig.kt   # Encryption configuration
 │       ├── JwtConfig.kt          # JWT configuration
 │       ├── LoginResult.kt        # Login result data model
 │       └── UserContext.kt        # User context data model
@@ -150,7 +164,7 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   └── serviceModule.kt          # Service implementations DI module
 ├── ktor/                         # Ktor server setup
 │   ├── configureKtor.kt          # Ktor server plugin configuration
-│   ├── auth/                     
+│   ├── auth/
 │   │   └── AuthUtils.kt          # Authentication utilities
 │   └── routes/                   # Ktor API routes
 │       ├── ApiRoutesKtor.kt      # Ktor route configuration using type-safe Resources plugin
@@ -171,7 +185,7 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   ├── ServerControlServiceImpl.kt # Server control service implementation
 │   ├── ServerInstanceInfo.kt     # Server instance information
 │   ├── ServerMain.kt             # Main application entry point
-│   └── ServerStatus.kt           # Server status sealed interface  
+│   └── ServerStatus.kt           # Server status sealed interface
 ├── service/                      # Business logic services
 │   ├── core/                     # Core services
 │   │   ├── GroupService.kt       # Group management service interface
@@ -201,12 +215,9 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   │       └── OpenAIChatStrategy.kt # OpenAI chat completion strategy
 │   ├── security/                 # Security services
 │   │   ├── AuthenticationService.kt # Authentication service interface
-│   │   ├── AESCryptoProvider.kt  # AES encryption provider
 │   │   ├── BCryptPasswordService.kt # BCrypt password service implementation
 │   │   ├── CredentialManager.kt  # Credential management interface
-│   │   ├── CryptoProvider.kt     # Crypto provider interface
 │   │   ├── DbEncryptedCredentialManager.kt # Database-backed credential manager
-│   │   ├── EncryptionService.kt  # Encryption service interface
 │   │   ├── PasswordService.kt    # Password service interface
 │   │   └── error/                # Domain-specific error types
 │   └── setup/                    # Initial setup services
@@ -244,7 +255,7 @@ server/src/test/kotlin/eu/torvian/chatbot/server/
 │   └── setup/                    # Setup service tests
 │       └── InitialSetupServiceTest.kt
 └── testutils/                    # Test utilities
-    ├── auth/ 
+    ├── auth/
     │   └── TestAuthHelper.kt     # Test authentication helper
     ├── data/                     # Data test utilities
     │   ├── ExposedTestDataManager.kt # Test data management
@@ -260,13 +271,6 @@ server/src/test/kotlin/eu/torvian/chatbot/server/
         └── myTestApplication.kt  # Custom test application setup
 ```
 
-**Key Features**:
-- Layered architecture with clear separation of concerns
-- Repository pattern with DAO interfaces and Exposed implementations
-- Comprehensive transaction management
-- Extensive test coverage with test utilities
-- Koin dependency injection throughout
-
 ### 3. App Module (`app/`)
 
 **Purpose**: Desktop application frontend built with Compose Multiplatform. (Android and WebAssembly support planned for future versions.)
@@ -275,10 +279,16 @@ server/src/test/kotlin/eu/torvian/chatbot/server/
 ```
 app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app targets
 ├── compose/          # Compose UI components
-│   ├── AppShell.kt   # Main application shell (contains navigation, top-level layout)
+│   ├── AppShell.kt   # Main entry point for routing based on AuthState (Loading, Auth, Unauth)
+│   ├── AuthenticationFlow.kt # UI flow wrapper for Login/Register screens
+│   ├── MainApplicationFlow.kt # UI flow wrapper for Chat/Settings screens (authenticated)
 │   ├── ChatScreen.kt # Main chat interface (displays session list, chat messages, input area)
 │   ├── ChatScreenContent.kt # Stateless content composable for chat interface
 │   ├── SettingsScreen.kt # Settings configuration interface (providers, models, settings)
+│   ├── auth/          # Authentication UI components
+│   │   ├── LoginScreen.kt
+│   │   ├── RegisterScreen.kt
+│   │   └── ... other auth components ...
 │   ├── chatarea/     # Chat area components
 │   │   ├── ChatArea.kt
 │   │   └── ... other chat area components ...
@@ -293,9 +303,10 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   ├── sessionlist/  # Session list components
 │   │   ├── SessionListPanel.kt
 │   │   └── ... other session list components ...
-│   └── settings/    # Settings components
-│       ├── SettingsScreen.kt
-│       └── ... other settings components ...
+│   ├── settings/    # Settings components
+│   │   ├── SettingsScreen.kt
+│   │   └── ... other settings components ...
+│   └── snackbar/    # Snackbar components
 ├── domain/          # Domain models specific to the *application's presentation layer*
 │   ├── contracts/    # UI State and Action contracts (interfaces between UI and ViewModels)
 │   │   ├── DataState.kt  # Data state contract
@@ -323,7 +334,11 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │       └── AppRoute.kt  # Application routes
 ├── koin/            # Koin modules 
 │   └── appModule.kt  # main app DI module
+├── main/            
+│   └── AppConfig.kt  # Application configuration
 ├── repository/      # Data repository for frontend
+│   ├── AuthRepository.kt   # Interface for managing user authentication state
+│   ├── AuthState.kt        # Sealed class representing auth status (Loading, Auth, Unauth)
 │   ├── GroupRepository.kt  # Group repository
 │   ├── ModelRepository.kt  # Model repository
 │   ├── ProviderRepository.kt # Provider repository
@@ -333,6 +348,7 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   └── impl/             # Repository implementations
 ├── service/          # Frontend services (API clients)
 │   ├── api/          # API interfaces
+│   │   ├── AuthApi.kt
 │   │   ├── ChatApi.kt  
 │   │   ├── GroupApi.kt
 │   │   ├── ModelApi.kt
@@ -344,7 +360,7 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   │       ├── createHttpClient.kt # Ktor HTTP client setup
 │   │       ├── KtorChatApiClient.kt
 │   │       ├── KtorGroupApiClient.kt
-│   │       └── ... 
+│   │       └── ...
 │   └── misc/          # Miscellaneous frontend services
 │       └── EventBus.kt  # Event bus for frontend events
 ├── utils/            # Utility classes
@@ -356,6 +372,8 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
     ├── ProviderConfigViewModel.kt # Provider Config ViewModel (manages LLM provider state)
     ├── SessionListViewModel.kt # Session List ViewModel (manages session list state)
     ├── SettingsConfigViewModel.kt # Settings Config ViewModel (manages model settings state)
+    ├── auth/
+    │   └── AuthViewModel.kt  # Authentication ViewModel
     ├── chat/
     │   ├── ChatViewModel.kt  # Chat ViewModel (manages chat session state)
     │   ├── state/  # Chat ViewModel state
@@ -429,16 +447,11 @@ app/src/wasmJsMain/kotlin/eu/torvian/chatbot/app/  # WebAssembly-specific implem
         └── createKmpLogger.wasmJs.kt # WebAssembly-specific KMP logger
 ```
 
-**Key Features**:
-- Compose Multiplatform UI framework
-- Simple application structure (currently minimal implementation)
-- Entry point for the desktop application
-
 ## Architecture Overview
 
 ### Module Dependencies
-- **app** depends on **common** (for shared models)
-- **server** depends on **common** (for shared models)
+- **app** depends on **common**
+- **server** depends on **common**
 - **app** and **server** are independent of each other
 
 ### Data Flow
@@ -460,13 +473,5 @@ app/src/wasmJsMain/kotlin/eu/torvian/chatbot/app/  # WebAssembly-specific implem
 - **common**: Kotlin library with serialization support
 - **server**: Kotlin application with Ktor server and Exposed ORM
 - **app**: Compose for Desktop application with native distribution support
-
-### Key Dependencies
-- **Ktor**: HTTP server and client functionality
-- **Exposed**: Type-safe SQL framework for Kotlin
-- **Compose**: Modern UI toolkit for desktop applications
-- **Koin**: Lightweight dependency injection framework
-- **kotlinx.serialization**: Kotlin serialization library
-- **SQLite**: Embedded database for local storage
 
 This structure provides a clean, maintainable, and testable architecture suitable for a desktop AI chatbot application.
