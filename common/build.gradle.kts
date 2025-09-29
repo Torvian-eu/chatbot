@@ -75,6 +75,9 @@ kotlin {
         }
     }
 
+    // Apply the default hierarchy template again. Needed for custom source sets to work correctly.
+    applyDefaultHierarchyTemplate()
+
     sourceSets {
         // Create a new source set for shared Android/Desktop code
         val desktopAndroidMain by creating {
