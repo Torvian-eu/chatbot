@@ -5,30 +5,38 @@ import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import eu.torvian.chatbot.server.data.dao.UserDao
+import eu.torvian.chatbot.server.data.dao.UserRoleAssignmentDao
+import eu.torvian.chatbot.server.data.dao.RoleDao
 import eu.torvian.chatbot.server.data.dao.error.UserError
+import eu.torvian.chatbot.server.data.dao.error.RoleError
+import eu.torvian.chatbot.server.data.dao.error.UserRoleAssignmentError
 import eu.torvian.chatbot.common.models.User
 import eu.torvian.chatbot.server.service.core.UserService
+import eu.torvian.chatbot.server.service.core.error.auth.AssignRoleError
+import eu.torvian.chatbot.server.service.core.error.auth.ChangePasswordError
+import eu.torvian.chatbot.server.service.core.error.auth.DeleteUserError
 import eu.torvian.chatbot.server.service.core.error.auth.RegisterUserError
+import eu.torvian.chatbot.server.service.core.error.auth.RevokeRoleError
+import eu.torvian.chatbot.server.service.core.error.auth.UpdateUserError
 import eu.torvian.chatbot.server.service.core.error.auth.UserNotFoundError
 import eu.torvian.chatbot.server.service.security.PasswordService
 import eu.torvian.chatbot.common.security.error.PasswordValidationError
 import eu.torvian.chatbot.common.security.error.CharacterType
 import eu.torvian.chatbot.server.data.entities.mappers.toUser
+import eu.torvian.chatbot.server.data.entities.mappers.toRole
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
 import kotlinx.datetime.Clock
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 
 /**
- * Implementation of [UserService] with secure user registration.
- *
- * This implementation handles user registration with password validation
- * and secure password hashing. All users automatically belong to the virtual
- * "All Users" group for access to public resources.
+ * Implementation of [UserService] with secure user registration and admin operations.
  */
 class UserServiceImpl(
     private val userDao: UserDao,
     private val passwordService: PasswordService,
+    private val roleDao: RoleDao,
+    private val userRoleAssignmentDao: UserRoleAssignmentDao,
     private val transactionScope: TransactionScope
 ) : UserService {
 
@@ -121,4 +129,218 @@ class UserServiceImpl(
 
     override suspend fun getAllUsers(): List<User> =
         userDao.getAllUsers().map { it.toUser() }
+
+    // --- Admin Operations ---
+
+    override suspend fun updateUser(
+        userId: Long,
+        username: String,
+        email: String?
+    ): Either<UpdateUserError, User> = transactionScope.transaction {
+        either {
+            logger.info("Updating user $userId: username=$username, email=$email")
+
+            // Validate input
+            ensure(!username.isBlank()) {
+                UpdateUserError.InvalidInput("Username cannot be blank")
+            }
+            ensure(email?.isBlank() != true) {
+                UpdateUserError.InvalidInput("Email cannot be blank if provided")
+            }
+
+            // Get existing user
+            val existingUser = withError({ _: UserError.UserNotFound ->
+                UpdateUserError.UserNotFound(userId)
+            }) {
+                userDao.getUserById(userId).bind()
+            }
+
+            // Update user
+            val updatedUser = existingUser.copy(
+                username = username,
+                email = email
+            )
+
+            withError({ daoError ->
+                when (daoError) {
+                    is UserError.UserNotFound ->
+                        UpdateUserError.UserNotFound(userId)
+                    is UserError.UsernameAlreadyExists ->
+                        UpdateUserError.UsernameAlreadyExists(username)
+                    is UserError.EmailAlreadyExists ->
+                        UpdateUserError.EmailAlreadyExists(email ?: "")
+                    else -> UpdateUserError.InvalidInput("Failed to update user")
+                }
+            }) {
+                userDao.updateUser(updatedUser).bind()
+            }
+
+            logger.info("Successfully updated user $userId")
+            updatedUser.toUser()
+        }
+    }
+
+    override suspend fun deleteUser(userId: Long): Either<DeleteUserError, Unit> =
+        transactionScope.transaction {
+            either {
+                logger.info("Attempting to delete user $userId")
+
+                // Check if user exists
+                withError({ _: UserError.UserNotFound ->
+                    DeleteUserError.UserNotFound(userId)
+                }) {
+                    userDao.getUserById(userId).bind()
+                }
+
+                // Check if this is the last admin
+                val isLastAdmin = isLastAdmin(userId)
+                ensure(!isLastAdmin) {
+                    logger.warn("Cannot delete user $userId: last admin in system")
+                    DeleteUserError.CannotDeleteLastAdmin(userId)
+                }
+
+                // Delete user
+                withError({ _: UserError.UserNotFound ->
+                    DeleteUserError.UserNotFound(userId)
+                }) {
+                    userDao.deleteUser(userId).bind()
+                }
+
+                logger.info("Successfully deleted user $userId")
+            }
+        }
+
+    override suspend fun assignRoleToUser(
+        userId: Long,
+        roleId: Long
+    ): Either<AssignRoleError, Unit> = transactionScope.transaction {
+        either {
+            logger.info("Assigning role $roleId to user $userId")
+
+            withError({ daoError ->
+                when (daoError) {
+                    is UserRoleAssignmentError.ForeignKeyViolation ->
+                        AssignRoleError.UserOrRoleNotFound(userId, roleId)
+                    is UserRoleAssignmentError.AssignmentAlreadyExists ->
+                        AssignRoleError.RoleAlreadyAssigned(userId, roleId)
+                    is UserRoleAssignmentError.AssignmentNotFound ->
+                        AssignRoleError.UserOrRoleNotFound(userId, roleId)
+                }
+            }) {
+                userRoleAssignmentDao.assignRoleToUser(userId, roleId).bind()
+            }
+
+            logger.info("Successfully assigned role $roleId to user $userId")
+        }
+    }
+
+    override suspend fun revokeRoleFromUser(
+        userId: Long,
+        roleId: Long
+    ): Either<RevokeRoleError, Unit> = transactionScope.transaction {
+        either {
+            logger.info("Revoking role $roleId from user $userId")
+
+            // Check if this is the admin role
+            val role = withError({ _: RoleError.RoleNotFound ->
+                RevokeRoleError.RoleNotFound(roleId)
+            }) {
+                roleDao.getRoleById(roleId).bind()
+            }
+
+            // If revoking admin role, check if this is the last admin
+            if (role.name == "Admin") {
+                val lastAdmin = isLastAdmin(userId)
+                ensure(!lastAdmin) {
+                    logger.warn("Cannot revoke admin role from user $userId: last admin")
+                    RevokeRoleError.CannotRevokeLastAdminRole(userId)
+                }
+            }
+
+            // Revoke role
+            withError({ daoError ->
+                when (daoError) {
+                    is UserRoleAssignmentError.AssignmentNotFound ->
+                        RevokeRoleError.RoleNotAssigned(userId, roleId)
+                }
+            }) {
+                userRoleAssignmentDao.revokeRoleFromUser(userId, roleId).bind()
+            }
+
+            logger.info("Successfully revoked role $roleId from user $userId")
+        }
+    }
+
+    override suspend fun getUserRoles(userId: Long) = transactionScope.transaction {
+        logger.debug("Retrieving roles for user $userId")
+        userRoleAssignmentDao.getRolesByUserId(userId)
+            .map { it.toRole() }
+    }
+
+    override suspend fun changePassword(
+        userId: Long,
+        newPassword: String
+    ): Either<ChangePasswordError, Unit> = transactionScope.transaction {
+        either {
+            logger.info("Changing password for user $userId")
+
+            // Validate password strength
+            withError({ passwordError ->
+                when (passwordError) {
+                    is PasswordValidationError.Empty ->
+                        ChangePasswordError.InvalidPassword("Password cannot be empty")
+                    is PasswordValidationError.OnlyWhitespace ->
+                        ChangePasswordError.InvalidPassword("Password cannot contain only whitespace")
+                    is PasswordValidationError.TooShort ->
+                        ChangePasswordError.InvalidPassword(
+                            "Password must be at least ${passwordError.minLength} characters"
+                        )
+                    is PasswordValidationError.TooLong ->
+                        ChangePasswordError.InvalidPassword(
+                            "Password must be no more than ${passwordError.maxLength} characters"
+                        )
+                    is PasswordValidationError.MissingCharacterTypes ->
+                        ChangePasswordError.InvalidPassword(
+                            "Password must contain required character types"
+                        )
+                    is PasswordValidationError.TooCommon ->
+                        ChangePasswordError.InvalidPassword(passwordError.reason)
+                }
+            }) {
+                passwordService.validatePasswordStrength(newPassword).bind()
+            }
+
+            // Get existing user
+            val existingUser = withError({ _: UserError.UserNotFound ->
+                ChangePasswordError.UserNotFound(userId)
+            }) {
+                userDao.getUserById(userId).bind()
+            }
+
+            // Hash new password
+            val hashedPassword = passwordService.hashPassword(newPassword)
+
+            // Update user with new password
+            val updatedUser = existingUser.copy(passwordHash = hashedPassword)
+            withError({ _: UserError ->
+                ChangePasswordError.UserNotFound(userId)
+            }) {
+                userDao.updateUser(updatedUser).bind()
+            }
+
+            logger.info("Successfully changed password for user $userId")
+        }
+    }
+
+    /**
+     * Helper method to check if a user is the last admin in the system.
+     */
+    private suspend fun isLastAdmin(userId: Long): Boolean {
+        val adminRole = roleDao.getRoleByName("Admin").fold(
+            { return false },
+            { it }
+        )
+        val adminUserIds = userRoleAssignmentDao.getUserIdsByRoleId(adminRole.id)
+        return adminUserIds.size == 1 && adminUserIds.contains(userId)
+    }
 }
