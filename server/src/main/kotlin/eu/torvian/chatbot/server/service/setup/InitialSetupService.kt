@@ -5,6 +5,7 @@ import arrow.core.raise.either
 import arrow.core.right
 import eu.torvian.chatbot.common.api.CommonPermissions
 import eu.torvian.chatbot.common.api.PermissionSpec
+import eu.torvian.chatbot.common.api.CommonRoles
 import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.entities.UserEntity
@@ -29,9 +30,6 @@ class InitialSetupService(
     private val transactionScope: TransactionScope
 ) {
     companion object {
-        const val ALL_USERS_GROUP_NAME = "All Users"
-        const val ADMIN_ROLE_NAME = "Admin"
-        const val STANDARD_USER_ROLE_NAME = "StandardUser"
         const val DEFAULT_ADMIN_USERNAME = "admin"
         const val DEFAULT_ADMIN_PASSWORD = "admin123" // Should be changed on first login
     }
@@ -52,8 +50,8 @@ class InitialSetupService(
                 }
 
                 // 1. Create basic roles
-                val adminRoleId = createRole(ADMIN_ROLE_NAME, "Administrator with full system access")
-                val standardUserRoleId = createRole(STANDARD_USER_ROLE_NAME, "Standard user with basic access")
+                val adminRoleId = createRole(CommonRoles.ADMIN, "Administrator with full system access")
+                val standardUserRoleId = createRole(CommonRoles.STANDARD_USER, "Standard user with basic access")
 
                 // 2. Create basic permissions and assign to roles
                 createBasicPermissions(adminRoleId, standardUserRoleId)

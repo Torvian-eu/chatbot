@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.ktor.routes
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.CommonPermissions
+import eu.torvian.chatbot.common.api.CommonRoles
 import eu.torvian.chatbot.common.api.resources.UserResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.misc.di.DIContainer
@@ -83,13 +84,13 @@ class UserRoutesTest {
 
     private val adminRole = RoleEntity(
         id = 1L,
-        name = "Admin",
+        name = CommonRoles.ADMIN,
         description = "Administrator role with full permissions"
     )
 
     private val standardUserRole = RoleEntity(
         id = 2L,
-        name = "StandardUser",
+        name = CommonRoles.STANDARD_USER,
         description = "Standard user role with basic permissions"
     )
 
