@@ -3,6 +3,8 @@ package eu.torvian.chatbot.server.service.setup
 import arrow.core.Either
 import arrow.core.raise.either
 import arrow.core.right
+import eu.torvian.chatbot.common.api.CommonPermissions
+import eu.torvian.chatbot.common.api.PermissionSpec
 import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.entities.UserEntity
@@ -84,11 +86,11 @@ class InitialSetupService(
      * Creates basic permissions and assigns them to roles.
      */
     private fun createBasicPermissions(adminRoleId: Long, standardUserRoleId: Long) {
-        // Create permissions
-        val manageUsersPermId = createPermission("manage", "users")
-        val createPublicProviderPermId = createPermission("create", "public_provider")
-        val createPublicModelPermId = createPermission("create", "public_model")
-        val createPublicSettingsPermId = createPermission("create", "public_settings")
+        // Create permissions using predefined PermissionSpec instances
+        val manageUsersPermId = createPermission(CommonPermissions.MANAGE_USERS)
+        val createPublicProviderPermId = createPermission(CommonPermissions.CREATE_PUBLIC_PROVIDER)
+        val createPublicModelPermId = createPermission(CommonPermissions.CREATE_PUBLIC_MODEL)
+        val createPublicSettingsPermId = createPermission(CommonPermissions.CREATE_PUBLIC_SETTINGS)
 
         // Assign all permissions to admin role
         assignPermissionToRole(adminRoleId, manageUsersPermId)
@@ -103,10 +105,10 @@ class InitialSetupService(
     /**
      * Creates a permission with the given action and subject.
      */
-    private fun createPermission(action: String, subject: String): Long {
+    private fun createPermission(permission: PermissionSpec): Long {
         val insertStatement = PermissionsTable.insert {
-            it[PermissionsTable.action] = action
-            it[PermissionsTable.subject] = subject
+            it[PermissionsTable.action] = permission.action
+            it[PermissionsTable.subject] = permission.subject
         }
         return insertStatement[PermissionsTable.id].value
     }

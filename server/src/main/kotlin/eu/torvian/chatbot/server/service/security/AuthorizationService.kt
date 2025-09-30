@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.service.security
 
 import arrow.core.Either
+import eu.torvian.chatbot.common.api.PermissionSpec
 import eu.torvian.chatbot.common.models.Permission
 import eu.torvian.chatbot.common.models.Role
 import eu.torvian.chatbot.server.service.security.error.AuthorizationError
@@ -24,6 +25,15 @@ interface AuthorizationService {
      * @return true if the user has the permission, false otherwise
      */
     suspend fun hasPermission(userId: Long, action: String, subject: String): Boolean
+
+    /**
+     * Overload: Checks if a user has a specific permission based on a PermissionSpec.
+     *
+     * @param userId The ID of the user to check
+     * @param permission The permission specification (action + subject)
+     * @return true if the user has the permission, false otherwise
+     */
+    suspend fun hasPermission(userId: Long, permission: PermissionSpec): Boolean
 
     /**
      * Checks if a user has a specific role.
@@ -69,6 +79,20 @@ interface AuthorizationService {
         userId: Long,
         action: String,
         subject: String
+    ): Either<AuthorizationError.PermissionDenied, Unit>
+
+    /**
+     * Ensures a user has a specific permission, raising an error if not.
+     *
+     * This overload accepts a PermissionSpec for convenience when using predefined permission constants.
+     *
+     * @param userId The ID of the user to check
+     * @param permission The permission specification (action + subject combination)
+     * @return Either [AuthorizationError.PermissionDenied] if denied, or Unit if allowed
+     */
+    suspend fun requirePermission(
+        userId: Long,
+        permission: PermissionSpec
     ): Either<AuthorizationError.PermissionDenied, Unit>
 
     /**

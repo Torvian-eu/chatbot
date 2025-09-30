@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.ktor.routes
 
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
+import eu.torvian.chatbot.common.api.CommonPermissions
 import eu.torvian.chatbot.common.api.resources.UserResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.misc.di.DIContainer
@@ -93,9 +94,8 @@ class UserRoutesTest {
     )
 
     private val manageUsersPermission = PermissionEntity(
-        id = 1L,
-        action = "manage",
-        subject = "users"
+        1L,
+        CommonPermissions.MANAGE_USERS
     )
 
     @BeforeEach

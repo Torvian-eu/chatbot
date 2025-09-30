@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.service.security
 import arrow.core.Either
 import arrow.core.raise.either
 import arrow.core.raise.ensure
+import eu.torvian.chatbot.common.api.PermissionSpec
 import eu.torvian.chatbot.common.models.Permission
 import eu.torvian.chatbot.common.models.Role
 import eu.torvian.chatbot.server.data.dao.PermissionDao
@@ -63,6 +64,10 @@ class AuthorizationServiceImpl(
 
             hasPermission
         }
+
+    override suspend fun hasPermission(userId: Long, permission: PermissionSpec): Boolean {
+        return hasPermission(userId, permission.action, permission.subject)
+    }
 
     override suspend fun hasRole(userId: Long, roleName: String): Boolean =
         transactionScope.transaction {
@@ -133,6 +138,12 @@ class AuthorizationServiceImpl(
                 logger.debug("Permission granted for user $userId: $action on $subject")
             }
         }
+
+    override suspend fun requirePermission(
+        userId: Long,
+        permission: PermissionSpec
+    ): Either<AuthorizationError.PermissionDenied, Unit> =
+        requirePermission(userId, permission.action, permission.subject)
 
     override suspend fun requireRole(
         userId: Long,

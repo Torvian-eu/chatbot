@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.ktor.routes
 
 import arrow.core.flatMap
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
+import eu.torvian.chatbot.common.api.CommonPermissions
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.UserResource
 import eu.torvian.chatbot.common.models.admin.*
@@ -34,7 +35,7 @@ fun Route.configureUserRoutes(
             val requestingUserId = call.getUserId()
 
             call.respondEither(
-                authorizationService.requirePermission(requestingUserId, "manage", "users")
+                authorizationService.requirePermission(requestingUserId, CommonPermissions.MANAGE_USERS)
                     .map { userService.getAllUsers() }
             ) { error ->
                 when (error) {
@@ -49,7 +50,7 @@ fun Route.configureUserRoutes(
             val requestingUserId = call.getUserId()
 
             call.respondEither(
-                authorizationService.requirePermission(requestingUserId, "manage", "users")
+                authorizationService.requirePermission(requestingUserId, CommonPermissions.MANAGE_USERS)
                     .flatMap { userService.getUserById(resource.userId) }
             ) { error ->
                 when (error) {
@@ -71,7 +72,7 @@ fun Route.configureUserRoutes(
             val request = call.receive<UpdateUserRequest>()
 
             call.respondEither(
-                authorizationService.requirePermission(requestingUserId, "manage", "users")
+                authorizationService.requirePermission(requestingUserId, CommonPermissions.MANAGE_USERS)
                     .flatMap {
                         userService.updateUser(resource.userId, request.username, request.email)
                     }
@@ -98,7 +99,7 @@ fun Route.configureUserRoutes(
             val requestingUserId = call.getUserId()
 
             call.respondEither(
-                authorizationService.requirePermission(requestingUserId, "manage", "users")
+                authorizationService.requirePermission(requestingUserId, CommonPermissions.MANAGE_USERS)
                     .flatMap { userService.deleteUser(resource.userId) },
                 HttpStatusCode.NoContent
             ) { error ->
@@ -124,7 +125,7 @@ fun Route.configureUserRoutes(
             val requestingUserId = call.getUserId()
 
             call.respondEither(
-                authorizationService.requirePermission(requestingUserId, "manage", "users")
+                authorizationService.requirePermission(requestingUserId, CommonPermissions.MANAGE_USERS)
                     .map { userService.getUserRoles(resource.parent.userId) }
             ) { error ->
                 when (error) {
@@ -140,7 +141,7 @@ fun Route.configureUserRoutes(
             val request = call.receive<AssignRoleRequest>()
 
             call.respondEither(
-                authorizationService.requirePermission(requestingUserId, "manage", "users")
+                authorizationService.requirePermission(requestingUserId, CommonPermissions.MANAGE_USERS)
                     .flatMap {
                         userService.assignRoleToUser(resource.parent.userId, request.roleId)
                     },
@@ -174,7 +175,7 @@ fun Route.configureUserRoutes(
             val requestingUserId = call.getUserId()
 
             call.respondEither(
-                authorizationService.requirePermission(requestingUserId, "manage", "users")
+                authorizationService.requirePermission(requestingUserId, CommonPermissions.MANAGE_USERS)
                     .flatMap {
                         userService.revokeRoleFromUser(
                             resource.parent.parent.userId,
@@ -213,7 +214,7 @@ fun Route.configureUserRoutes(
             val request = call.receive<ChangePasswordRequest>()
 
             call.respondEither(
-                authorizationService.requirePermission(requestingUserId, "manage", "users")
+                authorizationService.requirePermission(requestingUserId, CommonPermissions.MANAGE_USERS)
                     .flatMap {
                         userService.changePassword(resource.parent.userId, request.newPassword)
                     },
