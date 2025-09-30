@@ -6,6 +6,10 @@ import eu.torvian.chatbot.server.data.entities.ChatSessionEntity
 import eu.torvian.chatbot.server.data.entities.SessionCurrentLeafEntity
 import eu.torvian.chatbot.server.data.entities.UserEntity
 import eu.torvian.chatbot.server.data.entities.UserSessionEntity
+import eu.torvian.chatbot.server.data.entities.RoleEntity
+import eu.torvian.chatbot.server.data.entities.PermissionEntity
+import eu.torvian.chatbot.server.data.entities.RolePermissionEntity
+import eu.torvian.chatbot.server.data.entities.UserRoleAssignmentEntity
 import eu.torvian.chatbot.server.data.tables.*
 import eu.torvian.chatbot.server.data.tables.mappers.*
 import eu.torvian.chatbot.server.data.toEntity
@@ -15,6 +19,7 @@ import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.leftJoin
 import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.and
 
 /**
  * Implementation of [TestDataManager] for Exposed ORM.
@@ -86,6 +91,14 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
         val requiredTables = inferTablesFromDataSet(dataSet)
         createTables(requiredTables)
 
+        // Insert user management entities first (respect foreign key constraints)
+        dataSet.users.forEach { insertUser(it) }
+        dataSet.roles.forEach { insertRole(it) }
+        dataSet.permissions.forEach { insertPermission(it) }
+        dataSet.rolePermissions.forEach { insertRolePermission(it) }
+        dataSet.userRoleAssignments.forEach { insertUserRoleAssignment(it) }
+
+        // Insert other entities
         dataSet.apiSecrets.forEach { insertApiSecret(it) }
         dataSet.llmProviders.forEach { insertLLMProvider(it) }
         dataSet.llmModels.forEach { insertLLMModel(it) }
@@ -439,6 +452,83 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
             return@transaction
         }
 
+    override suspend fun insertRole(role: RoleEntity) =
+        transactionScope.transaction {
+            ensureTableCreated(Table.ROLES)
+            RolesTable.insert {
+                it[id] = role.id
+                it[name] = role.name
+                it[description] = role.description
+            }
+            return@transaction
+        }
+
+    override suspend fun getRole(id: Long): RoleEntity? =
+        transactionScope.transaction {
+            ensureTableCreated(Table.ROLES)
+            RolesTable.selectAll().where { RolesTable.id eq id }
+                .map { it.toRoleEntity() }
+                .singleOrNull()
+        }
+
+    override suspend fun insertPermission(permission: PermissionEntity) =
+        transactionScope.transaction {
+            ensureTableCreated(Table.PERMISSIONS)
+            PermissionsTable.insert {
+                it[id] = permission.id
+                it[action] = permission.action
+                it[subject] = permission.subject
+            }
+            return@transaction
+        }
+
+    override suspend fun getPermission(id: Long): PermissionEntity? =
+        transactionScope.transaction {
+            ensureTableCreated(Table.PERMISSIONS)
+            PermissionsTable.selectAll().where { PermissionsTable.id eq id }
+                .map { it.toPermissionEntity() }
+                .singleOrNull()
+        }
+
+    override suspend fun insertRolePermission(rolePermission: RolePermissionEntity) =
+        transactionScope.transaction {
+            ensureTableCreated(Table.ROLE_PERMISSIONS)
+            RolePermissionsTable.insert {
+                it[roleId] = rolePermission.roleId
+                it[permissionId] = rolePermission.permissionId
+            }
+            return@transaction
+        }
+
+    override suspend fun getRolePermission(roleId: Long, permissionId: Long): RolePermissionEntity? =
+        transactionScope.transaction {
+            ensureTableCreated(Table.ROLE_PERMISSIONS)
+            RolePermissionsTable.selectAll()
+                .where { (RolePermissionsTable.roleId eq roleId) and (RolePermissionsTable.permissionId eq permissionId) }
+                .map { it.toRolePermissionEntity() }
+                .singleOrNull()
+        }
+
+    override suspend fun insertUserRoleAssignment(userRoleAssignment: UserRoleAssignmentEntity) =
+        transactionScope.transaction {
+            ensureTableCreated(Table.USER_ROLE_ASSIGNMENTS)
+            UserRoleAssignmentsTable.insert {
+                it[userId] = userRoleAssignment.userId
+                it[roleId] = userRoleAssignment.roleId
+                it[assignedAt] = userRoleAssignment.assignedAt.toEpochMilliseconds()
+            }
+            return@transaction
+        }
+
+    override suspend fun getUserRoleAssignment(userId: Long, roleId: Long): UserRoleAssignmentEntity? =
+        transactionScope.transaction {
+            ensureTableCreated(Table.USER_ROLE_ASSIGNMENTS)
+            UserRoleAssignmentsTable.selectAll()
+                .where { (UserRoleAssignmentsTable.userId eq userId) and (UserRoleAssignmentsTable.roleId eq roleId) }
+                .map { it.toUserRoleAssignmentEntity() }
+                .singleOrNull()
+        }
+
     /**
      * Ensures the specified table has been created by this manager instance. If it hasn't been created yet,
      * it is created immediately and marked as created. This is useful for individual insert operations.
@@ -457,6 +547,15 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
      */
     private fun inferTablesFromDataSet(data: TestDataSet): Set<Table> {
         val required = mutableSetOf<Table>()
+
+        // User management tables
+        if (data.users.isNotEmpty()) required += Table.USERS
+        if (data.roles.isNotEmpty()) required += Table.ROLES
+        if (data.permissions.isNotEmpty()) required += Table.PERMISSIONS
+        if (data.rolePermissions.isNotEmpty()) required += Table.ROLE_PERMISSIONS
+        if (data.userRoleAssignments.isNotEmpty()) required += Table.USER_ROLE_ASSIGNMENTS
+
+        // Other tables
         if (data.apiSecrets.isNotEmpty()) required += Table.API_SECRETS
         if (data.llmProviders.isNotEmpty()) required += Table.LLM_PROVIDERS
         if (data.chatGroups.isNotEmpty()) required += Table.CHAT_GROUPS
@@ -465,6 +564,7 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
         if (data.llmModels.isNotEmpty()) required += Table.LLM_MODELS
         if (data.modelSettings.isNotEmpty()) required += Table.MODEL_SETTINGS
         if (data.sessionCurrentLeaves.isNotEmpty()) required += Table.SESSION_CURRENT_LEAF
+
         return required
     }
 }

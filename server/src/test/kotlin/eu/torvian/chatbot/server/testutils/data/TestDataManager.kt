@@ -10,6 +10,10 @@ import eu.torvian.chatbot.server.data.entities.ChatSessionEntity
 import eu.torvian.chatbot.server.data.entities.SessionCurrentLeafEntity
 import eu.torvian.chatbot.server.data.entities.UserEntity
 import eu.torvian.chatbot.server.data.entities.UserSessionEntity
+import eu.torvian.chatbot.server.data.entities.RoleEntity
+import eu.torvian.chatbot.server.data.entities.PermissionEntity
+import eu.torvian.chatbot.server.data.entities.RolePermissionEntity
+import eu.torvian.chatbot.server.data.entities.UserRoleAssignmentEntity
 
 /**
  * Manager interface for inserting and cleaning up test data in the chatbot database.
@@ -268,6 +272,68 @@ interface TestDataManager {
      * @param userId The ID of the user who owns the session.
      */
     suspend fun insertSessionOwnership(sessionId: Long, userId: Long)
+
+    /**
+     * Inserts a role into the database. Creates the table if it does not exist.
+     *
+     * @param role The role entity to insert.
+     */
+    suspend fun insertRole(role: RoleEntity)
+
+    /**
+     * Retrieves a role from the database.
+     *
+     * @param id The ID of the role to retrieve.
+     * @return The role entity if found, null otherwise.
+     */
+    suspend fun getRole(id: Long): RoleEntity?
+
+    /**
+     * Inserts a permission into the database. Creates the table if it does not exist.
+     *
+     * @param permission The permission entity to insert.
+     */
+    suspend fun insertPermission(permission: PermissionEntity)
+
+    /**
+     * Retrieves a permission from the database.
+     *
+     * @param id The ID of the permission to retrieve.
+     * @return The permission entity if found, null otherwise.
+     */
+    suspend fun getPermission(id: Long): PermissionEntity?
+
+    /**
+     * Inserts a role permission mapping into the database. Creates the table if it does not exist.
+     *
+     * @param rolePermission The role permission entity to insert.
+     */
+    suspend fun insertRolePermission(rolePermission: RolePermissionEntity)
+
+    /**
+     * Retrieves a role permission mapping from the database.
+     *
+     * @param roleId The ID of the role.
+     * @param permissionId The ID of the permission.
+     * @return The role permission entity if found, null otherwise.
+     */
+    suspend fun getRolePermission(roleId: Long, permissionId: Long): RolePermissionEntity?
+
+    /**
+     * Inserts a user role assignment into the database. Creates the table if it does not exist.
+     *
+     * @param userRoleAssignment The user role assignment entity to insert.
+     */
+    suspend fun insertUserRoleAssignment(userRoleAssignment: UserRoleAssignmentEntity)
+
+    /**
+     * Retrieves a user role assignment from the database.
+     *
+     * @param userId The ID of the user.
+     * @param roleId The ID of the role.
+     * @return The user role assignment entity if found, null otherwise.
+     */
+    suspend fun getUserRoleAssignment(userId: Long, roleId: Long): UserRoleAssignmentEntity?
 
     // Add other individual insert functions here as your chatbot project grows
 }
