@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.ktor.routes
 
 import eu.torvian.chatbot.server.service.core.*
 import eu.torvian.chatbot.server.service.security.AuthenticationService
+import eu.torvian.chatbot.server.service.security.AuthorizationService
 import io.ktor.server.routing.*
 
 /**
@@ -16,7 +17,8 @@ class ApiRoutesKtor(
     private val modelSettingsService: ModelSettingsService,
     private val messageService: MessageService,
     private val authenticationService: AuthenticationService,
-    private val userService: UserService
+    private val userService: UserService,
+    private val authorizationService: AuthorizationService
 ) {
     /**
      * Configures the API routes using the Ktor Resources plugin.
@@ -24,6 +26,7 @@ class ApiRoutesKtor(
      */
     fun configureAllRoutes(route: Route) {
         configureAuthRoutes(route)
+        configureUserRoutes(route)
         configureSessionRoutes(route)
         configureGroupRoutes(route)
         configureProviderRoutes(route)
@@ -37,6 +40,13 @@ class ApiRoutesKtor(
      */
     fun configureAuthRoutes(route: Route) {
         route.configureAuthRoutes(authenticationService, userService)
+    }
+
+    /**
+     * Configures routes related to User Management (/api/v1/users).
+     */
+    fun configureUserRoutes(route: Route) {
+        route.configureUserRoutes(userService, authorizationService)
     }
 
     /**
