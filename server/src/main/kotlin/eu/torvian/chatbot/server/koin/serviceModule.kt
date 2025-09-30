@@ -6,6 +6,8 @@ import eu.torvian.chatbot.common.security.EncryptionService
 import eu.torvian.chatbot.server.service.core.*
 import eu.torvian.chatbot.server.service.core.impl.*
 import eu.torvian.chatbot.server.service.security.*
+import eu.torvian.chatbot.server.service.security.AuthorizationService
+import eu.torvian.chatbot.server.service.security.AuthorizationServiceImpl
 import eu.torvian.chatbot.server.service.setup.InitialSetupService
 import org.koin.dsl.module
 
@@ -34,6 +36,9 @@ fun serviceModule() = module {
     single<PasswordService> { BCryptPasswordService() }
     single<UserService> { UserServiceImpl(get(), get(), get()) }
     single<AuthenticationService> { AuthenticationServiceImpl(get(), get(), get(), get(), get(), get()) }
+
+    // --- Authorization Services ---
+    single<AuthorizationService> { AuthorizationServiceImpl(get(), get(), get()) }
 
     // --- Setup Services ---
     single<InitialSetupService> { InitialSetupService(get(), get()) }
