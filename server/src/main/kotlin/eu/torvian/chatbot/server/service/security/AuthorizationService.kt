@@ -4,7 +4,9 @@ import arrow.core.Either
 import eu.torvian.chatbot.common.api.PermissionSpec
 import eu.torvian.chatbot.common.models.Permission
 import eu.torvian.chatbot.common.models.Role
+import eu.torvian.chatbot.server.service.authorizer.AccessMode
 import eu.torvian.chatbot.server.service.security.error.AuthorizationError
+import eu.torvian.chatbot.server.service.security.error.ResourceAuthorizationError
 
 /**
  * Service interface for authorization and permission checking.
@@ -109,4 +111,21 @@ interface AuthorizationService {
         userId: Long,
         roleName: String
     ): Either<AuthorizationError.RoleRequired, Unit>
+
+    /**
+     * Require resource-level access for a specific mode (READ/WRITE).
+     * This is resource-only; callers should combine with role checks when needed.
+     *
+     * @param userId The ID of the user to check
+     * @param resourceType The type of the resource (e.g., "group", "session", "llm_model")
+     * @param resourceId The ID of the resource
+     * @param accessMode The access mode (READ/WRITE)
+     * @return Either [ResourceAuthorizationError] if denied, or Unit if allowed
+     */
+    suspend fun requireAccess(
+        userId: Long,
+        resourceType: String,
+        resourceId: Long,
+        accessMode: AccessMode
+    ): Either<ResourceAuthorizationError, Unit>
 }

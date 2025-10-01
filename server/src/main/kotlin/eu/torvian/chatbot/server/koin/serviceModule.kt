@@ -8,6 +8,7 @@ import eu.torvian.chatbot.server.service.core.impl.*
 import eu.torvian.chatbot.server.service.security.*
 import eu.torvian.chatbot.server.service.security.AuthorizationService
 import eu.torvian.chatbot.server.service.security.AuthorizationServiceImpl
+import eu.torvian.chatbot.server.service.authorizer.*
 import eu.torvian.chatbot.server.service.setup.InitialSetupService
 import org.koin.dsl.module
 
@@ -37,8 +38,12 @@ fun serviceModule() = module {
     single<UserService> { UserServiceImpl(get(), get(), get(), get(), get()) }
     single<AuthenticationService> { AuthenticationServiceImpl(get(), get(), get(), get(), get(), get()) }
 
+    // --- Authorizers (resource-level access) ---
+    single<ResourceAuthorizer> { GroupAuthorizer(get()) }
+    single<Map<String, ResourceAuthorizer>> { getAll<ResourceAuthorizer>().associateBy { it.resourceType } }
+
     // --- Authorization Services ---
-    single<AuthorizationService> { AuthorizationServiceImpl(get(), get(), get()) }
+    single<AuthorizationService> { AuthorizationServiceImpl(get(), get(), get(), get()) }
 
     // --- Setup Services ---
     single<InitialSetupService> { InitialSetupService(get(), get()) }

@@ -8,7 +8,6 @@ import eu.torvian.chatbot.common.models.ChatGroup
 import eu.torvian.chatbot.server.data.dao.GroupDao
 import eu.torvian.chatbot.server.data.dao.GroupOwnershipDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
-import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
 import eu.torvian.chatbot.server.data.dao.error.GroupError
 import eu.torvian.chatbot.server.data.dao.error.SetOwnerError
 import eu.torvian.chatbot.server.service.core.GroupService
@@ -59,23 +58,11 @@ class GroupServiceImpl(
             }
         }
 
-    override suspend fun renameGroup(userId: Long, id: Long, newName: String): Either<RenameGroupError, Unit> =
+    override suspend fun renameGroup(id: Long, newName: String): Either<RenameGroupError, Unit> =
         transactionScope.transaction {
             either {
                 ensure(!newName.isBlank()) {
                     RenameGroupError.InvalidName("New group name cannot be blank.")
-                }
-
-                // Check ownership first
-                val ownerId = groupOwnershipDao.getOwner(id).mapLeft { ownershipError ->
-                    when (ownershipError) {
-                        is GetOwnerError.ResourceNotFound ->
-                            RenameGroupError.GroupNotFound(id)
-                    }
-                }.bind()
-
-                ensure(ownerId == userId) {
-                    RenameGroupError.AccessDenied("User does not own this group")
                 }
 
                 withError({ daoError: GroupError.GroupNotFound ->
@@ -86,21 +73,9 @@ class GroupServiceImpl(
             }
         }
 
-    override suspend fun deleteGroup(userId: Long, id: Long): Either<DeleteGroupError, Unit> =
+    override suspend fun deleteGroup(id: Long): Either<DeleteGroupError, Unit> =
         transactionScope.transaction {
             either {
-                // Check ownership first
-                val ownerId = groupOwnershipDao.getOwner(id).mapLeft { ownershipError ->
-                    when (ownershipError) {
-                        is GetOwnerError.ResourceNotFound ->
-                            DeleteGroupError.GroupNotFound(id)
-                    }
-                }.bind()
-
-                ensure(ownerId == userId) {
-                    DeleteGroupError.AccessDenied("User does not own this group")
-                }
-
                 // If the group exists, ungroup sessions.
                 sessionDao.ungroupSessions(id)
 

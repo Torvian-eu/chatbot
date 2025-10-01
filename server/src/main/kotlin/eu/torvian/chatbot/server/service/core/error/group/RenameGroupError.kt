@@ -13,9 +13,4 @@ sealed interface RenameGroupError {
      * Indicates that the provided new name is invalid (e.g., blank).
      */
     data class InvalidName(val reason: String) : RenameGroupError
-
-    /**
-     * Indicates that the user does not have access to rename the requested group.
-     */
-    data class AccessDenied(val reason: String) : RenameGroupError
 }

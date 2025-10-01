@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.service.security
 import arrow.core.Either
 import arrow.core.raise.either
 import arrow.core.raise.ensure
+import arrow.core.raise.withError
 import eu.torvian.chatbot.common.api.PermissionSpec
 import eu.torvian.chatbot.common.models.Permission
 import eu.torvian.chatbot.common.models.Role
@@ -10,7 +11,11 @@ import eu.torvian.chatbot.server.data.dao.PermissionDao
 import eu.torvian.chatbot.server.data.dao.UserRoleAssignmentDao
 import eu.torvian.chatbot.server.data.entities.mappers.toPermission
 import eu.torvian.chatbot.server.data.entities.mappers.toRole
+import eu.torvian.chatbot.server.service.authorizer.AccessMode
+import eu.torvian.chatbot.server.service.authorizer.ResourceAuthorizer
+import eu.torvian.chatbot.server.service.authorizer.ResourceAuthorizerError
 import eu.torvian.chatbot.server.service.security.error.AuthorizationError
+import eu.torvian.chatbot.server.service.security.error.ResourceAuthorizationError
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
@@ -25,6 +30,7 @@ import org.apache.logging.log4j.Logger
  * - Logging all authorization checks for security auditing
  */
 class AuthorizationServiceImpl(
+    private val authorizers: Map<String, ResourceAuthorizer>,
     private val userRoleAssignmentDao: UserRoleAssignmentDao,
     private val permissionDao: PermissionDao,
     private val transactionScope: TransactionScope
@@ -162,5 +168,44 @@ class AuthorizationServiceImpl(
 
                 logger.debug("Role requirement satisfied for user $userId: $roleName")
             }
+        }
+
+    override suspend fun requireAccess(
+        userId: Long,
+        resourceType: String,
+        resourceId: Long,
+        accessMode: AccessMode
+    ): Either<ResourceAuthorizationError, Unit> =
+        either {
+            logger.debug(
+                "Requiring access for user {} to {}/{} with mode {}",
+                userId,
+                resourceType,
+                resourceId,
+                accessMode
+            )
+
+            // Ensure we have an authorizer for the resource type; raise ResourceAuthorizationError if not
+            val authorizer = authorizers[resourceType]
+            ensure(authorizer != null) {
+                logger.warn("No authorizer for resource type: $resourceType")
+                ResourceAuthorizationError.PermissionDenied("No authorizer for type")
+            }
+
+            // Map any ResourceAuthorizerError into ResourceAuthorizationError
+            withError({ rae: ResourceAuthorizerError ->
+                when (rae) {
+                    is ResourceAuthorizerError.ResourceNotFound -> ResourceAuthorizationError.ResourceNotFound(
+                        resourceType,
+                        resourceId
+                    )
+
+                    is ResourceAuthorizerError.AccessDenied -> ResourceAuthorizationError.PermissionDenied(rae.reason)
+                }
+            }) {
+                authorizer.requireAccess(userId, resourceId, accessMode).bind()
+            }
+
+            logger.debug("Access requirement satisfied for user $userId to $resourceType/$resourceId")
         }
 }

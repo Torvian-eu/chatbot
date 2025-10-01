@@ -9,9 +9,4 @@ sealed interface DeleteGroupError {
      * Maps from GroupError.GroupNotFound in the DAO layer.
      */
     data class GroupNotFound(val id: Long) : DeleteGroupError
-
-    /**
-     * Indicates that the user does not have access to delete the requested group.
-     */
-    data class AccessDenied(val reason: String) : DeleteGroupError
 }

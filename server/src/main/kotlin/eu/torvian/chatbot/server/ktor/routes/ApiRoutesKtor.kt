@@ -60,7 +60,7 @@ class ApiRoutesKtor(
      * Configures routes related to Groups (/api/v1/groups).
      */
     fun configureGroupRoutes(route: Route) {
-        route.configureGroupRoutes(groupService)
+        route.configureGroupRoutes(groupService, authorizationService)
     }
 
     /**

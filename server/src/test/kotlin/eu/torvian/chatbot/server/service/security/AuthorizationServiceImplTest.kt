@@ -35,6 +35,7 @@ class AuthorizationServiceImplTest {
         }
 
         authorizationService = AuthorizationServiceImpl(
+            emptyMap(),
             userRoleAssignmentDao,
             permissionDao,
             transactionScope
