@@ -4,21 +4,16 @@ import arrow.core.Either
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.raise.withError
-import eu.torvian.chatbot.server.data.dao.GroupOwnershipDao
+import eu.torvian.chatbot.server.data.dao.SessionOwnershipDao
 import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
 
 /**
- * Authorizer that enforces access rules for chat groups.
- *
- * Policy: the owner of a group has both read and write privileges. This
- * implementation resolves the owner using [GroupOwnershipDao.getOwner] and maps
- * DAO logical errors into [ResourceAuthorizerError]. Technical exceptions from
- * the DAO should propagate and be handled by the global error handler.
+ * Authorizer for session resources. Enforces that only the owner can access or modify a session.
  */
-class GroupAuthorizer(
-    private val groupOwnershipDao: GroupOwnershipDao,
+class SessionResourceAuthorizer(
+    private val sessionOwnershipDao: SessionOwnershipDao
 ) : ResourceAuthorizer {
-    override val resourceType: String = "group"
+    override val resourceType: String = "session"
 
     override suspend fun requireAccess(
         userId: Long,
@@ -30,7 +25,7 @@ class GroupAuthorizer(
                 is GetOwnerError.ResourceNotFound -> ResourceAuthorizerError.ResourceNotFound(resourceId)
             }
         }) {
-            groupOwnershipDao.getOwner(resourceId).bind()
+            sessionOwnershipDao.getOwner(resourceId).bind()
         }
         ensure(ownerId == userId) {
             ResourceAuthorizerError.AccessDenied("User $userId is not the owner")

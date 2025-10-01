@@ -119,6 +119,8 @@ private suspend inline fun Raise<ApiError>.requireGroupWriteAccess(
                 apiError(
                     CommonApiErrorCodes.PERMISSION_DENIED,
                     "Access denied",
+                    "userId" to userId.toString(),
+                    "groupId" to groupId.toString(),
                     "reason" to authError.reason
                 )
         }

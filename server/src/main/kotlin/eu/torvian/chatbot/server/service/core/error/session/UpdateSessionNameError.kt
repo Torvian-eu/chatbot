@@ -12,9 +12,4 @@ sealed interface UpdateSessionNameError {
      * Indicates that the provided new name is invalid (e.g., blank).
      */
     data class InvalidName(val reason: String) : UpdateSessionNameError
-
-    /**
-     * Indicates that the user does not have access to update the requested session.
-     */
-    data class AccessDenied(val reason: String) : UpdateSessionNameError
 }

@@ -23,8 +23,4 @@ sealed interface UpdateSessionCurrentSettingsIdError {
      * This occurs when trying to assign settings that are not suitable for chat sessions.
      */
     data class InvalidSettingsType(val settingsId: Long, val actualType: String) : UpdateSessionCurrentSettingsIdError
-    /**
-     * Indicates that the user does not have permission to update this session.
-     */
-    data class AccessDenied(val message: String) : UpdateSessionCurrentSettingsIdError
 }

@@ -1,16 +1,23 @@
 package eu.torvian.chatbot.server.ktor.routes
 
+import arrow.core.raise.Raise
+import arrow.core.raise.either
+import arrow.core.raise.withError
+import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.models.*
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
+import eu.torvian.chatbot.server.service.authorizer.AccessMode
 import eu.torvian.chatbot.server.service.core.MessageService
 import eu.torvian.chatbot.server.service.core.MessageStreamEvent
 import eu.torvian.chatbot.server.service.core.SessionService
 import eu.torvian.chatbot.server.service.core.error.message.toApiError
 import eu.torvian.chatbot.server.service.core.error.session.*
+import eu.torvian.chatbot.server.service.security.AuthorizationService
+import eu.torvian.chatbot.server.service.security.error.ResourceAuthorizationError
 import io.ktor.http.*
 import io.ktor.server.auth.*
 import io.ktor.server.request.*
@@ -24,12 +31,42 @@ import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 import org.koin.ktor.ext.inject
 
+private suspend fun Raise<ApiError>.requireSessionAccess(
+    authorizationService: AuthorizationService,
+    userId: Long,
+    sessionId: Long,
+    accessMode: AccessMode
+) {
+    withError({ rae: ResourceAuthorizationError ->
+        when (rae) {
+            is ResourceAuthorizationError.ResourceNotFound ->
+                apiError(
+                    CommonApiErrorCodes.NOT_FOUND,
+                    "Session not found",
+                    "sessionId" to sessionId.toString()
+                )
+
+            is ResourceAuthorizationError.PermissionDenied ->
+                apiError(
+                    CommonApiErrorCodes.PERMISSION_DENIED,
+                    "Access denied",
+                    "userId" to userId.toString(),
+                    "sessionId" to sessionId.toString(),
+                    "reason" to rae.reason
+                )
+        }
+    }) {
+        authorizationService.requireAccess(userId, "session", sessionId, accessMode).bind()
+    }
+}
+
 /**
  * Configures routes related to Sessions (/api/v1/sessions) using Ktor Resources.
  */
 fun Route.configureSessionRoutes(
     sessionService: SessionService,
-    messageService: MessageService
+    messageService: MessageService,
+    authorizationService: AuthorizationService
 ) {
     val json: Json by inject() // Inject the Json instance for serialization
     val logger: Logger = LogManager.getLogger("SessionRoutes")
@@ -71,188 +108,192 @@ fun Route.configureSessionRoutes(
         get<SessionResource.ById> { resource ->
             val userId = call.getUserId()
             val sessionId = resource.sessionId
-            call.respondEither(sessionService.getSessionDetails(userId, sessionId)) { error ->
-                when (error) {
-                    is GetSessionDetailsError.SessionNotFound ->
-                        apiError(CommonApiErrorCodes.NOT_FOUND, "Session not found", "sessionId" to error.id.toString())
-
-                    is GetSessionDetailsError.AccessDenied ->
-                        apiError(CommonApiErrorCodes.PERMISSION_DENIED, "Access denied", "reason" to error.reason)
+            either {
+                requireSessionAccess(authorizationService, userId, sessionId, AccessMode.READ)
+                withError({ error: GetSessionDetailsError ->
+                    when (error) {
+                        is GetSessionDetailsError.SessionNotFound ->
+                            apiError(CommonApiErrorCodes.NOT_FOUND, "Session not found", "sessionId" to error.id.toString())
+                    }
+                }) {
+                    sessionService.getSessionDetails(sessionId).bind()
                 }
+            }.let { result ->
+                call.respondEither(result)
             }
         }
 
         // DELETE /api/v1/sessions/{sessionId} - Delete session by ID
         delete<SessionResource.ById> { resource ->
-            val userId = call.getUserId()
             val sessionId = resource.sessionId
-            call.respondEither(
-                sessionService.deleteSession(userId, sessionId),
-                HttpStatusCode.NoContent
-            ) { error ->
-                when (error) {
-                    is DeleteSessionError.SessionNotFound ->
-                        apiError(CommonApiErrorCodes.NOT_FOUND, "Session not found", "sessionId" to error.id.toString())
-
-                    is DeleteSessionError.AccessDenied ->
-                        apiError(CommonApiErrorCodes.PERMISSION_DENIED, "Access denied", "reason" to error.reason)
-                }
+            val userId = call.getUserId()
+            either {
+                requireSessionAccess(authorizationService, userId, sessionId, AccessMode.WRITE)
+                sessionService.deleteSession(sessionId).mapLeft { error ->
+                    when (error) {
+                        is DeleteSessionError.SessionNotFound ->
+                            apiError(CommonApiErrorCodes.NOT_FOUND, "Session not found", "sessionId" to error.id.toString())
+                        else -> apiError(CommonApiErrorCodes.INTERNAL, "Unexpected error")
+                    }
+                }.bind()
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.NoContent)
             }
         }
 
-        // --- Granular PUT routes using nested resources ---
         // PUT /api/v1/sessions/{sessionId}/name - Update the name of a session
         put<SessionResource.ById.Name> { resource ->
-            val userId = call.getUserId()
             val sessionId = resource.parent.sessionId
+            val userId = call.getUserId()
             val request = call.receive<UpdateSessionNameRequest>()
-            call.respondEither(sessionService.updateSessionName(userId, sessionId, request.name)) { error ->
-                when (error) {
-                    is UpdateSessionNameError.SessionNotFound ->
-                        apiError(CommonApiErrorCodes.NOT_FOUND, "Session not found", "sessionId" to error.id.toString())
-
-                    is UpdateSessionNameError.AccessDenied ->
-                        apiError(CommonApiErrorCodes.PERMISSION_DENIED, "Access denied", "reason" to error.reason)
-
-                    is UpdateSessionNameError.InvalidName ->
-                        apiError(
-                            CommonApiErrorCodes.INVALID_ARGUMENT,
-                            "Invalid session name provided",
-                            "reason" to error.reason
-                        )
-                }
+            either {
+                requireSessionAccess(authorizationService, userId, sessionId, AccessMode.WRITE)
+                sessionService.updateSessionName(sessionId, request.name).mapLeft { error ->
+                    when (error) {
+                        is UpdateSessionNameError.SessionNotFound ->
+                            apiError(CommonApiErrorCodes.NOT_FOUND, "Session not found", "sessionId" to error.id.toString())
+                        is UpdateSessionNameError.InvalidName ->
+                            apiError(
+                                CommonApiErrorCodes.INVALID_ARGUMENT,
+                                "Invalid session name provided",
+                                "reason" to error.reason
+                            )
+                    }
+                }.bind()
+            }.let { result ->
+                call.respondEither(result)
             }
         }
 
         // PUT /api/v1/sessions/{sessionId}/model - Update the current model ID of a session
         put<SessionResource.ById.Model> { resource ->
-            val userId = call.getUserId()
             val sessionId = resource.parent.sessionId
+            val userId = call.getUserId()
             val request = call.receive<UpdateSessionModelRequest>()
-            call.respondEither(
-                sessionService.updateSessionCurrentModelId(userId, sessionId, request.modelId)
-            ) { error ->
-                when (error) {
-                    is UpdateSessionCurrentModelIdError.SessionNotFound ->
-                        apiError(CommonApiErrorCodes.NOT_FOUND, "Session not found", "sessionId" to error.id.toString())
+            either {
+                requireSessionAccess(authorizationService, userId, sessionId, AccessMode.WRITE)
+                sessionService.updateSessionCurrentModelId(sessionId, request.modelId).mapLeft { error ->
+                    when (error) {
+                        is UpdateSessionCurrentModelIdError.SessionNotFound ->
+                            apiError(CommonApiErrorCodes.NOT_FOUND, "Session not found", "sessionId" to error.id.toString())
 
-                    is UpdateSessionCurrentModelIdError.AccessDenied ->
-                        apiError(CommonApiErrorCodes.PERMISSION_DENIED, "Access denied", "reason" to error.message)
+                        is UpdateSessionCurrentModelIdError.InvalidRelatedEntity ->
+                            apiError(
+                                CommonApiErrorCodes.INVALID_ARGUMENT,
+                                "Invalid model ID provided",
+                                "modelId" to request.modelId.toString()
+                            )
 
-                    is UpdateSessionCurrentModelIdError.InvalidRelatedEntity ->
-                        apiError(
-                            CommonApiErrorCodes.INVALID_ARGUMENT,
-                            "Invalid model ID provided",
-                            "modelId" to request.modelId.toString()
-                        )
+                        is UpdateSessionCurrentModelIdError.InvalidModelType ->
+                            apiError(
+                                CommonApiErrorCodes.INVALID_ARGUMENT,
+                                "Model type must be CHAT",
+                                "modelId" to error.modelId.toString(),
+                                "actualType" to error.actualType
+                            )
 
-                    is UpdateSessionCurrentModelIdError.InvalidModelType ->
-                        apiError(
-                            CommonApiErrorCodes.INVALID_ARGUMENT,
-                            "Model type must be CHAT",
-                            "modelId" to error.modelId.toString(),
-                            "actualType" to error.actualType
-                        )
-
-                    is UpdateSessionCurrentModelIdError.DeprecatedModel ->
-                        apiError(
-                            CommonApiErrorCodes.INVALID_ARGUMENT,
-                            "Model is deprecated and cannot be used",
-                            "modelId" to error.modelId.toString()
-                        )
-                }
+                        is UpdateSessionCurrentModelIdError.DeprecatedModel ->
+                            apiError(
+                                CommonApiErrorCodes.INVALID_ARGUMENT,
+                                "Model is deprecated and cannot be used",
+                                "modelId" to error.modelId.toString()
+                            )
+                    }
+                }.bind()
+            }.let { result ->
+                call.respondEither(result)
             }
         }
 
         // PUT /api/v1/sessions/{sessionId}/settings - Update the current settings ID of a session
         put<SessionResource.ById.Settings> { resource ->
-            val userId = call.getUserId()
             val sessionId = resource.parent.sessionId
+            val userId = call.getUserId()
             val request = call.receive<UpdateSessionSettingsRequest>()
-            call.respondEither(
-                sessionService.updateSessionCurrentSettingsId(userId, sessionId, request.settingsId)
-            ) { error ->
-                when (error) {
-                    is UpdateSessionCurrentSettingsIdError.SessionNotFound ->
-                        apiError(CommonApiErrorCodes.NOT_FOUND, "Session not found", "sessionId" to error.id.toString())
+            either {
+                requireSessionAccess(authorizationService, userId, sessionId, AccessMode.WRITE)
+                sessionService.updateSessionCurrentSettingsId(sessionId, request.settingsId).mapLeft { error ->
+                    when (error) {
+                        is UpdateSessionCurrentSettingsIdError.SessionNotFound ->
+                            apiError(CommonApiErrorCodes.NOT_FOUND, "Session not found", "sessionId" to error.id.toString())
 
-                    is UpdateSessionCurrentSettingsIdError.AccessDenied ->
-                        apiError(CommonApiErrorCodes.PERMISSION_DENIED, "Access denied", "reason" to error.message)
+                        is UpdateSessionCurrentSettingsIdError.InvalidRelatedEntity ->
+                            apiError(
+                                CommonApiErrorCodes.INVALID_ARGUMENT,
+                                "Invalid settings ID provided",
+                                "settingsId" to request.settingsId.toString()
+                            )
 
-                    is UpdateSessionCurrentSettingsIdError.InvalidRelatedEntity ->
-                        apiError(
-                            CommonApiErrorCodes.INVALID_ARGUMENT,
-                            "Invalid settings ID provided",
-                            "settingsId" to request.settingsId.toString()
-                        )
+                        is UpdateSessionCurrentSettingsIdError.SettingsModelMismatch ->
+                            apiError(
+                                CommonApiErrorCodes.INVALID_ARGUMENT,
+                                "Settings are not compatible with the current model",
+                                "settingsId" to error.settingsId.toString(),
+                                "settingsModelId" to error.settingsModelId.toString(),
+                                "sessionModelId" to (error.sessionModelId?.toString() ?: "null")
+                            )
 
-                    is UpdateSessionCurrentSettingsIdError.SettingsModelMismatch ->
-                        apiError(
-                            CommonApiErrorCodes.INVALID_ARGUMENT,
-                            "Settings are not compatible with the current model",
-                            "settingsId" to error.settingsId.toString(),
-                            "settingsModelId" to error.settingsModelId.toString(),
-                            "sessionModelId" to (error.sessionModelId?.toString() ?: "null")
-                        )
-
-                    is UpdateSessionCurrentSettingsIdError.InvalidSettingsType ->
-                        apiError(
-                            CommonApiErrorCodes.INVALID_ARGUMENT,
-                            "Settings must be of ChatModelSettings type for chat sessions",
-                            "settingsId" to error.settingsId.toString(),
-                            "actualType" to error.actualType
-                        )
-                }
+                        is UpdateSessionCurrentSettingsIdError.InvalidSettingsType ->
+                            apiError(
+                                CommonApiErrorCodes.INVALID_ARGUMENT,
+                                "Settings must be of ChatModelSettings type for chat sessions",
+                                "settingsId" to error.settingsId.toString(),
+                                "actualType" to error.actualType
+                            )
+                    }
+                }.bind()
+            }.let { result ->
+                call.respondEither(result)
             }
         }
 
         // PUT /api/v1/sessions/{sessionId}/leafMessage - Update the current leaf message ID of a session
         put<SessionResource.ById.LeafMessage> { resource ->
-            val userId = call.getUserId()
             val sessionId = resource.parent.sessionId
+            val userId = call.getUserId()
             val request = call.receive<UpdateSessionLeafMessageRequest>()
-            call.respondEither(
-                sessionService.updateSessionLeafMessageId(userId, sessionId, request.leafMessageId)
-            ) { error ->
-                when (error) {
-                    is UpdateSessionLeafMessageIdError.SessionNotFound ->
-                        apiError(CommonApiErrorCodes.NOT_FOUND, "Session not found", "sessionId" to error.id.toString())
+            either {
+                requireSessionAccess(authorizationService, userId, sessionId, AccessMode.WRITE)
+                sessionService.updateSessionLeafMessageId(sessionId, request.leafMessageId).mapLeft { error ->
+                    when (error) {
+                        is UpdateSessionLeafMessageIdError.SessionNotFound ->
+                            apiError(CommonApiErrorCodes.NOT_FOUND, "Session not found", "sessionId" to error.id.toString())
 
-                    is UpdateSessionLeafMessageIdError.AccessDenied ->
-                        apiError(CommonApiErrorCodes.PERMISSION_DENIED, "Access denied", "reason" to error.message)
-
-                    is UpdateSessionLeafMessageIdError.InvalidRelatedEntity ->
-                        apiError(
-                            CommonApiErrorCodes.INVALID_ARGUMENT,
-                            "Invalid leaf message ID provided",
-                            "leafMessageId" to request.leafMessageId.toString()
-                        )
-                }
+                        is UpdateSessionLeafMessageIdError.InvalidRelatedEntity ->
+                            apiError(
+                                CommonApiErrorCodes.INVALID_ARGUMENT,
+                                "Invalid leaf message ID provided",
+                                "leafMessageId" to request.leafMessageId.toString()
+                            )
+                    }
+                }.bind()
+            }.let { result ->
+                call.respondEither(result)
             }
         }
 
         // PUT /api/v1/sessions/{sessionId}/group - Assign session to group or ungroup
         put<SessionResource.ById.Group> { resource ->
-            val userId = call.getUserId()
             val sessionId = resource.parent.sessionId
+            val userId = call.getUserId()
             val request = call.receive<UpdateSessionGroupRequest>()
-            call.respondEither(
-                sessionService.updateSessionGroupId(userId, sessionId, request.groupId)
-            ) { error ->
-                when (error) {
-                    is UpdateSessionGroupIdError.SessionNotFound ->
-                        apiError(CommonApiErrorCodes.NOT_FOUND, "Session not found", "sessionId" to error.id.toString())
+            either {
+                requireSessionAccess(authorizationService, userId, sessionId, AccessMode.WRITE)
+                sessionService.updateSessionGroupId(sessionId, request.groupId).mapLeft { error ->
+                    when (error) {
+                        is UpdateSessionGroupIdError.SessionNotFound ->
+                            apiError(CommonApiErrorCodes.NOT_FOUND, "Session not found", "sessionId" to error.id.toString())
 
-                    is UpdateSessionGroupIdError.AccessDenied ->
-                        apiError(CommonApiErrorCodes.PERMISSION_DENIED, "Access denied", "reason" to error.message)
-
-                    is UpdateSessionGroupIdError.InvalidRelatedEntity ->
-                        apiError(
-                            CommonApiErrorCodes.INVALID_ARGUMENT,
-                            "Invalid group ID provided",
-                            "groupId" to request.groupId.toString()
-                        )
-                }
+                        is UpdateSessionGroupIdError.InvalidRelatedEntity ->
+                            apiError(
+                                CommonApiErrorCodes.INVALID_ARGUMENT,
+                                "Invalid group ID provided",
+                                "groupId" to request.groupId.toString()
+                            )
+                    }
+                }.bind()
+            }.let { result ->
+                call.respondEither(result)
             }
         }
 

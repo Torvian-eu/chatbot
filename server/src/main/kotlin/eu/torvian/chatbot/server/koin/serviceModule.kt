@@ -11,6 +11,7 @@ import eu.torvian.chatbot.server.service.security.AuthorizationServiceImpl
 import eu.torvian.chatbot.server.service.authorizer.*
 import eu.torvian.chatbot.server.service.setup.InitialSetupService
 import org.koin.dsl.module
+import org.koin.core.qualifier.named
 
 /**
  * Dependency injection module for configuring the application's service layer.
@@ -39,7 +40,8 @@ fun serviceModule() = module {
     single<AuthenticationService> { AuthenticationServiceImpl(get(), get(), get(), get(), get(), get()) }
 
     // --- Authorizers (resource-level access) ---
-    single<ResourceAuthorizer> { GroupAuthorizer(get()) }
+    single<ResourceAuthorizer>(named("group")) { GroupAuthorizer(get()) }
+    single<ResourceAuthorizer>(named("session")) { SessionResourceAuthorizer(get()) }
     single<Map<String, ResourceAuthorizer>> { getAll<ResourceAuthorizer>().associateBy { it.resourceType } }
 
     // --- Authorization Services ---

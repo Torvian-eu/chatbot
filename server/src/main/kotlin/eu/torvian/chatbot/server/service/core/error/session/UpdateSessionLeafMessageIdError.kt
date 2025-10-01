@@ -13,8 +13,4 @@ sealed interface UpdateSessionLeafMessageIdError {
      * Maps from SessionError.ForeignKeyViolation in the DAO layer.
      */
     data class InvalidRelatedEntity(val message: String) : UpdateSessionLeafMessageIdError
-    /**
-     * Indicates that the user does not have permission to update this session.
-     */
-    data class AccessDenied(val message: String) : UpdateSessionLeafMessageIdError
 }
