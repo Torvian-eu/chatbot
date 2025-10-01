@@ -1,6 +1,7 @@
-package eu.torvian.chatbot.server.service.authorizer
+package eu.torvian.chatbot.server.service.security.authorizer
 
 import arrow.core.Either
+import eu.torvian.chatbot.server.service.security.ResourceType
 
 /**
  * Pluggable authorizer responsible for enforcing resource-scoped access rules.
@@ -11,7 +12,7 @@ import arrow.core.Either
  */
 interface ResourceAuthorizer {
     /** The resource type handled by this authorizer (e.g. "group"). */
-    val resourceType: String
+    val resourceType: ResourceType
 
     /**
      * Enforce that [userId] has the requested [accessMode] for [resourceId].

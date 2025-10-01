@@ -4,7 +4,7 @@ import arrow.core.Either
 import eu.torvian.chatbot.common.api.PermissionSpec
 import eu.torvian.chatbot.common.models.Permission
 import eu.torvian.chatbot.common.models.Role
-import eu.torvian.chatbot.server.service.authorizer.AccessMode
+import eu.torvian.chatbot.server.service.security.authorizer.AccessMode
 import eu.torvian.chatbot.server.service.security.error.AuthorizationError
 import eu.torvian.chatbot.server.service.security.error.ResourceAuthorizationError
 
@@ -124,7 +124,7 @@ interface AuthorizationService {
      */
     suspend fun requireAccess(
         userId: Long,
-        resourceType: String,
+        resourceType: ResourceType,
         resourceId: Long,
         accessMode: AccessMode
     ): Either<ResourceAuthorizationError, Unit>

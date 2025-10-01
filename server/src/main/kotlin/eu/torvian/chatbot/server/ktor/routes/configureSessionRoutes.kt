@@ -10,13 +10,14 @@ import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.models.*
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
-import eu.torvian.chatbot.server.service.authorizer.AccessMode
 import eu.torvian.chatbot.server.service.core.MessageService
 import eu.torvian.chatbot.server.service.core.MessageStreamEvent
 import eu.torvian.chatbot.server.service.core.SessionService
 import eu.torvian.chatbot.server.service.core.error.message.toApiError
 import eu.torvian.chatbot.server.service.core.error.session.*
 import eu.torvian.chatbot.server.service.security.AuthorizationService
+import eu.torvian.chatbot.server.service.security.ResourceType
+import eu.torvian.chatbot.server.service.security.authorizer.AccessMode
 import eu.torvian.chatbot.server.service.security.error.ResourceAuthorizationError
 import io.ktor.http.*
 import io.ktor.server.auth.*
@@ -56,7 +57,7 @@ private suspend fun Raise<ApiError>.requireSessionAccess(
                 )
         }
     }) {
-        authorizationService.requireAccess(userId, "session", sessionId, accessMode).bind()
+        authorizationService.requireAccess(userId, ResourceType.SESSION, sessionId, accessMode).bind()
     }
 }
 
@@ -113,7 +114,11 @@ fun Route.configureSessionRoutes(
                 withError({ error: GetSessionDetailsError ->
                     when (error) {
                         is GetSessionDetailsError.SessionNotFound ->
-                            apiError(CommonApiErrorCodes.NOT_FOUND, "Session not found", "sessionId" to error.id.toString())
+                            apiError(
+                                CommonApiErrorCodes.NOT_FOUND,
+                                "Session not found",
+                                "sessionId" to error.id.toString()
+                            )
                     }
                 }) {
                     sessionService.getSessionDetails(sessionId).bind()
@@ -132,7 +137,12 @@ fun Route.configureSessionRoutes(
                 sessionService.deleteSession(sessionId).mapLeft { error ->
                     when (error) {
                         is DeleteSessionError.SessionNotFound ->
-                            apiError(CommonApiErrorCodes.NOT_FOUND, "Session not found", "sessionId" to error.id.toString())
+                            apiError(
+                                CommonApiErrorCodes.NOT_FOUND,
+                                "Session not found",
+                                "sessionId" to error.id.toString()
+                            )
+
                         else -> apiError(CommonApiErrorCodes.INTERNAL, "Unexpected error")
                     }
                 }.bind()
@@ -151,7 +161,12 @@ fun Route.configureSessionRoutes(
                 sessionService.updateSessionName(sessionId, request.name).mapLeft { error ->
                     when (error) {
                         is UpdateSessionNameError.SessionNotFound ->
-                            apiError(CommonApiErrorCodes.NOT_FOUND, "Session not found", "sessionId" to error.id.toString())
+                            apiError(
+                                CommonApiErrorCodes.NOT_FOUND,
+                                "Session not found",
+                                "sessionId" to error.id.toString()
+                            )
+
                         is UpdateSessionNameError.InvalidName ->
                             apiError(
                                 CommonApiErrorCodes.INVALID_ARGUMENT,
@@ -175,7 +190,11 @@ fun Route.configureSessionRoutes(
                 sessionService.updateSessionCurrentModelId(sessionId, request.modelId).mapLeft { error ->
                     when (error) {
                         is UpdateSessionCurrentModelIdError.SessionNotFound ->
-                            apiError(CommonApiErrorCodes.NOT_FOUND, "Session not found", "sessionId" to error.id.toString())
+                            apiError(
+                                CommonApiErrorCodes.NOT_FOUND,
+                                "Session not found",
+                                "sessionId" to error.id.toString()
+                            )
 
                         is UpdateSessionCurrentModelIdError.InvalidRelatedEntity ->
                             apiError(
@@ -215,7 +234,11 @@ fun Route.configureSessionRoutes(
                 sessionService.updateSessionCurrentSettingsId(sessionId, request.settingsId).mapLeft { error ->
                     when (error) {
                         is UpdateSessionCurrentSettingsIdError.SessionNotFound ->
-                            apiError(CommonApiErrorCodes.NOT_FOUND, "Session not found", "sessionId" to error.id.toString())
+                            apiError(
+                                CommonApiErrorCodes.NOT_FOUND,
+                                "Session not found",
+                                "sessionId" to error.id.toString()
+                            )
 
                         is UpdateSessionCurrentSettingsIdError.InvalidRelatedEntity ->
                             apiError(
@@ -257,7 +280,11 @@ fun Route.configureSessionRoutes(
                 sessionService.updateSessionLeafMessageId(sessionId, request.leafMessageId).mapLeft { error ->
                     when (error) {
                         is UpdateSessionLeafMessageIdError.SessionNotFound ->
-                            apiError(CommonApiErrorCodes.NOT_FOUND, "Session not found", "sessionId" to error.id.toString())
+                            apiError(
+                                CommonApiErrorCodes.NOT_FOUND,
+                                "Session not found",
+                                "sessionId" to error.id.toString()
+                            )
 
                         is UpdateSessionLeafMessageIdError.InvalidRelatedEntity ->
                             apiError(
@@ -282,7 +309,11 @@ fun Route.configureSessionRoutes(
                 sessionService.updateSessionGroupId(sessionId, request.groupId).mapLeft { error ->
                     when (error) {
                         is UpdateSessionGroupIdError.SessionNotFound ->
-                            apiError(CommonApiErrorCodes.NOT_FOUND, "Session not found", "sessionId" to error.id.toString())
+                            apiError(
+                                CommonApiErrorCodes.NOT_FOUND,
+                                "Session not found",
+                                "sessionId" to error.id.toString()
+                            )
 
                         is UpdateSessionGroupIdError.InvalidRelatedEntity ->
                             apiError(

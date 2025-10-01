@@ -1,4 +1,4 @@
-package eu.torvian.chatbot.server.service.authorizer
+package eu.torvian.chatbot.server.service.security.authorizer
 
 import arrow.core.Either
 import arrow.core.raise.either
@@ -6,6 +6,7 @@ import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import eu.torvian.chatbot.server.data.dao.SessionOwnershipDao
 import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
+import eu.torvian.chatbot.server.service.security.ResourceType
 
 /**
  * Authorizer for session resources. Enforces that only the owner can access or modify a session.
@@ -13,7 +14,7 @@ import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
 class SessionResourceAuthorizer(
     private val sessionOwnershipDao: SessionOwnershipDao
 ) : ResourceAuthorizer {
-    override val resourceType: String = "session"
+    override val resourceType: ResourceType = ResourceType.SESSION
 
     override suspend fun requireAccess(
         userId: Long,

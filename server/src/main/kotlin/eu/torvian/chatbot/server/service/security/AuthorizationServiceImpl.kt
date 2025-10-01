@@ -11,9 +11,9 @@ import eu.torvian.chatbot.server.data.dao.PermissionDao
 import eu.torvian.chatbot.server.data.dao.UserRoleAssignmentDao
 import eu.torvian.chatbot.server.data.entities.mappers.toPermission
 import eu.torvian.chatbot.server.data.entities.mappers.toRole
-import eu.torvian.chatbot.server.service.authorizer.AccessMode
-import eu.torvian.chatbot.server.service.authorizer.ResourceAuthorizer
-import eu.torvian.chatbot.server.service.authorizer.ResourceAuthorizerError
+import eu.torvian.chatbot.server.service.security.authorizer.AccessMode
+import eu.torvian.chatbot.server.service.security.authorizer.ResourceAuthorizer
+import eu.torvian.chatbot.server.service.security.authorizer.ResourceAuthorizerError
 import eu.torvian.chatbot.server.service.security.error.AuthorizationError
 import eu.torvian.chatbot.server.service.security.error.ResourceAuthorizationError
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
@@ -30,7 +30,7 @@ import org.apache.logging.log4j.Logger
  * - Logging all authorization checks for security auditing
  */
 class AuthorizationServiceImpl(
-    private val authorizers: Map<String, ResourceAuthorizer>,
+    private val authorizers: Map<ResourceType, ResourceAuthorizer>,
     private val userRoleAssignmentDao: UserRoleAssignmentDao,
     private val permissionDao: PermissionDao,
     private val transactionScope: TransactionScope
@@ -172,7 +172,7 @@ class AuthorizationServiceImpl(
 
     override suspend fun requireAccess(
         userId: Long,
-        resourceType: String,
+        resourceType: ResourceType,
         resourceId: Long,
         accessMode: AccessMode
     ): Either<ResourceAuthorizationError, Unit> =

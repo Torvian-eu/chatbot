@@ -6,12 +6,12 @@ import eu.torvian.chatbot.common.security.EncryptionService
 import eu.torvian.chatbot.server.service.core.*
 import eu.torvian.chatbot.server.service.core.impl.*
 import eu.torvian.chatbot.server.service.security.*
-import eu.torvian.chatbot.server.service.security.AuthorizationService
-import eu.torvian.chatbot.server.service.security.AuthorizationServiceImpl
-import eu.torvian.chatbot.server.service.authorizer.*
+import eu.torvian.chatbot.server.service.security.authorizer.GroupResourceAuthorizer
+import eu.torvian.chatbot.server.service.security.authorizer.ResourceAuthorizer
+import eu.torvian.chatbot.server.service.security.authorizer.SessionResourceAuthorizer
 import eu.torvian.chatbot.server.service.setup.InitialSetupService
-import org.koin.dsl.module
 import org.koin.core.qualifier.named
+import org.koin.dsl.module
 
 /**
  * Dependency injection module for configuring the application's service layer.
@@ -40,9 +40,9 @@ fun serviceModule() = module {
     single<AuthenticationService> { AuthenticationServiceImpl(get(), get(), get(), get(), get(), get()) }
 
     // --- Authorizers (resource-level access) ---
-    single<ResourceAuthorizer>(named("group")) { GroupAuthorizer(get()) }
-    single<ResourceAuthorizer>(named("session")) { SessionResourceAuthorizer(get()) }
-    single<Map<String, ResourceAuthorizer>> { getAll<ResourceAuthorizer>().associateBy { it.resourceType } }
+    single<ResourceAuthorizer>(named(ResourceType.GROUP.key)) { GroupResourceAuthorizer(get()) }
+    single<ResourceAuthorizer>(named(ResourceType.SESSION.key)) { SessionResourceAuthorizer(get()) }
+    single<Map<ResourceType, ResourceAuthorizer>> { getAll<ResourceAuthorizer>().associateBy { it.resourceType } }
 
     // --- Authorization Services ---
     single<AuthorizationService> { AuthorizationServiceImpl(get(), get(), get(), get()) }

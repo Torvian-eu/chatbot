@@ -1,4 +1,4 @@
-package eu.torvian.chatbot.server.service.authorizer
+package eu.torvian.chatbot.server.service.security.authorizer
 
 /**
  * Domain errors returned by resource authorizers.

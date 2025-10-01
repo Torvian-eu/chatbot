@@ -11,12 +11,13 @@ import eu.torvian.chatbot.common.models.CreateGroupRequest
 import eu.torvian.chatbot.common.models.RenameGroupRequest
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
-import eu.torvian.chatbot.server.service.authorizer.AccessMode
 import eu.torvian.chatbot.server.service.core.GroupService
 import eu.torvian.chatbot.server.service.core.error.group.CreateGroupError
 import eu.torvian.chatbot.server.service.core.error.group.DeleteGroupError
 import eu.torvian.chatbot.server.service.core.error.group.RenameGroupError
 import eu.torvian.chatbot.server.service.security.AuthorizationService
+import eu.torvian.chatbot.server.service.security.ResourceType
+import eu.torvian.chatbot.server.service.security.authorizer.AccessMode
 import eu.torvian.chatbot.server.service.security.error.ResourceAuthorizationError
 import io.ktor.http.*
 import io.ktor.server.auth.*
@@ -125,5 +126,5 @@ private suspend inline fun Raise<ApiError>.requireGroupWriteAccess(
                 )
         }
     }) {
-        authorizationService.requireAccess(userId, "group", groupId, AccessMode.WRITE).bind()
+        authorizationService.requireAccess(userId, ResourceType.GROUP, groupId, AccessMode.WRITE).bind()
     }
