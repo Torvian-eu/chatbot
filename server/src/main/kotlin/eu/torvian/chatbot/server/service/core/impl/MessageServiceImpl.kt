@@ -10,16 +10,10 @@ import arrow.core.right
 import eu.torvian.chatbot.common.models.*
 import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
-import eu.torvian.chatbot.server.data.dao.SessionOwnershipDao
-import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
 import eu.torvian.chatbot.server.data.dao.error.MessageError
 import eu.torvian.chatbot.server.data.dao.error.SessionError
 import eu.torvian.chatbot.server.service.core.*
-import eu.torvian.chatbot.server.service.core.error.message.DeleteMessageError
-import eu.torvian.chatbot.server.service.core.error.message.GetMessagesError
-import eu.torvian.chatbot.server.service.core.error.message.ProcessNewMessageError
-import eu.torvian.chatbot.server.service.core.error.message.UpdateMessageContentError
-import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageError
+import eu.torvian.chatbot.server.service.core.error.message.*
 import eu.torvian.chatbot.server.service.core.error.model.GetModelError
 import eu.torvian.chatbot.server.service.core.error.provider.GetProviderError
 import eu.torvian.chatbot.server.service.core.error.settings.GetSettingsByIdError
@@ -42,7 +36,6 @@ import org.apache.logging.log4j.Logger
 class MessageServiceImpl(
     private val messageDao: MessageDao,
     private val sessionDao: SessionDao,
-    private val sessionOwnershipDao: SessionOwnershipDao,
     private val llmModelService: LLMModelService,
     private val modelSettingsService: ModelSettingsService,
     private val llmProviderService: LLMProviderService,
@@ -55,56 +48,36 @@ class MessageServiceImpl(
         private val logger: Logger = LogManager.getLogger(MessageServiceImpl::class.java)
     }
 
-    override suspend fun getMessagesBySessionId(userId: Long, sessionId: Long): Either<GetMessagesError, List<ChatMessage>> {
+    override suspend fun getMessagesBySessionId(sessionId: Long): List<ChatMessage> {
         return transactionScope.transaction {
-            either {
-                // Verify user owns the session before returning messages
-                val ownerId = withError({ ownershipError: GetOwnerError ->
-                    when (ownershipError) {
-                        is GetOwnerError.ResourceNotFound ->
-                            GetMessagesError.SessionNotFound(sessionId)
-                    }
-                }) {
-                    sessionOwnershipDao.getOwner(sessionId).bind()
-                }
-
-                ensure(ownerId == userId) {
-                    GetMessagesError.AccessDenied("User does not have access to this session")
-                }
-
-                messageDao.getMessagesBySessionId(sessionId)
-            }
+            messageDao.getMessagesBySessionId(sessionId)
         }
     }
 
+    override suspend fun getMessageById(id: Long): Either<GetMessageError, ChatMessage> =
+        transactionScope.transaction {
+            either {
+                withError({ daoError: MessageError.MessageNotFound ->
+                    GetMessageError.MessageNotFound(daoError.id)
+                }) {
+                    messageDao.getMessageById(id).bind()
+                }
+            }
+        }
+
     override suspend fun validateProcessNewMessageRequest(
-        userId: Long,
         sessionId: Long,
         parentMessageId: Long?
     ): Either<ValidateNewMessageError, Pair<ChatSession, LLMConfig>> = transactionScope.transaction {
         either {
-            // 1. Check ownership first
-            val ownerId = withError({ ownershipError: GetOwnerError ->
-                when (ownershipError) {
-                    is GetOwnerError.ResourceNotFound ->
-                        ValidateNewMessageError.SessionNotFound(sessionId)
-                }
-            }) {
-                sessionOwnershipDao.getOwner(sessionId).bind()
-            }
-
-            ensure(ownerId == userId) {
-                ValidateNewMessageError.AccessDenied("User does not have access to this session")
-            }
-
-            // 2. Get session details
+            // 1. Validate session
             val session = withError({ daoError: SessionError.SessionNotFound ->
                 ValidateNewMessageError.SessionNotFound(daoError.id)
             }) {
                 sessionDao.getSessionById(sessionId).bind()
             }
 
-            // 3. Validate parent message if provided
+            // 2. Validate parent message if provided
             if (parentMessageId != null) {
                 withError({ _: MessageError.MessageNotFound ->
                     ValidateNewMessageError.ParentNotInSession(sessionId, parentMessageId)
@@ -113,27 +86,27 @@ class MessageServiceImpl(
                 }
             }
 
-            // 4. Get model and settings config
+            // 3. Get model and settings config
             val modelId = session.currentModelId
                 ?: raise(ValidateNewMessageError.ModelConfigurationError("No model selected for session $sessionId"))
             val settingsId = session.currentSettingsId
                 ?: raise(ValidateNewMessageError.ModelConfigurationError("No settings selected for session $sessionId"))
 
-            // 5. Fetch Model
+            // 4. Fetch Model
             val model = withError({ _: GetModelError ->
                 throw IllegalStateException("Model with ID $modelId not found after validation")
             }) {
                 llmModelService.getModelById(modelId).bind()
             }
 
-            // 6. Fetch Settings
+            // 5. Fetch Settings
             val settings = withError({ _: GetSettingsByIdError ->
                 throw IllegalStateException("Settings with ID $settingsId not found after validation")
             }) {
                 modelSettingsService.getSettingsById(settingsId).bind()
             }
 
-            // 7. Validate model and settings compatibility
+            // 6. Validate model and settings compatibility
             ensure(model.type == LLMModelType.CHAT) {
                 ValidateNewMessageError.ModelConfigurationError(
                     "Model type ${model.type} is not supported for chat sessions"
@@ -145,14 +118,14 @@ class MessageServiceImpl(
                 )
             }
 
-            // 8. Get LLM provider
+            // 7. Get LLM provider
             val provider = withError({ _: GetProviderError ->
                 throw IllegalStateException("Provider not found for model ID $modelId (provider ID: ${model.providerId})")
             }) {
                 llmProviderService.getProviderById(model.providerId).bind()
             }
 
-            // 9. Get API Key (if required)
+            // 8. Get API Key (if required)
             val apiKey = provider.apiKeyId?.let { keyId ->
                 withError({ _: CredentialError.CredentialNotFound ->
                     throw IllegalStateException("API key not found in secure storage for provider ID ${provider.id} (key alias: $keyId)")
@@ -161,7 +134,7 @@ class MessageServiceImpl(
                 }
             }
 
-            // 10. Return session and llmConfig
+            // 9. Return session and llmConfig
             session to LLMConfig(provider, model, settings, apiKey)
         }
     }
@@ -266,34 +239,11 @@ class MessageServiceImpl(
     }
 
     override suspend fun updateMessageContent(
-        userId: Long,
         id: Long,
         content: String
     ): Either<UpdateMessageContentError, ChatMessage> =
         transactionScope.transaction {
             either {
-                // Get the message first to determine which session it belongs to
-                val message = withError({ daoError: MessageError.MessageNotFound ->
-                    UpdateMessageContentError.MessageNotFound(daoError.id)
-                }) {
-                    messageDao.getMessageById(id).bind()
-                }
-
-                // Check if the user owns the session containing this message
-                val ownerId = withError({ ownershipError: GetOwnerError ->
-                    when (ownershipError) {
-                        is GetOwnerError.ResourceNotFound ->
-                            UpdateMessageContentError.AccessDenied("Session containing this message not found")
-                    }
-                }) {
-                    sessionOwnershipDao.getOwner(message.sessionId).bind()
-                }
-
-                ensure(ownerId == userId) {
-                    UpdateMessageContentError.AccessDenied("User does not own the session containing this message")
-                }
-
-                // User owns the session, proceed with message update
                 withError({ daoError: MessageError.MessageNotFound ->
                     UpdateMessageContentError.MessageNotFound(daoError.id)
                 }) {
@@ -302,7 +252,7 @@ class MessageServiceImpl(
             }
         }
 
-    override suspend fun deleteMessageRecursively(userId: Long, id: Long): Either<DeleteMessageError, Unit> =
+    override suspend fun deleteMessageRecursively(id: Long): Either<DeleteMessageError, Unit> =
         transactionScope.transaction {
             either {
                 // Get message details before deletion
@@ -313,20 +263,6 @@ class MessageServiceImpl(
                 }
 
                 val sessionId = messageToDelete.sessionId
-
-                // Check if the user owns the session containing this message
-                val ownerId = withError({ ownershipError: GetOwnerError ->
-                    when (ownershipError) {
-                        is GetOwnerError.ResourceNotFound ->
-                            DeleteMessageError.AccessDenied("Session containing this message not found")
-                    }
-                }) {
-                    sessionOwnershipDao.getOwner(sessionId).bind()
-                }
-
-                ensure(ownerId == userId) {
-                    DeleteMessageError.AccessDenied("User does not own the session containing this message")
-                }
 
                 // Get session and check if update is needed BEFORE deletion
                 val session = withError({ _: SessionError ->
@@ -360,7 +296,7 @@ class MessageServiceImpl(
             }
         }
 
-    override suspend fun deleteMessage(userId: Long, id: Long): Either<DeleteMessageError, Unit> =
+    override suspend fun deleteMessage(id: Long): Either<DeleteMessageError, Unit> =
         transactionScope.transaction {
             either {
                 // Get message details before deletion
@@ -371,20 +307,6 @@ class MessageServiceImpl(
                 }
 
                 val sessionId = messageToDelete.sessionId
-
-                // Check if the user owns the session containing this message
-                val ownerId = withError({ ownershipError: GetOwnerError ->
-                    when (ownershipError) {
-                        is GetOwnerError.ResourceNotFound ->
-                            DeleteMessageError.AccessDenied("Session containing this message not found")
-                    }
-                }) {
-                    sessionOwnershipDao.getOwner(sessionId).bind()
-                }
-
-                ensure(ownerId == userId) {
-                    DeleteMessageError.AccessDenied("User does not own the session containing this message")
-                }
 
                 // Get session BEFORE deletion
                 val session = withError({ _: SessionError ->

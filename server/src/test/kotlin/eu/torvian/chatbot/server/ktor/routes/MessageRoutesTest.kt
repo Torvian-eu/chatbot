@@ -219,4 +219,61 @@ class MessageRoutesTest {
         assert(error.details?.containsKey("messageId") == true)
         assertEquals(nonExistentId.toString(), error.details?.get("messageId"))
     }
+
+    // --- 403 (Forbidden) tests for non-owner access ---
+
+    @Test
+    fun `PUT message content as non-owner should return 403`() = messageTestApplication {
+        // Arrange: create another user and session owned by them
+        val otherUser = authHelper.createTestUser(id = 999L, email = "otheruser@example.com", username = "otheruser")
+        testDataManager.insertUser(otherUser)
+        val otherSession = testSession.copy(id = 10L)
+        testDataManager.insertChatSession(otherSession)
+        testDataManager.insertSessionOwnership(otherSession.id, otherUser.id)
+
+        // Insert a message in that session
+        val otherUsersMessage = testUserMessage.copy(sessionId = otherSession.id, id = 11L)
+        testDataManager.insertChatMessage(otherUsersMessage)
+
+        val updateRequest = UpdateMessageRequest(content = "Updated content")
+
+        // Act
+        val response = client.put(href(MessageResource.ById.Content(parent = MessageResource.ById(messageId = otherUsersMessage.id)))) {
+            contentType(ContentType.Application.Json)
+            setBody(updateRequest)
+            authenticate(authToken)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.Forbidden, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.PERMISSION_DENIED.code, error.code)
+        assertEquals(403, error.statusCode)
+        assertEquals("Access denied", error.message)
+    }
+
+    @Test
+    fun `DELETE message as non-owner should return 403`() = messageTestApplication {
+        // Arrange
+        val otherUser = authHelper.createTestUser(id = 998L, email = "otheruser2@example.com", username = "otheruser2")
+        testDataManager.insertUser(otherUser)
+        val otherSession = testSession.copy(id = 12L)
+        testDataManager.insertChatSession(otherSession)
+        testDataManager.insertSessionOwnership(otherSession.id, otherUser.id)
+
+        val otherUsersMessage = testUserMessage.copy(sessionId = otherSession.id, id = 13L)
+        testDataManager.insertChatMessage(otherUsersMessage)
+
+        // Act
+        val response = client.delete(href(MessageResource.ById(messageId = otherUsersMessage.id))) {
+            authenticate(authToken)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.Forbidden, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.PERMISSION_DENIED.code, error.code)
+        assertEquals(403, error.statusCode)
+        assertEquals("Access denied", error.message)
+    }
 }

@@ -296,9 +296,9 @@ class SessionRoutesTest {
         assertEquals(HttpStatusCode.NotFound, response.status)
         val error = response.body<ApiError>()
         assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
-        assertEquals("Session not found", error.message)
-        assert(error.details?.containsKey("sessionId") == true)
-        assertEquals(nonExistentId.toString(), error.details?.get("sessionId"))
+        assertEquals("Resource not found", error.message)
+        assert(error.details?.containsKey("id") == true)
+        assertEquals(nonExistentId.toString(), error.details?.get("id"))
     }
 
     // --- DELETE /api/v1/sessions/{sessionId} Tests ---
@@ -336,9 +336,9 @@ class SessionRoutesTest {
         assertEquals(HttpStatusCode.NotFound, response.status)
         val error = response.body<ApiError>()
         assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
-        assertEquals("Session not found", error.message)
-        assert(error.details?.containsKey("sessionId") == true)
-        assertEquals(nonExistentId.toString(), error.details?.get("sessionId"))
+        assertEquals("Resource not found", error.message)
+        assert(error.details?.containsKey("id") == true)
+        assertEquals(nonExistentId.toString(), error.details?.get("id"))
     }
 
     // --- PUT /api/v1/sessions/{sessionId}/name Tests ---
@@ -386,9 +386,9 @@ class SessionRoutesTest {
         assertEquals(HttpStatusCode.NotFound, response.status)
         val error = response.body<ApiError>()
         assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
-        assertEquals("Session not found", error.message)
-        assert(error.details?.containsKey("sessionId") == true)
-        assertEquals(nonExistentId.toString(), error.details?.get("sessionId"))
+        assertEquals("Resource not found", error.message)
+        assert(error.details?.containsKey("id") == true)
+        assertEquals(nonExistentId.toString(), error.details?.get("id"))
     }
 
     @Test
@@ -592,9 +592,9 @@ class SessionRoutesTest {
         assertEquals(HttpStatusCode.NotFound, response.status)
         val error = response.body<ApiError>()
         assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
-        assertEquals("Session not found", error.message)
-        assert(error.details?.containsKey("sessionId") == true)
-        assertEquals(nonExistentId.toString(), error.details?.get("sessionId"))
+        assertEquals("Resource not found", error.message)
+        assert(error.details?.containsKey("id") == true)
+        assertEquals(nonExistentId.toString(), error.details?.get("id"))
     }
 
     @Test
@@ -620,5 +620,200 @@ class SessionRoutesTest {
 
         // Verify no messages were created
         assertEquals(0, testDataManager.getChatMessagesForSession(testSession.id).size)
+    }
+
+    // --- 403 (Forbidden) tests for non-owner access ---
+
+    @Test
+    fun `GET session by ID as non-owner should return 403`() = sessionTestApplication {
+        // Arrange: create session owned by someone else
+        val otherUser = authHelper.createTestUser(id = 999L, email = "otheruser@example.com", username = "otheruser")
+        testDataManager.insertUser(otherUser)
+        testDataManager.insertChatSession(testSession)
+        testDataManager.insertSessionOwnership(testSession.id, otherUser.id)
+
+        // Act
+        val response = client.get(href(SessionResource.ById(sessionId = testSession.id))) {
+            authenticate(authToken)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.Forbidden, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.PERMISSION_DENIED.code, error.code)
+        assertEquals(403, error.statusCode)
+        assertEquals("Access denied", error.message)
+    }
+
+    @Test
+    fun `DELETE session as non-owner should return 403`() = sessionTestApplication {
+        // Arrange
+        val otherUser = authHelper.createTestUser(id = 998L, email = "otheruser2@example.com", username = "otheruser2")
+        testDataManager.insertUser(otherUser)
+        testDataManager.insertChatSession(testSession)
+        testDataManager.insertSessionOwnership(testSession.id, otherUser.id)
+
+        // Act
+        val response = client.delete(href(SessionResource.ById(sessionId = testSession.id))) {
+            authenticate(authToken)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.Forbidden, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.PERMISSION_DENIED.code, error.code)
+        assertEquals(403, error.statusCode)
+        assertEquals("Access denied", error.message)
+    }
+
+    @Test
+    fun `PUT session name as non-owner should return 403`() = sessionTestApplication {
+        // Arrange
+        val otherUser = authHelper.createTestUser(id = 997L, email = "otheruser3@example.com", username = "otheruser3")
+        testDataManager.insertUser(otherUser)
+        testDataManager.insertChatSession(testSession)
+        testDataManager.insertSessionOwnership(testSession.id, otherUser.id)
+
+        // Act
+        val response = client.put(href(SessionResource.ById.Name(parent = SessionResource.ById(sessionId = testSession.id)))) {
+            contentType(ContentType.Application.Json)
+            setBody(UpdateSessionNameRequest(name = "New Name"))
+            authenticate(authToken)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.Forbidden, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.PERMISSION_DENIED.code, error.code)
+        assertEquals(403, error.statusCode)
+        assertEquals("Access denied", error.message)
+    }
+
+    @Test
+    fun `PUT session model as non-owner should return 403`() = sessionTestApplication {
+        // Arrange
+        val otherUser = authHelper.createTestUser(id = 996L, email = "otheruser4@example.com", username = "otheruser4")
+        testDataManager.insertUser(otherUser)
+        testDataManager.insertChatSession(testSession)
+        testDataManager.insertSessionOwnership(testSession.id, otherUser.id)
+
+        val updateRequest = UpdateSessionModelRequest(modelId = 2L)
+
+        // Act
+        val response = client.put(href(SessionResource.ById.Model(parent = SessionResource.ById(sessionId = testSession.id)))) {
+            contentType(ContentType.Application.Json)
+            setBody(updateRequest)
+            authenticate(authToken)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.Forbidden, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.PERMISSION_DENIED.code, error.code)
+        assertEquals(403, error.statusCode)
+        assertEquals("Access denied", error.message)
+    }
+
+    @Test
+    fun `PUT session settings as non-owner should return 403`() = sessionTestApplication {
+        // Arrange
+        val otherUser = authHelper.createTestUser(id = 995L, email = "otheruser5@example.com", username = "otheruser5")
+        testDataManager.insertUser(otherUser)
+        testDataManager.insertChatSession(testSession)
+        testDataManager.insertSessionOwnership(testSession.id, otherUser.id)
+
+        val updateRequest = UpdateSessionSettingsRequest(settingsId = testSettings3.id)
+
+        // Act
+        val response = client.put(href(SessionResource.ById.Settings(parent = SessionResource.ById(sessionId = testSession.id)))) {
+            contentType(ContentType.Application.Json)
+            setBody(updateRequest)
+            authenticate(authToken)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.Forbidden, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.PERMISSION_DENIED.code, error.code)
+        assertEquals(403, error.statusCode)
+        assertEquals("Access denied", error.message)
+    }
+
+    @Test
+    fun `PUT session group as non-owner should return 403`() = sessionTestApplication {
+        // Arrange
+        val otherUser = authHelper.createTestUser(id = 994L, email = "otheruser6@example.com", username = "otheruser6")
+        testDataManager.insertUser(otherUser)
+        testDataManager.insertChatSession(testSession)
+        testDataManager.insertSessionOwnership(testSession.id, otherUser.id)
+
+        val updateRequest = UpdateSessionGroupRequest(groupId = 42L)
+
+        // Act
+        val response = client.put(href(SessionResource.ById.Group(parent = SessionResource.ById(sessionId = testSession.id)))) {
+            contentType(ContentType.Application.Json)
+            setBody(updateRequest)
+            authenticate(authToken)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.Forbidden, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.PERMISSION_DENIED.code, error.code)
+        assertEquals(403, error.statusCode)
+        assertEquals("Access denied", error.message)
+    }
+
+    @Test
+    fun `PUT session leaf message as non-owner should return 403`() = sessionTestApplication {
+        // Arrange
+        val otherUser = authHelper.createTestUser(id = 993L, email = "otheruser7@example.com", username = "otheruser7")
+        testDataManager.insertUser(otherUser)
+        testDataManager.insertChatSession(testSession)
+        testDataManager.insertSessionOwnership(testSession.id, otherUser.id)
+        // Insert messages referenced by the leaf update
+        testDataManager.insertChatMessage(testUserMessage)
+        testDataManager.insertChatMessage(testAssistantMessage)
+
+        val updateRequest = UpdateSessionLeafMessageRequest(leafMessageId = testAssistantMessage.id)
+
+        // Act
+        val response = client.put(href(SessionResource.ById.LeafMessage(parent = SessionResource.ById(sessionId = testSession.id)))) {
+            contentType(ContentType.Application.Json)
+            setBody(updateRequest)
+            authenticate(authToken)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.Forbidden, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.PERMISSION_DENIED.code, error.code)
+        assertEquals(403, error.statusCode)
+        assertEquals("Access denied", error.message)
+    }
+
+    @Test
+    fun `POST session message as non-owner should return 403`() = sessionTestApplication {
+        // Arrange
+        val otherUser = authHelper.createTestUser(id = 992L, email = "otheruser8@example.com", username = "otheruser8")
+        testDataManager.insertUser(otherUser)
+        testDataManager.insertChatSession(testSession)
+        testDataManager.insertSessionOwnership(testSession.id, otherUser.id)
+
+        val processRequest = ProcessNewMessageRequest(content = "Hi", parentMessageId = null, isStreaming = false)
+
+        // Act
+        val response = client.post(href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = testSession.id)))) {
+            contentType(ContentType.Application.Json)
+            setBody(processRequest)
+            authenticate(authToken)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.Forbidden, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.PERMISSION_DENIED.code, error.code)
+        assertEquals(403, error.statusCode)
+        assertEquals("Access denied", error.message)
     }
 }

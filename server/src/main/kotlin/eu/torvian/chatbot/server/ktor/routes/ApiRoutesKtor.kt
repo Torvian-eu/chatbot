@@ -88,6 +88,6 @@ class ApiRoutesKtor(
      * Configures routes related to Messages (/api/v1/messages)
      */
     fun configureMessageRoutes(route: Route) {
-        route.configureMessageRoutes(messageService)
+        route.configureMessageRoutes(messageService, authorizationService)
     }
 }

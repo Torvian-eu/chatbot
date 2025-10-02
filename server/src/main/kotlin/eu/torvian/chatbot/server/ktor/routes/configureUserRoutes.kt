@@ -1,17 +1,17 @@
 package eu.torvian.chatbot.server.ktor.routes
 
-import arrow.core.flatMap
-import eu.torvian.chatbot.common.api.CommonApiErrorCodes
+import arrow.core.raise.either
+import arrow.core.raise.withError
 import eu.torvian.chatbot.common.api.CommonPermissions
-import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.UserResource
-import eu.torvian.chatbot.common.models.admin.*
+import eu.torvian.chatbot.common.models.admin.AssignRoleRequest
+import eu.torvian.chatbot.common.models.admin.ChangePasswordRequest
+import eu.torvian.chatbot.common.models.admin.UpdateUserRequest
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.service.core.UserService
 import eu.torvian.chatbot.server.service.core.error.auth.*
 import eu.torvian.chatbot.server.service.security.AuthorizationService
-import eu.torvian.chatbot.server.service.security.error.AuthorizationError
 import io.ktor.http.*
 import io.ktor.server.auth.*
 import io.ktor.server.request.*
@@ -34,36 +34,24 @@ fun Route.configureUserRoutes(
         get<UserResource> {
             val requestingUserId = call.getUserId()
 
-            call.respondEither(
-                authorizationService.requirePermission(requestingUserId, CommonPermissions.MANAGE_USERS)
-                    .map { userService.getAllUsers() }
-            ) { error ->
-                when (error) {
-                    is AuthorizationError.PermissionDenied ->
-                        apiError(CommonApiErrorCodes.PERMISSION_DENIED, "Admin access required")
-                }
+            val result = either {
+                requirePermission(authorizationService, requestingUserId, CommonPermissions.MANAGE_USERS)
+                userService.getAllUsers()
             }
+            call.respondEither(result)
         }
 
         // GET /api/v1/users/{userId} - Get user by ID
         get<UserResource.ById> { resource ->
             val requestingUserId = call.getUserId()
 
-            call.respondEither(
-                authorizationService.requirePermission(requestingUserId, CommonPermissions.MANAGE_USERS)
-                    .flatMap { userService.getUserById(resource.userId) }
-            ) { error ->
-                when (error) {
-                    is AuthorizationError.PermissionDenied ->
-                        apiError(CommonApiErrorCodes.PERMISSION_DENIED, "Admin access required")
-                    is UserNotFoundError.ById ->
-                        apiError(CommonApiErrorCodes.NOT_FOUND, "User not found", "userId" to error.id.toString())
-                    is UserNotFoundError.ByUsername ->
-                        apiError(CommonApiErrorCodes.NOT_FOUND, "User not found", "username" to error.username)
-                    else ->
-                        apiError(CommonApiErrorCodes.INTERNAL, "Unexpected error: $error")
+            val result = either {
+                requirePermission(authorizationService, requestingUserId, CommonPermissions.MANAGE_USERS)
+                withError({ e: UserNotFoundError -> e.toApiError() }) {
+                    userService.getUserById(resource.userId).bind()
                 }
             }
+            call.respondEither(result)
         }
 
         // PUT /api/v1/users/{userId} - Update user profile
@@ -71,68 +59,37 @@ fun Route.configureUserRoutes(
             val requestingUserId = call.getUserId()
             val request = call.receive<UpdateUserRequest>()
 
-            call.respondEither(
-                authorizationService.requirePermission(requestingUserId, CommonPermissions.MANAGE_USERS)
-                    .flatMap {
-                        userService.updateUser(resource.userId, request.username, request.email)
-                    }
-            ) { error ->
-                when (error) {
-                    is AuthorizationError.PermissionDenied ->
-                        apiError(CommonApiErrorCodes.PERMISSION_DENIED, "Admin access required")
-                    is UpdateUserError.UserNotFound ->
-                        apiError(CommonApiErrorCodes.NOT_FOUND, "User not found", "userId" to error.userId.toString())
-                    is UpdateUserError.UsernameAlreadyExists ->
-                        apiError(CommonApiErrorCodes.ALREADY_EXISTS, "Username already exists", "username" to error.username)
-                    is UpdateUserError.EmailAlreadyExists ->
-                        apiError(CommonApiErrorCodes.ALREADY_EXISTS, "Email already exists", "email" to error.email)
-                    is UpdateUserError.InvalidInput ->
-                        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, error.reason)
-                    else ->
-                        apiError(CommonApiErrorCodes.INTERNAL, "Unexpected error: $error")
+            val result = either {
+                requirePermission(authorizationService, requestingUserId, CommonPermissions.MANAGE_USERS)
+                withError({ e: UpdateUserError -> e.toApiError() }) {
+                    userService.updateUser(resource.userId, request.username, request.email).bind()
                 }
             }
+            call.respondEither(result)
         }
 
         // DELETE /api/v1/users/{userId} - Delete user
         delete<UserResource.ById> { resource ->
             val requestingUserId = call.getUserId()
 
-            call.respondEither(
-                authorizationService.requirePermission(requestingUserId, CommonPermissions.MANAGE_USERS)
-                    .flatMap { userService.deleteUser(resource.userId) },
-                HttpStatusCode.NoContent
-            ) { error ->
-                when (error) {
-                    is AuthorizationError.PermissionDenied ->
-                        apiError(CommonApiErrorCodes.PERMISSION_DENIED, "Admin access required")
-                    is DeleteUserError.UserNotFound ->
-                        apiError(CommonApiErrorCodes.NOT_FOUND, "User not found", "userId" to error.userId.toString())
-                    is DeleteUserError.CannotDeleteLastAdmin ->
-                        apiError(
-                            CommonApiErrorCodes.CONFLICT,
-                            "Cannot delete the last administrator",
-                            "userId" to error.userId.toString()
-                        )
-                    else ->
-                        apiError(CommonApiErrorCodes.INTERNAL, "Unexpected error: $error")
+            val result = either {
+                requirePermission(authorizationService, requestingUserId, CommonPermissions.MANAGE_USERS)
+                withError({ e: DeleteUserError -> e.toApiError() }) {
+                    userService.deleteUser(resource.userId).bind()
                 }
             }
+            call.respondEither(result, HttpStatusCode.NoContent)
         }
 
         // GET /api/v1/users/{userId}/roles - Get user's roles
         get<UserResource.ById.Roles> { resource ->
             val requestingUserId = call.getUserId()
 
-            call.respondEither(
-                authorizationService.requirePermission(requestingUserId, CommonPermissions.MANAGE_USERS)
-                    .map { userService.getUserRoles(resource.parent.userId) }
-            ) { error ->
-                when (error) {
-                    is AuthorizationError.PermissionDenied ->
-                        apiError(CommonApiErrorCodes.PERMISSION_DENIED, "Admin access required")
-                }
+            val result = either {
+                requirePermission(authorizationService, requestingUserId, CommonPermissions.MANAGE_USERS)
+                userService.getUserRoles(resource.parent.userId)
             }
+            call.respondEither(result)
         }
 
         // POST /api/v1/users/{userId}/roles - Assign role to user
@@ -140,72 +97,29 @@ fun Route.configureUserRoutes(
             val requestingUserId = call.getUserId()
             val request = call.receive<AssignRoleRequest>()
 
-            call.respondEither(
-                authorizationService.requirePermission(requestingUserId, CommonPermissions.MANAGE_USERS)
-                    .flatMap {
-                        userService.assignRoleToUser(resource.parent.userId, request.roleId)
-                    },
-                HttpStatusCode.NoContent
-            ) { error ->
-                when (error) {
-                    is AuthorizationError.PermissionDenied ->
-                        apiError(CommonApiErrorCodes.PERMISSION_DENIED, "Admin access required")
-                    is AssignRoleError.UserOrRoleNotFound ->
-                        apiError(
-                            CommonApiErrorCodes.NOT_FOUND,
-                            "User or role not found",
-                            "userId" to error.userId.toString(),
-                            "roleId" to error.roleId.toString()
-                        )
-                    is AssignRoleError.RoleAlreadyAssigned ->
-                        apiError(
-                            CommonApiErrorCodes.CONFLICT,
-                            "Role already assigned to user",
-                            "userId" to error.userId.toString(),
-                            "roleId" to error.roleId.toString()
-                        )
-                    else ->
-                        apiError(CommonApiErrorCodes.INTERNAL, "Unexpected error: $error")
+            val result = either {
+                requirePermission(authorizationService, requestingUserId, CommonPermissions.MANAGE_USERS)
+                withError({ e: AssignRoleError -> e.toApiError() }) {
+                    userService.assignRoleToUser(resource.parent.userId, request.roleId).bind()
                 }
             }
+            call.respondEither(result, HttpStatusCode.NoContent)
         }
 
         // DELETE /api/v1/users/{userId}/roles/{roleId} - Revoke role from user
         delete<UserResource.ById.Roles.ByRoleId> { resource ->
             val requestingUserId = call.getUserId()
 
-            call.respondEither(
-                authorizationService.requirePermission(requestingUserId, CommonPermissions.MANAGE_USERS)
-                    .flatMap {
-                        userService.revokeRoleFromUser(
-                            resource.parent.parent.userId,
-                            resource.roleId
-                        )
-                    },
-                HttpStatusCode.NoContent
-            ) { error ->
-                when (error) {
-                    is AuthorizationError.PermissionDenied ->
-                        apiError(CommonApiErrorCodes.PERMISSION_DENIED, "Admin access required")
-                    is RevokeRoleError.RoleNotFound ->
-                        apiError(CommonApiErrorCodes.NOT_FOUND, "Role not found", "roleId" to error.roleId.toString())
-                    is RevokeRoleError.RoleNotAssigned ->
-                        apiError(
-                            CommonApiErrorCodes.NOT_FOUND,
-                            "Role not assigned to user",
-                            "userId" to error.userId.toString(),
-                            "roleId" to error.roleId.toString()
-                        )
-                    is RevokeRoleError.CannotRevokeLastAdminRole ->
-                        apiError(
-                            CommonApiErrorCodes.CONFLICT,
-                            "Cannot revoke admin role from the last administrator",
-                            "userId" to error.userId.toString()
-                        )
-                    else ->
-                        apiError(CommonApiErrorCodes.INTERNAL, "Unexpected error: $error")
+            val result = either {
+                requirePermission(authorizationService, requestingUserId, CommonPermissions.MANAGE_USERS)
+                withError({ e: RevokeRoleError -> e.toApiError() }) {
+                    userService.revokeRoleFromUser(
+                        resource.parent.parent.userId,
+                        resource.roleId
+                    ).bind()
                 }
             }
+            call.respondEither(result, HttpStatusCode.NoContent)
         }
 
         // PUT /api/v1/users/{userId}/password - Change user password
@@ -213,24 +127,13 @@ fun Route.configureUserRoutes(
             val requestingUserId = call.getUserId()
             val request = call.receive<ChangePasswordRequest>()
 
-            call.respondEither(
-                authorizationService.requirePermission(requestingUserId, CommonPermissions.MANAGE_USERS)
-                    .flatMap {
-                        userService.changePassword(resource.parent.userId, request.newPassword)
-                    },
-                HttpStatusCode.NoContent
-            ) { error ->
-                when (error) {
-                    is AuthorizationError.PermissionDenied ->
-                        apiError(CommonApiErrorCodes.PERMISSION_DENIED, "Admin access required")
-                    is ChangePasswordError.UserNotFound ->
-                        apiError(CommonApiErrorCodes.NOT_FOUND, "User not found", "userId" to error.userId.toString())
-                    is ChangePasswordError.InvalidPassword ->
-                        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, error.reason)
-                    else ->
-                        apiError(CommonApiErrorCodes.INTERNAL, "Unexpected error: $error")
+            val result = either {
+                requirePermission(authorizationService, requestingUserId, CommonPermissions.MANAGE_USERS)
+                withError({ e: ChangePasswordError -> e.toApiError() }) {
+                    userService.changePassword(resource.parent.userId, request.newPassword).bind()
                 }
             }
+            call.respondEither(result, HttpStatusCode.NoContent)
         }
     }
 }

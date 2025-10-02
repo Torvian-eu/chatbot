@@ -189,7 +189,7 @@ class AuthorizationServiceImpl(
             val authorizer = authorizers[resourceType]
             ensure(authorizer != null) {
                 logger.warn("No authorizer for resource type: $resourceType")
-                ResourceAuthorizationError.PermissionDenied("No authorizer for type")
+                ResourceAuthorizationError.UnsupportedResourceType(resourceType)
             }
 
             // Map any ResourceAuthorizerError into ResourceAuthorizationError
@@ -200,7 +200,12 @@ class AuthorizationServiceImpl(
                         resourceId
                     )
 
-                    is ResourceAuthorizerError.AccessDenied -> ResourceAuthorizationError.PermissionDenied(rae.reason)
+                    is ResourceAuthorizerError.AccessDenied -> ResourceAuthorizationError.AccessDenied(
+                        userId,
+                        resourceType,
+                        resourceId,
+                        accessMode
+                    )
                 }
             }) {
                 authorizer.requireAccess(userId, resourceId, accessMode).bind()

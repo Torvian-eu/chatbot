@@ -1,5 +1,7 @@
 package eu.torvian.chatbot.server.service.core.error.session
 
+import eu.torvian.chatbot.common.api.*
+
 /**
  * Represents possible errors during the creation of a chat session.
  */
@@ -13,4 +15,18 @@ sealed interface CreateSessionError {
      * Maps from SessionError.ForeignKeyViolation in the DAO layer.
      */
     data class InvalidRelatedEntity(val message: String) : CreateSessionError
+}
+
+fun CreateSessionError.toApiError(): ApiError = when (this) {
+    is CreateSessionError.InvalidName -> apiError(
+        CommonApiErrorCodes.INVALID_ARGUMENT,
+        "Invalid session name provided",
+        "reason" to reason
+    )
+
+    is CreateSessionError.InvalidRelatedEntity -> apiError(
+        CommonApiErrorCodes.INVALID_ARGUMENT,
+        "Invalid related entity ID provided",
+        "details" to message
+    )
 }

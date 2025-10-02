@@ -211,7 +211,7 @@ class UserRoutesTest {
         assertEquals(HttpStatusCode.Forbidden, response.status)
         val error = response.body<ApiError>()
         assertEquals(CommonApiErrorCodes.PERMISSION_DENIED.code, error.code)
-        assertEquals("Admin access required", error.message)
+        assertEquals("Permission denied", error.message)
     }
 
     @Test

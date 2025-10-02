@@ -1,5 +1,9 @@
 package eu.torvian.chatbot.server.service.core.error.auth
 
+import eu.torvian.chatbot.common.api.ApiError
+import eu.torvian.chatbot.common.api.CommonApiErrorCodes
+import eu.torvian.chatbot.common.api.apiError
+
 /**
  * Sealed interface representing errors that can occur during user profile updates.
  */
@@ -33,3 +37,19 @@ sealed interface UpdateUserError {
     data class InvalidInput(val reason: String) : UpdateUserError
 }
 
+/**
+ * Extension function to convert UpdateUserError to ApiError for HTTP responses.
+ */
+fun UpdateUserError.toApiError(): ApiError = when (this) {
+    is UpdateUserError.UserNotFound ->
+        apiError(CommonApiErrorCodes.NOT_FOUND, "User not found", "userId" to userId.toString())
+
+    is UpdateUserError.UsernameAlreadyExists ->
+        apiError(CommonApiErrorCodes.ALREADY_EXISTS, "Username already exists", "username" to username)
+
+    is UpdateUserError.EmailAlreadyExists ->
+        apiError(CommonApiErrorCodes.ALREADY_EXISTS, "Email already exists", "email" to email)
+
+    is UpdateUserError.InvalidInput ->
+        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, reason)
+}

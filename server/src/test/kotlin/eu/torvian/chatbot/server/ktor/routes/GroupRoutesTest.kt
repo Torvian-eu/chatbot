@@ -216,9 +216,9 @@ class GroupRoutesTest {
         val error = response.body<ApiError>()
         assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
         assertEquals(404, error.statusCode)
-        assertEquals("Group not found", error.message)
-        assert(error.details?.containsKey("groupId") == true)
-        assertEquals(nonExistentId.toString(), error.details?.get("groupId"))
+        assertEquals("Resource not found", error.message)
+        assert(error.details?.containsKey("id") == true)
+        assertEquals(nonExistentId.toString(), error.details?.get("id"))
     }
 
     @Test
@@ -285,9 +285,9 @@ class GroupRoutesTest {
         val error = response.body<ApiError>()
         assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
         assertEquals(404, error.statusCode)
-        assertEquals("Group not found", error.message)
-        assert(error.details?.containsKey("groupId") == true)
-        assertEquals(nonExistentId.toString(), error.details?.get("groupId"))
+        assertEquals("Resource not found", error.message)
+        assert(error.details?.containsKey("id") == true)
+        assertEquals(nonExistentId.toString(), error.details?.get("id"))
     }
 
     @Test

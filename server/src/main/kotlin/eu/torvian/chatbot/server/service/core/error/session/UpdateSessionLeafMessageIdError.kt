@@ -1,4 +1,7 @@
 package eu.torvian.chatbot.server.service.core.error.session
+
+import eu.torvian.chatbot.common.api.*
+
 /**
  * Represents possible errors when updating a chat session's current leaf message ID.
  */
@@ -13,4 +16,18 @@ sealed interface UpdateSessionLeafMessageIdError {
      * Maps from SessionError.ForeignKeyViolation in the DAO layer.
      */
     data class InvalidRelatedEntity(val message: String) : UpdateSessionLeafMessageIdError
+}
+
+fun UpdateSessionLeafMessageIdError.toApiError(): ApiError = when (this) {
+    is UpdateSessionLeafMessageIdError.SessionNotFound -> apiError(
+        CommonApiErrorCodes.NOT_FOUND,
+        "Session not found",
+        "sessionId" to id.toString()
+    )
+
+    is UpdateSessionLeafMessageIdError.InvalidRelatedEntity -> apiError(
+        CommonApiErrorCodes.INVALID_ARGUMENT,
+        "Invalid leaf message ID provided",
+        "leafMessageId" to message
+    )
 }

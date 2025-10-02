@@ -1,5 +1,9 @@
 package eu.torvian.chatbot.server.service.core.error.auth
 
+import eu.torvian.chatbot.common.api.ApiError
+import eu.torvian.chatbot.common.api.CommonApiErrorCodes
+import eu.torvian.chatbot.common.api.apiError
+
 /**
  * Sealed interface representing errors when a user cannot be found.
  */
@@ -17,4 +21,12 @@ sealed interface UserNotFoundError {
      * @property username The username that was not found
      */
     data class ByUsername(val username: String) : UserNotFoundError
+}
+
+fun UserNotFoundError.toApiError(): ApiError = when (this) {
+    is UserNotFoundError.ById ->
+        apiError(CommonApiErrorCodes.NOT_FOUND, "User not found", "userId" to id.toString())
+
+    is UserNotFoundError.ByUsername ->
+        apiError(CommonApiErrorCodes.NOT_FOUND, "User not found", "username" to username)
 }

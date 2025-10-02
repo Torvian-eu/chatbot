@@ -1,4 +1,7 @@
 package eu.torvian.chatbot.server.service.core.error.session
+
+import eu.torvian.chatbot.common.api.*
+
 /**
  * Represents possible errors when assigning or unassigning a session to/from a group.
  */
@@ -13,4 +16,18 @@ sealed interface UpdateSessionGroupIdError {
      * Maps from SessionError.ForeignKeyViolation in the DAO layer.
      */
     data class InvalidRelatedEntity(val message: String) : UpdateSessionGroupIdError
+}
+
+fun UpdateSessionGroupIdError.toApiError(): ApiError = when (this) {
+    is UpdateSessionGroupIdError.SessionNotFound -> apiError(
+        CommonApiErrorCodes.NOT_FOUND,
+        "Session not found",
+        "sessionId" to id.toString()
+    )
+
+    is UpdateSessionGroupIdError.InvalidRelatedEntity -> apiError(
+        CommonApiErrorCodes.INVALID_ARGUMENT,
+        "Invalid group ID provided",
+        "groupId" to message
+    )
 }

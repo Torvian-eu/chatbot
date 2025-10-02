@@ -50,9 +50,4 @@ sealed interface UpdateSessionCurrentModelAndSettingsIdError {
      * Indicates that the model exists but is deprecated (not active).
      */
     data class DeprecatedModel(val modelId: Long) : UpdateSessionCurrentModelAndSettingsIdError
-
-    /**
-     * Indicates that the user does not have permission to update this session.
-     */
-    data class AccessDenied(val message: String) : UpdateSessionCurrentModelAndSettingsIdError
 }
