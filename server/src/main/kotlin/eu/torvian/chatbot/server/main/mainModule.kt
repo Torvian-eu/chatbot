@@ -1,14 +1,13 @@
 package eu.torvian.chatbot.server.main
 
 import eu.torvian.chatbot.common.models.LLMProviderType
-import eu.torvian.chatbot.server.service.llm.ChatCompletionStrategy
 import eu.torvian.chatbot.server.service.llm.LLMApiClient
 import eu.torvian.chatbot.server.service.llm.LLMApiClientKtor
-import eu.torvian.chatbot.server.service.llm.strategy.OpenAIChatStrategy
 import eu.torvian.chatbot.server.service.llm.strategy.OllamaChatStrategy
+import eu.torvian.chatbot.server.service.llm.strategy.OpenAIChatStrategy
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
-import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
@@ -22,9 +21,6 @@ import org.koin.dsl.module
 fun mainModule(application: Application) = module {
     single { application }
     single<DataManager> { ExposedDataManager(get()) }
-
-    // --- External Services ---
-    single<LLMApiClient> { LLMApiClientKtor(get(), get()) }
 
     // --- JSON Serializer ---
     single<Json> {
@@ -49,13 +45,15 @@ fun mainModule(application: Application) = module {
     single<OpenAIChatStrategy> { OpenAIChatStrategy(get()) }
     single<OllamaChatStrategy> { OllamaChatStrategy(get()) }
 
-    single<Map<LLMProviderType, ChatCompletionStrategy>> {
-        mapOf(
+    // --- External Services ---
+    single<LLMApiClient> {
+        val strategies = mapOf(
             LLMProviderType.OPENAI to get<OpenAIChatStrategy>(),
             LLMProviderType.OPENROUTER to get<OpenAIChatStrategy>(), // OpenRouter uses OpenAI-compatible API
             LLMProviderType.OLLAMA to get<OllamaChatStrategy>(),
             // Add other strategies here as they are implemented
             // LLMProviderType.ANTHROPIC to get<AnthropicChatStrategy>(),
         )
+        LLMApiClientKtor(get(), strategies)
     }
 }

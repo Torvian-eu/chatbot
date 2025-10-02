@@ -42,10 +42,9 @@ fun serviceModule() = module {
     // --- Authorizers (resource-level access) ---
     single<ResourceAuthorizer>(named(ResourceType.GROUP.key)) { GroupResourceAuthorizer(get()) }
     single<ResourceAuthorizer>(named(ResourceType.SESSION.key)) { SessionResourceAuthorizer(get()) }
-    single<Map<ResourceType, ResourceAuthorizer>> { getAll<ResourceAuthorizer>().associateBy { it.resourceType } }
 
     // --- Authorization Services ---
-    single<AuthorizationService> { AuthorizationServiceImpl(get(), get(), get(), get()) }
+    single<AuthorizationService> { AuthorizationServiceImpl(getAll<ResourceAuthorizer>().associateBy { it.resourceType }, get(), get(), get()) }
 
     // --- Setup Services ---
     single<InitialSetupService> { InitialSetupService(get(), get()) }
