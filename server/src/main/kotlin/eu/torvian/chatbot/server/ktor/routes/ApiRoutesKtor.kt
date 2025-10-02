@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.ktor.routes
 
 import eu.torvian.chatbot.server.service.core.*
 import eu.torvian.chatbot.server.service.security.AuthenticationService
+import eu.torvian.chatbot.server.service.security.AuthorizationService
 import io.ktor.server.routing.*
 
 /**
@@ -16,7 +17,8 @@ class ApiRoutesKtor(
     private val modelSettingsService: ModelSettingsService,
     private val messageService: MessageService,
     private val authenticationService: AuthenticationService,
-    private val userService: UserService
+    private val userService: UserService,
+    private val authorizationService: AuthorizationService
 ) {
     /**
      * Configures the API routes using the Ktor Resources plugin.
@@ -24,6 +26,7 @@ class ApiRoutesKtor(
      */
     fun configureAllRoutes(route: Route) {
         configureAuthRoutes(route)
+        configureUserRoutes(route)
         configureSessionRoutes(route)
         configureGroupRoutes(route)
         configureProviderRoutes(route)
@@ -40,17 +43,24 @@ class ApiRoutesKtor(
     }
 
     /**
+     * Configures routes related to User Management (/api/v1/users).
+     */
+    fun configureUserRoutes(route: Route) {
+        route.configureUserRoutes(userService, authorizationService)
+    }
+
+    /**
      * Configures routes related to Sessions (/api/v1/sessions).
      */
     fun configureSessionRoutes(route: Route) {
-        route.configureSessionRoutes(sessionService, messageService)
+        route.configureSessionRoutes(sessionService, messageService, authorizationService)
     }
 
     /**
      * Configures routes related to Groups (/api/v1/groups).
      */
     fun configureGroupRoutes(route: Route) {
-        route.configureGroupRoutes(groupService)
+        route.configureGroupRoutes(groupService, authorizationService)
     }
 
     /**
@@ -78,6 +88,6 @@ class ApiRoutesKtor(
      * Configures routes related to Messages (/api/v1/messages)
      */
     fun configureMessageRoutes(route: Route) {
-        route.configureMessageRoutes(messageService)
+        route.configureMessageRoutes(messageService, authorizationService)
     }
 }

@@ -1,9 +1,15 @@
 package eu.torvian.chatbot.server.service.core
 
 import arrow.core.Either
+import eu.torvian.chatbot.common.models.Role
 import eu.torvian.chatbot.common.models.User
+import eu.torvian.chatbot.server.service.core.error.auth.AssignRoleError
+import eu.torvian.chatbot.server.service.core.error.auth.ChangePasswordError
+import eu.torvian.chatbot.server.service.core.error.auth.DeleteUserError
 import eu.torvian.chatbot.server.service.core.error.auth.RegisterUserError
+import eu.torvian.chatbot.server.service.core.error.auth.RevokeRoleError
 import eu.torvian.chatbot.server.service.core.error.auth.UserNotFoundError
+import eu.torvian.chatbot.server.service.core.error.auth.UpdateUserError
 
 /**
  * Service interface for user management operations.
@@ -65,4 +71,72 @@ interface UserService {
      * @return List of all [User] objects; empty list if no users exist
      */
     suspend fun getAllUsers(): List<User>
+
+    // --- Admin Operations ---
+
+    /**
+     * Updates a user's profile information (admin only). Does NOT update password (use changePassword for that).
+     *
+     * @param userId The ID of the user to update
+     * @param username New username (must be unique if changed)
+     * @param email New email (must be unique if provided)
+     * @return Either [UpdateUserError] if update fails, or the updated [User]
+     */
+    suspend fun updateUser(
+        userId: Long,
+        username: String,
+        email: String?
+    ): Either<UpdateUserError, User>
+
+    /**
+     * Deletes a user account (admin only). Cannot delete the last administrator in the system.
+     *
+     * @param userId The ID of the user to delete
+     * @return Either [DeleteUserError] if deletion fails, or Unit on success
+     */
+    suspend fun deleteUser(userId: Long): Either<DeleteUserError, Unit>
+
+    /**
+     * Assigns a role to a user (admin only).
+     *
+     * @param userId The ID of the user
+     * @param roleId The ID of the role to assign
+     * @return Either [AssignRoleError] if assignment fails, or Unit on success
+     */
+    suspend fun assignRoleToUser(
+        userId: Long,
+        roleId: Long
+    ): Either<AssignRoleError, Unit>
+
+    /**
+     * Revokes a role from a user (admin only). Cannot revoke admin role from the last administrator.
+     *
+     * @param userId The ID of the user
+     * @param roleId The ID of the role to revoke
+     * @return Either [RevokeRoleError] if revocation fails, or Unit on success
+     */
+    suspend fun revokeRoleFromUser(
+        userId: Long,
+        roleId: Long
+    ): Either<RevokeRoleError, Unit>
+
+    /**
+     * Retrieves all roles assigned to a user.
+     *
+     * @param userId The ID of the user
+     * @return List of [Role] objects assigned to the user; empty list if none
+     */
+    suspend fun getUserRoles(userId: Long): List<Role>
+
+    /**
+     * Changes a user's password (can be used by admin or user themselves).
+     *
+     * @param userId The ID of the user
+     * @param newPassword The new plaintext password (will be hashed)
+     * @return Either [ChangePasswordError] if change fails, or Unit on success
+     */
+    suspend fun changePassword(
+        userId: Long,
+        newPassword: String
+    ): Either<ChangePasswordError, Unit>
 }

@@ -28,23 +28,19 @@ interface GroupService {
     suspend fun createGroup(userId: Long, name: String): Either<CreateGroupError, ChatGroup>
 
     /**
-     * Renames an existing chat group.
-     * Verifies that the user owns the group before renaming.
-     * @param userId The ID of the user requesting the rename.
+     * Renames an existing chat group. Authorization (ownership or grants) must be enforced by the caller.
      * @param id The ID of the group to rename.
      * @param newName The new name for the group. Must not be blank.
-     * @return Either a [RenameGroupError] if the group is not found, access is denied, or the new name is invalid,
+     * @return Either a [RenameGroupError] if the group is not found or the new name is invalid,
      *         or Unit if successful.
      */
-    suspend fun renameGroup(userId: Long, id: Long, newName: String): Either<RenameGroupError, Unit>
+    suspend fun renameGroup(id: Long, newName: String): Either<RenameGroupError, Unit>
 
     /**
-     * Deletes a chat group by ID.
-     * Verifies that the user owns the group before deleting.
+     * Deletes a chat group by ID. Authorization (ownership or grants) must be enforced by the caller.
      * Sessions previously assigned to this group will become ungrouped.
-     * @param userId The ID of the user requesting the deletion.
      * @param id The ID of the group to delete.
-     * @return Either a [DeleteGroupError] if the group doesn't exist or access is denied, or Unit if successful.
+     * @return Either a [DeleteGroupError] if the group doesn't exist, or Unit if successful.
      */
-    suspend fun deleteGroup(userId: Long, id: Long): Either<DeleteGroupError, Unit>
+    suspend fun deleteGroup(id: Long): Either<DeleteGroupError, Unit>
 }

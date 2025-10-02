@@ -1,5 +1,9 @@
 package eu.torvian.chatbot.server.service.core.error.session
 
+import eu.torvian.chatbot.common.api.ApiError
+import eu.torvian.chatbot.common.api.CommonApiErrorCodes
+import eu.torvian.chatbot.common.api.apiError
+
 /**
  * Represents possible errors when deleting a chat session.
  */
@@ -9,9 +13,12 @@ sealed interface DeleteSessionError {
      * Maps from SessionError.SessionNotFound in the DAO layer.
      */
     data class SessionNotFound(val id: Long) : DeleteSessionError
+}
 
-    /**
-     * Indicates that the user does not have access to delete the requested session.
-     */
-    data class AccessDenied(val reason: String) : DeleteSessionError
+fun DeleteSessionError.toApiError(): ApiError = when (this) {
+    is DeleteSessionError.SessionNotFound -> apiError(
+        CommonApiErrorCodes.NOT_FOUND,
+        "Session not found",
+        "sessionId" to id.toString()
+    )
 }

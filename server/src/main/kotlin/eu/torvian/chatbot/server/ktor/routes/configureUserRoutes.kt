@@ -1,0 +1,139 @@
+package eu.torvian.chatbot.server.ktor.routes
+
+import arrow.core.raise.either
+import arrow.core.raise.withError
+import eu.torvian.chatbot.common.api.CommonPermissions
+import eu.torvian.chatbot.common.api.resources.UserResource
+import eu.torvian.chatbot.common.models.admin.AssignRoleRequest
+import eu.torvian.chatbot.common.models.admin.ChangePasswordRequest
+import eu.torvian.chatbot.common.models.admin.UpdateUserRequest
+import eu.torvian.chatbot.server.domain.security.AuthSchemes
+import eu.torvian.chatbot.server.ktor.auth.getUserId
+import eu.torvian.chatbot.server.service.core.UserService
+import eu.torvian.chatbot.server.service.core.error.auth.*
+import eu.torvian.chatbot.server.service.security.AuthorizationService
+import io.ktor.http.*
+import io.ktor.server.auth.*
+import io.ktor.server.request.*
+import io.ktor.server.resources.*
+import io.ktor.server.resources.post
+import io.ktor.server.resources.put
+import io.ktor.server.routing.*
+
+/**
+ * Configures routes related to User Management (/api/v1/users) using Ktor Resources.
+ *
+ * All routes require authentication and admin permissions.
+ */
+fun Route.configureUserRoutes(
+    userService: UserService,
+    authorizationService: AuthorizationService
+) {
+    authenticate(AuthSchemes.USER_JWT) {
+        // GET /api/v1/users - List all users
+        get<UserResource> {
+            val requestingUserId = call.getUserId()
+
+            val result = either {
+                requirePermission(authorizationService, requestingUserId, CommonPermissions.MANAGE_USERS)
+                userService.getAllUsers()
+            }
+            call.respondEither(result)
+        }
+
+        // GET /api/v1/users/{userId} - Get user by ID
+        get<UserResource.ById> { resource ->
+            val requestingUserId = call.getUserId()
+
+            val result = either {
+                requirePermission(authorizationService, requestingUserId, CommonPermissions.MANAGE_USERS)
+                withError({ e: UserNotFoundError -> e.toApiError() }) {
+                    userService.getUserById(resource.userId).bind()
+                }
+            }
+            call.respondEither(result)
+        }
+
+        // PUT /api/v1/users/{userId} - Update user profile
+        put<UserResource.ById> { resource ->
+            val requestingUserId = call.getUserId()
+            val request = call.receive<UpdateUserRequest>()
+
+            val result = either {
+                requirePermission(authorizationService, requestingUserId, CommonPermissions.MANAGE_USERS)
+                withError({ e: UpdateUserError -> e.toApiError() }) {
+                    userService.updateUser(resource.userId, request.username, request.email).bind()
+                }
+            }
+            call.respondEither(result)
+        }
+
+        // DELETE /api/v1/users/{userId} - Delete user
+        delete<UserResource.ById> { resource ->
+            val requestingUserId = call.getUserId()
+
+            val result = either {
+                requirePermission(authorizationService, requestingUserId, CommonPermissions.MANAGE_USERS)
+                withError({ e: DeleteUserError -> e.toApiError() }) {
+                    userService.deleteUser(resource.userId).bind()
+                }
+            }
+            call.respondEither(result, HttpStatusCode.NoContent)
+        }
+
+        // GET /api/v1/users/{userId}/roles - Get user's roles
+        get<UserResource.ById.Roles> { resource ->
+            val requestingUserId = call.getUserId()
+
+            val result = either {
+                requirePermission(authorizationService, requestingUserId, CommonPermissions.MANAGE_USERS)
+                userService.getUserRoles(resource.parent.userId)
+            }
+            call.respondEither(result)
+        }
+
+        // POST /api/v1/users/{userId}/roles - Assign role to user
+        post<UserResource.ById.Roles> { resource ->
+            val requestingUserId = call.getUserId()
+            val request = call.receive<AssignRoleRequest>()
+
+            val result = either {
+                requirePermission(authorizationService, requestingUserId, CommonPermissions.MANAGE_USERS)
+                withError({ e: AssignRoleError -> e.toApiError() }) {
+                    userService.assignRoleToUser(resource.parent.userId, request.roleId).bind()
+                }
+            }
+            call.respondEither(result, HttpStatusCode.NoContent)
+        }
+
+        // DELETE /api/v1/users/{userId}/roles/{roleId} - Revoke role from user
+        delete<UserResource.ById.Roles.ByRoleId> { resource ->
+            val requestingUserId = call.getUserId()
+
+            val result = either {
+                requirePermission(authorizationService, requestingUserId, CommonPermissions.MANAGE_USERS)
+                withError({ e: RevokeRoleError -> e.toApiError() }) {
+                    userService.revokeRoleFromUser(
+                        resource.parent.parent.userId,
+                        resource.roleId
+                    ).bind()
+                }
+            }
+            call.respondEither(result, HttpStatusCode.NoContent)
+        }
+
+        // PUT /api/v1/users/{userId}/password - Change user password
+        put<UserResource.ById.Password> { resource ->
+            val requestingUserId = call.getUserId()
+            val request = call.receive<ChangePasswordRequest>()
+
+            val result = either {
+                requirePermission(authorizationService, requestingUserId, CommonPermissions.MANAGE_USERS)
+                withError({ e: ChangePasswordError -> e.toApiError() }) {
+                    userService.changePassword(resource.parent.userId, request.newPassword).bind()
+                }
+            }
+            call.respondEither(result, HttpStatusCode.NoContent)
+        }
+    }
+}

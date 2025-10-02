@@ -4,7 +4,9 @@ import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.models.User
 import eu.torvian.chatbot.common.security.error.PasswordValidationError
+import eu.torvian.chatbot.server.data.dao.RoleDao
 import eu.torvian.chatbot.server.data.dao.UserDao
+import eu.torvian.chatbot.server.data.dao.UserRoleAssignmentDao
 import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.entities.UserEntity
 import eu.torvian.chatbot.server.service.core.error.auth.RegisterUserError
@@ -23,9 +25,11 @@ class UserServiceImplTest {
 
     private val userDao = mockk<UserDao>()
     private val passwordService = mockk<PasswordService>()
+    private val roleDao = mockk<RoleDao>()
+    private val userRoleAssignmentDao = mockk<UserRoleAssignmentDao>()
     private val transactionScope = mockk<TransactionScope>()
 
-    private val userService = UserServiceImpl(userDao, passwordService, transactionScope)
+    private val userService = UserServiceImpl(userDao, passwordService, roleDao, userRoleAssignmentDao, transactionScope)
 
     private val testUserEntity = UserEntity(
         id = 1L,
@@ -47,7 +51,7 @@ class UserServiceImplTest {
 
     @BeforeEach
     fun setUp() {
-        clearMocks(userDao, passwordService, transactionScope)
+        clearMocks(userDao, passwordService, transactionScope, roleDao, userRoleAssignmentDao)
 
         coEvery { transactionScope.transaction<Any>(any()) } coAnswers {
             val block = firstArg<suspend () -> Any>()

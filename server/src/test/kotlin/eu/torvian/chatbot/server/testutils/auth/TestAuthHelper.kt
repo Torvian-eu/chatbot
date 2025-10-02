@@ -43,6 +43,8 @@ class TestAuthHelper(private val container: DIContainer) {
         createdAt = TestDefaults.DEFAULT_INSTANT,
         lastAccessed = TestDefaults.DEFAULT_INSTANT
     )
+
+    val securePassword = "Gdsdw35!dfg"
     
     /**
      * Creates a test user and session, then returns a valid JWT token.
@@ -61,6 +63,30 @@ class TestAuthHelper(private val container: DIContainer) {
         
         // Generate JWT token
         return jwtConfig.generateAccessToken(user.id, session.id)
+    }
+
+    /**
+     * Creates a test session for an existing user, then returns a valid JWT token.
+     *
+     * @param userId The user ID to create the session for
+     * @param sessionId The session ID to create
+     * @return A valid JWT access token for the user
+     */
+    suspend fun createSessionAndGetToken(
+        userId: Long = defaultTestUser.id,
+        sessionId: Long = 1L
+    ): String {
+        // Insert test session
+        testDataManager.insertUserSession(UserSessionEntity(
+            id = sessionId,
+            userId = userId,
+            expiresAt = Instant.fromEpochMilliseconds(System.currentTimeMillis() + (24 * 60 * 60 * 1000)), // 24 hours from now
+            createdAt = TestDefaults.DEFAULT_INSTANT,
+            lastAccessed = TestDefaults.DEFAULT_INSTANT
+        ))
+
+        // Generate JWT token
+        return jwtConfig.generateAccessToken(userId, sessionId)
     }
     
     /**

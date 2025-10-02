@@ -1,5 +1,7 @@
 package eu.torvian.chatbot.server.service.core.error.message
 
+import eu.torvian.chatbot.common.api.*
+
 /**
  * Represents possible errors when updating the content of a message.
  */
@@ -9,9 +11,12 @@ sealed interface UpdateMessageContentError {
      * Maps from MessageError.MessageNotFound in the DAO layer.
      */
     data class MessageNotFound(val id: Long) : UpdateMessageContentError
+}
 
-    /**
-     * Indicates that the user does not have permission to update this message.
-     */
-    data class AccessDenied(val reason: String) : UpdateMessageContentError
+fun UpdateMessageContentError.toApiError(): ApiError = when (this) {
+    is UpdateMessageContentError.MessageNotFound -> apiError(
+        CommonApiErrorCodes.NOT_FOUND,
+        "Message not found",
+        "messageId" to id.toString()
+    )
 }

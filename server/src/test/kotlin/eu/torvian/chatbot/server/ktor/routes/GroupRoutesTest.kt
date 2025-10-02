@@ -69,7 +69,15 @@ class GroupRoutesTest {
         )
 
         testDataManager = container.get()
-        testDataManager.createTables(setOf(Table.CHAT_GROUPS, Table.CHAT_SESSIONS, Table.USERS, Table.USER_SESSIONS, Table.CHAT_GROUP_OWNERS))
+        testDataManager.createTables(
+            setOf(
+                Table.CHAT_GROUPS,
+                Table.CHAT_SESSIONS,
+                Table.USERS,
+                Table.USER_SESSIONS,
+                Table.CHAT_GROUP_OWNERS
+            )
+        )
 
         // Set up authentication
         authHelper = TestAuthHelper(container)
@@ -208,9 +216,30 @@ class GroupRoutesTest {
         val error = response.body<ApiError>()
         assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
         assertEquals(404, error.statusCode)
-        assertEquals("Group not found", error.message)
-        assert(error.details?.containsKey("groupId") == true)
-        assertEquals(nonExistentId.toString(), error.details?.get("groupId"))
+        assertEquals("Resource not found", error.message)
+        assert(error.details?.containsKey("id") == true)
+        assertEquals(nonExistentId.toString(), error.details?.get("id"))
+    }
+
+    @Test
+    fun `DELETE group as non-owner should return 403`() = groupTestApplication {
+        // Arrange: Insert group owned by another user
+        val otherUser = authHelper.createTestUser(id = 999L, email = "otheruser@example.com", username = "otheruser")
+        testDataManager.insertUser(otherUser)
+        testDataManager.insertChatGroup(testGroup1)
+        testDataManager.insertGroupOwnership(testGroup1.id, otherUser.id)
+
+        // Act: Try to delete as default test user
+        val response = client.delete(href(GroupResource.ById(groupId = testGroup1.id))) {
+            authenticate(authToken)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.Forbidden, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.PERMISSION_DENIED.code, error.code)
+        assertEquals(403, error.statusCode)
+        assertEquals("Access denied", error.message)
     }
 
     // --- PUT /api/v1/groups/{groupId} Tests ---
@@ -256,9 +285,9 @@ class GroupRoutesTest {
         val error = response.body<ApiError>()
         assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
         assertEquals(404, error.statusCode)
-        assertEquals("Group not found", error.message)
-        assert(error.details?.containsKey("groupId") == true)
-        assertEquals(nonExistentId.toString(), error.details?.get("groupId"))
+        assertEquals("Resource not found", error.message)
+        assert(error.details?.containsKey("id") == true)
+        assertEquals(nonExistentId.toString(), error.details?.get("id"))
     }
 
     @Test
@@ -309,5 +338,29 @@ class GroupRoutesTest {
         assertEquals("Invalid group name", error.message)
         assert(error.details?.containsKey("reason") == true)
         assertEquals("New group name cannot be blank.", error.details?.get("reason"))
+    }
+
+    @Test
+    fun `PUT group as non-owner should return 403`() = groupTestApplication {
+        // Arrange: Insert group owned by another user
+        val otherUser = authHelper.createTestUser(id = 999L, email = "otheruser@example.com", username = "otheruser")
+        testDataManager.insertUser(otherUser)
+        testDataManager.insertChatGroup(testGroup1)
+        testDataManager.insertGroupOwnership(testGroup1.id, otherUser.id)
+        val renameRequest = RenameGroupRequest(name = "Should Not Work")
+
+        // Act: Try to rename as default test user
+        val response = client.put(href(GroupResource.ById(groupId = testGroup1.id))) {
+            contentType(ContentType.Application.Json)
+            setBody<RenameGroupRequest>(renameRequest)
+            authenticate(authToken)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.Forbidden, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.PERMISSION_DENIED.code, error.code)
+        assertEquals(403, error.statusCode)
+        assertEquals("Access denied", error.message)
     }
 }

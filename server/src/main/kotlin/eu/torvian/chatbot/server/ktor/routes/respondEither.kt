@@ -2,8 +2,6 @@ package eu.torvian.chatbot.server.ktor.routes
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.api.ApiError
-import eu.torvian.chatbot.common.api.CommonApiErrorCodes
-import eu.torvian.chatbot.common.api.apiError
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.response.*
@@ -21,8 +19,7 @@ import io.ktor.server.response.*
 suspend inline fun <reified R : Any, reified L : Any> ApplicationCall.respondEither(
     either: Either<L, R>,
     successCode: HttpStatusCode = HttpStatusCode.OK,
-    noinline errorMapping: (L) -> ApiError =
-        { error -> apiError(CommonApiErrorCodes.INTERNAL, "An unexpected error occurred: $error") }
+    noinline errorMapping: (L) -> ApiError
 ) {
     when (either) {
         is Either.Right -> respond(successCode, either.value)
@@ -31,5 +28,15 @@ suspend inline fun <reified R : Any, reified L : Any> ApplicationCall.respondEit
             val status = HttpStatusCode.fromValue(apiError.statusCode)
             respond(status, apiError)
         }
+    }
+}
+
+suspend inline fun <reified R : Any> ApplicationCall.respondEither(
+    either: Either<ApiError, R>,
+    successCode: HttpStatusCode = HttpStatusCode.OK
+) {
+    when (either) {
+        is Either.Right -> respond(successCode, either.value)
+        is Either.Left -> respond(HttpStatusCode.fromValue(either.value.statusCode), either.value)
     }
 }

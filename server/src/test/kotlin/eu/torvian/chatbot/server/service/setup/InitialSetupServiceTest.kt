@@ -1,19 +1,25 @@
 package eu.torvian.chatbot.server.service.setup
 
+import eu.torvian.chatbot.common.api.CommonRoles
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.server.data.dao.UserDao
-import eu.torvian.chatbot.server.data.dao.UserGroupDao
-import eu.torvian.chatbot.server.data.tables.*
+import eu.torvian.chatbot.server.data.tables.PermissionsTable
+import eu.torvian.chatbot.server.data.tables.RolesTable
+import eu.torvian.chatbot.server.data.tables.UserRoleAssignmentsTable
 import eu.torvian.chatbot.server.testutils.data.Table
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
 import eu.torvian.chatbot.server.testutils.koin.defaultTestContainer
+import eu.torvian.chatbot.server.utils.transactions.TransactionScope
 import kotlinx.coroutines.test.runTest
 import org.jetbrains.exposed.sql.selectAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import kotlin.test.*
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 /**
  * Tests for [InitialSetupService].
@@ -41,15 +47,17 @@ class InitialSetupServiceTest {
         testDataManager = container.get()
 
         // Create all necessary tables for user management
-        testDataManager.createTables(setOf(
-            Table.USERS,
-            Table.ROLES,
-            Table.PERMISSIONS,
-            Table.ROLE_PERMISSIONS,
-            Table.USER_ROLE_ASSIGNMENTS,
-            Table.USER_GROUPS,
-            Table.USER_GROUP_MEMBERSHIPS
-        ))
+        testDataManager.createTables(
+            setOf(
+                Table.USERS,
+                Table.ROLES,
+                Table.PERMISSIONS,
+                Table.ROLE_PERMISSIONS,
+                Table.USER_ROLE_ASSIGNMENTS,
+                Table.USER_GROUPS,
+                Table.USER_GROUP_MEMBERSHIPS
+            )
+        )
     }
 
     @AfterEach
@@ -77,7 +85,7 @@ class InitialSetupServiceTest {
     @Test
     fun `performInitialSetup should create admin user successfully`() = runTest {
         val result = initialSetupService.performInitialSetup()
-        
+
         assertTrue(result.isRight(), "Expected successful initial setup")
         val adminUser = result.getOrNull()
         assertNotNull(adminUser, "Expected non-null admin user")
@@ -93,15 +101,15 @@ class InitialSetupServiceTest {
         assertTrue(result.isRight(), "Expected successful initial setup")
 
         // Verify roles were created
-        val transactionScope = container.get<eu.torvian.chatbot.server.utils.transactions.TransactionScope>()
+        val transactionScope = container.get<TransactionScope>()
         val roles = transactionScope.transaction {
             RolesTable.selectAll().toList()
         }
-        
+
         assertTrue(roles.size >= 2, "Expected at least 2 roles to be created")
         val roleNames = roles.map { it[RolesTable.name] }
-        assertTrue(roleNames.contains(InitialSetupService.ADMIN_ROLE_NAME), "Expected Admin role to be created")
-        assertTrue(roleNames.contains(InitialSetupService.STANDARD_USER_ROLE_NAME), "Expected StandardUser role to be created")
+        assertTrue(roleNames.contains(CommonRoles.ADMIN), "Expected Admin role to be created")
+        assertTrue(roleNames.contains(CommonRoles.STANDARD_USER), "Expected StandardUser role to be created")
     }
 
     @Test
@@ -110,11 +118,11 @@ class InitialSetupServiceTest {
         assertTrue(result.isRight(), "Expected successful initial setup")
 
         // Verify permissions were created
-        val transactionScope = container.get<eu.torvian.chatbot.server.utils.transactions.TransactionScope>()
+        val transactionScope = container.get<TransactionScope>()
         val permissions = transactionScope.transaction {
             PermissionsTable.selectAll().toList()
         }
-        
+
         assertTrue(permissions.isNotEmpty(), "Expected permissions to be created")
         val permissionActions = permissions.map { it[PermissionsTable.action] }
         assertTrue(permissionActions.contains("manage"), "Expected 'manage' permission to be created")
@@ -128,24 +136,24 @@ class InitialSetupServiceTest {
         val adminUser = result.getOrNull()!!
 
         // Verify admin user has admin role
-        val transactionScope = container.get<eu.torvian.chatbot.server.utils.transactions.TransactionScope>()
+        val transactionScope = container.get<TransactionScope>()
         val userRoleAssignments = transactionScope.transaction {
             UserRoleAssignmentsTable.selectAll()
                 .where { UserRoleAssignmentsTable.userId eq adminUser.id }
                 .toList()
         }
-        
+
         assertTrue(userRoleAssignments.isNotEmpty(), "Expected admin user to have role assignments")
-        
+
         // Check if admin user has the admin role
         val adminRoleId = transactionScope.transaction {
             RolesTable.selectAll()
-                .where { RolesTable.name eq InitialSetupService.ADMIN_ROLE_NAME }
+                .where { RolesTable.name eq CommonRoles.ADMIN }
                 .single()[RolesTable.id].value
         }
-        
-        val hasAdminRole = userRoleAssignments.any { 
-            it[UserRoleAssignmentsTable.roleId].value == adminRoleId 
+
+        val hasAdminRole = userRoleAssignments.any {
+            it[UserRoleAssignmentsTable.roleId].value == adminRoleId
         }
         assertTrue(hasAdminRole, "Expected admin user to have admin role")
     }
@@ -173,8 +181,8 @@ class InitialSetupServiceTest {
         initialSetupService.performInitialSetup()
         initialSetupService.performInitialSetup()
 
-        val transactionScope = container.get<eu.torvian.chatbot.server.utils.transactions.TransactionScope>()
-        
+        val transactionScope = container.get<TransactionScope>()
+
         // Verify only one admin user exists
         val users = userDao.getAllUsers()
         assertEquals(1, users.size, "Expected exactly one user after repeated setup")
@@ -182,7 +190,7 @@ class InitialSetupServiceTest {
         // Verify roles are not duplicated
         val adminRoles = transactionScope.transaction {
             RolesTable.selectAll()
-                .where { RolesTable.name eq InitialSetupService.ADMIN_ROLE_NAME }
+                .where { RolesTable.name eq CommonRoles.ADMIN }
                 .count()
         }
         assertEquals(1, adminRoles, "Expected exactly one Admin role after repeated setup")

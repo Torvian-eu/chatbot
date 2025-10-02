@@ -79,6 +79,10 @@ common/src/commonMain/kotlin/eu/torvian/chatbot/common/
 │   ├── UpdateSessionNameRequest.kt # Request DTO for updating session name
 │   ├── UpdateSessionSettingsRequest.kt # Request DTO for updating session settings
 │   ├── User.kt                   # User account data model
+│   ├── admin/                    # Admin-specific models
+│   │   ├── AssignRoleRequest.kt        # Admin: assign role to user
+│   │   ├── ChangePasswordRequest.kt    # Admin: change user password
+│   │   └── UpdateUserRequest.kt        # Admin: update user details
 │   └── auth/                     # Authentication-related models
 │       ├── LoginRequest.kt       # Login request DTO
 │       ├── LoginResponse.kt      # Login response DTO
@@ -131,20 +135,28 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   │   ├── GroupOwnershipDao.kt  # Group ownership management interface
 │   │   ├── MessageDao.kt         # Message operations interface
 │   │   ├── ModelDao.kt           # Model management interface
+│   │   ├── PermissionDao.kt      # permissions CRUD
+│   │   ├── RoleDao.kt            # roles CRUD
+│   │   ├── RolePermissionDao.kt  # role-permission assignments
 │   │   ├── SessionDao.kt         # Session operations interface
 │   │   ├── SessionOwnershipDao.kt # Session ownership management interface
 │   │   ├── SettingsDao.kt        # Settings management interface
 │   │   ├── UserDao.kt            # User account management interface
 │   │   ├── UserGroupDao.kt       # User group management interface
+│   │   ├── UserRoleAssignmentDao.kt # User-role assignments
 │   │   ├── UserSessionDao.kt     # User session management interface
 │   │   ├── error/                # DAO-specific error types
 │   │   └── exposed/              # Exposed ORM implementations
 │   ├── entities/                 # Database entity mappings
 │   │   ├── ApiSecretEntity.kt    # API secret entity
 │   │   ├── ChatSessionEntity.kt  # Chat session entity
+│   │   ├── PermissionEntity.kt   # Permission entity
+│   │   ├── RoleEntity.kt         # Role entity
+│   │   ├── RolePermissionEntity.kt # Role-permission entity
 │   │   ├── SessionCurrentLeafEntity.kt # Session current leaf entity
 │   │   ├── UserEntity.kt         # User account entity
 │   │   ├── UserGroupEntity.kt    # User group entity
+│   │   ├── UserRoleAssignmentEntity.kt # User-role assignment entity
 │   │   └── UserSessionEntity.kt  # User session entity
 │   └── tables/                   # Exposed table definitions
 │       └── mappers/              # Entity mapping utilities
@@ -174,7 +186,8 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │       ├── configureModelRoutes.kt
 │       ├── configureProviderRoutes.kt
 │       ├── configureSessionRoutes.kt
-│       └── configureSettingsRoutes.kt
+│       ├── configureSettingsRoutes.kt
+│       └── configureUserRoutes.kt
 ├── main/
 │   ├── chatBotServerModule.kt    # Main Ktor application module for the chatbot server
 │   ├── DataManager.kt            # Interface for managing database schema
@@ -215,10 +228,12 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   │       └── OpenAIChatStrategy.kt # OpenAI chat completion strategy
 │   ├── security/                 # Security services
 │   │   ├── AuthenticationService.kt # Authentication service interface
+│   │   ├── AuthorizationService.kt # Authorization service interface
 │   │   ├── BCryptPasswordService.kt # BCrypt password service implementation
 │   │   ├── CredentialManager.kt  # Credential management interface
 │   │   ├── DbEncryptedCredentialManager.kt # Database-backed credential manager
 │   │   ├── PasswordService.kt    # Password service interface
+│   │   ├── ResourceType.kt       # Resource type enumeration
 │   │   └── error/                # Domain-specific error types
 │   └── setup/                    # Initial setup services
 │       └── InitialSetupService.kt # Service for initial database and user setup

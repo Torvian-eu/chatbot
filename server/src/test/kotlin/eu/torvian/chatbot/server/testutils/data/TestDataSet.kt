@@ -8,6 +8,11 @@ import eu.torvian.chatbot.common.models.ModelSettings
 import eu.torvian.chatbot.server.data.entities.ApiSecretEntity
 import eu.torvian.chatbot.server.data.entities.ChatSessionEntity
 import eu.torvian.chatbot.server.data.entities.SessionCurrentLeafEntity
+import eu.torvian.chatbot.server.data.entities.UserEntity
+import eu.torvian.chatbot.server.data.entities.RoleEntity
+import eu.torvian.chatbot.server.data.entities.PermissionEntity
+import eu.torvian.chatbot.server.data.entities.RolePermissionEntity
+import eu.torvian.chatbot.server.data.entities.UserRoleAssignmentEntity
 
 /**
  * A declarative container for domain objects to be inserted into the chatbot test database.
@@ -23,7 +28,9 @@ import eu.torvian.chatbot.server.data.entities.SessionCurrentLeafEntity
  * Example:
  * 
  * val dataSet = TestDataSet(
- *     apiSecrets = listOf(TestDefaults.apiSecret1, TestDefaults.apiSecret2)
+ *     apiSecrets = listOf(TestDefaults.apiSecret1, TestDefaults.apiSecret2),
+ *     users = listOf(TestDefaults.adminUser, TestDefaults.standardUser),
+ *     roles = listOf(TestDefaults.adminRole, TestDefaults.userRole)
  * )
  * ```
  *
@@ -35,6 +42,11 @@ import eu.torvian.chatbot.server.data.entities.SessionCurrentLeafEntity
  * @property llmModels List of LLM model entries to insert into the `llm_models` table.
  * @property modelSettings List of model settings entries to insert into the `model_settings` table.
  * @property sessionCurrentLeaves List of session current leaf entries to insert into the `session_current_leaf` table.
+ * @property users List of user entries to insert into the `users` table.
+ * @property roles List of role entries to insert into the `roles` table.
+ * @property permissions List of permission entries to insert into the `permissions` table.
+ * @property rolePermissions List of role permission mappings to insert into the `role_permissions` table.
+ * @property userRoleAssignments List of user role assignments to insert into the `user_role_assignments` table.
  */
 data class TestDataSet(
     val apiSecrets: List<ApiSecretEntity> = emptyList(),
@@ -44,5 +56,10 @@ data class TestDataSet(
     val chatMessages: List<ChatMessage> = emptyList(),
     val llmModels: List<LLMModel> = emptyList(),
     val modelSettings: List<ModelSettings> = emptyList(),
-    val sessionCurrentLeaves: List<SessionCurrentLeafEntity> = emptyList()
+    val sessionCurrentLeaves: List<SessionCurrentLeafEntity> = emptyList(),
+    val users: List<UserEntity> = emptyList(),
+    val roles: List<RoleEntity> = emptyList(),
+    val permissions: List<PermissionEntity> = emptyList(),
+    val rolePermissions: List<RolePermissionEntity> = emptyList(),
+    val userRoleAssignments: List<UserRoleAssignmentEntity> = emptyList()
 )

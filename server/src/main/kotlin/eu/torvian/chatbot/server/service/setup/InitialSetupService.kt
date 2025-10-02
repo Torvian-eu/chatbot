@@ -3,6 +3,9 @@ package eu.torvian.chatbot.server.service.setup
 import arrow.core.Either
 import arrow.core.raise.either
 import arrow.core.right
+import eu.torvian.chatbot.common.api.CommonPermissions
+import eu.torvian.chatbot.common.api.PermissionSpec
+import eu.torvian.chatbot.common.api.CommonRoles
 import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.entities.UserEntity
@@ -27,9 +30,6 @@ class InitialSetupService(
     private val transactionScope: TransactionScope
 ) {
     companion object {
-        const val ALL_USERS_GROUP_NAME = "All Users"
-        const val ADMIN_ROLE_NAME = "Admin"
-        const val STANDARD_USER_ROLE_NAME = "StandardUser"
         const val DEFAULT_ADMIN_USERNAME = "admin"
         const val DEFAULT_ADMIN_PASSWORD = "admin123" // Should be changed on first login
     }
@@ -50,8 +50,8 @@ class InitialSetupService(
                 }
 
                 // 1. Create basic roles
-                val adminRoleId = createRole(ADMIN_ROLE_NAME, "Administrator with full system access")
-                val standardUserRoleId = createRole(STANDARD_USER_ROLE_NAME, "Standard user with basic access")
+                val adminRoleId = createRole(CommonRoles.ADMIN, "Administrator with full system access")
+                val standardUserRoleId = createRole(CommonRoles.STANDARD_USER, "Standard user with basic access")
 
                 // 2. Create basic permissions and assign to roles
                 createBasicPermissions(adminRoleId, standardUserRoleId)
@@ -84,11 +84,11 @@ class InitialSetupService(
      * Creates basic permissions and assigns them to roles.
      */
     private fun createBasicPermissions(adminRoleId: Long, standardUserRoleId: Long) {
-        // Create permissions
-        val manageUsersPermId = createPermission("manage", "users")
-        val createPublicProviderPermId = createPermission("create", "public_provider")
-        val createPublicModelPermId = createPermission("create", "public_model")
-        val createPublicSettingsPermId = createPermission("create", "public_settings")
+        // Create permissions using predefined PermissionSpec instances
+        val manageUsersPermId = createPermission(CommonPermissions.MANAGE_USERS)
+        val createPublicProviderPermId = createPermission(CommonPermissions.CREATE_PUBLIC_PROVIDER)
+        val createPublicModelPermId = createPermission(CommonPermissions.CREATE_PUBLIC_MODEL)
+        val createPublicSettingsPermId = createPermission(CommonPermissions.CREATE_PUBLIC_SETTINGS)
 
         // Assign all permissions to admin role
         assignPermissionToRole(adminRoleId, manageUsersPermId)
@@ -103,10 +103,10 @@ class InitialSetupService(
     /**
      * Creates a permission with the given action and subject.
      */
-    private fun createPermission(action: String, subject: String): Long {
+    private fun createPermission(permission: PermissionSpec): Long {
         val insertStatement = PermissionsTable.insert {
-            it[PermissionsTable.action] = action
-            it[PermissionsTable.subject] = subject
+            it[PermissionsTable.action] = permission.action
+            it[PermissionsTable.subject] = permission.subject
         }
         return insertStatement[PermissionsTable.id].value
     }
