@@ -5,6 +5,7 @@ import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.entities.UserEntity
+import eu.torvian.chatbot.common.models.UserStatus
 import eu.torvian.chatbot.server.testutils.data.Table
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
 import eu.torvian.chatbot.server.testutils.data.TestDefaults
@@ -42,6 +43,7 @@ class UserDaoExposedTest {
         username = "testuser1",
         passwordHash = "hashedpassword1",
         email = "test1@example.com",
+        status = UserStatus.ACTIVE,
         createdAt = Instant.fromEpochMilliseconds(TestDefaults.DEFAULT_INSTANT_MILLIS),
         updatedAt = Instant.fromEpochMilliseconds(TestDefaults.DEFAULT_INSTANT_MILLIS),
         lastLogin = null
@@ -52,6 +54,7 @@ class UserDaoExposedTest {
         username = "testuser2",
         passwordHash = "hashedpassword2",
         email = "test2@example.com",
+        status = UserStatus.ACTIVE,
         createdAt = Instant.fromEpochMilliseconds(TestDefaults.DEFAULT_INSTANT_MILLIS),
         updatedAt = Instant.fromEpochMilliseconds(TestDefaults.DEFAULT_INSTANT_MILLIS),
         lastLogin = null
@@ -82,8 +85,8 @@ class UserDaoExposedTest {
     @Test
     fun `getAllUsers should return all users when users exist`() = runTest {
         // Insert test users
-        userDao.insertUser(testUser1.username, testUser1.passwordHash, testUser1.email)
-        userDao.insertUser(testUser2.username, testUser2.passwordHash, testUser2.email)
+        userDao.insertUser(testUser1.username, testUser1.passwordHash, testUser1.email, UserStatus.ACTIVE)
+        userDao.insertUser(testUser2.username, testUser2.passwordHash, testUser2.email, UserStatus.ACTIVE)
 
         // Get all users
         val users = userDao.getAllUsers()
@@ -97,7 +100,7 @@ class UserDaoExposedTest {
     @Test
     fun `getUserById should return user when it exists`() = runTest {
         // Insert a test user
-        val insertResult = userDao.insertUser(testUser1.username, testUser1.passwordHash, testUser1.email)
+        val insertResult = userDao.insertUser(testUser1.username, testUser1.passwordHash, testUser1.email, UserStatus.ACTIVE)
         assertTrue(insertResult.isRight(), "Failed to insert test user")
         val insertedUser = insertResult.getOrNull()!!
 
@@ -127,7 +130,7 @@ class UserDaoExposedTest {
     @Test
     fun `getUserByUsername should return user when it exists`() = runTest {
         // Insert a test user
-        val insertResult = userDao.insertUser(testUser1.username, testUser1.passwordHash, testUser1.email)
+        val insertResult = userDao.insertUser(testUser1.username, testUser1.passwordHash, testUser1.email, UserStatus.ACTIVE)
         assertTrue(insertResult.isRight(), "Failed to insert test user")
 
         // Get the user by username
@@ -154,7 +157,7 @@ class UserDaoExposedTest {
 
     @Test
     fun `insertUser should create new user successfully`() = runTest {
-        val result = userDao.insertUser(testUser1.username, testUser1.passwordHash, testUser1.email)
+        val result = userDao.insertUser(testUser1.username, testUser1.passwordHash, testUser1.email, UserStatus.ACTIVE)
         
         assertTrue(result.isRight(), "Expected successful user creation")
         val user = result.getOrNull()
@@ -170,11 +173,11 @@ class UserDaoExposedTest {
     @Test
     fun `insertUser should return UsernameAlreadyExists when username is taken`() = runTest {
         // Insert first user
-        val firstResult = userDao.insertUser(testUser1.username, testUser1.passwordHash, testUser1.email)
+        val firstResult = userDao.insertUser(testUser1.username, testUser1.passwordHash, testUser1.email, UserStatus.ACTIVE)
         assertTrue(firstResult.isRight(), "Failed to insert first user")
 
         // Try to insert user with same username
-        val secondResult = userDao.insertUser(testUser1.username, "differenthash", "different@example.com")
+        val secondResult = userDao.insertUser(testUser1.username, "differenthash", "different@example.com", UserStatus.ACTIVE)
         
         assertTrue(secondResult.isLeft(), "Expected Left result for duplicate username")
         val error = secondResult.leftOrNull()
@@ -185,11 +188,11 @@ class UserDaoExposedTest {
     @Test
     fun `insertUser should return EmailAlreadyExists when email is taken`() = runTest {
         // Insert first user
-        val firstResult = userDao.insertUser(testUser1.username, testUser1.passwordHash, testUser1.email)
+        val firstResult = userDao.insertUser(testUser1.username, testUser1.passwordHash, testUser1.email, UserStatus.ACTIVE)
         assertTrue(firstResult.isRight(), "Failed to insert first user")
 
         // Try to insert user with same email
-        val secondResult = userDao.insertUser("differentuser", "differenthash", testUser1.email)
+        val secondResult = userDao.insertUser("differentuser", "differenthash", testUser1.email, UserStatus.ACTIVE)
         
         assertTrue(secondResult.isLeft(), "Expected Left result for duplicate email")
         val error = secondResult.leftOrNull()
@@ -200,7 +203,7 @@ class UserDaoExposedTest {
     @Test
     fun `updateUser should update existing user successfully`() = runTest {
         // Insert a test user
-        val insertResult = userDao.insertUser(testUser1.username, testUser1.passwordHash, testUser1.email)
+        val insertResult = userDao.insertUser(testUser1.username, testUser1.passwordHash, testUser1.email, UserStatus.ACTIVE)
         assertTrue(insertResult.isRight(), "Failed to insert test user")
         val originalUser = insertResult.getOrNull()!!
 
@@ -237,7 +240,7 @@ class UserDaoExposedTest {
     @Test
     fun `updateLastLogin should update last login timestamp successfully`() = runTest {
         // Insert a test user
-        val insertResult = userDao.insertUser(testUser1.username, testUser1.passwordHash, testUser1.email)
+        val insertResult = userDao.insertUser(testUser1.username, testUser1.passwordHash, testUser1.email, UserStatus.ACTIVE)
         assertTrue(insertResult.isRight(), "Failed to insert test user")
         val user = insertResult.getOrNull()!!
 
@@ -268,7 +271,7 @@ class UserDaoExposedTest {
     @Test
     fun `deleteUser should delete existing user successfully`() = runTest {
         // Insert a test user
-        val insertResult = userDao.insertUser(testUser1.username, testUser1.passwordHash, testUser1.email)
+        val insertResult = userDao.insertUser(testUser1.username, testUser1.passwordHash, testUser1.email, UserStatus.ACTIVE)
         assertTrue(insertResult.isRight(), "Failed to insert test user")
         val user = insertResult.getOrNull()!!
 

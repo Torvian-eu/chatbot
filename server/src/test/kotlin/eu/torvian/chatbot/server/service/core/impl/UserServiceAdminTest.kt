@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.service.core.impl
 import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.models.Role
+import eu.torvian.chatbot.common.models.UserStatus
 import eu.torvian.chatbot.server.data.dao.RoleDao
 import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.UserRoleAssignmentDao
@@ -67,6 +68,7 @@ class UserServiceAdminTest {
             username = "oldusername",
             passwordHash = "hash",
             email = "old@example.com",
+            status = UserStatus.ACTIVE,
             createdAt = Instant.fromEpochMilliseconds(0),
             updatedAt = Instant.fromEpochMilliseconds(0),
             lastLogin = null
@@ -115,6 +117,7 @@ class UserServiceAdminTest {
             username = "oldusername",
             passwordHash = "hash",
             email = null,
+            status = UserStatus.ACTIVE,
             createdAt = Instant.fromEpochMilliseconds(0),
             updatedAt = Instant.fromEpochMilliseconds(0),
             lastLogin = null
@@ -157,6 +160,7 @@ class UserServiceAdminTest {
             username = "testuser",
             passwordHash = "hash",
             email = null,
+            status = UserStatus.ACTIVE,
             createdAt = Instant.fromEpochMilliseconds(0),
             updatedAt = Instant.fromEpochMilliseconds(0),
             lastLogin = null
@@ -188,6 +192,7 @@ class UserServiceAdminTest {
             username = "admin",
             passwordHash = "hash",
             email = null,
+            status = UserStatus.ACTIVE,
             createdAt = Instant.fromEpochMilliseconds(0),
             updatedAt = Instant.fromEpochMilliseconds(0),
             lastLogin = null
@@ -323,6 +328,7 @@ class UserServiceAdminTest {
             username = "testuser",
             passwordHash = "oldHash",
             email = null,
+            status = UserStatus.ACTIVE,
             createdAt = Instant.fromEpochMilliseconds(0),
             updatedAt = Instant.fromEpochMilliseconds(0),
             lastLogin = null

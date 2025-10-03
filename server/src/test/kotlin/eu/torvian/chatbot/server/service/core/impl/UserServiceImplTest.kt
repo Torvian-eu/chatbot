@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.service.core.impl
 import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.models.User
+import eu.torvian.chatbot.common.models.UserStatus
 import eu.torvian.chatbot.common.security.error.PasswordValidationError
 import eu.torvian.chatbot.server.data.dao.RoleDao
 import eu.torvian.chatbot.server.data.dao.UserDao
@@ -36,6 +37,7 @@ class UserServiceImplTest {
         username = "testuser",
         passwordHash = "hashedpassword",
         email = "test@example.com",
+        status = UserStatus.ACTIVE,
         createdAt = Instant.fromEpochMilliseconds(System.currentTimeMillis()),
         updatedAt = Instant.fromEpochMilliseconds(System.currentTimeMillis()),
         lastLogin = null
@@ -45,6 +47,7 @@ class UserServiceImplTest {
         id = 1L,
         username = "testuser",
         email = "test@example.com",
+        status = UserStatus.ACTIVE,
         createdAt = Instant.fromEpochMilliseconds(System.currentTimeMillis()),
         lastLogin = null
     )
@@ -70,10 +73,11 @@ class UserServiceImplTest {
         every { passwordService.validatePasswordStrength(password) } returns Unit.right()
         every { passwordService.hashPassword(password) } returns hashedPassword
 
-        coEvery { userDao.insertUser(username, hashedPassword, email) } returns testUserEntity.copy(
+        coEvery { userDao.insertUser(username, hashedPassword, email, UserStatus.DISABLED) } returns testUserEntity.copy(
             username = username,
             passwordHash = hashedPassword,
-            email = email
+            email = email,
+            status = UserStatus.DISABLED
         ).right()
 
         // When
@@ -84,11 +88,12 @@ class UserServiceImplTest {
         val user = result.getOrNull()!!
         assertEquals(username, user.username)
         assertEquals(email, user.email)
+        assertEquals(UserStatus.DISABLED, user.status)
         // Note: User model doesn't expose passwordHash for security
 
         verify { passwordService.validatePasswordStrength(password) }
         verify { passwordService.hashPassword(password) }
-        coVerify { userDao.insertUser(username, hashedPassword, email) }
+        coVerify { userDao.insertUser(username, hashedPassword, email, any()) }
     }
 
     @Test
@@ -150,7 +155,7 @@ class UserServiceImplTest {
         every { passwordService.validatePasswordStrength(password) } returns Unit.right()
         every { passwordService.hashPassword(password) } returns hashedPassword
 
-        coEvery { userDao.insertUser(username, hashedPassword, null) } returns
+        coEvery { userDao.insertUser(username, hashedPassword, null, any()) } returns
                 UserError.UsernameAlreadyExists(username).left()
 
         // When
@@ -173,7 +178,7 @@ class UserServiceImplTest {
         every { passwordService.validatePasswordStrength(password) } returns Unit.right()
         every { passwordService.hashPassword(password) } returns hashedPassword
 
-        coEvery { userDao.insertUser(username, hashedPassword, email) } returns
+        coEvery { userDao.insertUser(username, hashedPassword, email, any()) } returns
                 UserError.EmailAlreadyExists(email).left()
 
         // When

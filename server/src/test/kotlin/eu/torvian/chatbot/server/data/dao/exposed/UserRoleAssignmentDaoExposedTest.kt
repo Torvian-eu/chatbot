@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.data.dao.exposed
 
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
+import eu.torvian.chatbot.common.models.UserStatus
 import eu.torvian.chatbot.server.data.dao.RoleDao
 import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.UserRoleAssignmentDao
@@ -64,12 +65,14 @@ class UserRoleAssignmentDaoExposedTest {
         val user1Result = userDao.insertUser(
             username = "testuser1",
             email = "test1@example.com",
-            passwordHash = "hash1"
+            passwordHash = "hash1",
+            status = UserStatus.ACTIVE
         )
         val user2Result = userDao.insertUser(
             username = "testuser2",
             email = "test2@example.com",
-            passwordHash = "hash2"
+            passwordHash = "hash2",
+            status = UserStatus.ACTIVE
         )
         assertTrue(user1Result.isRight() && user2Result.isRight(), "Failed to create test users")
         testUser1 = user1Result.getOrNull()!!

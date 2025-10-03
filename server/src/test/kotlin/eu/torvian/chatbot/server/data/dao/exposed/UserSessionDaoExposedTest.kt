@@ -54,7 +54,7 @@ class UserSessionDaoExposedTest {
         testDataManager.createTables(setOf(Table.USERS, Table.USER_SESSIONS))
 
         // Create a test user for session tests
-        val userResult = userDao.insertUser("testuser", "hashedpassword", "test@example.com")
+        val userResult = userDao.insertUser("testuser", "hashedpassword", "test@example.com", eu.torvian.chatbot.common.models.UserStatus.ACTIVE)
         assertTrue(userResult.isRight(), "Failed to create test user")
         testUser = userResult.getOrNull()!!
     }

@@ -9,6 +9,7 @@ import eu.torvian.chatbot.server.data.dao.UserSessionDao
 import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.dao.error.UserSessionError
 import eu.torvian.chatbot.server.data.entities.UserEntity
+import eu.torvian.chatbot.common.models.UserStatus
 import eu.torvian.chatbot.server.data.entities.UserSessionEntity
 import eu.torvian.chatbot.server.data.entities.mappers.toUser
 import eu.torvian.chatbot.server.domain.security.JwtConfig
@@ -51,6 +52,7 @@ class AuthenticationServiceImplTest {
         username = "testuser",
         passwordHash = "hashedpassword",
         email = "test@example.com",
+        status = UserStatus.ACTIVE,
         createdAt = Instant.fromEpochMilliseconds(System.currentTimeMillis()),
         updatedAt = Instant.fromEpochMilliseconds(System.currentTimeMillis()),
         lastLogin = null
@@ -133,6 +135,27 @@ class AuthenticationServiceImplTest {
         // Then
         assertTrue(result.isLeft())
         assertEquals(LoginError.InvalidCredentials, result.leftOrNull())
+    }
+
+    @Test
+    fun `login should return AccountLocked when account is disabled`() = runTest {
+        // Given
+        val username = "testuser"
+        val password = "anypassword"
+        val disabledUser = testUser.copy(status = UserStatus.DISABLED)
+
+        coEvery { userDao.getUserByUsername(username) } returns disabledUser.right()
+
+        // When
+        val result = authService.login(username, password)
+
+        // Then
+        assertTrue(result.isLeft())
+        assertEquals(LoginError.AccountLocked("Account is disabled"), result.leftOrNull())
+
+        coVerify { userDao.getUserByUsername(username) }
+        // Password verification should not be attempted for disabled accounts
+        verify(exactly = 0) { passwordService.verifyPassword(any(), any()) }
     }
 
     @Test
@@ -306,6 +329,24 @@ class AuthenticationServiceImplTest {
 
         val decodedJWT = JWT.decode(tokenWithInvalidClaims)
         val credential = JWTCredential(decodedJWT)
+
+        // When
+        val result = authService.validateCredential(credential)
+
+        // Then
+        assertNull(result)
+    }
+
+    @Test
+    fun `validateCredential should return null for locked or disabled account`() = runTest {
+        // Given
+        val disabledUser = testUser.copy(status = UserStatus.DISABLED)
+        val token = jwtConfig.generateAccessToken(testUser.id, testSession.id)
+        val decodedJWT = JWT.decode(token)
+        val credential = JWTCredential(decodedJWT)
+
+        coEvery { userSessionDao.getSessionById(testSession.id) } returns testSession.right()
+        coEvery { userService.getUserById(testUser.id) } returns disabledUser.toUser().right()
 
         // When
         val result = authService.validateCredential(credential)

@@ -396,6 +396,7 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
                 it[username] = user.username
                 it[passwordHash] = user.passwordHash
                 it[email] = user.email
+                it[status] = user.status
                 it[createdAt] = user.createdAt.toEpochMilliseconds()
                 it[updatedAt] = user.updatedAt.toEpochMilliseconds()
                 it[lastLogin] = user.lastLogin?.toEpochMilliseconds()
