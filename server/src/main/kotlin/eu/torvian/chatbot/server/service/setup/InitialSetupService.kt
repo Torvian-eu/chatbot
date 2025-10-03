@@ -4,8 +4,9 @@ import arrow.core.Either
 import arrow.core.raise.either
 import arrow.core.right
 import eu.torvian.chatbot.common.api.CommonPermissions
-import eu.torvian.chatbot.common.api.PermissionSpec
 import eu.torvian.chatbot.common.api.CommonRoles
+import eu.torvian.chatbot.common.api.PermissionSpec
+import eu.torvian.chatbot.common.models.UserStatus
 import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.entities.UserEntity
@@ -86,12 +87,14 @@ class InitialSetupService(
     private fun createBasicPermissions(adminRoleId: Long, standardUserRoleId: Long) {
         // Create permissions using predefined PermissionSpec instances
         val manageUsersPermId = createPermission(CommonPermissions.MANAGE_USERS)
+        val manageRolesPermId = createPermission(CommonPermissions.MANAGE_ROLES)
         val createPublicProviderPermId = createPermission(CommonPermissions.CREATE_PUBLIC_PROVIDER)
         val createPublicModelPermId = createPermission(CommonPermissions.CREATE_PUBLIC_MODEL)
         val createPublicSettingsPermId = createPermission(CommonPermissions.CREATE_PUBLIC_SETTINGS)
 
         // Assign all permissions to admin role
         assignPermissionToRole(adminRoleId, manageUsersPermId)
+        assignPermissionToRole(adminRoleId, manageRolesPermId)
         assignPermissionToRole(adminRoleId, createPublicProviderPermId)
         assignPermissionToRole(adminRoleId, createPublicModelPermId)
         assignPermissionToRole(adminRoleId, createPublicSettingsPermId)
@@ -130,7 +133,8 @@ class InitialSetupService(
         userDao.insertUser(
             username = DEFAULT_ADMIN_USERNAME,
             passwordHash = hashedPassword,
-            email = null
+            email = null,
+            status = UserStatus.ACTIVE
         ).mapLeft { error ->
             when (error) {
                 is UserError.UsernameAlreadyExists -> "Admin username already exists"
