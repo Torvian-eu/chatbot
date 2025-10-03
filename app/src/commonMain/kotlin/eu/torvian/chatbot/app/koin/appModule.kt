@@ -10,6 +10,7 @@ import eu.torvian.chatbot.app.viewmodel.ModelConfigViewModel
 import eu.torvian.chatbot.app.viewmodel.ProviderConfigViewModel
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
 import eu.torvian.chatbot.app.viewmodel.SettingsConfigViewModel
+import eu.torvian.chatbot.app.viewmodel.admin.UserManagementViewModel
 import eu.torvian.chatbot.app.viewmodel.auth.AuthViewModel
 import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
@@ -119,6 +120,12 @@ fun appModule(baseUri: String): Module = module {
     single<SettingsApi> {
         KtorSettingsApiClient(get())
     }
+    single<UserApi> {
+        KtorUserApiClient(get())
+    }
+    single<RoleApi> {
+        KtorRoleApiClient(get())
+    }
 
     // Provide Repository implementations, injecting the API clients
     single<ModelRepository> {
@@ -135,6 +142,12 @@ fun appModule(baseUri: String): Module = module {
     }
     single<GroupRepository> {
         DefaultGroupRepository(get())
+    }
+    single<UserRepository> {
+        DefaultUserRepository(get())
+    }
+    single<RoleRepository> {
+        DefaultRoleRepository(get())
     }
 
     // Provide shared chat state with background scope for computed state flows
@@ -224,4 +237,14 @@ fun appModule(baseUri: String): Module = module {
     viewModel { ProviderConfigViewModel(get<ProviderRepository>(), get<ErrorNotifier>()) }
     viewModel { ModelConfigViewModel(get<ModelRepository>(), get<ProviderRepository>(), get<ErrorNotifier>()) }
     viewModel { SettingsConfigViewModel(get<SettingsRepository>(), get<ModelRepository>(), get<ErrorNotifier>()) }
+    viewModel {
+        val scopeProvider = get<CoroutineScopeProvider>()
+        val normalScope = scopeProvider.createNormalScope()
+        UserManagementViewModel(
+            userRepository = get(),
+            roleRepository = get(),
+            errorNotifier = get(),
+            normalScope = normalScope
+        )
+    }
 }
