@@ -6,7 +6,8 @@ import kotlinx.datetime.Instant
 import org.jetbrains.exposed.sql.ResultRow
 
 /**
- * Extension function to map an Exposed [ResultRow] to a [UserEntity].
+ * Maps an Exposed [ResultRow] from [UsersTable] to a [UserEntity].
+ * Includes all server-side fields required for user management logic.
  */
 fun ResultRow.toUserEntity(): UserEntity {
     return UserEntity(
@@ -14,6 +15,7 @@ fun ResultRow.toUserEntity(): UserEntity {
         username = this[UsersTable.username],
         passwordHash = this[UsersTable.passwordHash],
         email = this[UsersTable.email],
+        status = this[UsersTable.status],
         createdAt = Instant.fromEpochMilliseconds(this[UsersTable.createdAt]),
         updatedAt = Instant.fromEpochMilliseconds(this[UsersTable.updatedAt]),
         lastLogin = this[UsersTable.lastLogin]?.let { Instant.fromEpochMilliseconds(it) }
