@@ -4,6 +4,7 @@ import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.models.User
+import eu.torvian.chatbot.common.models.UserStatus
 import eu.torvian.chatbot.common.security.CryptoError
 import eu.torvian.chatbot.common.security.CryptoProvider
 import kotlinx.coroutines.test.runTest
@@ -44,6 +45,7 @@ class FileSystemTokenStorageTest {
             id = id,
             username = username,
             email = "$username@example.com",
+            status = UserStatus.ACTIVE,
             createdAt = Clock.System.now(),
             lastLogin = Clock.System.now()
         )

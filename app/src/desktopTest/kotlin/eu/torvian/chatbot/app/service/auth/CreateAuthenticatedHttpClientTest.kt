@@ -6,6 +6,7 @@ import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.common.api.resources.AuthResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.models.User
+import eu.torvian.chatbot.common.models.UserStatus
 import eu.torvian.chatbot.common.models.auth.LoginResponse
 import io.ktor.client.*
 import io.ktor.client.engine.mock.*
@@ -291,6 +292,7 @@ class CreateAuthenticatedHttpClientTest {
                                     id = 1L,
                                     username = "testuser",
                                     email = "test@example.com",
+                                    status = UserStatus.ACTIVE,
                                     createdAt = now,
                                     lastLogin = now
                                 ),
