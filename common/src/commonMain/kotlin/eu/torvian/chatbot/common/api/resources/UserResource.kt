@@ -29,5 +29,23 @@ class UserResource(val parent: Api = Api()) {
          */
         @Resource("password")
         class Password(val parent: ById)
+
+        /**
+         * Resource for updating user status: /api/v1/users/{userId}/status
+         */
+        @Resource("status")
+        class Status(val parent: ById)
+
+        /**
+         * Resource for detailed user information: /api/v1/users/{userId}/detailed
+         */
+        @Resource("/detailed")
+        data class UserDetailed(val parent: ById)
     }
+
+    /**
+     * Resource for detailed information of all users: /api/v1/users/detailed
+     */
+    @Resource("/detailed")
+    data class UsersDetailed(val parent: UserResource = UserResource())
 }

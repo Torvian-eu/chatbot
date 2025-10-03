@@ -7,6 +7,7 @@ import eu.torvian.chatbot.common.api.resources.UserResource
 import eu.torvian.chatbot.common.models.admin.AssignRoleRequest
 import eu.torvian.chatbot.common.models.admin.ChangePasswordRequest
 import eu.torvian.chatbot.common.models.admin.UpdateUserRequest
+import eu.torvian.chatbot.common.models.admin.UpdateUserStatusRequest
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.service.core.UserService
@@ -54,7 +55,31 @@ fun Route.configureUserRoutes(
             call.respondEither(result)
         }
 
-        // PUT /api/v1/users/{userId} - Update user profile
+        // GET /api/v1/users/detailed - List all users (with details)
+        get<UserResource.UsersDetailed> {
+            val requestingUserId = call.getUserId()
+
+            val result = either {
+                requirePermission(authorizationService, requestingUserId, CommonPermissions.MANAGE_USERS)
+                userService.getAllUsersWithDetails()
+            }
+            call.respondEither(result)
+        }
+
+        // GET /api/v1/users/{userId}/detailed - Get user by ID (with details)
+        get<UserResource.ById.UserDetailed> { resource ->
+            val requestingUserId = call.getUserId()
+
+            val result = either {
+                requirePermission(authorizationService, requestingUserId, CommonPermissions.MANAGE_USERS)
+                withError({ e: UserNotFoundError -> e.toApiError() }) {
+                    userService.getUserWithDetails(resource.parent.userId).bind()
+                }
+            }
+            call.respondEither(result)
+        }
+
+        // PUT /api/v1/users/{userId} - Update user profile (returns public User)
         put<UserResource.ById> { resource ->
             val requestingUserId = call.getUserId()
             val request = call.receive<UpdateUserRequest>()
@@ -63,6 +88,20 @@ fun Route.configureUserRoutes(
                 requirePermission(authorizationService, requestingUserId, CommonPermissions.MANAGE_USERS)
                 withError({ e: UpdateUserError -> e.toApiError() }) {
                     userService.updateUser(resource.userId, request.username, request.email).bind()
+                }
+            }
+            call.respondEither(result)
+        }
+
+        // PUT /api/v1/users/{userId}/status - Update user status
+        put<UserResource.ById.Status> { resource ->
+            val requestingUserId = call.getUserId()
+            val request = call.receive<UpdateUserStatusRequest>()
+
+            val result = either {
+                requirePermission(authorizationService, requestingUserId, CommonPermissions.MANAGE_USERS)
+                withError({ e: UpdateUserError -> e.toApiError() }) {
+                    userService.updateUserStatus(resource.parent.userId, request.status).bind()
                 }
             }
             call.respondEither(result)
