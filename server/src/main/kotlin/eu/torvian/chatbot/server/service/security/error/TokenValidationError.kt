@@ -35,4 +35,11 @@ sealed interface TokenValidationError {
      * @property reason Description of the session validation failure
      */
     data class InvalidSession(val reason: String) : TokenValidationError
+
+    /**
+     * User account is locked or disabled.
+     *
+     * @property reason Description of why the account is locked
+     */
+    data class AccountLocked(val reason: String) : TokenValidationError
 }
