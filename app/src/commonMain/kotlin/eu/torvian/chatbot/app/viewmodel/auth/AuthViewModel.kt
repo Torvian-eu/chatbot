@@ -182,15 +182,9 @@ class AuthViewModel(
                 },
                 ifRight = { user ->
                     logger.info("Registration successful for user: ${user.username}")
-                    _registerFormState.update { currentState ->
-                        currentState.copy(
-                            isLoading = false,
-                            generalError = null,
-                            registrationSuccessEvent = true
-                        )
-                    }
-                    // Clear form on successful registration
-                    clearRegisterForm()
+                    _registerFormState.value = RegisterFormState(
+                        registrationSuccessEvent = true
+                    )
                 }
             )
         }
