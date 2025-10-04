@@ -7,6 +7,7 @@ import eu.torvian.chatbot.app.repository.AuthRepository
 import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.toRepositoryError
+import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.AuthApi
 import eu.torvian.chatbot.app.service.auth.AuthenticationFailureEvent
 import eu.torvian.chatbot.app.service.auth.TokenStorage
@@ -99,15 +100,15 @@ class DefaultAuthRepository(
     }
 
     override suspend fun logout(): Either<RepositoryError, Unit> = either {
+        val result = authApi.logout()
+        tokenStorage.clearAuthData()
+            .onLeft { logger.warn("Failed to clear auth data on logout: ${it.message}") }
+        _authState.value = AuthState.Unauthenticated
         withError({ apiError ->
             apiError.toRepositoryError("Logout failed")
         }) {
-            authApi.logout().bind()
+            result.bind()
         }
-        tokenStorage.clearAuthData()
-            .onLeft { logger.warn("Failed to clear auth data on logout: ${it.message}") }
-
-        _authState.value = AuthState.Unauthenticated
     }
 
     override suspend fun isAuthenticated(): Boolean {
