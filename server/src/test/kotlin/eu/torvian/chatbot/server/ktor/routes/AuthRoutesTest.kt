@@ -82,7 +82,11 @@ class AuthRoutesTest {
             setOf(
                 Table.USERS,
                 Table.CHAT_GROUPS,
-                Table.USER_SESSIONS
+                Table.USER_SESSIONS,
+                Table.ROLE_PERMISSIONS,
+                Table.PERMISSIONS,
+                Table.ROLES,
+                Table.USER_ROLE_ASSIGNMENTS
             )
         )
     }

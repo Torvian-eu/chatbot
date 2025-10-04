@@ -107,7 +107,8 @@ private suspend fun RefreshTokensParams.refreshTokens(
             refreshResponse.accessToken,
             refreshResponse.refreshToken,
             refreshResponse.expiresAt,
-            refreshResponse.user
+            refreshResponse.user,
+            refreshResponse.permissions
         ).fold(
             ifLeft = { error ->
                 tokenStorage.clearAuthData()

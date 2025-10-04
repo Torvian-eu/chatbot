@@ -37,6 +37,7 @@ class AuthenticationServiceImplTest {
     private val passwordService = mockk<PasswordService>()
     private val userSessionDao = mockk<UserSessionDao>()
     private val userDao = mockk<UserDao>()
+    private val authorizationService = mockk<AuthorizationService>()
     private val transactionScope = mockk<TransactionScope>()
 
     private val jwtConfig = JwtConfig(
@@ -44,7 +45,7 @@ class AuthenticationServiceImplTest {
     )
 
     private val authService = AuthenticationServiceImpl(
-        userService, passwordService, jwtConfig, userSessionDao, userDao, transactionScope
+        userService, passwordService, jwtConfig, userSessionDao, userDao, authorizationService, transactionScope
     )
 
     private val testUser = UserEntity(
@@ -68,7 +69,7 @@ class AuthenticationServiceImplTest {
 
     @BeforeEach
     fun setUp() {
-        clearMocks(userService, passwordService, userSessionDao, userDao, transactionScope)
+        clearMocks(userService, passwordService, userSessionDao, userDao, authorizationService, transactionScope)
 
         coEvery { transactionScope.transaction<Any>(any()) } coAnswers {
             val block = firstArg<suspend () -> Any>()
@@ -87,6 +88,7 @@ class AuthenticationServiceImplTest {
 
         coEvery { userSessionDao.insertSession(testUser.id, any()) } returns testSession.right()
         coEvery { userService.updateLastLogin(testUser.id) } returns Unit.right()
+        coEvery { authorizationService.getUserPermissions(testUser.id) } returns emptyList()
 
         // When
         val result = authService.login(username, password)
@@ -97,11 +99,13 @@ class AuthenticationServiceImplTest {
         assertEquals(testUser.toUser(), loginResult.user)
         assertTrue(loginResult.accessToken.isNotEmpty())
         assertEquals(loginResult.refreshToken.isNotEmpty(), true)
+        assertEquals(emptyList(), loginResult.permissions)
 
         coVerify { userDao.getUserByUsername(username) }
         verify { passwordService.verifyPassword(password, testUser.passwordHash) }
         coVerify { userSessionDao.insertSession(testUser.id, any()) }
         coVerify { userService.updateLastLogin(testUser.id) }
+        coVerify { authorizationService.getUserPermissions(testUser.id) }
     }
 
     @Test
@@ -365,6 +369,7 @@ class AuthenticationServiceImplTest {
         coEvery { userSessionDao.updateLastAccessed(testSession.id, any()) } returns Unit.right()
         coEvery { userSessionDao.deleteSession(testSession.id) } returns Unit.right()
         coEvery { userSessionDao.insertSession(testUser.id, any()) } returns testSession.right()
+        coEvery { authorizationService.getUserPermissions(testUser.id) } returns emptyList()
 
         // When
         val result = authService.refreshToken(refreshToken)
@@ -375,6 +380,7 @@ class AuthenticationServiceImplTest {
         assertEquals(testUser.toUser(), loginResult.user)
         assertTrue(loginResult.accessToken.isNotEmpty())
         assertEquals(loginResult.refreshToken.isNotEmpty(), true)
+        assertEquals(emptyList(), loginResult.permissions)
     }
 
     @Test

@@ -68,7 +68,7 @@ class DefaultAuthRepository(
             authApi.login(request).bind()
         }
 
-        // Save authentication data (tokens and user)
+        // Save authentication data (tokens, user, and permissions)
         withError({ tokenError ->
             _authState.value = AuthState.Unauthenticated
             RepositoryError.OtherError("Failed to save authentication data after successful login: ${tokenError.message}")
@@ -77,14 +77,16 @@ class DefaultAuthRepository(
                 accessToken = loginResponse.accessToken,
                 refreshToken = loginResponse.refreshToken,
                 expiresAt = loginResponse.expiresAt,
-                user = loginResponse.user
+                user = loginResponse.user,
+                permissions = loginResponse.permissions
             ).bind()
         }
 
         // Update auth state on successful token save
         _authState.value = AuthState.Authenticated(
             userId = loginResponse.user.id,
-            username = loginResponse.user.username
+            username = loginResponse.user.username,
+            permissions = loginResponse.permissions
         )
     }
 
@@ -122,8 +124,17 @@ class DefaultAuthRepository(
                 _authState.value = AuthState.Unauthenticated
             },
             ifRight = { user ->
-                logger.info("Found cached user data, setting authenticated state: ${user.username}")
-                _authState.value = AuthState.Authenticated(user.id, user.username)
+                // Also load permissions
+                tokenStorage.getPermissions().fold(
+                    ifLeft = { error ->
+                        logger.warn("Failed to load permissions, setting unauthenticated state: ${error.message}")
+                        _authState.value = AuthState.Unauthenticated
+                    },
+                    ifRight = { permissions ->
+                        logger.info("Found cached user data and permissions, setting authenticated state: ${user.username}")
+                        _authState.value = AuthState.Authenticated(user.id, user.username, permissions)
+                    }
+                )
             }
         )
     }

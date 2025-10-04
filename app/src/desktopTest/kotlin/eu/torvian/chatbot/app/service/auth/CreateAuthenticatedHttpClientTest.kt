@@ -55,7 +55,8 @@ class CreateAuthenticatedHttpClientTest {
         coEvery { mockTokenStorage.getAccessToken() } answers { "default-access-token".right() }
         coEvery { mockTokenStorage.getRefreshToken() } answers { "default-refresh-token".right() }
         coEvery { mockTokenStorage.getExpiry() } answers { Clock.System.now().right() }
-        coEvery { mockTokenStorage.saveAuthData(any(), any(), any(), any()) } answers { Unit.right() }
+        // Updated to include permissions parameter
+        coEvery { mockTokenStorage.saveAuthData(any(), any(), any(), any(), any()) } answers { Unit.right() }
         coEvery { mockTokenStorage.clearAuthData() } answers { Unit.right() }
     }
 
@@ -337,8 +338,8 @@ class CreateAuthenticatedHttpClientTest {
         assertEquals(HttpStatusCode.OK, response.status)
         assertEquals("""{"message": "success with new token"}""", response.bodyAsText())
 
-        // Verify tokens were saved after refresh
-        coVerify(exactly = 1) { mockTokenStorage.saveAuthData(newAccessToken, newRefreshToken, newExpiresAt, any()) }
+        // Verify tokens were saved after refresh - include permissions argument in verification
+        coVerify(exactly = 1) { mockTokenStorage.saveAuthData(newAccessToken, newRefreshToken, newExpiresAt, any(), any()) }
         coVerify(exactly = 0) { mockEventBus.emitEvent(any<AuthenticationFailureEvent>()) }
 
         client.close()

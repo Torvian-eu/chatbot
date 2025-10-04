@@ -5,6 +5,7 @@ import arrow.core.raise.catch
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
+import eu.torvian.chatbot.common.models.Permission
 import eu.torvian.chatbot.common.models.User
 import eu.torvian.chatbot.common.security.CryptoProvider
 import kotlinx.datetime.Instant
@@ -58,7 +59,8 @@ open class FileSystemTokenStorage(
         val accessToken: String,
         val refreshToken: String,
         val expiresAt: Long,
-        val user: User
+        val user: User,
+        val permissions: List<Permission> = emptyList()
     )
 
     private val storageDirPath = Path(storageDirectoryPath)
@@ -69,11 +71,12 @@ open class FileSystemTokenStorage(
         accessToken: String,
         refreshToken: String,
         expiresAt: Instant,
-        user: User
+        user: User,
+        permissions: List<Permission>
     ): Either<TokenStorageError, Unit> = either {
         catch({
-            // 1. Prepare the plaintext token data with user info.
-            val tokenData = TokenData(accessToken, refreshToken, expiresAt.epochSeconds, user)
+            // 1. Prepare the plaintext token data with user info and permissions.
+            val tokenData = TokenData(accessToken, refreshToken, expiresAt.epochSeconds, user, permissions)
             val plainTextJson = json.encodeToString(TokenData.serializer(), tokenData)
 
             // 2-4. Generate DEK, encrypt data, and wrap DEK using bind for sequential operations
@@ -121,6 +124,9 @@ open class FileSystemTokenStorage(
 
     override suspend fun getUserData(): Either<TokenStorageError, User> =
         loadTokenData().map { it.user }
+
+    override suspend fun getPermissions(): Either<TokenStorageError, List<Permission>> =
+        loadTokenData().map { it.permissions }
 
     override suspend fun clearAuthData(): Either<TokenStorageError, Unit> = either {
         catch({
