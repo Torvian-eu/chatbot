@@ -4,7 +4,7 @@ import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
-import eu.torvian.chatbot.common.models.ChatSessionSummary
+import eu.torvian.chatbot.common.models.UserStatus
 import eu.torvian.chatbot.server.data.dao.SessionOwnershipDao
 import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
 import eu.torvian.chatbot.server.data.dao.error.SetOwnerError
@@ -17,12 +17,14 @@ import eu.torvian.chatbot.server.testutils.data.TestDefaults
 import eu.torvian.chatbot.server.testutils.koin.defaultTestContainer
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Instant
-import kotlin.time.Duration.Companion.hours
-import kotlin.time.Duration.Companion.minutes
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import kotlin.test.*
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.minutes
 
 /**
  * Tests for [SessionOwnershipDaoExposed].
@@ -46,6 +48,7 @@ class SessionOwnershipDaoExposedTest {
         username = "testuser1",
         passwordHash = "hashedpassword1",
         email = "test1@example.com",
+        status = UserStatus.ACTIVE,
         createdAt = Instant.fromEpochMilliseconds(TestDefaults.DEFAULT_INSTANT_MILLIS),
         updatedAt = Instant.fromEpochMilliseconds(TestDefaults.DEFAULT_INSTANT_MILLIS),
         lastLogin = null
@@ -56,6 +59,7 @@ class SessionOwnershipDaoExposedTest {
         username = "testuser2",
         passwordHash = "hashedpassword2",
         email = "test2@example.com",
+        status = UserStatus.ACTIVE,
         createdAt = Instant.fromEpochMilliseconds(TestDefaults.DEFAULT_INSTANT_MILLIS),
         updatedAt = Instant.fromEpochMilliseconds(TestDefaults.DEFAULT_INSTANT_MILLIS),
         lastLogin = null
@@ -124,7 +128,7 @@ class SessionOwnershipDaoExposedTest {
     @Test
     fun `getAllSessionsForUser should return empty list when user has no sessions`() = runTest {
         val result = sessionOwnershipDao.getAllSessionsForUser(testUser1.id)
-        
+
         assertTrue(result.isEmpty(), "Should return empty list when user has no sessions")
     }
 
@@ -132,7 +136,7 @@ class SessionOwnershipDaoExposedTest {
     fun `getAllSessionsForUser should return empty list when user does not exist`() = runTest {
         val nonExistentUserId = 999L
         val result = sessionOwnershipDao.getAllSessionsForUser(nonExistentUserId)
-        
+
         assertTrue(result.isEmpty(), "Should return empty list when user does not exist")
     }
 
@@ -141,7 +145,7 @@ class SessionOwnershipDaoExposedTest {
         // Set ownership for user1
         sessionOwnershipDao.setOwner(testSession1.id, testUser1.id)
         sessionOwnershipDao.setOwner(testSession3.id, testUser1.id)
-        
+
         // Set ownership for user2
         sessionOwnershipDao.setOwner(testSession2.id, testUser2.id)
 
@@ -174,14 +178,14 @@ class SessionOwnershipDaoExposedTest {
     fun `getOwner should return ResourceNotFound when session does not exist`() = runTest {
         val nonExistentSessionId = 999L
         val result = sessionOwnershipDao.getOwner(nonExistentSessionId)
-        
+
         assertEquals(GetOwnerError.ResourceNotFound(nonExistentSessionId.toString()).left(), result)
     }
 
     @Test
     fun `getOwner should return ResourceNotFound when session exists but has no owner`() = runTest {
         val result = sessionOwnershipDao.getOwner(testSession1.id)
-        
+
         assertEquals(GetOwnerError.ResourceNotFound(testSession1.id.toString()).left(), result)
     }
 
@@ -189,18 +193,18 @@ class SessionOwnershipDaoExposedTest {
     fun `getOwner should return owner user ID when session has owner`() = runTest {
         // Set ownership
         sessionOwnershipDao.setOwner(testSession1.id, testUser1.id)
-        
+
         val result = sessionOwnershipDao.getOwner(testSession1.id)
-        
+
         assertEquals(testUser1.id.right(), result)
     }
 
     @Test
     fun `setOwner should successfully create ownership link`() = runTest {
         val result = sessionOwnershipDao.setOwner(testSession1.id, testUser1.id)
-        
+
         assertTrue(result.isRight(), "setOwner should succeed")
-        
+
         // Verify ownership was set
         val ownerResult = sessionOwnershipDao.getOwner(testSession1.id)
         assertEquals(testUser1.id.right(), ownerResult)
@@ -210,11 +214,11 @@ class SessionOwnershipDaoExposedTest {
     fun `setOwner should return AlreadyOwned when trying to set owner for already owned session`() = runTest {
         // Set initial ownership
         sessionOwnershipDao.setOwner(testSession1.id, testUser1.id)
-        
+
         // Try to set ownership again (same user)
         val result1 = sessionOwnershipDao.setOwner(testSession1.id, testUser1.id)
         assertEquals(SetOwnerError.AlreadyOwned.left(), result1)
-        
+
         // Try to set ownership to different user
         val result2 = sessionOwnershipDao.setOwner(testSession1.id, testUser2.id)
         assertEquals(SetOwnerError.AlreadyOwned.left(), result2)
@@ -224,7 +228,7 @@ class SessionOwnershipDaoExposedTest {
     fun `setOwner should return ForeignKeyViolation when session does not exist`() = runTest {
         val nonExistentSessionId = 999L
         val result = sessionOwnershipDao.setOwner(nonExistentSessionId, testUser1.id)
-        
+
         assertEquals(
             SetOwnerError.ForeignKeyViolation(nonExistentSessionId.toString(), testUser1.id).left(),
             result
@@ -235,7 +239,7 @@ class SessionOwnershipDaoExposedTest {
     fun `setOwner should return ForeignKeyViolation when user does not exist`() = runTest {
         val nonExistentUserId = 999L
         val result = sessionOwnershipDao.setOwner(testSession1.id, nonExistentUserId)
-        
+
         assertEquals(
             SetOwnerError.ForeignKeyViolation(testSession1.id.toString(), nonExistentUserId).left(),
             result
@@ -247,7 +251,7 @@ class SessionOwnershipDaoExposedTest {
         val nonExistentSessionId = 999L
         val nonExistentUserId = 888L
         val result = sessionOwnershipDao.setOwner(nonExistentSessionId, nonExistentUserId)
-        
+
         assertEquals(
             SetOwnerError.ForeignKeyViolation(nonExistentSessionId.toString(), nonExistentUserId).left(),
             result
@@ -272,10 +276,10 @@ class SessionOwnershipDaoExposedTest {
 
         assertEquals(2, user1Sessions.size)
         assertEquals(1, user2Sessions.size)
-        
+
         val user1SessionIds = user1Sessions.map { it.id }.toSet()
         val user2SessionIds = user2Sessions.map { it.id }.toSet()
-        
+
         assertEquals(setOf(testSession1.id, testSession3.id), user1SessionIds)
         assertEquals(setOf(testSession2.id), user2SessionIds)
     }

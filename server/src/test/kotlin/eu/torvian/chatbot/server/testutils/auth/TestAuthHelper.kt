@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.testutils.auth
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.server.data.entities.UserEntity
+import eu.torvian.chatbot.common.models.UserStatus
 import eu.torvian.chatbot.server.data.entities.UserSessionEntity
 import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
@@ -28,6 +29,7 @@ class TestAuthHelper(private val container: DIContainer) {
         username = "testuser",
         email = "test@example.com",
         passwordHash = "hashed-password",
+        status = UserStatus.ACTIVE,
         createdAt = TestDefaults.DEFAULT_INSTANT,
         updatedAt = TestDefaults.DEFAULT_INSTANT,
         lastLogin = null
@@ -120,6 +122,7 @@ class TestAuthHelper(private val container: DIContainer) {
             username = username,
             email = email,
             passwordHash = "hashed-password",
+            status = UserStatus.ACTIVE,
             createdAt = TestDefaults.DEFAULT_INSTANT,
             updatedAt = TestDefaults.DEFAULT_INSTANT,
             lastLogin = null

@@ -12,6 +12,7 @@ import eu.torvian.chatbot.common.models.auth.LoginResponse
 import eu.torvian.chatbot.common.models.auth.RefreshTokenRequest
 import eu.torvian.chatbot.common.models.auth.RegisterRequest
 import eu.torvian.chatbot.server.data.entities.UserEntity
+import eu.torvian.chatbot.common.models.UserStatus
 import eu.torvian.chatbot.server.service.security.PasswordService
 import eu.torvian.chatbot.server.testutils.auth.TestAuthHelper
 import eu.torvian.chatbot.server.testutils.auth.authenticate
@@ -54,6 +55,7 @@ class AuthRoutesTest {
         username = "testuser",
         email = "test@example.com",
         passwordHash = "hashed-password",
+        status = UserStatus.ACTIVE,
         createdAt = TestDefaults.DEFAULT_INSTANT,
         updatedAt = TestDefaults.DEFAULT_INSTANT,
         lastLogin = null
@@ -119,6 +121,7 @@ class AuthRoutesTest {
         val user = response.body<User>()
         assertEquals("newuser", user.username)
         assertEquals("newuser@example.com", user.email)
+        assertEquals(UserStatus.DISABLED, user.status)
         assertNotNull(user.id)
     }
 

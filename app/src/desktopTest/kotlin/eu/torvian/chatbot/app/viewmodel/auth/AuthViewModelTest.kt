@@ -11,6 +11,7 @@ import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.models.auth.LoginRequest
 import eu.torvian.chatbot.common.models.auth.RegisterRequest
 import eu.torvian.chatbot.common.models.User
+import eu.torvian.chatbot.common.models.UserStatus
 import io.mockk.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -176,6 +177,7 @@ class AuthViewModelTest {
             id = 1,
             username = username,
             email = email,
+            status = UserStatus.ACTIVE,
             createdAt = now,
             lastLogin = null
         )
@@ -257,6 +259,7 @@ class AuthViewModelTest {
             id = 1,
             username = username,
             email = null,
+            status = UserStatus.ACTIVE,
             createdAt = now,
             lastLogin = null
         )

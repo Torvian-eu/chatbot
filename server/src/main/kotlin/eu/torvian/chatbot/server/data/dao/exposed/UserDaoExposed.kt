@@ -6,12 +6,15 @@ import arrow.core.raise.catch
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.right
+import eu.torvian.chatbot.common.models.*
 import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.entities.UserEntity
-import eu.torvian.chatbot.server.data.tables.UsersTable
+import eu.torvian.chatbot.server.data.entities.mappers.toUser
+import eu.torvian.chatbot.server.data.tables.*
 import eu.torvian.chatbot.server.data.tables.mappers.toUserEntity
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import kotlinx.datetime.Instant
 import org.jetbrains.exposed.exceptions.ExposedSQLException
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -50,7 +53,8 @@ class UserDaoExposed(
     override suspend fun insertUser(
         username: String,
         passwordHash: String,
-        email: String?
+        email: String?,
+        status: UserStatus
     ): Either<UserError, UserEntity> =
         transactionScope.transaction {
             either {
@@ -59,6 +63,7 @@ class UserDaoExposed(
                         it[UsersTable.username] = username
                         it[UsersTable.passwordHash] = passwordHash
                         it[UsersTable.email] = email
+                        it[UsersTable.status] = status
                         it[UsersTable.createdAt] = System.currentTimeMillis()
                         it[UsersTable.updatedAt] = System.currentTimeMillis()
                     }
@@ -71,13 +76,16 @@ class UserDaoExposed(
                             // Determine which constraint was violated
                             val message = e.message ?: e.cause?.message ?: ""
                             when {
-                                message.contains("username", ignoreCase = true) -> 
+                                message.contains("username", ignoreCase = true) ->
                                     raise(UserError.UsernameAlreadyExists(username))
-                                message.contains("email", ignoreCase = true) -> 
+
+                                message.contains("email", ignoreCase = true) ->
                                     raise(UserError.EmailAlreadyExists(email ?: ""))
+
                                 else -> raise(UserError.UsernameAlreadyExists(username)) // Default assumption
                             }
                         }
+
                         else -> throw e
                     }
                 }
@@ -92,6 +100,7 @@ class UserDaoExposed(
                         it[username] = user.username
                         it[passwordHash] = user.passwordHash
                         it[email] = user.email
+                        it[status] = user.status
                         it[updatedAt] = System.currentTimeMillis()
                         it[lastLogin] = user.lastLogin?.toEpochMilliseconds()
                     }
@@ -101,13 +110,16 @@ class UserDaoExposed(
                         e.isUniqueConstraintViolation() -> {
                             val message = e.message ?: e.cause?.message ?: ""
                             when {
-                                message.contains("username", ignoreCase = true) -> 
+                                message.contains("username", ignoreCase = true) ->
                                     raise(UserError.UsernameAlreadyExists(user.username))
-                                message.contains("email", ignoreCase = true) -> 
+
+                                message.contains("email", ignoreCase = true) ->
                                     raise(UserError.EmailAlreadyExists(user.email ?: ""))
+
                                 else -> raise(UserError.UsernameAlreadyExists(user.username))
                             }
                         }
+
                         else -> throw e
                     }
                 }
@@ -130,6 +142,117 @@ class UserDaoExposed(
             either {
                 val deletedCount = UsersTable.deleteWhere { UsersTable.id eq id }
                 ensure(deletedCount != 0) { UserError.UserNotFound(id) }
+            }
+        }
+
+    // --- New methods ---
+
+    override suspend fun getAllUsersWithDetails(): List<UserWithDetails> =
+        transactionScope.transaction {
+            // Build a single query that fetches users with optional role and group data
+            val query = UsersTable
+                .leftJoin(UserRoleAssignmentsTable, { UsersTable.id }, { UserRoleAssignmentsTable.userId })
+                .leftJoin(RolesTable, { UserRoleAssignmentsTable.roleId }, { RolesTable.id })
+                .leftJoin(UserGroupMembershipsTable, { UsersTable.id }, { UserGroupMembershipsTable.userId })
+                .leftJoin(UserGroupsTable, { UserGroupMembershipsTable.groupId }, { UserGroupsTable.id })
+                .selectAll()
+
+            val rows = query.toList()
+            if (rows.isEmpty()) return@transaction emptyList()
+
+            // Group the flat, duplicated rows by user id and map each group to a single UserWithDetails
+            rows.groupBy { it[UsersTable.id].value }
+                .map { (userId, userRows) ->
+                    val first = userRows.first()
+
+                    // Extract roles from the user's rows
+                    val roles = userRows.mapNotNull { row ->
+                        row.getOrNull(RolesTable.id)?.let { roleId ->
+                            Role(
+                                id = roleId.value,
+                                name = row[RolesTable.name],
+                                description = row[RolesTable.description]
+                            )
+                        }
+                    }.distinctBy { it.id }
+
+                    // Extract groups from the user's rows
+                    val groups = userRows.mapNotNull { row ->
+                        row.getOrNull(UserGroupsTable.id)?.let { groupId ->
+                            UserGroup(
+                                id = groupId.value,
+                                name = row[UserGroupsTable.name],
+                                description = row[UserGroupsTable.description]
+                            )
+                        }
+                    }.distinctBy { it.id }
+
+                    // Create UserWithDetails
+                    UserWithDetails(
+                        id = userId,
+                        username = first[UsersTable.username],
+                        email = first[UsersTable.email],
+                        status = first[UsersTable.status],
+                        roles = roles,
+                        userGroups = groups,
+                        createdAt = Instant.fromEpochMilliseconds(first[UsersTable.createdAt]),
+                        lastLogin = first[UsersTable.lastLogin]?.let { Instant.fromEpochMilliseconds(it) }
+                    )
+                }
+        }
+
+    override suspend fun getUserByIdWithDetails(id: Long): Either<UserError.UserNotFound, UserWithDetails> =
+        transactionScope.transaction {
+            val rows = UsersTable
+                .leftJoin(UserRoleAssignmentsTable, { UsersTable.id }, { UserRoleAssignmentsTable.userId })
+                .leftJoin(RolesTable, { UserRoleAssignmentsTable.roleId }, { RolesTable.id })
+                .leftJoin(UserGroupMembershipsTable, { UsersTable.id }, { UserGroupMembershipsTable.userId })
+                .leftJoin(UserGroupsTable, { UserGroupMembershipsTable.groupId }, { UserGroupsTable.id })
+                .selectAll()
+                .where { UsersTable.id eq id }
+                .toList()
+
+            if (rows.isEmpty()) return@transaction UserError.UserNotFound(id).left()
+
+            val first = rows.first()
+
+            // Extract roles and groups from the user's rows
+            val roles = rows.mapNotNull { row ->
+                row.getOrNull(RolesTable.id)?.let { roleId ->
+                    Role(roleId.value, row[RolesTable.name], row[RolesTable.description])
+                }
+            }.distinctBy { it.id }
+
+            // Extract groups from the user's rows
+            val groups = rows.mapNotNull { row ->
+                row.getOrNull(UserGroupsTable.id)?.let { groupId ->
+                    UserGroup(groupId.value, row[UserGroupsTable.name], row[UserGroupsTable.description])
+                }
+            }.distinctBy { it.id }
+
+            UserWithDetails(
+                id = first[UsersTable.id].value,
+                username = first[UsersTable.username],
+                email = first[UsersTable.email],
+                status = first[UsersTable.status],
+                roles = roles,
+                userGroups = groups,
+                createdAt = Instant.fromEpochMilliseconds(first[UsersTable.createdAt]),
+                lastLogin = first[UsersTable.lastLogin]?.let { Instant.fromEpochMilliseconds(it) }
+            ).right()
+        }
+
+    override suspend fun updateUserStatus(id: Long, status: UserStatus): Either<UserError.UserNotFound, User> =
+        transactionScope.transaction {
+            either {
+                val updatedRowCount = UsersTable.update({ UsersTable.id eq id }) {
+                    it[UsersTable.status] = status
+                    it[updatedAt] = System.currentTimeMillis()
+                }
+                ensure(updatedRowCount != 0) { UserError.UserNotFound(id) }
+
+                // Return updated public view
+                getUserById(id).bind().toUser()
             }
         }
 }

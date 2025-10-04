@@ -10,6 +10,7 @@ import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.Role
 import eu.torvian.chatbot.common.models.User
+import eu.torvian.chatbot.common.models.UserStatus
 import eu.torvian.chatbot.common.models.admin.AssignRoleRequest
 import eu.torvian.chatbot.common.models.admin.ChangePasswordRequest
 import eu.torvian.chatbot.common.models.admin.UpdateUserRequest
@@ -57,6 +58,7 @@ class UserRoutesTest {
         username = "admin",
         email = "admin@example.com",
         passwordHash = "hashed-password",
+        status = UserStatus.ACTIVE,
         createdAt = TestDefaults.DEFAULT_INSTANT,
         updatedAt = TestDefaults.DEFAULT_INSTANT,
         lastLogin = null
@@ -67,6 +69,7 @@ class UserRoutesTest {
         username = "user",
         email = "user@example.com",
         passwordHash = "hashed-password",
+        status = UserStatus.ACTIVE,
         createdAt = TestDefaults.DEFAULT_INSTANT,
         updatedAt = TestDefaults.DEFAULT_INSTANT,
         lastLogin = null
@@ -77,6 +80,7 @@ class UserRoutesTest {
         username = "other",
         email = "other@example.com",
         passwordHash = "hashed-password",
+        status = UserStatus.ACTIVE,
         createdAt = TestDefaults.DEFAULT_INSTANT,
         updatedAt = TestDefaults.DEFAULT_INSTANT,
         lastLogin = null
@@ -119,8 +123,10 @@ class UserRoutesTest {
             setOf(
                 Table.USERS,
                 Table.ROLES,
+                Table.USER_GROUPS,
                 Table.PERMISSIONS,
                 Table.USER_ROLE_ASSIGNMENTS,
+                Table.USER_GROUP_MEMBERSHIPS,
                 Table.ROLE_PERMISSIONS,
                 Table.USER_SESSIONS
             )

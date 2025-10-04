@@ -8,6 +8,7 @@ import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import com.auth0.jwt.exceptions.JWTDecodeException
 import com.auth0.jwt.exceptions.JWTVerificationException
+import eu.torvian.chatbot.common.models.UserStatus
 import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.UserSessionDao
 import eu.torvian.chatbot.server.data.dao.error.UserError
@@ -64,6 +65,10 @@ class AuthenticationServiceImpl(
                     LoginError.UserNotFound
                 }) {
                     userDao.getUserByUsername(username).bind()
+                }
+
+                ensure(userEntity.status == UserStatus.ACTIVE) {
+                    LoginError.AccountLocked("Account is disabled")
                 }
 
                 // Verify password
@@ -272,6 +277,10 @@ class AuthenticationServiceImpl(
                 TokenValidationError.InvalidSession("User not found for session")
             }) {
                 userService.getUserById(userId).bind()
+            }
+
+            ensure(user.status == UserStatus.ACTIVE) {
+                TokenValidationError.AccountLocked("Account is disabled")
             }
 
             // Update session last accessed time

@@ -3,8 +3,8 @@
 ## Overview
 
 This is a multi-module Kotlin desktop application for AI chatbot interactions, built using Compose Multiplatform, Ktor, and Exposed ORM.  
-**The application now uses a client-server architecture by default:**  
-- The backend (Ktor server) runs as a separate process, exposing APIs for the frontend (Compose desktop app) to consume.  
+**The application now uses a client-server architecture by default:**
+- The backend (Ktor server) runs as a separate process, exposing APIs for the frontend (Compose desktop app) to consume.
 - An integrated monolith (single-process UI+backend) will be implemented as an option in a future release.
 
 ## Technology Stack
@@ -79,10 +79,15 @@ common/src/commonMain/kotlin/eu/torvian/chatbot/common/
 │   ├── UpdateSessionNameRequest.kt # Request DTO for updating session name
 │   ├── UpdateSessionSettingsRequest.kt # Request DTO for updating session settings
 │   ├── User.kt                   # User account data model
+│   ├── UserGroup.kt              # User group data model
+│   ├── UserWithDetails.kt        # Comprehensive user data for admin UIs
 │   ├── admin/                    # Admin-specific models
-│   │   ├── AssignRoleRequest.kt        # Admin: assign role to user
-│   │   ├── ChangePasswordRequest.kt    # Admin: change user password
-│   │   └── UpdateUserRequest.kt        # Admin: update user details
+│   │   ├── AssignRoleRequest.kt        # Request DTO for assigning a role to a user
+│   │   ├── ChangePasswordRequest.kt    # Request DTO for changing user password
+│   │   ├── CreateRoleRequest.kt        # Request DTO for creating a new role
+│   │   ├── UpdateRoleRequest.kt        # Request DTO for updating an existing role
+│   │   ├── UpdateUserRequest.kt        # Request DTO for updating user profile
+│   │   └── UpdateUserStatusRequest.kt  # Request DTO for updating user status
 │   └── auth/                     # Authentication-related models
 │       ├── LoginRequest.kt       # Login request DTO
 │       ├── LoginResponse.kt      # Login response DTO
@@ -185,9 +190,10 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │       ├── configureMessageRoutes.kt
 │       ├── configureModelRoutes.kt
 │       ├── configureProviderRoutes.kt
+│       ├── configureRoleRoutes.kt    # Ktor routes for role management
 │       ├── configureSessionRoutes.kt
 │       ├── configureSettingsRoutes.kt
-│       └── configureUserRoutes.kt
+│       └── configureUserRoutes.kt    # Ktor routes for user management
 ├── main/
 │   ├── chatBotServerModule.kt    # Main Ktor application module for the chatbot server
 │   ├── DataManager.kt            # Interface for managing database schema
@@ -207,6 +213,7 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   │   ├── MessageService.kt     # Message handling service interface
 │   │   ├── MessageStreamEvent.kt # Message stream event type
 │   │   ├── ModelSettingsService.kt # Model Settings management service interface
+│   │   ├── RoleService.kt        # Role management service interface
 │   │   ├── SessionService.kt     # Session management service interface
 │   │   ├── UserService.kt        # User account management service interface
 │   │   ├── error/                # Service-specific error types
@@ -358,8 +365,10 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   ├── ModelRepository.kt  # Model repository
 │   ├── ProviderRepository.kt # Provider repository
 │   ├── RepositoryError.kt  # Repository error hierarchy
+│   ├── RoleRepository.kt   # Interface for managing user roles
 │   ├── SessionRepository.kt  # Session repository
 │   ├── SettingsRepository.kt # Settings repository
+│   ├── UserRepository.kt   # Interface for managing user accounts and details
 │   └── impl/             # Repository implementations
 ├── service/          # Frontend services (API clients)
 │   ├── api/          # API interfaces
@@ -368,8 +377,10 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   │   ├── GroupApi.kt
 │   │   ├── ModelApi.kt
 │   │   ├── ProviderApi.kt
+│   │   ├── RoleApi.kt      # Interface for managing user roles
 │   │   ├── SessionApi.kt
 │   │   ├── SettingsApi.kt
+│   │   ├── UserApi.kt      # Interface for user management operations
 │   │   └── ktor/       # Ktor-based API client implementations
 │   │       ├── BaseApiClient.kt  # Base API client implementation
 │   │       ├── createHttpClient.kt # Ktor HTTP client setup
@@ -387,6 +398,9 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
     ├── ProviderConfigViewModel.kt # Provider Config ViewModel (manages LLM provider state)
     ├── SessionListViewModel.kt # Session List ViewModel (manages session list state)
     ├── SettingsConfigViewModel.kt # Settings Config ViewModel (manages model settings state)
+    ├── admin/          # Admin-specific ViewModels
+    │   ├── UserManagementState.kt      # State for user management UI
+    │   └── UserManagementViewModel.kt  # ViewModel for admin user management
     ├── auth/
     │   └── AuthViewModel.kt  # Authentication ViewModel
     ├── chat/

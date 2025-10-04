@@ -18,6 +18,7 @@ class ApiRoutesKtor(
     private val messageService: MessageService,
     private val authenticationService: AuthenticationService,
     private val userService: UserService,
+    private val roleService: RoleService,
     private val authorizationService: AuthorizationService
 ) {
     /**
@@ -27,6 +28,7 @@ class ApiRoutesKtor(
     fun configureAllRoutes(route: Route) {
         configureAuthRoutes(route)
         configureUserRoutes(route)
+        configureRoleRoutes(route)
         configureSessionRoutes(route)
         configureGroupRoutes(route)
         configureProviderRoutes(route)
@@ -47,6 +49,13 @@ class ApiRoutesKtor(
      */
     fun configureUserRoutes(route: Route) {
         route.configureUserRoutes(userService, authorizationService)
+    }
+
+    /**
+     * Configures routes related to Role Management (/api/v1/roles).
+     */
+    fun configureRoleRoutes(route: Route) {
+        route.configureRoleRoutes(roleService, authorizationService)
     }
 
     /**

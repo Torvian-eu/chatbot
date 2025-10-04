@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.service.setup
 import eu.torvian.chatbot.common.api.CommonRoles
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
+import eu.torvian.chatbot.common.models.UserStatus
 import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.tables.PermissionsTable
 import eu.torvian.chatbot.server.data.tables.RolesTable
@@ -75,7 +76,7 @@ class InitialSetupServiceTest {
     @Test
     fun `isSetupComplete should return true when users exist`() = runTest {
         // Create a user manually
-        val userResult = userDao.insertUser("testuser", "hashedpassword", "test@example.com")
+        val userResult = userDao.insertUser("testuser", "hashedpassword", "test@example.com", UserStatus.ACTIVE)
         assertTrue(userResult.isRight(), "Failed to create test user")
 
         val isComplete = initialSetupService.isSetupComplete()

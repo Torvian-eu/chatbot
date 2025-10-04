@@ -5,6 +5,7 @@ import arrow.core.right
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.ChatGroup
+import eu.torvian.chatbot.common.models.UserStatus
 import eu.torvian.chatbot.server.data.dao.GroupOwnershipDao
 import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
 import eu.torvian.chatbot.server.data.dao.error.SetOwnerError
@@ -19,7 +20,8 @@ import kotlinx.datetime.Instant
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import kotlin.test.*
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * Tests for [GroupOwnershipDaoExposed].
@@ -43,6 +45,7 @@ class GroupOwnershipDaoExposedTest {
         username = "testuser1",
         passwordHash = "hashedpassword1",
         email = "test1@example.com",
+        status = UserStatus.ACTIVE,
         createdAt = Instant.fromEpochMilliseconds(TestDefaults.DEFAULT_INSTANT_MILLIS),
         updatedAt = Instant.fromEpochMilliseconds(TestDefaults.DEFAULT_INSTANT_MILLIS),
         lastLogin = null
@@ -53,6 +56,7 @@ class GroupOwnershipDaoExposedTest {
         username = "testuser2",
         passwordHash = "hashedpassword2",
         email = "test2@example.com",
+        status = UserStatus.ACTIVE,
         createdAt = Instant.fromEpochMilliseconds(TestDefaults.DEFAULT_INSTANT_MILLIS),
         updatedAt = Instant.fromEpochMilliseconds(TestDefaults.DEFAULT_INSTANT_MILLIS),
         lastLogin = null
@@ -105,7 +109,7 @@ class GroupOwnershipDaoExposedTest {
     @Test
     fun `getAllGroupsForUser should return empty list when user has no groups`() = runTest {
         val result = groupOwnershipDao.getAllGroupsForUser(testUser1.id)
-        
+
         assertTrue(result.isEmpty(), "Should return empty list when user has no groups")
     }
 
@@ -113,7 +117,7 @@ class GroupOwnershipDaoExposedTest {
     fun `getAllGroupsForUser should return empty list when user does not exist`() = runTest {
         val nonExistentUserId = 999L
         val result = groupOwnershipDao.getAllGroupsForUser(nonExistentUserId)
-        
+
         assertTrue(result.isEmpty(), "Should return empty list when user does not exist")
     }
 
@@ -122,7 +126,7 @@ class GroupOwnershipDaoExposedTest {
         // Set ownership for user1
         groupOwnershipDao.setOwner(testGroup1.id, testUser1.id)
         groupOwnershipDao.setOwner(testGroup3.id, testUser1.id)
-        
+
         // Set ownership for user2
         groupOwnershipDao.setOwner(testGroup2.id, testUser2.id)
 
@@ -147,14 +151,14 @@ class GroupOwnershipDaoExposedTest {
     fun `getOwner should return ResourceNotFound when group does not exist`() = runTest {
         val nonExistentGroupId = 999L
         val result = groupOwnershipDao.getOwner(nonExistentGroupId)
-        
+
         assertEquals(GetOwnerError.ResourceNotFound(nonExistentGroupId.toString()).left(), result)
     }
 
     @Test
     fun `getOwner should return ResourceNotFound when group exists but has no owner`() = runTest {
         val result = groupOwnershipDao.getOwner(testGroup1.id)
-        
+
         assertEquals(GetOwnerError.ResourceNotFound(testGroup1.id.toString()).left(), result)
     }
 
@@ -162,18 +166,18 @@ class GroupOwnershipDaoExposedTest {
     fun `getOwner should return owner user ID when group has owner`() = runTest {
         // Set ownership
         groupOwnershipDao.setOwner(testGroup1.id, testUser1.id)
-        
+
         val result = groupOwnershipDao.getOwner(testGroup1.id)
-        
+
         assertEquals(testUser1.id.right(), result)
     }
 
     @Test
     fun `setOwner should successfully create ownership link`() = runTest {
         val result = groupOwnershipDao.setOwner(testGroup1.id, testUser1.id)
-        
+
         assertTrue(result.isRight(), "setOwner should succeed")
-        
+
         // Verify ownership was set
         val ownerResult = groupOwnershipDao.getOwner(testGroup1.id)
         assertEquals(testUser1.id.right(), ownerResult)
@@ -183,11 +187,11 @@ class GroupOwnershipDaoExposedTest {
     fun `setOwner should return AlreadyOwned when trying to set owner for already owned group`() = runTest {
         // Set initial ownership
         groupOwnershipDao.setOwner(testGroup1.id, testUser1.id)
-        
+
         // Try to set ownership again (same user)
         val result1 = groupOwnershipDao.setOwner(testGroup1.id, testUser1.id)
         assertEquals(SetOwnerError.AlreadyOwned.left(), result1)
-        
+
         // Try to set ownership to different user
         val result2 = groupOwnershipDao.setOwner(testGroup1.id, testUser2.id)
         assertEquals(SetOwnerError.AlreadyOwned.left(), result2)
@@ -197,7 +201,7 @@ class GroupOwnershipDaoExposedTest {
     fun `setOwner should return ForeignKeyViolation when group does not exist`() = runTest {
         val nonExistentGroupId = 999L
         val result = groupOwnershipDao.setOwner(nonExistentGroupId, testUser1.id)
-        
+
         assertEquals(
             SetOwnerError.ForeignKeyViolation(nonExistentGroupId.toString(), testUser1.id).left(),
             result
@@ -208,7 +212,7 @@ class GroupOwnershipDaoExposedTest {
     fun `setOwner should return ForeignKeyViolation when user does not exist`() = runTest {
         val nonExistentUserId = 999L
         val result = groupOwnershipDao.setOwner(testGroup1.id, nonExistentUserId)
-        
+
         assertEquals(
             SetOwnerError.ForeignKeyViolation(testGroup1.id.toString(), nonExistentUserId).left(),
             result
@@ -220,7 +224,7 @@ class GroupOwnershipDaoExposedTest {
         val nonExistentGroupId = 999L
         val nonExistentUserId = 888L
         val result = groupOwnershipDao.setOwner(nonExistentGroupId, nonExistentUserId)
-        
+
         assertEquals(
             SetOwnerError.ForeignKeyViolation(nonExistentGroupId.toString(), nonExistentUserId).left(),
             result
@@ -245,10 +249,10 @@ class GroupOwnershipDaoExposedTest {
 
         assertEquals(2, user1Groups.size)
         assertEquals(1, user2Groups.size)
-        
+
         val user1GroupIds = user1Groups.map { it.id }.toSet()
         val user2GroupIds = user2Groups.map { it.id }.toSet()
-        
+
         assertEquals(setOf(testGroup1.id, testGroup3.id), user1GroupIds)
         assertEquals(setOf(testGroup2.id), user2GroupIds)
     }

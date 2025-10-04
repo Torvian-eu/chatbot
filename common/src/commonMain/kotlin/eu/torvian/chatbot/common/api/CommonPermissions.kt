@@ -42,6 +42,7 @@ object CommonPermissions {
      */
     object Subjects {
         const val USERS = "users"
+        const val ROLES = "roles"
         const val PUBLIC_PROVIDER = "public_provider"
         const val PUBLIC_MODEL = "public_model"
         const val PUBLIC_SETTINGS = "public_settings"
@@ -52,6 +53,7 @@ object CommonPermissions {
 
     // Predefined permission specifications for common operations
     val MANAGE_USERS = PermissionSpec(Actions.MANAGE, Subjects.USERS)
+    val MANAGE_ROLES = PermissionSpec(Actions.MANAGE, Subjects.ROLES)
     val CREATE_PUBLIC_PROVIDER = PermissionSpec(Actions.CREATE, Subjects.PUBLIC_PROVIDER)
     val CREATE_PUBLIC_MODEL = PermissionSpec(Actions.CREATE, Subjects.PUBLIC_MODEL)
     val CREATE_PUBLIC_SETTINGS = PermissionSpec(Actions.CREATE, Subjects.PUBLIC_SETTINGS)
