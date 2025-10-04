@@ -345,8 +345,11 @@ class UserServiceImpl(
             // Hash new password
             val hashedPassword = passwordService.hashPassword(newPassword)
 
-            // Update user with new password
-            val updatedUser = existingUser.copy(passwordHash = hashedPassword)
+            // Update user with new password and clear requiresPasswordChange flag
+            val updatedUser = existingUser.copy(
+                passwordHash = hashedPassword,
+                requiresPasswordChange = false  // Clear the flag after password change
+            )
             withError({ _: UserError ->
                 ChangePasswordError.UserNotFound(userId)
             }) {

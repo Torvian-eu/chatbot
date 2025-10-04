@@ -1,8 +1,11 @@
 package eu.torvian.chatbot.server.ktor.routes
 
 import arrow.core.raise.either
+import arrow.core.raise.ensure
 import arrow.core.raise.withError
+import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.CommonPermissions
+import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.UserResource
 import eu.torvian.chatbot.common.models.admin.AssignRoleRequest
 import eu.torvian.chatbot.common.models.admin.ChangePasswordRequest
@@ -167,7 +170,20 @@ fun Route.configureUserRoutes(
             val request = call.receive<ChangePasswordRequest>()
 
             val result = either {
-                requirePermission(authorizationService, requestingUserId, CommonPermissions.MANAGE_USERS)
+                // Allow if user is changing their own password OR has MANAGE_USERS permission
+                val isOwnPassword = requestingUserId == resource.parent.userId
+                val hasManageUsersPermission = authorizationService.hasPermission(
+                    requestingUserId,
+                    CommonPermissions.MANAGE_USERS
+                )
+
+                ensure(isOwnPassword || hasManageUsersPermission) {
+                    apiError(
+                        CommonApiErrorCodes.PERMISSION_DENIED,
+                        "You can only change your own password unless you have MANAGE_USERS permission"
+                    )
+                }
+
                 withError({ e: ChangePasswordError -> e.toApiError() }) {
                     userService.changePassword(resource.parent.userId, request.newPassword).bind()
                 }

@@ -55,6 +55,9 @@ class AuthViewModel(
     private val _registerFormState = MutableStateFlow(RegisterFormState())
     val registerFormState: StateFlow<RegisterFormState> = _registerFormState.asStateFlow()
 
+    private val _passwordChangeFormState = MutableStateFlow(PasswordChangeFormState())
+    val passwordChangeFormState: StateFlow<PasswordChangeFormState> = _passwordChangeFormState.asStateFlow()
+
     // --- Authentication Operations ---
 
     /**
@@ -215,6 +218,70 @@ class AuthViewModel(
     }
 
     /**
+     * Changes the password for the currently authenticated user.
+     * Used when the user is forced to change their password on first login.
+     */
+    fun changePassword(userId: Long) {
+        viewModelScope.launch {
+            val currentForm = _passwordChangeFormState.value
+            val newPassword = currentForm.newPassword
+            val confirmPassword = currentForm.confirmPassword
+
+            logger.info("Attempting password change for user: $userId")
+
+            // Validate form before submission
+            val newPasswordError = AuthFormValidation.validatePassword(newPassword)
+            val confirmPasswordError = AuthFormValidation.validateConfirmPassword(newPassword, confirmPassword)
+
+            if (newPasswordError != null || confirmPasswordError != null) {
+                _passwordChangeFormState.update { currentState ->
+                    currentState.copy(
+                        newPasswordError = newPasswordError,
+                        confirmPasswordError = confirmPasswordError,
+                        generalError = null
+                    )
+                }
+                return@launch
+            }
+
+            // Clear errors and set loading state
+            _passwordChangeFormState.update { currentState ->
+                currentState.copy(
+                    isLoading = true,
+                    newPasswordError = null,
+                    confirmPasswordError = null,
+                    generalError = null
+                )
+            }
+
+            // Perform password change
+            val result = authRepository.changePassword(userId, newPassword)
+
+            result.fold(
+                ifLeft = { error ->
+                    logger.warn("Password change failed for user $userId: ${error.message}")
+                    _passwordChangeFormState.update { currentState ->
+                        currentState.copy(
+                            isLoading = false,
+                            generalError = mapPasswordChangeError(error)
+                        )
+                    }
+                },
+                ifRight = {
+                    logger.info("Password change successful for user: $userId")
+                    _passwordChangeFormState.update { currentState ->
+                        currentState.copy(
+                            isLoading = false,
+                            generalError = null,
+                            passwordChangeSuccessEvent = true
+                        )
+                    }
+                }
+            )
+        }
+    }
+
+    /**
      * Checks the initial authentication state on app startup.
      */
     suspend fun checkInitialAuthState() {
@@ -268,6 +335,26 @@ class AuthViewModel(
     }
 
     /**
+     * Updates the password change form state with optional named parameters for each field.
+     * Only the provided fields will be updated; others remain unchanged.
+     * Field-specific errors are cleared if the corresponding field is updated.
+     */
+    fun updatePasswordChangeForm(
+        newPassword: String? = null,
+        confirmPassword: String? = null
+    ) {
+        _passwordChangeFormState.update { currentState ->
+            currentState.copy(
+                newPassword = newPassword ?: currentState.newPassword,
+                confirmPassword = confirmPassword ?: currentState.confirmPassword,
+                // Clear field-specific errors when user types
+                newPasswordError = if (newPassword != null && newPassword != currentState.newPassword) null else currentState.newPasswordError,
+                confirmPasswordError = if (confirmPassword != null && confirmPassword != currentState.confirmPassword) null else currentState.confirmPasswordError
+            )
+        }
+    }
+
+    /**
      * Resets the registration form state, typically called by the UI after
      * successful navigation away from the registration success screen.
      */
@@ -290,11 +377,19 @@ class AuthViewModel(
     }
 
     /**
+     * Clears the password change form state.
+     */
+    fun clearPasswordChangeForm() {
+        _passwordChangeFormState.value = PasswordChangeFormState()
+    }
+
+    /**
      * Clears all form states.
      */
     fun clearAllForms() {
         clearLoginForm()
         clearRegisterForm()
+        clearPasswordChangeForm()
     }
 
     // --- Error Mapping ---
@@ -329,6 +424,23 @@ class AuthViewModel(
                     "Email is already registered. Please use a different email or try logging in."
 
                 else -> "Registration failed. Please try again."
+            }
+
+            is RepositoryError.OtherError ->
+                "An unexpected error occurred. Please try again."
+        }
+    }
+
+    private fun mapPasswordChangeError(error: RepositoryError): String {
+        return when (error) {
+            is RepositoryError.DataFetchError -> when {
+                error.message.contains("Weak password", ignoreCase = true) ->
+                    "New password is too weak. Please choose a stronger password."
+
+                error.message.contains("Password cannot be reused", ignoreCase = true) ->
+                    "New password cannot be the same as the old password."
+
+                else -> "Password change failed. Please try again."
             }
 
             is RepositoryError.OtherError ->

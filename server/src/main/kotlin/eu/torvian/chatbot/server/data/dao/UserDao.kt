@@ -46,6 +46,7 @@ interface UserDao {
      * @param passwordHash Securely hashed password.
      * @param email Optional email address (must be unique if provided).
      * @param status Initial account status to persist (e.g., DISABLED for new registrations, ACTIVE for initial admin)
+     * @param requiresPasswordChange Whether the user must change their password upon next login
      * @return Either [UserError.UsernameAlreadyExists] or [UserError.EmailAlreadyExists] if constraints are violated,
      *         or the newly created [UserEntity] on success.
      */
@@ -53,7 +54,8 @@ interface UserDao {
         username: String,
         passwordHash: String,
         email: String? = null,
-        status: UserStatus
+        status: UserStatus,
+        requiresPasswordChange: Boolean = false
     ): Either<UserError, UserEntity>
 
     /**

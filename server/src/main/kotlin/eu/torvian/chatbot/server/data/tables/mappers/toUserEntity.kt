@@ -18,6 +18,7 @@ fun ResultRow.toUserEntity(): UserEntity {
         status = this[UsersTable.status],
         createdAt = Instant.fromEpochMilliseconds(this[UsersTable.createdAt]),
         updatedAt = Instant.fromEpochMilliseconds(this[UsersTable.updatedAt]),
-        lastLogin = this[UsersTable.lastLogin]?.let { Instant.fromEpochMilliseconds(it) }
+        lastLogin = this[UsersTable.lastLogin]?.let { Instant.fromEpochMilliseconds(it) },
+        requiresPasswordChange = this[UsersTable.requiresPasswordChange]
     )
 }

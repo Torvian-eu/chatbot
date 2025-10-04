@@ -134,7 +134,8 @@ class InitialSetupService(
             username = DEFAULT_ADMIN_USERNAME,
             passwordHash = hashedPassword,
             email = null,
-            status = UserStatus.ACTIVE
+            status = UserStatus.ACTIVE,
+            requiresPasswordChange = true  // Force password change on first login
         ).mapLeft { error ->
             when (error) {
                 is UserError.UsernameAlreadyExists -> "Admin username already exists"

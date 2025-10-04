@@ -9,11 +9,13 @@ import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.AuthApi
+import eu.torvian.chatbot.app.service.api.UserApi
 import eu.torvian.chatbot.app.service.auth.AuthenticationFailureEvent
 import eu.torvian.chatbot.app.service.auth.TokenStorage
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.models.User
+import eu.torvian.chatbot.common.models.admin.ChangePasswordRequest
 import eu.torvian.chatbot.common.models.auth.LoginRequest
 import eu.torvian.chatbot.common.models.auth.RegisterRequest
 import kotlinx.coroutines.CoroutineScope
@@ -30,10 +32,12 @@ import kotlinx.coroutines.launch
  * between the AuthApi for server operations and TokenStorage for local token management.
  *
  * @property authApi The API client for authentication operations
+ * @property userApi The API client for user management operations
  * @property tokenStorage The storage for managing authentication tokens
  */
 class DefaultAuthRepository(
     private val authApi: AuthApi,
+    private val userApi: UserApi,
     private val tokenStorage: TokenStorage,
     private val eventBus: EventBus
 ) : AuthRepository {
@@ -87,7 +91,8 @@ class DefaultAuthRepository(
         _authState.value = AuthState.Authenticated(
             userId = loginResponse.user.id,
             username = loginResponse.user.username,
-            permissions = loginResponse.permissions
+            permissions = loginResponse.permissions,
+            requiresPasswordChange = loginResponse.user.requiresPasswordChange
         )
     }
 
@@ -97,6 +102,21 @@ class DefaultAuthRepository(
         }) {
             authApi.register(request).bind()
         }
+    }
+
+    override suspend fun changePassword(userId: Long, newPassword: String): Either<RepositoryError, Unit> = either {
+        logger.info("Changing password for user: $userId")
+
+        val request = ChangePasswordRequest(newPassword)
+
+        // Call the API to change password
+        withError({ apiError: ApiResourceError ->
+            apiError.toRepositoryError("Password change failed")
+        }) {
+            userApi.changeUserPassword(userId, request).bind()
+        }
+
+        logger.info("Password changed successfully for user: $userId")
     }
 
     override suspend fun logout(): Either<RepositoryError, Unit> = either {
@@ -133,7 +153,12 @@ class DefaultAuthRepository(
                     },
                     ifRight = { permissions ->
                         logger.info("Found cached user data and permissions, setting authenticated state: ${user.username}")
-                        _authState.value = AuthState.Authenticated(user.id, user.username, permissions)
+                        _authState.value = AuthState.Authenticated(
+                            userId = user.id,
+                            username = user.username,
+                            permissions = permissions,
+                            requiresPasswordChange = user.requiresPasswordChange
+                        )
                     }
                 )
             }

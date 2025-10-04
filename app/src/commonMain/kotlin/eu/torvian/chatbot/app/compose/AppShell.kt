@@ -5,6 +5,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.*
 import eu.torvian.chatbot.app.compose.auth.AuthLoadingScreen
+import eu.torvian.chatbot.app.compose.auth.ForcePasswordChangeScreen
 import eu.torvian.chatbot.app.compose.snackbar.SnackbarVisualsWithError
 import eu.torvian.chatbot.app.domain.events.AppError
 import eu.torvian.chatbot.app.domain.events.AppSuccess
@@ -111,11 +112,18 @@ fun AppShell() {
         }
 
         is AuthState.Authenticated -> {
-            MainApplicationFlow(
-                authState = currentAuthState,
-                snackbarHostState = snackbarHostState,
-                authViewModel = authViewModel
-            )
+            // Check if user needs to change password before accessing the app
+            if (currentAuthState.requiresPasswordChange) {
+                ForcePasswordChangeScreen(
+                    authState = currentAuthState
+                )
+            } else {
+                MainApplicationFlow(
+                    authState = currentAuthState,
+                    snackbarHostState = snackbarHostState,
+                    authViewModel = authViewModel
+                )
+            }
         }
     }
 }

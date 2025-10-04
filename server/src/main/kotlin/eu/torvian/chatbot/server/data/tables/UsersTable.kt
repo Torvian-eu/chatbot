@@ -16,6 +16,7 @@ import org.jetbrains.exposed.dao.id.LongIdTable
  * @property createdAt Timestamp when the user account was created (epoch milliseconds)
  * @property updatedAt Timestamp when the user account was last updated (epoch milliseconds)
  * @property lastLogin Timestamp of the user's last successful login (nullable, epoch milliseconds)
+ * @property requiresPasswordChange Whether the user must change their password upon next login
  */
 object UsersTable : LongIdTable("users") {
     val username = varchar("username", 255).uniqueIndex()
@@ -25,4 +26,5 @@ object UsersTable : LongIdTable("users") {
     val createdAt = long("created_at").default(System.currentTimeMillis())
     val updatedAt = long("updated_at").default(System.currentTimeMillis())
     val lastLogin = long("last_login").nullable()
+    val requiresPasswordChange = bool("requires_password_change").default(false)
 }

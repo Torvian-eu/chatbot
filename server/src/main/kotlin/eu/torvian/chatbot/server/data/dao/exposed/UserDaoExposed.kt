@@ -54,7 +54,8 @@ class UserDaoExposed(
         username: String,
         passwordHash: String,
         email: String?,
-        status: UserStatus
+        status: UserStatus,
+        requiresPasswordChange: Boolean
     ): Either<UserError, UserEntity> =
         transactionScope.transaction {
             either {
@@ -66,6 +67,7 @@ class UserDaoExposed(
                         it[UsersTable.status] = status
                         it[UsersTable.createdAt] = System.currentTimeMillis()
                         it[UsersTable.updatedAt] = System.currentTimeMillis()
+                        it[UsersTable.requiresPasswordChange] = requiresPasswordChange
                     }
 
                     val newId = insertStatement[UsersTable.id].value
@@ -103,6 +105,7 @@ class UserDaoExposed(
                         it[status] = user.status
                         it[updatedAt] = System.currentTimeMillis()
                         it[lastLogin] = user.lastLogin?.toEpochMilliseconds()
+                        it[requiresPasswordChange] = user.requiresPasswordChange
                     }
                     ensure(updatedRowCount != 0) { UserError.UserNotFound(user.id) }
                 }) { e: ExposedSQLException ->

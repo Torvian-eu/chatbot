@@ -16,6 +16,7 @@ import kotlinx.serialization.Serializable
  * @property status Current operational status of the account (e.g., ACTIVE, DISABLED, LOCKED)
  * @property createdAt Timestamp when the user account was created
  * @property lastLogin Timestamp of the user's last successful login (nullable)
+ * @property requiresPasswordChange Whether the user must change their password upon next login
  */
 @Serializable
 data class User(
@@ -24,5 +25,6 @@ data class User(
     val email: String?,
     val status: UserStatus,
     val createdAt: Instant,
-    val lastLogin: Instant?
+    val lastLogin: Instant?,
+    val requiresPasswordChange: Boolean = false
 )

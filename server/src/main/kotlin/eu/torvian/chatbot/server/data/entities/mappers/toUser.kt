@@ -16,6 +16,7 @@ fun UserEntity.toUser(): User {
         email = this.email,
         status = this.status,
         createdAt = this.createdAt,
-        lastLogin = this.lastLogin
+        lastLogin = this.lastLogin,
+        requiresPasswordChange = this.requiresPasswordChange
     )
 }
