@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,10 +19,13 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import eu.torvian.chatbot.app.compose.admin.AdminScreen
 import eu.torvian.chatbot.app.compose.common.OverflowTooltipText
+import eu.torvian.chatbot.app.compose.permissions.RequiresAnyPermission
 import eu.torvian.chatbot.app.compose.settings.SettingsScreen
 import eu.torvian.chatbot.app.compose.snackbar.SharedSnackbar
 import eu.torvian.chatbot.app.compose.snackbar.SnackbarVisualsWithError
+import eu.torvian.chatbot.app.domain.navigation.Admin
 import eu.torvian.chatbot.app.domain.navigation.Chat
 import eu.torvian.chatbot.app.domain.navigation.Settings
 import eu.torvian.chatbot.app.generated.resources.Res
@@ -30,6 +34,7 @@ import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
 import eu.torvian.chatbot.app.viewmodel.auth.AuthViewModel
 import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
+import eu.torvian.chatbot.common.api.CommonPermissions
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
@@ -110,6 +115,30 @@ fun MainApplicationFlow(
                             }
                         }
                     )
+
+                    // Admin navigation item with permission check
+                    RequiresAnyPermission(
+                        authState = authState,
+                        permissions = listOf(
+                            CommonPermissions.MANAGE_USERS,
+                            CommonPermissions.MANAGE_ROLES
+                        )
+                    ) {
+                        NavigationBarItem(
+                            icon = { Icon(Icons.Default.AdminPanelSettings, contentDescription = "Admin") },
+                            label = { Text("Admin") },
+                            selected = currentRoute == Admin.route,
+                            onClick = {
+                                navController.navigate(Admin) {
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            }
+                        )
+                    }
                 }
             },
             snackbarHost = {
@@ -126,6 +155,9 @@ fun MainApplicationFlow(
                     }
                     composable<Settings> {
                         SettingsScreen()
+                    }
+                    composable<Admin> {
+                        AdminScreen(authState = authState)
                     }
                 }
             }
