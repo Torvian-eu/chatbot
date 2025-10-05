@@ -21,6 +21,11 @@ sealed interface ChangePasswordError {
      * @property reason Description of why the password is invalid
      */
     data class InvalidPassword(val reason: String) : ChangePasswordError
+
+    /**
+     * New password is the same as the current password.
+     */
+    data object SameAsCurrentPassword : ChangePasswordError
 }
 
 /**
@@ -32,4 +37,8 @@ fun ChangePasswordError.toApiError(): ApiError = when (this) {
 
     is ChangePasswordError.InvalidPassword ->
         apiError(CommonApiErrorCodes.INVALID_ARGUMENT, reason)
+
+    is ChangePasswordError.SameAsCurrentPassword ->
+        // Use a message that client-side mapping already expects
+        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Password cannot be reused")
 }

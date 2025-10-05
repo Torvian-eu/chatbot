@@ -355,6 +355,12 @@ class UserServiceImpl(
                 userDao.getUserById(userId).bind()
             }
 
+            // Prevent reusing the current password
+            if (passwordService.verifyPassword(newPassword, existingUser.passwordHash)) {
+                logger.warn("User $userId attempted to reuse current password")
+                raise(ChangePasswordError.SameAsCurrentPassword)
+            }
+
             // Hash new password
             val hashedPassword = passwordService.hashPassword(newPassword)
 
