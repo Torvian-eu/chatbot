@@ -4,7 +4,8 @@ import arrow.core.Either
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
-import eu.torvian.chatbot.common.models.*
+import eu.torvian.chatbot.common.models.core.ChatMessage
+import eu.torvian.chatbot.common.models.core.ChatSession
 import kotlinx.datetime.Instant
 
 // Helper to create Instant for tests (using a fixed time)

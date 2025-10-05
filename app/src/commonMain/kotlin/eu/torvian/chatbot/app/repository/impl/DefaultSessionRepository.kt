@@ -10,7 +10,6 @@ import eu.torvian.chatbot.app.service.api.ChatApi
 import eu.torvian.chatbot.app.service.api.SessionApi
 import eu.torvian.chatbot.app.utils.misc.LruCache
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
-import eu.torvian.chatbot.common.models.*
 import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
 import eu.torvian.chatbot.common.models.api.core.CreateSessionRequest
 import eu.torvian.chatbot.common.models.api.core.ProcessNewMessageRequest
@@ -20,6 +19,9 @@ import eu.torvian.chatbot.common.models.api.core.UpdateSessionLeafMessageRequest
 import eu.torvian.chatbot.common.models.api.core.UpdateSessionModelRequest
 import eu.torvian.chatbot.common.models.api.core.UpdateSessionNameRequest
 import eu.torvian.chatbot.common.models.api.core.UpdateSessionSettingsRequest
+import eu.torvian.chatbot.common.models.core.ChatMessage
+import eu.torvian.chatbot.common.models.core.ChatSession
+import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock

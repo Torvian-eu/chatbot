@@ -2,7 +2,7 @@ package eu.torvian.chatbot.app.viewmodel.chat.util
 
 import eu.torvian.chatbot.app.utils.misc.KmpLogger
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
-import eu.torvian.chatbot.common.models.ChatMessage
+import eu.torvian.chatbot.common.models.core.ChatMessage
 
 /**
  * Default implementation of [ThreadBuilder] that handles message thread traversal

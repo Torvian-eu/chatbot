@@ -2,8 +2,8 @@ package eu.torvian.chatbot.server.service.core.impl
 
 import arrow.core.left
 import arrow.core.right
-import eu.torvian.chatbot.common.models.ChatSession
-import eu.torvian.chatbot.common.models.ChatSessionSummary
+import eu.torvian.chatbot.common.models.core.ChatSession
+import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType

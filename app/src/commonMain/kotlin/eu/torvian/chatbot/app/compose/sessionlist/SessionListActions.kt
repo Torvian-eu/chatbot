@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.app.compose.sessionlist
 
-import eu.torvian.chatbot.common.models.ChatGroup
-import eu.torvian.chatbot.common.models.ChatSessionSummary
+import eu.torvian.chatbot.common.models.core.ChatGroup
+import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 
 /**
  * Defines all UI actions that can be triggered from the Session List Panel.

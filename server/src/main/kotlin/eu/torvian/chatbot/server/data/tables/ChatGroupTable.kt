@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.server.data.tables
 
-import eu.torvian.chatbot.common.models.ChatGroup
+import eu.torvian.chatbot.common.models.core.ChatGroup
 import org.jetbrains.exposed.dao.id.LongIdTable
 
 /**

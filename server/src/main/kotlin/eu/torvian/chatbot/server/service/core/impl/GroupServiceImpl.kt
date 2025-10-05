@@ -4,7 +4,7 @@ import arrow.core.Either
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.raise.withError
-import eu.torvian.chatbot.common.models.ChatGroup
+import eu.torvian.chatbot.common.models.core.ChatGroup
 import eu.torvian.chatbot.server.data.dao.GroupDao
 import eu.torvian.chatbot.server.data.dao.GroupOwnershipDao
 import eu.torvian.chatbot.server.data.dao.SessionDao

@@ -1,8 +1,8 @@
 package eu.torvian.chatbot.app.service.api
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.ChatSession
-import eu.torvian.chatbot.common.models.ChatSessionSummary
+import eu.torvian.chatbot.common.models.core.ChatSession
+import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 import eu.torvian.chatbot.common.models.api.core.CreateSessionRequest
 import eu.torvian.chatbot.common.models.api.core.UpdateSessionGroupRequest
 import eu.torvian.chatbot.common.models.api.core.UpdateSessionLeafMessageRequest

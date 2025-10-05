@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.app.domain.contracts
 
-import eu.torvian.chatbot.common.models.ChatSessionSummary
+import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 
 /**
  * Consolidated state for all dialog management in the SessionListPanel.

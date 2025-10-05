@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.server.service.core
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.ChatGroup
+import eu.torvian.chatbot.common.models.core.ChatGroup
 import eu.torvian.chatbot.server.service.core.error.group.CreateGroupError
 import eu.torvian.chatbot.server.service.core.error.group.DeleteGroupError
 import eu.torvian.chatbot.server.service.core.error.group.RenameGroupError

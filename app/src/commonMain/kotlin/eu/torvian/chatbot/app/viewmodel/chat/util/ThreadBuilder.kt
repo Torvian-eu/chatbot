@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.app.viewmodel.chat.util
 
-import eu.torvian.chatbot.common.models.ChatMessage
+import eu.torvian.chatbot.common.models.core.ChatMessage
 
 /**
  * Service responsible for building thread branches from flat message lists

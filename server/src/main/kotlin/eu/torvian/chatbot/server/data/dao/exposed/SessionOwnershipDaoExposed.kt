@@ -5,7 +5,7 @@ import arrow.core.left
 import arrow.core.raise.catch
 import arrow.core.raise.either
 import arrow.core.right
-import eu.torvian.chatbot.common.models.ChatSessionSummary
+import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 import eu.torvian.chatbot.server.data.dao.SessionOwnershipDao
 import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
 import eu.torvian.chatbot.server.data.dao.error.SetOwnerError

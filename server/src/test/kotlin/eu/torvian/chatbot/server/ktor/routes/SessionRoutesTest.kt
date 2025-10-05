@@ -7,7 +7,6 @@ import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
-import eu.torvian.chatbot.common.models.*
 import eu.torvian.chatbot.common.models.api.core.CreateSessionRequest
 import eu.torvian.chatbot.common.models.api.core.ProcessNewMessageRequest
 import eu.torvian.chatbot.common.models.api.core.UpdateSessionGroupRequest
@@ -15,6 +14,9 @@ import eu.torvian.chatbot.common.models.api.core.UpdateSessionLeafMessageRequest
 import eu.torvian.chatbot.common.models.api.core.UpdateSessionModelRequest
 import eu.torvian.chatbot.common.models.api.core.UpdateSessionNameRequest
 import eu.torvian.chatbot.common.models.api.core.UpdateSessionSettingsRequest
+import eu.torvian.chatbot.common.models.core.ChatMessage
+import eu.torvian.chatbot.common.models.core.ChatSession
+import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 import eu.torvian.chatbot.server.testutils.auth.TestAuthHelper
 import eu.torvian.chatbot.server.testutils.auth.authenticate
 import eu.torvian.chatbot.server.testutils.data.Table

@@ -15,7 +15,7 @@ import eu.torvian.chatbot.app.compose.common.LoadingOverlay
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.contracts.SessionListData
 import eu.torvian.chatbot.app.domain.contracts.SessionListDialogState
-import eu.torvian.chatbot.common.models.ChatGroup
+import eu.torvian.chatbot.common.models.core.ChatGroup
 
 /**
  * Stateless Composable for the session list panel.

@@ -5,7 +5,7 @@ import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.GroupApi
 import eu.torvian.chatbot.common.api.resources.GroupResource
 import eu.torvian.chatbot.common.api.resources.GroupResource.ById
-import eu.torvian.chatbot.common.models.ChatGroup
+import eu.torvian.chatbot.common.models.core.ChatGroup
 import eu.torvian.chatbot.common.models.api.core.CreateGroupRequest
 import eu.torvian.chatbot.common.models.api.core.RenameGroupRequest
 import io.ktor.client.*

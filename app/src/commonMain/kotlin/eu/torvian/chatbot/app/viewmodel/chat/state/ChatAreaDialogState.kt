@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.app.viewmodel.chat.state
 
-import eu.torvian.chatbot.common.models.ChatMessage
+import eu.torvian.chatbot.common.models.core.ChatMessage
 
 /**
  * Consolidated state for all dialog management in the ChatArea.

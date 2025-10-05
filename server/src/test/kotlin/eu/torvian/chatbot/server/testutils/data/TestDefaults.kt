@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.testutils.data
 
-import eu.torvian.chatbot.common.models.*
+import eu.torvian.chatbot.common.models.core.ChatGroup
+import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType

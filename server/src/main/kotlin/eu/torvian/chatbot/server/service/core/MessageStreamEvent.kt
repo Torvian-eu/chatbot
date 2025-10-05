@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.server.service.core
 
-import eu.torvian.chatbot.common.models.ChatMessage
+import eu.torvian.chatbot.common.models.core.ChatMessage
 
 /**
  * Internal streaming events emitted by MessageService during streaming message processing.

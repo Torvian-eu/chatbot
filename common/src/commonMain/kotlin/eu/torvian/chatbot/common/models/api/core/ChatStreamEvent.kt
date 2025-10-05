@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.common.models.api.core
 
 import eu.torvian.chatbot.common.api.ApiError
-import eu.torvian.chatbot.common.models.ChatMessage
+import eu.torvian.chatbot.common.models.core.ChatMessage
 import kotlinx.serialization.Serializable
 
 /**

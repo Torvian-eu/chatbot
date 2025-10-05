@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.app.compose.chatarea
 
-import eu.torvian.chatbot.common.models.ChatMessage
+import eu.torvian.chatbot.common.models.core.ChatMessage
 
 /**
  * Defines all UI actions that can be triggered from the main Chat Area.

@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.server.service.llm
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.*
+import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider

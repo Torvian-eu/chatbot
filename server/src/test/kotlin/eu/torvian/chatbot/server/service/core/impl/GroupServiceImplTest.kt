@@ -2,7 +2,7 @@ package eu.torvian.chatbot.server.service.core.impl
 
 import arrow.core.left
 import arrow.core.right
-import eu.torvian.chatbot.common.models.ChatGroup
+import eu.torvian.chatbot.common.models.core.ChatGroup
 import eu.torvian.chatbot.server.data.dao.GroupDao
 import eu.torvian.chatbot.server.data.dao.GroupOwnershipDao
 import eu.torvian.chatbot.server.data.dao.SessionDao

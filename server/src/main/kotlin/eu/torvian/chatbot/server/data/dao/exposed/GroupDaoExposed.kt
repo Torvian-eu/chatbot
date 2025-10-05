@@ -2,7 +2,7 @@ package eu.torvian.chatbot.server.data.dao.exposed
 
 import arrow.core.*
 import arrow.core.raise.*
-import eu.torvian.chatbot.common.models.ChatGroup
+import eu.torvian.chatbot.common.models.core.ChatGroup
 import eu.torvian.chatbot.server.data.dao.GroupDao
 import eu.torvian.chatbot.server.data.dao.error.GroupError
 import eu.torvian.chatbot.server.data.tables.ChatGroupTable

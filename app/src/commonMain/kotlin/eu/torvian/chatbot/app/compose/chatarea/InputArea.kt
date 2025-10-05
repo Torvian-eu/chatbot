@@ -25,7 +25,7 @@ import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.cancel_reply_button_description
 import eu.torvian.chatbot.app.generated.resources.replying_to_prefix
 import eu.torvian.chatbot.app.generated.resources.send_message_button_description
-import eu.torvian.chatbot.common.models.ChatMessage
+import eu.torvian.chatbot.common.models.core.ChatMessage
 import org.jetbrains.compose.resources.stringResource
 
 /**
