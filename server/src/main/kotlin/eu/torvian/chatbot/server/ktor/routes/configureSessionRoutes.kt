@@ -8,6 +8,13 @@ import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.models.*
+import eu.torvian.chatbot.common.models.api.core.CreateSessionRequest
+import eu.torvian.chatbot.common.models.api.core.ProcessNewMessageRequest
+import eu.torvian.chatbot.common.models.api.core.UpdateSessionGroupRequest
+import eu.torvian.chatbot.common.models.api.core.UpdateSessionLeafMessageRequest
+import eu.torvian.chatbot.common.models.api.core.UpdateSessionModelRequest
+import eu.torvian.chatbot.common.models.api.core.UpdateSessionNameRequest
+import eu.torvian.chatbot.common.models.api.core.UpdateSessionSettingsRequest
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.service.core.MessageService

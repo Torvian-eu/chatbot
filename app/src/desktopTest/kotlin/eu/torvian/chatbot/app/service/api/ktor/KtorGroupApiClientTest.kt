@@ -8,8 +8,8 @@ import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.GroupResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.models.ChatGroup
-import eu.torvian.chatbot.common.models.CreateGroupRequest
-import eu.torvian.chatbot.common.models.RenameGroupRequest
+import eu.torvian.chatbot.common.models.api.core.CreateGroupRequest
+import eu.torvian.chatbot.common.models.api.core.RenameGroupRequest
 import io.ktor.client.engine.mock.*
 import io.ktor.http.*
 import kotlinx.coroutines.test.runTest

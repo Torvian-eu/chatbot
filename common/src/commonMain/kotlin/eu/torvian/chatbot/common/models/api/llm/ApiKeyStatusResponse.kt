@@ -1,4 +1,4 @@
-package eu.torvian.chatbot.common.models
+package eu.torvian.chatbot.common.models.api.llm
 
 import kotlinx.serialization.Serializable
 

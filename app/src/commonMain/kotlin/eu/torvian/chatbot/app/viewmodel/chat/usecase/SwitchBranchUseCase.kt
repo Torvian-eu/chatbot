@@ -7,7 +7,7 @@ import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.util.ThreadBuilder
 import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
-import eu.torvian.chatbot.common.models.UpdateSessionLeafMessageRequest
+import eu.torvian.chatbot.common.models.api.core.UpdateSessionLeafMessageRequest
 
 /**
  * Use case for switching the currently displayed chat branch.

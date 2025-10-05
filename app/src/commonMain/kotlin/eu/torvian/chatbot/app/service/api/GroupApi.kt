@@ -2,8 +2,8 @@ package eu.torvian.chatbot.app.service.api
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.ChatGroup
-import eu.torvian.chatbot.common.models.CreateGroupRequest
-import eu.torvian.chatbot.common.models.RenameGroupRequest
+import eu.torvian.chatbot.common.models.api.core.CreateGroupRequest
+import eu.torvian.chatbot.common.models.api.core.RenameGroupRequest
 
 /**
  * Frontend API interface for interacting with Chat Group-related endpoints.

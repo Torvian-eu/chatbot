@@ -7,7 +7,7 @@ import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.ChatMessage
-import eu.torvian.chatbot.common.models.UpdateMessageRequest
+import eu.torvian.chatbot.common.models.api.core.UpdateMessageRequest
 import eu.torvian.chatbot.server.data.entities.SessionCurrentLeafEntity
 import eu.torvian.chatbot.server.testutils.auth.TestAuthHelper
 import eu.torvian.chatbot.server.testutils.auth.authenticate

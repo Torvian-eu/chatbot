@@ -6,7 +6,7 @@ import eu.torvian.chatbot.app.repository.SessionRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
-import eu.torvian.chatbot.common.models.UpdateSessionModelRequest
+import eu.torvian.chatbot.common.models.api.core.UpdateSessionModelRequest
 
 /**
  * Use case for selecting a model for the current chat session in the reactive architecture.

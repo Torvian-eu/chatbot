@@ -17,6 +17,11 @@ import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
 import eu.torvian.chatbot.common.models.*
+import eu.torvian.chatbot.common.models.api.core.CreateGroupRequest
+import eu.torvian.chatbot.common.models.api.core.CreateSessionRequest
+import eu.torvian.chatbot.common.models.api.core.RenameGroupRequest
+import eu.torvian.chatbot.common.models.api.core.UpdateSessionGroupRequest
+import eu.torvian.chatbot.common.models.api.core.UpdateSessionNameRequest
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*

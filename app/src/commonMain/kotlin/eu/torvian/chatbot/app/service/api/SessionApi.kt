@@ -3,12 +3,12 @@ package eu.torvian.chatbot.app.service.api
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.ChatSession
 import eu.torvian.chatbot.common.models.ChatSessionSummary
-import eu.torvian.chatbot.common.models.CreateSessionRequest
-import eu.torvian.chatbot.common.models.UpdateSessionGroupRequest
-import eu.torvian.chatbot.common.models.UpdateSessionLeafMessageRequest
-import eu.torvian.chatbot.common.models.UpdateSessionModelRequest
-import eu.torvian.chatbot.common.models.UpdateSessionNameRequest
-import eu.torvian.chatbot.common.models.UpdateSessionSettingsRequest
+import eu.torvian.chatbot.common.models.api.core.CreateSessionRequest
+import eu.torvian.chatbot.common.models.api.core.UpdateSessionGroupRequest
+import eu.torvian.chatbot.common.models.api.core.UpdateSessionLeafMessageRequest
+import eu.torvian.chatbot.common.models.api.core.UpdateSessionModelRequest
+import eu.torvian.chatbot.common.models.api.core.UpdateSessionNameRequest
+import eu.torvian.chatbot.common.models.api.core.UpdateSessionSettingsRequest
 
 /**
  * Frontend API interface for interacting with Chat Session-related endpoints.

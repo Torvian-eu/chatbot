@@ -7,8 +7,8 @@ import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.service.api.ModelApi
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
-import eu.torvian.chatbot.common.models.AddModelRequest
-import eu.torvian.chatbot.common.models.ApiKeyStatusResponse
+import eu.torvian.chatbot.common.models.api.llm.AddModelRequest
+import eu.torvian.chatbot.common.models.api.llm.ApiKeyStatusResponse
 import eu.torvian.chatbot.common.models.LLMModel
 import kotlinx.coroutines.flow.*
 

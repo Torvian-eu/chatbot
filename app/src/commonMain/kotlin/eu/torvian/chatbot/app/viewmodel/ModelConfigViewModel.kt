@@ -8,7 +8,7 @@ import eu.torvian.chatbot.app.repository.ModelRepository
 import eu.torvian.chatbot.app.repository.ProviderRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
-import eu.torvian.chatbot.common.models.AddModelRequest
+import eu.torvian.chatbot.common.models.api.llm.AddModelRequest
 import eu.torvian.chatbot.common.models.LLMModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers

@@ -8,9 +8,9 @@ import eu.torvian.chatbot.app.domain.contracts.ProvidersDialogState
 import eu.torvian.chatbot.app.repository.ProviderRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
-import eu.torvian.chatbot.common.models.AddProviderRequest
+import eu.torvian.chatbot.common.models.api.llm.AddProviderRequest
 import eu.torvian.chatbot.common.models.LLMProvider
-import eu.torvian.chatbot.common.models.UpdateProviderCredentialRequest
+import eu.torvian.chatbot.common.models.api.llm.UpdateProviderCredentialRequest
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow

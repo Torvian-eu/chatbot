@@ -1,5 +1,6 @@
-package eu.torvian.chatbot.common.models
+package eu.torvian.chatbot.common.models.api.llm
 
+import eu.torvian.chatbot.common.models.LLMModelType
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 

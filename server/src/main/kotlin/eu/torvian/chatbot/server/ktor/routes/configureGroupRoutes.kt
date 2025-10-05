@@ -5,8 +5,8 @@ import arrow.core.raise.either
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.resources.GroupResource
-import eu.torvian.chatbot.common.models.CreateGroupRequest
-import eu.torvian.chatbot.common.models.RenameGroupRequest
+import eu.torvian.chatbot.common.models.api.core.CreateGroupRequest
+import eu.torvian.chatbot.common.models.api.core.RenameGroupRequest
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.service.core.GroupService

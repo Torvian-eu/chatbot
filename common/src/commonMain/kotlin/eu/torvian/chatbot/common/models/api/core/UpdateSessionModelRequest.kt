@@ -1,4 +1,4 @@
-package eu.torvian.chatbot.common.models
+package eu.torvian.chatbot.common.models.api.core
 import kotlinx.serialization.Serializable
 /**
  * Request body for updating the current model ID of a chat session.

@@ -12,8 +12,8 @@ import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.models.ChatMessage
 import eu.torvian.chatbot.common.models.ChatStreamEvent
-import eu.torvian.chatbot.common.models.ProcessNewMessageRequest
-import eu.torvian.chatbot.common.models.UpdateMessageRequest
+import eu.torvian.chatbot.common.models.api.core.ProcessNewMessageRequest
+import eu.torvian.chatbot.common.models.api.core.UpdateMessageRequest
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.*

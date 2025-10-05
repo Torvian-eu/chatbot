@@ -7,8 +7,8 @@ import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.ModelResource
 import eu.torvian.chatbot.common.api.resources.href
-import eu.torvian.chatbot.common.models.AddModelRequest
-import eu.torvian.chatbot.common.models.ApiKeyStatusResponse
+import eu.torvian.chatbot.common.models.api.llm.AddModelRequest
+import eu.torvian.chatbot.common.models.api.llm.ApiKeyStatusResponse
 import eu.torvian.chatbot.common.models.LLMModel
 import eu.torvian.chatbot.common.models.LLMModelType
 import io.ktor.client.engine.mock.*
