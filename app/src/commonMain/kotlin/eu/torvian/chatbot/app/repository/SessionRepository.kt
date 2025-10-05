@@ -3,7 +3,7 @@ import arrow.core.Either
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.common.models.ChatSession
 import eu.torvian.chatbot.common.models.ChatSessionSummary
-import eu.torvian.chatbot.common.models.ChatStreamEvent
+import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
 import eu.torvian.chatbot.common.models.api.core.CreateSessionRequest
 import eu.torvian.chatbot.common.models.api.core.ProcessNewMessageRequest
 import eu.torvian.chatbot.common.models.api.core.UpdateMessageRequest
