@@ -9,7 +9,7 @@ import eu.torvian.chatbot.app.service.api.ModelApi
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.models.api.llm.AddModelRequest
 import eu.torvian.chatbot.common.models.api.llm.ApiKeyStatusResponse
-import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.common.models.llm.LLMModel
 import kotlinx.coroutines.flow.*
 
 /**

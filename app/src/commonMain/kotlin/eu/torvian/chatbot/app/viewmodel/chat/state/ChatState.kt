@@ -3,9 +3,9 @@ package eu.torvian.chatbot.app.viewmodel.chat.state
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.common.models.ChatMessage
-import eu.torvian.chatbot.common.models.ChatModelSettings
+import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.ChatSession
-import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.common.models.llm.LLMModel
 import kotlinx.coroutines.flow.StateFlow
 
 /**

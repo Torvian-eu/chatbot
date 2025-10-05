@@ -1,4 +1,4 @@
-package eu.torvian.chatbot.common.models
+package eu.torvian.chatbot.common.models.llm
 
 import kotlinx.serialization.json.*
 

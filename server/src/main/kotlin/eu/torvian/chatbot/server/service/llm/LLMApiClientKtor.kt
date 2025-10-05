@@ -5,6 +5,10 @@ import arrow.core.getOrElse
 import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.models.*
+import eu.torvian.chatbot.common.models.llm.ChatModelSettings
+import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.llm.LLMProvider
+import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.*

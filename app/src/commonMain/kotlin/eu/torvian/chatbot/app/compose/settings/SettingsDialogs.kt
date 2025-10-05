@@ -3,7 +3,7 @@ package eu.torvian.chatbot.app.compose.settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import eu.torvian.chatbot.app.domain.contracts.SettingsDialogState
-import eu.torvian.chatbot.common.models.ModelSettings
+import eu.torvian.chatbot.common.models.llm.ModelSettings
 
 /**
  * Dialog router for the Settings Config tab.

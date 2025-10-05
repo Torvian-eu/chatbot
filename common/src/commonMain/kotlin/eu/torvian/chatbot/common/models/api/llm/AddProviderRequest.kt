@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.common.models.api.llm
 
-import eu.torvian.chatbot.common.models.LLMProviderType
+import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import kotlinx.serialization.Serializable
 
 /**

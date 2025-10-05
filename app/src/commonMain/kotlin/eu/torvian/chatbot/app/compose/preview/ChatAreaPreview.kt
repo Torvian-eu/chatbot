@@ -6,9 +6,9 @@ import eu.torvian.chatbot.app.compose.chatarea.ChatAreaActions
 import eu.torvian.chatbot.app.compose.chatarea.ChatAreaState
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.common.models.ChatSession
-import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.ChatMessage
-import eu.torvian.chatbot.common.models.LLMModelType
+import eu.torvian.chatbot.common.models.llm.LLMModelType
 import kotlinx.datetime.Instant
 import org.jetbrains.compose.ui.tooling.preview.Preview
 

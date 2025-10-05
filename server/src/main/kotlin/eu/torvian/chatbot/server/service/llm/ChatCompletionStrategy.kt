@@ -2,6 +2,10 @@ package eu.torvian.chatbot.server.service.llm
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.*
+import eu.torvian.chatbot.common.models.llm.ChatModelSettings
+import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.llm.LLMProvider
+import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import kotlinx.coroutines.flow.Flow
 
 /**

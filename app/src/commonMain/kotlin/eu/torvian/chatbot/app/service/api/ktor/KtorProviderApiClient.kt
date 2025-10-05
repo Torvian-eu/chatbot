@@ -8,8 +8,8 @@ import eu.torvian.chatbot.common.api.resources.ProviderResource.ById
 import eu.torvian.chatbot.common.api.resources.ProviderResource.ById.Credential
 import eu.torvian.chatbot.common.api.resources.ProviderResource.ById.Models
 import eu.torvian.chatbot.common.models.api.llm.AddProviderRequest
-import eu.torvian.chatbot.common.models.LLMModel
-import eu.torvian.chatbot.common.models.LLMProvider
+import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.api.llm.UpdateProviderCredentialRequest
 import io.ktor.client.*
 import io.ktor.client.call.*

@@ -3,7 +3,7 @@ package eu.torvian.chatbot.server.service.core.impl
 import arrow.core.Either
 import arrow.core.raise.*
 import arrow.core.raise.ensure
-import eu.torvian.chatbot.common.models.ModelSettings
+import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.server.data.dao.SettingsDao
 import eu.torvian.chatbot.server.data.dao.error.SettingsError
 import eu.torvian.chatbot.server.service.core.error.model.GetModelError

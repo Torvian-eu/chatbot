@@ -4,8 +4,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import eu.torvian.chatbot.app.domain.contracts.SettingsFormState
 import eu.torvian.chatbot.app.viewmodel.SettingsConfigViewModel
-import eu.torvian.chatbot.common.models.LLMModel
-import eu.torvian.chatbot.common.models.ModelSettings
+import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.llm.ModelSettings
 import org.koin.compose.viewmodel.koinViewModel
 
 /**

@@ -11,9 +11,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import eu.torvian.chatbot.common.models.ChatModelSettings
-import eu.torvian.chatbot.common.models.EmbeddingModelSettings
-import eu.torvian.chatbot.common.models.ModelSettings
+import eu.torvian.chatbot.common.models.llm.ChatModelSettings
+import eu.torvian.chatbot.common.models.llm.EmbeddingModelSettings
+import eu.torvian.chatbot.common.models.llm.ModelSettings
 
 /**
  * Detail panel for the Settings Config tab.

@@ -13,8 +13,8 @@ import eu.torvian.chatbot.app.compose.common.ConfigDropdown
 import eu.torvian.chatbot.app.compose.common.ConfigTextField
 import eu.torvian.chatbot.app.domain.contracts.FormMode
 import eu.torvian.chatbot.app.domain.contracts.ModelFormState
-import eu.torvian.chatbot.common.models.LLMModelType
-import eu.torvian.chatbot.common.models.LLMProvider
+import eu.torvian.chatbot.common.models.llm.LLMModelType
+import eu.torvian.chatbot.common.models.llm.LLMProvider
 
 /**
  * Dialog for adding new models or editing existing ones.

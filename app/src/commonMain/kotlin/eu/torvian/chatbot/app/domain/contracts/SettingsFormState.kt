@@ -1,9 +1,9 @@
 package eu.torvian.chatbot.app.domain.contracts
 
-import eu.torvian.chatbot.common.models.ChatModelSettings
-import eu.torvian.chatbot.common.models.EmbeddingModelSettings
-import eu.torvian.chatbot.common.models.LLMModelType
-import eu.torvian.chatbot.common.models.ModelSettings
+import eu.torvian.chatbot.common.models.llm.ChatModelSettings
+import eu.torvian.chatbot.common.models.llm.EmbeddingModelSettings
+import eu.torvian.chatbot.common.models.llm.LLMModelType
+import eu.torvian.chatbot.common.models.llm.ModelSettings
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 

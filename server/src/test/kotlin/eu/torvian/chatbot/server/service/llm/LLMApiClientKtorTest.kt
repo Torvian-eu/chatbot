@@ -3,7 +3,7 @@ package eu.torvian.chatbot.server.service.llm
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
-import eu.torvian.chatbot.common.models.LLMProviderType
+import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import eu.torvian.chatbot.server.testutils.data.TestDefaults
 import io.ktor.client.*
 import io.ktor.client.engine.mock.*
