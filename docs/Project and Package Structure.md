@@ -51,48 +51,58 @@ chatbot/
 common/src/commonMain/kotlin/eu/torvian/chatbot/common/
 ├── api/resources/                # API resource definitions (for Ktor Resources plugin)
 ├── models/                       # Shared data models (DTOs)
-│   ├── AddModelRequest.kt        # Request DTO for adding LLM models
-│   ├── AddProviderRequest.kt     # Request DTO for adding LLM providers
-│   ├── ApiKeyStatusResponse.kt   # Response DTO for API key status
-│   ├── AssignSessionToGroupRequest.kt # Request DTO for assigning session to group
-│   ├── ChatGroup.kt              # Chat group data model
-│   ├── ChatMessage.kt            # Chat message with threading support
-│   ├── ChatSession.kt            # Chat session data model
-│   ├── ChatSessionSummary.kt     # Session summary for lists
-│   ├── ChatStreamEvent.kt        # Chat stream event DTO
-│   ├── CreateGroupRequest.kt     # Group creation request DTO
-│   ├── CreateSessionRequest.kt   # Session creation request DTO
-│   ├── LLMModel.kt               # LLM model configuration
-│   ├── LLMModel_exensions.kt     # Extension functions for LLMModel
-│   ├── LLMModelCapabilities.kt   # Data class for model capabilities
-│   ├── LLMModelType.kt           # Enum for LLM model types
-│   ├── LLMProvider.kt            # LLM provider configuration
-│   ├── LLMProviderType.kt        # Enum for LLM provider types
-│   ├── ModelSettings.kt          # Model settings and parameters
-│   ├── ProcessNewMessageRequest.kt # Request DTO for processing new messages
-│   ├── RenameGroupRequest.kt     # Group renaming request DTO
-│   ├── UpdateMessageRequest.kt   # Message update request DTO
-│   ├── UpdateProviderCredentialRequest.kt # Request DTO for updating provider credentials
-│   ├── UpdateSessionGroupRequest.kt # Request DTO for updating session group
-│   ├── UpdateSessionLeafRequest.kt # Request DTO for updating session leaf message
-│   ├── UpdateSessionModelRequest.kt # Request DTO for updating session model
-│   ├── UpdateSessionNameRequest.kt # Request DTO for updating session name
-│   ├── UpdateSessionSettingsRequest.kt # Request DTO for updating session settings
-│   ├── User.kt                   # User account data model
-│   ├── UserGroup.kt              # User group data model
-│   ├── UserWithDetails.kt        # Comprehensive user data for admin UIs
-│   ├── admin/                    # Admin-specific models
-│   │   ├── AssignRoleRequest.kt        # Request DTO for assigning a role to a user
-│   │   ├── ChangePasswordRequest.kt    # Request DTO for changing user password
-│   │   ├── CreateRoleRequest.kt        # Request DTO for creating a new role
-│   │   ├── UpdateRoleRequest.kt        # Request DTO for updating an existing role
-│   │   ├── UpdateUserRequest.kt        # Request DTO for updating user profile
-│   │   └── UpdateUserStatusRequest.kt  # Request DTO for updating user status
-│   └── auth/                     # Authentication-related models
-│       ├── LoginRequest.kt       # Login request DTO
-│       ├── LoginResponse.kt      # Login response DTO
-│       ├── RefreshTokenRequest.kt # Refresh token request DTO
-│       └── RegisterRequest.kt    # User registration request DTO
+│   ├── api/                      # API request/response DTOs
+│   │   ├── admin/                # Admin-specific API DTOs
+│   │   │   ├── AssignRoleRequest.kt        # Request DTO for assigning a role to a user
+│   │   │   ├── ChangePasswordRequest.kt    # Request DTO for changing user password
+│   │   │   ├── CreateRoleRequest.kt        # Request DTO for creating a new role
+│   │   │   ├── UpdatePasswordChangeRequiredRequest.kt # Request DTO for updating password change requirement
+│   │   │   ├── UpdateRoleRequest.kt        # Request DTO for updating an existing role
+│   │   │   ├── UpdateUserRequest.kt        # Request DTO for updating user profile
+│   │   │   └── UpdateUserStatusRequest.kt  # Request DTO for updating user status
+│   │   ├── auth/                 # Authentication-related API DTOs
+│   │   │   ├── LoginRequest.kt       # Login request DTO
+│   │   │   ├── LoginResponse.kt      # Login response DTO
+│   │   │   ├── RefreshTokenRequest.kt # Refresh token request DTO
+│   │   │   └── RegisterRequest.kt    # User registration request DTO
+│   │   ├── core/                 # Core API request/response DTOs
+│   │   │   ├── AssignSessionToGroupRequest.kt # Request DTO for assigning session to group
+│   │   │   ├── ChatStreamEvent.kt        # Chat stream event DTO
+│   │   │   ├── CreateGroupRequest.kt     # Group creation request DTO
+│   │   │   ├── CreateSessionRequest.kt   # Session creation request DTO
+│   │   │   ├── ProcessNewMessageRequest.kt # Request DTO for processing new messages
+│   │   │   ├── RenameGroupRequest.kt     # Group renaming request DTO
+│   │   │   ├── UpdateMessageRequest.kt   # Message update request DTO
+│   │   │   ├── UpdateSessionGroupRequest.kt # Request DTO for updating session group
+│   │   │   ├── UpdateSessionLeafMessageRequest.kt # Request DTO for updating session leaf message
+│   │   │   ├── UpdateSessionModelRequest.kt # Request DTO for updating session model
+│   │   │   ├── UpdateSessionNameRequest.kt # Request DTO for updating session name
+│   │   │   └── UpdateSessionSettingsRequest.kt # Request DTO for updating session settings
+│   │   └── llm/                  # LLM-specific API DTOs
+│   │       ├── AddModelRequest.kt        # Request DTO for adding LLM models
+│   │       ├── AddProviderRequest.kt     # Request DTO for adding LLM providers
+│   │       ├── ApiKeyStatusResponse.kt   # Response DTO for API key status
+│   │       └── UpdateProviderCredentialRequest.kt # Request DTO for updating provider credentials
+│   ├── core/                     # Core domain models
+│   │   ├── ChatGroup.kt              # Chat group data model
+│   │   ├── ChatMessage.kt            # Chat message with threading support
+│   │   ├── ChatSession.kt            # Chat session data model
+│   │   └── ChatSessionSummary.kt     # Session summary for lists
+│   ├── llm/                      # LLM-related domain models
+│   │   ├── LLMModel.kt               # LLM model configuration
+│   │   ├── LLMModel_exensions.kt     # Extension functions for LLMModel
+│   │   ├── LLMModelCapabilities.kt   # Data class for model capabilities
+│   │   ├── LLMModelType.kt           # Enum for LLM model types
+│   │   ├── LLMProvider.kt            # LLM provider configuration
+│   │   ├── LLMProviderType.kt        # Enum for LLM provider types
+│   │   └── ModelSettings.kt          # Model settings and parameters
+│   └── user/                     # User-related domain models
+│       ├── Permission.kt             # Permission data model
+│       ├── Role.kt                   # Role data model
+│       ├── User.kt                   # User account data model
+│       ├── UserGroup.kt              # User group data model
+│       ├── UserStatus.kt             # User status enum
+│       └── UserWithDetails.kt        # Comprehensive user data for admin UIs
 ├── misc/                         # Miscellaneous utilities
 │   └── di/                       # Dependency injection abstractions
 │       ├── DIContainer.kt        # Framework-agnostic DI interface
@@ -307,6 +317,9 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   ├── ChatScreen.kt # Main chat interface (displays session list, chat messages, input area)
 │   ├── ChatScreenContent.kt # Stateless content composable for chat interface
 │   ├── SettingsScreen.kt # Settings configuration interface (providers, models, settings)
+│   ├── admin/        # Admin UI components
+│   │   ├── AdminScreen.kt
+│   │   └── users/    # User management UI components
 │   ├── auth/          # Authentication UI components
 │   │   ├── LoginScreen.kt
 │   │   ├── RegisterScreen.kt
