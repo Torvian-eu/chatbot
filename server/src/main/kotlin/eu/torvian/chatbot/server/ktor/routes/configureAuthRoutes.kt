@@ -3,9 +3,9 @@ package eu.torvian.chatbot.server.ktor.routes
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.AuthResource
-import eu.torvian.chatbot.common.models.auth.LoginRequest
-import eu.torvian.chatbot.common.models.auth.RefreshTokenRequest
-import eu.torvian.chatbot.common.models.auth.RegisterRequest
+import eu.torvian.chatbot.common.models.api.auth.LoginRequest
+import eu.torvian.chatbot.common.models.api.auth.RefreshTokenRequest
+import eu.torvian.chatbot.common.models.api.auth.RegisterRequest
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.domain.security.mappers.toLoginResponse
 import eu.torvian.chatbot.server.ktor.auth.getUserContext

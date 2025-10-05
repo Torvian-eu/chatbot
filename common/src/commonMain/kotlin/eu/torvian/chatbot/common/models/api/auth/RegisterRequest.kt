@@ -1,4 +1,4 @@
-package eu.torvian.chatbot.common.models.auth
+package eu.torvian.chatbot.common.models.api.auth
 
 import kotlinx.serialization.Serializable
 

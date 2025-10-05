@@ -7,10 +7,10 @@ import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.User
-import eu.torvian.chatbot.common.models.auth.LoginRequest
-import eu.torvian.chatbot.common.models.auth.LoginResponse
-import eu.torvian.chatbot.common.models.auth.RefreshTokenRequest
-import eu.torvian.chatbot.common.models.auth.RegisterRequest
+import eu.torvian.chatbot.common.models.api.auth.LoginRequest
+import eu.torvian.chatbot.common.models.api.auth.LoginResponse
+import eu.torvian.chatbot.common.models.api.auth.RefreshTokenRequest
+import eu.torvian.chatbot.common.models.api.auth.RegisterRequest
 import eu.torvian.chatbot.server.data.entities.UserEntity
 import eu.torvian.chatbot.common.models.UserStatus
 import eu.torvian.chatbot.server.service.security.PasswordService

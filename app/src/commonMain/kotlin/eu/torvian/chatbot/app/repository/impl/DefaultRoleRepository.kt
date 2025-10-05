@@ -10,8 +10,8 @@ import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.service.api.RoleApi
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.models.Role
-import eu.torvian.chatbot.common.models.admin.CreateRoleRequest
-import eu.torvian.chatbot.common.models.admin.UpdateRoleRequest
+import eu.torvian.chatbot.common.models.api.admin.CreateRoleRequest
+import eu.torvian.chatbot.common.models.api.admin.UpdateRoleRequest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

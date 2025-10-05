@@ -15,9 +15,9 @@ import eu.torvian.chatbot.app.service.auth.TokenStorage
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.models.User
-import eu.torvian.chatbot.common.models.admin.ChangePasswordRequest
-import eu.torvian.chatbot.common.models.auth.LoginRequest
-import eu.torvian.chatbot.common.models.auth.RegisterRequest
+import eu.torvian.chatbot.common.models.api.admin.ChangePasswordRequest
+import eu.torvian.chatbot.common.models.api.auth.LoginRequest
+import eu.torvian.chatbot.common.models.api.auth.RegisterRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow

@@ -2,8 +2,8 @@ package eu.torvian.chatbot.app.repository
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.User
-import eu.torvian.chatbot.common.models.auth.LoginRequest
-import eu.torvian.chatbot.common.models.auth.RegisterRequest
+import eu.torvian.chatbot.common.models.api.auth.LoginRequest
+import eu.torvian.chatbot.common.models.api.auth.RegisterRequest
 import kotlinx.coroutines.flow.StateFlow
 
 /**

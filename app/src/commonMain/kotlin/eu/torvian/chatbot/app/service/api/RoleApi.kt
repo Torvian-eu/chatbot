@@ -2,8 +2,8 @@ package eu.torvian.chatbot.app.service.api
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.Role
-import eu.torvian.chatbot.common.models.admin.CreateRoleRequest
-import eu.torvian.chatbot.common.models.admin.UpdateRoleRequest
+import eu.torvian.chatbot.common.models.api.admin.CreateRoleRequest
+import eu.torvian.chatbot.common.models.api.admin.UpdateRoleRequest
 
 /**
  * API client interface for role management operations.

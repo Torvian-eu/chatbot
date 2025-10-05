@@ -7,8 +7,8 @@ import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.utils.misc.createKmpLogger
 import eu.torvian.chatbot.common.api.resources.AuthResource
 import eu.torvian.chatbot.common.api.resources.href
-import eu.torvian.chatbot.common.models.auth.LoginResponse
-import eu.torvian.chatbot.common.models.auth.RefreshTokenRequest
+import eu.torvian.chatbot.common.models.api.auth.LoginResponse
+import eu.torvian.chatbot.common.models.api.auth.RefreshTokenRequest
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.auth.*

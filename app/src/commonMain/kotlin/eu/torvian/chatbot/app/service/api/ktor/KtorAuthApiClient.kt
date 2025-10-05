@@ -5,7 +5,10 @@ import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.AuthApi
 import eu.torvian.chatbot.common.api.resources.AuthResource
 import eu.torvian.chatbot.common.models.User
-import eu.torvian.chatbot.common.models.auth.*
+import eu.torvian.chatbot.common.models.api.auth.LoginRequest
+import eu.torvian.chatbot.common.models.api.auth.LoginResponse
+import eu.torvian.chatbot.common.models.api.auth.RefreshTokenRequest
+import eu.torvian.chatbot.common.models.api.auth.RegisterRequest
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.auth.authProvider

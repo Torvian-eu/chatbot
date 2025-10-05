@@ -13,9 +13,9 @@ import eu.torvian.chatbot.common.models.Role
 import eu.torvian.chatbot.common.models.User
 import eu.torvian.chatbot.common.models.UserStatus
 import eu.torvian.chatbot.common.models.UserWithDetails
-import eu.torvian.chatbot.common.models.admin.AssignRoleRequest
-import eu.torvian.chatbot.common.models.admin.ChangePasswordRequest
-import eu.torvian.chatbot.common.models.admin.UpdateUserRequest
+import eu.torvian.chatbot.common.models.api.admin.AssignRoleRequest
+import eu.torvian.chatbot.common.models.api.admin.ChangePasswordRequest
+import eu.torvian.chatbot.common.models.api.admin.UpdateUserRequest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.server.domain.security.mappers
 
-import eu.torvian.chatbot.common.models.auth.LoginResponse
+import eu.torvian.chatbot.common.models.api.auth.LoginResponse
 import eu.torvian.chatbot.server.domain.security.LoginResult
 
 /**

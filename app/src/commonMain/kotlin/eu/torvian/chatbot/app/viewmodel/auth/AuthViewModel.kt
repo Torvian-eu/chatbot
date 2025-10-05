@@ -7,8 +7,8 @@ import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
-import eu.torvian.chatbot.common.models.auth.LoginRequest
-import eu.torvian.chatbot.common.models.auth.RegisterRequest
+import eu.torvian.chatbot.common.models.api.auth.LoginRequest
+import eu.torvian.chatbot.common.models.api.auth.RegisterRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow

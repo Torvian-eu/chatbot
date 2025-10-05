@@ -1,4 +1,4 @@
-package eu.torvian.chatbot.common.models.admin
+package eu.torvian.chatbot.common.models.api.admin
 
 import eu.torvian.chatbot.common.models.UserStatus
 import kotlinx.serialization.Serializable

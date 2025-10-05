@@ -1,4 +1,4 @@
-package eu.torvian.chatbot.common.models.auth
+package eu.torvian.chatbot.common.models.api.auth
 
 import eu.torvian.chatbot.common.models.Permission
 import eu.torvian.chatbot.common.models.User

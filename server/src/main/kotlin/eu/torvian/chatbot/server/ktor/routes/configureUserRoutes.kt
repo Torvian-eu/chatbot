@@ -7,11 +7,11 @@ import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.CommonPermissions
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.UserResource
-import eu.torvian.chatbot.common.models.admin.AssignRoleRequest
-import eu.torvian.chatbot.common.models.admin.ChangePasswordRequest
-import eu.torvian.chatbot.common.models.admin.UpdatePasswordChangeRequiredRequest
-import eu.torvian.chatbot.common.models.admin.UpdateUserRequest
-import eu.torvian.chatbot.common.models.admin.UpdateUserStatusRequest
+import eu.torvian.chatbot.common.models.api.admin.AssignRoleRequest
+import eu.torvian.chatbot.common.models.api.admin.ChangePasswordRequest
+import eu.torvian.chatbot.common.models.api.admin.UpdatePasswordChangeRequiredRequest
+import eu.torvian.chatbot.common.models.api.admin.UpdateUserRequest
+import eu.torvian.chatbot.common.models.api.admin.UpdateUserStatusRequest
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.service.core.UserService

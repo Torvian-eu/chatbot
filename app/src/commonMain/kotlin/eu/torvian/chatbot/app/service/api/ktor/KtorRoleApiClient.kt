@@ -5,8 +5,8 @@ import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.RoleApi
 import eu.torvian.chatbot.common.api.resources.RoleResource
 import eu.torvian.chatbot.common.models.Role
-import eu.torvian.chatbot.common.models.admin.CreateRoleRequest
-import eu.torvian.chatbot.common.models.admin.UpdateRoleRequest
+import eu.torvian.chatbot.common.models.api.admin.CreateRoleRequest
+import eu.torvian.chatbot.common.models.api.admin.UpdateRoleRequest
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.resources.*
