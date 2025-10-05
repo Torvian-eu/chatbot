@@ -1,7 +1,8 @@
 package eu.torvian.chatbot.app.service.auth
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.User
+import eu.torvian.chatbot.common.models.user.Permission
+import eu.torvian.chatbot.common.models.user.User
 import kotlinx.datetime.Instant
 
 /**
@@ -20,19 +21,21 @@ import kotlinx.datetime.Instant
 interface TokenStorage {
 
     /**
-     * Saves authentication data (tokens and user info) to secure storage.
+     * Saves authentication data (tokens, user info, and permissions) to secure storage.
      *
      * @param accessToken The JWT access token for API authentication
      * @param refreshToken The refresh token for obtaining new access tokens
      * @param expiresAt The expiration timestamp for the access token
      * @param user The authenticated user data for optimistic authentication
+     * @param permissions The list of permissions granted to the user
      * @return Either a [TokenStorageError] on failure or Unit on success
      */
     suspend fun saveAuthData(
         accessToken: String,
         refreshToken: String,
         expiresAt: Instant,
-        user: User
+        user: User,
+        permissions: List<Permission>
     ): Either<TokenStorageError, Unit>
 
     /**
@@ -41,6 +44,13 @@ interface TokenStorage {
      * @return Either a [TokenStorageError] on failure or the user data on success
      */
     suspend fun getUserData(): Either<TokenStorageError, User>
+
+    /**
+     * Retrieves cached permissions for the authenticated user.
+     *
+     * @return Either a [TokenStorageError] on failure or the list of permissions on success
+     */
+    suspend fun getPermissions(): Either<TokenStorageError, List<Permission>>
 
     /**
      * Clears all stored authentication data (tokens and user info) from storage.

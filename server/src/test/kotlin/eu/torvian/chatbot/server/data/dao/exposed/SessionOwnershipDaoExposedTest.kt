@@ -4,7 +4,7 @@ import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
-import eu.torvian.chatbot.common.models.UserStatus
+import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.server.data.dao.SessionOwnershipDao
 import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
 import eu.torvian.chatbot.server.data.dao.error.SetOwnerError

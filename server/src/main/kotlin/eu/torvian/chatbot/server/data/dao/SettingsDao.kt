@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.server.data.dao
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.ModelSettings
+import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.server.data.dao.error.SettingsError
 
 /**

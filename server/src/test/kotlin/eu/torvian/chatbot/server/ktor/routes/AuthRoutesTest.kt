@@ -6,13 +6,13 @@ import eu.torvian.chatbot.common.api.resources.AuthResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
-import eu.torvian.chatbot.common.models.User
-import eu.torvian.chatbot.common.models.auth.LoginRequest
-import eu.torvian.chatbot.common.models.auth.LoginResponse
-import eu.torvian.chatbot.common.models.auth.RefreshTokenRequest
-import eu.torvian.chatbot.common.models.auth.RegisterRequest
+import eu.torvian.chatbot.common.models.user.User
+import eu.torvian.chatbot.common.models.api.auth.LoginRequest
+import eu.torvian.chatbot.common.models.api.auth.LoginResponse
+import eu.torvian.chatbot.common.models.api.auth.RefreshTokenRequest
+import eu.torvian.chatbot.common.models.api.auth.RegisterRequest
 import eu.torvian.chatbot.server.data.entities.UserEntity
-import eu.torvian.chatbot.common.models.UserStatus
+import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.server.service.security.PasswordService
 import eu.torvian.chatbot.server.testutils.auth.TestAuthHelper
 import eu.torvian.chatbot.server.testutils.auth.authenticate
@@ -82,7 +82,11 @@ class AuthRoutesTest {
             setOf(
                 Table.USERS,
                 Table.CHAT_GROUPS,
-                Table.USER_SESSIONS
+                Table.USER_SESSIONS,
+                Table.ROLE_PERMISSIONS,
+                Table.PERMISSIONS,
+                Table.ROLES,
+                Table.USER_ROLE_ASSIGNMENTS
             )
         )
     }

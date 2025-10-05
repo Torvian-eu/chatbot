@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.server.data.dao
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.ChatGroup
+import eu.torvian.chatbot.common.models.core.ChatGroup
 import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
 import eu.torvian.chatbot.server.data.dao.error.SetOwnerError
 

@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.server.data.entities.mappers
 
-import eu.torvian.chatbot.common.models.Permission
+import eu.torvian.chatbot.common.models.user.Permission
 import eu.torvian.chatbot.server.data.entities.PermissionEntity
 
 /**

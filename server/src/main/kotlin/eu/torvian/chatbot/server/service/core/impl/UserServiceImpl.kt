@@ -4,8 +4,8 @@ import arrow.core.Either
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.raise.withError
-import eu.torvian.chatbot.common.models.User
-import eu.torvian.chatbot.common.models.UserStatus
+import eu.torvian.chatbot.common.models.user.User
+import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.common.security.error.CharacterType
 import eu.torvian.chatbot.common.security.error.PasswordValidationError
 import eu.torvian.chatbot.server.data.dao.RoleDao
@@ -137,9 +137,34 @@ class UserServiceImpl(
             .mapLeft { UserNotFoundError.ById(userId) }
     }
 
-    override suspend fun updateUserStatus(userId: Long, status: UserStatus) =
+    override suspend fun updateUserStatus(userId: Long, status: UserStatus, requestingUserId: Long) =
         transactionScope.transaction {
-            userDao.updateUserStatus(userId, status)
+            either {
+                logger.info("Updating status for user $userId to $status by requester $requestingUserId")
+
+                // Prevent a user from modifying their own status (self-lockout)
+                ensure(userId != requestingUserId) {
+                    logger.warn("User $requestingUserId attempted to modify their own status")
+                    UpdateUserError.CannotModifyOwnStatus(userId)
+                }
+
+                // Delegate to DAO and translate DAO errors into service errors
+                withError({ daoError ->
+                    when (daoError) {
+                        is UserError.UserNotFound -> UpdateUserError.UserNotFound(userId)
+                    }
+                }) {
+                    userDao.updateUserStatus(userId, status).bind()
+                }
+            }
+        }
+
+    override suspend fun updatePasswordChangeRequired(
+        userId: Long,
+        requiresPasswordChange: Boolean
+    ): Either<UpdateUserError, User> =
+        transactionScope.transaction {
+            userDao.updatePasswordChangeRequired(userId, requiresPasswordChange)
                 .mapLeft { error ->
                     when (error) {
                         is UserError.UserNotFound -> UpdateUserError.UserNotFound(userId)
@@ -342,11 +367,20 @@ class UserServiceImpl(
                 userDao.getUserById(userId).bind()
             }
 
+            // Prevent reusing the current password
+            if (passwordService.verifyPassword(newPassword, existingUser.passwordHash)) {
+                logger.warn("User $userId attempted to reuse current password")
+                raise(ChangePasswordError.SameAsCurrentPassword)
+            }
+
             // Hash new password
             val hashedPassword = passwordService.hashPassword(newPassword)
 
-            // Update user with new password
-            val updatedUser = existingUser.copy(passwordHash = hashedPassword)
+            // Update user with new password and clear requiresPasswordChange flag
+            val updatedUser = existingUser.copy(
+                passwordHash = hashedPassword,
+                requiresPasswordChange = false  // Clear the flag after password change
+            )
             withError({ _: UserError ->
                 ChangePasswordError.UserNotFound(userId)
             }) {

@@ -6,8 +6,8 @@ import arrow.core.raise.catch
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.right
-import eu.torvian.chatbot.common.models.LLMProvider
-import eu.torvian.chatbot.common.models.LLMProviderType
+import eu.torvian.chatbot.common.models.llm.LLMProvider
+import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import eu.torvian.chatbot.server.data.dao.LLMProviderDao
 import eu.torvian.chatbot.server.data.dao.error.LLMProviderError
 import eu.torvian.chatbot.server.data.tables.LLMProviderTable

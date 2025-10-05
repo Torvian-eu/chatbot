@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.server.domain.security
 
-import eu.torvian.chatbot.common.models.User
+import eu.torvian.chatbot.common.models.user.User
 import kotlinx.datetime.Instant
 
 /**

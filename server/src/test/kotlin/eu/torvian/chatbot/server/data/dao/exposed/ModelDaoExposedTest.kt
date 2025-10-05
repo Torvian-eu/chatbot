@@ -2,8 +2,8 @@ package eu.torvian.chatbot.server.data.dao.exposed
 
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
-import eu.torvian.chatbot.common.models.LLMModel
-import eu.torvian.chatbot.common.models.LLMModelType
+import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.server.data.dao.ModelDao
 import eu.torvian.chatbot.server.data.dao.error.ModelError
 import eu.torvian.chatbot.server.data.dao.error.UpdateModelError

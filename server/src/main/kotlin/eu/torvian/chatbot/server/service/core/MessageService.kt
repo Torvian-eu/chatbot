@@ -1,8 +1,8 @@
 package eu.torvian.chatbot.server.service.core
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.ChatMessage
-import eu.torvian.chatbot.common.models.ChatSession
+import eu.torvian.chatbot.common.models.core.ChatMessage
+import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.server.service.core.error.message.*
 import kotlinx.coroutines.flow.Flow
 

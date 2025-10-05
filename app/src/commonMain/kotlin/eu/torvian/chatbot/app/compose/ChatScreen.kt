@@ -7,9 +7,9 @@ import eu.torvian.chatbot.app.compose.sessionlist.SessionListActions
 import eu.torvian.chatbot.app.compose.sessionlist.SessionListState
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
 import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
-import eu.torvian.chatbot.common.models.ChatGroup
-import eu.torvian.chatbot.common.models.ChatMessage
-import eu.torvian.chatbot.common.models.ChatSessionSummary
+import eu.torvian.chatbot.common.models.core.ChatGroup
+import eu.torvian.chatbot.common.models.core.ChatMessage
+import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 import org.koin.compose.viewmodel.koinViewModel
 
 /**

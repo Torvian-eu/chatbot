@@ -68,6 +68,17 @@ object Settings : AppRoute {
     override val route = "settings"
 }
 
+/**
+ * Route for the admin interface (user management, roles, permissions, etc.).
+ * Requires admin permissions.
+ */
+@Serializable
+@SerialName("admin")
+object Admin : AppRoute {
+    override val name = "admin"
+    override val route = "admin"
+}
+
 // Future routes can be added here, potentially with arguments:
 
 // @Serializable

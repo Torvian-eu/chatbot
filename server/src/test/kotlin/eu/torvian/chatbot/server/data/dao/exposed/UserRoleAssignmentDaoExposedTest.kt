@@ -2,7 +2,7 @@ package eu.torvian.chatbot.server.data.dao.exposed
 
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
-import eu.torvian.chatbot.common.models.UserStatus
+import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.server.data.dao.RoleDao
 import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.UserRoleAssignmentDao

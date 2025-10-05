@@ -4,7 +4,14 @@ import arrow.core.Either
 import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.SessionApi
 import eu.torvian.chatbot.common.api.resources.SessionResource
-import eu.torvian.chatbot.common.models.*
+import eu.torvian.chatbot.common.models.api.core.CreateSessionRequest
+import eu.torvian.chatbot.common.models.api.core.UpdateSessionGroupRequest
+import eu.torvian.chatbot.common.models.api.core.UpdateSessionLeafMessageRequest
+import eu.torvian.chatbot.common.models.api.core.UpdateSessionModelRequest
+import eu.torvian.chatbot.common.models.api.core.UpdateSessionNameRequest
+import eu.torvian.chatbot.common.models.api.core.UpdateSessionSettingsRequest
+import eu.torvian.chatbot.common.models.core.ChatSession
+import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.resources.*

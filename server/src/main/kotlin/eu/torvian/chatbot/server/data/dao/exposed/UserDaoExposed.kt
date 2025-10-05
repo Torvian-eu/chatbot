@@ -6,7 +6,11 @@ import arrow.core.raise.catch
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.right
-import eu.torvian.chatbot.common.models.*
+import eu.torvian.chatbot.common.models.user.Role
+import eu.torvian.chatbot.common.models.user.User
+import eu.torvian.chatbot.common.models.user.UserGroup
+import eu.torvian.chatbot.common.models.user.UserStatus
+import eu.torvian.chatbot.common.models.user.UserWithDetails
 import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.entities.UserEntity
@@ -54,7 +58,8 @@ class UserDaoExposed(
         username: String,
         passwordHash: String,
         email: String?,
-        status: UserStatus
+        status: UserStatus,
+        requiresPasswordChange: Boolean
     ): Either<UserError, UserEntity> =
         transactionScope.transaction {
             either {
@@ -66,6 +71,7 @@ class UserDaoExposed(
                         it[UsersTable.status] = status
                         it[UsersTable.createdAt] = System.currentTimeMillis()
                         it[UsersTable.updatedAt] = System.currentTimeMillis()
+                        it[UsersTable.requiresPasswordChange] = requiresPasswordChange
                     }
 
                     val newId = insertStatement[UsersTable.id].value
@@ -103,6 +109,7 @@ class UserDaoExposed(
                         it[status] = user.status
                         it[updatedAt] = System.currentTimeMillis()
                         it[lastLogin] = user.lastLogin?.toEpochMilliseconds()
+                        it[requiresPasswordChange] = user.requiresPasswordChange
                     }
                     ensure(updatedRowCount != 0) { UserError.UserNotFound(user.id) }
                 }) { e: ExposedSQLException ->
@@ -196,7 +203,8 @@ class UserDaoExposed(
                         roles = roles,
                         userGroups = groups,
                         createdAt = Instant.fromEpochMilliseconds(first[UsersTable.createdAt]),
-                        lastLogin = first[UsersTable.lastLogin]?.let { Instant.fromEpochMilliseconds(it) }
+                        lastLogin = first[UsersTable.lastLogin]?.let { Instant.fromEpochMilliseconds(it) },
+                        requiresPasswordChange = first[UsersTable.requiresPasswordChange]
                     )
                 }
         }
@@ -238,7 +246,8 @@ class UserDaoExposed(
                 roles = roles,
                 userGroups = groups,
                 createdAt = Instant.fromEpochMilliseconds(first[UsersTable.createdAt]),
-                lastLogin = first[UsersTable.lastLogin]?.let { Instant.fromEpochMilliseconds(it) }
+                lastLogin = first[UsersTable.lastLogin]?.let { Instant.fromEpochMilliseconds(it) },
+                requiresPasswordChange = first[UsersTable.requiresPasswordChange]
             ).right()
         }
 
@@ -247,6 +256,20 @@ class UserDaoExposed(
             either {
                 val updatedRowCount = UsersTable.update({ UsersTable.id eq id }) {
                     it[UsersTable.status] = status
+                    it[updatedAt] = System.currentTimeMillis()
+                }
+                ensure(updatedRowCount != 0) { UserError.UserNotFound(id) }
+
+                // Return updated public view
+                getUserById(id).bind().toUser()
+            }
+        }
+
+    override suspend fun updatePasswordChangeRequired(id: Long, requiresPasswordChange: Boolean): Either<UserError.UserNotFound, User> =
+        transactionScope.transaction {
+            either {
+                val updatedRowCount = UsersTable.update({ UsersTable.id eq id }) {
+                    it[UsersTable.requiresPasswordChange] = requiresPasswordChange
                     it[updatedAt] = System.currentTimeMillis()
                 }
                 ensure(updatedRowCount != 0) { UserError.UserNotFound(id) }

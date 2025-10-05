@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.server.main
 
-import eu.torvian.chatbot.common.models.LLMProviderType
+import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import eu.torvian.chatbot.server.service.llm.LLMApiClient
 import eu.torvian.chatbot.server.service.llm.LLMApiClientKtor
 import eu.torvian.chatbot.server.service.llm.strategy.OllamaChatStrategy

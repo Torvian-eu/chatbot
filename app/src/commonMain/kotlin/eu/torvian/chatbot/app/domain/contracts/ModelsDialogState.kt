@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.app.domain.contracts
 
-import eu.torvian.chatbot.common.models.LLMModel
-import eu.torvian.chatbot.common.models.LLMProvider
+import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.llm.LLMProvider
 
 /**
  * Consolidated state for all dialog management in the ModelsTab.

@@ -6,9 +6,9 @@ import arrow.core.raise.catch
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.right
-import eu.torvian.chatbot.common.models.ChatMessage
-import eu.torvian.chatbot.common.models.ChatSession
-import eu.torvian.chatbot.common.models.ChatSessionSummary
+import eu.torvian.chatbot.common.models.core.ChatMessage
+import eu.torvian.chatbot.common.models.core.ChatSession
+import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
 import eu.torvian.chatbot.server.data.dao.error.SessionError

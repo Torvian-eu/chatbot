@@ -11,8 +11,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import eu.torvian.chatbot.common.models.LLMModel
-import eu.torvian.chatbot.common.models.LLMProvider
+import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.llm.LLMProvider
 
 /**
  * Panel displaying details of a selected LLM model with edit and delete actions.

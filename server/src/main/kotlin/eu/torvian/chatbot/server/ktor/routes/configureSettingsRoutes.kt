@@ -3,7 +3,7 @@ package eu.torvian.chatbot.server.ktor.routes
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.SettingsResource
-import eu.torvian.chatbot.common.models.ModelSettings
+import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.server.service.core.ModelSettingsService
 import eu.torvian.chatbot.server.service.core.error.settings.AddSettingsError
 import eu.torvian.chatbot.server.service.core.error.settings.DeleteSettingsError

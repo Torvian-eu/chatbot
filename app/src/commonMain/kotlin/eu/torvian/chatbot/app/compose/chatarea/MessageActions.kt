@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.app.compose.chatarea
 
-import eu.torvian.chatbot.common.models.ChatMessage
+import eu.torvian.chatbot.common.models.core.ChatMessage
 
 /**
  * Data class holding all possible message actions that can be performed.

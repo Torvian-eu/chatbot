@@ -3,7 +3,7 @@ package eu.torvian.chatbot.server.testutils.auth
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.server.data.entities.UserEntity
-import eu.torvian.chatbot.common.models.UserStatus
+import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.server.data.entities.UserSessionEntity
 import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.testutils.data.TestDataManager

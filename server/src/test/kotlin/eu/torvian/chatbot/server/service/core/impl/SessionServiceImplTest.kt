@@ -2,10 +2,11 @@ package eu.torvian.chatbot.server.service.core.impl
 
 import arrow.core.left
 import arrow.core.right
-import eu.torvian.chatbot.common.models.ChatSession
-import eu.torvian.chatbot.common.models.ChatSessionSummary
-import eu.torvian.chatbot.common.models.LLMModel
-import eu.torvian.chatbot.common.models.LLMModelType
+import eu.torvian.chatbot.common.models.core.ChatSession
+import eu.torvian.chatbot.common.models.core.ChatSessionSummary
+import eu.torvian.chatbot.common.models.llm.ChatModelSettings
+import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.server.data.dao.ModelDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
 import eu.torvian.chatbot.server.data.dao.SessionOwnershipDao
@@ -514,7 +515,7 @@ class SessionServiceImplTest {
         val sessionWithModel = testSession.copy(currentModelId = modelId)
 
         // Create test settings that belong to the same model
-        val testSettings = eu.torvian.chatbot.common.models.ChatModelSettings(
+        val testSettings = ChatModelSettings(
             id = settingsId,
             modelId = modelId,
             name = "Test Settings",
@@ -589,7 +590,7 @@ class SessionServiceImplTest {
             val sessionWithModel = testSession.copy(currentModelId = sessionModelId)
 
             // Create test settings that belong to a different model
-            val testSettings = eu.torvian.chatbot.common.models.ChatModelSettings(
+            val testSettings = ChatModelSettings(
                 id = settingsId,
                 modelId = settingsModelId, // Different from session model
                 name = "Test Settings",

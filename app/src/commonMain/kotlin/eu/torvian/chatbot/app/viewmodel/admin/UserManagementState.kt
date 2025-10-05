@@ -1,8 +1,7 @@
 package eu.torvian.chatbot.app.viewmodel.admin
 
-import eu.torvian.chatbot.common.models.Role
-import eu.torvian.chatbot.common.models.UserWithDetails
-import eu.torvian.chatbot.common.models.UserStatus
+import eu.torvian.chatbot.common.models.user.Role
+import eu.torvian.chatbot.common.models.user.UserWithDetails
 
 /**
  * Represents the overall state of the user management screen.
@@ -76,6 +75,17 @@ sealed interface UserManagementDialogState {
         val user: UserWithDetails,
         val isLoading: Boolean = false
     ) : UserManagementDialogState
+
+    /**
+     * Change password change required dialog is shown.
+     *
+     * @property user The user whose password change required flag is being changed
+     * @property isLoading Whether the operation is in progress
+     */
+    data class ChangePasswordChangeRequired(
+        val user: UserWithDetails,
+        val isLoading: Boolean = false
+    ) : UserManagementDialogState
 }
 
 /**
@@ -139,4 +149,3 @@ data class PasswordFormState(
                 newPasswordError == null &&
                 confirmPasswordError == null
 }
-

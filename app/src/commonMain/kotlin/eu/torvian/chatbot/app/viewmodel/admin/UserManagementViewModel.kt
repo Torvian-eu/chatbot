@@ -8,11 +8,11 @@ import eu.torvian.chatbot.app.repository.RoleRepository
 import eu.torvian.chatbot.app.repository.UserRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
-import eu.torvian.chatbot.common.models.Role
-import eu.torvian.chatbot.common.models.UserWithDetails
-import eu.torvian.chatbot.common.models.admin.ChangePasswordRequest
-import eu.torvian.chatbot.common.models.admin.UpdateUserRequest
-import eu.torvian.chatbot.common.models.UserStatus
+import eu.torvian.chatbot.common.models.user.Role
+import eu.torvian.chatbot.common.models.user.UserWithDetails
+import eu.torvian.chatbot.common.models.api.admin.ChangePasswordRequest
+import eu.torvian.chatbot.common.models.api.admin.UpdateUserRequest
+import eu.torvian.chatbot.common.models.user.UserStatus
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 
@@ -485,6 +485,62 @@ class UserManagementViewModel(
                         it.copy(
                             selectedUser = it.selectedUser?.let { sel ->
                                 if (sel.id == updatedUser.id) sel.copy(status = updatedUser.status) else sel
+                            },
+                            dialogState = UserManagementDialogState.None
+                        )
+                    }
+                }
+            )
+        }
+    }
+
+    /**
+     * Initiates the password change required flag change process for a user.
+     */
+    fun startChangingPasswordChangeRequired(user: UserWithDetails) {
+        _state.update {
+            it.copy(
+                dialogState = UserManagementDialogState.ChangePasswordChangeRequired(user = user)
+            )
+        }
+    }
+
+    /**
+     * Submits the password change required flag change.
+     */
+    fun submitPasswordChangeRequiredChange(requiresPasswordChange: Boolean) {
+        val currentDialog = _state.value.dialogState
+        if (currentDialog !is UserManagementDialogState.ChangePasswordChangeRequired) return
+
+        val userId = currentDialog.user.id
+
+        viewModelScope.launch {
+            // Set loading state
+            _state.update {
+                it.copy(
+                    dialogState = currentDialog.copy(isLoading = true)
+                )
+            }
+
+            userRepository.updatePasswordChangeRequired(userId, requiresPasswordChange).fold(
+                ifLeft = { error ->
+                    logger.warn("Failed to update password change required flag for ID $userId to $requiresPasswordChange: ${error.message}")
+                    errorNotifier.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to update password change required flag"
+                    )
+                    _state.update {
+                        it.copy(
+                            dialogState = currentDialog.copy(isLoading = false)
+                        )
+                    }
+                },
+                ifRight = { updatedUser ->
+                    logger.info("Successfully updated password change required flag for ID $userId to ${updatedUser.requiresPasswordChange}")
+                    _state.update {
+                        it.copy(
+                            selectedUser = it.selectedUser?.let { sel ->
+                                if (sel.id == updatedUser.id) sel.copy(requiresPasswordChange = updatedUser.requiresPasswordChange) else sel
                             },
                             dialogState = UserManagementDialogState.None
                         )

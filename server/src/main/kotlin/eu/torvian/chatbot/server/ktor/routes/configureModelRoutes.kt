@@ -3,9 +3,9 @@ package eu.torvian.chatbot.server.ktor.routes
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.ModelResource
-import eu.torvian.chatbot.common.models.AddModelRequest
-import eu.torvian.chatbot.common.models.ApiKeyStatusResponse
-import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.common.models.api.llm.AddModelRequest
+import eu.torvian.chatbot.common.models.api.llm.ApiKeyStatusResponse
+import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.server.service.core.LLMModelService
 import eu.torvian.chatbot.server.service.core.ModelSettingsService
 import eu.torvian.chatbot.server.service.core.error.model.AddModelError

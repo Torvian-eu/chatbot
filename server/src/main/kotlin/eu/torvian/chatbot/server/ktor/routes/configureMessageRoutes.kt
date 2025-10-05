@@ -5,7 +5,7 @@ import arrow.core.raise.either
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.resources.MessageResource
-import eu.torvian.chatbot.common.models.UpdateMessageRequest
+import eu.torvian.chatbot.common.models.api.core.UpdateMessageRequest
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.service.core.MessageService

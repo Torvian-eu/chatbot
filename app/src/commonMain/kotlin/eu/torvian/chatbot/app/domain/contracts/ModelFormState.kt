@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.app.domain.contracts
 
-import eu.torvian.chatbot.common.models.LLMModelType
-import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.common.models.llm.LLMModelType
+import eu.torvian.chatbot.common.models.llm.LLMModel
 
 /**
  * Data class representing the state of model configuration forms.

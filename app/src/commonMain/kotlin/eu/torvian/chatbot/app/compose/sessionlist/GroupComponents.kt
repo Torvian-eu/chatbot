@@ -16,7 +16,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.OverflowTooltipText
 import eu.torvian.chatbot.app.compose.common.PlainTooltipBox
-import eu.torvian.chatbot.common.models.ChatGroup
+import eu.torvian.chatbot.common.models.core.ChatGroup
 
 /**
  * Composable for the header of a group in the session list.

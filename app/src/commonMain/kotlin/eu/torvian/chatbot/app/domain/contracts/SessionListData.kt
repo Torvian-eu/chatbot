@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.app.domain.contracts
 
-import eu.torvian.chatbot.common.models.ChatGroup
-import eu.torvian.chatbot.common.models.ChatSessionSummary
+import eu.torvian.chatbot.common.models.core.ChatGroup
+import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 
 /**
  * Data class to hold the multiple pieces of data needed for the Session List UI when in Success state.

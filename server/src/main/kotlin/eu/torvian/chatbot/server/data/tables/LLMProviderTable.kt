@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.server.data.tables
 
-import eu.torvian.chatbot.common.models.LLMProvider
-import eu.torvian.chatbot.common.models.LLMProviderType
+import eu.torvian.chatbot.common.models.llm.LLMProvider
+import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import org.jetbrains.exposed.dao.id.LongIdTable
 
 /**

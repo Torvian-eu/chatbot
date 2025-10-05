@@ -35,6 +35,13 @@ sealed interface UpdateUserError {
      * @property reason Description of what input was invalid
      */
     data class InvalidInput(val reason: String) : UpdateUserError
+
+    /**
+     * Attempt to modify own status (not allowed).
+     *
+     * @property userId The ID of the user attempted to be modified
+     */
+    data class CannotModifyOwnStatus(val userId: Long) : UpdateUserError
 }
 
 /**
@@ -52,4 +59,7 @@ fun UpdateUserError.toApiError(): ApiError = when (this) {
 
     is UpdateUserError.InvalidInput ->
         apiError(CommonApiErrorCodes.INVALID_ARGUMENT, reason)
+
+    is UpdateUserError.CannotModifyOwnStatus ->
+        apiError(CommonApiErrorCodes.INVALID_STATE, "Cannot modify own status", "userId" to userId.toString())
 }

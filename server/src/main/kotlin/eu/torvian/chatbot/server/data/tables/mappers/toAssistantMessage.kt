@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.server.data.tables.mappers
 
-import eu.torvian.chatbot.common.models.ChatMessage
+import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.server.data.tables.AssistantMessageTable
 import eu.torvian.chatbot.server.data.tables.ChatMessageTable
 import kotlinx.datetime.Instant

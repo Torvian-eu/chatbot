@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.app.viewmodel.chat.usecase
 
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
-import eu.torvian.chatbot.common.models.ChatMessage
+import eu.torvian.chatbot.common.models.core.ChatMessage
 
 /**
  * Use case for managing reply functionality in chat.

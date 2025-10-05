@@ -8,8 +8,8 @@ import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.ModelResource
 import eu.torvian.chatbot.common.api.resources.SettingsResource
 import eu.torvian.chatbot.common.api.resources.href
-import eu.torvian.chatbot.common.models.ChatModelSettings
-import eu.torvian.chatbot.common.models.ModelSettings
+import eu.torvian.chatbot.common.models.llm.ChatModelSettings
+import eu.torvian.chatbot.common.models.llm.ModelSettings
 import io.ktor.client.engine.mock.*
 import io.ktor.http.*
 import kotlinx.coroutines.test.runTest

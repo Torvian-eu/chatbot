@@ -1,10 +1,10 @@
 package eu.torvian.chatbot.server.service.core
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.Role
-import eu.torvian.chatbot.common.models.User
-import eu.torvian.chatbot.common.models.UserStatus
-import eu.torvian.chatbot.common.models.UserWithDetails
+import eu.torvian.chatbot.common.models.user.Role
+import eu.torvian.chatbot.common.models.user.User
+import eu.torvian.chatbot.common.models.user.UserStatus
+import eu.torvian.chatbot.common.models.user.UserWithDetails
 import eu.torvian.chatbot.server.service.core.error.auth.AssignRoleError
 import eu.torvian.chatbot.server.service.core.error.auth.ChangePasswordError
 import eu.torvian.chatbot.server.service.core.error.auth.DeleteUserError
@@ -88,8 +88,24 @@ interface UserService {
 
     /**
      * Updates a user's status (ACTIVE, DISABLED, LOCKED) and returns updated public [User].
+     *
+     * @param userId The ID of the user to update
+     * @param status The new status to set
+     * @param requestingUserId The ID of the user making the request (used to prevent self-modification)
      */
-    suspend fun updateUserStatus(userId: Long, status: UserStatus): Either<UpdateUserError, User>
+    suspend fun updateUserStatus(userId: Long, status: UserStatus, requestingUserId: Long): Either<UpdateUserError, User>
+
+    /**
+     * Updates a user's password change required flag and returns updated public [User].
+     *
+     * @param userId The ID of the user
+     * @param requiresPasswordChange Whether the user must change their password on next login
+     * @return Either [UpdateUserError] if update fails, or the updated [User]
+     */
+    suspend fun updatePasswordChangeRequired(
+        userId: Long,
+        requiresPasswordChange: Boolean
+    ): Either<UpdateUserError, User>
 
     /**
      * Updates a user's profile information (admin only). Does NOT update password (use changePassword for that).

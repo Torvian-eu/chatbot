@@ -5,7 +5,7 @@ import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.api.CommonRoles
-import eu.torvian.chatbot.common.models.Role
+import eu.torvian.chatbot.common.models.user.Role
 import eu.torvian.chatbot.server.data.dao.RoleDao
 import eu.torvian.chatbot.server.data.dao.UserRoleAssignmentDao
 import eu.torvian.chatbot.server.data.dao.error.RoleError

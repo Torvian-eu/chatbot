@@ -2,8 +2,8 @@ package eu.torvian.chatbot.server.service.core.impl
 
 import arrow.core.left
 import arrow.core.right
-import eu.torvian.chatbot.common.models.Role
-import eu.torvian.chatbot.common.models.UserStatus
+import eu.torvian.chatbot.common.models.user.Role
+import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.server.data.dao.RoleDao
 import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.UserRoleAssignmentDao
@@ -336,6 +336,8 @@ class UserServiceAdminTest {
 
         every { passwordService.validatePasswordStrength(newPassword) } returns Unit.right()
         every { passwordService.hashPassword(newPassword) } returns hashedPassword
+        // Ensure verifyPassword returns false for a new/different password
+        every { passwordService.verifyPassword(newPassword, existingUser.passwordHash) } returns false
         coEvery { userDao.getUserById(userId) } returns existingUser.right()
         coEvery { userDao.updateUser(any()) } returns Unit.right()
 
@@ -363,6 +365,37 @@ class UserServiceAdminTest {
         assertTrue(result.isLeft())
         val error = result.leftOrNull()
         assertTrue(error is ChangePasswordError.InvalidPassword)
+    }
+
+    @Test
+    fun `changePassword should reject password same as current`() = runTest {
+        // Given
+        val userId = 1L
+        val currentPassword = "CurrentPass123!"
+        val hashedCurrentPassword = "hashedCurrentPass"
+
+        val existingUser = UserEntity(
+            id = userId,
+            username = "testuser",
+            passwordHash = hashedCurrentPassword,
+            email = null,
+            status = UserStatus.ACTIVE,
+            createdAt = Instant.fromEpochMilliseconds(0),
+            updatedAt = Instant.fromEpochMilliseconds(0),
+            lastLogin = null
+        )
+
+        every { passwordService.validatePasswordStrength(currentPassword) } returns Unit.right()
+        every { passwordService.verifyPassword(currentPassword, hashedCurrentPassword) } returns true
+        coEvery { userDao.getUserById(userId) } returns existingUser.right()
+
+        // When
+        val result = userService.changePassword(userId, currentPassword)
+
+        // Then
+        assertTrue(result.isLeft())
+        val error = result.leftOrNull()
+        assertTrue(error is ChangePasswordError.SameAsCurrentPassword)
     }
 
     // --- getUserRoles Tests ---

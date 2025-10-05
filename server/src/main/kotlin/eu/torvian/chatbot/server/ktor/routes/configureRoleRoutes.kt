@@ -4,8 +4,8 @@ import arrow.core.raise.either
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.api.CommonPermissions
 import eu.torvian.chatbot.common.api.resources.RoleResource
-import eu.torvian.chatbot.common.models.admin.CreateRoleRequest
-import eu.torvian.chatbot.common.models.admin.UpdateRoleRequest
+import eu.torvian.chatbot.common.models.api.admin.CreateRoleRequest
+import eu.torvian.chatbot.common.models.api.admin.UpdateRoleRequest
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.service.core.RoleService

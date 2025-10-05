@@ -1,9 +1,9 @@
 package eu.torvian.chatbot.app.repository
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.User
-import eu.torvian.chatbot.common.models.auth.LoginRequest
-import eu.torvian.chatbot.common.models.auth.RegisterRequest
+import eu.torvian.chatbot.common.models.user.User
+import eu.torvian.chatbot.common.models.api.auth.LoginRequest
+import eu.torvian.chatbot.common.models.api.auth.RegisterRequest
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -37,6 +37,16 @@ interface AuthRepository {
      * @return Either a [RepositoryError] on failure or [User] with user details on success
      */
     suspend fun register(request: RegisterRequest): Either<RepositoryError, User>
+
+    /**
+     * Changes the password for the currently authenticated user.
+     * This is used when the user is forced to change their password on first login.
+     *
+     * @param userId The ID of the user changing their password
+     * @param newPassword The new password to set
+     * @return Either a [RepositoryError] on failure or Unit on success
+     */
+    suspend fun changePassword(userId: Long, newPassword: String): Either<RepositoryError, Unit>
 
     /**
      * Logs out the current user by clearing tokens and updating auth state.

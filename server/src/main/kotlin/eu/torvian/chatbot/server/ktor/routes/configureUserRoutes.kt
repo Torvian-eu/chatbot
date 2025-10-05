@@ -1,13 +1,17 @@
 package eu.torvian.chatbot.server.ktor.routes
 
 import arrow.core.raise.either
+import arrow.core.raise.ensure
 import arrow.core.raise.withError
+import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.CommonPermissions
+import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.UserResource
-import eu.torvian.chatbot.common.models.admin.AssignRoleRequest
-import eu.torvian.chatbot.common.models.admin.ChangePasswordRequest
-import eu.torvian.chatbot.common.models.admin.UpdateUserRequest
-import eu.torvian.chatbot.common.models.admin.UpdateUserStatusRequest
+import eu.torvian.chatbot.common.models.api.admin.AssignRoleRequest
+import eu.torvian.chatbot.common.models.api.admin.ChangePasswordRequest
+import eu.torvian.chatbot.common.models.api.admin.UpdatePasswordChangeRequiredRequest
+import eu.torvian.chatbot.common.models.api.admin.UpdateUserRequest
+import eu.torvian.chatbot.common.models.api.admin.UpdateUserStatusRequest
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.service.core.UserService
@@ -101,7 +105,21 @@ fun Route.configureUserRoutes(
             val result = either {
                 requirePermission(authorizationService, requestingUserId, CommonPermissions.MANAGE_USERS)
                 withError({ e: UpdateUserError -> e.toApiError() }) {
-                    userService.updateUserStatus(resource.parent.userId, request.status).bind()
+                    userService.updateUserStatus(resource.parent.userId, request.status, requestingUserId).bind()
+                }
+            }
+            call.respondEither(result)
+        }
+
+        // PUT /api/v1/users/{userId}/password-change-required - Update password change required flag
+        put<UserResource.ById.PasswordChangeRequired> { resource ->
+            val requestingUserId = call.getUserId()
+            val request = call.receive<UpdatePasswordChangeRequiredRequest>()
+
+            val result = either {
+                requirePermission(authorizationService, requestingUserId, CommonPermissions.MANAGE_USERS)
+                withError({ e: UpdateUserError -> e.toApiError() }) {
+                    userService.updatePasswordChangeRequired(resource.parent.userId, request.requiresPasswordChange).bind()
                 }
             }
             call.respondEither(result)
@@ -167,7 +185,20 @@ fun Route.configureUserRoutes(
             val request = call.receive<ChangePasswordRequest>()
 
             val result = either {
-                requirePermission(authorizationService, requestingUserId, CommonPermissions.MANAGE_USERS)
+                // Allow if user is changing their own password OR has MANAGE_USERS permission
+                val isOwnPassword = requestingUserId == resource.parent.userId
+                val hasManageUsersPermission = authorizationService.hasPermission(
+                    requestingUserId,
+                    CommonPermissions.MANAGE_USERS
+                )
+
+                ensure(isOwnPassword || hasManageUsersPermission) {
+                    apiError(
+                        CommonApiErrorCodes.PERMISSION_DENIED,
+                        "You can only change your own password unless you have MANAGE_USERS permission"
+                    )
+                }
+
                 withError({ e: ChangePasswordError -> e.toApiError() }) {
                     userService.changePassword(resource.parent.userId, request.newPassword).bind()
                 }

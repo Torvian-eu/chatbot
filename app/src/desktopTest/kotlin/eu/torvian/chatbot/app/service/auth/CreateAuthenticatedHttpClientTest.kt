@@ -5,9 +5,9 @@ import arrow.core.right
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.common.api.resources.AuthResource
 import eu.torvian.chatbot.common.api.resources.href
-import eu.torvian.chatbot.common.models.User
-import eu.torvian.chatbot.common.models.UserStatus
-import eu.torvian.chatbot.common.models.auth.LoginResponse
+import eu.torvian.chatbot.common.models.user.User
+import eu.torvian.chatbot.common.models.user.UserStatus
+import eu.torvian.chatbot.common.models.api.auth.LoginResponse
 import io.ktor.client.*
 import io.ktor.client.engine.mock.*
 import io.ktor.client.plugins.*
@@ -55,7 +55,8 @@ class CreateAuthenticatedHttpClientTest {
         coEvery { mockTokenStorage.getAccessToken() } answers { "default-access-token".right() }
         coEvery { mockTokenStorage.getRefreshToken() } answers { "default-refresh-token".right() }
         coEvery { mockTokenStorage.getExpiry() } answers { Clock.System.now().right() }
-        coEvery { mockTokenStorage.saveAuthData(any(), any(), any(), any()) } answers { Unit.right() }
+        // Updated to include permissions parameter
+        coEvery { mockTokenStorage.saveAuthData(any(), any(), any(), any(), any()) } answers { Unit.right() }
         coEvery { mockTokenStorage.clearAuthData() } answers { Unit.right() }
     }
 
@@ -337,8 +338,8 @@ class CreateAuthenticatedHttpClientTest {
         assertEquals(HttpStatusCode.OK, response.status)
         assertEquals("""{"message": "success with new token"}""", response.bodyAsText())
 
-        // Verify tokens were saved after refresh
-        coVerify(exactly = 1) { mockTokenStorage.saveAuthData(newAccessToken, newRefreshToken, newExpiresAt, any()) }
+        // Verify tokens were saved after refresh - include permissions argument in verification
+        coVerify(exactly = 1) { mockTokenStorage.saveAuthData(newAccessToken, newRefreshToken, newExpiresAt, any(), any()) }
         coVerify(exactly = 0) { mockEventBus.emitEvent(any<AuthenticationFailureEvent>()) }
 
         client.close()

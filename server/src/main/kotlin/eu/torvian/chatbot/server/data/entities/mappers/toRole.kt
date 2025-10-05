@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.server.data.entities.mappers
 
-import eu.torvian.chatbot.common.models.Role
+import eu.torvian.chatbot.common.models.user.Role
 import eu.torvian.chatbot.server.data.entities.RoleEntity
 
 /**

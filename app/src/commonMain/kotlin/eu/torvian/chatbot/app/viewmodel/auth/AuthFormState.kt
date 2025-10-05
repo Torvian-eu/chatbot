@@ -57,3 +57,31 @@ data class RegisterFormState(
                 confirmPasswordError != null ||
                 generalError != null
 }
+
+/**
+ * Represents the state of the password change form.
+ */
+@Serializable
+data class PasswordChangeFormState(
+    val currentPassword: String = "",
+    val newPassword: String = "",
+    val confirmPassword: String = "",
+    val isLoading: Boolean = false,
+    val currentPasswordError: String? = null,
+    val newPasswordError: String? = null,
+    val confirmPasswordError: String? = null,
+    val generalError: String? = null,
+    val passwordChangeSuccessEvent: Boolean = false
+) {
+    val isValid: Boolean
+        get() = newPassword.isNotBlank() &&
+                newPassword == confirmPassword &&
+                newPasswordError == null &&
+                confirmPasswordError == null
+
+    val hasErrors: Boolean
+        get() = currentPasswordError != null ||
+                newPasswordError != null ||
+                confirmPasswordError != null ||
+                generalError != null
+}

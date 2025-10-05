@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.server.data.tables
 
-import eu.torvian.chatbot.common.models.ChatMessage
-import eu.torvian.chatbot.common.models.ChatMessage.Role
+import eu.torvian.chatbot.common.models.core.ChatMessage
+import eu.torvian.chatbot.common.models.core.ChatMessage.Role
 import org.jetbrains.exposed.dao.id.LongIdTable
 import org.jetbrains.exposed.sql.ReferenceOption
 

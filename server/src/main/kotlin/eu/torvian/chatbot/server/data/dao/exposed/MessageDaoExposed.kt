@@ -6,7 +6,7 @@ import arrow.core.raise.Raise
 import arrow.core.raise.catch
 import arrow.core.raise.either
 import arrow.core.raise.ensure
-import eu.torvian.chatbot.common.models.ChatMessage
+import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.error.InsertMessageError
 import eu.torvian.chatbot.server.data.dao.error.MessageError

@@ -1,8 +1,8 @@
 package eu.torvian.chatbot.server.service.core
 
-import eu.torvian.chatbot.common.models.LLMModel
-import eu.torvian.chatbot.common.models.LLMProvider
-import eu.torvian.chatbot.common.models.ModelSettings
+import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.llm.LLMProvider
+import eu.torvian.chatbot.common.models.llm.ModelSettings
 
 /**
  * Data class to hold LLM configuration components.

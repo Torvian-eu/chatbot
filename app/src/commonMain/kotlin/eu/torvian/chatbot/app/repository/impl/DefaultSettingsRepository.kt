@@ -7,7 +7,7 @@ import eu.torvian.chatbot.app.repository.SettingsRepository
 import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.service.api.SettingsApi
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
-import eu.torvian.chatbot.common.models.ModelSettings
+import eu.torvian.chatbot.common.models.llm.ModelSettings
 import kotlinx.coroutines.flow.*
 
 /**

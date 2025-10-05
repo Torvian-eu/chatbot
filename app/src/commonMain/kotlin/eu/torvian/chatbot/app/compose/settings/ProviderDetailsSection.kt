@@ -5,7 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import eu.torvian.chatbot.common.models.LLMProvider
+import eu.torvian.chatbot.common.models.llm.LLMProvider
 
 /**
  * Section displaying provider details in a structured format.

@@ -2,7 +2,7 @@ package eu.torvian.chatbot.server.data.dao.exposed
 
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
-import eu.torvian.chatbot.common.models.ChatMessage
+import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.error.MessageError
 import eu.torvian.chatbot.server.data.dao.error.InsertMessageError

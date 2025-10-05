@@ -7,14 +7,17 @@ import eu.torvian.chatbot.app.repository.AuthRepository
 import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.toRepositoryError
+import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.AuthApi
+import eu.torvian.chatbot.app.service.api.UserApi
 import eu.torvian.chatbot.app.service.auth.AuthenticationFailureEvent
 import eu.torvian.chatbot.app.service.auth.TokenStorage
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
-import eu.torvian.chatbot.common.models.User
-import eu.torvian.chatbot.common.models.auth.LoginRequest
-import eu.torvian.chatbot.common.models.auth.RegisterRequest
+import eu.torvian.chatbot.common.models.user.User
+import eu.torvian.chatbot.common.models.api.admin.ChangePasswordRequest
+import eu.torvian.chatbot.common.models.api.auth.LoginRequest
+import eu.torvian.chatbot.common.models.api.auth.RegisterRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,10 +32,12 @@ import kotlinx.coroutines.launch
  * between the AuthApi for server operations and TokenStorage for local token management.
  *
  * @property authApi The API client for authentication operations
+ * @property userApi The API client for user management operations
  * @property tokenStorage The storage for managing authentication tokens
  */
 class DefaultAuthRepository(
     private val authApi: AuthApi,
+    private val userApi: UserApi,
     private val tokenStorage: TokenStorage,
     private val eventBus: EventBus
 ) : AuthRepository {
@@ -68,7 +73,7 @@ class DefaultAuthRepository(
             authApi.login(request).bind()
         }
 
-        // Save authentication data (tokens and user)
+        // Save authentication data (tokens, user, and permissions)
         withError({ tokenError ->
             _authState.value = AuthState.Unauthenticated
             RepositoryError.OtherError("Failed to save authentication data after successful login: ${tokenError.message}")
@@ -77,14 +82,17 @@ class DefaultAuthRepository(
                 accessToken = loginResponse.accessToken,
                 refreshToken = loginResponse.refreshToken,
                 expiresAt = loginResponse.expiresAt,
-                user = loginResponse.user
+                user = loginResponse.user,
+                permissions = loginResponse.permissions
             ).bind()
         }
 
         // Update auth state on successful token save
         _authState.value = AuthState.Authenticated(
             userId = loginResponse.user.id,
-            username = loginResponse.user.username
+            username = loginResponse.user.username,
+            permissions = loginResponse.permissions,
+            requiresPasswordChange = loginResponse.user.requiresPasswordChange
         )
     }
 
@@ -96,16 +104,31 @@ class DefaultAuthRepository(
         }
     }
 
+    override suspend fun changePassword(userId: Long, newPassword: String): Either<RepositoryError, Unit> = either {
+        logger.info("Changing password for user: $userId")
+
+        val request = ChangePasswordRequest(newPassword)
+
+        // Call the API to change password
+        withError({ apiError: ApiResourceError ->
+            apiError.toRepositoryError("Password change failed")
+        }) {
+            userApi.changeUserPassword(userId, request).bind()
+        }
+
+        logger.info("Password changed successfully for user: $userId")
+    }
+
     override suspend fun logout(): Either<RepositoryError, Unit> = either {
+        val result = authApi.logout()
+        tokenStorage.clearAuthData()
+            .onLeft { logger.warn("Failed to clear auth data on logout: ${it.message}") }
+        _authState.value = AuthState.Unauthenticated
         withError({ apiError ->
             apiError.toRepositoryError("Logout failed")
         }) {
-            authApi.logout().bind()
+            result.bind()
         }
-        tokenStorage.clearAuthData()
-            .onLeft { logger.warn("Failed to clear auth data on logout: ${it.message}") }
-
-        _authState.value = AuthState.Unauthenticated
     }
 
     override suspend fun isAuthenticated(): Boolean {
@@ -122,8 +145,22 @@ class DefaultAuthRepository(
                 _authState.value = AuthState.Unauthenticated
             },
             ifRight = { user ->
-                logger.info("Found cached user data, setting authenticated state: ${user.username}")
-                _authState.value = AuthState.Authenticated(user.id, user.username)
+                // Also load permissions
+                tokenStorage.getPermissions().fold(
+                    ifLeft = { error ->
+                        logger.warn("Failed to load permissions, setting unauthenticated state: ${error.message}")
+                        _authState.value = AuthState.Unauthenticated
+                    },
+                    ifRight = { permissions ->
+                        logger.info("Found cached user data and permissions, setting authenticated state: ${user.username}")
+                        _authState.value = AuthState.Authenticated(
+                            userId = user.id,
+                            username = user.username,
+                            permissions = permissions,
+                            requiresPasswordChange = user.requiresPasswordChange
+                        )
+                    }
+                )
             }
         )
     }

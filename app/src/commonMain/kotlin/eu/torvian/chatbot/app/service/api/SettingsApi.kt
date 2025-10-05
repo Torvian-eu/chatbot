@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.app.service.api
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.ModelSettings
+import eu.torvian.chatbot.common.models.llm.ModelSettings
 
 /**
  * Frontend API interface for interacting with Model Settings Profile-related endpoints.

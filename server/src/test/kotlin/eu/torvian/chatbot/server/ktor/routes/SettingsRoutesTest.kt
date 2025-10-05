@@ -6,8 +6,8 @@ import eu.torvian.chatbot.common.api.resources.SettingsResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
-import eu.torvian.chatbot.common.models.ChatModelSettings
-import eu.torvian.chatbot.common.models.ModelSettings
+import eu.torvian.chatbot.common.models.llm.ChatModelSettings
+import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.server.testutils.auth.TestAuthHelper
 import eu.torvian.chatbot.server.testutils.auth.authenticate
 import eu.torvian.chatbot.server.testutils.data.Table

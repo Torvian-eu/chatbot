@@ -8,7 +8,7 @@ import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import com.auth0.jwt.exceptions.JWTDecodeException
 import com.auth0.jwt.exceptions.JWTVerificationException
-import eu.torvian.chatbot.common.models.UserStatus
+import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.UserSessionDao
 import eu.torvian.chatbot.server.data.dao.error.UserError
@@ -48,6 +48,7 @@ class AuthenticationServiceImpl(
     private val jwtConfig: JwtConfig,
     private val userSessionDao: UserSessionDao,
     private val userDao: UserDao,
+    private val authorizationService: AuthorizationService,
     private val transactionScope: TransactionScope
 ) : AuthenticationService {
 
@@ -105,12 +106,16 @@ class AuthenticationServiceImpl(
                     // Don't fail the login if updating last login fails
                 }
 
+                // Retrieve user permissions
+                val permissions = authorizationService.getUserPermissions(userEntity.id)
+
                 logger.info("Successful login for user: $username")
                 LoginResult(
                     user = userEntity.toUser(),
                     accessToken = accessToken,
                     refreshToken = refreshToken,
-                    expiresAt = Instant.fromEpochMilliseconds(sessionExpiresAt)
+                    expiresAt = Instant.fromEpochMilliseconds(sessionExpiresAt),
+                    permissions = permissions
                 )
             }
         }
@@ -235,13 +240,17 @@ class AuthenticationServiceImpl(
                     currentTime = currentTime.toEpochMilliseconds())
                 val tokenExpiresAt = currentTime.plus(jwtConfig.tokenExpirationMs.milliseconds)
 
+                // Retrieve user permissions
+                val permissions = authorizationService.getUserPermissions(userId)
+
                 logger.info("Successfully refreshed tokens for user: $userId")
 
                 LoginResult(
                     user = user,
                     accessToken = newAccessToken,
                     refreshToken = newRefreshToken,
-                    expiresAt = tokenExpiresAt
+                    expiresAt = tokenExpiresAt,
+                    permissions = permissions
                 )
             }
         }

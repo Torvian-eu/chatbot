@@ -14,8 +14,8 @@ import eu.torvian.chatbot.app.compose.common.ConfigDropdown
 import eu.torvian.chatbot.app.compose.common.ConfigTextField
 import eu.torvian.chatbot.app.compose.common.CredentialField
 import eu.torvian.chatbot.app.domain.contracts.ProviderFormState
-import eu.torvian.chatbot.common.models.LLMProvider
-import eu.torvian.chatbot.common.models.LLMProviderType
+import eu.torvian.chatbot.common.models.llm.LLMProvider
+import eu.torvian.chatbot.common.models.llm.LLMProviderType
 
 /**
  * Modal dialog for adding a new LLM provider (E4.S8).

@@ -8,9 +8,9 @@ import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.MessageResource
 import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.api.resources.href
-import eu.torvian.chatbot.common.models.ChatMessage
-import eu.torvian.chatbot.common.models.ProcessNewMessageRequest
-import eu.torvian.chatbot.common.models.UpdateMessageRequest
+import eu.torvian.chatbot.common.models.core.ChatMessage
+import eu.torvian.chatbot.common.models.api.core.ProcessNewMessageRequest
+import eu.torvian.chatbot.common.models.api.core.UpdateMessageRequest
 import io.ktor.client.engine.mock.*
 import io.ktor.http.*
 import kotlinx.coroutines.test.runTest

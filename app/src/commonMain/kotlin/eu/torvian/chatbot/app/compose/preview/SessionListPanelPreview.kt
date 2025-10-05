@@ -6,8 +6,8 @@ import eu.torvian.chatbot.app.compose.sessionlist.SessionListState
 import eu.torvian.chatbot.app.compose.sessionlist.SessionListActions
 import eu.torvian.chatbot.app.domain.contracts.SessionListData
 import eu.torvian.chatbot.app.domain.contracts.DataState
-import eu.torvian.chatbot.common.models.ChatGroup
-import eu.torvian.chatbot.common.models.ChatSessionSummary
+import eu.torvian.chatbot.common.models.core.ChatGroup
+import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 import kotlinx.datetime.Instant
 import org.jetbrains.compose.ui.tooling.preview.Preview
 

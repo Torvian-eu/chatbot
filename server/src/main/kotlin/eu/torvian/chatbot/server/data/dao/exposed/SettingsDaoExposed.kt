@@ -2,7 +2,7 @@ package eu.torvian.chatbot.server.data.dao.exposed
 
 import arrow.core.*
 import arrow.core.raise.*
-import eu.torvian.chatbot.common.models.ModelSettings
+import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.server.data.dao.SettingsDao
 import eu.torvian.chatbot.server.data.dao.error.SettingsError
 import eu.torvian.chatbot.server.data.tables.mappers.toModelSettings

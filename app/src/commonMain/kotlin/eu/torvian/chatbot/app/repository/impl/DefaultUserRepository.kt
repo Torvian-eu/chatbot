@@ -9,13 +9,13 @@ import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.repository.UserRepository
 import eu.torvian.chatbot.app.service.api.UserApi
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
-import eu.torvian.chatbot.common.models.Role
-import eu.torvian.chatbot.common.models.User
-import eu.torvian.chatbot.common.models.UserStatus
-import eu.torvian.chatbot.common.models.UserWithDetails
-import eu.torvian.chatbot.common.models.admin.AssignRoleRequest
-import eu.torvian.chatbot.common.models.admin.ChangePasswordRequest
-import eu.torvian.chatbot.common.models.admin.UpdateUserRequest
+import eu.torvian.chatbot.common.models.user.Role
+import eu.torvian.chatbot.common.models.user.User
+import eu.torvian.chatbot.common.models.user.UserStatus
+import eu.torvian.chatbot.common.models.user.UserWithDetails
+import eu.torvian.chatbot.common.models.api.admin.AssignRoleRequest
+import eu.torvian.chatbot.common.models.api.admin.ChangePasswordRequest
+import eu.torvian.chatbot.common.models.api.admin.UpdateUserRequest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -123,6 +123,29 @@ class DefaultUserRepository(
                 updateUsersState { list ->
                     list.map { current ->
                         if (current.id == updatedUser.id) current.copy(status = updatedUser.status) else current
+                    }
+                }
+                updatedUser.right()
+            }
+        )
+    }
+
+    override suspend fun updatePasswordChangeRequired(
+        userId: Long,
+        requiresPasswordChange: Boolean
+    ): Either<RepositoryError, User> {
+        logger.info("Updating password change required flag for user ID: $userId to $requiresPasswordChange")
+        return userApi.updatePasswordChangeRequired(userId, requiresPasswordChange).fold(
+            ifLeft = { apiResourceError ->
+                val repositoryError = apiResourceError.toRepositoryError("Failed to update password change required for user ID: $userId")
+                logger.warn("Failed to update password change required for user ID: $userId: ${repositoryError.message}")
+                repositoryError.left()
+            },
+            ifRight = { updatedUser ->
+                logger.info("Successfully updated password change required flag for user ID: $userId to ${updatedUser.requiresPasswordChange}")
+                updateUsersState { list ->
+                    list.map { current ->
+                        if (current.id == updatedUser.id) current.copy(requiresPasswordChange = updatedUser.requiresPasswordChange) else current
                     }
                 }
                 updatedUser.right()

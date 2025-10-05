@@ -21,9 +21,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ScrollbarWrapper
-import eu.torvian.chatbot.common.models.ChatMessage
-import eu.torvian.chatbot.common.models.ChatSession
-import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.common.models.core.ChatMessage
+import eu.torvian.chatbot.common.models.core.ChatSession
+import eu.torvian.chatbot.common.models.llm.LLMModel
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 /**

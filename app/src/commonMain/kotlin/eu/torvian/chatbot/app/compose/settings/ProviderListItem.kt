@@ -11,7 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import eu.torvian.chatbot.common.models.LLMProvider
+import eu.torvian.chatbot.common.models.llm.LLMProvider
 
 /**
  * Individual provider item in the list.

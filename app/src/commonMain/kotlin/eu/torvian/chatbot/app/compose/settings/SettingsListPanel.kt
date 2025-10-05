@@ -14,8 +14,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ConfigDropdown
-import eu.torvian.chatbot.common.models.LLMModel
-import eu.torvian.chatbot.common.models.ModelSettings
+import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.llm.ModelSettings
 
 /**
  * Master panel for the Settings Config tab.

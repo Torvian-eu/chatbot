@@ -69,7 +69,12 @@ fun appModule(baseUri: String): Module = module {
     }
 
     single<AuthRepository> {
-        DefaultAuthRepository(get(), get(), get())
+        DefaultAuthRepository(
+            authApi = get(),
+            userApi = get(),
+            tokenStorage = get(),
+            eventBus = get()
+        )
     }
 
     // Default HttpClient (authenticated) for backward compatibility

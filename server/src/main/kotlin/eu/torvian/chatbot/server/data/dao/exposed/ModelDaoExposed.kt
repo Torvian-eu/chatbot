@@ -6,8 +6,8 @@ import arrow.core.raise.catch
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.right
-import eu.torvian.chatbot.common.models.LLMModel
-import eu.torvian.chatbot.common.models.LLMModelType
+import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.server.data.dao.ModelDao
 import eu.torvian.chatbot.server.data.dao.error.InsertModelError
 import eu.torvian.chatbot.server.data.dao.error.ModelError
@@ -92,7 +92,7 @@ class ModelDaoExposed(
                         it[active] = model.active
                         it[displayName] = model.displayName
                         it[capabilities] = model.capabilities?.let { cap ->
-                            Json.Default.encodeToString(JsonObject.serializer(), cap)
+                            Json.encodeToString(JsonObject.serializer(), cap)
                         }
                     }
                     ensure(updatedRowCount != 0) { UpdateModelError.ModelNotFound(model.id) }

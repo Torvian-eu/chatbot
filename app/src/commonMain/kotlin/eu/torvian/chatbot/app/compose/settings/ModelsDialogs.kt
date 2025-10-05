@@ -5,6 +5,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import eu.torvian.chatbot.app.domain.contracts.ModelsDialogState
+import eu.torvian.chatbot.common.models.llm.LLMModel
 
 /**
  * Composable for managing all dialogs in the ModelsTab.
@@ -65,7 +66,7 @@ fun ModelsDialogs(
  */
 @Composable
 private fun DeleteModelDialog(
-    model: eu.torvian.chatbot.common.models.LLMModel,
+    model: LLMModel,
     onConfirmDelete: () -> Unit,
     onDismiss: () -> Unit
 ) {

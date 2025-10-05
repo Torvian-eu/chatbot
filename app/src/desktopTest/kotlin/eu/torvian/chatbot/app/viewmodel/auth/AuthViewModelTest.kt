@@ -8,10 +8,10 @@ import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
 import eu.torvian.chatbot.common.api.ApiError
-import eu.torvian.chatbot.common.models.auth.LoginRequest
-import eu.torvian.chatbot.common.models.auth.RegisterRequest
-import eu.torvian.chatbot.common.models.User
-import eu.torvian.chatbot.common.models.UserStatus
+import eu.torvian.chatbot.common.models.api.auth.LoginRequest
+import eu.torvian.chatbot.common.models.api.auth.RegisterRequest
+import eu.torvian.chatbot.common.models.user.User
+import eu.torvian.chatbot.common.models.user.UserStatus
 import io.mockk.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow

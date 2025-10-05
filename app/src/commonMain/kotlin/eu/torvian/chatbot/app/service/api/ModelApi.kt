@@ -1,9 +1,9 @@
 package eu.torvian.chatbot.app.service.api
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.AddModelRequest
-import eu.torvian.chatbot.common.models.ApiKeyStatusResponse
-import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.common.models.api.llm.AddModelRequest
+import eu.torvian.chatbot.common.models.api.llm.ApiKeyStatusResponse
+import eu.torvian.chatbot.common.models.llm.LLMModel
 
 /**
  * Frontend API interface for interacting with LLM Model-related endpoints.

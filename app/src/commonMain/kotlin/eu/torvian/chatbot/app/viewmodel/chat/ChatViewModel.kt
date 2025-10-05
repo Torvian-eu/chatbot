@@ -9,10 +9,10 @@ import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.usecase.*
-import eu.torvian.chatbot.common.models.ChatMessage
-import eu.torvian.chatbot.common.models.ChatSession
-import eu.torvian.chatbot.common.models.LLMModel
-import eu.torvian.chatbot.common.models.ModelSettings
+import eu.torvian.chatbot.common.models.core.ChatMessage
+import eu.torvian.chatbot.common.models.core.ChatSession
+import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.llm.ModelSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.StateFlow

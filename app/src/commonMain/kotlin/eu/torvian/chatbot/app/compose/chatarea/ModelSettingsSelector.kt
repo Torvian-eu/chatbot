@@ -12,8 +12,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
-import eu.torvian.chatbot.common.models.LLMModel
-import eu.torvian.chatbot.common.models.ModelSettings
+import eu.torvian.chatbot.common.models.llm.ChatModelSettings
+import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.llm.ModelSettings
+import eu.torvian.chatbot.common.models.llm.LLMModelType
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
 /**
@@ -215,12 +217,12 @@ private fun <T> SelectorDropdown(
 @Composable
 private fun ModelSettingsSelector_SuccessState_Preview() {
     val models = listOf(
-        LLMModel(1, "GPT-4 Turbo", 1, true, "GPT-4 Turbo", eu.torvian.chatbot.common.models.LLMModelType.CHAT),
-        LLMModel(2, "Claude 3 Sonnet", 2, true, "Claude 3 Sonnet", eu.torvian.chatbot.common.models.LLMModelType.CHAT)
+        LLMModel(1, "GPT-4 Turbo", 1, true, "GPT-4 Turbo", LLMModelType.CHAT),
+        LLMModel(2, "Claude 3 Sonnet", 2, true, "Claude 3 Sonnet", LLMModelType.CHAT)
     )
     val settings = listOf(
-        eu.torvian.chatbot.common.models.ChatModelSettings(10, 1, "Creative"),
-        eu.torvian.chatbot.common.models.ChatModelSettings(11, 1, "Balanced")
+        ChatModelSettings(10, 1, "Creative"),
+        ChatModelSettings(11, 1, "Balanced")
     )
     MaterialTheme {
         ModelSettingsSelector(
@@ -278,7 +280,7 @@ private fun ModelSettingsSelector_ErrorState_Preview() {
 @Composable
 private fun ModelSettingsSelector_MixedState_Preview() {
     val models = listOf(
-        LLMModel(1, "GPT-4 Turbo", 1, true, "GPT-4 Turbo", eu.torvian.chatbot.common.models.LLMModelType.CHAT)
+        LLMModel(1, "GPT-4 Turbo", 1, true, "GPT-4 Turbo", LLMModelType.CHAT)
     )
     MaterialTheme {
         ModelSettingsSelector(

@@ -45,6 +45,11 @@ The user should be able to configure this in their profile. (Requires: user acco
 
 ### Allow user to quickly scroll to the bottom of the messages list
 
+### Allow user to switch accounts without logging out (requires: user accounts feature)
+
+### Allow admin to create new accounts for other users. (requires: user accounts feature)
+Users will be forced to change their password on first login.
+
 ---
 
 ## Intermediate features

@@ -2,7 +2,7 @@ package eu.torvian.chatbot.app.repository
 
 import arrow.core.Either
 import eu.torvian.chatbot.app.domain.contracts.DataState
-import eu.torvian.chatbot.common.models.ModelSettings
+import eu.torvian.chatbot.common.models.llm.ModelSettings
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 

@@ -9,8 +9,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ScrollbarWrapper
-import eu.torvian.chatbot.common.models.ChatGroup
-import eu.torvian.chatbot.common.models.ChatSessionSummary
+import eu.torvian.chatbot.common.models.core.ChatGroup
+import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 
 /**
  * Main content section displaying the list of sessions and groups.

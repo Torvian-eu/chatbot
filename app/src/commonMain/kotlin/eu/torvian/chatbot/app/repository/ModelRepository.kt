@@ -2,9 +2,9 @@ package eu.torvian.chatbot.app.repository
 
 import arrow.core.Either
 import eu.torvian.chatbot.app.domain.contracts.DataState
-import eu.torvian.chatbot.common.models.AddModelRequest
-import eu.torvian.chatbot.common.models.ApiKeyStatusResponse
-import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.common.models.api.llm.AddModelRequest
+import eu.torvian.chatbot.common.models.api.llm.ApiKeyStatusResponse
+import eu.torvian.chatbot.common.models.llm.LLMModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 

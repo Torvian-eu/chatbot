@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.app.domain.contracts
 
-import eu.torvian.chatbot.common.models.LLMProviderType
+import eu.torvian.chatbot.common.models.llm.LLMProviderType
+import eu.torvian.chatbot.common.models.llm.LLMProvider
 
 /**
  * Data class representing the state of provider configuration forms.
@@ -24,7 +25,7 @@ data class ProviderFormState(
         /**
          * Creates a ProviderFormState from an existing LLMProvider for editing.
          */
-        fun fromProvider(provider: eu.torvian.chatbot.common.models.LLMProvider): ProviderFormState {
+        fun fromProvider(provider: LLMProvider): ProviderFormState {
             return ProviderFormState(
                 mode = FormMode.EDIT,
                 name = provider.name,

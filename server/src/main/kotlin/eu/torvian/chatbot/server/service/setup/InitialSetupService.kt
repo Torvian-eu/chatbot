@@ -6,7 +6,7 @@ import arrow.core.right
 import eu.torvian.chatbot.common.api.CommonPermissions
 import eu.torvian.chatbot.common.api.CommonRoles
 import eu.torvian.chatbot.common.api.PermissionSpec
-import eu.torvian.chatbot.common.models.UserStatus
+import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.entities.UserEntity
@@ -134,7 +134,8 @@ class InitialSetupService(
             username = DEFAULT_ADMIN_USERNAME,
             passwordHash = hashedPassword,
             email = null,
-            status = UserStatus.ACTIVE
+            status = UserStatus.ACTIVE,
+            requiresPasswordChange = true  // Force password change on first login
         ).mapLeft { error ->
             when (error) {
                 is UserError.UsernameAlreadyExists -> "Admin username already exists"

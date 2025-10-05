@@ -1,8 +1,8 @@
 package eu.torvian.chatbot.server.service.core
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.LLMModel
-import eu.torvian.chatbot.common.models.LLMModelType
+import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.server.service.core.error.model.*
 import kotlinx.serialization.json.JsonObject
 

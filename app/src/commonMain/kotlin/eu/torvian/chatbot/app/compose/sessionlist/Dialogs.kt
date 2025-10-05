@@ -8,8 +8,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.domain.contracts.SessionListDialogState
-import eu.torvian.chatbot.common.models.ChatGroup
-import eu.torvian.chatbot.common.models.ChatSessionSummary
+import eu.torvian.chatbot.common.models.core.ChatGroup
+import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 
 /**
  * Consolidated dialog management for the session list panel.

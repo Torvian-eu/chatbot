@@ -8,9 +8,9 @@ import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.service.api.GroupApi
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
-import eu.torvian.chatbot.common.models.ChatGroup
-import eu.torvian.chatbot.common.models.CreateGroupRequest
-import eu.torvian.chatbot.common.models.RenameGroupRequest
+import eu.torvian.chatbot.common.models.core.ChatGroup
+import eu.torvian.chatbot.common.models.api.core.CreateGroupRequest
+import eu.torvian.chatbot.common.models.api.core.RenameGroupRequest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

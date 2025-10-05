@@ -1,9 +1,9 @@
 package eu.torvian.chatbot.server.data.dao
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.User
-import eu.torvian.chatbot.common.models.UserStatus
-import eu.torvian.chatbot.common.models.UserWithDetails
+import eu.torvian.chatbot.common.models.user.User
+import eu.torvian.chatbot.common.models.user.UserStatus
+import eu.torvian.chatbot.common.models.user.UserWithDetails
 import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.entities.UserEntity
 
@@ -46,6 +46,7 @@ interface UserDao {
      * @param passwordHash Securely hashed password.
      * @param email Optional email address (must be unique if provided).
      * @param status Initial account status to persist (e.g., DISABLED for new registrations, ACTIVE for initial admin)
+     * @param requiresPasswordChange Whether the user must change their password upon next login
      * @return Either [UserError.UsernameAlreadyExists] or [UserError.EmailAlreadyExists] if constraints are violated,
      *         or the newly created [UserEntity] on success.
      */
@@ -53,7 +54,8 @@ interface UserDao {
         username: String,
         passwordHash: String,
         email: String? = null,
-        status: UserStatus
+        status: UserStatus,
+        requiresPasswordChange: Boolean = false
     ): Either<UserError, UserEntity>
 
     /**
@@ -99,4 +101,13 @@ interface UserDao {
      * Updates only the status field of a user and returns the updated public [User].
      */
     suspend fun updateUserStatus(id: Long, status: UserStatus): Either<UserError.UserNotFound, User>
+
+    /**
+     * Updates only the requiresPasswordChange field of a user and returns the updated public [User].
+     *
+     * @param id The unique identifier of the user
+     * @param requiresPasswordChange Whether the user must change their password on next login
+     * @return Either [UserError.UserNotFound] if the user doesn't exist, or the updated [User] on success
+     */
+    suspend fun updatePasswordChangeRequired(id: Long, requiresPasswordChange: Boolean): Either<UserError.UserNotFound, User>
 }

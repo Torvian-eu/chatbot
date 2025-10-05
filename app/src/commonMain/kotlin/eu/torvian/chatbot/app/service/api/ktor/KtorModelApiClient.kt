@@ -6,9 +6,9 @@ import eu.torvian.chatbot.app.service.api.ModelApi
 import eu.torvian.chatbot.common.api.resources.ModelResource
 import eu.torvian.chatbot.common.api.resources.ModelResource.ById
 import eu.torvian.chatbot.common.api.resources.ModelResource.ById.ApiKeyStatus
-import eu.torvian.chatbot.common.models.AddModelRequest
-import eu.torvian.chatbot.common.models.ApiKeyStatusResponse
-import eu.torvian.chatbot.common.models.LLMModel
+import eu.torvian.chatbot.common.models.api.llm.AddModelRequest
+import eu.torvian.chatbot.common.models.api.llm.ApiKeyStatusResponse
+import eu.torvian.chatbot.common.models.llm.LLMModel
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.resources.*

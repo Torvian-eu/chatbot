@@ -2,9 +2,9 @@ package eu.torvian.chatbot.app.repository
 
 import arrow.core.Either
 import eu.torvian.chatbot.app.domain.contracts.DataState
-import eu.torvian.chatbot.common.models.ChatGroup
-import eu.torvian.chatbot.common.models.CreateGroupRequest
-import eu.torvian.chatbot.common.models.RenameGroupRequest
+import eu.torvian.chatbot.common.models.core.ChatGroup
+import eu.torvian.chatbot.common.models.api.core.CreateGroupRequest
+import eu.torvian.chatbot.common.models.api.core.RenameGroupRequest
 import kotlinx.coroutines.flow.StateFlow
 
 /**

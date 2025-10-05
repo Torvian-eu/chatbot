@@ -22,7 +22,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.OverflowTooltipText
 import eu.torvian.chatbot.app.compose.common.PlainTooltipBox
-import eu.torvian.chatbot.common.models.ChatSessionSummary
+import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 
 /**
  * Composable for a single session list item with improved accessibility and visual feedback.
