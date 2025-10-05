@@ -495,6 +495,62 @@ class UserManagementViewModel(
     }
 
     /**
+     * Initiates the password change required flag change process for a user.
+     */
+    fun startChangingPasswordChangeRequired(user: UserWithDetails) {
+        _state.update {
+            it.copy(
+                dialogState = UserManagementDialogState.ChangePasswordChangeRequired(user = user)
+            )
+        }
+    }
+
+    /**
+     * Submits the password change required flag change.
+     */
+    fun submitPasswordChangeRequiredChange(requiresPasswordChange: Boolean) {
+        val currentDialog = _state.value.dialogState
+        if (currentDialog !is UserManagementDialogState.ChangePasswordChangeRequired) return
+
+        val userId = currentDialog.user.id
+
+        viewModelScope.launch {
+            // Set loading state
+            _state.update {
+                it.copy(
+                    dialogState = currentDialog.copy(isLoading = true)
+                )
+            }
+
+            userRepository.updatePasswordChangeRequired(userId, requiresPasswordChange).fold(
+                ifLeft = { error ->
+                    logger.warn("Failed to update password change required flag for ID $userId to $requiresPasswordChange: ${error.message}")
+                    errorNotifier.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to update password change required flag"
+                    )
+                    _state.update {
+                        it.copy(
+                            dialogState = currentDialog.copy(isLoading = false)
+                        )
+                    }
+                },
+                ifRight = { updatedUser ->
+                    logger.info("Successfully updated password change required flag for ID $userId to ${updatedUser.requiresPasswordChange}")
+                    _state.update {
+                        it.copy(
+                            selectedUser = it.selectedUser?.let { sel ->
+                                if (sel.id == updatedUser.id) sel.copy(requiresPasswordChange = updatedUser.requiresPasswordChange) else sel
+                            },
+                            dialogState = UserManagementDialogState.None
+                        )
+                    }
+                }
+            )
+        }
+    }
+
+    /**
      * Closes the current dialog.
      */
     fun closeDialog() {

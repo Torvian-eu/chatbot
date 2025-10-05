@@ -9,6 +9,7 @@ import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.UserResource
 import eu.torvian.chatbot.common.models.admin.AssignRoleRequest
 import eu.torvian.chatbot.common.models.admin.ChangePasswordRequest
+import eu.torvian.chatbot.common.models.admin.UpdatePasswordChangeRequiredRequest
 import eu.torvian.chatbot.common.models.admin.UpdateUserRequest
 import eu.torvian.chatbot.common.models.admin.UpdateUserStatusRequest
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
@@ -105,6 +106,20 @@ fun Route.configureUserRoutes(
                 requirePermission(authorizationService, requestingUserId, CommonPermissions.MANAGE_USERS)
                 withError({ e: UpdateUserError -> e.toApiError() }) {
                     userService.updateUserStatus(resource.parent.userId, request.status).bind()
+                }
+            }
+            call.respondEither(result)
+        }
+
+        // PUT /api/v1/users/{userId}/password-change-required - Update password change required flag
+        put<UserResource.ById.PasswordChangeRequired> { resource ->
+            val requestingUserId = call.getUserId()
+            val request = call.receive<UpdatePasswordChangeRequiredRequest>()
+
+            val result = either {
+                requirePermission(authorizationService, requestingUserId, CommonPermissions.MANAGE_USERS)
+                withError({ e: UpdateUserError -> e.toApiError() }) {
+                    userService.updatePasswordChangeRequired(resource.parent.userId, request.requiresPasswordChange).bind()
                 }
             }
             call.respondEither(result)

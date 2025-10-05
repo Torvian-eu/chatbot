@@ -28,10 +28,11 @@ data class UserWithDetails(
     val roles: List<Role>,
     val userGroups: List<UserGroup>,
     val createdAt: Instant,
-    val lastLogin: Instant?
+    val lastLogin: Instant?,
+    val requiresPasswordChange: Boolean = false
 ) {
     /** Returns the lightweight [User] representation of this object. */
-    fun toUser(): User = User(id, username, email, status, createdAt, lastLogin)
+    fun toUser(): User = User(id, username, email, status, createdAt, lastLogin, requiresPasswordChange)
 
     /** Checks if the user has the given role by its name. */
     fun hasRole(roleName: String): Boolean = roles.any { it.name == roleName }

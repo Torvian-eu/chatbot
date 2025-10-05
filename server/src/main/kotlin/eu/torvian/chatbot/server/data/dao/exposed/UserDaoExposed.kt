@@ -199,7 +199,8 @@ class UserDaoExposed(
                         roles = roles,
                         userGroups = groups,
                         createdAt = Instant.fromEpochMilliseconds(first[UsersTable.createdAt]),
-                        lastLogin = first[UsersTable.lastLogin]?.let { Instant.fromEpochMilliseconds(it) }
+                        lastLogin = first[UsersTable.lastLogin]?.let { Instant.fromEpochMilliseconds(it) },
+                        requiresPasswordChange = first[UsersTable.requiresPasswordChange]
                     )
                 }
         }
@@ -241,7 +242,8 @@ class UserDaoExposed(
                 roles = roles,
                 userGroups = groups,
                 createdAt = Instant.fromEpochMilliseconds(first[UsersTable.createdAt]),
-                lastLogin = first[UsersTable.lastLogin]?.let { Instant.fromEpochMilliseconds(it) }
+                lastLogin = first[UsersTable.lastLogin]?.let { Instant.fromEpochMilliseconds(it) },
+                requiresPasswordChange = first[UsersTable.requiresPasswordChange]
             ).right()
         }
 
@@ -250,6 +252,20 @@ class UserDaoExposed(
             either {
                 val updatedRowCount = UsersTable.update({ UsersTable.id eq id }) {
                     it[UsersTable.status] = status
+                    it[updatedAt] = System.currentTimeMillis()
+                }
+                ensure(updatedRowCount != 0) { UserError.UserNotFound(id) }
+
+                // Return updated public view
+                getUserById(id).bind().toUser()
+            }
+        }
+
+    override suspend fun updatePasswordChangeRequired(id: Long, requiresPasswordChange: Boolean): Either<UserError.UserNotFound, User> =
+        transactionScope.transaction {
+            either {
+                val updatedRowCount = UsersTable.update({ UsersTable.id eq id }) {
+                    it[UsersTable.requiresPasswordChange] = requiresPasswordChange
                     it[updatedAt] = System.currentTimeMillis()
                 }
                 ensure(updatedRowCount != 0) { UserError.UserNotFound(id) }

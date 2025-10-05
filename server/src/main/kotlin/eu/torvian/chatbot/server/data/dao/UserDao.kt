@@ -101,4 +101,13 @@ interface UserDao {
      * Updates only the status field of a user and returns the updated public [User].
      */
     suspend fun updateUserStatus(id: Long, status: UserStatus): Either<UserError.UserNotFound, User>
+
+    /**
+     * Updates only the requiresPasswordChange field of a user and returns the updated public [User].
+     *
+     * @param id The unique identifier of the user
+     * @param requiresPasswordChange Whether the user must change their password on next login
+     * @return Either [UserError.UserNotFound] if the user doesn't exist, or the updated [User] on success
+     */
+    suspend fun updatePasswordChangeRequired(id: Long, requiresPasswordChange: Boolean): Either<UserError.UserNotFound, User>
 }

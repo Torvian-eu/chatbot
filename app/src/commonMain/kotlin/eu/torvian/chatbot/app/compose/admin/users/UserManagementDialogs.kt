@@ -68,9 +68,17 @@ fun UserManagementDialogs(
             )
         }
 
+        is UserManagementDialogState.ChangePasswordChangeRequired -> {
+            ChangePasswordChangeRequiredDialog(
+                user = dialogState.user,
+                isLoading = dialogState.isLoading,
+                onDismiss = { actions.onCancelDialog() },
+                onConfirm = { actions.onSubmitPasswordChangeRequiredChange(it) }
+            )
+        }
+
         UserManagementDialogState.None -> {
             // No dialog to show
         }
     }
 }
-

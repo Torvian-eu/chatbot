@@ -80,6 +80,7 @@ fun UserManagementTab(
                         onManageRoles = { actions.onStartManagingRoles(it) },
                         onChangePassword = { actions.onStartChangingPassword(it) },
                         onChangeStatus = { actions.onStartChangingUserStatus(it) },
+                        onChangePasswordChangeRequired = { actions.onStartChangingPasswordChangeRequired(it) },
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()

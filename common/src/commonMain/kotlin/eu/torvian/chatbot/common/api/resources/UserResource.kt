@@ -37,6 +37,12 @@ class UserResource(val parent: Api = Api()) {
         class Status(val parent: ById)
 
         /**
+         * Resource for updating password change required flag: /api/v1/users/{userId}/password-change-required
+         */
+        @Resource("password-change-required")
+        data class PasswordChangeRequired(val parent: ById)
+
+        /**
          * Resource for detailed user information: /api/v1/users/{userId}/detailed
          */
         @Resource("/detailed")

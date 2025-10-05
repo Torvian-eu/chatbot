@@ -65,6 +65,11 @@ fun UserManagementTabRoute(
         override fun onStartChangingUserStatus(user: UserWithDetails) = viewModel.startChangingUserStatus(user)
         override fun onSubmitUserStatusChange(status: UserStatus) = viewModel.submitUserStatusChange(status)
 
+        override fun onStartChangingPasswordChangeRequired(user: UserWithDetails) =
+            viewModel.startChangingPasswordChangeRequired(user)
+        override fun onSubmitPasswordChangeRequiredChange(requiresPasswordChange: Boolean) =
+            viewModel.submitPasswordChangeRequiredChange(requiresPasswordChange)
+
         override fun onCancelDialog() = viewModel.closeDialog()
     }
 

@@ -29,6 +29,7 @@ import eu.torvian.chatbot.common.models.UserWithDetails
  * @param onManageRoles Callback invoked when the manage roles button is clicked
  * @param onChangePassword Callback invoked when the change password button is clicked
  * @param onChangeStatus Callback invoked when the change status button is clicked
+ * @param onChangePasswordChangeRequired Callback invoked when the change password requirement button is clicked
  * @param modifier Modifier for styling and layout
  */
 @Composable
@@ -39,6 +40,7 @@ fun UserDetailPanel(
     onManageRoles: (UserWithDetails) -> Unit,
     onChangePassword: (UserWithDetails) -> Unit,
     onChangeStatus: (UserWithDetails) -> Unit,
+    onChangePasswordChangeRequired: (UserWithDetails) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -105,7 +107,8 @@ fun UserDetailPanel(
                         user = user,
                         onManageRoles = onManageRoles,
                         onChangePassword = onChangePassword,
-                        onChangeStatus = onChangeStatus
+                        onChangeStatus = onChangeStatus,
+                        onChangePasswordChangeRequired = onChangePasswordChangeRequired
                     )
                 }
             }
@@ -127,7 +130,8 @@ private fun UserDetailsContent(
     user: UserWithDetails,
     onManageRoles: (UserWithDetails) -> Unit,
     onChangePassword: (UserWithDetails) -> Unit,
-    onChangeStatus: (UserWithDetails) -> Unit
+    onChangeStatus: (UserWithDetails) -> Unit,
+    onChangePasswordChangeRequired: (UserWithDetails) -> Unit
 ) {
     // Basic Information Section
     Text(
@@ -141,6 +145,7 @@ private fun UserDetailsContent(
     DetailRow("User ID", user.id.toString())
     DetailRow("Created", user.createdAt.toString())
     DetailRow("Last Login", user.lastLogin?.toString() ?: "Never")
+    DetailRow("Requires Password Change", if (user.requiresPasswordChange) "Yes" else "No")
 
     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
@@ -208,12 +213,19 @@ private fun UserDetailsContent(
     )
     Spacer(modifier = Modifier.height(8.dp))
 
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(onClick = { onChangePassword(user) }) {
-            Text("Change Password")
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { onChangePassword(user) }) {
+                Text("Change Password")
+            }
+            Button(onClick = { onChangeStatus(user) }) {
+                Text("Change Status")
+            }
         }
-        Button(onClick = { onChangeStatus(user) }) {
-            Text("Change Status")
+        Button(
+            onClick = { onChangePasswordChangeRequired(user) }
+        ) {
+            Text("Change Password Requirement")
         }
     }
 }
@@ -243,4 +255,3 @@ private fun GroupChip(group: UserGroup) {
         label = { Text(group.name) }
     )
 }
-

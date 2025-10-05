@@ -7,6 +7,7 @@ import eu.torvian.chatbot.common.api.resources.UserResource
 import eu.torvian.chatbot.common.api.resources.UserResource.UsersDetailed
 import eu.torvian.chatbot.common.api.resources.UserResource.ById
 import eu.torvian.chatbot.common.api.resources.UserResource.ById.Password
+import eu.torvian.chatbot.common.api.resources.UserResource.ById.PasswordChangeRequired
 import eu.torvian.chatbot.common.api.resources.UserResource.ById.Roles
 import eu.torvian.chatbot.common.api.resources.UserResource.ById.Roles.ByRoleId
 import eu.torvian.chatbot.common.api.resources.UserResource.ById.Status
@@ -19,6 +20,7 @@ import eu.torvian.chatbot.common.models.admin.AssignRoleRequest
 import eu.torvian.chatbot.common.models.admin.ChangePasswordRequest
 import eu.torvian.chatbot.common.models.admin.UpdateUserRequest
 import eu.torvian.chatbot.common.models.admin.UpdateUserStatusRequest
+import eu.torvian.chatbot.common.models.admin.UpdatePasswordChangeRequiredRequest
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.resources.*
@@ -71,6 +73,17 @@ class KtorUserApiClient(client: HttpClient) : BaseApiResourceClient(client), Use
         return safeApiCall {
             client.put(Status(ById(userId = userId))) {
                 setBody(UpdateUserStatusRequest(status))
+            }.body<User>()
+        }
+    }
+
+    override suspend fun updatePasswordChangeRequired(
+        userId: Long,
+        requiresPasswordChange: Boolean
+    ): Either<ApiResourceError, User> {
+        return safeApiCall {
+            client.put(PasswordChangeRequired(ById(userId = userId))) {
+                setBody(UpdatePasswordChangeRequiredRequest(requiresPasswordChange))
             }.body<User>()
         }
     }

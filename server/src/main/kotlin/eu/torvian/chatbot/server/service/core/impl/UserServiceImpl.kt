@@ -147,6 +147,19 @@ class UserServiceImpl(
                 }
         }
 
+    override suspend fun updatePasswordChangeRequired(
+        userId: Long,
+        requiresPasswordChange: Boolean
+    ): Either<UpdateUserError, User> =
+        transactionScope.transaction {
+            userDao.updatePasswordChangeRequired(userId, requiresPasswordChange)
+                .mapLeft { error ->
+                    when (error) {
+                        is UserError.UserNotFound -> UpdateUserError.UserNotFound(userId)
+                    }
+                }
+        }
+
     override suspend fun updateUser(
         userId: Long,
         username: String,

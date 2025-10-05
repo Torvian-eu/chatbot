@@ -73,6 +73,18 @@ interface UserRepository {
     suspend fun updateUserStatus(userId: Long, status: UserStatus): Either<RepositoryError, User>
 
     /**
+     * Updates a user's password change required flag and returns the updated public User.
+     *
+     * @param userId The ID of the user
+     * @param requiresPasswordChange Whether the user must change their password on next login
+     * @return Either.Right with the updated public User on success, or Either.Left with RepositoryError on failure
+     */
+    suspend fun updatePasswordChangeRequired(
+        userId: Long,
+        requiresPasswordChange: Boolean
+    ): Either<RepositoryError, User>
+
+    /**
      * Deletes a user account.
      * Cannot delete the last admin user in the system.
      *
@@ -130,4 +142,3 @@ interface UserRepository {
      */
     suspend fun changeUserPassword(userId: Long, request: ChangePasswordRequest): Either<RepositoryError, Unit>
 }
-

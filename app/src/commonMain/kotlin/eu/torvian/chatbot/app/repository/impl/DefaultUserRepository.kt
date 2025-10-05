@@ -130,6 +130,29 @@ class DefaultUserRepository(
         )
     }
 
+    override suspend fun updatePasswordChangeRequired(
+        userId: Long,
+        requiresPasswordChange: Boolean
+    ): Either<RepositoryError, User> {
+        logger.info("Updating password change required flag for user ID: $userId to $requiresPasswordChange")
+        return userApi.updatePasswordChangeRequired(userId, requiresPasswordChange).fold(
+            ifLeft = { apiResourceError ->
+                val repositoryError = apiResourceError.toRepositoryError("Failed to update password change required for user ID: $userId")
+                logger.warn("Failed to update password change required for user ID: $userId: ${repositoryError.message}")
+                repositoryError.left()
+            },
+            ifRight = { updatedUser ->
+                logger.info("Successfully updated password change required flag for user ID: $userId to ${updatedUser.requiresPasswordChange}")
+                updateUsersState { list ->
+                    list.map { current ->
+                        if (current.id == updatedUser.id) current.copy(requiresPasswordChange = updatedUser.requiresPasswordChange) else current
+                    }
+                }
+                updatedUser.right()
+            }
+        )
+    }
+
     override suspend fun deleteUser(userId: Long): Either<RepositoryError, Unit> {
         logger.info("Deleting user ID: $userId")
         return userApi.deleteUser(userId).fold(

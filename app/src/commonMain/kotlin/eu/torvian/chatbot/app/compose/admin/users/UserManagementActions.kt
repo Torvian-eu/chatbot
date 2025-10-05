@@ -112,8 +112,21 @@ interface UserManagementActions {
     fun onSubmitUserStatusChange(status: UserStatus)
     
     /**
+     * Starts changing a user's password change required flag by opening the dialog.
+     *
+     * @param user The user whose password change required flag to change
+     */
+    fun onStartChangingPasswordChangeRequired(user: UserWithDetails)
+
+    /**
+     * Submits the password change required flag change.
+     *
+     * @param requiresPasswordChange The new value for the flag
+     */
+    fun onSubmitPasswordChangeRequiredChange(requiresPasswordChange: Boolean)
+
+    /**
      * Cancels the current dialog and closes it.
      */
     fun onCancelDialog()
 }
-

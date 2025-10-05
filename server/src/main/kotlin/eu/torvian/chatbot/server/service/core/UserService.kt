@@ -92,6 +92,18 @@ interface UserService {
     suspend fun updateUserStatus(userId: Long, status: UserStatus): Either<UpdateUserError, User>
 
     /**
+     * Updates a user's password change required flag and returns updated public [User].
+     *
+     * @param userId The ID of the user
+     * @param requiresPasswordChange Whether the user must change their password on next login
+     * @return Either [UpdateUserError] if update fails, or the updated [User]
+     */
+    suspend fun updatePasswordChangeRequired(
+        userId: Long,
+        requiresPasswordChange: Boolean
+    ): Either<UpdateUserError, User>
+
+    /**
      * Updates a user's profile information (admin only). Does NOT update password (use changePassword for that).
      *
      * @param userId The ID of the user to update

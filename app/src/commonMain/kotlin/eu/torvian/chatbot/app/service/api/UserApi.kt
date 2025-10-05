@@ -82,8 +82,30 @@ interface UserApi {
      * Updates a user's status (ACTIVE, DISABLED, LOCKED) and returns updated public [User].
      *
      * Corresponds to `PUT /api/v1/users/{userId}/status`.
+     * Requires admin permission: MANAGE_USERS
+     *
+     * @param userId The ID of the user to update.
+     * @param status The new status to apply to the user.
+     * @return [Either.Right] containing the updated public [User] on success,
+     *         or [Either.Left] containing an [ApiResourceError] on failure.
      */
     suspend fun updateUserStatus(userId: Long, status: UserStatus): Either<ApiResourceError, User>
+
+    /**
+     * Updates a user's password change required flag.
+     *
+     * Corresponds to `PUT /api/v1/users/{userId}/password-change-required`.
+     * Requires admin permission: MANAGE_USERS
+     *
+     * @param userId The ID of the user
+     * @param requiresPasswordChange Whether the user must change their password on next login
+     * @return [Either.Right] containing the updated public [User] on success,
+     *         or [Either.Left] containing an [ApiResourceError] on failure.
+     */
+    suspend fun updatePasswordChangeRequired(
+        userId: Long,
+        requiresPasswordChange: Boolean
+    ): Either<ApiResourceError, User>
 
     /**
      * Deletes a user account.
@@ -140,7 +162,7 @@ interface UserApi {
      * Changes a user's password (admin operation).
      *
      * Corresponds to `PUT /api/v1/users/{userId}/password`.
-     * Requires admin permission: MANAGE_USERS
+     * Requires admin permission: MANAGE_USERS OR changing own password
      *
      * @param userId The ID of the user.
      * @param request The password change request containing the new password.
