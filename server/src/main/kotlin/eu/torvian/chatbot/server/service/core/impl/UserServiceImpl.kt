@@ -137,14 +137,26 @@ class UserServiceImpl(
             .mapLeft { UserNotFoundError.ById(userId) }
     }
 
-    override suspend fun updateUserStatus(userId: Long, status: UserStatus) =
+    override suspend fun updateUserStatus(userId: Long, status: UserStatus, requestingUserId: Long) =
         transactionScope.transaction {
-            userDao.updateUserStatus(userId, status)
-                .mapLeft { error ->
-                    when (error) {
+            either {
+                logger.info("Updating status for user $userId to $status by requester $requestingUserId")
+
+                // Prevent a user from modifying their own status (self-lockout)
+                ensure(userId != requestingUserId) {
+                    logger.warn("User $requestingUserId attempted to modify their own status")
+                    UpdateUserError.CannotModifyOwnStatus(userId)
+                }
+
+                // Delegate to DAO and translate DAO errors into service errors
+                withError({ daoError ->
+                    when (daoError) {
                         is UserError.UserNotFound -> UpdateUserError.UserNotFound(userId)
                     }
+                }) {
+                    userDao.updateUserStatus(userId, status).bind()
                 }
+            }
         }
 
     override suspend fun updatePasswordChangeRequired(

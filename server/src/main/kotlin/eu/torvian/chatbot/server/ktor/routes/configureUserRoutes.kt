@@ -105,7 +105,7 @@ fun Route.configureUserRoutes(
             val result = either {
                 requirePermission(authorizationService, requestingUserId, CommonPermissions.MANAGE_USERS)
                 withError({ e: UpdateUserError -> e.toApiError() }) {
-                    userService.updateUserStatus(resource.parent.userId, request.status).bind()
+                    userService.updateUserStatus(resource.parent.userId, request.status, requestingUserId).bind()
                 }
             }
             call.respondEither(result)

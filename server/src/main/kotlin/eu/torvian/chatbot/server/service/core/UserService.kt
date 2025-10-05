@@ -88,8 +88,12 @@ interface UserService {
 
     /**
      * Updates a user's status (ACTIVE, DISABLED, LOCKED) and returns updated public [User].
+     *
+     * @param userId The ID of the user to update
+     * @param status The new status to set
+     * @param requestingUserId The ID of the user making the request (used to prevent self-modification)
      */
-    suspend fun updateUserStatus(userId: Long, status: UserStatus): Either<UpdateUserError, User>
+    suspend fun updateUserStatus(userId: Long, status: UserStatus, requestingUserId: Long): Either<UpdateUserError, User>
 
     /**
      * Updates a user's password change required flag and returns updated public [User].
