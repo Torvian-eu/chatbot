@@ -8,9 +8,9 @@ import eu.torvian.chatbot.common.api.resources.UserResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
-import eu.torvian.chatbot.common.models.Role
-import eu.torvian.chatbot.common.models.User
-import eu.torvian.chatbot.common.models.UserStatus
+import eu.torvian.chatbot.common.models.user.Role
+import eu.torvian.chatbot.common.models.user.User
+import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.common.models.api.admin.AssignRoleRequest
 import eu.torvian.chatbot.common.models.api.admin.ChangePasswordRequest
 import eu.torvian.chatbot.common.models.api.admin.UpdateUserRequest

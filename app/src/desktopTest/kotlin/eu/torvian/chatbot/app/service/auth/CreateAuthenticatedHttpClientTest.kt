@@ -5,8 +5,8 @@ import arrow.core.right
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.common.api.resources.AuthResource
 import eu.torvian.chatbot.common.api.resources.href
-import eu.torvian.chatbot.common.models.User
-import eu.torvian.chatbot.common.models.UserStatus
+import eu.torvian.chatbot.common.models.user.User
+import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.common.models.api.auth.LoginResponse
 import io.ktor.client.*
 import io.ktor.client.engine.mock.*

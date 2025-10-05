@@ -10,7 +10,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ScrollbarWrapper
-import eu.torvian.chatbot.common.models.UserWithDetails
+import eu.torvian.chatbot.common.models.user.UserWithDetails
 
 /**
  * Displays a scrollable list of users with a header showing the user count.

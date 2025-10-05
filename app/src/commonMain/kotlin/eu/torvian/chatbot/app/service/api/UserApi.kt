@@ -1,10 +1,10 @@
 package eu.torvian.chatbot.app.service.api
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.Role
-import eu.torvian.chatbot.common.models.User
-import eu.torvian.chatbot.common.models.UserStatus
-import eu.torvian.chatbot.common.models.UserWithDetails
+import eu.torvian.chatbot.common.models.user.Role
+import eu.torvian.chatbot.common.models.user.User
+import eu.torvian.chatbot.common.models.user.UserStatus
+import eu.torvian.chatbot.common.models.user.UserWithDetails
 import eu.torvian.chatbot.common.models.api.admin.AssignRoleRequest
 import eu.torvian.chatbot.common.models.api.admin.ChangePasswordRequest
 import eu.torvian.chatbot.common.models.api.admin.UpdateUserRequest

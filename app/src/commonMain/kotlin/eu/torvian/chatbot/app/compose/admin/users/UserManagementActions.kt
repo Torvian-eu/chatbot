@@ -1,8 +1,8 @@
 package eu.torvian.chatbot.app.compose.admin.users
 
-import eu.torvian.chatbot.common.models.Role
-import eu.torvian.chatbot.common.models.UserStatus
-import eu.torvian.chatbot.common.models.UserWithDetails
+import eu.torvian.chatbot.common.models.user.Role
+import eu.torvian.chatbot.common.models.user.UserStatus
+import eu.torvian.chatbot.common.models.user.UserWithDetails
 
 /**
  * Actions interface for User Management UI.

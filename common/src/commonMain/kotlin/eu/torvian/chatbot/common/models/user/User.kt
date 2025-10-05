@@ -1,4 +1,4 @@
-package eu.torvian.chatbot.common.models
+package eu.torvian.chatbot.common.models.user
 
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable

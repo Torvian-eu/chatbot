@@ -14,7 +14,7 @@ import eu.torvian.chatbot.app.service.auth.AuthenticationFailureEvent
 import eu.torvian.chatbot.app.service.auth.TokenStorage
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
-import eu.torvian.chatbot.common.models.User
+import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.api.admin.ChangePasswordRequest
 import eu.torvian.chatbot.common.models.api.auth.LoginRequest
 import eu.torvian.chatbot.common.models.api.auth.RegisterRequest

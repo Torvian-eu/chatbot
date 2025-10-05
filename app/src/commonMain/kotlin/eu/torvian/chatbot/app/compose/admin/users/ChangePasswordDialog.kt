@@ -11,7 +11,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.viewmodel.admin.PasswordFormState
-import eu.torvian.chatbot.common.models.UserWithDetails
+import eu.torvian.chatbot.common.models.user.UserWithDetails
 
 /**
  * Dialog for an administrator to change a user's password.

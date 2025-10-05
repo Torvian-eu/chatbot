@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.server.data.entities
 
-import eu.torvian.chatbot.common.models.UserStatus
+import eu.torvian.chatbot.common.models.user.UserStatus
 import kotlinx.datetime.Instant
 
 /**

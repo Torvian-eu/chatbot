@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.app.viewmodel.admin
 
-import eu.torvian.chatbot.common.models.Role
-import eu.torvian.chatbot.common.models.UserWithDetails
+import eu.torvian.chatbot.common.models.user.Role
+import eu.torvian.chatbot.common.models.user.UserWithDetails
 
 /**
  * Represents the overall state of the user management screen.

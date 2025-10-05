@@ -3,7 +3,7 @@ package eu.torvian.chatbot.server.service.setup
 import eu.torvian.chatbot.common.api.CommonRoles
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
-import eu.torvian.chatbot.common.models.UserStatus
+import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.tables.PermissionsTable
 import eu.torvian.chatbot.server.data.tables.RolesTable

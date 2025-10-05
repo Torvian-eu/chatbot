@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.app.utils.permissions
 
 import eu.torvian.chatbot.common.api.PermissionSpec
-import eu.torvian.chatbot.common.models.Permission
+import eu.torvian.chatbot.common.models.user.Permission
 
 /**
  * Checks if a list of permissions contains a specific permission.

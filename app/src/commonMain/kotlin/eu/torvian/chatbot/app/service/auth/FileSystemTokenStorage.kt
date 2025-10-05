@@ -5,8 +5,8 @@ import arrow.core.raise.catch
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
-import eu.torvian.chatbot.common.models.Permission
-import eu.torvian.chatbot.common.models.User
+import eu.torvian.chatbot.common.models.user.Permission
+import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.security.CryptoProvider
 import kotlinx.datetime.Instant
 import kotlinx.io.buffered

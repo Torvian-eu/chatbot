@@ -8,11 +8,11 @@ import eu.torvian.chatbot.app.repository.RoleRepository
 import eu.torvian.chatbot.app.repository.UserRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
-import eu.torvian.chatbot.common.models.Role
-import eu.torvian.chatbot.common.models.UserWithDetails
+import eu.torvian.chatbot.common.models.user.Role
+import eu.torvian.chatbot.common.models.user.UserWithDetails
 import eu.torvian.chatbot.common.models.api.admin.ChangePasswordRequest
 import eu.torvian.chatbot.common.models.api.admin.UpdateUserRequest
-import eu.torvian.chatbot.common.models.UserStatus
+import eu.torvian.chatbot.common.models.user.UserStatus
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 

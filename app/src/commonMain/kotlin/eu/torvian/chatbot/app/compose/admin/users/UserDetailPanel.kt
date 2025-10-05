@@ -12,9 +12,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.settings.DetailRow
-import eu.torvian.chatbot.common.models.Role
-import eu.torvian.chatbot.common.models.UserGroup
-import eu.torvian.chatbot.common.models.UserWithDetails
+import eu.torvian.chatbot.common.models.user.Role
+import eu.torvian.chatbot.common.models.user.UserGroup
+import eu.torvian.chatbot.common.models.user.UserWithDetails
 
 /**
  * Displays detailed information about a selected user with action buttons.

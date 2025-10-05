@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.app.repository
 
-import eu.torvian.chatbot.common.models.Permission
+import eu.torvian.chatbot.common.models.user.Permission
 
 /**
  * Represents the current authentication state of the application.

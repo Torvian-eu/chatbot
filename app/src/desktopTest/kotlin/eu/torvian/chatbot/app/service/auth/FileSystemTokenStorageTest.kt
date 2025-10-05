@@ -3,9 +3,9 @@ package eu.torvian.chatbot.app.service.auth
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
-import eu.torvian.chatbot.common.models.Permission
-import eu.torvian.chatbot.common.models.User
-import eu.torvian.chatbot.common.models.UserStatus
+import eu.torvian.chatbot.common.models.user.Permission
+import eu.torvian.chatbot.common.models.user.User
+import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.common.security.CryptoError
 import eu.torvian.chatbot.common.security.CryptoProvider
 import kotlinx.coroutines.test.runTest

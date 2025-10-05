@@ -12,10 +12,10 @@ import eu.torvian.chatbot.common.api.resources.UserResource.ById.Roles
 import eu.torvian.chatbot.common.api.resources.UserResource.ById.Roles.ByRoleId
 import eu.torvian.chatbot.common.api.resources.UserResource.ById.Status
 import eu.torvian.chatbot.common.api.resources.UserResource.ById.UserDetailed
-import eu.torvian.chatbot.common.models.Role
-import eu.torvian.chatbot.common.models.User
-import eu.torvian.chatbot.common.models.UserStatus
-import eu.torvian.chatbot.common.models.UserWithDetails
+import eu.torvian.chatbot.common.models.user.Role
+import eu.torvian.chatbot.common.models.user.User
+import eu.torvian.chatbot.common.models.user.UserStatus
+import eu.torvian.chatbot.common.models.user.UserWithDetails
 import eu.torvian.chatbot.common.models.api.admin.AssignRoleRequest
 import eu.torvian.chatbot.common.models.api.admin.ChangePasswordRequest
 import eu.torvian.chatbot.common.models.api.admin.UpdateUserRequest

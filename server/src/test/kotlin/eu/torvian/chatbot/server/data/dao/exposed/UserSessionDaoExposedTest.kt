@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.data.dao.exposed
 
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
+import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.UserSessionDao
 import eu.torvian.chatbot.server.data.dao.error.UserSessionError
@@ -54,7 +55,7 @@ class UserSessionDaoExposedTest {
         testDataManager.createTables(setOf(Table.USERS, Table.USER_SESSIONS))
 
         // Create a test user for session tests
-        val userResult = userDao.insertUser("testuser", "hashedpassword", "test@example.com", eu.torvian.chatbot.common.models.UserStatus.ACTIVE)
+        val userResult = userDao.insertUser("testuser", "hashedpassword", "test@example.com", UserStatus.ACTIVE)
         assertTrue(userResult.isRight(), "Failed to create test user")
         testUser = userResult.getOrNull()!!
     }

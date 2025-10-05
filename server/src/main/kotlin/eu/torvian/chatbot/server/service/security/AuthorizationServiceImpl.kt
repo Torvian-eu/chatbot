@@ -5,8 +5,8 @@ import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.api.PermissionSpec
-import eu.torvian.chatbot.common.models.Permission
-import eu.torvian.chatbot.common.models.Role
+import eu.torvian.chatbot.common.models.user.Permission
+import eu.torvian.chatbot.common.models.user.Role
 import eu.torvian.chatbot.server.data.dao.PermissionDao
 import eu.torvian.chatbot.server.data.dao.UserRoleAssignmentDao
 import eu.torvian.chatbot.server.data.entities.mappers.toPermission

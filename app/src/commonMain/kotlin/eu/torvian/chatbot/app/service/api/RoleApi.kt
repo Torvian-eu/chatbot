@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.app.service.api
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.Role
+import eu.torvian.chatbot.common.models.user.Role
 import eu.torvian.chatbot.common.models.api.admin.CreateRoleRequest
 import eu.torvian.chatbot.common.models.api.admin.UpdateRoleRequest
 
