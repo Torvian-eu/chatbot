@@ -134,8 +134,98 @@ class SettingsRoutesTest {
 
     // --- POST /api/v1/settings Tests ---
 
-    // TODO: Add tests for POST /api/v1/settings
+    @Test
+    fun `POST settings should add new settings successfully`() = settingsTestApplication {
+        // Arrange
+        // model and provider are already set up in @BeforeEach via TestDataSet
+        val newSettings = ChatModelSettings(
+            id = 0L,
+            modelId = TestDefaults.llmModel1.id,
+            name = "New Settings",
+            systemMessage = "Hello",
+            temperature = 0.6f,
+            maxTokens = 512,
+            customParams = Json.decodeFromString("""{"foo":"bar"}""")
+        )
 
+        // Act
+        val response = client.post(href(SettingsResource())) {
+            contentType(ContentType.Application.Json)
+            setBody(newSettings as ModelSettings)
+            authenticate(authToken)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.Created, response.status)
+        val created = response.body<ModelSettings>()
+        // Verify persisted fields
+        assertEquals(newSettings.name, created.name)
+        assertEquals(newSettings.modelId, created.modelId)
+    }
+
+    @Test
+    fun `POST settings with non-existent model should return 400`() = settingsTestApplication {
+        // Arrange
+        val nonExistentModelId = 999L
+        val newSettings = ChatModelSettings(
+            id = 0L,
+            modelId = nonExistentModelId,
+            name = "New Settings",
+            systemMessage = "Hello",
+            temperature = 0.6f,
+            maxTokens = 512,
+            customParams = Json.decodeFromString("""{"foo":"bar"}""")
+        )
+
+        // Act
+        val response = client.post(href(SettingsResource())) {
+            contentType(ContentType.Application.Json)
+            setBody(newSettings as ModelSettings)
+            authenticate(authToken)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.code)
+        assertEquals(400, error.statusCode)
+        assertEquals("Model not found for settings", error.message)
+        assert(error.details?.containsKey("modelId") == true)
+        assertEquals(nonExistentModelId.toString(), error.details?.get("modelId"))
+    }
+
+    @Test
+    fun `POST settings with mismatched model type should return 400`() = settingsTestApplication {
+        // Arrange
+        // The TestDefaults.llmModel1 is of type CHAT; create CompletionModelSettings to cause mismatch
+        val mismatchedSettings = eu.torvian.chatbot.common.models.llm.CompletionModelSettings(
+            id = 0L,
+            modelId = TestDefaults.llmModel1.id,
+            name = "Completion Settings",
+            suffix = "",
+            temperature = 0.5f,
+            maxTokens = 100,
+            topP = null,
+            stopSequences = null,
+            customParams = null
+        )
+
+        // Act
+        val response = client.post(href(SettingsResource())) {
+            contentType(ContentType.Application.Json)
+            setBody(mismatchedSettings as ModelSettings)
+            authenticate(authToken)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.code)
+        assertEquals(400, error.statusCode)
+        assertEquals("Invalid settings input", error.message)
+        assert(error.details?.containsKey("reason") == true)
+        assert(error.details?.get("reason")!!.contains("does not match"))
+    }
 
     // --- PUT /api/v1/settings/{settingsId} Tests ---
 
