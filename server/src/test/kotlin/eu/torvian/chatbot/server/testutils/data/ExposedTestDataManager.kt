@@ -14,6 +14,7 @@ import eu.torvian.chatbot.server.data.entities.RoleEntity
 import eu.torvian.chatbot.server.data.entities.PermissionEntity
 import eu.torvian.chatbot.server.data.entities.RolePermissionEntity
 import eu.torvian.chatbot.server.data.entities.UserRoleAssignmentEntity
+import eu.torvian.chatbot.server.data.entities.UserGroupEntity
 import eu.torvian.chatbot.server.data.tables.*
 import eu.torvian.chatbot.server.data.tables.mappers.*
 import eu.torvian.chatbot.server.data.toEntity
@@ -434,6 +435,25 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
             ensureTableCreated(Table.USER_SESSIONS)
             UserSessionsTable.selectAll().where { UserSessionsTable.id eq id }
                 .map { it.toUserSessionEntity() }
+                .singleOrNull()
+        }
+
+    override suspend fun insertUserGroup(userGroup: UserGroupEntity) =
+        transactionScope.transaction {
+            ensureTableCreated(Table.USER_GROUPS)
+            UserGroupsTable.insert {
+                it[id] = userGroup.id
+                it[name] = userGroup.name
+                it[description] = userGroup.description
+            }
+            return@transaction
+        }
+
+    override suspend fun getUserGroup(id: Long): UserGroupEntity? =
+        transactionScope.transaction {
+            ensureTableCreated(Table.USER_GROUPS)
+            UserGroupsTable.selectAll().where { UserGroupsTable.id eq id }
+                .map { it.toUserGroupEntity() }
                 .singleOrNull()
         }
 

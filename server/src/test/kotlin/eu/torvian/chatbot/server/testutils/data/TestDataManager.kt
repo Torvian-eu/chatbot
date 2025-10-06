@@ -14,6 +14,7 @@ import eu.torvian.chatbot.server.data.entities.RoleEntity
 import eu.torvian.chatbot.server.data.entities.PermissionEntity
 import eu.torvian.chatbot.server.data.entities.RolePermissionEntity
 import eu.torvian.chatbot.server.data.entities.UserRoleAssignmentEntity
+import eu.torvian.chatbot.server.data.entities.UserGroupEntity
 
 /**
  * Manager interface for inserting and cleaning up test data in the chatbot database.
@@ -256,6 +257,21 @@ interface TestDataManager {
      * @return The user session entity if found, null otherwise.
      */
     suspend fun getUserSession(id: Long): UserSessionEntity?
+
+    /**
+     * Inserts a user group into the database. Creates the table if it does not exist.
+     *
+     * @param userGroup The user group entity to insert.
+     */
+    suspend fun insertUserGroup(userGroup: UserGroupEntity)
+
+    /**
+     * Retrieves a user group from the database.
+     *
+     * @param id The ID of the user group to retrieve.
+     * @return The user group entity if found, null otherwise.
+     */
+    suspend fun getUserGroup(id: Long): UserGroupEntity?
 
     /**
      * Inserts a group ownership record into the database. Creates the table if it does not exist.
