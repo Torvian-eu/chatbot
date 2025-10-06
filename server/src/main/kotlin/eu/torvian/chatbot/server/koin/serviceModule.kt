@@ -38,7 +38,7 @@ fun serviceModule() = module {
 
     // --- Authentication Services ---
     single<PasswordService> { BCryptPasswordService() }
-    single<UserService> { UserServiceImpl(get(), get(), get(), get(), get()) }
+    single<UserService> { UserServiceImpl(get(), get(), get(), get(), get(), get()) }
     single<AuthenticationService> { AuthenticationServiceImpl(get(), get(), get(), get(), get(), get(), get()) }
 
     // --- Authorizers (resource-level access) ---
@@ -49,6 +49,6 @@ fun serviceModule() = module {
     single<AuthorizationService> { AuthorizationServiceImpl(getAll<ResourceAuthorizer>().associateBy { it.resourceType }, get(), get(), get()) }
 
     // --- Setup Services ---
-    single<InitialSetupService> { InitialSetupService(get(), get()) }
+    single<InitialSetupService> { InitialSetupService(get(), get(), get()) }
 
 }

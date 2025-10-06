@@ -16,6 +16,7 @@ import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.dao.error.UserRoleAssignmentError
 import eu.torvian.chatbot.server.data.entities.mappers.toRole
 import eu.torvian.chatbot.server.data.entities.mappers.toUser
+import eu.torvian.chatbot.server.service.core.UserGroupService
 import eu.torvian.chatbot.server.service.core.UserService
 import eu.torvian.chatbot.server.service.core.error.auth.*
 import eu.torvian.chatbot.server.service.security.PasswordService
@@ -32,6 +33,7 @@ class UserServiceImpl(
     private val passwordService: PasswordService,
     private val roleDao: RoleDao,
     private val userRoleAssignmentDao: UserRoleAssignmentDao,
+    private val userGroupService: UserGroupService,
     private val transactionScope: TransactionScope
 ) : UserService {
 
@@ -106,6 +108,21 @@ class UserServiceImpl(
                 }
             }) {
                 userDao.insertUser(username, hashedPassword, email, status = UserStatus.DISABLED).bind()
+            }
+
+            // Add user to the "All Users" group
+            val allUsersGroup = withError({ error ->
+                logger.error("Failed to get All Users group for new user $username: $error")
+                RegisterUserError.GroupAssignmentFailed("Failed to add user to All Users group")
+            }) {
+                userGroupService.getAllUsersGroup().bind()
+            }
+
+            withError({ error ->
+                logger.error("Failed to add user $username to All Users group: $error")
+                RegisterUserError.GroupAssignmentFailed("Failed to add user to All Users group")
+            }) {
+                userGroupService.addUserToGroup(newUser.id, allUsersGroup.id).bind()
             }
 
             logger.info("Successfully registered user: $username (ID: ${newUser.id})")

@@ -2,15 +2,18 @@ package eu.torvian.chatbot.server.service.setup
 
 import arrow.core.Either
 import arrow.core.raise.either
+import arrow.core.raise.withError
 import arrow.core.right
 import eu.torvian.chatbot.common.api.CommonPermissions
 import eu.torvian.chatbot.common.api.CommonRoles
+import eu.torvian.chatbot.common.api.CommonUserGroups
 import eu.torvian.chatbot.common.api.PermissionSpec
 import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.entities.UserEntity
 import eu.torvian.chatbot.server.data.tables.*
+import eu.torvian.chatbot.server.service.core.UserGroupService
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
@@ -22,12 +25,11 @@ import org.mindrot.jbcrypt.BCrypt
  * This service creates the essential data required for the multi-user system to function:
  * - The initial administrator user account with full system access
  * - Basic roles and permissions for the authorization system
- *
- * Note: All users automatically belong to the virtual "All Users" group which requires
- * no database storage or explicit membership management.
+ * - The "All Users" group for public resource sharing
  */
 class InitialSetupService(
     private val userDao: UserDao,
+    private val userGroupService: UserGroupService,
     private val transactionScope: TransactionScope
 ) {
     companion object {
@@ -57,13 +59,25 @@ class InitialSetupService(
                 // 2. Create basic permissions and assign to roles
                 createBasicPermissions(adminRoleId, standardUserRoleId)
 
-                // 3. Create the initial admin user
+                // 3. Create the "All Users" group for public resource sharing
+                val allUsersGroup = withError({
+                    error -> "Failed to create All Users group: $error"
+                }) {
+                    userGroupService.createGroup(
+                        name = CommonUserGroups.ALL_USERS,
+                        description = "Special group that automatically includes all users. Resources shared with this group are public."
+                    ).bind()
+                }
+
+                // 4. Create the initial admin user
                 val adminUser = createInitialAdminUser().bind()
 
-                // 4. Assign admin role to the admin user
+                // 5. Assign admin role to the admin user
                 assignRoleToUser(adminUser.id, adminRoleId)
 
-                // Note: Admin user is automatically a member of the virtual "All Users" group
+                // 6. Add admin user to the "All Users" group
+                userGroupService.addUserToGroup(adminUser.id, allUsersGroup.id)
+                    .mapLeft { error -> "Failed to add admin to All Users group: $error" }.bind()
 
                 adminUser
             }

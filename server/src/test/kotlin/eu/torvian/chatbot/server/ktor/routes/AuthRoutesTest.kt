@@ -2,17 +2,19 @@ package eu.torvian.chatbot.server.ktor.routes
 
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
+import eu.torvian.chatbot.common.api.CommonUserGroups
 import eu.torvian.chatbot.common.api.resources.AuthResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
-import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.api.auth.LoginRequest
 import eu.torvian.chatbot.common.models.api.auth.LoginResponse
 import eu.torvian.chatbot.common.models.api.auth.RefreshTokenRequest
 import eu.torvian.chatbot.common.models.api.auth.RegisterRequest
-import eu.torvian.chatbot.server.data.entities.UserEntity
+import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.user.UserStatus
+import eu.torvian.chatbot.server.data.entities.UserEntity
+import eu.torvian.chatbot.server.service.core.UserGroupService
 import eu.torvian.chatbot.server.service.security.PasswordService
 import eu.torvian.chatbot.server.testutils.auth.TestAuthHelper
 import eu.torvian.chatbot.server.testutils.auth.authenticate
@@ -86,8 +88,17 @@ class AuthRoutesTest {
                 Table.ROLE_PERMISSIONS,
                 Table.PERMISSIONS,
                 Table.ROLES,
-                Table.USER_ROLE_ASSIGNMENTS
+                Table.USER_ROLE_ASSIGNMENTS,
+                Table.USER_GROUPS,
+                Table.USER_GROUP_MEMBERSHIPS
             )
+        )
+
+        // Create the "All Users" group required for user registration
+        val userGroupService = container.get<UserGroupService>()
+        userGroupService.createGroup(
+            name = CommonUserGroups.ALL_USERS,
+            description = "Special group for all users"
         )
     }
 

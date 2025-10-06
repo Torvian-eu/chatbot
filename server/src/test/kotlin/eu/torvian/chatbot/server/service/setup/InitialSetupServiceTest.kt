@@ -1,18 +1,19 @@
 package eu.torvian.chatbot.server.service.setup
 
 import eu.torvian.chatbot.common.api.CommonRoles
+import eu.torvian.chatbot.common.api.CommonUserGroups
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.server.data.dao.UserDao
-import eu.torvian.chatbot.server.data.tables.PermissionsTable
-import eu.torvian.chatbot.server.data.tables.RolesTable
-import eu.torvian.chatbot.server.data.tables.UserRoleAssignmentsTable
+import eu.torvian.chatbot.server.data.tables.*
+import eu.torvian.chatbot.server.service.core.UserGroupService
 import eu.torvian.chatbot.server.testutils.data.Table
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
 import eu.torvian.chatbot.server.testutils.koin.defaultTestContainer
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
 import kotlinx.coroutines.test.runTest
+import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -28,7 +29,8 @@ import kotlin.test.assertTrue
  * This test suite verifies the initial database setup functionality:
  * - Creating basic roles and permissions
  * - Creating the initial admin user
- * - Assigning roles and virtual group memberships
+ * - Creating the "All Users" group
+ * - Assigning roles and group memberships
  * - Handling repeated setup calls
  *
  * The tests rely on an in-memory SQLite database managed by [TestDataManager].
@@ -37,6 +39,7 @@ class InitialSetupServiceTest {
     private lateinit var container: DIContainer
     private lateinit var initialSetupService: InitialSetupService
     private lateinit var userDao: UserDao
+    private lateinit var userGroupService: UserGroupService
     private lateinit var testDataManager: TestDataManager
 
     @BeforeEach
@@ -45,6 +48,7 @@ class InitialSetupServiceTest {
 
         initialSetupService = container.get()
         userDao = container.get()
+        userGroupService = container.get()
         testDataManager = container.get()
 
         // Create all necessary tables for user management
@@ -157,6 +161,62 @@ class InitialSetupServiceTest {
             it[UserRoleAssignmentsTable.roleId].value == adminRoleId
         }
         assertTrue(hasAdminRole, "Expected admin user to have admin role")
+    }
+
+    @Test
+    fun `performInitialSetup should create All Users group`() = runTest {
+        val result = initialSetupService.performInitialSetup()
+        assertTrue(result.isRight(), "Expected successful initial setup")
+
+        // Verify "All Users" group was created
+        val allUsersGroupResult = userGroupService.getGroupByName(CommonUserGroups.ALL_USERS)
+        assertTrue(allUsersGroupResult.isRight(), "Expected All Users group to be created")
+
+        val allUsersGroup = allUsersGroupResult.getOrNull()!!
+        assertEquals(CommonUserGroups.ALL_USERS, allUsersGroup.name, "Expected correct group name")
+        assertNotNull(allUsersGroup.description, "Expected non-null description")
+    }
+
+    @Test
+    fun `performInitialSetup should add admin user to All Users group`() = runTest {
+        val result = initialSetupService.performInitialSetup()
+        assertTrue(result.isRight(), "Expected successful initial setup")
+        val adminUser = result.getOrNull()!!
+
+        // Get All Users group
+        val allUsersGroupResult = userGroupService.getGroupByName(CommonUserGroups.ALL_USERS)
+        assertTrue(allUsersGroupResult.isRight(), "Expected All Users group to exist")
+        val allUsersGroup = allUsersGroupResult.getOrNull()!!
+
+        // Verify admin user is a member of All Users group
+        val transactionScope = container.get<TransactionScope>()
+        val memberships = transactionScope.transaction {
+            UserGroupMembershipsTable.selectAll()
+                .where {
+                    (UserGroupMembershipsTable.userId eq adminUser.id) and
+                            (UserGroupMembershipsTable.groupId eq allUsersGroup.id)
+                }
+                .toList()
+        }
+
+        assertTrue(memberships.isNotEmpty(), "Expected admin user to be member of All Users group")
+    }
+
+    @Test
+    fun `performInitialSetup should not duplicate All Users group on repeated calls`() = runTest {
+        // Perform initial setup twice
+        initialSetupService.performInitialSetup()
+        initialSetupService.performInitialSetup()
+
+        val transactionScope = container.get<TransactionScope>()
+
+        // Verify only one "All Users" group exists
+        val allUsersGroupCount = transactionScope.transaction {
+            UserGroupsTable.selectAll()
+                .where { UserGroupsTable.name eq CommonUserGroups.ALL_USERS }
+                .count()
+        }
+        assertEquals(1, allUsersGroupCount, "Expected exactly one All Users group after repeated setup")
     }
 
     @Test
