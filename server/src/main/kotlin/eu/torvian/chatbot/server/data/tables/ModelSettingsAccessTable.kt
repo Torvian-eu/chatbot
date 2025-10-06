@@ -12,11 +12,18 @@ import org.jetbrains.exposed.sql.Table
  * 
  * @property settingsId Reference to the model settings profile being shared
  * @property userGroupId Reference to the user group that has access to the settings
+ * @property accessMode String representation of the access mode (e.g. "read", "write")
  */
 object ModelSettingsAccessTable : Table("model_settings_access") {
     val settingsId = reference("settings_id", ModelSettingsTable, onDelete = ReferenceOption.CASCADE)
     val userGroupId = reference("user_group_id", UserGroupsTable, onDelete = ReferenceOption.CASCADE)
+    val accessMode = varchar("access_mode", 50)
 
-    // Composite primary key to prevent duplicate access grants
-    override val primaryKey = PrimaryKey(settingsId, userGroupId)
+    // Composite primary key to allow multiple access modes per group
+    override val primaryKey = PrimaryKey(settingsId, userGroupId, accessMode)
+
+    // Index for efficient lookups by settings and group
+    init {
+        index(false, settingsId, userGroupId)
+    }
 }

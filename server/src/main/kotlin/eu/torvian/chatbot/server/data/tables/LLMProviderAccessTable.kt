@@ -12,11 +12,18 @@ import org.jetbrains.exposed.sql.Table
  * 
  * @property providerId Reference to the LLM provider being shared
  * @property userGroupId Reference to the user group that has access to the provider
+ * @property accessMode String representation of the access mode (e.g. "read", "write")
  */
 object LLMProviderAccessTable : Table("llm_provider_access") {
     val providerId = reference("provider_id", LLMProviderTable, onDelete = ReferenceOption.CASCADE)
     val userGroupId = reference("user_group_id", UserGroupsTable, onDelete = ReferenceOption.CASCADE)
+    val accessMode = varchar("access_mode", 50)
 
-    // Composite primary key to prevent duplicate access grants
-    override val primaryKey = PrimaryKey(providerId, userGroupId)
+    // Composite primary key to allow multiple access modes per group
+    override val primaryKey = PrimaryKey(providerId, userGroupId, accessMode)
+
+    // Index for efficient lookups by provider and group
+    init {
+        index(false, providerId, userGroupId)
+    }
 }
