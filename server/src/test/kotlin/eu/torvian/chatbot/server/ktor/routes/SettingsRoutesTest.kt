@@ -102,7 +102,9 @@ class SettingsRoutesTest {
         testDataManager.insertModelSettings(testSettings1)
 
         // Act
-        val response = client.get(href(SettingsResource.ById(settingsId = testSettings1.id)))
+        val response = client.get(href(SettingsResource.ById(settingsId = testSettings1.id))) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
@@ -116,7 +118,9 @@ class SettingsRoutesTest {
         val nonExistentId = 999L
 
         // Act
-        val response = client.get(href(SettingsResource.ById(settingsId = nonExistentId)))
+        val response = client.get(href(SettingsResource.ById(settingsId = nonExistentId))) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.NotFound, response.status)
@@ -250,7 +254,9 @@ class SettingsRoutesTest {
         testDataManager.insertModelSettings(testSettings1)
 
         // Act
-        val response = client.delete(href(SettingsResource.ById(settingsId = testSettings1.id)))
+        val response = client.delete(href(SettingsResource.ById(settingsId = testSettings1.id))) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.NoContent, response.status)
@@ -266,7 +272,9 @@ class SettingsRoutesTest {
         val nonExistentId = 999L
 
         // Act
-        val response = client.delete(href(SettingsResource.ById(settingsId = nonExistentId)))
+        val response = client.delete(href(SettingsResource.ById(settingsId = nonExistentId))) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.NotFound, response.status)

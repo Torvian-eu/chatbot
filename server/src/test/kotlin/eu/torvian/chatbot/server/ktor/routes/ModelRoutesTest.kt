@@ -11,6 +11,8 @@ import eu.torvian.chatbot.common.models.api.llm.ApiKeyStatusResponse
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.llm.ModelSettings
+import eu.torvian.chatbot.server.testutils.auth.TestAuthHelper
+import eu.torvian.chatbot.server.testutils.auth.authenticate
 import eu.torvian.chatbot.server.testutils.data.Table
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
 import eu.torvian.chatbot.server.testutils.data.TestDataSet
@@ -44,6 +46,8 @@ class ModelRoutesTest {
     private lateinit var container: DIContainer
     private lateinit var modelTestApplication: KtorTestApp
     private lateinit var testDataManager: TestDataManager
+    private lateinit var authHelper: TestAuthHelper
+    private lateinit var authToken: String
 
     // Test data
     private val testProvider1 = TestDefaults.llmProvider1
@@ -71,9 +75,16 @@ class ModelRoutesTest {
                 Table.LLM_PROVIDERS,
                 Table.LLM_MODELS,
                 Table.MODEL_SETTINGS,
-                Table.API_SECRETS
+                Table.API_SECRETS,
+                Table.USERS,
+                Table.USER_SESSIONS,
+                Table.CHAT_SESSION_OWNERS
             )
         )
+
+        // Set up authentication
+        authHelper = TestAuthHelper(container)
+        authToken = authHelper.createUserAndGetToken()
     }
 
     @AfterEach
@@ -96,7 +107,9 @@ class ModelRoutesTest {
         val expectedModels = listOf(testModel1, testModel2)
 
         // Act & Assert
-        val response = client.get(href(ModelResource()))
+        val response = client.get(href(ModelResource())) {
+            authenticate(authToken)
+        }
         assertEquals(HttpStatusCode.OK, response.status)
         val models = response.body<List<LLMModel>>()
         assertEquals(expectedModels, models)
@@ -107,7 +120,9 @@ class ModelRoutesTest {
         // Arrange (no models inserted)
 
         // Act & Assert
-        val response = client.get(href(ModelResource()))
+        val response = client.get(href(ModelResource())) {
+            authenticate(authToken)
+        }
         assertEquals(HttpStatusCode.OK, response.status)
         val models = response.body<List<LLMModel>>()
         assertEquals(emptyList(), models)
@@ -135,6 +150,7 @@ class ModelRoutesTest {
         val response = client.post(href(ModelResource())) {
             contentType(ContentType.Application.Json)
             setBody(createRequest)
+            authenticate(authToken)
         }
 
         // Assert
@@ -167,6 +183,7 @@ class ModelRoutesTest {
         val response = client.post(href(ModelResource())) {
             contentType(ContentType.Application.Json)
             setBody(createRequest)
+            authenticate(authToken)
         }
 
         // Assert
@@ -195,6 +212,7 @@ class ModelRoutesTest {
         val response = client.post(href(ModelResource())) {
             contentType(ContentType.Application.Json)
             setBody(createRequest)
+            authenticate(authToken)
         }
 
         // Assert
@@ -229,6 +247,7 @@ class ModelRoutesTest {
         val response = client.post(href(ModelResource())) {
             contentType(ContentType.Application.Json)
             setBody(createRequest)
+            authenticate(authToken)
         }
 
         // Assert
@@ -254,7 +273,9 @@ class ModelRoutesTest {
         )
 
         // Act
-        val response = client.get(href(ModelResource.ById(modelId = testModel1.id)))
+        val response = client.get(href(ModelResource.ById(modelId = testModel1.id))) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
@@ -268,7 +289,9 @@ class ModelRoutesTest {
         val nonExistentId = 999L
 
         // Act
-        val response = client.get(href(ModelResource.ById(modelId = nonExistentId)))
+        val response = client.get(href(ModelResource.ById(modelId = nonExistentId))) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.NotFound, response.status)
@@ -302,6 +325,7 @@ class ModelRoutesTest {
         val response = client.put(href(ModelResource.ById(modelId = testModel1.id))) {
             contentType(ContentType.Application.Json)
             setBody(updatedModel)
+            authenticate(authToken)
         }
 
         // Assert
@@ -328,6 +352,7 @@ class ModelRoutesTest {
         val response = client.put(href(ModelResource.ById(modelId = nonExistentId))) {
             contentType(ContentType.Application.Json)
             setBody(updatedModel)
+            authenticate(authToken)
         }
 
         // Assert
@@ -356,6 +381,7 @@ class ModelRoutesTest {
         val response = client.put(href(ModelResource.ById(modelId = testModel1.id))) {
             contentType(ContentType.Application.Json)
             setBody(updatedModel)
+            authenticate(authToken)
         }
 
         // Assert
@@ -385,6 +411,7 @@ class ModelRoutesTest {
         val response = client.put(href(ModelResource.ById(modelId = testModel1.id))) {
             contentType(ContentType.Application.Json)
             setBody(updatedModel)
+            authenticate(authToken)
         }
 
         // Assert
@@ -414,6 +441,7 @@ class ModelRoutesTest {
         val response = client.put(href(ModelResource.ById(modelId = testModel1.id))) {
             contentType(ContentType.Application.Json)
             setBody(updatedModel)
+            authenticate(authToken)
         }
 
         // Assert
@@ -431,7 +459,6 @@ class ModelRoutesTest {
     @Test
     fun `DELETE model should remove the model successfully`() = modelTestApplication {
         // Arrange
-
         testDataManager.setup(
             TestDataSet(
                 llmProviders = listOf(testProvider1),
@@ -440,7 +467,9 @@ class ModelRoutesTest {
         )
 
         // Act
-        val response = client.delete(href(ModelResource.ById(modelId = testModel1.id)))
+        val response = client.delete(href(ModelResource.ById(modelId = testModel1.id))) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.NoContent, response.status)
@@ -456,7 +485,9 @@ class ModelRoutesTest {
         val nonExistentId = 999L
 
         // Act
-        val response = client.delete(href(ModelResource.ById(modelId = nonExistentId)))
+        val response = client.delete(href(ModelResource.ById(modelId = nonExistentId))) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.NotFound, response.status)
@@ -482,7 +513,9 @@ class ModelRoutesTest {
         )
 
         // Act
-        val response = client.get(href(ModelResource.ById.Settings(ModelResource.ById(modelId = testModel1.id))))
+        val response = client.get(href(ModelResource.ById.Settings(ModelResource.ById(modelId = testModel1.id)))) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
@@ -502,7 +535,9 @@ class ModelRoutesTest {
         )
 
         // Act
-        val response = client.get(href(ModelResource.ById.Settings(ModelResource.ById(modelId = testModel1.id))))
+        val response = client.get(href(ModelResource.ById.Settings(ModelResource.ById(modelId = testModel1.id)))) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
@@ -516,14 +551,14 @@ class ModelRoutesTest {
         val nonExistentId = 999L
 
         // Act
-        // Note: The service layer currently returns an empty list if the model doesn't exist,
-        // rather than a Not Found error. The test reflects this current behavior.
-        val response = client.get(href(ModelResource.ById.Settings(ModelResource.ById(modelId = nonExistentId))))
+        val response = client.get(href(ModelResource.ById.Settings(ModelResource.ById(modelId = nonExistentId)))) {
+            authenticate(authToken)
+        }
 
         // Assert
-        assertEquals(HttpStatusCode.OK, response.status) // Expect OK with empty list based on service impl
-        val settingsList = response.body<List<ModelSettings>>()
-        assertEquals(emptyList(), settingsList)
+        assertEquals(HttpStatusCode.OK, response.status)
+        val settings = response.body<List<ModelSettings>>()
+        assertEquals(emptyList(), settings)
     }
 
     // --- GET /api/v1/models/{modelId}/apikey/status Tests ---
@@ -533,14 +568,16 @@ class ModelRoutesTest {
         // Arrange
         testDataManager.setup(
             TestDataSet(
-                apiSecrets = listOf(TestDefaults.apiSecret1),
-                llmProviders = listOf(testProvider1), // testProvider1 has apiSecret1
-                llmModels = listOf(testModel1) // testModel1 uses testProvider1
+                llmProviders = listOf(testProvider1),
+                llmModels = listOf(testModel1),
+                apiSecrets = listOf(TestDefaults.apiSecret1)
             )
         )
 
         // Act
-        val response = client.get(href(ModelResource.ById.ApiKeyStatus(ModelResource.ById(modelId = testModel1.id))))
+        val response = client.get(href(ModelResource.ById.ApiKeyStatus(ModelResource.ById(modelId = testModel1.id)))) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
@@ -560,7 +597,9 @@ class ModelRoutesTest {
         )
 
         // Act
-        val response = client.get(href(ModelResource.ById.ApiKeyStatus(ModelResource.ById(modelId = testModel1.id))))
+        val response = client.get(href(ModelResource.ById.ApiKeyStatus(ModelResource.ById(modelId = testModel1.id)))) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
@@ -574,9 +613,9 @@ class ModelRoutesTest {
         val nonExistentId = 999L
 
         // Act
-        // Note: The service layer currently returns false if the model doesn't exist,
-        // rather than a Not Found error. The test reflects this current behavior.
-        val response = client.get(href(ModelResource.ById.ApiKeyStatus(ModelResource.ById(modelId = nonExistentId))))
+        val response = client.get(href(ModelResource.ById.ApiKeyStatus(ModelResource.ById(modelId = nonExistentId)))) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status) // Expect OK with false based on service impl

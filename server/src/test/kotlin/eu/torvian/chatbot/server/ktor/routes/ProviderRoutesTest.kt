@@ -96,7 +96,9 @@ class ProviderRoutesTest {
         val expectedProviders = listOf(testProvider1, testProvider2)
 
         // Act & Assert
-        val response = client.get(href(ProviderResource()))
+        val response = client.get(href(ProviderResource())) {
+            authenticate(authToken)
+        }
         assertEquals(HttpStatusCode.OK, response.status)
         val providers = response.body<List<LLMProvider>>()
         assertEquals(expectedProviders, providers)
@@ -107,7 +109,9 @@ class ProviderRoutesTest {
         // Arrange (no providers inserted)
 
         // Act & Assert
-        val response = client.get(href(ProviderResource()))
+        val response = client.get(href(ProviderResource())) {
+            authenticate(authToken)
+        }
         assertEquals(HttpStatusCode.OK, response.status)
         val providers = response.body<List<LLMProvider>>()
         assertEquals(emptyList(), providers)
@@ -283,7 +287,9 @@ class ProviderRoutesTest {
         testDataManager.insertLLMProvider(testProvider1)
 
         // Act
-        val response = client.get(href(ProviderResource.ById(providerId = testProvider1.id)))
+        val response = client.get(href(ProviderResource.ById(providerId = testProvider1.id))) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
@@ -297,7 +303,9 @@ class ProviderRoutesTest {
         val nonExistentId = 999L
 
         // Act
-        val response = client.get(href(ProviderResource.ById(providerId = nonExistentId)))
+        val response = client.get(href(ProviderResource.ById(providerId = nonExistentId))) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.NotFound, response.status)
@@ -444,7 +452,9 @@ class ProviderRoutesTest {
         testDataManager.insertLLMProvider(testProvider1)
 
         // Act
-        val response = client.delete(href(ProviderResource.ById(providerId = testProvider1.id)))
+        val response = client.delete(href(ProviderResource.ById(providerId = testProvider1.id))) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.NoContent, response.status)
@@ -464,7 +474,9 @@ class ProviderRoutesTest {
         val nonExistentId = 999L
 
         // Act
-        val response = client.delete(href(ProviderResource.ById(providerId = nonExistentId)))
+        val response = client.delete(href(ProviderResource.ById(providerId = nonExistentId))) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.NotFound, response.status)
@@ -488,7 +500,9 @@ class ProviderRoutesTest {
         )
 
         // Act
-        val response = client.delete(href(ProviderResource.ById(providerId = testProvider1.id)))
+        val response = client.delete(href(ProviderResource.ById(providerId = testProvider1.id))) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.Conflict, response.status) // 409 Conflict
@@ -522,6 +536,7 @@ class ProviderRoutesTest {
             client.put(href(ProviderResource.ById.Credential(ProviderResource.ById(providerId = testProvider1.id)))) {
                 contentType(ContentType.Application.Json)
                 setBody(updateRequest)
+                authenticate(authToken)
             }
 
         // Assert
@@ -560,6 +575,7 @@ class ProviderRoutesTest {
                 client.put(href(ProviderResource.ById.Credential(ProviderResource.ById(providerId = testProvider1.id)))) {
                     contentType(ContentType.Application.Json)
                     setBody(updateRequest)
+                    authenticate(authToken)
                 }
 
             // Assert
@@ -586,6 +602,7 @@ class ProviderRoutesTest {
             client.put(href(ProviderResource.ById.Credential(ProviderResource.ById(providerId = nonExistentId)))) {
                 contentType(ContentType.Application.Json)
                 setBody(updateRequest)
+                authenticate(authToken)
             }
 
         // Assert
@@ -609,6 +626,7 @@ class ProviderRoutesTest {
             client.put(href(ProviderResource.ById.Credential(ProviderResource.ById(providerId = testProvider1.id)))) {
                 contentType(ContentType.Application.Json)
                 setBody(updateRequest)
+                authenticate(authToken)
             }
 
         // Assert
@@ -640,7 +658,9 @@ class ProviderRoutesTest {
 
         // Act
         val response =
-            client.get(href(ProviderResource.ById.Models(ProviderResource.ById(providerId = testProvider1.id))))
+            client.get(href(ProviderResource.ById.Models(ProviderResource.ById(providerId = testProvider1.id)))) {
+                authenticate(authToken)
+            }
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
@@ -656,7 +676,9 @@ class ProviderRoutesTest {
 
         // Act
         val response =
-            client.get(href(ProviderResource.ById.Models(ProviderResource.ById(providerId = testProvider1.id))))
+            client.get(href(ProviderResource.ById.Models(ProviderResource.ById(providerId = testProvider1.id)))) {
+                authenticate(authToken)
+            }
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
@@ -673,7 +695,9 @@ class ProviderRoutesTest {
         // Note: The service layer currently returns an empty list if the provider doesn't exist,
         // rather than a Not Found error. The test reflects this current behavior.
         val response =
-            client.get(href(ProviderResource.ById.Models(ProviderResource.ById(providerId = nonExistentId))))
+            client.get(href(ProviderResource.ById.Models(ProviderResource.ById(providerId = nonExistentId)))) {
+                authenticate(authToken)
+            }
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status) // Expect OK with empty list based on service impl
