@@ -30,22 +30,22 @@ class UserGroupDaoExposed(
                 .map { it.toUserGroupEntity() }
         }
 
-    override suspend fun getGroupById(id: Long): Either<GroupByIdError, UserGroupEntity> =
+    override suspend fun getGroupById(id: Long): Either<GetGroupByIdError, UserGroupEntity> =
         transactionScope.transaction {
             UserGroupsTable.selectAll().where { UserGroupsTable.id eq id }
                 .singleOrNull()
                 ?.toUserGroupEntity()
                 ?.right()
-                ?: GroupByIdError.GroupNotFound(id).left()
+                ?: GetGroupByIdError.GroupNotFound(id).left()
         }
 
-    override suspend fun getGroupByName(name: String): Either<GroupByNameError, UserGroupEntity> =
+    override suspend fun getGroupByName(name: String): Either<GetGroupByNameError, UserGroupEntity> =
         transactionScope.transaction {
             UserGroupsTable.selectAll().where { UserGroupsTable.name eq name }
                 .singleOrNull()
                 ?.toUserGroupEntity()
                 ?.right()
-                ?: GroupByNameError.GroupNotFoundByName(name).left()
+                ?: GetGroupByNameError.GroupNotFound(name).left()
         }
 
     override suspend fun insertGroup(

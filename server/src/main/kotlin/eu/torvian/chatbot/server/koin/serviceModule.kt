@@ -29,6 +29,7 @@ fun serviceModule() = module {
     single<LLMProviderService> { LLMProviderServiceImpl(get(), get(), get(), get()) }
     single<MessageService> { MessageServiceImpl(get(), get(), get(), get(), get(), get(), get(), get()) }
     single<RoleService> { RoleServiceImpl(get(), get(), get()) }
+    single<UserGroupService> { UserGroupServiceImpl(get(), get()) }
 
     // --- Security Services ---
     single<CryptoProvider> { AESCryptoProvider(get()) }

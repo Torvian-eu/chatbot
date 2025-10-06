@@ -22,19 +22,19 @@ interface UserGroupDao {
      * Retrieves a user group by its unique ID.
      *
      * @param id The unique identifier of the group.
-     * @return Either [GroupByIdError.GroupNotFound] if no group exists with the given ID,
+     * @return Either [GetGroupByIdError.GroupNotFound] if no group exists with the given ID,
      *         or the [UserGroupEntity] if found.
      */
-    suspend fun getGroupById(id: Long): Either<GroupByIdError, UserGroupEntity>
+    suspend fun getGroupById(id: Long): Either<GetGroupByIdError, UserGroupEntity>
 
     /**
      * Retrieves a user group by its unique name.
      *
      * @param name The name of the group to search for.
-     * @return Either [GroupByNameError.GroupNotFoundByName] if no group exists with the given name,
+     * @return Either [GetGroupByNameError.GroupNotFound] if no group exists with the given name,
      *         or the [UserGroupEntity] if found.
      */
-    suspend fun getGroupByName(name: String): Either<GroupByNameError, UserGroupEntity>
+    suspend fun getGroupByName(name: String): Either<GetGroupByNameError, UserGroupEntity>
 
     /**
      * Creates a new user group.
