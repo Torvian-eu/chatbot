@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.ktor.routes
 import arrow.core.raise.Raise
 import arrow.core.raise.either
 import arrow.core.raise.withError
+import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.resources.MessageResource
 import eu.torvian.chatbot.common.models.api.core.UpdateMessageRequest
@@ -15,7 +16,6 @@ import eu.torvian.chatbot.server.service.core.error.message.UpdateMessageContent
 import eu.torvian.chatbot.server.service.core.error.message.toApiError
 import eu.torvian.chatbot.server.service.security.AuthorizationService
 import eu.torvian.chatbot.server.service.security.ResourceType
-import eu.torvian.chatbot.server.service.security.authorizer.AccessMode
 import eu.torvian.chatbot.server.service.security.error.ResourceAuthorizationError
 import eu.torvian.chatbot.server.service.security.error.toApiError
 import io.ktor.http.*

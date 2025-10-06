@@ -4,6 +4,7 @@ import arrow.core.Either
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.raise.withError
+import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.api.PermissionSpec
 import eu.torvian.chatbot.common.models.user.Permission
 import eu.torvian.chatbot.common.models.user.Role
@@ -11,7 +12,6 @@ import eu.torvian.chatbot.server.data.dao.PermissionDao
 import eu.torvian.chatbot.server.data.dao.UserRoleAssignmentDao
 import eu.torvian.chatbot.server.data.entities.mappers.toPermission
 import eu.torvian.chatbot.server.data.entities.mappers.toRole
-import eu.torvian.chatbot.server.service.security.authorizer.AccessMode
 import eu.torvian.chatbot.server.service.security.authorizer.ResourceAuthorizer
 import eu.torvian.chatbot.server.service.security.authorizer.ResourceAuthorizerError
 import eu.torvian.chatbot.server.service.security.error.AuthorizationError
