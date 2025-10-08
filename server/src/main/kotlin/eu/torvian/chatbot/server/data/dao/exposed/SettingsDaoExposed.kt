@@ -1,17 +1,25 @@
 package eu.torvian.chatbot.server.data.dao.exposed
 
-import arrow.core.*
-import arrow.core.raise.*
+import arrow.core.Either
+import arrow.core.left
+import arrow.core.raise.catch
+import arrow.core.raise.either
+import arrow.core.raise.ensure
+import arrow.core.right
+import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.server.data.dao.SettingsDao
 import eu.torvian.chatbot.server.data.dao.error.SettingsError
+import eu.torvian.chatbot.server.data.tables.ModelSettingsAccessTable
+import eu.torvian.chatbot.server.data.tables.ModelSettingsOwnersTable
+import eu.torvian.chatbot.server.data.tables.ModelSettingsTable
+import eu.torvian.chatbot.server.data.tables.UserGroupMembershipsTable
 import eu.torvian.chatbot.server.data.tables.mappers.toModelSettings
 import eu.torvian.chatbot.server.data.toEntity
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
 import org.jetbrains.exposed.exceptions.ExposedSQLException
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import eu.torvian.chatbot.server.data.tables.ModelSettingsTable as ModelSettingsTable
 
 /**
  * Exposed implementation of the [SettingsDao].
@@ -40,6 +48,56 @@ class SettingsDaoExposed(
         transactionScope.transaction {
             ModelSettingsTable
                 .selectAll().where { ModelSettingsTable.modelId eq modelId }
+                .map { it.toModelSettings() }
+        }
+
+    override suspend fun getAllAccessibleSettings(userId: Long, accessMode: AccessMode): List<ModelSettings> =
+        transactionScope.transaction {
+            // Subquery for settings accessible via user groups
+            val groupAccessSubquery = ModelSettingsTable
+                .innerJoin(ModelSettingsAccessTable, { id }, { settingsId })
+                .innerJoin(UserGroupMembershipsTable, { ModelSettingsAccessTable.userGroupId }, { groupId })
+                .select(ModelSettingsTable.columns)
+                .where {
+                    (UserGroupMembershipsTable.userId eq userId) and
+                            (ModelSettingsAccessTable.accessMode eq accessMode.key)
+                }
+
+            // Subquery for settings directly owned by the user
+            val directOwnershipSubquery = ModelSettingsTable
+                .innerJoin(ModelSettingsOwnersTable, { id }, { settingsId })
+                .select(ModelSettingsTable.columns)
+                .where { ModelSettingsOwnersTable.userId eq userId }
+
+            // Combine the two subqueries and map to ModelSettings
+            groupAccessSubquery.union(directOwnershipSubquery)
+                .map { it.toModelSettings() }
+        }
+
+    override suspend fun getAccessibleSettingsByModelId(
+        userId: Long,
+        modelId: Long,
+        accessMode: AccessMode
+    ): List<ModelSettings> =
+        transactionScope.transaction {
+            // Settings the user can access via group membership for the specific model
+            val groupAccessSubquery = ModelSettingsTable
+                .innerJoin(ModelSettingsAccessTable, { id }, { settingsId })
+                .innerJoin(UserGroupMembershipsTable, { ModelSettingsAccessTable.userGroupId }, { groupId })
+                .select(ModelSettingsTable.columns)
+                .where {
+                    (UserGroupMembershipsTable.userId eq userId) and
+                            (ModelSettingsAccessTable.accessMode eq accessMode.key) and
+                            (ModelSettingsTable.modelId eq modelId)
+                }
+
+            // Settings directly owned by the user for the specific model
+            val directOwnershipSubquery = ModelSettingsTable
+                .innerJoin(ModelSettingsOwnersTable, { id }, { settingsId })
+                .select(ModelSettingsTable.columns)
+                .where { (ModelSettingsOwnersTable.userId eq userId) and (ModelSettingsTable.modelId eq modelId) }
+
+            groupAccessSubquery.union(directOwnershipSubquery)
                 .map { it.toModelSettings() }
         }
 

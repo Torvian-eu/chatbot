@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.data.dao.exposed
 
 import arrow.core.getOrElse
+import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
@@ -31,6 +32,8 @@ class LLMProviderDaoExposedTest {
     // Test data
     private val testProvider1 = TestDefaults.llmProvider1
     private val testProvider2 = TestDefaults.llmProvider2
+    private val testUser1 = TestDefaults.user1
+    private val testUserGroup1 = TestDefaults.userGroup1
 
     @BeforeEach
     fun setUp() = runTest {
@@ -39,7 +42,12 @@ class LLMProviderDaoExposedTest {
         llmProviderDao = container.get()
         testDataManager = container.get()
 
-        testDataManager.createTables(setOf(Table.LLM_PROVIDERS))
+        testDataManager.createTables(
+            setOf(
+                Table.LLM_PROVIDERS, Table.LLM_PROVIDER_OWNERS, Table.LLM_PROVIDER_ACCESS,
+                Table.USERS, Table.USER_GROUPS, Table.USER_GROUP_MEMBERSHIPS
+            )
+        )
     }
 
     @AfterEach
@@ -127,7 +135,7 @@ class LLMProviderDaoExposedTest {
         // Verify
         assertTrue(result.isRight(), "Expected Right result")
         val provider = result.getOrElse { throw AssertionError("Expected provider to be created") }
-        
+
         assertTrue(provider.id > 0, "Expected generated ID to be positive")
         assertEquals(apiKeyId, provider.apiKeyId)
         assertEquals(name, provider.name)
@@ -153,7 +161,7 @@ class LLMProviderDaoExposedTest {
         // Verify
         assertTrue(result.isRight(), "Expected Right result")
         val provider = result.getOrElse { throw AssertionError("Expected provider to be created") }
-        
+
         assertTrue(provider.id > 0, "Expected generated ID to be positive")
         assertEquals(null, provider.apiKeyId)
         assertEquals(name, provider.name)
@@ -218,7 +226,7 @@ class LLMProviderDaoExposedTest {
         // Verify provider was actually updated by retrieving it
         val retrievedResult = llmProviderDao.getProviderById(testProvider1.id)
         assertTrue(retrievedResult.isRight(), "Expected to retrieve updated provider")
-        
+
         val retrievedProvider = retrievedResult.getOrElse { throw AssertionError("Expected provider to be found") }
         assertEquals(updatedProvider.name, retrievedProvider.name)
         assertEquals(updatedProvider.description, retrievedProvider.description)
@@ -304,6 +312,84 @@ class LLMProviderDaoExposedTest {
                 assertEquals(nonExistentId, error.id)
             },
             { throw AssertionError("Expected LLMProviderNotFound error") }
+        )
+    }
+
+    @Test
+    fun `getAllAccessibleProviders should return providers accessible via group membership for requested access mode`() =
+        runTest {
+            // Setup providers and user
+            testDataManager.setup(
+                TestDataSet(
+                    llmProviders = listOf(testProvider1, testProvider2),
+                    users = listOf(testUser1)
+                )
+            )
+
+            // Create user group and membership, then grant read access to provider1
+            testDataManager.insertUserGroup(testUserGroup1)
+            testDataManager.insertUserGroupMembership(testUser1.id, testUserGroup1.id)
+            testDataManager.insertProviderAccess(testProvider1.id, testUserGroup1.id, AccessMode.READ)
+
+            // Query accessible providers for READ
+            val accessibleRead = llmProviderDao.getAllAccessibleProviders(testUser1.id, AccessMode.READ)
+
+            assertTrue(
+                accessibleRead.any { it.id == testProvider1.id },
+                "Expected provider1 to be accessible via group read access"
+            )
+            assertTrue(accessibleRead.none { it.id == testProvider2.id }, "Expected provider2 to NOT be accessible")
+        }
+
+    @Test
+    fun `getAllAccessibleProviders should return providers owned by the user regardless of access mode`() = runTest {
+        // Setup provider and user
+        testDataManager.setup(
+            TestDataSet(
+                llmProviders = listOf(testProvider2),
+                users = listOf(testUser1)
+            )
+        )
+
+        // Make user1 the owner of provider2
+        testDataManager.insertProviderOwnership(testProvider2.id, testUser1.id)
+
+        // Query accessible providers for WRITE (owner should still see it)
+        val accessibleWrite = llmProviderDao.getAllAccessibleProviders(testUser1.id, AccessMode.WRITE)
+
+        assertTrue(
+            accessibleWrite.any { it.id == testProvider2.id },
+            "Expected owned provider to be accessible for WRITE mode"
+        )
+    }
+
+    @Test
+    fun `getAllAccessibleProviders should respect access mode when group has different mode`() = runTest {
+        // Setup providers and user
+        testDataManager.setup(
+            TestDataSet(
+                llmProviders = listOf(testProvider1),
+                users = listOf(testUser1)
+            )
+        )
+
+        // Create user group and membership, grant WRITE access only
+        testDataManager.insertUserGroup(testUserGroup1)
+        testDataManager.insertUserGroupMembership(testUser1.id, testUserGroup1.id)
+        testDataManager.insertProviderAccess(testProvider1.id, testUserGroup1.id, AccessMode.WRITE)
+
+        // Query for READ should NOT return the provider
+        val accessibleRead = llmProviderDao.getAllAccessibleProviders(testUser1.id, AccessMode.READ)
+        assertTrue(
+            accessibleRead.none { it.id == testProvider1.id },
+            "Expected provider not accessible for READ when only WRITE granted"
+        )
+
+        // Query for WRITE should return the provider
+        val accessibleWrite = llmProviderDao.getAllAccessibleProviders(testUser1.id, AccessMode.WRITE)
+        assertTrue(
+            accessibleWrite.any { it.id == testProvider1.id },
+            "Expected provider accessible for WRITE when WRITE granted"
         )
     }
 }

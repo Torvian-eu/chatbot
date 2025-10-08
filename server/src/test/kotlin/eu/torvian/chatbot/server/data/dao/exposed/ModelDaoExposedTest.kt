@@ -1,11 +1,11 @@
 package eu.torvian.chatbot.server.data.dao.exposed
 
+import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.server.data.dao.ModelDao
-import eu.torvian.chatbot.server.data.dao.error.ModelError
 import eu.torvian.chatbot.server.data.dao.error.UpdateModelError
 import eu.torvian.chatbot.server.testutils.data.Table
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
@@ -16,7 +16,9 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import kotlin.test.*
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 /**
  * Tests for [ModelDaoExposed].
@@ -50,7 +52,18 @@ class ModelDaoExposedTest {
         modelDao = container.get()
         testDataManager = container.get()
 
-        testDataManager.createTables(setOf(Table.LLM_PROVIDERS, Table.LLM_MODELS))
+        // Ensure all tables required by access/ownership logic are created for these tests
+        testDataManager.createTables(
+            setOf(
+                Table.LLM_PROVIDERS,
+                Table.LLM_MODELS,
+                Table.LLM_MODEL_ACCESS,
+                Table.LLM_MODEL_OWNERS,
+                Table.USER_GROUPS,
+                Table.USER_GROUP_MEMBERSHIPS,
+                Table.USERS
+            )
+        )
     }
 
     @AfterEach
@@ -125,8 +138,7 @@ class ModelDaoExposedTest {
         assertTrue(result.isLeft(), "Expected Left result for non-existent model")
         val error = result.leftOrNull()
         assertNotNull(error, "Expected non-null error")
-        assertTrue(error is ModelError.ModelNotFound, "Expected ModelNotFound error")
-        assertEquals(999, (error as ModelError.ModelNotFound).id, "Expected error with correct ID")
+        assertEquals(999, error.id, "Expected error with correct ID")
     }
 
     @Test
@@ -290,7 +302,6 @@ class ModelDaoExposedTest {
         assertTrue(retrievedResult.isLeft(), "Expected Left result for deleted model")
         val error = retrievedResult.leftOrNull()
         assertNotNull(error, "Expected non-null error")
-        assertTrue(error is ModelError.ModelNotFound, "Expected ModelNotFound error")
     }
 
     @Test
@@ -302,7 +313,119 @@ class ModelDaoExposedTest {
         assertTrue(result.isLeft(), "Expected Left result for non-existent model")
         val error = result.leftOrNull()
         assertNotNull(error, "Expected non-null error")
-        assertTrue(error is ModelError.ModelNotFound, "Expected ModelNotFound error")
-        assertEquals(999, (error as ModelError.ModelNotFound).id, "Expected error with correct ID")
+        assertEquals(999, error.id, "Expected error with correct ID")
+    }
+
+    @Test
+    fun `getAllAccessibleModels should return models accessible via group membership for requested access mode`() =
+        runTest {
+            // Setup providers, models and user
+            testDataManager.setup(
+                TestDataSet(
+                    llmProviders = listOf(testProvider1, testProvider2),
+                    llmModels = listOf(testModel1, testModel2),
+                    users = listOf(TestDefaults.user1)
+                )
+            )
+
+            val user = TestDefaults.user1
+            val userGroup = TestDefaults.userGroup1
+
+            // Create user group and membership, then grant read access to model1
+            testDataManager.insertUserGroup(userGroup)
+            testDataManager.insertUserGroupMembership(user.id, userGroup.id)
+            testDataManager.insertModelAccess(
+                testModel1.id,
+                userGroup.id,
+                AccessMode.READ
+            )
+
+            // Query accessible models for READ
+            val accessibleRead = modelDao.getAllAccessibleModels(user.id, AccessMode.READ)
+
+            assertTrue(
+                accessibleRead.any { it.id == testModel1.id },
+                "Expected model1 to be accessible via group read access"
+            )
+            assertTrue(accessibleRead.none { it.id == testModel2.id }, "Expected model2 to NOT be accessible")
+        }
+
+    @Test
+    fun `getAllAccessibleModels should return models owned by the user regardless of access mode`() = runTest {
+        // Setup provider, model and user
+        testDataManager.setup(
+            TestDataSet(
+                llmProviders = listOf(testProvider2),
+                llmModels = listOf(testModel2),
+                users = listOf(TestDefaults.user1)
+            )
+        )
+
+        val user = TestDefaults.user1
+
+        // Make user the owner of model2
+        testDataManager.insertModelOwnership(testModel2.id, user.id)
+
+        // Query accessible models for WRITE (owner should still see it)
+        val accessibleWrite = modelDao.getAllAccessibleModels(user.id, AccessMode.WRITE)
+
+        assertTrue(
+            accessibleWrite.any { it.id == testModel2.id },
+            "Expected owned model to be accessible for WRITE mode"
+        )
+    }
+
+    @Test
+    fun `accessibleModelsByProviderId should respect access mode and ownership`() = runTest {
+        // Setup provider, model and user
+        testDataManager.setup(
+            TestDataSet(
+                llmProviders = listOf(testProvider1),
+                llmModels = listOf(testModel1),
+                users = listOf(TestDefaults.user1)
+            )
+        )
+
+        val user = TestDefaults.user1
+        val userGroup = TestDefaults.userGroup1
+
+        // Create user group and membership, grant WRITE access only
+        testDataManager.insertUserGroup(userGroup)
+        testDataManager.insertUserGroupMembership(user.id, userGroup.id)
+        testDataManager.insertModelAccess(testModel1.id, userGroup.id, AccessMode.WRITE)
+
+        // Query for READ should NOT return the model
+        val accessibleRead = modelDao.getAccessibleModelsByProviderId(
+            user.id,
+            testProvider1.id,
+            AccessMode.READ
+        )
+        assertTrue(
+            accessibleRead.none { it.id == testModel1.id },
+            "Expected model not accessible for READ when only WRITE granted"
+        )
+
+        // Query for WRITE should return the model
+        val accessibleWrite = modelDao.getAccessibleModelsByProviderId(
+            user.id,
+            testProvider1.id,
+            AccessMode.WRITE
+        )
+        assertTrue(
+            accessibleWrite.any { it.id == testModel1.id },
+            "Expected model accessible for WRITE when WRITE granted"
+        )
+
+        // Now give ownership to user and ensure owner sees it regardless of mode
+        testDataManager.insertModelOwnership(testModel1.id, user.id)
+        val accessibleReadAfterOwnership = modelDao.getAccessibleModelsByProviderId(
+            user.id,
+            testProvider1.id,
+            AccessMode.READ
+        )
+        assertTrue(
+            accessibleReadAfterOwnership.any { it.id == testModel1.id },
+            "Expected owned model to be accessible for READ after ownership granted"
+        )
     }
 }

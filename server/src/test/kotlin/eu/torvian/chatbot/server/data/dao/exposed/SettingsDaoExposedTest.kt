@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.data.dao.exposed
 
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
+import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.server.data.dao.SettingsDao
 import eu.torvian.chatbot.server.data.dao.error.SettingsError
@@ -53,8 +54,18 @@ class SettingsDaoExposedTest {
         settingsDao = container.get()
         testDataManager = container.get()
 
-        // Need to create both tables as settings reference the models table via foreign key
-        testDataManager.createTables(setOf(Table.LLM_MODELS, Table.LLM_PROVIDERS, Table.MODEL_SETTINGS))
+        testDataManager.createTables(
+            setOf(
+                Table.LLM_MODELS,
+                Table.LLM_PROVIDERS,
+                Table.MODEL_SETTINGS,
+                Table.MODEL_SETTINGS_ACCESS,
+                Table.MODEL_SETTINGS_OWNERS,
+                Table.USER_GROUPS,
+                Table.USER_GROUP_MEMBERSHIPS,
+                Table.USERS
+            )
+        )
     }
 
     @AfterEach
@@ -98,8 +109,7 @@ class SettingsDaoExposedTest {
         assertTrue(result.isLeft(), "Expected Left result for non-existent settings")
         val error = result.leftOrNull()
         assertNotNull(error, "Expected non-null error")
-        assertTrue(error is SettingsError.SettingsNotFound, "Expected SettingsNotFound error")
-        assertEquals(999, (error as SettingsError.SettingsNotFound).id, "Expected error with correct ID")
+        assertEquals(999, error.id, "Expected error with correct ID")
     }
 
     @Test
@@ -240,7 +250,6 @@ class SettingsDaoExposedTest {
         assertTrue(result.isLeft(), "Expected Left result for non-existent model")
         val error = result.leftOrNull()
         assertNotNull(error, "Expected non-null error")
-        assertTrue(error is SettingsError.ModelNotFound, "Expected ModelNotFound error")
         assertEquals(999L, error.modelId, "Expected error with correct ID")
     }
 
@@ -364,7 +373,6 @@ class SettingsDaoExposedTest {
         assertTrue(retrievedResult.isLeft(), "Expected Left result for deleted settings")
         val error = retrievedResult.leftOrNull()
         assertNotNull(error, "Expected non-null error")
-        assertTrue(error is SettingsError.SettingsNotFound, "Expected SettingsNotFound error")
     }
 
     @Test
@@ -376,7 +384,90 @@ class SettingsDaoExposedTest {
         assertTrue(result.isLeft(), "Expected Left result for non-existent settings")
         val error = result.leftOrNull()
         assertNotNull(error, "Expected non-null error")
-        assertTrue(error is SettingsError.SettingsNotFound, "Expected SettingsNotFound error")
-        assertEquals(999L, (error as SettingsError.SettingsNotFound).id, "Expected error with correct ID")
+        assertEquals(999L, error.id, "Expected error with correct ID")
+    }
+
+    @Test
+    fun `getAllAccessibleSettings should return settings accessible via group membership for requested access mode`() = runTest {
+        // Setup models, settings and user
+        testDataManager.setup(
+            TestDataSet(
+                llmModels = listOf(testModel1, testModel2),
+                llmProviders = listOf(llmProvider1, llmProvider2),
+                modelSettings = listOf(testSettings1, testSettings2),
+                users = listOf(TestDefaults.user1)
+            )
+        )
+
+        val user = TestDefaults.user1
+        val userGroup = TestDefaults.userGroup1
+
+        // Create user group and membership, then grant READ access to settings1
+        testDataManager.insertUserGroup(userGroup)
+        testDataManager.insertUserGroupMembership(user.id, userGroup.id)
+        testDataManager.insertSettingsAccess(testSettings1.id, userGroup.id, AccessMode.READ)
+
+        // Query accessible settings for READ
+        val accessibleRead = settingsDao.getAllAccessibleSettings(user.id, AccessMode.READ)
+
+        assertTrue(accessibleRead.any { it.id == testSettings1.id }, "Expected settings1 to be accessible via group read access")
+        assertTrue(accessibleRead.none { it.id == testSettings2.id }, "Expected settings2 to NOT be accessible")
+    }
+
+    @Test
+    fun `getAllAccessibleSettings should return settings owned by the user regardless of access mode`() = runTest {
+        // Setup model, settings and user
+        testDataManager.setup(
+            TestDataSet(
+                llmModels = listOf(testModel2),
+                llmProviders = listOf(llmProvider2),
+                modelSettings = listOf(testSettings2),
+                users = listOf(TestDefaults.user1)
+            )
+        )
+
+        val user = TestDefaults.user1
+
+        // Make user the owner of settings2
+        testDataManager.insertSettingsOwnership(testSettings2.id, user.id)
+
+        // Query accessible settings for WRITE (owner should still see it)
+        val accessibleWrite = settingsDao.getAllAccessibleSettings(user.id, AccessMode.WRITE)
+
+        assertTrue(accessibleWrite.any { it.id == testSettings2.id }, "Expected owned settings to be accessible for WRITE mode")
+    }
+
+    @Test
+    fun `getAccessibleSettingsByModelId should respect access mode and ownership`() = runTest {
+        // Setup model, settings and user
+        testDataManager.setup(
+            TestDataSet(
+                llmModels = listOf(testModel1),
+                llmProviders = listOf(llmProvider1),
+                modelSettings = listOf(testSettings1),
+                users = listOf(TestDefaults.user1)
+            )
+        )
+
+        val user = TestDefaults.user1
+        val userGroup = TestDefaults.userGroup1
+
+        // Create user group and membership, grant WRITE access only
+        testDataManager.insertUserGroup(userGroup)
+        testDataManager.insertUserGroupMembership(user.id, userGroup.id)
+        testDataManager.insertSettingsAccess(testSettings1.id, userGroup.id, AccessMode.WRITE)
+
+        // Query for READ should NOT return the settings
+        val accessibleRead = settingsDao.getAccessibleSettingsByModelId(user.id, testModel1.id, AccessMode.READ)
+        assertTrue(accessibleRead.none { it.id == testSettings1.id }, "Expected settings not accessible for READ when only WRITE granted")
+
+        // Query for WRITE should return the settings
+        val accessibleWrite = settingsDao.getAccessibleSettingsByModelId(user.id, testModel1.id, AccessMode.WRITE)
+        assertTrue(accessibleWrite.any { it.id == testSettings1.id }, "Expected settings accessible for WRITE when WRITE granted")
+
+        // Now give ownership to user and ensure owner sees it regardless of mode
+        testDataManager.insertSettingsOwnership(testSettings1.id, user.id)
+        val accessibleReadAfterOwnership = settingsDao.getAccessibleSettingsByModelId(user.id, testModel1.id, AccessMode.READ)
+        assertTrue(accessibleReadAfterOwnership.any { it.id == testSettings1.id }, "Expected owned settings to be accessible for READ after ownership granted")
     }
 }
