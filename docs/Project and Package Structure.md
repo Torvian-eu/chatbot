@@ -149,13 +149,20 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   │   ├── GroupDao.kt           # Group operations interface
 │   │   ├── GroupOwnershipDao.kt  # Group ownership management interface
 │   │   ├── MessageDao.kt         # Message operations interface
+│   │   ├── ModelAccessDao.kt     # Model access management interface
 │   │   ├── ModelDao.kt           # Model management interface
+│   │   ├── ModelOwnershipDao.kt  # Model ownership management interface
 │   │   ├── PermissionDao.kt      # permissions CRUD
+│   │   ├── ProviderAccessDao.kt  # Provider access management interface
+│   │   ├── ProviderDao.kt        # Model management interface
+│   │   ├── ProviderOwnershipDao.kt # Provider ownership management interface
 │   │   ├── RoleDao.kt            # roles CRUD
 │   │   ├── RolePermissionDao.kt  # role-permission assignments
 │   │   ├── SessionDao.kt         # Session operations interface
 │   │   ├── SessionOwnershipDao.kt # Session ownership management interface
+│   │   ├── SettingsAccessDao.kt  # Settings access management interface
 │   │   ├── SettingsDao.kt        # Settings management interface
+│   │   ├── SettingsOwnershipDao.kt # Settings ownership management interface
 │   │   ├── UserDao.kt            # User account management interface
 │   │   ├── UserGroupDao.kt       # User group management interface
 │   │   ├── UserRoleAssignmentDao.kt # User-role assignments
@@ -225,6 +232,7 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   │   ├── ModelSettingsService.kt # Model Settings management service interface
 │   │   ├── RoleService.kt        # Role management service interface
 │   │   ├── SessionService.kt     # Session management service interface
+│   │   ├── UserGroupService.kt   # User group management service interface
 │   │   ├── UserService.kt        # User account management service interface
 │   │   ├── error/                # Service-specific error types
 │   │   └── impl/                 # Core service implementations
