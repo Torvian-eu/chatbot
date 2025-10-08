@@ -6,18 +6,22 @@ import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
-import eu.torvian.chatbot.server.data.dao.LLMProviderDao
-import eu.torvian.chatbot.server.data.dao.ModelDao
+import eu.torvian.chatbot.server.data.dao.*
 import eu.torvian.chatbot.server.data.dao.error.LLMProviderError
 import eu.torvian.chatbot.server.service.core.error.provider.*
 import eu.torvian.chatbot.server.service.security.CredentialManager
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
-import io.mockk.*
+import io.mockk.clearMocks
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import kotlin.test.*
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 /**
  * Unit tests for [LLMProviderServiceImpl].
@@ -30,6 +34,7 @@ class LLMProviderServiceImplTest {
 
     // Mocked dependencies
     private lateinit var llmProviderDao: LLMProviderDao
+    private lateinit var providerOwnershipDao: ProviderOwnershipDao
     private lateinit var modelDao: ModelDao
     private lateinit var credentialManager: CredentialManager
     private lateinit var transactionScope: TransactionScope
@@ -69,18 +74,31 @@ class LLMProviderServiceImplTest {
     fun setUp() {
         // Create mocks for all dependencies
         llmProviderDao = mockk()
+        providerOwnershipDao = mockk()
         modelDao = mockk()
         credentialManager = mockk()
         transactionScope = mockk()
+        val providerAccessDao = mockk<ProviderAccessDao>()
+        val userGroupDao = mockk<UserGroupDao>()
 
         // Create the service instance with mocked dependencies
-        llmProviderService = LLMProviderServiceImpl(llmProviderDao, modelDao, credentialManager, transactionScope)
+        llmProviderService = LLMProviderServiceImpl(
+            llmProviderDao,
+            providerOwnershipDao,
+            modelDao,
+            credentialManager,
+            transactionScope
+        )
 
         // Mock the transaction scope to execute blocks directly
         coEvery { transactionScope.transaction(any<suspend () -> Any>()) } coAnswers {
             val block = firstArg<suspend () -> Any>()
             block()
         }
+
+        // Mock the new DAO methods to return empty results by default
+        coEvery { userGroupDao.getGroupsForUser(any()) } returns emptyList()
+        coEvery { providerAccessDao.getResourcesAccessibleByGroups(any(), any()) } returns emptyList()
     }
 
     @AfterEach
@@ -169,12 +187,21 @@ class LLMProviderServiceImplTest {
         val type = LLMProviderType.OPENAI
         val credential = "test-api-key"
         val credentialAlias = "test-key-id"
-        
+
         coEvery { credentialManager.storeCredential(credential) } returns credentialAlias
-        coEvery { llmProviderDao.insertProvider(credentialAlias, name, description, baseUrl, type) } returns testProvider1.right()
+        coEvery {
+            llmProviderDao.insertProvider(
+                credentialAlias,
+                name,
+                description,
+                baseUrl,
+                type
+            )
+        } returns testProvider1.right()
+        coEvery { providerOwnershipDao.setOwner(testProvider1.id, 1L) } returns Unit.right()
 
         // Act
-        val result = llmProviderService.addProvider(name, description, baseUrl, type, credential)
+        val result = llmProviderService.addProvider(1L, name, description, baseUrl, type, credential)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful creation")
@@ -182,6 +209,7 @@ class LLMProviderServiceImplTest {
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { credentialManager.storeCredential(credential) }
         coVerify(exactly = 1) { llmProviderDao.insertProvider(credentialAlias, name, description, baseUrl, type) }
+        coVerify(exactly = 1) { providerOwnershipDao.setOwner(any(), 1L) }
     }
 
     @Test
@@ -191,11 +219,12 @@ class LLMProviderServiceImplTest {
         val description = "Local Ollama Provider"
         val baseUrl = "http://localhost:11434"
         val type = LLMProviderType.OLLAMA
-        
+
         coEvery { llmProviderDao.insertProvider(null, name, description, baseUrl, type) } returns testProvider2.right()
+        coEvery { providerOwnershipDao.setOwner(testProvider2.id, 1L) } returns Unit.right()
 
         // Act
-        val result = llmProviderService.addProvider(name, description, baseUrl, type, null)
+        val result = llmProviderService.addProvider(1L, name, description, baseUrl, type, null)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful creation")
@@ -203,6 +232,7 @@ class LLMProviderServiceImplTest {
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 0) { credentialManager.storeCredential(any()) }
         coVerify(exactly = 1) { llmProviderDao.insertProvider(null, name, description, baseUrl, type) }
+        coVerify(exactly = 1) { providerOwnershipDao.setOwner(testProvider2.id, 1L) }
     }
 
     @Test
@@ -214,7 +244,7 @@ class LLMProviderServiceImplTest {
         val type = LLMProviderType.OPENAI
 
         // Act
-        val result = llmProviderService.addProvider(blankName, description, baseUrl, type, null)
+        val result = llmProviderService.addProvider(1L, blankName, description, baseUrl, type, null)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for blank name")
@@ -236,7 +266,7 @@ class LLMProviderServiceImplTest {
         val type = LLMProviderType.OPENAI
 
         // Act
-        val result = llmProviderService.addProvider(name, description, blankBaseUrl, type, null)
+        val result = llmProviderService.addProvider(1L, name, description, blankBaseUrl, type, null)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for blank baseUrl")
@@ -259,14 +289,17 @@ class LLMProviderServiceImplTest {
         val blankCredential = "   "
 
         // Act
-        val result = llmProviderService.addProvider(name, description, baseUrl, type, blankCredential)
+        val result = llmProviderService.addProvider(1L, name, description, baseUrl, type, blankCredential)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for blank credential")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
         assertTrue(error is AddProviderError.InvalidInput, "Should be InvalidInput error")
-        assertEquals("Provider credential cannot be blank when provided.", (error as AddProviderError.InvalidInput).reason)
+        assertEquals(
+            "Provider credential cannot be blank when provided.",
+            (error as AddProviderError.InvalidInput).reason
+        )
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 0) { credentialManager.storeCredential(any()) }
         coVerify(exactly = 0) { llmProviderDao.insertProvider(any(), any(), any(), any(), any()) }
@@ -521,7 +554,10 @@ class LLMProviderServiceImplTest {
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
         assertTrue(error is UpdateProviderCredentialError.InvalidInput, "Should be InvalidInput error")
-        assertEquals("Provider credential cannot be blank.", (error as UpdateProviderCredentialError.InvalidInput).reason)
+        assertEquals(
+            "Provider credential cannot be blank.",
+            (error as UpdateProviderCredentialError.InvalidInput).reason
+        )
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 0) { llmProviderDao.getProviderById(any()) }
         coVerify(exactly = 0) { credentialManager.storeCredential(any()) }
