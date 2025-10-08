@@ -7,8 +7,11 @@ import eu.torvian.chatbot.server.service.core.*
 import eu.torvian.chatbot.server.service.core.impl.*
 import eu.torvian.chatbot.server.service.security.*
 import eu.torvian.chatbot.server.service.security.authorizer.GroupResourceAuthorizer
+import eu.torvian.chatbot.server.service.security.authorizer.ModelResourceAuthorizer
+import eu.torvian.chatbot.server.service.security.authorizer.ProviderResourceAuthorizer
 import eu.torvian.chatbot.server.service.security.authorizer.ResourceAuthorizer
 import eu.torvian.chatbot.server.service.security.authorizer.SessionResourceAuthorizer
+import eu.torvian.chatbot.server.service.security.authorizer.SettingsResourceAuthorizer
 import eu.torvian.chatbot.server.service.setup.InitialSetupService
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
@@ -44,6 +47,15 @@ fun serviceModule() = module {
     // --- Authorizers (resource-level access) ---
     single<ResourceAuthorizer>(named(ResourceType.GROUP.key)) { GroupResourceAuthorizer(get()) }
     single<ResourceAuthorizer>(named(ResourceType.SESSION.key)) { SessionResourceAuthorizer(get()) }
+    single<ResourceAuthorizer>(named(ResourceType.PROVIDER.key)) {
+        ProviderResourceAuthorizer(get(), get(), get())
+    }
+    single<ResourceAuthorizer>(named(ResourceType.MODEL.key)) {
+        ModelResourceAuthorizer(get(), get(), get())
+    }
+    single<ResourceAuthorizer>(named(ResourceType.SETTINGS.key)) {
+        SettingsResourceAuthorizer(get(), get(), get())
+    }
 
     // --- Authorization Services ---
     single<AuthorizationService> { AuthorizationServiceImpl(getAll<ResourceAuthorizer>().associateBy { it.resourceType }, get(), get(), get()) }
