@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.server.testutils.data
 
+import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.models.core.ChatGroup
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.llm.LLMModel
@@ -409,6 +410,95 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
             return@transaction
         }
 
+    // --- Ownership records ---
+
+    override suspend fun insertGroupOwnership(groupId: Long, userId: Long) =
+        transactionScope.transaction {
+            ensureTableCreated(Table.CHAT_GROUP_OWNERS)
+            ChatGroupOwnersTable.insert {
+                it[ChatGroupOwnersTable.groupId] = groupId
+                it[ChatGroupOwnersTable.userId] = userId
+            }
+            return@transaction
+        }
+
+    override suspend fun insertSessionOwnership(sessionId: Long, userId: Long) =
+        transactionScope.transaction {
+            ensureTableCreated(Table.CHAT_SESSION_OWNERS)
+            ChatSessionOwnersTable.insert {
+                it[ChatSessionOwnersTable.sessionId] = sessionId
+                it[ChatSessionOwnersTable.userId] = userId
+            }
+            return@transaction
+        }
+
+    override suspend fun insertProviderOwnership(providerId: Long, userId: Long) =
+        transactionScope.transaction {
+            ensureTableCreated(Table.LLM_PROVIDER_OWNERS)
+            LLMProviderOwnersTable.insert {
+                it[LLMProviderOwnersTable.providerId] = providerId
+                it[LLMProviderOwnersTable.userId] = userId
+            }
+            return@transaction
+        }
+
+    override suspend fun insertModelOwnership(modelId: Long, userId: Long) =
+        transactionScope.transaction {
+            ensureTableCreated(Table.LLM_MODEL_OWNERS)
+            LLMModelOwnersTable.insert {
+                it[LLMModelOwnersTable.modelId] = modelId
+                it[LLMModelOwnersTable.userId] = userId
+            }
+            return@transaction
+        }
+
+    override suspend fun insertSettingsOwnership(settingsId: Long, userId: Long) =
+        transactionScope.transaction {
+            ensureTableCreated(Table.MODEL_SETTINGS_OWNERS)
+            ModelSettingsOwnersTable.insert {
+                it[ModelSettingsOwnersTable.settingsId] = settingsId
+                it[ModelSettingsOwnersTable.userId] = userId
+            }
+            return@transaction
+        }
+
+    // --- Access records ---
+
+    override suspend fun insertProviderAccess(providerId: Long, groupId: Long, accessMode: AccessMode) =
+        transactionScope.transaction {
+            ensureTableCreated(Table.LLM_PROVIDER_ACCESS)
+            LLMProviderAccessTable.insert {
+                it[LLMProviderAccessTable.providerId] = providerId
+                it[userGroupId] = groupId
+                it[LLMProviderAccessTable.accessMode] = accessMode.key
+            }
+            return@transaction
+        }
+
+    override suspend fun insertModelAccess(modelId: Long, groupId: Long, accessMode: AccessMode) =
+        transactionScope.transaction {
+            ensureTableCreated(Table.LLM_MODEL_ACCESS)
+            LLMModelAccessTable.insert {
+                it[LLMModelAccessTable.modelId] = modelId
+                it[userGroupId] = groupId
+                it[LLMModelAccessTable.accessMode] = accessMode.key
+            }
+            return@transaction
+        }
+
+    override suspend fun insertSettingsAccess(settingsId: Long, groupId: Long, accessMode: AccessMode) =
+        transactionScope.transaction {
+            ensureTableCreated(Table.MODEL_SETTINGS_ACCESS)
+            ModelSettingsAccessTable.insert {
+                it[ModelSettingsAccessTable.settingsId] = settingsId
+                it[userGroupId] = groupId
+                it[ModelSettingsAccessTable.accessMode] = accessMode.key
+            }
+            return@transaction
+        }
+
+    // --- User management records ---
+
     override suspend fun getUser(id: Long): UserEntity? =
         transactionScope.transaction {
             ensureTableCreated(Table.USERS)
@@ -457,22 +547,12 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
                 .singleOrNull()
         }
 
-    override suspend fun insertGroupOwnership(groupId: Long, userId: Long) =
+    override suspend fun insertUserGroupMembership(userId: Long, groupId: Long) =
         transactionScope.transaction {
-            ensureTableCreated(Table.CHAT_GROUP_OWNERS)
-            ChatGroupOwnersTable.insert {
-                it[ChatGroupOwnersTable.groupId] = groupId
-                it[ChatGroupOwnersTable.userId] = userId
-            }
-            return@transaction
-        }
-
-    override suspend fun insertSessionOwnership(sessionId: Long, userId: Long) =
-        transactionScope.transaction {
-            ensureTableCreated(Table.CHAT_SESSION_OWNERS)
-            ChatSessionOwnersTable.insert {
-                it[ChatSessionOwnersTable.sessionId] = sessionId
-                it[ChatSessionOwnersTable.userId] = userId
+            ensureTableCreated(Table.USER_GROUP_MEMBERSHIPS)
+            UserGroupMembershipsTable.insert {
+                it[UserGroupMembershipsTable.userId] = userId
+                it[UserGroupMembershipsTable.groupId] = groupId
             }
             return@transaction
         }

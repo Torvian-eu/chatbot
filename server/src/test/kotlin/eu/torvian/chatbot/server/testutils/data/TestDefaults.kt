@@ -7,12 +7,16 @@ import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
+import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.server.data.entities.ApiSecretEntity
 import eu.torvian.chatbot.server.data.entities.ChatSessionEntity
 import eu.torvian.chatbot.server.data.entities.SessionCurrentLeafEntity
 import eu.torvian.chatbot.server.domain.config.DatabaseConfig
 import eu.torvian.chatbot.common.security.EncryptedSecret
 import eu.torvian.chatbot.common.security.EncryptionConfig
+import eu.torvian.chatbot.server.data.entities.UserEntity
+import eu.torvian.chatbot.server.data.entities.UserGroupEntity
+import eu.torvian.chatbot.server.data.entities.UserSessionEntity
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
 
@@ -205,5 +209,43 @@ object TestDefaults {
         childrenMessageIds = emptyList(),
         modelId = llmModel2.id,
         settingsId = modelSettings2.id
+    )
+
+    // --- User Data ---
+
+    val user1 = UserEntity(
+        id = 1L,
+        username = "testuser1",
+        passwordHash = "hashedpassword1",
+        email = "test1@example.com",
+        status = UserStatus.ACTIVE,
+        createdAt = Instant.fromEpochMilliseconds(DEFAULT_INSTANT_MILLIS),
+        updatedAt = Instant.fromEpochMilliseconds(DEFAULT_INSTANT_MILLIS),
+        lastLogin = null
+    )
+
+    val user2 = UserEntity(
+        id = 2L,
+        username = "testuser2",
+        passwordHash = "hashedpassword2",
+        email = "test2@example.com",
+        status = UserStatus.ACTIVE,
+        createdAt = Instant.fromEpochMilliseconds(DEFAULT_INSTANT_MILLIS),
+        updatedAt = Instant.fromEpochMilliseconds(DEFAULT_INSTANT_MILLIS),
+        lastLogin = null
+    )
+
+    val userSession1 = UserSessionEntity(
+        id = 1L,
+        userId = user1.id,
+        expiresAt = Instant.fromEpochMilliseconds(System.currentTimeMillis() + (24 * 60 * 60 * 1000)), // 24 hours from now
+        createdAt = Instant.fromEpochMilliseconds(DEFAULT_INSTANT_MILLIS),
+        lastAccessed = Instant.fromEpochMilliseconds(DEFAULT_INSTANT_MILLIS)
+    )
+
+    val userGroup1 = UserGroupEntity(
+        id = 1L,
+        name = "Test User Group 1",
+        description = "Test User Group 1"
     )
 }
