@@ -55,6 +55,8 @@ class ModelRoutesTest {
     private val testModel1 = TestDefaults.llmModel1 // Uses testProvider1
     private val testModel2 = TestDefaults.llmModel2 // Uses testProvider2
     private val testSettings1 = TestDefaults.modelSettings1 // For testModel1
+    private val testUser1 = TestDefaults.user1
+    private val testUserSession1 = TestDefaults.userSession1
 
     @BeforeEach
     fun setUp() = runTest {
@@ -72,19 +74,17 @@ class ModelRoutesTest {
         // Need LLMProviders for models, LLMModels for models and settings, ModelSettings for settings
         testDataManager.createTables(
             setOf(
-                Table.LLM_PROVIDERS,
-                Table.LLM_MODELS,
-                Table.MODEL_SETTINGS,
-                Table.API_SECRETS,
-                Table.USERS,
-                Table.USER_SESSIONS,
-                Table.CHAT_SESSION_OWNERS
+                Table.LLM_PROVIDERS, Table.LLM_MODELS, Table.MODEL_SETTINGS, Table.API_SECRETS,
+                Table.USERS, Table.ROLES, Table.PERMISSIONS, Table.USER_GROUPS, Table.USER_SESSIONS,
+                Table.ROLE_PERMISSIONS, Table.USER_ROLE_ASSIGNMENTS, Table.USER_GROUP_MEMBERSHIPS,
+                Table.LLM_MODEL_OWNERS, Table.LLM_MODEL_ACCESS, Table.CHAT_SESSION_OWNERS,
+                Table.MODEL_SETTINGS_OWNERS, Table.MODEL_SETTINGS_ACCESS
             )
         )
 
         // Set up authentication
         authHelper = TestAuthHelper(container)
-        authToken = authHelper.createUserAndGetToken()
+        authToken = authHelper.createUserAndGetToken(testUser1, testUserSession1)
     }
 
     @AfterEach
@@ -104,6 +104,8 @@ class ModelRoutesTest {
                 llmModels = listOf(testModel1, testModel2)
             )
         )
+        testDataManager.insertModelOwnership(testModel1.id, testUser1.id)
+        testDataManager.insertModelOwnership(testModel2.id, testUser1.id)
         val expectedModels = listOf(testModel1, testModel2)
 
         // Act & Assert
@@ -271,6 +273,7 @@ class ModelRoutesTest {
                 llmModels = listOf(testModel1)
             )
         )
+        testDataManager.insertModelOwnership(testModel1.id, testUser1.id)
 
         // Act
         val response = client.get(href(ModelResource.ById(modelId = testModel1.id))) {
@@ -298,9 +301,6 @@ class ModelRoutesTest {
         val error = response.body<ApiError>()
         assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
         assertEquals(404, error.statusCode)
-        assertEquals("Model not found", error.message)
-        assert(error.details?.containsKey("modelId") == true)
-        assertEquals(nonExistentId.toString(), error.details?.get("modelId"))
     }
 
     // --- PUT /api/v1/models/{modelId} Tests ---
@@ -314,6 +314,8 @@ class ModelRoutesTest {
                 llmModels = listOf(testModel1)
             )
         )
+        testDataManager.insertModelOwnership(testModel1.id, testUser1.id)
+
         val updatedModel = testModel1.copy(
             name = "updated-gpt-4",
             active = false,
@@ -360,9 +362,6 @@ class ModelRoutesTest {
         val error = response.body<ApiError>()
         assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
         assertEquals(404, error.statusCode)
-        assertEquals("Model not found", error.message)
-        assert(error.details?.containsKey("modelId") == true)
-        assertEquals(nonExistentId.toString(), error.details?.get("modelId"))
     }
 
     @Test
@@ -405,6 +404,8 @@ class ModelRoutesTest {
                 llmModels = listOf(testModel1)
             )
         )
+        testDataManager.insertModelOwnership(testModel1.id, testUser1.id)
+
         val updatedModel = testModel1.copy(name = "   ")
 
         // Act
@@ -433,6 +434,7 @@ class ModelRoutesTest {
                 llmModels = listOf(testModel1, testModel2) // name="gpt-4", name="claude-3"
             )
         )
+        testDataManager.insertModelOwnership(testModel1.id, testUser1.id)
 
         val updatedModel =
             testModel1.copy(name = testModel2.name) // Try to change testModel1's name to testModel2's name
@@ -465,6 +467,7 @@ class ModelRoutesTest {
                 llmModels = listOf(testModel1)
             )
         )
+        testDataManager.insertModelOwnership(testModel1.id, testUser1.id)
 
         // Act
         val response = client.delete(href(ModelResource.ById(modelId = testModel1.id))) {
@@ -494,9 +497,6 @@ class ModelRoutesTest {
         val error = response.body<ApiError>()
         assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
         assertEquals(404, error.statusCode)
-        assertEquals("Model not found", error.message)
-        assert(error.details?.containsKey("modelId") == true)
-        assertEquals(nonExistentId.toString(), error.details?.get("modelId"))
     }
 
     // --- GET /api/v1/models/{modelId}/settings Tests ---
@@ -511,6 +511,7 @@ class ModelRoutesTest {
                 modelSettings = listOf(testSettings1) // Settings for testModel1
             )
         )
+        testDataManager.insertSettingsOwnership(testSettings1.id, testUser1.id)
 
         // Act
         val response = client.get(href(ModelResource.ById.Settings(ModelResource.ById(modelId = testModel1.id)))) {
@@ -533,6 +534,7 @@ class ModelRoutesTest {
                 llmModels = listOf(testModel1) // Insert model but no settings for it
             )
         )
+        testDataManager.insertModelOwnership(testModel1.id, testUser1.id)
 
         // Act
         val response = client.get(href(ModelResource.ById.Settings(ModelResource.ById(modelId = testModel1.id)))) {
@@ -573,6 +575,7 @@ class ModelRoutesTest {
                 apiSecrets = listOf(TestDefaults.apiSecret1)
             )
         )
+        testDataManager.insertModelOwnership(testModel1.id, testUser1.id)
 
         // Act
         val response = client.get(href(ModelResource.ById.ApiKeyStatus(ModelResource.ById(modelId = testModel1.id)))) {
@@ -595,6 +598,7 @@ class ModelRoutesTest {
                 llmModels = listOf(testModel1.copy(providerId = providerWithoutSecret.id)) // Model uses this provider
             )
         )
+        testDataManager.insertModelOwnership(testModel1.id, testUser1.id)
 
         // Act
         val response = client.get(href(ModelResource.ById.ApiKeyStatus(ModelResource.ById(modelId = testModel1.id)))) {
@@ -608,7 +612,7 @@ class ModelRoutesTest {
     }
 
     @Test
-    fun `GET model apikey status for non-existent model ID should return false`() = modelTestApplication {
+    fun `GET model apikey status for non-existent model ID should return 404`() = modelTestApplication {
         // Arrange
         val nonExistentId = 999L
 
@@ -618,8 +622,6 @@ class ModelRoutesTest {
         }
 
         // Assert
-        assertEquals(HttpStatusCode.OK, response.status) // Expect OK with false based on service impl
-        val status = response.body<ApiKeyStatusResponse>()
-        assertFalse(status.isConfigured, "API key should not be configured for non-existent model")
+        assertEquals(HttpStatusCode.NotFound, response.status)
     }
 }

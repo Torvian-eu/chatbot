@@ -76,21 +76,21 @@ class ApiRoutesKtor(
      * Configures routes related to Providers (/api/v1/providers).
      */
     fun configureProviderRoutes(route: Route) {
-        route.configureProviderRoutes(llmProviderService, llmModelService)
+        route.configureProviderRoutes(llmProviderService, llmModelService, authorizationService)
     }
 
     /**
      * Configures routes related to Models (/api/v1/models).
      */
     fun configureModelRoutes(route: Route) {
-        route.configureModelRoutes(llmModelService, modelSettingsService)
+        route.configureModelRoutes(llmModelService, modelSettingsService, authorizationService)
     }
 
     /**
      * Configures routes related to Settings (/api/v1/settings).
      */
     fun configureSettingsRoutes(route: Route) {
-        route.configureSettingsRoutes(modelSettingsService)
+        route.configureSettingsRoutes(modelSettingsService, authorizationService)
     }
 
     /**

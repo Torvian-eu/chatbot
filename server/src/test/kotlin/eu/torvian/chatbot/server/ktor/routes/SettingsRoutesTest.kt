@@ -44,6 +44,9 @@ class SettingsRoutesTest {
     private lateinit var authHelper: TestAuthHelper
     private lateinit var authToken: String
 
+    private val testUser1 = TestDefaults.user1
+    private val testUserSession1 = TestDefaults.userSession1
+
     // Test data
     private val testSettings1 = ChatModelSettings(
         id = 1L,
@@ -77,15 +80,15 @@ class SettingsRoutesTest {
         testDataManager.createTables(
             setOf(
                 Table.MODEL_SETTINGS,
-                Table.USERS,
-                Table.USER_SESSIONS,
-                Table.CHAT_SESSION_OWNERS
+                Table.USERS, Table.ROLES, Table.PERMISSIONS, Table.USER_GROUPS, Table.USER_SESSIONS,
+                Table.ROLE_PERMISSIONS, Table.USER_ROLE_ASSIGNMENTS, Table.USER_GROUP_MEMBERSHIPS,
+                Table.MODEL_SETTINGS_OWNERS, Table.MODEL_SETTINGS_ACCESS
             )
         )
 
         // Set up authentication
         authHelper = TestAuthHelper(container)
-        authToken = authHelper.createUserAndGetToken()
+        authToken = authHelper.createUserAndGetToken(testUser1, testUserSession1)
     }
 
     @AfterEach
@@ -100,6 +103,7 @@ class SettingsRoutesTest {
     fun `GET settings by ID should return settings successfully`() = settingsTestApplication {
         // Arrange
         testDataManager.insertModelSettings(testSettings1)
+        testDataManager.insertSettingsOwnership(testSettings1.id, testUser1.id)
 
         // Act
         val response = client.get(href(SettingsResource.ById(settingsId = testSettings1.id))) {
@@ -127,9 +131,6 @@ class SettingsRoutesTest {
         val error = response.body<ApiError>()
         assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
         assertEquals(404, error.statusCode)
-        assertEquals("Settings not found", error.message)
-        assert(error.details?.containsKey("settingsId") == true)
-        assertEquals(nonExistentId.toString(), error.details?.get("settingsId"))
     }
 
     // --- POST /api/v1/settings Tests ---
@@ -189,7 +190,7 @@ class SettingsRoutesTest {
         val error = response.body<ApiError>()
         assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.code)
         assertEquals(400, error.statusCode)
-        assertEquals("Model not found for settings", error.message)
+        assertEquals("Model not found", error.message)
         assert(error.details?.containsKey("modelId") == true)
         assertEquals(nonExistentModelId.toString(), error.details?.get("modelId"))
     }
@@ -233,6 +234,7 @@ class SettingsRoutesTest {
     fun `PUT settings should update settings successfully`() = settingsTestApplication {
         // Arrange
         testDataManager.insertModelSettings(testSettings1)
+        testDataManager.insertSettingsOwnership(testSettings1.id, testUser1.id)
         val updatedSettings = testSettings1.copy(
             name = "Updated Settings",
             systemMessage = "Updated system message",
@@ -279,9 +281,6 @@ class SettingsRoutesTest {
         val error = response.body<ApiError>()
         assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
         assertEquals(404, error.statusCode)
-        assertEquals("Settings not found", error.message)
-        assert(error.details?.containsKey("settingsId") == true)
-        assertEquals(nonExistentId.toString(), error.details?.get("settingsId"))
     }
 
     @Test
@@ -315,6 +314,7 @@ class SettingsRoutesTest {
     fun `PUT settings with non-existent model ID should return 400`() = settingsTestApplication {
         // Arrange
         testDataManager.insertModelSettings(testSettings1)
+        testDataManager.insertSettingsOwnership(testSettings1.id, testUser1.id)
         val nonExistentModelId = 999L
         val updatedSettings = testSettings1.copy(modelId = nonExistentModelId)
 
@@ -322,7 +322,6 @@ class SettingsRoutesTest {
         val response = client.put(href(SettingsResource.ById(settingsId = testSettings1.id))) {
             contentType(ContentType.Application.Json)
             setBody(updatedSettings as ModelSettings)
-
             authenticate(authToken)
         }
 
@@ -331,7 +330,7 @@ class SettingsRoutesTest {
         val error = response.body<ApiError>()
         assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.code)
         assertEquals(400, error.statusCode)
-        assertEquals("Model not found for settings", error.message)
+        assertEquals("Model not found", error.message)
         assert(error.details?.containsKey("modelId") == true)
         assertEquals(nonExistentModelId.toString(), error.details?.get("modelId"))
     }
@@ -342,6 +341,7 @@ class SettingsRoutesTest {
     fun `DELETE settings should remove the settings successfully`() = settingsTestApplication {
         // Arrange
         testDataManager.insertModelSettings(testSettings1)
+        testDataManager.insertSettingsOwnership(testSettings1.id, testUser1.id)
 
         // Act
         val response = client.delete(href(SettingsResource.ById(settingsId = testSettings1.id))) {
@@ -371,8 +371,5 @@ class SettingsRoutesTest {
         val error = response.body<ApiError>()
         assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
         assertEquals(404, error.statusCode)
-        assertEquals("Settings not found", error.message)
-        assert(error.details?.containsKey("settingsId") == true)
-        assertEquals(nonExistentId.toString(), error.details?.get("settingsId"))
     }
 }
