@@ -131,7 +131,6 @@ class InitialSetupServiceTest {
         assertTrue(permissions.isNotEmpty(), "Expected permissions to be created")
         val permissionActions = permissions.map { it[PermissionsTable.action] }
         assertTrue(permissionActions.contains("manage"), "Expected 'manage' permission to be created")
-        assertTrue(permissionActions.contains("create"), "Expected 'create' permission to be created")
     }
 
     @Test

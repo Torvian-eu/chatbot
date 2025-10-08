@@ -102,17 +102,20 @@ class InitialSetupService(
         // Create permissions using predefined PermissionSpec instances
         val manageUsersPermId = createPermission(CommonPermissions.MANAGE_USERS)
         val manageRolesPermId = createPermission(CommonPermissions.MANAGE_ROLES)
-        val createPublicProviderPermId = createPermission(CommonPermissions.CREATE_PUBLIC_PROVIDER)
-        val createPublicModelPermId = createPermission(CommonPermissions.CREATE_PUBLIC_MODEL)
-        val createPublicSettingsPermId = createPermission(CommonPermissions.CREATE_PUBLIC_SETTINGS)
+        val managePermissionsPermId = createPermission(CommonPermissions.MANAGE_PERMISSIONS)
+        val manageUserGroupsPermId = createPermission(CommonPermissions.MANAGE_USER_GROUPS)
+        val manageLlmProvidersPermId = createPermission(CommonPermissions.MANAGE_LLM_PROVIDERS)
+        val manageLlmModelsPermId = createPermission(CommonPermissions.MANAGE_LLM_MODELS)
+        val manageLlmModelSettingsPermId = createPermission(CommonPermissions.MANAGE_LLM_MODEL_SETTINGS)
 
         // Assign all permissions to admin role
         assignPermissionToRole(adminRoleId, manageUsersPermId)
         assignPermissionToRole(adminRoleId, manageRolesPermId)
-        assignPermissionToRole(adminRoleId, createPublicProviderPermId)
-        assignPermissionToRole(adminRoleId, createPublicModelPermId)
-        assignPermissionToRole(adminRoleId, createPublicSettingsPermId)
-
+        assignPermissionToRole(adminRoleId, managePermissionsPermId)
+        assignPermissionToRole(adminRoleId, manageUserGroupsPermId)
+        assignPermissionToRole(adminRoleId, manageLlmProvidersPermId)
+        assignPermissionToRole(adminRoleId, manageLlmModelsPermId)
+        assignPermissionToRole(adminRoleId, manageLlmModelSettingsPermId)
         // Standard users get no special permissions by default
         // standardUserRoleId parameter kept for future extensibility
     }
