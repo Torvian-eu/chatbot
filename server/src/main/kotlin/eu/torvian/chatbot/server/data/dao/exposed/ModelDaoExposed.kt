@@ -20,6 +20,10 @@ import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.exceptions.ExposedSQLException
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import eu.torvian.chatbot.server.data.tables.LLMModelAccessTable
+import eu.torvian.chatbot.server.data.tables.LLMModelOwnersTable
+import eu.torvian.chatbot.server.data.tables.UserGroupMembershipsTable
+import eu.torvian.chatbot.common.api.AccessMode
 
 /**
  * Exposed implementation of the [ModelDao].
@@ -45,6 +49,51 @@ class ModelDaoExposed(
     override suspend fun getModelsByProviderId(providerId: Long): List<LLMModel> =
         transactionScope.transaction {
             LLMModelTable.selectAll().where { LLMModelTable.providerId eq providerId }
+                .map { it.toLLMModel() }
+        }
+
+    override suspend fun getAllAccessibleModels(userId: Long, accessMode: AccessMode): List<LLMModel> =
+        transactionScope.transaction {
+            // Models accessible via group memberships
+            val groupAccessSubquery = LLMModelTable
+                .innerJoin(LLMModelAccessTable, { id }, { modelId })
+                .innerJoin(UserGroupMembershipsTable, { LLMModelAccessTable.userGroupId }, { groupId })
+                .select(LLMModelTable.columns)
+                .where {
+                    (UserGroupMembershipsTable.userId eq userId) and
+                            (LLMModelAccessTable.accessMode eq accessMode.key)
+                }
+
+            // Models directly owned by the user
+            val directOwnershipSubquery = LLMModelTable
+                .innerJoin(LLMModelOwnersTable, { id }, { modelId })
+                .select(LLMModelTable.columns)
+                .where { LLMModelOwnersTable.userId eq userId }
+
+            groupAccessSubquery.union(directOwnershipSubquery)
+                .map { it.toLLMModel() }
+        }
+
+    override suspend fun getAccessibleModelsByProviderId(userId: Long, providerId: Long, accessMode: AccessMode): List<LLMModel> =
+        transactionScope.transaction {
+            // Models accessible via group memberships filtered by provider
+            val groupAccessSubquery = LLMModelTable
+                .innerJoin(LLMModelAccessTable, { id }, { modelId })
+                .innerJoin(UserGroupMembershipsTable, { LLMModelAccessTable.userGroupId }, { groupId })
+                .select(LLMModelTable.columns)
+                .where {
+                    (UserGroupMembershipsTable.userId eq userId) and
+                            (LLMModelAccessTable.accessMode eq accessMode.key) and
+                            (LLMModelTable.providerId eq providerId)
+                }
+
+            // Models directly owned by the user filtered by provider
+            val directOwnershipSubquery = LLMModelTable
+                .innerJoin(LLMModelOwnersTable, { id }, { modelId })
+                .select(LLMModelTable.columns)
+                .where { (LLMModelOwnersTable.userId eq userId) and (LLMModelTable.providerId eq providerId) }
+
+            groupAccessSubquery.union(directOwnershipSubquery)
                 .map { it.toLLMModel() }
         }
 

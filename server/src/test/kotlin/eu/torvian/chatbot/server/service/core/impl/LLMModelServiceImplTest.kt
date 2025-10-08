@@ -8,6 +8,10 @@ import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import eu.torvian.chatbot.server.data.dao.LLMProviderDao
 import eu.torvian.chatbot.server.data.dao.ModelDao
+import eu.torvian.chatbot.server.data.dao.ModelOwnershipDao
+import eu.torvian.chatbot.server.data.dao.ModelAccessDao
+import eu.torvian.chatbot.server.data.dao.UserGroupDao
+import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
 import eu.torvian.chatbot.server.data.dao.error.InsertModelError
 import eu.torvian.chatbot.server.data.dao.error.LLMProviderError
 import eu.torvian.chatbot.server.data.dao.error.ModelError
@@ -34,6 +38,9 @@ class LLMModelServiceImplTest {
     private lateinit var modelDao: ModelDao
     private lateinit var llmProviderDao: LLMProviderDao
     private lateinit var transactionScope: TransactionScope
+    private lateinit var modelOwnershipDao: ModelOwnershipDao
+    private lateinit var modelAccessDao: ModelAccessDao
+    private lateinit var userGroupDao: UserGroupDao
 
     // Class under test
     private lateinit var llmModelService: LLMModelServiceImpl
@@ -72,21 +79,34 @@ class LLMModelServiceImplTest {
         modelDao = mockk()
         llmProviderDao = mockk()
         transactionScope = mockk()
+        modelOwnershipDao = mockk()
+        modelAccessDao = mockk()
+        userGroupDao = mockk()
 
         // Create the service instance with mocked dependencies
-        llmModelService = LLMModelServiceImpl(modelDao, llmProviderDao, transactionScope)
+        llmModelService = LLMModelServiceImpl(
+            modelDao,
+            llmProviderDao,
+            transactionScope,
+            modelOwnershipDao
+        )
 
         // Mock the transaction scope to execute blocks directly
         coEvery { transactionScope.transaction(any<suspend () -> Any>()) } coAnswers {
             val block = firstArg<suspend () -> Any>()
             block()
         }
+
+        // Mock the new DAO methods to return empty results by default
+        coEvery { userGroupDao.getGroupsForUser(any()) } returns emptyList()
+        coEvery { modelAccessDao.getResourcesAccessibleByGroups(any(), any()) } returns emptyList()
+        coEvery { modelOwnershipDao.getOwner(any()) } returns GetOwnerError.ResourceNotFound("Not found").left()
     }
 
     @AfterEach
     fun tearDown() {
         // Clear all mocks after each test to ensure isolation
-        clearMocks(modelDao, llmProviderDao, transactionScope)
+        clearMocks(modelDao, llmProviderDao, transactionScope, modelOwnershipDao, modelAccessDao, userGroupDao)
     }
 
     // --- getAllModels Tests ---
@@ -196,32 +216,36 @@ class LLMModelServiceImplTest {
     @Test
     fun `addModel should create model successfully with valid parameters`() = runTest {
         // Arrange
+        val ownerId = 1L
         val name = "gpt-3.5-turbo"
         val providerId = 1L
         val type = LLMModelType.CHAT
         val active = true
         val displayName = "GPT-3.5 Turbo"
         coEvery { modelDao.insertModel(name, providerId, type, active, displayName, null) } returns testModel1.right()
+        coEvery { modelOwnershipDao.setOwner(testModel1.id, ownerId) } returns Unit.right()
 
         // Act
-        val result = llmModelService.addModel(name, providerId, type, active, displayName, null)
+        val result = llmModelService.addModel(ownerId, name, providerId, type, active, displayName, null)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful creation")
         assertEquals(testModel1, result.getOrNull(), "Should return the created model")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { modelDao.insertModel(name, providerId, type, active, displayName, null) }
+        coVerify(exactly = 1) { modelOwnershipDao.setOwner(testModel1.id, ownerId) }
     }
 
     @Test
     fun `addModel should return InvalidInput error for blank name`() = runTest {
         // Arrange
+        val ownerId = 1L
         val blankName = "   "
         val providerId = 1L
         val type = LLMModelType.CHAT
 
         // Act
-        val result = llmModelService.addModel(blankName, providerId, type, true, null, null)
+        val result = llmModelService.addModel(ownerId, blankName, providerId, type, true, null, null)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for blank name")
@@ -231,11 +255,13 @@ class LLMModelServiceImplTest {
         assertEquals("Model name cannot be blank.", (error as AddModelError.InvalidInput).reason)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 0) { modelDao.insertModel(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { modelOwnershipDao.setOwner(any(), any()) }
     }
 
     @Test
     fun `addModel should return ProviderNotFound error when provider does not exist`() = runTest {
         // Arrange
+        val ownerId = 1L
         val name = "test-model"
         val providerId = 999L
         val type = LLMModelType.CHAT
@@ -243,7 +269,7 @@ class LLMModelServiceImplTest {
         coEvery { modelDao.insertModel(name, providerId, type, true, null, null) } returns daoError.left()
 
         // Act
-        val result = llmModelService.addModel(name, providerId, type, true, null, null)
+        val result = llmModelService.addModel(ownerId, name, providerId, type, true, null, null)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for non-existent provider")
@@ -253,11 +279,13 @@ class LLMModelServiceImplTest {
         assertEquals(providerId, (error as AddModelError.ProviderNotFound).providerId)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { modelDao.insertModel(name, providerId, type, true, null, null) }
+        coVerify(exactly = 0) { modelOwnershipDao.setOwner(any(), any()) }
     }
 
     @Test
     fun `addModel should return ModelNameAlreadyExists error when name is duplicate`() = runTest {
         // Arrange
+        val ownerId = 1L
         val name = "existing-model"
         val providerId = 1L
         val type = LLMModelType.CHAT
@@ -265,7 +293,7 @@ class LLMModelServiceImplTest {
         coEvery { modelDao.insertModel(name, providerId, type, true, null, null) } returns daoError.left()
 
         // Act
-        val result = llmModelService.addModel(name, providerId, type, true, null, null)
+        val result = llmModelService.addModel(ownerId, name, providerId, type, true, null, null)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for duplicate name")
@@ -275,6 +303,7 @@ class LLMModelServiceImplTest {
         assertEquals(name, (error as AddModelError.ModelNameAlreadyExists).name)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { modelDao.insertModel(name, providerId, type, true, null, null) }
+        coVerify(exactly = 0) { modelOwnershipDao.setOwner(any(), any()) }
     }
 
     // --- updateModel Tests ---

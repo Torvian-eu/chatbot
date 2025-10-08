@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.data.dao
 
 import arrow.core.Either
+import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import eu.torvian.chatbot.server.data.dao.error.LLMProviderError
@@ -18,6 +19,16 @@ interface LLMProviderDao {
      * @return List of all LLM providers in the system.
      */
     suspend fun getAllProviders(): List<LLMProvider>
+
+    /**
+     * Retrieves all LLM provider configurations accessible by the specified user,
+     * either owned by the user or shared with a group the user is a member of.
+     *
+     * @param userId The ID of the user requesting the providers.
+     * @param accessMode The access mode to query (e.g., "read", "write").
+     * @return List of all LLM providers accessible by the user.
+     */
+    suspend fun getAllAccessibleProviders(userId: Long, accessMode: AccessMode): List<LLMProvider>
 
     /**
      * Retrieves a single LLM provider configuration by its unique identifier.

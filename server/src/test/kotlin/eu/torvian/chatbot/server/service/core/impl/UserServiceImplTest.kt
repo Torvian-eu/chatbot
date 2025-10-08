@@ -2,7 +2,9 @@ package eu.torvian.chatbot.server.service.core.impl
 
 import arrow.core.left
 import arrow.core.right
+import eu.torvian.chatbot.common.api.CommonUserGroups
 import eu.torvian.chatbot.common.models.user.User
+import eu.torvian.chatbot.common.models.user.UserGroup
 import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.common.security.error.PasswordValidationError
 import eu.torvian.chatbot.server.data.dao.RoleDao
@@ -10,6 +12,7 @@ import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.UserRoleAssignmentDao
 import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.entities.UserEntity
+import eu.torvian.chatbot.server.service.core.UserGroupService
 import eu.torvian.chatbot.server.service.core.error.auth.RegisterUserError
 import eu.torvian.chatbot.server.service.core.error.auth.UserNotFoundError
 import eu.torvian.chatbot.server.service.security.PasswordService
@@ -28,9 +31,10 @@ class UserServiceImplTest {
     private val passwordService = mockk<PasswordService>()
     private val roleDao = mockk<RoleDao>()
     private val userRoleAssignmentDao = mockk<UserRoleAssignmentDao>()
+    private val userGroupService = mockk<UserGroupService>()
     private val transactionScope = mockk<TransactionScope>()
 
-    private val userService = UserServiceImpl(userDao, passwordService, roleDao, userRoleAssignmentDao, transactionScope)
+    private val userService = UserServiceImpl(userDao, passwordService, roleDao, userRoleAssignmentDao, userGroupService, transactionScope)
 
     private val testUserEntity = UserEntity(
         id = 1L,
@@ -54,7 +58,7 @@ class UserServiceImplTest {
 
     @BeforeEach
     fun setUp() {
-        clearMocks(userDao, passwordService, transactionScope, roleDao, userRoleAssignmentDao)
+        clearMocks(userDao, passwordService, transactionScope, roleDao, userRoleAssignmentDao, userGroupService)
 
         coEvery { transactionScope.transaction<Any>(any()) } coAnswers {
             val block = firstArg<suspend () -> Any>()
@@ -69,6 +73,11 @@ class UserServiceImplTest {
         val password = "ValidPass123!"
         val email = "new@example.com"
         val hashedPassword = "hashedValidPass123!"
+        val allUsersGroup = UserGroup(
+            id = 1L,
+            name = CommonUserGroups.ALL_USERS,
+            description = "All users group"
+        )
 
         every { passwordService.validatePasswordStrength(password) } returns Unit.right()
         every { passwordService.hashPassword(password) } returns hashedPassword
@@ -79,6 +88,9 @@ class UserServiceImplTest {
             email = email,
             status = UserStatus.DISABLED
         ).right()
+
+        coEvery { userGroupService.getAllUsersGroup() } returns allUsersGroup.right()
+        coEvery { userGroupService.addUserToGroup(any(), any()) } returns Unit.right()
 
         // When
         val result = userService.registerUser(username, password, email)
@@ -94,6 +106,8 @@ class UserServiceImplTest {
         verify { passwordService.validatePasswordStrength(password) }
         verify { passwordService.hashPassword(password) }
         coVerify { userDao.insertUser(username, hashedPassword, email, any()) }
+        coVerify { userGroupService.getAllUsersGroup() }
+        coVerify { userGroupService.addUserToGroup(any(), allUsersGroup.id) }
     }
 
     @Test
@@ -293,5 +307,41 @@ class UserServiceImplTest {
         assertEquals(2, result.size)
         assertEquals(testUser.username, result[0].username)
         assertEquals("user2", result[1].username)
+    }
+
+    @Test
+    fun `registerUser should add new user to All Users group`() = runTest {
+        // Given
+        val username = "newuser"
+        val password = "ValidPass123!"
+        val email = "new@example.com"
+        val hashedPassword = "hashedValidPass123!"
+        val allUsersGroup = UserGroup(
+            id = 1L,
+            name = CommonUserGroups.ALL_USERS,
+            description = "All users group"
+        )
+
+        every { passwordService.validatePasswordStrength(password) } returns Unit.right()
+        every { passwordService.hashPassword(password) } returns hashedPassword
+
+        coEvery { userDao.insertUser(username, hashedPassword, email, UserStatus.DISABLED) } returns testUserEntity.copy(
+            id = 2L,
+            username = username,
+            passwordHash = hashedPassword,
+            email = email,
+            status = UserStatus.DISABLED
+        ).right()
+
+        coEvery { userGroupService.getAllUsersGroup() } returns allUsersGroup.right()
+        coEvery { userGroupService.addUserToGroup(2L, 1L) } returns Unit.right()
+
+        // When
+        val result = userService.registerUser(username, password, email)
+
+        // Then
+        assertTrue(result.isRight())
+        coVerify { userGroupService.getAllUsersGroup() }
+        coVerify { userGroupService.addUserToGroup(2L, 1L) }
     }
 }

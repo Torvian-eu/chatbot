@@ -17,6 +17,12 @@ import eu.torvian.chatbot.server.data.dao.exposed.RoleDaoExposed
 import eu.torvian.chatbot.server.data.dao.exposed.PermissionDaoExposed
 import eu.torvian.chatbot.server.data.dao.exposed.UserRoleAssignmentDaoExposed
 import eu.torvian.chatbot.server.data.dao.exposed.RolePermissionDaoExposed
+import eu.torvian.chatbot.server.data.dao.exposed.ProviderOwnershipDaoExposed
+import eu.torvian.chatbot.server.data.dao.exposed.ProviderAccessDaoExposed
+import eu.torvian.chatbot.server.data.dao.exposed.ModelOwnershipDaoExposed
+import eu.torvian.chatbot.server.data.dao.exposed.ModelAccessDaoExposed
+import eu.torvian.chatbot.server.data.dao.exposed.SettingsOwnershipDaoExposed
+import eu.torvian.chatbot.server.data.dao.exposed.SettingsAccessDaoExposed
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
 import org.koin.dsl.module
 
@@ -45,6 +51,14 @@ fun daoModule() = module {
     // Ownership DAOs
     single<SessionOwnershipDao> { SessionOwnershipDaoExposed(get()) }
     single<GroupOwnershipDao> { GroupOwnershipDaoExposed(get()) }
+    single<ProviderOwnershipDao> { ProviderOwnershipDaoExposed(get()) }
+    single<ModelOwnershipDao> { ModelOwnershipDaoExposed(get()) }
+    single<SettingsOwnershipDao> { SettingsOwnershipDaoExposed(get()) }
+
+    // Access DAOs
+    single<ProviderAccessDao> { ProviderAccessDaoExposed(get()) }
+    single<ModelAccessDao> { ModelAccessDaoExposed(get()) }
+    single<SettingsAccessDao> { SettingsAccessDaoExposed(get()) }
 
     // Role and permission DAOs
     single<RoleDao> { RoleDaoExposed(get()) }

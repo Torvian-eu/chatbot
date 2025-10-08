@@ -1,15 +1,22 @@
 package eu.torvian.chatbot.server.service.core.impl
 
 import arrow.core.Either
-import arrow.core.raise.*
+import arrow.core.raise.either
 import arrow.core.raise.ensure
+import arrow.core.raise.withError
+import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.server.data.dao.SettingsDao
+import eu.torvian.chatbot.server.data.dao.SettingsOwnershipDao
+import eu.torvian.chatbot.server.data.dao.error.SetOwnerError
 import eu.torvian.chatbot.server.data.dao.error.SettingsError
-import eu.torvian.chatbot.server.service.core.error.model.GetModelError
 import eu.torvian.chatbot.server.service.core.LLMModelService
 import eu.torvian.chatbot.server.service.core.ModelSettingsService
-import eu.torvian.chatbot.server.service.core.error.settings.*
+import eu.torvian.chatbot.server.service.core.error.model.GetModelError
+import eu.torvian.chatbot.server.service.core.error.settings.AddSettingsError
+import eu.torvian.chatbot.server.service.core.error.settings.DeleteSettingsError
+import eu.torvian.chatbot.server.service.core.error.settings.GetSettingsByIdError
+import eu.torvian.chatbot.server.service.core.error.settings.UpdateSettingsError
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
 
 /**
@@ -19,6 +26,7 @@ class ModelSettingsServiceImpl(
     private val settingsDao: SettingsDao,
     private val llmModelService: LLMModelService,
     private val transactionScope: TransactionScope,
+    private val settingsOwnershipDao: SettingsOwnershipDao
 ) : ModelSettingsService {
 
     override suspend fun getSettingsById(id: Long): Either<GetSettingsByIdError, ModelSettings> =
@@ -44,7 +52,23 @@ class ModelSettingsServiceImpl(
         }
     }
 
-    override suspend fun addSettings(settings: ModelSettings): Either<AddSettingsError, ModelSettings> =
+    override suspend fun getAllAccessibleSettings(userId: Long, accessMode: AccessMode): List<ModelSettings> {
+        return transactionScope.transaction {
+            settingsDao.getAllAccessibleSettings(userId, accessMode)
+        }
+    }
+
+    override suspend fun getAccessibleSettingsByModelId(
+        userId: Long,
+        modelId: Long,
+        accessMode: AccessMode
+    ): List<ModelSettings> {
+        return transactionScope.transaction {
+            settingsDao.getAccessibleSettingsByModelId(userId, modelId, accessMode)
+        }
+    }
+
+    override suspend fun addSettings(ownerId: Long, settings: ModelSettings): Either<AddSettingsError, ModelSettings> =
         transactionScope.transaction {
             either {
                 // Get the associated LLMModel to verify type consistency
@@ -62,11 +86,23 @@ class ModelSettingsServiceImpl(
                 }
 
                 // Insert the settings
-                withError({ daoError: SettingsError.ModelNotFound ->
+                val createdModelSettings = withError({ daoError: SettingsError.ModelNotFound ->
                     AddSettingsError.ModelNotFound(daoError.modelId)
                 }) {
                     settingsDao.insertSettings(settings).bind()
                 }
+
+                // Set ownership for the newly created settings
+                withError({ daoError: SetOwnerError ->
+                    when (daoError) {
+                        is SetOwnerError.ForeignKeyViolation -> AddSettingsError.OwnershipError("Failed to set settings ownership")
+                        is SetOwnerError.AlreadyOwned -> AddSettingsError.OwnershipError("Settings ownership conflict")
+                    }
+                }) {
+                    settingsOwnershipDao.setOwner(createdModelSettings.id, ownerId).bind()
+                }
+
+                createdModelSettings
             }
         }
 
@@ -91,7 +127,7 @@ class ModelSettingsServiceImpl(
 
                 // Update the settings
                 withError({ daoError: SettingsError ->
-                    when(daoError) {
+                    when (daoError) {
                         is SettingsError.SettingsNotFound -> UpdateSettingsError.SettingsNotFound(daoError.id)
                         is SettingsError.ModelNotFound -> UpdateSettingsError.ModelNotFound(daoError.modelId)
                     }

@@ -2,10 +2,13 @@ package eu.torvian.chatbot.server.ktor.routes
 
 import arrow.core.raise.Raise
 import arrow.core.raise.withError
+import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.PermissionSpec
 import eu.torvian.chatbot.server.service.security.AuthorizationService
+import eu.torvian.chatbot.server.service.security.ResourceType
 import eu.torvian.chatbot.server.service.security.error.AuthorizationError
+import eu.torvian.chatbot.server.service.security.error.ResourceAuthorizationError
 import eu.torvian.chatbot.server.service.security.error.toApiError
 
 /**
@@ -22,5 +25,62 @@ suspend inline fun Raise<ApiError>.requirePermission(
 ) {
     withError({ ae: AuthorizationError -> ae.toApiError() }) {
         authorizationService.requirePermission(userId, permission).bind()
+    }
+}
+
+/**
+ * Helper function to require access to a provider resource.
+ *
+ * @param authorizationService The authorization service to use
+ * @param userId The ID of the user requesting access
+ * @param providerId The ID of the provider resource
+ * @param accessMode The access mode required (READ or WRITE)
+ */
+suspend inline fun Raise<ApiError>.requireProviderAccess(
+    authorizationService: AuthorizationService,
+    userId: Long,
+    providerId: Long,
+    accessMode: AccessMode
+) {
+    withError({ rae: ResourceAuthorizationError -> rae.toApiError() }) {
+        authorizationService.requireAccess(userId, ResourceType.PROVIDER, providerId, accessMode).bind()
+    }
+}
+
+/**
+ * Helper function to require access to a model resource.
+ *
+ * @param authorizationService The authorization service to use
+ * @param userId The ID of the user requesting access
+ * @param modelId The ID of the model resource
+ * @param accessMode The access mode required (READ or WRITE)
+ */
+suspend inline fun Raise<ApiError>.requireModelAccess(
+    authorizationService: AuthorizationService,
+    userId: Long,
+    modelId: Long,
+    accessMode: AccessMode
+) {
+    withError({ rae: ResourceAuthorizationError -> rae.toApiError() }) {
+        authorizationService.requireAccess(userId, ResourceType.MODEL, modelId, accessMode).bind()
+    }
+}
+
+/**
+ * Helper function to require access to a settings resource.
+ *
+ * @param authorizationService The authorization service to use
+ * @param userId The ID of the user requesting access
+ * @param settingsId The ID of the settings resource
+ * @param accessMode The access mode required (READ or WRITE)
+ */
+suspend inline fun Raise<ApiError>.requireSettingsAccess(
+    authorizationService: AuthorizationService,
+    userId: Long,
+    settingsId: Long,
+    accessMode: AccessMode
+) {
+    withError({ rae: ResourceAuthorizationError -> rae.toApiError() }) {
+        authorizationService.requireAccess(userId, ResourceType.SETTINGS, settingsId, accessMode).bind()
     }
 }

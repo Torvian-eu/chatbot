@@ -9,4 +9,9 @@ sealed interface AddProviderError {
      * This would typically be a business rule validation failure.
      */
     data class InvalidInput(val reason: String) : AddProviderError
+
+    /**
+     * Indicates that there was an error setting ownership for the provider.
+     */
+    data class OwnershipError(val reason: String) : AddProviderError
 }

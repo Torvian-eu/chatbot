@@ -31,36 +31,28 @@ object CommonPermissions {
      */
     object Actions {
         const val MANAGE = "manage"
-        const val CREATE = "create"
-        const val READ = "read"
-        const val UPDATE = "update"
-        const val DELETE = "delete"
     }
 
     /**
      * Available subjects/resources that actions can be performed on.
      */
     object Subjects {
+        const val LLM_PROVIDERS = "llm_providers"
+        const val LLM_MODELS = "llm_models"
+        const val LLM_MODEL_SETTINGS = "llm_model_settings"
         const val USERS = "users"
         const val ROLES = "roles"
-        const val PUBLIC_PROVIDER = "public_provider"
-        const val PUBLIC_MODEL = "public_model"
-        const val PUBLIC_SETTINGS = "public_settings"
-        const val SESSIONS = "sessions"
-        const val MESSAGES = "messages"
-        const val GROUPS = "groups"
+        const val PERMISSIONS = "permissions"
+        const val USER_GROUPS = "user_groups"
     }
 
     // Predefined permission specifications for common operations
+    val MANAGE_LLM_PROVIDERS = PermissionSpec(Actions.MANAGE, Subjects.LLM_PROVIDERS)
+    val MANAGE_LLM_MODELS = PermissionSpec(Actions.MANAGE, Subjects.LLM_MODELS)
+    val MANAGE_LLM_MODEL_SETTINGS = PermissionSpec(Actions.MANAGE, Subjects.LLM_MODEL_SETTINGS)
     val MANAGE_USERS = PermissionSpec(Actions.MANAGE, Subjects.USERS)
     val MANAGE_ROLES = PermissionSpec(Actions.MANAGE, Subjects.ROLES)
-    val CREATE_PUBLIC_PROVIDER = PermissionSpec(Actions.CREATE, Subjects.PUBLIC_PROVIDER)
-    val CREATE_PUBLIC_MODEL = PermissionSpec(Actions.CREATE, Subjects.PUBLIC_MODEL)
-    val CREATE_PUBLIC_SETTINGS = PermissionSpec(Actions.CREATE, Subjects.PUBLIC_SETTINGS)
-    val READ_SESSIONS = PermissionSpec(Actions.READ, Subjects.SESSIONS)
-    val CREATE_SESSIONS = PermissionSpec(Actions.CREATE, Subjects.SESSIONS)
-    val MANAGE_SESSIONS = PermissionSpec(Actions.MANAGE, Subjects.SESSIONS)
-    val READ_MESSAGES = PermissionSpec(Actions.READ, Subjects.MESSAGES)
-    val CREATE_MESSAGES = PermissionSpec(Actions.CREATE, Subjects.MESSAGES)
-    val MANAGE_GROUPS = PermissionSpec(Actions.MANAGE, Subjects.GROUPS)
+    val MANAGE_PERMISSIONS = PermissionSpec(Actions.MANAGE, Subjects.PERMISSIONS)
+    val MANAGE_USER_GROUPS = PermissionSpec(Actions.MANAGE, Subjects.USER_GROUPS)
+
 }

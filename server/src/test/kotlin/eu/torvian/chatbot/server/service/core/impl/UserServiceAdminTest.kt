@@ -11,11 +11,15 @@ import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.dao.error.UserRoleAssignmentError
 import eu.torvian.chatbot.server.data.entities.RoleEntity
 import eu.torvian.chatbot.server.data.entities.UserEntity
+import eu.torvian.chatbot.server.service.core.UserGroupService
 import eu.torvian.chatbot.server.service.core.UserService
 import eu.torvian.chatbot.server.service.core.error.auth.*
 import eu.torvian.chatbot.server.service.security.PasswordService
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
-import io.mockk.*
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.every
+import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Instant
 import org.junit.jupiter.api.BeforeEach
@@ -28,6 +32,7 @@ class UserServiceAdminTest {
     private lateinit var passwordService: PasswordService
     private lateinit var roleDao: RoleDao
     private lateinit var userRoleAssignmentDao: UserRoleAssignmentDao
+    private lateinit var userGroupService: UserGroupService
     private lateinit var transactionScope: TransactionScope
     private lateinit var userService: UserService
 
@@ -37,6 +42,7 @@ class UserServiceAdminTest {
         passwordService = mockk()
         roleDao = mockk()
         userRoleAssignmentDao = mockk()
+        userGroupService = mockk()
         transactionScope = mockk()
 
         // Mock transaction scope to execute block directly
@@ -50,6 +56,7 @@ class UserServiceAdminTest {
             passwordService,
             roleDao,
             userRoleAssignmentDao,
+            userGroupService,
             transactionScope
         )
     }
@@ -125,7 +132,7 @@ class UserServiceAdminTest {
 
         coEvery { userDao.getUserById(userId) } returns existingUser.right()
         coEvery { userDao.updateUser(any()) } returns
-            UserError.UsernameAlreadyExists(existingUsername).left()
+                UserError.UsernameAlreadyExists(existingUsername).left()
 
         // When
         val result = userService.updateUser(userId, existingUsername, null)
@@ -171,7 +178,7 @@ class UserServiceAdminTest {
         coEvery { userDao.getUserById(userId) } returns user.right()
         coEvery { roleDao.getRoleByName("Admin") } returns adminRole.right()
         coEvery { userRoleAssignmentDao.getUserIdsByRoleId(adminRole.id) } returns
-            listOf(1L, 2L) // Multiple admins
+                listOf(1L, 2L) // Multiple admins
         coEvery { userDao.deleteUser(userId) } returns Unit.right()
 
         // When
@@ -203,7 +210,7 @@ class UserServiceAdminTest {
         coEvery { userDao.getUserById(userId) } returns user.right()
         coEvery { roleDao.getRoleByName("Admin") } returns adminRole.right()
         coEvery { userRoleAssignmentDao.getUserIdsByRoleId(adminRole.id) } returns
-            listOf(userId) // Only one admin
+                listOf(userId) // Only one admin
 
         // When
         val result = userService.deleteUser(userId)
@@ -258,7 +265,7 @@ class UserServiceAdminTest {
         val roleId = 2L
 
         coEvery { userRoleAssignmentDao.assignRoleToUser(userId, roleId) } returns
-            UserRoleAssignmentError.AssignmentAlreadyExists(userId, roleId).left()
+                UserRoleAssignmentError.AssignmentAlreadyExists(userId, roleId).left()
 
         // When
         val result = userService.assignRoleToUser(userId, roleId)
@@ -301,7 +308,7 @@ class UserServiceAdminTest {
         coEvery { roleDao.getRoleById(adminRoleId) } returns adminRole.right()
         coEvery { roleDao.getRoleByName("Admin") } returns adminRole.right()
         coEvery { userRoleAssignmentDao.getUserIdsByRoleId(adminRoleId) } returns
-            listOf(userId) // Only one admin
+                listOf(userId) // Only one admin
 
         // When
         val result = userService.revokeRoleFromUser(userId, adminRoleId)
@@ -356,7 +363,7 @@ class UserServiceAdminTest {
         val weakPassword = "weak"
 
         every { passwordService.validatePasswordStrength(weakPassword) } returns
-            eu.torvian.chatbot.common.security.error.PasswordValidationError.TooShort(8, weakPassword.length).left()
+                eu.torvian.chatbot.common.security.error.PasswordValidationError.TooShort(8, weakPassword.length).left()
 
         // When
         val result = userService.changePassword(userId, weakPassword)

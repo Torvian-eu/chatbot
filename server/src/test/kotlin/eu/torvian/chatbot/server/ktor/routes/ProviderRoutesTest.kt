@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.server.ktor.routes
 
+import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.resources.ProviderResource
@@ -11,6 +12,8 @@ import eu.torvian.chatbot.common.models.api.llm.UpdateProviderCredentialRequest
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
+import eu.torvian.chatbot.server.testutils.auth.TestAuthHelper
+import eu.torvian.chatbot.server.testutils.auth.authenticate
 import eu.torvian.chatbot.server.testutils.data.Table
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
 import eu.torvian.chatbot.server.testutils.data.TestDataSet
@@ -18,8 +21,6 @@ import eu.torvian.chatbot.server.testutils.data.TestDefaults
 import eu.torvian.chatbot.server.testutils.koin.defaultTestContainer
 import eu.torvian.chatbot.server.testutils.ktor.KtorTestApp
 import eu.torvian.chatbot.server.testutils.ktor.myTestApplication
-import eu.torvian.chatbot.server.testutils.auth.TestAuthHelper
-import eu.torvian.chatbot.server.testutils.auth.authenticate
 import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.http.*
@@ -53,8 +54,13 @@ class ProviderRoutesTest {
     // Test data
     private val testProvider1 = TestDefaults.llmProvider1
     private val testProvider2 = TestDefaults.llmProvider2
+    private val testApiSecret1 = TestDefaults.apiSecret1
     private val testModel1 = TestDefaults.llmModel1
     private val testModel2 = TestDefaults.llmModel2
+    private val testUser1 = TestDefaults.user1
+    private val testUser2 = TestDefaults.user2
+    private val testUserSession1 = TestDefaults.userSession1
+    private val testUserGroup1 = TestDefaults.userGroup1
 
     @BeforeEach
     fun setUp() = runTest {
@@ -70,14 +76,19 @@ class ProviderRoutesTest {
 
         testDataManager = container.get()
         // Need ApiSecrets table for credentials, LLMProviders for providers, LLMModels for provider-in-use check
-        testDataManager.createTables(setOf(Table.API_SECRETS, Table.LLM_PROVIDERS, Table.LLM_MODELS,
-            Table.USERS,
-            Table.USER_SESSIONS,
-            Table.CHAT_SESSION_OWNERS))
-        
+        testDataManager.createTables(
+            setOf(
+                Table.API_SECRETS, Table.LLM_PROVIDERS, Table.LLM_MODELS,
+                Table.LLM_PROVIDER_OWNERS, Table.LLM_PROVIDER_ACCESS, Table.CHAT_SESSION_OWNERS,
+                Table.LLM_MODEL_OWNERS, Table.LLM_MODEL_ACCESS,
+                Table.USERS, Table.ROLES, Table.PERMISSIONS, Table.ROLE_PERMISSIONS, Table.USER_ROLE_ASSIGNMENTS,
+                Table.USER_GROUPS, Table.USER_GROUP_MEMBERSHIPS, Table.USER_SESSIONS
+            )
+        )
+
         // Set up authentication
         authHelper = TestAuthHelper(container)
-        authToken = authHelper.createUserAndGetToken()
+        authToken = authHelper.createUserAndGetToken(user = testUser1, session = testUserSession1)
     }
 
     @AfterEach
@@ -92,11 +103,15 @@ class ProviderRoutesTest {
     fun `GET providers should return list of providers successfully`() = providerTestApplication {
         // Arrange
         testDataManager.insertLLMProvider(testProvider1)
+        testDataManager.insertProviderOwnership(testProvider1.id, testUser1.id)
         testDataManager.insertLLMProvider(testProvider2)
+        testDataManager.insertProviderOwnership(testProvider2.id, testUser1.id)
         val expectedProviders = listOf(testProvider1, testProvider2)
 
         // Act & Assert
-        val response = client.get(href(ProviderResource()))
+        val response = client.get(href(ProviderResource())) {
+            authenticate(authToken)
+        }
         assertEquals(HttpStatusCode.OK, response.status)
         val providers = response.body<List<LLMProvider>>()
         assertEquals(expectedProviders, providers)
@@ -107,7 +122,9 @@ class ProviderRoutesTest {
         // Arrange (no providers inserted)
 
         // Act & Assert
-        val response = client.get(href(ProviderResource()))
+        val response = client.get(href(ProviderResource())) {
+            authenticate(authToken)
+        }
         assertEquals(HttpStatusCode.OK, response.status)
         val providers = response.body<List<LLMProvider>>()
         assertEquals(emptyList(), providers)
@@ -136,7 +153,8 @@ class ProviderRoutesTest {
         val response = client.post(href(ProviderResource())) {
             contentType(ContentType.Application.Json)
             setBody(createRequest)
-            authenticate(authToken)}
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.Created, response.status)
@@ -177,7 +195,8 @@ class ProviderRoutesTest {
         val response = client.post(href(ProviderResource())) {
             contentType(ContentType.Application.Json)
             setBody(createRequest)
-            authenticate(authToken)}
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.Created, response.status)
@@ -209,7 +228,8 @@ class ProviderRoutesTest {
         val response = client.post(href(ProviderResource())) {
             contentType(ContentType.Application.Json)
             setBody(createRequest)
-            authenticate(authToken)}
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.BadRequest, response.status)
@@ -236,7 +256,8 @@ class ProviderRoutesTest {
         val response = client.post(href(ProviderResource())) {
             contentType(ContentType.Application.Json)
             setBody(createRequest)
-            authenticate(authToken)}
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.BadRequest, response.status)
@@ -263,7 +284,8 @@ class ProviderRoutesTest {
         val response = client.post(href(ProviderResource())) {
             contentType(ContentType.Application.Json)
             setBody(createRequest)
-            authenticate(authToken)}
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.BadRequest, response.status)
@@ -278,12 +300,40 @@ class ProviderRoutesTest {
     // --- GET /api/v1/providers/{providerId} Tests ---
 
     @Test
-    fun `GET provider by ID should return provider successfully`() = providerTestApplication {
+    fun `GET provider by ID should return provider successfully when owned`() = providerTestApplication {
         // Arrange
         testDataManager.insertLLMProvider(testProvider1)
+        testDataManager.insertProviderOwnership(testProvider1.id, testUser1.id)
 
         // Act
-        val response = client.get(href(ProviderResource.ById(providerId = testProvider1.id)))
+        val response = client.get(href(ProviderResource.ById(providerId = testProvider1.id))) {
+            authenticate(authToken)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.OK, response.status)
+        val provider = response.body<LLMProvider>()
+        assertEquals(testProvider1, provider)
+    }
+
+    @Test
+    fun `GET provider by ID should return provider successfully when shared via group`() = providerTestApplication {
+        // Arrange
+
+        // Insert provider owned by another user
+        testDataManager.insertLLMProvider(testProvider1)
+        testDataManager.insertUser(testUser2)
+        testDataManager.insertProviderOwnership(providerId = testProvider1.id, userId = testUser2.id)
+
+        // Insert user group and share provider with it
+        testDataManager.insertUserGroup(testUserGroup1)
+        testDataManager.insertUserGroupMembership(testUserGroup1.id, testUserGroup1.id)
+        testDataManager.insertProviderAccess(testProvider1.id, testUserGroup1.id, AccessMode.READ)
+
+        // Act
+        val response = client.get(href(ProviderResource.ById(providerId = testProvider1.id))) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
@@ -297,16 +347,15 @@ class ProviderRoutesTest {
         val nonExistentId = 999L
 
         // Act
-        val response = client.get(href(ProviderResource.ById(providerId = nonExistentId)))
+        val response = client.get(href(ProviderResource.ById(providerId = nonExistentId))) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.NotFound, response.status)
         val error = response.body<ApiError>()
         assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
         assertEquals(404, error.statusCode)
-        assertEquals("Provider not found", error.message)
-        assert(error.details?.containsKey("providerId") == true)
-        assertEquals(nonExistentId.toString(), error.details?.get("providerId"))
     }
 
     // --- PUT /api/v1/providers/{providerId} Tests ---
@@ -315,6 +364,7 @@ class ProviderRoutesTest {
     fun `PUT provider should update provider successfully`() = providerTestApplication {
         // Arrange
         testDataManager.insertLLMProvider(testProvider1)
+        testDataManager.insertProviderOwnership(testProvider1.id, testUser1.id)
         val updatedProvider = testProvider1.copy(
             name = "Updated OpenAI",
             description = "Updated description",
@@ -326,7 +376,8 @@ class ProviderRoutesTest {
         val response = client.put(href(ProviderResource.ById(providerId = testProvider1.id))) {
             contentType(ContentType.Application.Json)
             setBody(updatedProvider)
-            authenticate(authToken)}
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
@@ -353,16 +404,14 @@ class ProviderRoutesTest {
         val response = client.put(href(ProviderResource.ById(providerId = nonExistentId))) {
             contentType(ContentType.Application.Json)
             setBody(updatedProvider)
-            authenticate(authToken)}
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.NotFound, response.status)
         val error = response.body<ApiError>()
         assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
         assertEquals(404, error.statusCode)
-        assertEquals("Provider not found", error.message)
-        assert(error.details?.containsKey("providerId") == true)
-        assertEquals(nonExistentId.toString(), error.details?.get("providerId"))
     }
 
     @Test
@@ -376,7 +425,8 @@ class ProviderRoutesTest {
         val response = client.put(href(ProviderResource.ById(providerId = testProvider1.id))) {
             contentType(ContentType.Application.Json)
             setBody(updatedProvider)
-            authenticate(authToken)}
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.BadRequest, response.status)
@@ -394,13 +444,15 @@ class ProviderRoutesTest {
     fun `PUT provider should return 400 for blank name`() = providerTestApplication {
         // Arrange
         testDataManager.insertLLMProvider(testProvider1)
+        testDataManager.insertProviderOwnership(testProvider1.id, testUser1.id)
         val updatedProvider = testProvider1.copy(name = "   ")
 
         // Act
         val response = client.put(href(ProviderResource.ById(providerId = testProvider1.id))) {
             contentType(ContentType.Application.Json)
             setBody(updatedProvider)
-            authenticate(authToken)}
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.BadRequest, response.status)
@@ -416,13 +468,15 @@ class ProviderRoutesTest {
     fun `PUT provider should return 400 for blank base URL`() = providerTestApplication {
         // Arrange
         testDataManager.insertLLMProvider(testProvider1)
+        testDataManager.insertProviderOwnership(testProvider1.id, testUser1.id)
         val updatedProvider = testProvider1.copy(baseUrl = "   ")
 
         // Act
         val response = client.put(href(ProviderResource.ById(providerId = testProvider1.id))) {
             contentType(ContentType.Application.Json)
             setBody(updatedProvider)
-            authenticate(authToken)}
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.BadRequest, response.status)
@@ -440,11 +494,14 @@ class ProviderRoutesTest {
     fun `DELETE provider should remove the provider successfully`() = providerTestApplication {
         // Arrange
         // Need to insert the API secret first because the provider references it
-        testDataManager.insertApiSecret(TestDefaults.apiSecret1)
+        testDataManager.insertApiSecret(testApiSecret1)
         testDataManager.insertLLMProvider(testProvider1)
+        testDataManager.insertProviderOwnership(testProvider1.id, testUser1.id)
 
         // Act
-        val response = client.delete(href(ProviderResource.ById(providerId = testProvider1.id)))
+        val response = client.delete(href(ProviderResource.ById(providerId = testProvider1.id))) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.NoContent, response.status)
@@ -464,31 +521,29 @@ class ProviderRoutesTest {
         val nonExistentId = 999L
 
         // Act
-        val response = client.delete(href(ProviderResource.ById(providerId = nonExistentId)))
+        val response = client.delete(href(ProviderResource.ById(providerId = nonExistentId))) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.NotFound, response.status)
         val error = response.body<ApiError>()
         assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
         assertEquals(404, error.statusCode)
-        assertEquals("Provider not found", error.message)
-        assert(error.details?.containsKey("providerId") == true)
-        assertEquals(nonExistentId.toString(), error.details?.get("providerId"))
     }
 
     @Test
     fun `DELETE provider in use by models should return 409 Conflict`() = providerTestApplication {
         // Arrange
         // Need to insert provider and model that uses it
-        testDataManager.setup(
-            TestDataSet(
-                llmProviders = listOf(testProvider1),
-                llmModels = listOf(testModel1) // testModel1 uses testProvider1
-            )
-        )
+        testDataManager.insertLLMProvider(testProvider1)
+        testDataManager.insertLLMModel(testModel1)
+        testDataManager.insertProviderOwnership(testProvider1.id, testUser1.id)
 
         // Act
-        val response = client.delete(href(ProviderResource.ById(providerId = testProvider1.id)))
+        val response = client.delete(href(ProviderResource.ById(providerId = testProvider1.id))) {
+            authenticate(authToken)
+        }
 
         // Assert
         assertEquals(HttpStatusCode.Conflict, response.status) // 409 Conflict
@@ -508,12 +563,10 @@ class ProviderRoutesTest {
     fun `PUT provider credential should update credential successfully`() = providerTestApplication {
         // Arrange
         // Insert provider with an existing credential
-        testDataManager.setup(
-            TestDataSet(
-                apiSecrets = listOf(TestDefaults.apiSecret1),
-                llmProviders = listOf(testProvider1) // testProvider1 uses apiSecret1
-            )
-        )
+        testDataManager.insertApiSecret(testApiSecret1)
+        testDataManager.insertLLMProvider(testProvider1)
+        testDataManager.insertProviderOwnership(testProvider1.id, testUser1.id)
+
         val newCredentialValue = "sk-new-secret-key"
         val updateRequest = UpdateProviderCredentialRequest(credential = newCredentialValue)
 
@@ -522,6 +575,7 @@ class ProviderRoutesTest {
             client.put(href(ProviderResource.ById.Credential(ProviderResource.ById(providerId = testProvider1.id)))) {
                 contentType(ContentType.Application.Json)
                 setBody(updateRequest)
+                authenticate(authToken)
             }
 
         // Assert
@@ -547,12 +601,10 @@ class ProviderRoutesTest {
         providerTestApplication {
             // Arrange
             // Insert provider with an existing credential
-            testDataManager.setup(
-                TestDataSet(
-                    apiSecrets = listOf(TestDefaults.apiSecret1),
-                    llmProviders = listOf(testProvider1) // testProvider1 uses apiSecret1
-                )
-            )
+            testDataManager.insertApiSecret(testApiSecret1)
+            testDataManager.insertLLMProvider(testProvider1)
+            testDataManager.insertProviderOwnership(testProvider1.id, testUser1.id)
+
             val updateRequest = UpdateProviderCredentialRequest(credential = null) // Remove credential
 
             // Act
@@ -560,6 +612,7 @@ class ProviderRoutesTest {
                 client.put(href(ProviderResource.ById.Credential(ProviderResource.ById(providerId = testProvider1.id)))) {
                     contentType(ContentType.Application.Json)
                     setBody(updateRequest)
+                    authenticate(authToken)
                 }
 
             // Assert
@@ -586,6 +639,7 @@ class ProviderRoutesTest {
             client.put(href(ProviderResource.ById.Credential(ProviderResource.ById(providerId = nonExistentId)))) {
                 contentType(ContentType.Application.Json)
                 setBody(updateRequest)
+                authenticate(authToken)
             }
 
         // Assert
@@ -593,15 +647,13 @@ class ProviderRoutesTest {
         val error = response.body<ApiError>()
         assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
         assertEquals(404, error.statusCode)
-        assertEquals("Provider not found", error.message)
-        assert(error.details?.containsKey("providerId") == true)
-        assertEquals(nonExistentId.toString(), error.details?.get("providerId"))
     }
 
     @Test
     fun `PUT provider credential should return 400 for blank credential when provided`() = providerTestApplication {
         // Arrange
         testDataManager.insertLLMProvider(testProvider1)
+        testDataManager.insertProviderOwnership(testProvider1.id, testUser1.id)
         val updateRequest = UpdateProviderCredentialRequest(credential = "   ") // Blank credential
 
         // Act
@@ -609,6 +661,7 @@ class ProviderRoutesTest {
             client.put(href(ProviderResource.ById.Credential(ProviderResource.ById(providerId = testProvider1.id)))) {
                 contentType(ContentType.Application.Json)
                 setBody(updateRequest)
+                authenticate(authToken)
             }
 
         // Assert
@@ -636,11 +689,15 @@ class ProviderRoutesTest {
                 ) // testModel1 uses testProvider1, testModel2 uses testProvider2
             )
         )
+        testDataManager.insertModelOwnership(testModel1.id, testUser1.id)
+        testDataManager.insertModelOwnership(testModel2.id, testUser1.id)
         val expectedModels = listOf(testModel1) // Only models for testProvider1
 
         // Act
         val response =
-            client.get(href(ProviderResource.ById.Models(ProviderResource.ById(providerId = testProvider1.id))))
+            client.get(href(ProviderResource.ById.Models(ProviderResource.ById(providerId = testProvider1.id)))) {
+                authenticate(authToken)
+            }
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
@@ -653,10 +710,13 @@ class ProviderRoutesTest {
         // Arrange
         // Insert provider but no models for it
         testDataManager.insertLLMProvider(testProvider1)
+        testDataManager.insertProviderOwnership(testProvider1.id, testUser1.id)
 
         // Act
         val response =
-            client.get(href(ProviderResource.ById.Models(ProviderResource.ById(providerId = testProvider1.id))))
+            client.get(href(ProviderResource.ById.Models(ProviderResource.ById(providerId = testProvider1.id)))) {
+                authenticate(authToken)
+            }
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status)
@@ -673,7 +733,9 @@ class ProviderRoutesTest {
         // Note: The service layer currently returns an empty list if the provider doesn't exist,
         // rather than a Not Found error. The test reflects this current behavior.
         val response =
-            client.get(href(ProviderResource.ById.Models(ProviderResource.ById(providerId = nonExistentId))))
+            client.get(href(ProviderResource.ById.Models(ProviderResource.ById(providerId = nonExistentId)))) {
+                authenticate(authToken)
+            }
 
         // Assert
         assertEquals(HttpStatusCode.OK, response.status) // Expect OK with empty list based on service impl

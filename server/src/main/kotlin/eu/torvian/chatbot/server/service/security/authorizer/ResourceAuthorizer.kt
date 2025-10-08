@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.service.security.authorizer
 
 import arrow.core.Either
+import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.server.service.security.ResourceType
 
 /**

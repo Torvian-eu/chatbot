@@ -1,10 +1,10 @@
 package eu.torvian.chatbot.server.service.security
 
 import arrow.core.Either
+import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.api.PermissionSpec
 import eu.torvian.chatbot.common.models.user.Permission
 import eu.torvian.chatbot.common.models.user.Role
-import eu.torvian.chatbot.server.service.security.authorizer.AccessMode
 import eu.torvian.chatbot.server.service.security.error.AuthorizationError
 import eu.torvian.chatbot.server.service.security.error.ResourceAuthorizationError
 

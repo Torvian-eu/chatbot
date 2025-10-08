@@ -1,10 +1,10 @@
 package eu.torvian.chatbot.server.service.security.error
 
+import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.server.service.security.ResourceType
-import eu.torvian.chatbot.server.service.security.authorizer.AccessMode
 
 /**
  * Represents possible errors that can occur during resource authorization operations.

@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.server.testutils.data
 
+import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.core.ChatGroup
 import eu.torvian.chatbot.common.models.core.ChatMessage
@@ -14,6 +15,7 @@ import eu.torvian.chatbot.server.data.entities.RoleEntity
 import eu.torvian.chatbot.server.data.entities.PermissionEntity
 import eu.torvian.chatbot.server.data.entities.RolePermissionEntity
 import eu.torvian.chatbot.server.data.entities.UserRoleAssignmentEntity
+import eu.torvian.chatbot.server.data.entities.UserGroupEntity
 
 /**
  * Manager interface for inserting and cleaning up test data in the chatbot database.
@@ -227,6 +229,79 @@ interface TestDataManager {
      */
     suspend fun getLLMProvider(id: Long): LLMProvider?
 
+    // --- Ownership records ---
+
+    /**
+     * Inserts a group ownership record into the database. Creates the table if it does not exist.
+     *
+     * @param groupId The ID of the group.
+     * @param userId The ID of the user who owns the group.
+     */
+    suspend fun insertGroupOwnership(groupId: Long, userId: Long)
+
+    /**
+     * Inserts a session ownership record into the database. Creates the table if it does not exist.
+     *
+     * @param sessionId The ID of the session.
+     * @param userId The ID of the user who owns the session.
+     */
+    suspend fun insertSessionOwnership(sessionId: Long, userId: Long)
+
+    /**
+     * Inserts a provider ownership record into the database. Creates the table if it does not exist.
+     *
+     * @param providerId The ID of the provider.
+     * @param userId The ID of the user who owns the provider.
+     */
+    suspend fun insertProviderOwnership(providerId: Long, userId: Long)
+
+    /**
+     * Inserts a model ownership record into the database. Creates the table if it does not exist.
+     *
+     * @param modelId The ID of the model.
+     * @param userId The ID of the user who owns the model.
+     */
+    suspend fun insertModelOwnership(modelId: Long, userId: Long)
+
+    /**
+     * Inserts a settings ownership record into the database. Creates the table if it does not exist.
+     *
+     * @param settingsId The ID of the settings.
+     * @param userId The ID of the user who owns the settings.
+     */
+    suspend fun insertSettingsOwnership(settingsId: Long, userId: Long)
+
+    // --- Access records ---
+
+    /**
+     * Inserts a provider access record into the database. Creates the table if it does not exist.
+     *
+     * @param providerId The ID of the provider.
+     * @param groupId The ID of the group that has access.
+     * @param accessMode The access mode (e.g., "read", "write").
+     */
+    suspend fun insertProviderAccess(providerId: Long, groupId: Long, accessMode: AccessMode)
+
+    /**
+     * Inserts a model access record into the database. Creates the table if it does not exist.
+     *
+     * @param modelId The ID of the model.
+     * @param groupId The ID of the group that has access.
+     * @param accessMode The access mode (e.g., "read", "write").
+     */
+    suspend fun insertModelAccess(modelId: Long, groupId: Long, accessMode: AccessMode)
+
+    /**
+     * Inserts a settings access record into the database. Creates the table if it does not exist.
+     *
+     * @param settingsId The ID of the settings.
+     * @param groupId The ID of the group that has access.
+     * @param accessMode The access mode (e.g., "read", "write").
+     */
+    suspend fun insertSettingsAccess(settingsId: Long, groupId: Long, accessMode: AccessMode)
+
+    // --- User management records ---
+
     /**
      * Inserts a user into the database. Creates the table if it does not exist.
      *
@@ -258,20 +333,27 @@ interface TestDataManager {
     suspend fun getUserSession(id: Long): UserSessionEntity?
 
     /**
-     * Inserts a group ownership record into the database. Creates the table if it does not exist.
+     * Inserts a user group into the database. Creates the table if it does not exist.
      *
-     * @param groupId The ID of the group.
-     * @param userId The ID of the user who owns the group.
+     * @param userGroup The user group entity to insert.
      */
-    suspend fun insertGroupOwnership(groupId: Long, userId: Long)
+    suspend fun insertUserGroup(userGroup: UserGroupEntity)
 
     /**
-     * Inserts a session ownership record into the database. Creates the table if it does not exist.
+     * Retrieves a user group from the database.
      *
-     * @param sessionId The ID of the session.
-     * @param userId The ID of the user who owns the session.
+     * @param id The ID of the user group to retrieve.
+     * @return The user group entity if found, null otherwise.
      */
-    suspend fun insertSessionOwnership(sessionId: Long, userId: Long)
+    suspend fun getUserGroup(id: Long): UserGroupEntity?
+
+    /**
+     * Inserts a user group membership into the database. Creates the table if it does not exist.
+     *
+     * @param userId The ID of the user.
+     * @param groupId The ID of the user group.
+     */
+    suspend fun insertUserGroupMembership(userId: Long, groupId: Long)
 
     /**
      * Inserts a role into the database. Creates the table if it does not exist.

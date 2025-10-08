@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.data.dao
 
 import arrow.core.Either
+import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.server.data.dao.error.InsertModelError
@@ -39,6 +40,27 @@ interface ModelDao {
      * @return A list of LLMModel entities associated with the provider.
      */
     suspend fun getModelsByProviderId(providerId: Long): List<LLMModel>
+
+    /**
+     * Retrieves all models accessible by the specified user, either owned by the user
+     * or shared with a group the user is a member of.
+     *
+     * @param userId The ID of the user requesting the models
+     * @param accessMode The access mode to query (e.g., "read", "write")
+     * @return List of LLMModel objects accessible by the user.
+     */
+    suspend fun getAllAccessibleModels(userId: Long, accessMode: AccessMode): List<LLMModel>
+
+    /**
+     * Retrieves all models accessible by the specified user for a specific provider.
+     * Filters accessible models (owned or group-shared) by the provided providerId.
+     *
+     * @param userId The ID of the user requesting the models
+     * @param providerId The provider id to filter models by
+     * @param accessMode The access mode to query (e.g., "read", "write")
+     * @return List of LLMModel objects accessible by the user for the given provider.
+     */
+    suspend fun getAccessibleModelsByProviderId(userId: Long, providerId: Long, accessMode: AccessMode): List<LLMModel>
 
     /**
      * Creates a new LLM model in the database.

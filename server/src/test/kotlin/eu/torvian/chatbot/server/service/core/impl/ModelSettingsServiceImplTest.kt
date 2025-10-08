@@ -6,13 +6,14 @@ import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.server.data.dao.SettingsDao
+import eu.torvian.chatbot.server.data.dao.SettingsAccessDao
+import eu.torvian.chatbot.server.data.dao.SettingsOwnershipDao
+import eu.torvian.chatbot.server.data.dao.UserGroupDao
+import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
 import eu.torvian.chatbot.server.data.dao.error.SettingsError
 import eu.torvian.chatbot.server.service.core.LLMModelService
 import eu.torvian.chatbot.server.service.core.error.model.GetModelError
-import eu.torvian.chatbot.server.service.core.error.settings.AddSettingsError
-import eu.torvian.chatbot.server.service.core.error.settings.DeleteSettingsError
-import eu.torvian.chatbot.server.service.core.error.settings.GetSettingsByIdError
-import eu.torvian.chatbot.server.service.core.error.settings.UpdateSettingsError
+import eu.torvian.chatbot.server.service.core.error.settings.*
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
 import io.mockk.clearMocks
 import io.mockk.coEvery
@@ -40,6 +41,9 @@ class ModelSettingsServiceImplTest {
     private lateinit var settingsDao: SettingsDao
     private lateinit var llmModelService: LLMModelService
     private lateinit var transactionScope: TransactionScope
+    private lateinit var settingsOwnershipDao: SettingsOwnershipDao
+    private lateinit var settingsAccessDao: SettingsAccessDao
+    private lateinit var userGroupDao: UserGroupDao
 
     // Class under test
     private lateinit var modelSettingsService: ModelSettingsServiceImpl
@@ -80,15 +84,28 @@ class ModelSettingsServiceImplTest {
         settingsDao = mockk()
         llmModelService = mockk()
         transactionScope = mockk()
+        settingsOwnershipDao = mockk()
+        settingsAccessDao = mockk()
+        userGroupDao = mockk()
 
         // Create the service instance with mocked dependencies
-        modelSettingsService = ModelSettingsServiceImpl(settingsDao, llmModelService, transactionScope)
+        modelSettingsService = ModelSettingsServiceImpl(
+            settingsDao,
+            llmModelService,
+            transactionScope,
+            settingsOwnershipDao
+        )
 
         // Mock the transaction scope to execute blocks directly
         coEvery { transactionScope.transaction(any<suspend () -> Any>()) } coAnswers {
             val block = firstArg<suspend () -> Any>()
             block()
         }
+
+        // Mock the new DAO methods to return empty results by default
+        coEvery { userGroupDao.getGroupsForUser(any()) } returns emptyList()
+        coEvery { settingsAccessDao.getResourcesAccessibleByGroups(any(), any()) } returns emptyList()
+        coEvery { settingsOwnershipDao.getOwner(any()) } returns GetOwnerError.ResourceNotFound("Not found").left()
     }
 
     @AfterEach
@@ -208,9 +225,10 @@ class ModelSettingsServiceImplTest {
 
         coEvery { llmModelService.getModelById(settings.modelId) } returns testModel1.right()
         coEvery { settingsDao.insertSettings(settings) } returns testSettings1.right()
+        coEvery { settingsOwnershipDao.setOwner(testSettings1.id, 1L) } returns Unit.right()
 
         // Act
-        val result = modelSettingsService.addSettings(settings)
+        val result = modelSettingsService.addSettings(1L, settings)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful creation")
@@ -238,7 +256,7 @@ class ModelSettingsServiceImplTest {
         coEvery { llmModelService.getModelById(modelId) } returns getModelError.left()
 
         // Act
-        val result = modelSettingsService.addSettings(settings)
+        val result = modelSettingsService.addSettings(1L, settings)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for non-existent model")

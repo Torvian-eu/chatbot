@@ -1,137 +1,169 @@
 package eu.torvian.chatbot.server.ktor.routes
 
+import arrow.core.raise.either
+import arrow.core.raise.withError
+import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
+import eu.torvian.chatbot.common.api.CommonPermissions
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.ProviderResource
 import eu.torvian.chatbot.common.models.api.llm.AddProviderRequest
-import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.api.llm.UpdateProviderCredentialRequest
+import eu.torvian.chatbot.common.models.llm.LLMProvider
+import eu.torvian.chatbot.server.domain.security.AuthSchemes
+import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.service.core.LLMModelService
 import eu.torvian.chatbot.server.service.core.LLMProviderService
 import eu.torvian.chatbot.server.service.core.error.provider.*
+import eu.torvian.chatbot.server.service.security.AuthorizationService
 import io.ktor.http.*
+import io.ktor.server.auth.*
 import io.ktor.server.request.*
 import io.ktor.server.resources.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.Route
-import kotlin.to
 
 /**
  * Configures routes related to Providers (/api/v1/providers) using Ktor Resources.
  */
 fun Route.configureProviderRoutes(
     llmProviderService: LLMProviderService,
-    llmModelService: LLMModelService
+    llmModelService: LLMModelService,
+    authorizationService: AuthorizationService
 ) {
-    // GET /api/v1/providers - List all providers
-    get<ProviderResource> {
-        call.respond(llmProviderService.getAllProviders())
-    }
+    authenticate(AuthSchemes.USER_JWT) {
+        // GET /api/v1/providers - List all providers (filtered by user access)
+        get<ProviderResource> {
+            val userId = call.getUserId()
 
-    // POST /api/v1/providers - Add new provider
-    post<ProviderResource> {
-        val request = call.receive<AddProviderRequest>()
-        call.respondEither(
-            llmProviderService.addProvider(
-                request.name,
-                request.description,
-                request.baseUrl,
-                request.type,
-                request.credential
-            ), HttpStatusCode.Created
-        ) { error ->
-            when (error) {
-                is AddProviderError.InvalidInput ->
-                    apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid provider input", "reason" to error.reason)
+            // If user has MANAGE_LLM_PROVIDERS permission, show all providers
+            if (authorizationService.hasPermission(userId, CommonPermissions.MANAGE_LLM_PROVIDERS)) {
+                call.respond(llmProviderService.getAllProviders())
+            }
+            // Otherwise, show only providers accessible to the user
+            else {
+                call.respond(llmProviderService.getAllAccessibleProviders(userId, AccessMode.READ))
             }
         }
-    }
 
-    // GET /api/v1/providers/{providerId} - Get provider by ID
-    get<ProviderResource.ById> { resource ->
-        val providerId = resource.providerId
-        call.respondEither(llmProviderService.getProviderById(providerId)) { error ->
-            when (error) {
-                is GetProviderError.ProviderNotFound ->
-                    apiError(CommonApiErrorCodes.NOT_FOUND, "Provider not found", "providerId" to error.id.toString())
+        // GET /api/v1/providers/{providerId} - Get provider by ID
+        get<ProviderResource.ById> { resource ->
+            val userId = call.getUserId()
+            val providerId = resource.providerId
+
+            either {
+                // Check READ access
+                requireProviderAccess(authorizationService, userId, providerId, AccessMode.READ)
+
+                // Get provider
+                withError({ error: GetProviderError -> error.toApiError() }) {
+                    llmProviderService.getProviderById(providerId).bind()
+                }
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.OK)
             }
         }
-    }
 
-    // PUT /api/v1/providers/{providerId} - Update provider by ID
-    put<ProviderResource.ById> { resource ->
-        val providerId = resource.providerId
-        val provider = call.receive<LLMProvider>()
-        if (provider.id != providerId) {
-            val errorApiCode = CommonApiErrorCodes.INVALID_ARGUMENT
-            val error = apiError(
-                apiCode = errorApiCode,
-                message = "Provider ID in path and body must match",
-                "pathId" to providerId.toString(),
-                "bodyId" to provider.id.toString()
-            )
-            // Use respond directly for the invalid argument case before calling service
-            return@put call.respond(HttpStatusCode.fromValue(error.statusCode), error)
-        }
-        call.respondEither(llmProviderService.updateProvider(provider)) { error ->
-            when (error) {
-                is UpdateProviderError.ProviderNotFound ->
-                    apiError(CommonApiErrorCodes.NOT_FOUND, "Provider not found", "providerId" to error.id.toString())
-
-                is UpdateProviderError.InvalidInput ->
-                    apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid provider input", "reason" to error.reason)
-
-                is UpdateProviderError.ApiKeyAlreadyInUse ->
-                    apiError(CommonApiErrorCodes.ALREADY_EXISTS, "API key already in use", "apiKeyId" to error.apiKeyId)
+        // POST /api/v1/providers - Add new provider
+        post<ProviderResource> {
+            val userId = call.getUserId()
+            val request = call.receive<AddProviderRequest>()
+            either {
+                withError({ error: AddProviderError -> error.toApiError() }) {
+                    llmProviderService.addProvider(
+                        userId,
+                        request.name,
+                        request.description,
+                        request.baseUrl,
+                        request.type,
+                        request.credential
+                    ).bind()
+                }
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.Created)
             }
         }
-    }
 
-    // DELETE /api/v1/providers/{providerId} - Delete provider by ID
-    delete<ProviderResource.ById> { resource ->
-        val providerId = resource.providerId
-        call.respondEither(
-            llmProviderService.deleteProvider(providerId),
-            HttpStatusCode.NoContent
-        ) { error ->
-            when (error) {
-                is DeleteProviderError.ProviderNotFound ->
-                    apiError(CommonApiErrorCodes.NOT_FOUND, "Provider not found", "providerId" to error.id.toString())
+        // PUT /api/v1/providers/{providerId} - Update provider by ID
+        put<ProviderResource.ById> { resource ->
+            val userId = call.getUserId()
+            val providerId = resource.providerId
+            val provider = call.receive<LLMProvider>()
 
-                is DeleteProviderError.ProviderInUse ->
-                    apiError(
-                        CommonApiErrorCodes.RESOURCE_IN_USE,
-                        "Provider is still in use by models",
-                        "providerId" to error.id.toString(),
-                        "modelNames" to error.modelNames.joinToString()
-                    )
+            if (provider.id != providerId) {
+                val errorApiCode = CommonApiErrorCodes.INVALID_ARGUMENT
+                val error = apiError(
+                    apiCode = errorApiCode,
+                    message = "Provider ID in path and body must match",
+                    "pathId" to providerId.toString(),
+                    "bodyId" to provider.id.toString()
+                )
+                return@put call.respond(HttpStatusCode.fromValue(error.statusCode), error)
+            }
+
+            either {
+                // Check WRITE access
+                requireProviderAccess(authorizationService, userId, providerId, AccessMode.WRITE)
+
+                // Update provider
+                withError({ error: UpdateProviderError -> error.toApiError() }) {
+                    llmProviderService.updateProvider(provider).bind()
+                }
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.OK)
             }
         }
-    }
 
-    // PUT /api/v1/providers/{providerId}/credential - Update provider credential
-    put<ProviderResource.ById.Credential> { resource ->
-        val providerId = resource.parent.providerId
-        val request = call.receive<UpdateProviderCredentialRequest>()
-        call.respondEither(
-            llmProviderService.updateProviderCredential(
-                providerId,
-                request.credential
-            )
-        ) { error ->
-            when (error) {
-                is UpdateProviderCredentialError.ProviderNotFound ->
-                    apiError(CommonApiErrorCodes.NOT_FOUND, "Provider not found", "providerId" to error.id.toString())
+        // DELETE /api/v1/providers/{providerId} - Delete provider by ID
+        delete<ProviderResource.ById> { resource ->
+            val userId = call.getUserId()
+            val providerId = resource.providerId
 
-                is UpdateProviderCredentialError.InvalidInput ->
-                    apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid credential input", "reason" to error.reason)
+            either {
+                // Check WRITE access
+                requireProviderAccess(authorizationService, userId, providerId, AccessMode.WRITE)
+
+                // Delete provider
+                withError({ error: DeleteProviderError -> error.toApiError() }) {
+                    llmProviderService.deleteProvider(providerId).bind()
+                }
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.NoContent)
             }
         }
-    }
 
-    // GET /api/v1/providers/{providerId}/models - Get models for this provider
-    get<ProviderResource.ById.Models> { resource ->
-        val providerId = resource.parent.providerId
-        call.respond(llmModelService.getModelsByProviderId(providerId))
+        // PUT /api/v1/providers/{providerId}/credential - Update provider credential
+        put<ProviderResource.ById.Credential> { resource ->
+            val userId = call.getUserId()
+            val providerId = resource.parent.providerId
+            val request = call.receive<UpdateProviderCredentialRequest>()
+
+            either {
+                // Check WRITE access
+                requireProviderAccess(authorizationService, userId, providerId, AccessMode.WRITE)
+
+                // Update credential
+                withError({ error: UpdateProviderCredentialError -> error.toApiError() }) {
+                    llmProviderService.updateProviderCredential(providerId, request.credential).bind()
+                }
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.OK)
+            }
+        }
+
+        // GET /api/v1/providers/{providerId}/models - Get models for this provider (filtered by user access)
+        get<ProviderResource.ById.Models> { resource ->
+            val userId = call.getUserId()
+            val providerId = resource.parent.providerId
+
+            // If user has MANAGE_LLM_MODELS permission, show all models
+            if (authorizationService.hasPermission(userId, CommonPermissions.MANAGE_LLM_MODELS)) {
+                call.respond(llmModelService.getModelsByProviderId(providerId))
+            }
+            // Otherwise, show only models accessible to the user
+            else {
+                call.respond(llmModelService.getAccessibleModelsByProviderId(userId, providerId, AccessMode.READ))
+            }
+        }
     }
 }

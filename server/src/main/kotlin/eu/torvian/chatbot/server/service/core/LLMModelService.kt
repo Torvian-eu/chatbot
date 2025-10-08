@@ -1,9 +1,13 @@
 package eu.torvian.chatbot.server.service.core
 
 import arrow.core.Either
+import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType
-import eu.torvian.chatbot.server.service.core.error.model.*
+import eu.torvian.chatbot.server.service.core.error.model.AddModelError
+import eu.torvian.chatbot.server.service.core.error.model.DeleteModelError
+import eu.torvian.chatbot.server.service.core.error.model.GetModelError
+import eu.torvian.chatbot.server.service.core.error.model.UpdateModelError
 import kotlinx.serialization.json.JsonObject
 
 /**
@@ -31,7 +35,29 @@ interface LLMModelService {
     suspend fun getModelsByProviderId(providerId: Long): List<LLMModel>
 
     /**
+     * Retrieves all models accessible by the specified user, either owned by the user
+     * or shared with a group the user is a member of.
+     *
+     * @param userId The ID of the user requesting the models
+     * @param accessMode The access mode to query (e.g., "read", "write")
+     * @return List of LLMModel objects accessible by the user.
+     */
+    suspend fun getAllAccessibleModels(userId: Long, accessMode: AccessMode): List<LLMModel>
+
+    /**
+     * Retrieves all models accessible by the specified user for a specific provider.
+     * Filters accessible models (owned or group-shared) by the provided providerId.
+     *
+     * @param userId The ID of the user requesting the models
+     * @param providerId The provider id to filter models by
+     * @param accessMode The access mode to query (e.g., "read", "write")
+     * @return List of LLMModel objects accessible by the user for the given provider.
+     */
+    suspend fun getAccessibleModelsByProviderId(userId: Long, providerId: Long, accessMode: AccessMode): List<LLMModel>
+
+    /**
      * Adds a new LLM model configuration.
+     * @param ownerId The ID of the user creating the model (owner).
      * @param name The unique identifier for the model (e.g., "gpt-3.5-turbo").
      * @param providerId The ID of the provider that hosts this model.
      * @param type The operational type of this model (e.g., CHAT, EMBEDDING, etc.).
@@ -41,6 +67,7 @@ interface LLMModelService {
      * @return Either an [AddModelError], or the newly created [LLMModel].
      */
     suspend fun addModel(
+        ownerId: Long,
         name: String,
         providerId: Long,
         type: LLMModelType,
