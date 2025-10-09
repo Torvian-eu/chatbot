@@ -110,6 +110,19 @@ class SettingsAccessDaoExposed(
             }
         }
 
+    override suspend fun revokeAllAccess(settingsId: Long, groupId: Long): Either<RevokeAccessError, Unit> =
+        transactionScope.transaction {
+            either {
+                val deleted = ModelSettingsAccessTable.deleteWhere {
+                    (ModelSettingsAccessTable.settingsId eq settingsId) and
+                            (ModelSettingsAccessTable.userGroupId eq groupId)
+                }
+                ensure(deleted > 0) {
+                    RevokeAccessError.AccessNotGranted
+                }
+            }
+        }
+
     override suspend fun getResourcesAccessibleByGroups(
         groupIds: List<Long>,
         accessMode: String

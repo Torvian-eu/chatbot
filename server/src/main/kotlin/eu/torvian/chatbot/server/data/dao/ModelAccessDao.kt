@@ -60,6 +60,15 @@ interface ModelAccessDao {
     suspend fun revokeAccess(modelId: Long, groupId: Long, accessMode: String): Either<RevokeAccessError, Unit>
 
     /**
+     * Revokes all access from a group for a model.
+     *
+     * @param modelId ID of the model.
+     * @param groupId ID of the group to revoke access from.
+     * @return Either [RevokeAccessError] or Unit on success.
+     */
+    suspend fun revokeAllAccess(modelId: Long, groupId: Long): Either<RevokeAccessError, Unit>
+
+    /**
      * Retrieves all model IDs that are accessible by any of the given groups with a specific access mode.
      *
      * @param groupIds List of group IDs to check.

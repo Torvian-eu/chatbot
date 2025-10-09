@@ -109,6 +109,19 @@ class ModelAccessDaoExposed(
             }
         }
 
+    override suspend fun revokeAllAccess(modelId: Long, groupId: Long): Either<RevokeAccessError, Unit> =
+        transactionScope.transaction {
+            either {
+                val deleted = LLMModelAccessTable.deleteWhere {
+                    (LLMModelAccessTable.modelId eq modelId) and
+                            (LLMModelAccessTable.userGroupId eq groupId)
+                }
+                ensure(deleted > 0) {
+                    RevokeAccessError.AccessNotGranted
+                }
+            }
+        }
+
     override suspend fun getResourcesAccessibleByGroups(
         groupIds: List<Long>,
         accessMode: String

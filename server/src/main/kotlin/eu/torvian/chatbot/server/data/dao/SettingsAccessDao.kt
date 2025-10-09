@@ -61,6 +61,15 @@ interface SettingsAccessDao {
     suspend fun revokeAccess(settingsId: Long, groupId: Long, accessMode: String): Either<RevokeAccessError, Unit>
 
     /**
+     * Revokes all access from a group for a settings profile.
+     *
+     * @param settingsId ID of the settings profile.
+     * @param groupId ID of the group to revoke access from.
+     * @return Either [RevokeAccessError] or Unit on success.
+     */
+    suspend fun revokeAllAccess(settingsId: Long, groupId: Long): Either<RevokeAccessError, Unit>
+
+    /**
      * Retrieves all settings profile IDs that are accessible by any of the given groups with a specific access mode.
      *
      * @param groupIds List of group IDs to check.

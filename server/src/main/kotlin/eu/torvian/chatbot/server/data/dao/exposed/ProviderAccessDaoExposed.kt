@@ -13,8 +13,11 @@ import eu.torvian.chatbot.server.data.tables.UserGroupsTable
 import eu.torvian.chatbot.server.data.tables.mappers.toUserGroupEntity
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
 import org.jetbrains.exposed.exceptions.ExposedSQLException
-import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.deleteWhere
+import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.selectAll
 
 /**
  * Exposed implementation of the [ProviderAccessDao].
@@ -29,7 +32,7 @@ class ProviderAccessDaoExposed(
                 .selectAll()
                 .where {
                     (LLMProviderAccessTable.providerId eq providerId) and
-                    (LLMProviderAccessTable.accessMode eq accessMode)
+                            (LLMProviderAccessTable.accessMode eq accessMode)
                 }
                 .map { it.toUserGroupEntity() }
         }
@@ -55,8 +58,8 @@ class ProviderAccessDaoExposed(
                 .selectAll()
                 .where {
                     (LLMProviderAccessTable.providerId eq providerId) and
-                    (LLMProviderAccessTable.userGroupId inList groupIds) and
-                    (LLMProviderAccessTable.accessMode eq accessMode)
+                            (LLMProviderAccessTable.userGroupId inList groupIds) and
+                            (LLMProviderAccessTable.accessMode eq accessMode)
                 }
                 .count() > 0
         }
@@ -78,8 +81,10 @@ class ProviderAccessDaoExposed(
                     when {
                         e.isForeignKeyViolation() ->
                             raise(GrantAccessError.ForeignKeyViolation(providerId.toString(), groupId))
+
                         e.isUniqueConstraintViolation() ->
                             raise(GrantAccessError.AlreadyGranted)
+
                         else -> throw e
                     }
                 }
@@ -95,8 +100,21 @@ class ProviderAccessDaoExposed(
             either {
                 val deleted = LLMProviderAccessTable.deleteWhere {
                     (LLMProviderAccessTable.providerId eq providerId) and
-                    (LLMProviderAccessTable.userGroupId eq groupId) and
-                    (LLMProviderAccessTable.accessMode eq accessMode)
+                            (LLMProviderAccessTable.userGroupId eq groupId) and
+                            (LLMProviderAccessTable.accessMode eq accessMode)
+                }
+                ensure(deleted > 0) {
+                    RevokeAccessError.AccessNotGranted
+                }
+            }
+        }
+
+    override suspend fun revokeAllAccess(providerId: Long, groupId: Long): Either<RevokeAccessError, Unit> =
+        transactionScope.transaction {
+            either {
+                val deleted = LLMProviderAccessTable.deleteWhere {
+                    (LLMProviderAccessTable.providerId eq providerId) and
+                            (LLMProviderAccessTable.userGroupId eq groupId)
                 }
                 ensure(deleted > 0) {
                     RevokeAccessError.AccessNotGranted
@@ -115,7 +133,7 @@ class ProviderAccessDaoExposed(
                 .select(LLMProviderAccessTable.providerId)
                 .where {
                     (LLMProviderAccessTable.userGroupId inList groupIds) and
-                    (LLMProviderAccessTable.accessMode eq accessMode)
+                            (LLMProviderAccessTable.accessMode eq accessMode)
                 }
                 .withDistinct()
                 .map { it[LLMProviderAccessTable.providerId].value }
