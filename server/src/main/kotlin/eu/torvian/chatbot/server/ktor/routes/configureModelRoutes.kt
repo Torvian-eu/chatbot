@@ -19,6 +19,9 @@ import eu.torvian.chatbot.server.service.core.ModelSettingsService
 import eu.torvian.chatbot.server.service.core.error.access.GetResourceAccessError
 import eu.torvian.chatbot.server.service.core.error.access.GrantResourceAccessError
 import eu.torvian.chatbot.server.service.core.error.access.RevokeResourceAccessError
+import eu.torvian.chatbot.server.service.core.error.access.MakeResourcePublicError
+import eu.torvian.chatbot.server.service.core.error.access.MakeResourcePrivateError
+import eu.torvian.chatbot.server.service.core.error.access.CheckResourcePublicError
 import eu.torvian.chatbot.server.service.core.error.access.toApiError
 import eu.torvian.chatbot.server.service.core.error.model.*
 import eu.torvian.chatbot.server.service.security.AuthorizationService
@@ -240,6 +243,62 @@ fun Route.configureModelRoutes(
                         request.groupId,
                         accessMode
                     ).bind()
+                }
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.OK)
+            }
+        }
+
+        // --- Convenience Endpoints ---
+
+        // POST /api/v1/models/{modelId}/make-public - Make model public
+        post<ModelResource.ById.MakePublic> { resource ->
+            val userId = call.getUserId()
+            val modelId = resource.parent.modelId
+
+            either {
+                // Require MANAGE access to change visibility
+                requireModelAccess(authorizationService, userId, modelId, AccessMode.MANAGE)
+
+                // Make public
+                withError({ error: MakeResourcePublicError -> error.toApiError() }) {
+                    llmModelService.makeModelPublic(modelId).bind()
+                }
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.OK)
+            }
+        }
+
+        // POST /api/v1/models/{modelId}/make-private - Make model private
+        post<ModelResource.ById.MakePrivate> { resource ->
+            val userId = call.getUserId()
+            val modelId = resource.parent.modelId
+
+            either {
+                // Require MANAGE access to change visibility
+                requireModelAccess(authorizationService, userId, modelId, AccessMode.MANAGE)
+
+                // Make private
+                withError({ error: MakeResourcePrivateError -> error.toApiError() }) {
+                    llmModelService.makeModelPrivate(modelId).bind()
+                }
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.OK)
+            }
+        }
+
+        // GET /api/v1/models/{modelId}/is-public - Check if model is public
+        get<ModelResource.ById.IsPublic> { resource ->
+            val userId = call.getUserId()
+            val modelId = resource.parent.modelId
+
+            either {
+                // Require READ access to check visibility
+                requireModelAccess(authorizationService, userId, modelId, AccessMode.READ)
+
+                // Check public status
+                withError({ error: CheckResourcePublicError -> error.toApiError() }) {
+                    llmModelService.isModelPublic(modelId).bind()
                 }
             }.let { result ->
                 call.respondEither(result, HttpStatusCode.OK)

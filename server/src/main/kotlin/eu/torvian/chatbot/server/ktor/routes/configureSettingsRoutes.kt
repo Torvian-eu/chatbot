@@ -13,10 +13,7 @@ import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.service.core.ModelSettingsService
-import eu.torvian.chatbot.server.service.core.error.access.GetResourceAccessError
-import eu.torvian.chatbot.server.service.core.error.access.GrantResourceAccessError
-import eu.torvian.chatbot.server.service.core.error.access.RevokeResourceAccessError
-import eu.torvian.chatbot.server.service.core.error.access.toApiError
+import eu.torvian.chatbot.server.service.core.error.access.*
 import eu.torvian.chatbot.server.service.core.error.settings.*
 import eu.torvian.chatbot.server.service.security.AuthorizationService
 import io.ktor.http.*
@@ -195,6 +192,59 @@ fun Route.configureSettingsRoutes(
                         request.groupId,
                         accessMode
                     ).bind()
+                }
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.OK)
+            }
+        }
+
+        // --- Convenience Endpoints ---
+
+        // POST /api/v1/settings/{settingsId}/make-public - Make settings public
+        post<SettingsResource.ById.MakePublic> { resource ->
+            val userId = call.getUserId()
+            val settingsId = resource.parent.settingsId
+
+            either {
+                requireSettingsAccess(authorizationService, userId, settingsId, AccessMode.MANAGE)
+
+                // Make public
+                withError({ error: MakeResourcePublicError -> error.toApiError() }) {
+                    modelSettingsService.makeSettingsPublic(settingsId).bind()
+                }
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.OK)
+            }
+        }
+
+        // POST /api/v1/settings/{settingsId}/make-private - Make settings private
+        post<SettingsResource.ById.MakePrivate> { resource ->
+            val userId = call.getUserId()
+            val settingsId = resource.parent.settingsId
+
+            either {
+                requireSettingsAccess(authorizationService, userId, settingsId, AccessMode.MANAGE)
+
+                // Make private
+                withError({ error: MakeResourcePrivateError -> error.toApiError() }) {
+                    modelSettingsService.makeSettingsPrivate(settingsId).bind()
+                }
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.OK)
+            }
+        }
+
+        // GET /api/v1/settings/{settingsId}/is-public - Check if settings is public
+        get<SettingsResource.ById.IsPublic> { resource ->
+            val userId = call.getUserId()
+            val settingsId = resource.parent.settingsId
+
+            either {
+                requireSettingsAccess(authorizationService, userId, settingsId, AccessMode.READ)
+
+                // Check public status
+                withError({ error: CheckResourcePublicError -> error.toApiError() }) {
+                    modelSettingsService.isSettingsPublic(settingsId).bind()
                 }
             }.let { result ->
                 call.respondEither(result, HttpStatusCode.OK)

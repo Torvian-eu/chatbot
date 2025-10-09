@@ -16,10 +16,7 @@ import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.service.core.LLMModelService
 import eu.torvian.chatbot.server.service.core.LLMProviderService
-import eu.torvian.chatbot.server.service.core.error.access.GetResourceAccessError
-import eu.torvian.chatbot.server.service.core.error.access.GrantResourceAccessError
-import eu.torvian.chatbot.server.service.core.error.access.RevokeResourceAccessError
-import eu.torvian.chatbot.server.service.core.error.access.toApiError
+import eu.torvian.chatbot.server.service.core.error.access.*
 import eu.torvian.chatbot.server.service.core.error.provider.*
 import eu.torvian.chatbot.server.service.security.AuthorizationService
 import io.ktor.http.*
@@ -241,6 +238,62 @@ fun Route.configureProviderRoutes(
                         request.groupId,
                         accessMode
                     ).bind()
+                }
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.OK)
+            }
+        }
+
+        // --- Convenience Endpoints ---
+
+        // POST /api/v1/providers/{providerId}/make-public - Make provider public
+        post<ProviderResource.ById.MakePublic> { resource ->
+            val userId = call.getUserId()
+            val providerId = resource.parent.providerId
+
+            either {
+                // Require MANAGE access to change visibility
+                requireProviderAccess(authorizationService, userId, providerId, AccessMode.MANAGE)
+
+                // Make public
+                withError({ error: MakeResourcePublicError -> error.toApiError() }) {
+                    llmProviderService.makeProviderPublic(providerId).bind()
+                }
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.OK)
+            }
+        }
+
+        // POST /api/v1/providers/{providerId}/make-private - Make provider private
+        post<ProviderResource.ById.MakePrivate> { resource ->
+            val userId = call.getUserId()
+            val providerId = resource.parent.providerId
+
+            either {
+                // Require MANAGE access to change visibility
+                requireProviderAccess(authorizationService, userId, providerId, AccessMode.MANAGE)
+
+                // Make private
+                withError({ error: MakeResourcePrivateError -> error.toApiError() }) {
+                    llmProviderService.makeProviderPrivate(providerId).bind()
+                }
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.OK)
+            }
+        }
+
+        // GET /api/v1/providers/{providerId}/is-public - Check if provider is public
+        get<ProviderResource.ById.IsPublic> { resource ->
+            val userId = call.getUserId()
+            val providerId = resource.parent.providerId
+
+            either {
+                // Require READ access to check visibility
+                requireProviderAccess(authorizationService, userId, providerId, AccessMode.READ)
+
+                // Check public status
+                withError({ error: CheckResourcePublicError -> error.toApiError() }) {
+                    llmProviderService.isProviderPublic(providerId).bind()
                 }
             }.let { result ->
                 call.respondEither(result, HttpStatusCode.OK)
