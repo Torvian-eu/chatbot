@@ -29,6 +29,24 @@ class ProviderResource(val parent: Api = Api()) {
          */
         @Resource("access")
         class Access(val parent: ById)
+
+        /**
+         * Resource for making a provider public: /api/v1/providers/{providerId}/make-public
+         */
+        @Resource("make-public")
+        data class MakePublic(val parent: ById)
+
+        /**
+         * Resource for making a provider private: /api/v1/providers/{providerId}/make-private
+         */
+        @Resource("make-private")
+        data class MakePrivate(val parent: ById)
+
+        /**
+         * Resource for checking if a provider is public: /api/v1/providers/{providerId}/is-public
+         */
+        @Resource("is-public")
+        data class IsPublic(val parent: ById)
     }
 }
 

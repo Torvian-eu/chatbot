@@ -18,6 +18,24 @@ class SettingsResource(val parent: Api = Api()) {
          */
         @Resource("access")
         class Access(val parent: ById)
+
+        /**
+         * Resource for making a settings profile public: /api/v1/settings/{settingsId}/make-public
+         */
+        @Resource("make-public")
+        data class MakePublic(val parent: ById)
+
+        /**
+         * Resource for making a settings profile private: /api/v1/settings/{settingsId}/make-private
+         */
+        @Resource("make-private")
+        data class MakePrivate(val parent: ById)
+
+        /**
+         * Resource for checking if a settings profile is public: /api/v1/settings/{settingsId}/is-public
+         */
+        @Resource("is-public")
+        data class IsPublic(val parent: ById)
     }
 }
 
