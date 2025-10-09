@@ -23,6 +23,12 @@ class ProviderResource(val parent: Api = Api()) {
          */
         @Resource("models")
         class Models(val parent: ById)
+
+        /**
+         * Resource for managing provider access: /api/v1/providers/{providerId}/access
+         */
+        @Resource("access")
+        class Access(val parent: ById)
     }
 }
 

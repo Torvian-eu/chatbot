@@ -1,4 +1,5 @@
 package eu.torvian.chatbot.common.api.resources
+
 import io.ktor.resources.*
 
 /**
@@ -11,6 +12,12 @@ class SettingsResource(val parent: Api = Api()) {
      * Resource for a specific setting by ID: /api/v1/settings/{settingsId}
      */
     @Resource("{settingsId}")
-    class ById(val parent: SettingsResource = SettingsResource(), val settingsId: Long)
+    class ById(val parent: SettingsResource = SettingsResource(), val settingsId: Long) {
+        /**
+         * Resource for managing settings access: /api/v1/settings/{settingsId}/access
+         */
+        @Resource("access")
+        class Access(val parent: ById)
+    }
 }
 

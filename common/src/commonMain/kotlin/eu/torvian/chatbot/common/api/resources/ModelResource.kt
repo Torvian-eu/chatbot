@@ -17,11 +17,18 @@ class ModelResource(val parent: Api = Api()) {
          */
         @Resource("settings")
         class Settings(val parent: ById) // Note: Handles GET (list) and POST (add)
+
         /**
          * Resource for getting API key status for a model: /api/v1/models/{modelId}/apikey/status
          */
         @Resource("apikey/status")
         class ApiKeyStatus(val parent: ById)
+
+        /**
+         * Resource for managing model access: /api/v1/models/{modelId}/access
+         */
+        @Resource("access")
+        class Access(val parent: ById)
     }
 }
 
