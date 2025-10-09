@@ -12,11 +12,11 @@ import eu.torvian.chatbot.common.api.apiError
  * Errors that can occur when granting access to a resource for a group.
  */
 sealed class GrantResourceAccessError {
-
     /**
      * The access entry already exists (unique constraint on (resource, group)).
      */
-    data class AlreadyGranted(val resourceId: Long, val groupId: Long, val accessMode: String) : GrantResourceAccessError()
+    data class AlreadyGranted(val resourceId: Long, val groupId: Long, val accessMode: String) :
+        GrantResourceAccessError()
 
     /**
      * Resource or group does not exist (foreign key violation).
@@ -25,16 +25,11 @@ sealed class GrantResourceAccessError {
 }
 
 sealed class RevokeResourceAccessError {
-
     /**
      * The access entry did not exist (nothing to revoke).
      */
-    data class AccessNotFound(val resourceId: Long, val groupId: Long, val accessMode: String) : RevokeResourceAccessError()
-
-    /**
-     * Resource or group does not exist (foreign key violation).
-     */
-    data class InvalidRelatedEntity(val resourceId: Long, val groupId: Long) : RevokeResourceAccessError()
+    data class AccessNotFound(val resourceId: Long, val groupId: Long, val accessMode: String) :
+        RevokeResourceAccessError()
 }
 
 sealed class GetResourceAccessError {
@@ -58,6 +53,7 @@ fun GrantResourceAccessError.toApiError(): ApiError = when (this) {
         "groupId" to groupId.toString(),
         "accessMode" to accessMode
     )
+
     is GrantResourceAccessError.InvalidRelatedEntity -> apiError(
         apiCode = CommonApiErrorCodes.INVALID_ARGUMENT,
         message = "Resource or group does not exist",
@@ -74,12 +70,6 @@ fun RevokeResourceAccessError.toApiError(): ApiError = when (this) {
         "groupId" to groupId.toString(),
         "accessMode" to accessMode
     )
-    is RevokeResourceAccessError.InvalidRelatedEntity -> apiError(
-        apiCode = CommonApiErrorCodes.INVALID_ARGUMENT,
-        message = "Resource or group does not exist",
-        "resourceId" to resourceId.toString(),
-        "groupId" to groupId.toString()
-    )
 }
 
 fun GetResourceAccessError.toApiError(): ApiError = when (this) {
@@ -88,6 +78,7 @@ fun GetResourceAccessError.toApiError(): ApiError = when (this) {
         message = "Resource not found",
         "resourceId" to resourceId.toString()
     )
+
     is GetResourceAccessError.OwnerNotFound -> apiError(
         apiCode = CommonApiErrorCodes.INTERNAL,
         message = "Failed to get owner",

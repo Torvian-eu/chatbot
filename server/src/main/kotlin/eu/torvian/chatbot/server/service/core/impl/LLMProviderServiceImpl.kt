@@ -6,6 +6,8 @@ import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.api.AccessMode
+import eu.torvian.chatbot.common.api.CommonUserGroups
+import eu.torvian.chatbot.common.models.api.access.IsPublicResponse
 import eu.torvian.chatbot.common.models.api.access.ResourceAccessInfo
 import eu.torvian.chatbot.common.models.api.access.ResourceAccessResponse
 import eu.torvian.chatbot.common.models.llm.LLMProvider
@@ -24,6 +26,10 @@ import eu.torvian.chatbot.server.service.security.CredentialManager
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
+import eu.torvian.chatbot.server.service.core.error.usergroup.*
+import eu.torvian.chatbot.server.service.core.error.access.*
+import eu.torvian.chatbot.server.service.core.UserGroupService
+import eu.torvian.chatbot.server.service.core.error.access.CheckResourcePublicError.*
 
 /**
  * Implementation of the [LLMProviderService] interface.
@@ -33,6 +39,7 @@ class LLMProviderServiceImpl(
     private val providerOwnershipDao: ProviderOwnershipDao,
     private val providerAccessDao: ProviderAccessDao,
     private val modelDao: ModelDao,
+    private val userGroupService: UserGroupService,
     private val credentialManager: CredentialManager,
     private val transactionScope: TransactionScope
 ) : LLMProviderService {
@@ -250,9 +257,6 @@ class LLMProviderServiceImpl(
                 when (error) {
                     is RevokeAccessError.AccessNotGranted ->
                         RevokeResourceAccessError.AccessNotFound(providerId, groupId, accessMode.key)
-
-                    is RevokeAccessError.ForeignKeyViolation ->
-                        RevokeResourceAccessError.InvalidRelatedEntity(providerId, groupId)
                 }
             }) {
                 providerAccessDao.revokeAccess(providerId, groupId, accessMode.key).bind()
@@ -301,6 +305,76 @@ class LLMProviderServiceImpl(
                     resourceId = providerId,
                     ownerId = ownerId,
                     accessList = accessList
+                )
+            }
+        }
+
+    // --- Convenience Methods ---
+
+    override suspend fun makeProviderPublic(providerId: Long): Either<MakeResourcePublicError, Unit> =
+        transactionScope.transaction {
+            either {
+                // Get the "All Users" group
+                val allUsersGroup = withError({ error: GetGroupByNameError ->
+                    when (error) {
+                        is GetGroupByNameError.NotFound -> MakeResourcePublicError.AllUsersGroupNotFound
+                    }
+                }) {
+                    userGroupService.getAllUsersGroup().bind()
+                }
+
+                // Grant READ access to "All Users" group
+                providerAccessDao.grantAccess(providerId, allUsersGroup.id, AccessMode.READ.key).fold(
+                    ifLeft = { error ->
+                        when (error) {
+                            is GrantAccessError.AlreadyGranted -> {
+                                // Already public - this is fine (idempotent operation)
+                            }
+                            is GrantAccessError.ForeignKeyViolation -> {
+                                raise(MakeResourcePublicError.InvalidRelatedEntity(providerId, allUsersGroup.id))
+                            }
+                        }
+                    },
+                    ifRight = { /* Success */ }
+                )
+            }
+        }
+
+    override suspend fun makeProviderPrivate(providerId: Long): Either<MakeResourcePrivateError, Unit> =
+        transactionScope.transaction {
+            either {
+                // Get the "All Users" group
+                val allUsersGroup = withError({ error: GetGroupByNameError ->
+                    when (error) {
+                        is GetGroupByNameError.NotFound -> MakeResourcePrivateError.AllUsersGroupNotFound
+                    }
+                }) {
+                    userGroupService.getAllUsersGroup().bind()
+                }
+
+                // Revoke any access that "All Users" group has for this provider (all modes)
+                providerAccessDao.revokeAllAccess(providerId, allUsersGroup.id)
+            }
+        }
+
+    override suspend fun isProviderPublic(providerId: Long): Either<CheckResourcePublicError, IsPublicResponse> =
+        transactionScope.transaction {
+            either {
+                val accessResponse = withError({ error: GetResourceAccessError ->
+                    when (error) {
+                        is GetResourceAccessError.ResourceNotFound, is GetResourceAccessError.OwnerNotFound ->
+                            ResourceNotFound(providerId)
+                    }
+                }) {
+                    getProviderAccess(providerId).bind()
+                }
+
+                val allUsersAccess = accessResponse.accessList.filter { it.groupName == CommonUserGroups.ALL_USERS }
+
+                IsPublicResponse(
+                    hasAllUsersReadAccess = allUsersAccess.any { it.accessMode == AccessMode.READ.key },
+                    hasAllUsersWriteAccess = allUsersAccess.any { it.accessMode == AccessMode.WRITE.key },
+                    hasAllUsersOtherAccess = allUsersAccess.any { it.accessMode != AccessMode.READ.key && it.accessMode != AccessMode.WRITE.key }
                 )
             }
         }

@@ -3,10 +3,14 @@ package eu.torvian.chatbot.server.service.core
 import arrow.core.Either
 import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.models.api.access.ResourceAccessResponse
+import eu.torvian.chatbot.common.models.api.access.IsPublicResponse
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.server.service.core.error.access.GetResourceAccessError
 import eu.torvian.chatbot.server.service.core.error.access.GrantResourceAccessError
 import eu.torvian.chatbot.server.service.core.error.access.RevokeResourceAccessError
+import eu.torvian.chatbot.server.service.core.error.access.MakeResourcePublicError
+import eu.torvian.chatbot.server.service.core.error.access.MakeResourcePrivateError
+import eu.torvian.chatbot.server.service.core.error.access.CheckResourcePublicError
 import eu.torvian.chatbot.server.service.core.error.settings.AddSettingsError
 import eu.torvian.chatbot.server.service.core.error.settings.DeleteSettingsError
 import eu.torvian.chatbot.server.service.core.error.settings.GetSettingsByIdError
@@ -119,4 +123,30 @@ interface ModelSettingsService {
      * @return Either [GetResourceAccessError] or [ResourceAccessResponse]
      */
     suspend fun getSettingsAccess(settingsId: Long): Either<GetResourceAccessError, ResourceAccessResponse>
+
+    // --- Convenience Methods ---
+
+    /**
+     * Makes a settings profile publicly accessible by granting READ access to the "All Users" group.
+     *
+     * @param settingsId The ID of the settings profile to make public
+     * @return Either [MakeResourcePublicError] or Unit on success
+     */
+    suspend fun makeSettingsPublic(settingsId: Long): Either<MakeResourcePublicError, Unit>
+
+    /**
+     * Makes a settings profile private by revoking all access from the "All Users" group.
+     *
+     * @param settingsId The ID of the settings profile to make private
+     * @return Either [MakeResourcePrivateError] or Unit on success
+     */
+    suspend fun makeSettingsPrivate(settingsId: Long): Either<MakeResourcePrivateError, Unit>
+
+    /**
+     * Checks if a settings profile is publicly accessible.
+     *
+     * @param settingsId The ID of the settings profile to check
+     * @return Either [CheckResourcePublicError] or [IsPublicResponse]
+     */
+    suspend fun isSettingsPublic(settingsId: Long): Either<CheckResourcePublicError, IsPublicResponse>
 }

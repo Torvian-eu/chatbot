@@ -2,11 +2,15 @@ package eu.torvian.chatbot.server.service.core
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.api.AccessMode
+import eu.torvian.chatbot.common.models.api.access.IsPublicResponse
 import eu.torvian.chatbot.common.models.api.access.ResourceAccessResponse
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
+import eu.torvian.chatbot.server.service.core.error.access.CheckResourcePublicError
 import eu.torvian.chatbot.server.service.core.error.access.GetResourceAccessError
 import eu.torvian.chatbot.server.service.core.error.access.GrantResourceAccessError
+import eu.torvian.chatbot.server.service.core.error.access.MakeResourcePrivateError
+import eu.torvian.chatbot.server.service.core.error.access.MakeResourcePublicError
 import eu.torvian.chatbot.server.service.core.error.access.RevokeResourceAccessError
 import eu.torvian.chatbot.server.service.core.error.provider.*
 
@@ -126,4 +130,39 @@ interface LLMProviderService {
      * @return Either [GetResourceAccessError] or [ResourceAccessResponse]
      */
     suspend fun getProviderAccess(providerId: Long): Either<GetResourceAccessError, ResourceAccessResponse>
+
+    // --- Convenience Methods ---
+
+    /**
+     * Makes a provider publicly accessible by granting READ access to the "All Users" group.
+     *
+     * This is a convenience method that internally grants READ access to the special
+     * "All Users" group, making the provider visible to all users in the system.
+     *
+     * @param providerId The ID of the provider to make public
+     * @return Either [MakeResourcePublicError] or Unit on success
+     */
+    suspend fun makeProviderPublic(providerId: Long): Either<MakeResourcePublicError, Unit>
+
+    /**
+     * Makes a provider private by revoking all access from the "All Users" group.
+     *
+     * This is a convenience method that removes all access from
+     * the "All Users" group, making the provider accessible only to users with
+     * explicit group access or the owner.
+     *
+     * @param providerId The ID of the provider to make private
+     * @return Either [MakeResourcePrivateError] or Unit on success
+     */
+    suspend fun makeProviderPrivate(providerId: Long): Either<MakeResourcePrivateError, Unit>
+
+    /**
+     * Checks if a provider is publicly accessible.
+     *
+     * A provider is considered public if the "All Users" group has READ access.
+     *
+     * @param providerId The ID of the provider to check
+     * @return Either [CheckResourcePublicError] or [IsPublicResponse]
+     */
+    suspend fun isProviderPublic(providerId: Long): Either<CheckResourcePublicError, IsPublicResponse>
 }

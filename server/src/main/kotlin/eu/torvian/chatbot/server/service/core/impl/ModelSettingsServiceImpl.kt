@@ -5,6 +5,8 @@ import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.api.AccessMode
+import eu.torvian.chatbot.common.api.CommonUserGroups
+import eu.torvian.chatbot.common.models.api.access.IsPublicResponse
 import eu.torvian.chatbot.common.models.api.access.ResourceAccessInfo
 import eu.torvian.chatbot.common.models.api.access.ResourceAccessResponse
 import eu.torvian.chatbot.common.models.llm.ModelSettings
@@ -17,14 +19,19 @@ import eu.torvian.chatbot.server.data.dao.error.GrantAccessError
 import eu.torvian.chatbot.server.data.dao.error.RevokeAccessError
 import eu.torvian.chatbot.server.service.core.LLMModelService
 import eu.torvian.chatbot.server.service.core.ModelSettingsService
+import eu.torvian.chatbot.server.service.core.UserGroupService
 import eu.torvian.chatbot.server.service.core.error.access.GetResourceAccessError
 import eu.torvian.chatbot.server.service.core.error.access.GrantResourceAccessError
 import eu.torvian.chatbot.server.service.core.error.access.RevokeResourceAccessError
+import eu.torvian.chatbot.server.service.core.error.access.MakeResourcePublicError
+import eu.torvian.chatbot.server.service.core.error.access.MakeResourcePrivateError
+import eu.torvian.chatbot.server.service.core.error.access.CheckResourcePublicError
 import eu.torvian.chatbot.server.service.core.error.model.GetModelError
 import eu.torvian.chatbot.server.service.core.error.settings.AddSettingsError
 import eu.torvian.chatbot.server.service.core.error.settings.DeleteSettingsError
 import eu.torvian.chatbot.server.service.core.error.settings.GetSettingsByIdError
 import eu.torvian.chatbot.server.service.core.error.settings.UpdateSettingsError
+import eu.torvian.chatbot.server.service.core.error.usergroup.GetGroupByNameError
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
 import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
 
@@ -36,7 +43,8 @@ class ModelSettingsServiceImpl(
     private val llmModelService: LLMModelService,
     private val transactionScope: TransactionScope,
     private val settingsOwnershipDao: SettingsOwnershipDao,
-    private val settingsAccessDao: SettingsAccessDao
+    private val settingsAccessDao: SettingsAccessDao,
+    private val userGroupService: UserGroupService
 ) : ModelSettingsService {
 
     override suspend fun getSettingsById(id: Long): Either<GetSettingsByIdError, ModelSettings> =
@@ -194,9 +202,6 @@ class ModelSettingsServiceImpl(
                 when (error) {
                     is RevokeAccessError.AccessNotGranted ->
                         RevokeResourceAccessError.AccessNotFound(settingsId, groupId, accessMode.key)
-
-                    is RevokeAccessError.ForeignKeyViolation ->
-                        RevokeResourceAccessError.InvalidRelatedEntity(settingsId, groupId)
                 }
             }) {
                 settingsAccessDao.revokeAccess(settingsId, groupId, accessMode.key).bind()
@@ -245,6 +250,76 @@ class ModelSettingsServiceImpl(
                     resourceId = settingsId,
                     ownerId = ownerId,
                     accessList = accessList
+                )
+            }
+        }
+
+    // --- Convenience Methods ---
+
+    override suspend fun makeSettingsPublic(settingsId: Long): Either<MakeResourcePublicError, Unit> =
+        transactionScope.transaction {
+            either {
+                // Get the "All Users" group
+                val allUsersGroup = withError({ error: GetGroupByNameError ->
+                    when (error) {
+                        is GetGroupByNameError.NotFound -> MakeResourcePublicError.AllUsersGroupNotFound
+                    }
+                }) {
+                    userGroupService.getAllUsersGroup().bind()
+                }
+
+                // Grant READ access to "All Users" group
+                settingsAccessDao.grantAccess(settingsId, allUsersGroup.id, AccessMode.READ.key).fold(
+                    ifLeft = { error ->
+                        when (error) {
+                            is GrantAccessError.AlreadyGranted -> {
+                                // Already public - idempotent
+                            }
+                            is GrantAccessError.ForeignKeyViolation -> {
+                                raise(MakeResourcePublicError.InvalidRelatedEntity(settingsId, allUsersGroup.id))
+                            }
+                        }
+                    },
+                    ifRight = { /* Success */ }
+                )
+            }
+        }
+
+    override suspend fun makeSettingsPrivate(settingsId: Long): Either<MakeResourcePrivateError, Unit> =
+        transactionScope.transaction {
+            either {
+                // Get the "All Users" group
+                val allUsersGroup = withError({ error: GetGroupByNameError ->
+                    when (error) {
+                        is GetGroupByNameError.NotFound -> MakeResourcePrivateError.AllUsersGroupNotFound
+                    }
+                }) {
+                    userGroupService.getAllUsersGroup().bind()
+                }
+
+                // Revoke any access that "All Users" group has for this settings profile (all modes)
+                settingsAccessDao.revokeAllAccess(settingsId, allUsersGroup.id)
+            }
+        }
+
+    override suspend fun isSettingsPublic(settingsId: Long): Either<CheckResourcePublicError, IsPublicResponse> =
+        transactionScope.transaction {
+            either {
+                val accessResponse = withError({ error: GetResourceAccessError ->
+                    when (error) {
+                        is GetResourceAccessError.ResourceNotFound, is GetResourceAccessError.OwnerNotFound ->
+                            CheckResourcePublicError.ResourceNotFound(settingsId)
+                    }
+                }) {
+                    getSettingsAccess(settingsId).bind()
+                }
+
+                val allUsersAccess = accessResponse.accessList.filter { it.groupName == CommonUserGroups.ALL_USERS }
+
+                IsPublicResponse(
+                    hasAllUsersReadAccess = allUsersAccess.any { it.accessMode == AccessMode.READ.key },
+                    hasAllUsersWriteAccess = allUsersAccess.any { it.accessMode == AccessMode.WRITE.key },
+                    hasAllUsersOtherAccess = allUsersAccess.any { it.accessMode != AccessMode.READ.key && it.accessMode != AccessMode.WRITE.key }
                 )
             }
         }

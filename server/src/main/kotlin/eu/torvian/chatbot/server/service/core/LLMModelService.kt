@@ -3,11 +3,15 @@ package eu.torvian.chatbot.server.service.core
 import arrow.core.Either
 import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.models.api.access.ResourceAccessResponse
+import eu.torvian.chatbot.common.models.api.access.IsPublicResponse
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.server.service.core.error.access.GetResourceAccessError
 import eu.torvian.chatbot.server.service.core.error.access.GrantResourceAccessError
 import eu.torvian.chatbot.server.service.core.error.access.RevokeResourceAccessError
+import eu.torvian.chatbot.server.service.core.error.access.MakeResourcePublicError
+import eu.torvian.chatbot.server.service.core.error.access.MakeResourcePrivateError
+import eu.torvian.chatbot.server.service.core.error.access.CheckResourcePublicError
 import eu.torvian.chatbot.server.service.core.error.model.AddModelError
 import eu.torvian.chatbot.server.service.core.error.model.DeleteModelError
 import eu.torvian.chatbot.server.service.core.error.model.GetModelError
@@ -140,4 +144,39 @@ interface LLMModelService {
      * @return Either [GetResourceAccessError] or [ResourceAccessResponse]
      */
     suspend fun getModelAccess(modelId: Long): Either<GetResourceAccessError, ResourceAccessResponse>
+
+    // --- Convenience Methods ---
+
+    /**
+     * Makes a model publicly accessible by granting READ access to the "All Users" group.
+     *
+     * This is a convenience method that internally grants READ access to the special
+     * "All Users" group, making the model visible to all users in the system.
+     *
+     * @param modelId The ID of the model to make public
+     * @return Either [MakeResourcePublicError] or Unit on success
+     */
+    suspend fun makeModelPublic(modelId: Long): Either<MakeResourcePublicError, Unit>
+
+    /**
+     * Makes a model private by revoking all access from the "All Users" group.
+     *
+     * This is a convenience method that removes all access from
+     * the "All Users" group, making the model accessible only to users with
+     * explicit group access or the owner.
+     *
+     * @param modelId The ID of the model to make private
+     * @return Either [MakeResourcePrivateError] or Unit on success
+     */
+    suspend fun makeModelPrivate(modelId: Long): Either<MakeResourcePrivateError, Unit>
+
+    /**
+     * Checks if a model is publicly accessible.
+     *
+     * A model is considered public if the "All Users" group has READ access.
+     *
+     * @param modelId The ID of the model to check
+     * @return Either [CheckResourcePublicError] or [IsPublicResponse]
+     */
+    suspend fun isModelPublic(modelId: Long): Either<CheckResourcePublicError, IsPublicResponse>
 }

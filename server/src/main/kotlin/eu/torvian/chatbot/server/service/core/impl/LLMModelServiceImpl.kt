@@ -6,28 +6,25 @@ import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.api.AccessMode
+import eu.torvian.chatbot.common.api.CommonUserGroups
+import eu.torvian.chatbot.common.models.api.access.IsPublicResponse
 import eu.torvian.chatbot.common.models.api.access.ResourceAccessInfo
 import eu.torvian.chatbot.common.models.api.access.ResourceAccessResponse
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.server.data.dao.LLMProviderDao
+import eu.torvian.chatbot.server.data.dao.ModelAccessDao
 import eu.torvian.chatbot.server.data.dao.ModelDao
 import eu.torvian.chatbot.server.data.dao.ModelOwnershipDao
-import eu.torvian.chatbot.server.data.dao.ModelAccessDao
-import eu.torvian.chatbot.server.data.dao.error.InsertModelError
-import eu.torvian.chatbot.server.data.dao.error.ModelError
-import eu.torvian.chatbot.server.data.dao.error.SetOwnerError
-import eu.torvian.chatbot.server.data.dao.error.GrantAccessError
-import eu.torvian.chatbot.server.data.dao.error.RevokeAccessError
-import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
+import eu.torvian.chatbot.server.data.dao.error.*
 import eu.torvian.chatbot.server.service.core.LLMModelService
-import eu.torvian.chatbot.server.service.core.error.access.GetResourceAccessError
-import eu.torvian.chatbot.server.service.core.error.access.GrantResourceAccessError
-import eu.torvian.chatbot.server.service.core.error.access.RevokeResourceAccessError
+import eu.torvian.chatbot.server.service.core.UserGroupService
+import eu.torvian.chatbot.server.service.core.error.access.*
 import eu.torvian.chatbot.server.service.core.error.model.AddModelError
 import eu.torvian.chatbot.server.service.core.error.model.DeleteModelError
 import eu.torvian.chatbot.server.service.core.error.model.GetModelError
 import eu.torvian.chatbot.server.service.core.error.model.UpdateModelError
+import eu.torvian.chatbot.server.service.core.error.usergroup.GetGroupByNameError
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
 import kotlinx.serialization.json.JsonObject
 import eu.torvian.chatbot.server.data.dao.error.UpdateModelError as DaoUpdateModelError
@@ -40,7 +37,8 @@ class LLMModelServiceImpl(
     private val llmProviderDao: LLMProviderDao,
     private val transactionScope: TransactionScope,
     private val modelOwnershipDao: ModelOwnershipDao,
-    private val modelAccessDao: ModelAccessDao
+    private val modelAccessDao: ModelAccessDao,
+    private val userGroupService: UserGroupService
 ) : LLMModelService {
 
     override suspend fun getAllModels(): List<LLMModel> {
@@ -168,18 +166,20 @@ class LLMModelServiceImpl(
 
     // --- Access Management ---
 
-    override suspend fun grantModelAccess(modelId: Long, groupId: Long, accessMode: AccessMode): Either<GrantResourceAccessError, Unit> =
+    override suspend fun grantModelAccess(
+        modelId: Long,
+        groupId: Long,
+        accessMode: AccessMode
+    ): Either<GrantResourceAccessError, Unit> =
         transactionScope.transaction {
             either {
                 withError({ error: GrantAccessError ->
                     when (error) {
-                        is GrantAccessError.AlreadyGranted -> GrantResourceAccessError.AlreadyGranted(
-                            modelId,
-                            groupId,
-                            accessMode.key
-                        )
+                        is GrantAccessError.AlreadyGranted ->
+                            GrantResourceAccessError.AlreadyGranted(modelId, groupId, accessMode.key)
 
-                        is GrantAccessError.ForeignKeyViolation -> GrantResourceAccessError.InvalidRelatedEntity(modelId, groupId)
+                        is GrantAccessError.ForeignKeyViolation ->
+                            GrantResourceAccessError.InvalidRelatedEntity(modelId, groupId)
                     }
                 }) {
                     modelAccessDao.grantAccess(modelId, groupId, accessMode.key).bind()
@@ -187,13 +187,17 @@ class LLMModelServiceImpl(
             }
         }
 
-    override suspend fun revokeModelAccess(modelId: Long, groupId: Long, accessMode: AccessMode): Either<RevokeResourceAccessError, Unit> =
+    override suspend fun revokeModelAccess(
+        modelId: Long,
+        groupId: Long,
+        accessMode: AccessMode
+    ): Either<RevokeResourceAccessError, Unit> =
         transactionScope.transaction {
             either {
                 withError({ error: RevokeAccessError ->
                     when (error) {
-                        is RevokeAccessError.AccessNotGranted -> RevokeResourceAccessError.AccessNotFound(modelId, groupId, accessMode.key)
-                        is RevokeAccessError.ForeignKeyViolation -> RevokeResourceAccessError.InvalidRelatedEntity(modelId, groupId)
+                        is RevokeAccessError.AccessNotGranted ->
+                            RevokeResourceAccessError.AccessNotFound(modelId, groupId, accessMode.key)
                     }
                 }) {
                     modelAccessDao.revokeAccess(modelId, groupId, accessMode.key).bind()
@@ -241,6 +245,79 @@ class LLMModelServiceImpl(
                     resourceId = modelId,
                     ownerId = ownerId,
                     accessList = accessList
+                )
+            }
+        }
+
+    // --- Convenience Methods ---
+
+    override suspend fun makeModelPublic(modelId: Long): Either<MakeResourcePublicError, Unit> =
+        transactionScope.transaction {
+            either {
+                // Get the "All Users" group
+                val allUsersGroup =
+                    withError({ error: GetGroupByNameError ->
+                        when (error) {
+                            is GetGroupByNameError.NotFound -> MakeResourcePublicError.AllUsersGroupNotFound
+                        }
+                    }) {
+                        userGroupService.getAllUsersGroup().bind()
+                    }
+
+                // Grant READ access to "All Users" group
+                modelAccessDao.grantAccess(modelId, allUsersGroup.id, AccessMode.READ.key).fold(
+                    ifLeft = { error ->
+                        when (error) {
+                            is GrantAccessError.AlreadyGranted -> {
+                                // Already public - idempotent
+                            }
+
+                            is GrantAccessError.ForeignKeyViolation -> {
+                                raise(MakeResourcePublicError.InvalidRelatedEntity(modelId, allUsersGroup.id))
+                            }
+                        }
+                    },
+                    ifRight = { /* Success */ }
+                )
+            }
+        }
+
+    override suspend fun makeModelPrivate(modelId: Long): Either<MakeResourcePrivateError, Unit> =
+        transactionScope.transaction {
+            either {
+                // Get the "All Users" group
+                val allUsersGroup =
+                    withError({ error: GetGroupByNameError ->
+                        when (error) {
+                            is GetGroupByNameError.NotFound -> MakeResourcePrivateError.AllUsersGroupNotFound
+                        }
+                    }) {
+                        userGroupService.getAllUsersGroup().bind()
+                    }
+
+                // Revoke any access that "All Users" group has for this model (all modes)
+                modelAccessDao.revokeAllAccess(modelId, allUsersGroup.id)
+            }
+        }
+
+    override suspend fun isModelPublic(modelId: Long): Either<CheckResourcePublicError, IsPublicResponse> =
+        transactionScope.transaction {
+            either {
+                val accessResponse = withError({ error: GetResourceAccessError ->
+                    when (error) {
+                        is GetResourceAccessError.ResourceNotFound, is GetResourceAccessError.OwnerNotFound ->
+                            CheckResourcePublicError.ResourceNotFound(modelId)
+                    }
+                }) {
+                    getModelAccess(modelId).bind()
+                }
+
+                val allUsersAccess = accessResponse.accessList.filter { it.groupName == CommonUserGroups.ALL_USERS }
+
+                IsPublicResponse(
+                    hasAllUsersReadAccess = allUsersAccess.any { it.accessMode == AccessMode.READ.key },
+                    hasAllUsersWriteAccess = allUsersAccess.any { it.accessMode == AccessMode.WRITE.key },
+                    hasAllUsersOtherAccess = allUsersAccess.any { it.accessMode != AccessMode.READ.key && it.accessMode != AccessMode.WRITE.key }
                 )
             }
         }
