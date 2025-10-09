@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.ktor.routes
 
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
+import eu.torvian.chatbot.common.api.CommonPermissions
 import eu.torvian.chatbot.common.api.resources.ModelResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.misc.di.DIContainer
@@ -11,6 +12,10 @@ import eu.torvian.chatbot.common.models.api.llm.ApiKeyStatusResponse
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.llm.ModelSettings
+import eu.torvian.chatbot.server.data.entities.PermissionEntity
+import eu.torvian.chatbot.server.data.entities.RolePermissionEntity
+import eu.torvian.chatbot.server.data.entities.UserEntity
+import eu.torvian.chatbot.server.data.entities.UserRoleAssignmentEntity
 import eu.torvian.chatbot.server.testutils.auth.TestAuthHelper
 import eu.torvian.chatbot.server.testutils.auth.authenticate
 import eu.torvian.chatbot.server.testutils.data.Table
@@ -93,6 +98,19 @@ class ModelRoutesTest {
         container.close()
     }
 
+    private suspend fun addCreatePermissionForUser(testUser: UserEntity = testUser1) {
+        testDataManager.insertRole(TestDefaults.role1)
+        testDataManager.insertPermission(PermissionEntity(1L, CommonPermissions.CREATE_LLM_MODEL))
+        testDataManager.insertRolePermission(RolePermissionEntity(1L, 1L))
+        testDataManager.insertUserRoleAssignment(
+            UserRoleAssignmentEntity(
+                testUser.id,
+                1L,
+                TestDefaults.DEFAULT_INSTANT
+            )
+        )
+    }
+
     // --- GET /api/v1/models Tests ---
 
     @Test
@@ -148,6 +166,8 @@ class ModelRoutesTest {
             displayName = newModelDisplayName
         )
 
+        addCreatePermissionForUser()
+
         // Act
         val response = client.post(href(ModelResource())) {
             contentType(ContentType.Application.Json)
@@ -181,6 +201,8 @@ class ModelRoutesTest {
             displayName = null
         )
 
+        addCreatePermissionForUser()
+
         // Act
         val response = client.post(href(ModelResource())) {
             contentType(ContentType.Application.Json)
@@ -210,6 +232,8 @@ class ModelRoutesTest {
             displayName = null
         )
 
+        addCreatePermissionForUser()
+
         // Act
         val response = client.post(href(ModelResource())) {
             contentType(ContentType.Application.Json)
@@ -236,6 +260,8 @@ class ModelRoutesTest {
                 llmModels = listOf(testModel1)
             )
         )
+
+        addCreatePermissionForUser()
 
         val createRequest = AddModelRequest(
             name = testModel1.name, // Use existing name

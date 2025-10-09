@@ -7,6 +7,8 @@ import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.CommonPermissions
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.ModelResource
+import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
+import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
 import eu.torvian.chatbot.common.models.api.llm.AddModelRequest
 import eu.torvian.chatbot.common.models.api.llm.ApiKeyStatusResponse
 import eu.torvian.chatbot.common.models.llm.LLMModel
@@ -14,6 +16,10 @@ import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.service.core.LLMModelService
 import eu.torvian.chatbot.server.service.core.ModelSettingsService
+import eu.torvian.chatbot.server.service.core.error.access.GetResourceAccessError
+import eu.torvian.chatbot.server.service.core.error.access.GrantResourceAccessError
+import eu.torvian.chatbot.server.service.core.error.access.RevokeResourceAccessError
+import eu.torvian.chatbot.server.service.core.error.access.toApiError
 import eu.torvian.chatbot.server.service.core.error.model.*
 import eu.torvian.chatbot.server.service.security.AuthorizationService
 import io.ktor.http.*
@@ -22,6 +28,8 @@ import io.ktor.server.request.*
 import io.ktor.server.resources.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.Route
+import kotlin.let
+import kotlin.to
 
 /**
  * Configures routes related to Models (/api/v1/models) using Ktor Resources.
@@ -51,6 +59,14 @@ fun Route.configureModelRoutes(
             val userId = call.getUserId()
             val request = call.receive<AddModelRequest>()
             either {
+                // Require CREATE or MANAGE permission for models
+                requireAnyPermission(
+                    authorizationService,
+                    userId,
+                    CommonPermissions.MANAGE_LLM_MODELS,
+                    CommonPermissions.CREATE_LLM_MODEL
+                )
+
                 withError({ error: AddModelError -> error.toApiError() }) {
                     llmModelService.addModel(
                         userId,
@@ -162,6 +178,71 @@ fun Route.configureModelRoutes(
                 ApiKeyStatusResponse(isConfigured)
             }.let { result ->
                 call.respondEither(result)
+            }
+        }
+
+        // --- Access Management for models ---
+
+        // GET /api/v1/models/{modelId}/access - Get access information
+        get<ModelResource.ById.Access> { resource ->
+            val userId = call.getUserId()
+            val modelId = resource.parent.modelId
+
+            either {
+                requireModelAccess(authorizationService, userId, modelId, AccessMode.MANAGE)
+
+                // Get access information
+                withError({ error: GetResourceAccessError -> error.toApiError() }) {
+                    llmModelService.getModelAccess(modelId).bind()
+                }
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.OK)
+            }
+        }
+
+        // POST /api/v1/models/{modelId}/access - Grant access to a group
+        post<ModelResource.ById.Access> { resource ->
+            val userId = call.getUserId()
+            val modelId = resource.parent.modelId
+            val request = call.receive<GrantAccessRequest>()
+
+            either {
+                requireModelAccess(authorizationService, userId, modelId, AccessMode.MANAGE)
+
+                // Grant access
+                val accessMode = AccessMode.of(request.accessMode)
+                withError({ error: GrantResourceAccessError -> error.toApiError() }) {
+                    llmModelService.grantModelAccess(
+                        modelId,
+                        request.groupId,
+                        accessMode
+                    ).bind()
+                }
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.OK)
+            }
+        }
+
+        // DELETE /api/v1/models/{modelId}/access - Revoke access from a group
+        delete<ModelResource.ById.Access> { resource ->
+            val userId = call.getUserId()
+            val modelId = resource.parent.modelId
+            val request = call.receive<RevokeAccessRequest>()
+
+            either {
+                requireModelAccess(authorizationService, userId, modelId, AccessMode.MANAGE)
+
+                // Revoke access
+                val accessMode = AccessMode.of(request.accessMode)
+                withError({ error: RevokeResourceAccessError -> error.toApiError() }) {
+                    llmModelService.revokeModelAccess(
+                        modelId,
+                        request.groupId,
+                        accessMode
+                    ).bind()
+                }
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.OK)
             }
         }
     }

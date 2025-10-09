@@ -2,12 +2,17 @@ package eu.torvian.chatbot.server.ktor.routes
 
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
+import eu.torvian.chatbot.common.api.CommonPermissions
 import eu.torvian.chatbot.common.api.resources.SettingsResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.ModelSettings
+import eu.torvian.chatbot.server.data.entities.PermissionEntity
+import eu.torvian.chatbot.server.data.entities.RolePermissionEntity
+import eu.torvian.chatbot.server.data.entities.UserEntity
+import eu.torvian.chatbot.server.data.entities.UserRoleAssignmentEntity
 import eu.torvian.chatbot.server.testutils.auth.TestAuthHelper
 import eu.torvian.chatbot.server.testutils.auth.authenticate
 import eu.torvian.chatbot.server.testutils.data.Table
@@ -97,6 +102,19 @@ class SettingsRoutesTest {
         container.close()
     }
 
+    private suspend fun addCreatePermissionForUser(testUser: UserEntity = testUser1) {
+        testDataManager.insertRole(TestDefaults.role1)
+        testDataManager.insertPermission(PermissionEntity(1L, CommonPermissions.CREATE_LLM_MODEL_SETTINGS))
+        testDataManager.insertRolePermission(RolePermissionEntity(1L, 1L))
+        testDataManager.insertUserRoleAssignment(
+            UserRoleAssignmentEntity(
+                testUser.id,
+                1L,
+                TestDefaults.DEFAULT_INSTANT
+            )
+        )
+    }
+
     // --- GET /api/v1/settings/{settingsId} Tests ---
 
     @Test
@@ -148,6 +166,7 @@ class SettingsRoutesTest {
             maxTokens = 512,
             customParams = Json.decodeFromString("""{"foo":"bar"}""")
         )
+        addCreatePermissionForUser()
 
         // Act
         val response = client.post(href(SettingsResource())) {
@@ -177,6 +196,7 @@ class SettingsRoutesTest {
             maxTokens = 512,
             customParams = Json.decodeFromString("""{"foo":"bar"}""")
         )
+        addCreatePermissionForUser()
 
         // Act
         val response = client.post(href(SettingsResource())) {
@@ -210,6 +230,7 @@ class SettingsRoutesTest {
             stopSequences = null,
             customParams = null
         )
+        addCreatePermissionForUser()
 
         // Act
         val response = client.post(href(SettingsResource())) {

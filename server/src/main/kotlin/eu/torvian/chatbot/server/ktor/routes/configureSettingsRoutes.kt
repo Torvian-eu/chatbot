@@ -7,10 +7,16 @@ import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.CommonPermissions
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.SettingsResource
+import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
+import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.service.core.ModelSettingsService
+import eu.torvian.chatbot.server.service.core.error.access.GetResourceAccessError
+import eu.torvian.chatbot.server.service.core.error.access.GrantResourceAccessError
+import eu.torvian.chatbot.server.service.core.error.access.RevokeResourceAccessError
+import eu.torvian.chatbot.server.service.core.error.access.toApiError
 import eu.torvian.chatbot.server.service.core.error.settings.*
 import eu.torvian.chatbot.server.service.security.AuthorizationService
 import io.ktor.http.*
@@ -19,6 +25,8 @@ import io.ktor.server.request.*
 import io.ktor.server.resources.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.Route
+import kotlin.let
+import kotlin.to
 
 /**
  * Configures routes related to Settings (/api/v1/settings) using Ktor Resources.
@@ -40,8 +48,6 @@ fun Route.configureSettingsRoutes(
             else {
                 call.respond(modelSettingsService.getAllAccessibleSettings(userId, AccessMode.READ))
             }
-            val allSettings = modelSettingsService.getAllSettings()
-            call.respond(allSettings)
         }
 
         // GET /api/v1/settings/{settingsId} - Get settings by ID
@@ -67,6 +73,14 @@ fun Route.configureSettingsRoutes(
             val userId = call.getUserId()
             val settings = call.receive<ModelSettings>()
             either {
+                // Require CREATE or MANAGE permission for settings
+                requireAnyPermission(
+                    authorizationService,
+                    userId,
+                    CommonPermissions.MANAGE_LLM_MODEL_SETTINGS,
+                    CommonPermissions.CREATE_LLM_MODEL_SETTINGS
+                )
+
                 withError({ error: AddSettingsError -> error.toApiError() }) {
                     modelSettingsService.addSettings(userId, settings).bind()
                 }
@@ -119,6 +133,71 @@ fun Route.configureSettingsRoutes(
                 }
             }.let { result ->
                 call.respondEither(result, HttpStatusCode.NoContent)
+            }
+        }
+
+        // --- Access Management for settings ---
+
+        // GET /api/v1/settings/{settingsId}/access - Get access information
+        get<SettingsResource.ById.Access> { resource ->
+            val userId = call.getUserId()
+            val settingsId = resource.parent.settingsId
+
+            either {
+                requireSettingsAccess(authorizationService, userId, settingsId, AccessMode.MANAGE)
+
+                // Get access information
+                withError({ error: GetResourceAccessError -> error.toApiError() }) {
+                    modelSettingsService.getSettingsAccess(settingsId).bind()
+                }
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.OK)
+            }
+        }
+
+        // POST /api/v1/settings/{settingsId}/access - Grant access to a group
+        post<SettingsResource.ById.Access> { resource ->
+            val userId = call.getUserId()
+            val settingsId = resource.parent.settingsId
+            val request = call.receive<GrantAccessRequest>()
+
+            either {
+                requireSettingsAccess(authorizationService, userId, settingsId, AccessMode.MANAGE)
+
+                // Grant access
+                val accessMode = AccessMode.of(request.accessMode)
+                withError({ error: GrantResourceAccessError -> error.toApiError() }) {
+                    modelSettingsService.grantSettingsAccess(
+                        settingsId,
+                        request.groupId,
+                        accessMode
+                    ).bind()
+                }
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.OK)
+            }
+        }
+
+        // DELETE /api/v1/settings/{settingsId}/access - Revoke access from a group
+        delete<SettingsResource.ById.Access> { resource ->
+            val userId = call.getUserId()
+            val settingsId = resource.parent.settingsId
+            val request = call.receive<RevokeAccessRequest>()
+
+            either {
+                requireSettingsAccess(authorizationService, userId, settingsId, AccessMode.MANAGE)
+
+                // Revoke access
+                val accessMode = AccessMode.of(request.accessMode)
+                withError({ error: RevokeResourceAccessError -> error.toApiError() }) {
+                    modelSettingsService.revokeSettingsAccess(
+                        settingsId,
+                        request.groupId,
+                        accessMode
+                    ).bind()
+                }
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.OK)
             }
         }
     }

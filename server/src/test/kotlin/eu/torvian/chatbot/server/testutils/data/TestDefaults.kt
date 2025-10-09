@@ -14,6 +14,7 @@ import eu.torvian.chatbot.server.data.entities.SessionCurrentLeafEntity
 import eu.torvian.chatbot.server.domain.config.DatabaseConfig
 import eu.torvian.chatbot.common.security.EncryptedSecret
 import eu.torvian.chatbot.common.security.EncryptionConfig
+import eu.torvian.chatbot.server.data.entities.RoleEntity
 import eu.torvian.chatbot.server.data.entities.UserEntity
 import eu.torvian.chatbot.server.data.entities.UserGroupEntity
 import eu.torvian.chatbot.server.data.entities.UserSessionEntity
@@ -247,5 +248,11 @@ object TestDefaults {
         id = 1L,
         name = "Test User Group 1",
         description = "Test User Group 1"
+    )
+
+    val role1 = RoleEntity(
+        id = 1L,
+        name = "Test Role 1",
+        description = "Test Role 1"
     )
 }
