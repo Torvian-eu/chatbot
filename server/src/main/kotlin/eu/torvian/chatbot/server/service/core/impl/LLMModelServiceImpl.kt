@@ -6,15 +6,24 @@ import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.api.AccessMode
+import eu.torvian.chatbot.common.models.api.access.ResourceAccessInfo
+import eu.torvian.chatbot.common.models.api.access.ResourceAccessResponse
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.server.data.dao.LLMProviderDao
 import eu.torvian.chatbot.server.data.dao.ModelDao
 import eu.torvian.chatbot.server.data.dao.ModelOwnershipDao
+import eu.torvian.chatbot.server.data.dao.ModelAccessDao
 import eu.torvian.chatbot.server.data.dao.error.InsertModelError
 import eu.torvian.chatbot.server.data.dao.error.ModelError
 import eu.torvian.chatbot.server.data.dao.error.SetOwnerError
+import eu.torvian.chatbot.server.data.dao.error.GrantAccessError
+import eu.torvian.chatbot.server.data.dao.error.RevokeAccessError
+import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
 import eu.torvian.chatbot.server.service.core.LLMModelService
+import eu.torvian.chatbot.server.service.core.error.access.GetResourceAccessError
+import eu.torvian.chatbot.server.service.core.error.access.GrantResourceAccessError
+import eu.torvian.chatbot.server.service.core.error.access.RevokeResourceAccessError
 import eu.torvian.chatbot.server.service.core.error.model.AddModelError
 import eu.torvian.chatbot.server.service.core.error.model.DeleteModelError
 import eu.torvian.chatbot.server.service.core.error.model.GetModelError
@@ -30,7 +39,8 @@ class LLMModelServiceImpl(
     private val modelDao: ModelDao,
     private val llmProviderDao: LLMProviderDao,
     private val transactionScope: TransactionScope,
-    private val modelOwnershipDao: ModelOwnershipDao
+    private val modelOwnershipDao: ModelOwnershipDao,
+    private val modelAccessDao: ModelAccessDao
 ) : LLMModelService {
 
     override suspend fun getAllModels(): List<LLMModel> {
@@ -155,4 +165,83 @@ class LLMModelServiceImpl(
                 .getOrElse { false }
         }
     }
+
+    // --- Access Management ---
+
+    override suspend fun grantModelAccess(modelId: Long, groupId: Long, accessMode: AccessMode): Either<GrantResourceAccessError, Unit> =
+        transactionScope.transaction {
+            either {
+                withError({ error: GrantAccessError ->
+                    when (error) {
+                        is GrantAccessError.AlreadyGranted -> GrantResourceAccessError.AlreadyGranted(
+                            modelId,
+                            groupId,
+                            accessMode.key
+                        )
+
+                        is GrantAccessError.ForeignKeyViolation -> GrantResourceAccessError.InvalidRelatedEntity(modelId, groupId)
+                    }
+                }) {
+                    modelAccessDao.grantAccess(modelId, groupId, accessMode.key).bind()
+                }
+            }
+        }
+
+    override suspend fun revokeModelAccess(modelId: Long, groupId: Long, accessMode: AccessMode): Either<RevokeResourceAccessError, Unit> =
+        transactionScope.transaction {
+            either {
+                withError({ error: RevokeAccessError ->
+                    when (error) {
+                        is RevokeAccessError.AccessNotGranted -> RevokeResourceAccessError.AccessNotFound(modelId, groupId, accessMode.key)
+                        is RevokeAccessError.ForeignKeyViolation -> RevokeResourceAccessError.InvalidRelatedEntity(modelId, groupId)
+                    }
+                }) {
+                    modelAccessDao.revokeAccess(modelId, groupId, accessMode.key).bind()
+                }
+            }
+        }
+
+    override suspend fun getModelAccess(modelId: Long): Either<GetResourceAccessError, ResourceAccessResponse> =
+        transactionScope.transaction {
+            either {
+                // Verify model exists
+                withError({ daoError: ModelError.ModelNotFound ->
+                    GetResourceAccessError.ResourceNotFound(daoError.id)
+                }) {
+                    modelDao.getModelById(modelId).bind()
+                }
+
+                // Get owner ID
+                val ownerId = withError({ error: GetOwnerError ->
+                    when (error) {
+                        is GetOwnerError.ResourceNotFound -> GetResourceAccessError.OwnerNotFound(modelId)
+                    }
+                }) {
+                    modelOwnershipDao.getOwner(modelId).bind()
+                }
+
+                // Get all access groups grouped by access mode
+                val allAccessGroups = modelAccessDao.getAccessGroups(modelId)
+
+                val accessList = buildList {
+                    allAccessGroups.forEach { (accessMode, groups) ->
+                        groups.forEach { group ->
+                            add(
+                                ResourceAccessInfo(
+                                    groupId = group.id,
+                                    groupName = group.name,
+                                    accessMode = accessMode
+                                )
+                            )
+                        }
+                    }
+                }
+
+                ResourceAccessResponse(
+                    resourceId = modelId,
+                    ownerId = ownerId,
+                    accessList = accessList
+                )
+            }
+        }
 }

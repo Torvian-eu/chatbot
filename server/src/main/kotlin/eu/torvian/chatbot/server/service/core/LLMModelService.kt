@@ -2,8 +2,12 @@ package eu.torvian.chatbot.server.service.core
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.api.AccessMode
+import eu.torvian.chatbot.common.models.api.access.ResourceAccessResponse
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType
+import eu.torvian.chatbot.server.service.core.error.access.GetResourceAccessError
+import eu.torvian.chatbot.server.service.core.error.access.GrantResourceAccessError
+import eu.torvian.chatbot.server.service.core.error.access.RevokeResourceAccessError
 import eu.torvian.chatbot.server.service.core.error.model.AddModelError
 import eu.torvian.chatbot.server.service.core.error.model.DeleteModelError
 import eu.torvian.chatbot.server.service.core.error.model.GetModelError
@@ -98,4 +102,42 @@ interface LLMModelService {
      * @return True if the model's provider has an API key configured, false otherwise.
      */
     suspend fun isApiKeyConfiguredForModel(modelId: Long): Boolean
+
+    // --- Access Management ---
+
+    /**
+     * Grants access to a model for a specific user group with the specified access mode.
+     *
+     * @param modelId The ID of the model to grant access to
+     * @param groupId The ID of the user group to grant access
+     * @param accessMode The access mode to grant (e.g., AccessMode.READ, AccessMode.WRITE)
+     * @return Either [GrantResourceAccessError] or Unit on success
+     */
+    suspend fun grantModelAccess(
+        modelId: Long,
+        groupId: Long,
+        accessMode: AccessMode
+    ): Either<GrantResourceAccessError, Unit>
+
+    /**
+     * Revokes access to a model from a specific user group for the specified access mode.
+     *
+     * @param modelId The ID of the model to revoke access from
+     * @param groupId The ID of the user group to revoke access from
+     * @param accessMode The access mode to revoke
+     * @return Either [RevokeResourceAccessError] or Unit on success
+     */
+    suspend fun revokeModelAccess(
+        modelId: Long,
+        groupId: Long,
+        accessMode: AccessMode
+    ): Either<RevokeResourceAccessError, Unit>
+
+    /**
+     * Retrieves all access information for a model, including the owner and all groups with access.
+     *
+     * @param modelId The ID of the model to query
+     * @return Either [GetResourceAccessError] or [ResourceAccessResponse]
+     */
+    suspend fun getModelAccess(modelId: Long): Either<GetResourceAccessError, ResourceAccessResponse>
 }

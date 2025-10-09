@@ -88,7 +88,8 @@ class LLMModelServiceImplTest {
             modelDao,
             llmProviderDao,
             transactionScope,
-            modelOwnershipDao
+            modelOwnershipDao,
+            modelAccessDao
         )
 
         // Mock the transaction scope to execute blocks directly

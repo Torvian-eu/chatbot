@@ -2,8 +2,15 @@ package eu.torvian.chatbot.server.service.core
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.api.AccessMode
+import eu.torvian.chatbot.common.models.api.access.ResourceAccessResponse
 import eu.torvian.chatbot.common.models.llm.ModelSettings
-import eu.torvian.chatbot.server.service.core.error.settings.*
+import eu.torvian.chatbot.server.service.core.error.access.GetResourceAccessError
+import eu.torvian.chatbot.server.service.core.error.access.GrantResourceAccessError
+import eu.torvian.chatbot.server.service.core.error.access.RevokeResourceAccessError
+import eu.torvian.chatbot.server.service.core.error.settings.AddSettingsError
+import eu.torvian.chatbot.server.service.core.error.settings.DeleteSettingsError
+import eu.torvian.chatbot.server.service.core.error.settings.GetSettingsByIdError
+import eu.torvian.chatbot.server.service.core.error.settings.UpdateSettingsError
 
 /**
  * Service interface for managing Model Settings.
@@ -30,7 +37,7 @@ interface ModelSettingsService {
     suspend fun getSettingsByModelId(modelId: Long): List<ModelSettings>
 
     /**
-     * Retrieves all settings profiles accessible by the specified user, either owned by the user
+     * Retrieves all settings profiles accessible by the specified LLM user, either owned by the user
      * or shared with a group the user is a member of.
      *
      * @param userId The ID of the user requesting the settings
@@ -74,4 +81,42 @@ interface ModelSettingsService {
      * @return [Either] a [DeleteSettingsError] if not found, or [Unit] on success
      */
     suspend fun deleteSettings(id: Long): Either<DeleteSettingsError, Unit>
+
+    // --- Access Management ---
+
+    /**
+     * Grants access to a settings profile for a specific user group with the specified access mode.
+     *
+     * @param settingsId The ID of the settings profile to grant access to
+     * @param groupId The ID of the user group to grant access
+     * @param accessMode The access mode to grant (e.g., AccessMode.READ, AccessMode.WRITE)
+     * @return Either [GrantResourceAccessError] or Unit on success
+     */
+    suspend fun grantSettingsAccess(
+        settingsId: Long,
+        groupId: Long,
+        accessMode: AccessMode
+    ): Either<GrantResourceAccessError, Unit>
+
+    /**
+     * Revokes access to a settings profile from a specific user group for the specified access mode.
+     *
+     * @param settingsId The ID of the settings profile to revoke access from
+     * @param groupId The ID of the user group to revoke access from
+     * @param accessMode The access mode to revoke
+     * @return Either [RevokeResourceAccessError] or Unit on success
+     */
+    suspend fun revokeSettingsAccess(
+        settingsId: Long,
+        groupId: Long,
+        accessMode: AccessMode
+    ): Either<RevokeResourceAccessError, Unit>
+
+    /**
+     * Retrieves all access information for a settings profile, including the owner and all groups with access.
+     *
+     * @param settingsId The ID of the settings profile to query
+     * @return Either [GetResourceAccessError] or [ResourceAccessResponse]
+     */
+    suspend fun getSettingsAccess(settingsId: Long): Either<GetResourceAccessError, ResourceAccessResponse>
 }

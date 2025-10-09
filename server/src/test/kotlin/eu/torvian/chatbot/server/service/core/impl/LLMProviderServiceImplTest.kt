@@ -35,7 +35,9 @@ class LLMProviderServiceImplTest {
     // Mocked dependencies
     private lateinit var llmProviderDao: LLMProviderDao
     private lateinit var providerOwnershipDao: ProviderOwnershipDao
+    private lateinit var providerAccessDao: ProviderAccessDao
     private lateinit var modelDao: ModelDao
+    private lateinit var userGroupDao: UserGroupDao
     private lateinit var credentialManager: CredentialManager
     private lateinit var transactionScope: TransactionScope
 
@@ -78,13 +80,14 @@ class LLMProviderServiceImplTest {
         modelDao = mockk()
         credentialManager = mockk()
         transactionScope = mockk()
-        val providerAccessDao = mockk<ProviderAccessDao>()
-        val userGroupDao = mockk<UserGroupDao>()
+        providerAccessDao = mockk()
+        userGroupDao = mockk()
 
         // Create the service instance with mocked dependencies
         llmProviderService = LLMProviderServiceImpl(
             llmProviderDao,
             providerOwnershipDao,
+            providerAccessDao,
             modelDao,
             credentialManager,
             transactionScope

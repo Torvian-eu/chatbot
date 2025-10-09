@@ -5,19 +5,28 @@ import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.api.AccessMode
+import eu.torvian.chatbot.common.models.api.access.ResourceAccessInfo
+import eu.torvian.chatbot.common.models.api.access.ResourceAccessResponse
 import eu.torvian.chatbot.common.models.llm.ModelSettings
+import eu.torvian.chatbot.server.data.dao.SettingsAccessDao
 import eu.torvian.chatbot.server.data.dao.SettingsDao
 import eu.torvian.chatbot.server.data.dao.SettingsOwnershipDao
 import eu.torvian.chatbot.server.data.dao.error.SetOwnerError
 import eu.torvian.chatbot.server.data.dao.error.SettingsError
+import eu.torvian.chatbot.server.data.dao.error.GrantAccessError
+import eu.torvian.chatbot.server.data.dao.error.RevokeAccessError
 import eu.torvian.chatbot.server.service.core.LLMModelService
 import eu.torvian.chatbot.server.service.core.ModelSettingsService
+import eu.torvian.chatbot.server.service.core.error.access.GetResourceAccessError
+import eu.torvian.chatbot.server.service.core.error.access.GrantResourceAccessError
+import eu.torvian.chatbot.server.service.core.error.access.RevokeResourceAccessError
 import eu.torvian.chatbot.server.service.core.error.model.GetModelError
 import eu.torvian.chatbot.server.service.core.error.settings.AddSettingsError
 import eu.torvian.chatbot.server.service.core.error.settings.DeleteSettingsError
 import eu.torvian.chatbot.server.service.core.error.settings.GetSettingsByIdError
 import eu.torvian.chatbot.server.service.core.error.settings.UpdateSettingsError
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
 
 /**
  * Implementation of the [ModelSettingsService] interface.
@@ -26,7 +35,8 @@ class ModelSettingsServiceImpl(
     private val settingsDao: SettingsDao,
     private val llmModelService: LLMModelService,
     private val transactionScope: TransactionScope,
-    private val settingsOwnershipDao: SettingsOwnershipDao
+    private val settingsOwnershipDao: SettingsOwnershipDao,
+    private val settingsAccessDao: SettingsAccessDao
 ) : ModelSettingsService {
 
     override suspend fun getSettingsById(id: Long): Either<GetSettingsByIdError, ModelSettings> =
@@ -145,6 +155,97 @@ class ModelSettingsServiceImpl(
                 }) {
                     settingsDao.deleteSettings(id).bind()
                 }
+            }
+        }
+
+    // --- Access Management ---
+
+    override suspend fun grantSettingsAccess(
+        settingsId: Long,
+        groupId: Long,
+        accessMode: AccessMode
+    ): Either<GrantResourceAccessError, Unit> = transactionScope.transaction {
+        either {
+            withError({ error: GrantAccessError ->
+                when (error) {
+                    is GrantAccessError.AlreadyGranted -> GrantResourceAccessError.AlreadyGranted(
+                        settingsId,
+                        groupId,
+                        accessMode.key
+                    )
+
+                    is GrantAccessError.ForeignKeyViolation -> {
+                        GrantResourceAccessError.InvalidRelatedEntity(settingsId, groupId)
+                    }
+                }
+            }) {
+                settingsAccessDao.grantAccess(settingsId, groupId, accessMode.key).bind()
+            }
+        }
+    }
+
+    override suspend fun revokeSettingsAccess(
+        settingsId: Long,
+        groupId: Long,
+        accessMode: AccessMode
+    ): Either<RevokeResourceAccessError, Unit> = transactionScope.transaction {
+        either {
+            withError({ error: RevokeAccessError ->
+                when (error) {
+                    is RevokeAccessError.AccessNotGranted ->
+                        RevokeResourceAccessError.AccessNotFound(settingsId, groupId, accessMode.key)
+
+                    is RevokeAccessError.ForeignKeyViolation ->
+                        RevokeResourceAccessError.InvalidRelatedEntity(settingsId, groupId)
+                }
+            }) {
+                settingsAccessDao.revokeAccess(settingsId, groupId, accessMode.key).bind()
+            }
+        }
+    }
+
+    override suspend fun getSettingsAccess(settingsId: Long): Either<GetResourceAccessError, ResourceAccessResponse> =
+        transactionScope.transaction {
+            either {
+                // Verify settings exists
+                withError({ daoError: SettingsError.SettingsNotFound ->
+                    GetResourceAccessError.ResourceNotFound(daoError.id)
+                }) {
+                    settingsDao.getSettingsById(settingsId).bind()
+                }
+
+                // Get owner ID
+                val ownerId = withError({ error: GetOwnerError ->
+                    when (error) {
+                        is GetOwnerError.ResourceNotFound -> GetResourceAccessError.OwnerNotFound(settingsId)
+                    }
+                }) {
+                    settingsOwnershipDao.getOwner(settingsId).bind()
+                }
+
+                // Get all access entries for all access modes
+                val allAccessGroups = settingsAccessDao.getAccessGroups(settingsId)
+
+                // Combine into access info list
+                val accessList = buildList {
+                    allAccessGroups.forEach { (accessMode, groups) ->
+                        groups.forEach { group ->
+                            add(
+                                ResourceAccessInfo(
+                                    groupId = group.id,
+                                    groupName = group.name,
+                                    accessMode = accessMode
+                                )
+                            )
+                        }
+                    }
+                }
+
+                ResourceAccessResponse(
+                    resourceId = settingsId,
+                    ownerId = ownerId,
+                    accessList = accessList
+                )
             }
         }
 }

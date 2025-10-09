@@ -93,7 +93,8 @@ class ModelSettingsServiceImplTest {
             settingsDao,
             llmModelService,
             transactionScope,
-            settingsOwnershipDao
+            settingsOwnershipDao,
+            settingsAccessDao
         )
 
         // Mock the transaction scope to execute blocks directly

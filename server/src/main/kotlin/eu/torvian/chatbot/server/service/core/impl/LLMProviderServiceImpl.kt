@@ -6,14 +6,19 @@ import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.api.AccessMode
+import eu.torvian.chatbot.common.models.api.access.ResourceAccessInfo
+import eu.torvian.chatbot.common.models.api.access.ResourceAccessResponse
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import eu.torvian.chatbot.server.data.dao.LLMProviderDao
 import eu.torvian.chatbot.server.data.dao.ModelDao
+import eu.torvian.chatbot.server.data.dao.ProviderAccessDao
 import eu.torvian.chatbot.server.data.dao.ProviderOwnershipDao
-import eu.torvian.chatbot.server.data.dao.error.LLMProviderError
-import eu.torvian.chatbot.server.data.dao.error.SetOwnerError
+import eu.torvian.chatbot.server.data.dao.error.*
 import eu.torvian.chatbot.server.service.core.LLMProviderService
+import eu.torvian.chatbot.server.service.core.error.access.GetResourceAccessError
+import eu.torvian.chatbot.server.service.core.error.access.GrantResourceAccessError
+import eu.torvian.chatbot.server.service.core.error.access.RevokeResourceAccessError
 import eu.torvian.chatbot.server.service.core.error.provider.*
 import eu.torvian.chatbot.server.service.security.CredentialManager
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
@@ -26,6 +31,7 @@ import org.apache.logging.log4j.Logger
 class LLMProviderServiceImpl(
     private val llmProviderDao: LLMProviderDao,
     private val providerOwnershipDao: ProviderOwnershipDao,
+    private val providerAccessDao: ProviderAccessDao,
     private val modelDao: ModelDao,
     private val credentialManager: CredentialManager,
     private val transactionScope: TransactionScope
@@ -34,6 +40,7 @@ class LLMProviderServiceImpl(
     companion object {
         private val logger: Logger = LogManager.getLogger(LLMProviderServiceImpl::class.java)
     }
+
     override suspend fun getAllProviders(): List<LLMProvider> {
         return transactionScope.transaction {
             llmProviderDao.getAllProviders()
@@ -204,6 +211,97 @@ class LLMProviderServiceImpl(
                         throw IllegalStateException("Failed to delete old credential for provider ID $providerId: ${it.alias}")
                     }
                 }
+            }
+        }
+
+    // --- Access Management ---
+
+    override suspend fun grantProviderAccess(
+        providerId: Long,
+        groupId: Long,
+        accessMode: AccessMode
+    ): Either<GrantResourceAccessError, Unit> = transactionScope.transaction {
+        either {
+            withError({ error: GrantAccessError ->
+                when (error) {
+                    is GrantAccessError.AlreadyGranted -> GrantResourceAccessError.AlreadyGranted(
+                        providerId,
+                        groupId,
+                        accessMode.key
+                    )
+
+                    is GrantAccessError.ForeignKeyViolation -> {
+                        GrantResourceAccessError.InvalidRelatedEntity(providerId, groupId)
+                    }
+                }
+            }) {
+                providerAccessDao.grantAccess(providerId, groupId, accessMode.key).bind()
+            }
+        }
+    }
+
+    override suspend fun revokeProviderAccess(
+        providerId: Long,
+        groupId: Long,
+        accessMode: AccessMode
+    ): Either<RevokeResourceAccessError, Unit> = transactionScope.transaction {
+        either {
+            withError({ error: RevokeAccessError ->
+                when (error) {
+                    is RevokeAccessError.AccessNotGranted ->
+                        RevokeResourceAccessError.AccessNotFound(providerId, groupId, accessMode.key)
+
+                    is RevokeAccessError.ForeignKeyViolation ->
+                        RevokeResourceAccessError.InvalidRelatedEntity(providerId, groupId)
+                }
+            }) {
+                providerAccessDao.revokeAccess(providerId, groupId, accessMode.key).bind()
+            }
+        }
+    }
+
+    override suspend fun getProviderAccess(providerId: Long): Either<GetResourceAccessError, ResourceAccessResponse> =
+        transactionScope.transaction {
+            either {
+                // Verify provider exists
+                withError({ daoError: LLMProviderError.LLMProviderNotFound ->
+                    GetResourceAccessError.ResourceNotFound(daoError.id)
+                }) {
+                    llmProviderDao.getProviderById(providerId).bind()
+                }
+
+                // Get owner ID
+                val ownerId = withError({ error: GetOwnerError ->
+                    when (error) {
+                        is GetOwnerError.ResourceNotFound -> GetResourceAccessError.OwnerNotFound(providerId)
+                    }
+                }) {
+                    providerOwnershipDao.getOwner(providerId).bind()
+                }
+
+                // Get all access entries for all access modes
+                val allAccessGroups = providerAccessDao.getAccessGroups(providerId)
+
+                // Combine into access info list
+                val accessList = buildList {
+                    allAccessGroups.forEach { (accessMode, groups) ->
+                        groups.forEach { group ->
+                            add(
+                                ResourceAccessInfo(
+                                    groupId = group.id,
+                                    groupName = group.name,
+                                    accessMode = accessMode
+                                )
+                            )
+                        }
+                    }
+                }
+
+                ResourceAccessResponse(
+                    resourceId = providerId,
+                    ownerId = ownerId,
+                    accessList = accessList
+                )
             }
         }
 }
