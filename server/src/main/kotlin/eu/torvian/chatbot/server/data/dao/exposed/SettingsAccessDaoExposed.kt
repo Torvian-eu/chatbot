@@ -13,8 +13,11 @@ import eu.torvian.chatbot.server.data.tables.UserGroupsTable
 import eu.torvian.chatbot.server.data.tables.mappers.toUserGroupEntity
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
 import org.jetbrains.exposed.exceptions.ExposedSQLException
-import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.deleteWhere
+import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.selectAll
 
 /**
  * Exposed implementation of the [SettingsAccessDao].
@@ -29,9 +32,19 @@ class SettingsAccessDaoExposed(
                 .selectAll()
                 .where {
                     (ModelSettingsAccessTable.settingsId eq settingsId) and
-                    (ModelSettingsAccessTable.accessMode eq accessMode)
+                            (ModelSettingsAccessTable.accessMode eq accessMode)
                 }
                 .map { it.toUserGroupEntity() }
+        }
+
+    override suspend fun getAccessGroups(settingsId: Long): Map<String, List<UserGroupEntity>> =
+        transactionScope.transaction {
+            // select rows for the settings id and join with groups
+            (ModelSettingsAccessTable innerJoin UserGroupsTable)
+                .selectAll()
+                .where { ModelSettingsAccessTable.settingsId eq settingsId }
+                .groupBy { it[ModelSettingsAccessTable.accessMode] }
+                .mapValues { entry -> entry.value.map { it.toUserGroupEntity() } }
         }
 
     override suspend fun hasAccess(
@@ -46,8 +59,8 @@ class SettingsAccessDaoExposed(
                 .selectAll()
                 .where {
                     (ModelSettingsAccessTable.settingsId eq settingsId) and
-                    (ModelSettingsAccessTable.userGroupId inList groupIds) and
-                    (ModelSettingsAccessTable.accessMode eq accessMode)
+                            (ModelSettingsAccessTable.userGroupId inList groupIds) and
+                            (ModelSettingsAccessTable.accessMode eq accessMode)
                 }
                 .count() > 0
         }
@@ -69,8 +82,10 @@ class SettingsAccessDaoExposed(
                     when {
                         e.isForeignKeyViolation() ->
                             raise(GrantAccessError.ForeignKeyViolation(settingsId.toString(), groupId))
+
                         e.isUniqueConstraintViolation() ->
                             raise(GrantAccessError.AlreadyGranted)
+
                         else -> throw e
                     }
                 }
@@ -86,8 +101,8 @@ class SettingsAccessDaoExposed(
             either {
                 val deleted = ModelSettingsAccessTable.deleteWhere {
                     (ModelSettingsAccessTable.settingsId eq settingsId) and
-                    (ModelSettingsAccessTable.userGroupId eq groupId) and
-                    (ModelSettingsAccessTable.accessMode eq accessMode)
+                            (ModelSettingsAccessTable.userGroupId eq groupId) and
+                            (ModelSettingsAccessTable.accessMode eq accessMode)
                 }
                 ensure(deleted > 0) {
                     RevokeAccessError.AccessNotGranted
@@ -106,7 +121,7 @@ class SettingsAccessDaoExposed(
                 .select(ModelSettingsAccessTable.settingsId)
                 .where {
                     (ModelSettingsAccessTable.userGroupId inList groupIds) and
-                    (ModelSettingsAccessTable.accessMode eq accessMode)
+                            (ModelSettingsAccessTable.accessMode eq accessMode)
                 }
                 .withDistinct()
                 .map { it[ModelSettingsAccessTable.settingsId].value }

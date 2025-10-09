@@ -22,6 +22,15 @@ interface SettingsAccessDao {
     suspend fun getAccessGroups(settingsId: Long, accessMode: String): List<UserGroupEntity>
 
     /**
+     * Retrieves all user groups that have any access mode to a settings profile, grouped by access mode.
+     *
+     * @param settingsId ID of the settings profile.
+     * @return A map where keys are access modes (e.g., "read", "write") and values are lists of [UserGroupEntity]
+     *         that have that access mode; empty map if no access is granted.
+     */
+    suspend fun getAccessGroups(settingsId: Long): Map<String, List<UserGroupEntity>>
+
+    /**
      * Checks if any of the given groups have a specific access mode to a settings profile.
      *
      * @param settingsId ID of the settings profile.

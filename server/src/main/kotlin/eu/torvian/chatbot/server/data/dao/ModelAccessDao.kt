@@ -22,6 +22,14 @@ interface ModelAccessDao {
     suspend fun getAccessGroups(modelId: Long, accessMode: String): List<UserGroupEntity>
 
     /**
+     * Retrieves all user groups that have any access mode to a model, grouped by access mode.
+     *
+     * @param modelId ID of the model.
+     * @return A map where keys are access modes and values are lists of [UserGroupEntity] that have that access.
+     */
+    suspend fun getAccessGroups(modelId: Long): Map<String, List<UserGroupEntity>>
+
+    /**
      * Checks if any of the given groups have a specific access mode to a model.
      *
      * @param modelId ID of the model.

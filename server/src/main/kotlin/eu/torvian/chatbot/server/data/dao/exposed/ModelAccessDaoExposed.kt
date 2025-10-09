@@ -13,8 +13,11 @@ import eu.torvian.chatbot.server.data.tables.UserGroupsTable
 import eu.torvian.chatbot.server.data.tables.mappers.toUserGroupEntity
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
 import org.jetbrains.exposed.exceptions.ExposedSQLException
-import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.deleteWhere
+import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.selectAll
 
 /**
  * Exposed implementation of the [ModelAccessDao].
@@ -29,9 +32,18 @@ class ModelAccessDaoExposed(
                 .selectAll()
                 .where {
                     (LLMModelAccessTable.modelId eq modelId) and
-                    (LLMModelAccessTable.accessMode eq accessMode)
+                            (LLMModelAccessTable.accessMode eq accessMode)
                 }
                 .map { it.toUserGroupEntity() }
+        }
+
+    override suspend fun getAccessGroups(modelId: Long): Map<String, List<UserGroupEntity>> =
+        transactionScope.transaction {
+            (LLMModelAccessTable innerJoin UserGroupsTable)
+                .selectAll()
+                .where { LLMModelAccessTable.modelId eq modelId }
+                .groupBy { it[LLMModelAccessTable.accessMode] }
+                .mapValues { (_, rows) -> rows.map { it.toUserGroupEntity() } }
         }
 
     override suspend fun hasAccess(
@@ -46,8 +58,8 @@ class ModelAccessDaoExposed(
                 .selectAll()
                 .where {
                     (LLMModelAccessTable.modelId eq modelId) and
-                    (LLMModelAccessTable.userGroupId inList groupIds) and
-                    (LLMModelAccessTable.accessMode eq accessMode)
+                            (LLMModelAccessTable.userGroupId inList groupIds) and
+                            (LLMModelAccessTable.accessMode eq accessMode)
                 }
                 .count() > 0
         }
@@ -69,8 +81,10 @@ class ModelAccessDaoExposed(
                     when {
                         e.isForeignKeyViolation() ->
                             raise(GrantAccessError.ForeignKeyViolation(modelId.toString(), groupId))
+
                         e.isUniqueConstraintViolation() ->
                             raise(GrantAccessError.AlreadyGranted)
+
                         else -> throw e
                     }
                 }
@@ -86,8 +100,8 @@ class ModelAccessDaoExposed(
             either {
                 val deleted = LLMModelAccessTable.deleteWhere {
                     (LLMModelAccessTable.modelId eq modelId) and
-                    (LLMModelAccessTable.userGroupId eq groupId) and
-                    (LLMModelAccessTable.accessMode eq accessMode)
+                            (LLMModelAccessTable.userGroupId eq groupId) and
+                            (LLMModelAccessTable.accessMode eq accessMode)
                 }
                 ensure(deleted > 0) {
                     RevokeAccessError.AccessNotGranted
@@ -106,7 +120,7 @@ class ModelAccessDaoExposed(
                 .select(LLMModelAccessTable.modelId)
                 .where {
                     (LLMModelAccessTable.userGroupId inList groupIds) and
-                    (LLMModelAccessTable.accessMode eq accessMode)
+                            (LLMModelAccessTable.accessMode eq accessMode)
                 }
                 .withDistinct()
                 .map { it[LLMModelAccessTable.modelId].value }

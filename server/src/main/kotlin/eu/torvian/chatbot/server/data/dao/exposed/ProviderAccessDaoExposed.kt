@@ -34,6 +34,15 @@ class ProviderAccessDaoExposed(
                 .map { it.toUserGroupEntity() }
         }
 
+    override suspend fun getAccessGroups(providerId: Long): Map<String, List<UserGroupEntity>> =
+        transactionScope.transaction {
+            (LLMProviderAccessTable innerJoin UserGroupsTable)
+                .selectAll()
+                .where { LLMProviderAccessTable.providerId eq providerId }
+                .groupBy { it[LLMProviderAccessTable.accessMode] }
+                .mapValues { (_, rows) -> rows.map { it.toUserGroupEntity() } }
+        }
+
     override suspend fun hasAccess(
         providerId: Long,
         groupIds: List<Long>,

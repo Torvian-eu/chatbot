@@ -22,6 +22,15 @@ interface ProviderAccessDao {
     suspend fun getAccessGroups(providerId: Long, accessMode: String): List<UserGroupEntity>
 
     /**
+     * Retrieves all user groups that have any access mode to a provider, grouped by access mode.
+     *
+     * @param providerId ID of the provider.
+     * @return A map where keys are access modes (e.g., "read", "write") and values are lists of [UserGroupEntity]
+     *         that have that access mode; empty map if no access is granted.
+     */
+    suspend fun getAccessGroups(providerId: Long): Map<String, List<UserGroupEntity>>
+
+    /**
      * Checks if any of the given groups have a specific access mode to a provider.
      *
      * @param providerId ID of the provider.
