@@ -304,5 +304,23 @@ fun Route.configureModelRoutes(
                 call.respondEither(result, HttpStatusCode.OK)
             }
         }
+
+        // GET /api/v1/models/{modelId}/owner - Get model owner information
+        get<ModelResource.ById.Owner> { resource ->
+            val userId = call.getUserId()
+            val modelId = resource.parent.modelId
+
+            either {
+                // Require READ access to view owner
+                requireModelAccess(authorizationService, userId, modelId, AccessMode.READ)
+
+                // Get owner information
+                withError({ error: GetModelError -> error.toApiError() }) {
+                    llmModelService.getModelOwner(modelId).bind()
+                }
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.OK)
+            }
+        }
     }
 }

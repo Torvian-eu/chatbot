@@ -299,5 +299,23 @@ fun Route.configureProviderRoutes(
                 call.respondEither(result, HttpStatusCode.OK)
             }
         }
+
+        // GET /api/v1/providers/{providerId}/owner - Get provider owner information
+        get<ProviderResource.ById.Owner> { resource ->
+            val userId = call.getUserId()
+            val providerId = resource.parent.providerId
+
+            either {
+                // Require READ access to view owner
+                requireProviderAccess(authorizationService, userId, providerId, AccessMode.READ)
+
+                // Get owner information
+                withError({ error: GetProviderError -> error.toApiError() }) {
+                    llmProviderService.getProviderOwner(providerId).bind()
+                }
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.OK)
+            }
+        }
     }
 }

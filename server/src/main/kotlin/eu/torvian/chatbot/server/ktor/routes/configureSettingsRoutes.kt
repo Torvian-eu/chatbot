@@ -250,5 +250,23 @@ fun Route.configureSettingsRoutes(
                 call.respondEither(result, HttpStatusCode.OK)
             }
         }
+
+        // GET /api/v1/settings/{settingsId}/owner - Get settings owner information
+        get<SettingsResource.ById.Owner> { resource ->
+            val userId = call.getUserId()
+            val settingsId = resource.parent.settingsId
+
+            either {
+                // Require READ access to view owner
+                requireSettingsAccess(authorizationService, userId, settingsId, AccessMode.READ)
+
+                // Get owner information
+                withError({ error: GetSettingsByIdError -> error.toApiError() }) {
+                    modelSettingsService.getSettingsOwner(settingsId).bind()
+                }
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.OK)
+            }
+        }
     }
 }
