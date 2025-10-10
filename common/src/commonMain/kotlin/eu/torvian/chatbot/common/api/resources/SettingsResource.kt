@@ -36,6 +36,11 @@ class SettingsResource(val parent: Api = Api()) {
          */
         @Resource("is-public")
         data class IsPublic(val parent: ById)
+
+        /**
+         * Resource for getting settings owner information: /api/v1/settings/{settingsId}/owner
+         */
+        @Resource("owner")
+        data class Owner(val parent: ById)
     }
 }
-

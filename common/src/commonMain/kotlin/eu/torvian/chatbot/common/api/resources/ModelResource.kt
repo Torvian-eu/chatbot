@@ -47,6 +47,11 @@ class ModelResource(val parent: Api = Api()) {
          */
         @Resource("is-public")
         data class IsPublic(val parent: ById)
+
+        /**
+         * Resource for getting model owner information: /api/v1/models/{modelId}/owner
+         */
+        @Resource("owner")
+        data class Owner(val parent: ById)
     }
 }
-

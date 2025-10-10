@@ -47,6 +47,11 @@ class ProviderResource(val parent: Api = Api()) {
          */
         @Resource("is-public")
         data class IsPublic(val parent: ById)
+
+        /**
+         * Resource for getting provider owner information: /api/v1/providers/{providerId}/owner
+         */
+        @Resource("owner")
+        data class Owner(val parent: ById)
     }
 }
-
