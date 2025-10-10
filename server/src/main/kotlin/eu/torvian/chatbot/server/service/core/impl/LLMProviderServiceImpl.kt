@@ -8,6 +8,7 @@ import arrow.core.raise.withError
 import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.api.CommonUserGroups
 import eu.torvian.chatbot.common.models.api.access.IsPublicResponse
+import eu.torvian.chatbot.common.models.api.access.OwnerInfo
 import eu.torvian.chatbot.common.models.api.access.ResourceAccessInfo
 import eu.torvian.chatbot.common.models.api.access.ResourceAccessResponse
 import eu.torvian.chatbot.common.models.llm.LLMProvider
@@ -18,18 +19,17 @@ import eu.torvian.chatbot.server.data.dao.ProviderAccessDao
 import eu.torvian.chatbot.server.data.dao.ProviderOwnershipDao
 import eu.torvian.chatbot.server.data.dao.error.*
 import eu.torvian.chatbot.server.service.core.LLMProviderService
-import eu.torvian.chatbot.server.service.core.error.access.GetResourceAccessError
-import eu.torvian.chatbot.server.service.core.error.access.GrantResourceAccessError
-import eu.torvian.chatbot.server.service.core.error.access.RevokeResourceAccessError
+import eu.torvian.chatbot.server.service.core.UserGroupService
+import eu.torvian.chatbot.server.service.core.UserService
+import eu.torvian.chatbot.server.service.core.error.access.*
+import eu.torvian.chatbot.server.service.core.error.access.CheckResourcePublicError.ResourceNotFound
+import eu.torvian.chatbot.server.service.core.error.auth.UserNotFoundError
 import eu.torvian.chatbot.server.service.core.error.provider.*
+import eu.torvian.chatbot.server.service.core.error.usergroup.GetGroupByNameError
 import eu.torvian.chatbot.server.service.security.CredentialManager
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
-import eu.torvian.chatbot.server.service.core.error.usergroup.*
-import eu.torvian.chatbot.server.service.core.error.access.*
-import eu.torvian.chatbot.server.service.core.UserGroupService
-import eu.torvian.chatbot.server.service.core.error.access.CheckResourcePublicError.*
 
 /**
  * Implementation of the [LLMProviderService] interface.
@@ -40,6 +40,7 @@ class LLMProviderServiceImpl(
     private val providerAccessDao: ProviderAccessDao,
     private val modelDao: ModelDao,
     private val userGroupService: UserGroupService,
+    private val userService: UserService,
     private val credentialManager: CredentialManager,
     private val transactionScope: TransactionScope
 ) : LLMProviderService {
@@ -330,6 +331,7 @@ class LLMProviderServiceImpl(
                             is GrantAccessError.AlreadyGranted -> {
                                 // Already public - this is fine (idempotent operation)
                             }
+
                             is GrantAccessError.ForeignKeyViolation -> {
                                 raise(MakeResourcePublicError.InvalidRelatedEntity(providerId, allUsersGroup.id))
                             }
@@ -376,6 +378,32 @@ class LLMProviderServiceImpl(
                     hasAllUsersWriteAccess = allUsersAccess.any { it.accessMode == AccessMode.WRITE.key },
                     hasAllUsersOtherAccess = allUsersAccess.any { it.accessMode != AccessMode.READ.key && it.accessMode != AccessMode.WRITE.key }
                 )
+            }
+        }
+
+    override suspend fun getProviderOwner(providerId: Long): Either<GetProviderError, OwnerInfo> =
+        transactionScope.transaction {
+            either {
+                // Get owner ID
+                val ownerId = withError({ error: GetOwnerError ->
+                    when (error) {
+                        is GetOwnerError.ResourceNotFound -> GetProviderError.ProviderNotFound(providerId)
+                    }
+                }) {
+                    providerOwnershipDao.getOwner(providerId).bind()
+                }
+
+                // Get owner info from UserService
+                withError({ _: UserNotFoundError.ById ->
+                    GetProviderError.ProviderNotFound(providerId)
+                }) {
+                    userService.getUserById(ownerId).bind()
+                }.let { user ->
+                    OwnerInfo(
+                        userId = user.id,
+                        username = user.username
+                    )
+                }
             }
         }
 }

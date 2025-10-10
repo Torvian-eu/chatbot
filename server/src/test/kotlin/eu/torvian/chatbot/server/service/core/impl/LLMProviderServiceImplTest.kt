@@ -9,6 +9,7 @@ import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import eu.torvian.chatbot.server.data.dao.*
 import eu.torvian.chatbot.server.data.dao.error.LLMProviderError
 import eu.torvian.chatbot.server.service.core.UserGroupService
+import eu.torvian.chatbot.server.service.core.UserService
 import eu.torvian.chatbot.server.service.core.error.provider.*
 import eu.torvian.chatbot.server.service.security.CredentialManager
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
@@ -40,6 +41,7 @@ class LLMProviderServiceImplTest {
     private lateinit var modelDao: ModelDao
     private lateinit var userGroupDao: UserGroupDao
     private lateinit var userGroupService: UserGroupService
+    private lateinit var userService: UserService
     private lateinit var credentialManager: CredentialManager
     private lateinit var transactionScope: TransactionScope
 
@@ -85,6 +87,7 @@ class LLMProviderServiceImplTest {
         providerAccessDao = mockk()
         userGroupDao = mockk()
         userGroupService = mockk()
+        userService = mockk()
 
         // Create the service instance with mocked dependencies
         llmProviderService = LLMProviderServiceImpl(
@@ -93,6 +96,7 @@ class LLMProviderServiceImplTest {
             providerAccessDao,
             modelDao,
             userGroupService,
+            userService,
             credentialManager,
             transactionScope,
         )

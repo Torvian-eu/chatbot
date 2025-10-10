@@ -4,6 +4,7 @@ import arrow.core.Either
 import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.models.api.access.ResourceAccessResponse
 import eu.torvian.chatbot.common.models.api.access.IsPublicResponse
+import eu.torvian.chatbot.common.models.api.access.OwnerInfo
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.server.service.core.error.access.GetResourceAccessError
@@ -179,4 +180,12 @@ interface LLMModelService {
      * @return Either [CheckResourcePublicError] or [IsPublicResponse]
      */
     suspend fun isModelPublic(modelId: Long): Either<CheckResourcePublicError, IsPublicResponse>
+
+    /**
+     * Retrieves the owner information for a model.
+     *
+     * @param modelId The ID of the model
+     * @return Either [GetModelError] if model not found, or [OwnerInfo]
+     */
+    suspend fun getModelOwner(modelId: Long): Either<GetModelError, OwnerInfo>
 }

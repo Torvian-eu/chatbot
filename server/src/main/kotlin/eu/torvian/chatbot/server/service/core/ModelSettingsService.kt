@@ -4,6 +4,7 @@ import arrow.core.Either
 import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.models.api.access.ResourceAccessResponse
 import eu.torvian.chatbot.common.models.api.access.IsPublicResponse
+import eu.torvian.chatbot.common.models.api.access.OwnerInfo
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.server.service.core.error.access.GetResourceAccessError
 import eu.torvian.chatbot.server.service.core.error.access.GrantResourceAccessError
@@ -149,4 +150,12 @@ interface ModelSettingsService {
      * @return Either [CheckResourcePublicError] or [IsPublicResponse]
      */
     suspend fun isSettingsPublic(settingsId: Long): Either<CheckResourcePublicError, IsPublicResponse>
+
+    /**
+     * Retrieves the owner information for a settings profile.
+     *
+     * @param settingsId The ID of the settings profile
+     * @return Either [GetSettingsByIdError] if settings not found, or [OwnerInfo]
+     */
+    suspend fun getSettingsOwner(settingsId: Long): Either<GetSettingsByIdError, OwnerInfo>
 }

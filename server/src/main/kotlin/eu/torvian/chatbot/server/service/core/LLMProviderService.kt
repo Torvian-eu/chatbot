@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.service.core
 import arrow.core.Either
 import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.models.api.access.IsPublicResponse
+import eu.torvian.chatbot.common.models.api.access.OwnerInfo
 import eu.torvian.chatbot.common.models.api.access.ResourceAccessResponse
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
@@ -165,4 +166,12 @@ interface LLMProviderService {
      * @return Either [CheckResourcePublicError] or [IsPublicResponse]
      */
     suspend fun isProviderPublic(providerId: Long): Either<CheckResourcePublicError, IsPublicResponse>
+
+    /**
+     * Retrieves the owner information for a provider.
+     *
+     * @param providerId The ID of the provider
+     * @return Either [GetProviderError] if provider not found, or [OwnerInfo]
+     */
+    suspend fun getProviderOwner(providerId: Long): Either<GetProviderError, OwnerInfo>
 }

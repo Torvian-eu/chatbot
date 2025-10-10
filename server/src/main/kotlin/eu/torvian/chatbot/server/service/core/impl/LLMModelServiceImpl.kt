@@ -8,6 +8,7 @@ import arrow.core.raise.withError
 import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.api.CommonUserGroups
 import eu.torvian.chatbot.common.models.api.access.IsPublicResponse
+import eu.torvian.chatbot.common.models.api.access.OwnerInfo
 import eu.torvian.chatbot.common.models.api.access.ResourceAccessInfo
 import eu.torvian.chatbot.common.models.api.access.ResourceAccessResponse
 import eu.torvian.chatbot.common.models.llm.LLMModel
@@ -19,7 +20,9 @@ import eu.torvian.chatbot.server.data.dao.ModelOwnershipDao
 import eu.torvian.chatbot.server.data.dao.error.*
 import eu.torvian.chatbot.server.service.core.LLMModelService
 import eu.torvian.chatbot.server.service.core.UserGroupService
+import eu.torvian.chatbot.server.service.core.UserService
 import eu.torvian.chatbot.server.service.core.error.access.*
+import eu.torvian.chatbot.server.service.core.error.auth.UserNotFoundError
 import eu.torvian.chatbot.server.service.core.error.model.AddModelError
 import eu.torvian.chatbot.server.service.core.error.model.DeleteModelError
 import eu.torvian.chatbot.server.service.core.error.model.GetModelError
@@ -38,7 +41,8 @@ class LLMModelServiceImpl(
     private val transactionScope: TransactionScope,
     private val modelOwnershipDao: ModelOwnershipDao,
     private val modelAccessDao: ModelAccessDao,
-    private val userGroupService: UserGroupService
+    private val userGroupService: UserGroupService,
+    private val userService: UserService
 ) : LLMModelService {
 
     override suspend fun getAllModels(): List<LLMModel> {
@@ -319,6 +323,32 @@ class LLMModelServiceImpl(
                     hasAllUsersWriteAccess = allUsersAccess.any { it.accessMode == AccessMode.WRITE.key },
                     hasAllUsersOtherAccess = allUsersAccess.any { it.accessMode != AccessMode.READ.key && it.accessMode != AccessMode.WRITE.key }
                 )
+            }
+        }
+
+    override suspend fun getModelOwner(modelId: Long): Either<GetModelError, OwnerInfo> =
+        transactionScope.transaction {
+            either {
+                // Get owner ID
+                val ownerId = withError({ error: GetOwnerError ->
+                    when (error) {
+                        is GetOwnerError.ResourceNotFound -> GetModelError.ModelNotFound(modelId)
+                    }
+                }) {
+                    modelOwnershipDao.getOwner(modelId).bind()
+                }
+
+                // Get owner info from UserService
+                withError({ _: UserNotFoundError.ById ->
+                    GetModelError.ModelNotFound(modelId)
+                }) {
+                    userService.getUserById(ownerId).bind()
+                }.let { user ->
+                    OwnerInfo(
+                        userId = user.id,
+                        username = user.username
+                    )
+                }
             }
         }
 }
