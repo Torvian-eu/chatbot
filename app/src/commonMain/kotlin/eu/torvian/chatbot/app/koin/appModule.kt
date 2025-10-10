@@ -10,6 +10,7 @@ import eu.torvian.chatbot.app.viewmodel.ModelConfigViewModel
 import eu.torvian.chatbot.app.viewmodel.ProviderConfigViewModel
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
 import eu.torvian.chatbot.app.viewmodel.SettingsConfigViewModel
+import eu.torvian.chatbot.app.viewmodel.admin.UserGroupManagementViewModel
 import eu.torvian.chatbot.app.viewmodel.admin.UserManagementViewModel
 import eu.torvian.chatbot.app.viewmodel.auth.AuthViewModel
 import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
@@ -256,6 +257,13 @@ fun appModule(baseUri: String): Module = module {
             roleRepository = get(),
             errorNotifier = get(),
             normalScope = normalScope
+        )
+    }
+    viewModel {
+        UserGroupManagementViewModel(
+            userGroupRepository = get(),
+            userRepository = get(),
+            errorNotifier = get()
         )
     }
 }
