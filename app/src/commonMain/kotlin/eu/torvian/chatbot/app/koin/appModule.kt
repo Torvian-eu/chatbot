@@ -131,6 +131,9 @@ fun appModule(baseUri: String): Module = module {
     single<RoleApi> {
         KtorRoleApiClient(get())
     }
+    single<UserGroupApi> {
+        KtorUserGroupApiClient(get())
+    }
 
     // Provide Repository implementations, injecting the API clients
     single<ModelRepository> {
