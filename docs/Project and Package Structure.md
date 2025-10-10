@@ -52,12 +52,21 @@ common/src/commonMain/kotlin/eu/torvian/chatbot/common/
 ├── api/resources/                # API resource definitions (for Ktor Resources plugin)
 ├── models/                       # Shared data models (DTOs)
 │   ├── api/                      # API request/response DTOs
+│   │   ├── access/               # Access management API DTOs
+│   │   │   ├── GrantAccessRequest.kt     # Request DTO for granting access
+│   │   │   ├── IsPublicResponse.kt       # Response DTO for public accessibility status
+│   │   │   ├── OwnerInfo.kt              # Data class for owner details
+│   │   │   ├── ResourceAccessInfo.kt     # Resource access information DTO
+│   │   │   └── RevokeAccessRequest.kt    # Request DTO for revoking access
 │   │   ├── admin/                # Admin-specific API DTOs
+│   │   │   ├── AddUserToGroupRequest.kt  # Request DTO for adding user to group
 │   │   │   ├── AssignRoleRequest.kt        # Request DTO for assigning a role to a user
 │   │   │   ├── ChangePasswordRequest.kt    # Request DTO for changing user password
 │   │   │   ├── CreateRoleRequest.kt        # Request DTO for creating a new role
+│   │   │   ├── CreateUserGroupRequest.kt # Request DTO for creating a user group
 │   │   │   ├── UpdatePasswordChangeRequiredRequest.kt # Request DTO for updating password change requirement
 │   │   │   ├── UpdateRoleRequest.kt        # Request DTO for updating an existing role
+│   │   │   ├── UpdateUserGroupRequest.kt # Request DTO for updating a user group
 │   │   │   ├── UpdateUserRequest.kt        # Request DTO for updating user profile
 │   │   │   └── UpdateUserStatusRequest.kt  # Request DTO for updating user status
 │   │   ├── auth/                 # Authentication-related API DTOs
@@ -210,6 +219,7 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │       ├── configureRoleRoutes.kt    # Ktor routes for role management
 │       ├── configureSessionRoutes.kt
 │       ├── configureSettingsRoutes.kt
+│       ├── configureUserGroupRoutes.kt # Ktor routes for user group management
 │       └── configureUserRoutes.kt    # Ktor routes for user management
 ├── main/
 │   ├── chatBotServerModule.kt    # Main Ktor application module for the chatbot server

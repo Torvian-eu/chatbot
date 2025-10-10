@@ -5,8 +5,11 @@ import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.api.CommonUserGroups
+import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.user.UserGroup
+import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.UserGroupDao
+import eu.torvian.chatbot.server.data.entities.mappers.toUser
 import eu.torvian.chatbot.server.data.entities.mappers.toUserGroup
 import eu.torvian.chatbot.server.service.core.UserGroupService
 import eu.torvian.chatbot.server.service.core.error.usergroup.*
@@ -30,6 +33,7 @@ import eu.torvian.chatbot.server.data.dao.error.usergroup.UpdateGroupError as Da
  */
 class UserGroupServiceImpl(
     private val userGroupDao: UserGroupDao,
+    private val userDao: UserDao,
     private val transactionScope: TransactionScope
 ) : UserGroupService {
 
@@ -192,7 +196,9 @@ class UserGroupServiceImpl(
                 }
 
                 // Protect "All Users" group from deletion
-                ensure(existingGroup.name != CommonUserGroups.ALL_USERS) { DeleteGroupError.InvalidOperation("Cannot delete the All Users group") }
+                ensure(existingGroup.name != CommonUserGroups.ALL_USERS) {
+                    DeleteGroupError.InvalidOperation("Cannot delete the All Users group")
+                }
 
                 // Delete the group
                 withError({ error: DaoDeleteGroupError ->
@@ -266,6 +272,13 @@ class UserGroupServiceImpl(
             }
 
             logger.info("Successfully removed user $userId from group $groupId")
+        }
+    }
+
+    override suspend fun getUsersInGroup(groupId: Long): List<User> {
+        val userIds = userGroupDao.getUsersInGroup(groupId)
+        return userIds.mapNotNull { userId ->
+            userDao.getUserById(userId).getOrNull()?.toUser()
         }
     }
 }

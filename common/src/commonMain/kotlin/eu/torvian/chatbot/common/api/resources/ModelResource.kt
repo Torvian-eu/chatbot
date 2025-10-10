@@ -17,11 +17,41 @@ class ModelResource(val parent: Api = Api()) {
          */
         @Resource("settings")
         class Settings(val parent: ById) // Note: Handles GET (list) and POST (add)
+
         /**
          * Resource for getting API key status for a model: /api/v1/models/{modelId}/apikey/status
          */
         @Resource("apikey/status")
         class ApiKeyStatus(val parent: ById)
+
+        /**
+         * Resource for managing model access: /api/v1/models/{modelId}/access
+         */
+        @Resource("access")
+        class Access(val parent: ById)
+
+        /**
+         * Resource for making a model public: /api/v1/models/{modelId}/make-public
+         */
+        @Resource("make-public")
+        data class MakePublic(val parent: ById)
+
+        /**
+         * Resource for making a model private: /api/v1/models/{modelId}/make-private
+         */
+        @Resource("make-private")
+        data class MakePrivate(val parent: ById)
+
+        /**
+         * Resource for checking if a model is public: /api/v1/models/{modelId}/is-public
+         */
+        @Resource("is-public")
+        data class IsPublic(val parent: ById)
+
+        /**
+         * Resource for getting model owner information: /api/v1/models/{modelId}/owner
+         */
+        @Resource("owner")
+        data class Owner(val parent: ById)
     }
 }
-

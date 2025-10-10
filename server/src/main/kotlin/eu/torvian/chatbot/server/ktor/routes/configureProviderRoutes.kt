@@ -7,6 +7,8 @@ import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.CommonPermissions
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.ProviderResource
+import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
+import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
 import eu.torvian.chatbot.common.models.api.llm.AddProviderRequest
 import eu.torvian.chatbot.common.models.api.llm.UpdateProviderCredentialRequest
 import eu.torvian.chatbot.common.models.llm.LLMProvider
@@ -14,6 +16,7 @@ import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.service.core.LLMModelService
 import eu.torvian.chatbot.server.service.core.LLMProviderService
+import eu.torvian.chatbot.server.service.core.error.access.*
 import eu.torvian.chatbot.server.service.core.error.provider.*
 import eu.torvian.chatbot.server.service.security.AuthorizationService
 import io.ktor.http.*
@@ -22,6 +25,8 @@ import io.ktor.server.request.*
 import io.ktor.server.resources.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.Route
+import kotlin.let
+import kotlin.to
 
 /**
  * Configures routes related to Providers (/api/v1/providers) using Ktor Resources.
@@ -69,6 +74,14 @@ fun Route.configureProviderRoutes(
             val userId = call.getUserId()
             val request = call.receive<AddProviderRequest>()
             either {
+                // Require CREATE or MANAGE permission for providers
+                requireAnyPermission(
+                    authorizationService,
+                    userId,
+                    CommonPermissions.MANAGE_LLM_PROVIDERS,
+                    CommonPermissions.CREATE_LLM_PROVIDER
+                )
+
                 withError({ error: AddProviderError -> error.toApiError() }) {
                     llmProviderService.addProvider(
                         userId,
@@ -163,6 +176,145 @@ fun Route.configureProviderRoutes(
             // Otherwise, show only models accessible to the user
             else {
                 call.respond(llmModelService.getAccessibleModelsByProviderId(userId, providerId, AccessMode.READ))
+            }
+        }
+
+        // --- Access Management ---
+
+        // GET /api/v1/providers/{providerId}/access - Get access information
+        get<ProviderResource.ById.Access> { resource ->
+            val userId = call.getUserId()
+            val providerId = resource.parent.providerId
+
+            either {
+                requireProviderAccess(authorizationService, userId, providerId, AccessMode.MANAGE)
+
+                // Get access information
+                withError({ error: GetResourceAccessError -> error.toApiError() }) {
+                    llmProviderService.getProviderAccess(providerId).bind()
+                }
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.OK)
+            }
+        }
+
+        // POST /api/v1/providers/{providerId}/access - Grant access to a group
+        post<ProviderResource.ById.Access> { resource ->
+            val userId = call.getUserId()
+            val providerId = resource.parent.providerId
+            val request = call.receive<GrantAccessRequest>()
+
+            either {
+                requireProviderAccess(authorizationService, userId, providerId, AccessMode.MANAGE)
+
+                // Grant access
+                val accessMode = AccessMode.of(request.accessMode)
+                withError({ error: GrantResourceAccessError -> error.toApiError() }) {
+                    llmProviderService.grantProviderAccess(
+                        providerId,
+                        request.groupId,
+                        accessMode
+                    ).bind()
+                }
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.OK)
+            }
+        }
+
+        // DELETE /api/v1/providers/{providerId}/access - Revoke access from a group
+        delete<ProviderResource.ById.Access> { resource ->
+            val userId = call.getUserId()
+            val providerId = resource.parent.providerId
+            val request = call.receive<RevokeAccessRequest>()
+
+            either {
+                requireProviderAccess(authorizationService, userId, providerId, AccessMode.MANAGE)
+
+                // Revoke access
+                val accessMode = AccessMode.of(request.accessMode)
+                withError({ error: RevokeResourceAccessError -> error.toApiError() }) {
+                    llmProviderService.revokeProviderAccess(
+                        providerId,
+                        request.groupId,
+                        accessMode
+                    ).bind()
+                }
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.OK)
+            }
+        }
+
+        // --- Convenience Endpoints ---
+
+        // POST /api/v1/providers/{providerId}/make-public - Make provider public
+        post<ProviderResource.ById.MakePublic> { resource ->
+            val userId = call.getUserId()
+            val providerId = resource.parent.providerId
+
+            either {
+                // Require MANAGE access to change visibility
+                requireProviderAccess(authorizationService, userId, providerId, AccessMode.MANAGE)
+
+                // Make public
+                withError({ error: MakeResourcePublicError -> error.toApiError() }) {
+                    llmProviderService.makeProviderPublic(providerId).bind()
+                }
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.OK)
+            }
+        }
+
+        // POST /api/v1/providers/{providerId}/make-private - Make provider private
+        post<ProviderResource.ById.MakePrivate> { resource ->
+            val userId = call.getUserId()
+            val providerId = resource.parent.providerId
+
+            either {
+                // Require MANAGE access to change visibility
+                requireProviderAccess(authorizationService, userId, providerId, AccessMode.MANAGE)
+
+                // Make private
+                withError({ error: MakeResourcePrivateError -> error.toApiError() }) {
+                    llmProviderService.makeProviderPrivate(providerId).bind()
+                }
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.OK)
+            }
+        }
+
+        // GET /api/v1/providers/{providerId}/is-public - Check if provider is public
+        get<ProviderResource.ById.IsPublic> { resource ->
+            val userId = call.getUserId()
+            val providerId = resource.parent.providerId
+
+            either {
+                // Require READ access to check visibility
+                requireProviderAccess(authorizationService, userId, providerId, AccessMode.READ)
+
+                // Check public status
+                withError({ error: CheckResourcePublicError -> error.toApiError() }) {
+                    llmProviderService.isProviderPublic(providerId).bind()
+                }
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.OK)
+            }
+        }
+
+        // GET /api/v1/providers/{providerId}/owner - Get provider owner information
+        get<ProviderResource.ById.Owner> { resource ->
+            val userId = call.getUserId()
+            val providerId = resource.parent.providerId
+
+            either {
+                // Require READ access to view owner
+                requireProviderAccess(authorizationService, userId, providerId, AccessMode.READ)
+
+                // Get owner information
+                withError({ error: GetProviderError -> error.toApiError() }) {
+                    llmProviderService.getProviderOwner(providerId).bind()
+                }
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.OK)
             }
         }
     }

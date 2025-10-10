@@ -39,14 +39,6 @@ sealed interface GrantAccessError {
  */
 sealed interface RevokeAccessError {
     /**
-     * Either the resource or the group did not exist (FK violation discovered during delete or check).
-     *
-     * @param resourceIdentifier String representation of the resource id.
-     * @param groupId The group id that was supplied when attempting to revoke access.
-     */
-    data class ForeignKeyViolation(val resourceIdentifier: String, val groupId: Long) : RevokeAccessError
-
-    /**
      * The access entry did not exist (nothing to revoke). This is useful for idempotency decisions.
      */
     data object AccessNotGranted : RevokeAccessError

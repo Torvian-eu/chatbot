@@ -2,8 +2,17 @@ package eu.torvian.chatbot.server.service.core
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.api.AccessMode
+import eu.torvian.chatbot.common.models.api.access.IsPublicResponse
+import eu.torvian.chatbot.common.models.api.access.OwnerInfo
+import eu.torvian.chatbot.common.models.api.access.ResourceAccessResponse
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
+import eu.torvian.chatbot.server.service.core.error.access.CheckResourcePublicError
+import eu.torvian.chatbot.server.service.core.error.access.GetResourceAccessError
+import eu.torvian.chatbot.server.service.core.error.access.GrantResourceAccessError
+import eu.torvian.chatbot.server.service.core.error.access.MakeResourcePrivateError
+import eu.torvian.chatbot.server.service.core.error.access.MakeResourcePublicError
+import eu.torvian.chatbot.server.service.core.error.access.RevokeResourceAccessError
 import eu.torvian.chatbot.server.service.core.error.provider.*
 
 /**
@@ -16,7 +25,6 @@ interface LLMProviderService {
      * @return List of all LLM providers in the system.
      */
     suspend fun getAllProviders(): List<LLMProvider>
-
 
     /**
      * Retrieves all LLM provider configurations accessible by the specified user.
@@ -46,7 +54,14 @@ interface LLMProviderService {
      * @param credential The actual API key credential to store securely (null for local providers).
      * @return Either an [AddProviderError], or the newly created [LLMProvider].
      */
-    suspend fun addProvider(ownerId: Long, name: String, description: String, baseUrl: String, type: LLMProviderType, credential: String?): Either<AddProviderError, LLMProvider>
+    suspend fun addProvider(
+        ownerId: Long,
+        name: String,
+        description: String,
+        baseUrl: String,
+        type: LLMProviderType,
+        credential: String?
+    ): Either<AddProviderError, LLMProvider>
 
     /**
      * Updates an existing LLM provider configuration.
@@ -74,5 +89,89 @@ interface LLMProviderService {
      * @param newCredential The new API key credential to store securely. (null to remove the credential)
      * @return Either an [UpdateProviderCredentialError], or Unit if successful.
      */
-    suspend fun updateProviderCredential(providerId: Long, newCredential: String?): Either<UpdateProviderCredentialError, Unit>
+    suspend fun updateProviderCredential(
+        providerId: Long,
+        newCredential: String?
+    ): Either<UpdateProviderCredentialError, Unit>
+
+    // --- Access Management ---
+
+    /**
+     * Grants access to a provider for a specific user group with the specified access mode.
+     *
+     * @param providerId The ID of the provider to grant access to
+     * @param groupId The ID of the user group to grant access
+     * @param accessMode The access mode to grant (e.g., AccessMode.READ, AccessMode.WRITE)
+     * @return Either [GrantResourceAccessError] or Unit on success
+     */
+    suspend fun grantProviderAccess(
+        providerId: Long,
+        groupId: Long,
+        accessMode: AccessMode
+    ): Either<GrantResourceAccessError, Unit>
+
+    /**
+     * Revokes access to a provider from a specific user group for the specified access mode.
+     *
+     * @param providerId The ID of the provider to revoke access from
+     * @param groupId The ID of the user group to revoke access from
+     * @param accessMode The access mode to revoke
+     * @return Either [RevokeResourceAccessError] or Unit on success
+     */
+    suspend fun revokeProviderAccess(
+        providerId: Long,
+        groupId: Long,
+        accessMode: AccessMode
+    ): Either<RevokeResourceAccessError, Unit>
+
+    /**
+     * Retrieves all access information for a provider, including the owner and all groups with access.
+     *
+     * @param providerId The ID of the provider to query
+     * @return Either [GetResourceAccessError] or [ResourceAccessResponse]
+     */
+    suspend fun getProviderAccess(providerId: Long): Either<GetResourceAccessError, ResourceAccessResponse>
+
+    // --- Convenience Methods ---
+
+    /**
+     * Makes a provider publicly accessible by granting READ access to the "All Users" group.
+     *
+     * This is a convenience method that internally grants READ access to the special
+     * "All Users" group, making the provider visible to all users in the system.
+     *
+     * @param providerId The ID of the provider to make public
+     * @return Either [MakeResourcePublicError] or Unit on success
+     */
+    suspend fun makeProviderPublic(providerId: Long): Either<MakeResourcePublicError, Unit>
+
+    /**
+     * Makes a provider private by revoking all access from the "All Users" group.
+     *
+     * This is a convenience method that removes all access from
+     * the "All Users" group, making the provider accessible only to users with
+     * explicit group access or the owner.
+     *
+     * @param providerId The ID of the provider to make private
+     * @return Either [MakeResourcePrivateError] or Unit on success
+     */
+    suspend fun makeProviderPrivate(providerId: Long): Either<MakeResourcePrivateError, Unit>
+
+    /**
+     * Checks if a provider is publicly accessible.
+     *
+     * A provider is considered public if the "All Users" group has READ access.
+     *
+     * @param providerId The ID of the provider to check
+     * @return Either [CheckResourcePublicError] or [IsPublicResponse]
+     */
+    suspend fun isProviderPublic(providerId: Long): Either<CheckResourcePublicError, IsPublicResponse>
+
+    /**
+     * Retrieves the owner information for a provider.
+     *
+     * @param providerId The ID of the provider
+     * @return Either [GetProviderError] if provider not found, or [OwnerInfo]
+     */
+    suspend fun getProviderOwner(providerId: Long): Either<GetProviderError, OwnerInfo>
 }

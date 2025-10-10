@@ -75,6 +75,152 @@ class AuthorizationServiceImpl(
         return hasPermission(userId, permission.action, permission.subject)
     }
 
+    override suspend fun hasAnyPermission(userId: Long, vararg permissions: PermissionSpec): Boolean =
+        transactionScope.transaction {
+            logger.debug("Checking if user $userId has any of ${permissions.size} permission(s)")
+
+            if (permissions.isEmpty()) {
+                logger.debug("No permissions requested; returning false")
+                return@transaction false
+            }
+
+            // Fetch roles once
+            val roles = userRoleAssignmentDao.getRolesByUserId(userId)
+
+            if (roles.isEmpty()) {
+                logger.debug("User $userId has no roles assigned")
+                return@transaction false
+            }
+
+            // Fetch permissions for all roles once
+            val permissionsFromRoles = roles.flatMap { role ->
+                permissionDao.getPermissionsByRoleId(role.id)
+            }
+
+            if (permissionsFromRoles.isEmpty()) {
+                logger.debug("User $userId has no permissions from roles")
+                return@transaction false
+            }
+
+            // Build a set of (action, subject) for fast membership checks
+            val permissionSet = permissionsFromRoles.map { it.action to it.subject }.toSet()
+
+            val result = permissions.any { spec ->
+                permissionSet.contains(spec.action to spec.subject)
+            }
+
+            if (result) {
+                logger.debug("User $userId has at least one of the requested permissions")
+            } else {
+                logger.debug("User $userId does NOT have any of the requested permissions")
+            }
+
+            result
+        }
+
+    override suspend fun hasAllPermissions(userId: Long, permissions: List<PermissionSpec>): Boolean =
+        transactionScope.transaction {
+            logger.debug("Checking if user $userId has all of ${permissions.size} permission(s)")
+
+            if (permissions.isEmpty()) {
+                logger.debug("No permissions requested; returning false")
+                return@transaction false
+            }
+
+            // Fetch roles once
+            val roles = userRoleAssignmentDao.getRolesByUserId(userId)
+
+            if (roles.isEmpty()) {
+                logger.debug("User $userId has no roles assigned")
+                return@transaction false
+            }
+
+            // Fetch permissions for all roles once
+            val permissionsFromRoles = roles.flatMap { role ->
+                permissionDao.getPermissionsByRoleId(role.id)
+            }
+
+            if (permissionsFromRoles.isEmpty()) {
+                logger.debug("User $userId has no permissions from roles")
+                return@transaction false
+            }
+
+            // Build a set of (action, subject) for fast membership checks
+            val permissionSet = permissionsFromRoles.map { it.action to it.subject }.toSet()
+
+            val result = permissions.all { spec ->
+                permissionSet.contains(spec.action to spec.subject)
+            }
+
+            if (result) {
+                logger.debug("User $userId has all of the requested permissions")
+            } else {
+                logger.debug("User $userId does NOT have all of the requested permissions")
+            }
+
+            result
+        }
+
+    override suspend fun requirePermission(
+        userId: Long,
+        action: String,
+        subject: String
+    ): Either<AuthorizationError.PermissionDenied, Unit> =
+        transactionScope.transaction {
+            either {
+                logger.debug("Requiring permission for user $userId: $action on $subject")
+
+                val hasPermission = hasPermission(userId, action, subject)
+
+                ensure(hasPermission) {
+                    logger.warn("Permission denied for user $userId: $action on $subject")
+                    AuthorizationError.PermissionDenied(userId, action, subject)
+                }
+
+                logger.debug("Permission granted for user $userId: $action on $subject")
+            }
+        }
+
+    override suspend fun requirePermission(
+        userId: Long,
+        permission: PermissionSpec
+    ): Either<AuthorizationError.PermissionDenied, Unit> =
+        requirePermission(userId, permission.action, permission.subject)
+
+    override suspend fun requireAnyPermission(
+        userId: Long,
+        vararg permissions: PermissionSpec
+    ): Either<AuthorizationError.AnyPermissionDenied, Unit> = either {
+        logger.debug("Requiring any of ${permissions.size} permission(s) for user $userId")
+
+        val hasAnyPermission = hasAnyPermission(userId, *permissions)
+
+        ensure(hasAnyPermission) {
+            logger.warn("User $userId does not have any of the required permissions")
+            AuthorizationError.AnyPermissionDenied(userId, permissions.toList())
+        }
+
+        logger.debug("User $userId has at least one of the required permissions")
+    }
+
+
+    override suspend fun requireAllPermissions(
+        userId: Long,
+        permissions: List<PermissionSpec>
+    ): Either<AuthorizationError.AllPermissionsDenied, Unit> = either {
+        logger.debug("Requiring all of ${permissions.size} permission(s) for user $userId")
+
+        val hasAllPermissions = hasAllPermissions(userId, permissions)
+
+        ensure(hasAllPermissions) {
+            logger.warn("User $userId does not have all of the required permissions")
+            AuthorizationError.AllPermissionsDenied(userId, permissions)
+        }
+
+        logger.debug("User $userId has all of the required permissions")
+    }
+
+
     override suspend fun hasRole(userId: Long, roleName: String): Boolean =
         transactionScope.transaction {
             logger.debug("Checking if user $userId has role: $roleName")
@@ -125,31 +271,6 @@ class AuthorizationServiceImpl(
             permissions
         }
 
-    override suspend fun requirePermission(
-        userId: Long,
-        action: String,
-        subject: String
-    ): Either<AuthorizationError.PermissionDenied, Unit> =
-        transactionScope.transaction {
-            either {
-                logger.debug("Requiring permission for user $userId: $action on $subject")
-
-                val hasPermission = hasPermission(userId, action, subject)
-
-                ensure(hasPermission) {
-                    logger.warn("Permission denied for user $userId: $action on $subject")
-                    AuthorizationError.PermissionDenied(userId, action, subject)
-                }
-
-                logger.debug("Permission granted for user $userId: $action on $subject")
-            }
-        }
-
-    override suspend fun requirePermission(
-        userId: Long,
-        permission: PermissionSpec
-    ): Either<AuthorizationError.PermissionDenied, Unit> =
-        requirePermission(userId, permission.action, permission.subject)
 
     override suspend fun requireRole(
         userId: Long,

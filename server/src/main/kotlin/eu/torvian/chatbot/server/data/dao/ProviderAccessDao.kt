@@ -22,6 +22,15 @@ interface ProviderAccessDao {
     suspend fun getAccessGroups(providerId: Long, accessMode: String): List<UserGroupEntity>
 
     /**
+     * Retrieves all user groups that have any access mode to a provider, grouped by access mode.
+     *
+     * @param providerId ID of the provider.
+     * @return A map where keys are access modes (e.g., "read", "write") and values are lists of [UserGroupEntity]
+     *         that have that access mode; empty map if no access is granted.
+     */
+    suspend fun getAccessGroups(providerId: Long): Map<String, List<UserGroupEntity>>
+
+    /**
      * Checks if any of the given groups have a specific access mode to a provider.
      *
      * @param providerId ID of the provider.
@@ -52,6 +61,15 @@ interface ProviderAccessDao {
     suspend fun revokeAccess(providerId: Long, groupId: Long, accessMode: String): Either<RevokeAccessError, Unit>
 
     /**
+     * Revokes all access from a group for a provider.
+     *
+     * @param providerId ID of the provider.
+     * @param groupId ID of the group to revoke access from.
+     * @return Either [RevokeAccessError] or Unit on success.
+     */
+    suspend fun revokeAllAccess(providerId: Long, groupId: Long): Either<RevokeAccessError, Unit>
+
+    /**
      * Retrieves all provider IDs that are accessible by any of the given groups with a specific access mode.
      *
      * @param groupIds List of group IDs to check.
@@ -60,4 +78,5 @@ interface ProviderAccessDao {
      */
     suspend fun getResourcesAccessibleByGroups(groupIds: List<Long>, accessMode: String): List<Long>
 }
+
 

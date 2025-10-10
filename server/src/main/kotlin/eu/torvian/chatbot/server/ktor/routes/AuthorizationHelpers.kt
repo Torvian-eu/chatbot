@@ -4,6 +4,7 @@ import arrow.core.raise.Raise
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.api.ApiError
+import eu.torvian.chatbot.common.api.CommonPermissions
 import eu.torvian.chatbot.common.api.PermissionSpec
 import eu.torvian.chatbot.server.service.security.AuthorizationService
 import eu.torvian.chatbot.server.service.security.ResourceType
@@ -29,6 +30,40 @@ suspend inline fun Raise<ApiError>.requirePermission(
 }
 
 /**
+ * Helper function to require any of the specified permissions for the current user.
+ *
+ * @param authorizationService The authorization service to use
+ * @param userId The ID of the user to check
+ * @param permissions The permissions to check
+ */
+suspend inline fun Raise<ApiError>.requireAnyPermission(
+    authorizationService: AuthorizationService,
+    userId: Long,
+    vararg permissions: PermissionSpec
+) {
+    withError({ ae: AuthorizationError -> ae.toApiError() }) {
+        authorizationService.requireAnyPermission(userId, *permissions).bind()
+    }
+}
+
+/**
+ * Helper function to require all of the specified permissions for the current user.
+ *
+ * @param authorizationService The authorization service to use
+ * @param userId The ID of the user to check
+ * @param permissions The permissions to check
+ */
+suspend inline fun Raise<ApiError>.requireAllPermissions(
+    authorizationService: AuthorizationService,
+    userId: Long,
+    permissions: List<PermissionSpec>
+) {
+    withError({ ae: AuthorizationError -> ae.toApiError() }) {
+        authorizationService.requireAllPermissions(userId, permissions).bind()
+    }
+}
+
+/**
  * Helper function to require access to a provider resource.
  *
  * @param authorizationService The authorization service to use
@@ -42,6 +77,9 @@ suspend inline fun Raise<ApiError>.requireProviderAccess(
     providerId: Long,
     accessMode: AccessMode
 ) {
+    if (authorizationService.hasPermission(userId, CommonPermissions.MANAGE_LLM_PROVIDERS)) {
+        return // Admins have implicit access to all resources
+    }
     withError({ rae: ResourceAuthorizationError -> rae.toApiError() }) {
         authorizationService.requireAccess(userId, ResourceType.PROVIDER, providerId, accessMode).bind()
     }
@@ -61,6 +99,9 @@ suspend inline fun Raise<ApiError>.requireModelAccess(
     modelId: Long,
     accessMode: AccessMode
 ) {
+    if (authorizationService.hasPermission(userId, CommonPermissions.MANAGE_LLM_MODELS)) {
+        return // Admins have implicit access to all resources
+    }
     withError({ rae: ResourceAuthorizationError -> rae.toApiError() }) {
         authorizationService.requireAccess(userId, ResourceType.MODEL, modelId, accessMode).bind()
     }
@@ -80,6 +121,9 @@ suspend inline fun Raise<ApiError>.requireSettingsAccess(
     settingsId: Long,
     accessMode: AccessMode
 ) {
+    if (authorizationService.hasPermission(userId, CommonPermissions.MANAGE_LLM_MODEL_SETTINGS)) {
+        return // Admins have implicit access to all resources
+    }
     withError({ rae: ResourceAuthorizationError -> rae.toApiError() }) {
         authorizationService.requireAccess(userId, ResourceType.SETTINGS, settingsId, accessMode).bind()
     }

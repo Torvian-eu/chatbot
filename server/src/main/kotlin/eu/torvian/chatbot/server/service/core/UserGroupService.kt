@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.service.core
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.user.UserGroup
 import eu.torvian.chatbot.server.service.core.error.usergroup.*
+import eu.torvian.chatbot.common.models.user.User
 
 /**
  * Service interface for user group management operations.
@@ -11,9 +12,6 @@ import eu.torvian.chatbot.server.service.core.error.usergroup.*
  * used for resource sharing and access control. It handles business logic such as
  * protecting special groups (e.g., "All Users") from modification and ensuring
  * group names are unique.
- *
- * Unlike [GroupService] which manages chat conversation groups, this service
- * manages user access control groups.
  */
 interface UserGroupService {
     /**
@@ -111,5 +109,13 @@ interface UserGroupService {
      * @return Either [RemoveUserFromGroupError] if the operation fails, or Unit on success
      */
     suspend fun removeUserFromGroup(userId: Long, groupId: Long): Either<RemoveUserFromGroupError, Unit>
+
+    /**
+     * Retrieves all users that belong to a specific user group.
+     *
+     * @param groupId The unique identifier of the group
+     * @return List of [User] objects that belong to the group; empty list if none
+     */
+    suspend fun getUsersInGroup(groupId: Long): List<User>
 }
 

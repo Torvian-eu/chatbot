@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.ktor.routes
 import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
+import eu.torvian.chatbot.common.api.CommonPermissions
 import eu.torvian.chatbot.common.api.resources.ProviderResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.misc.di.DIContainer
@@ -12,6 +13,10 @@ import eu.torvian.chatbot.common.models.api.llm.UpdateProviderCredentialRequest
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
+import eu.torvian.chatbot.server.data.entities.PermissionEntity
+import eu.torvian.chatbot.server.data.entities.RolePermissionEntity
+import eu.torvian.chatbot.server.data.entities.UserEntity
+import eu.torvian.chatbot.server.data.entities.UserRoleAssignmentEntity
 import eu.torvian.chatbot.server.testutils.auth.TestAuthHelper
 import eu.torvian.chatbot.server.testutils.auth.authenticate
 import eu.torvian.chatbot.server.testutils.data.Table
@@ -97,6 +102,13 @@ class ProviderRoutesTest {
         container.close()
     }
 
+    private suspend fun addCreatePermissionForUser(testUser: UserEntity = testUser1) {
+        testDataManager.insertRole(TestDefaults.role1)
+        testDataManager.insertPermission(PermissionEntity(1L, CommonPermissions.CREATE_LLM_PROVIDER))
+        testDataManager.insertRolePermission(RolePermissionEntity(1L, 1L))
+        testDataManager.insertUserRoleAssignment(UserRoleAssignmentEntity(testUser.id, 1L, TestDefaults.DEFAULT_INSTANT))
+    }
+
     // --- GET /api/v1/providers Tests ---
 
     @Test
@@ -149,6 +161,8 @@ class ProviderRoutesTest {
             credential = newCredential
         )
 
+        addCreatePermissionForUser()
+
         // Act
         val response = client.post(href(ProviderResource())) {
             contentType(ContentType.Application.Json)
@@ -191,6 +205,8 @@ class ProviderRoutesTest {
             credential = null // No credential
         )
 
+        addCreatePermissionForUser()
+
         // Act
         val response = client.post(href(ProviderResource())) {
             contentType(ContentType.Application.Json)
@@ -224,6 +240,8 @@ class ProviderRoutesTest {
             credential = null
         )
 
+        addCreatePermissionForUser()
+
         // Act
         val response = client.post(href(ProviderResource())) {
             contentType(ContentType.Application.Json)
@@ -252,6 +270,8 @@ class ProviderRoutesTest {
             credential = null
         )
 
+        addCreatePermissionForUser()
+
         // Act
         val response = client.post(href(ProviderResource())) {
             contentType(ContentType.Application.Json)
@@ -279,6 +299,8 @@ class ProviderRoutesTest {
             type = LLMProviderType.OPENAI,
             credential = "   " // Blank credential
         )
+
+        addCreatePermissionForUser()
 
         // Act
         val response = client.post(href(ProviderResource())) {

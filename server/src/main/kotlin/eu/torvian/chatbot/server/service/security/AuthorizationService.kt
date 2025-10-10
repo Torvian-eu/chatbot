@@ -38,6 +38,24 @@ interface AuthorizationService {
     suspend fun hasPermission(userId: Long, permission: PermissionSpec): Boolean
 
     /**
+     * Checks if a user has any of the specified permissions.
+     *
+     * @param userId The ID of the user to check
+     * @param permissions The list of permission specifications (user needs at least one)
+     * @return true if the user has any of the permissions, false otherwise
+     */
+    suspend fun hasAnyPermission(userId: Long, vararg permissions: PermissionSpec): Boolean
+
+    /**
+     * Checks if a user has all of the specified permissions.
+     *
+     * @param userId The ID of the user to check
+     * @param permissions The list of permission specifications (user needs all of them)
+     * @return true if the user has all of the permissions, false otherwise
+     */
+    suspend fun hasAllPermissions(userId: Long, permissions: List<PermissionSpec>): Boolean
+
+    /**
      * Checks if a user has a specific role.
      *
      * @param userId The ID of the user to check
@@ -96,6 +114,30 @@ interface AuthorizationService {
         userId: Long,
         permission: PermissionSpec
     ): Either<AuthorizationError.PermissionDenied, Unit>
+
+    /**
+     * Ensures a user has any of the specified permissions, raising an error if not.
+     *
+     * @param userId The ID of the user to check
+     * @param permissions The list of permission specifications (user needs at least one)
+     * @return Either [AuthorizationError.AnyPermissionDenied] if denied, or Unit if allowed
+     */
+    suspend fun requireAnyPermission(
+        userId: Long,
+        vararg permissions: PermissionSpec
+    ): Either<AuthorizationError.AnyPermissionDenied, Unit>
+
+    /**
+     * Ensures a user has all of the specified permissions, raising an error if not.
+     *
+     * @param userId The ID of the user to check
+     * @param permissions The list of permission specifications (user needs all of them)
+     * @return Either [AuthorizationError.AllPermissionsDenied] if denied, or Unit if allowed
+     */
+    suspend fun requireAllPermissions(
+        userId: Long,
+        permissions: List<PermissionSpec>
+    ): Either<AuthorizationError.AllPermissionsDenied, Unit>
 
     /**
      * Ensures a user has a specific role, raising an error if not.

@@ -23,6 +23,35 @@ class ProviderResource(val parent: Api = Api()) {
          */
         @Resource("models")
         class Models(val parent: ById)
+
+        /**
+         * Resource for managing provider access: /api/v1/providers/{providerId}/access
+         */
+        @Resource("access")
+        class Access(val parent: ById)
+
+        /**
+         * Resource for making a provider public: /api/v1/providers/{providerId}/make-public
+         */
+        @Resource("make-public")
+        data class MakePublic(val parent: ById)
+
+        /**
+         * Resource for making a provider private: /api/v1/providers/{providerId}/make-private
+         */
+        @Resource("make-private")
+        data class MakePrivate(val parent: ById)
+
+        /**
+         * Resource for checking if a provider is public: /api/v1/providers/{providerId}/is-public
+         */
+        @Resource("is-public")
+        data class IsPublic(val parent: ById)
+
+        /**
+         * Resource for getting provider owner information: /api/v1/providers/{providerId}/owner
+         */
+        @Resource("owner")
+        data class Owner(val parent: ById)
     }
 }
-

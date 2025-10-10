@@ -8,6 +8,8 @@ import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import eu.torvian.chatbot.server.data.dao.*
 import eu.torvian.chatbot.server.data.dao.error.LLMProviderError
+import eu.torvian.chatbot.server.service.core.UserGroupService
+import eu.torvian.chatbot.server.service.core.UserService
 import eu.torvian.chatbot.server.service.core.error.provider.*
 import eu.torvian.chatbot.server.service.security.CredentialManager
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
@@ -35,7 +37,11 @@ class LLMProviderServiceImplTest {
     // Mocked dependencies
     private lateinit var llmProviderDao: LLMProviderDao
     private lateinit var providerOwnershipDao: ProviderOwnershipDao
+    private lateinit var providerAccessDao: ProviderAccessDao
     private lateinit var modelDao: ModelDao
+    private lateinit var userGroupDao: UserGroupDao
+    private lateinit var userGroupService: UserGroupService
+    private lateinit var userService: UserService
     private lateinit var credentialManager: CredentialManager
     private lateinit var transactionScope: TransactionScope
 
@@ -78,16 +84,21 @@ class LLMProviderServiceImplTest {
         modelDao = mockk()
         credentialManager = mockk()
         transactionScope = mockk()
-        val providerAccessDao = mockk<ProviderAccessDao>()
-        val userGroupDao = mockk<UserGroupDao>()
+        providerAccessDao = mockk()
+        userGroupDao = mockk()
+        userGroupService = mockk()
+        userService = mockk()
 
         // Create the service instance with mocked dependencies
         llmProviderService = LLMProviderServiceImpl(
             llmProviderDao,
             providerOwnershipDao,
+            providerAccessDao,
             modelDao,
+            userGroupService,
+            userService,
             credentialManager,
-            transactionScope
+            transactionScope,
         )
 
         // Mock the transaction scope to execute blocks directly

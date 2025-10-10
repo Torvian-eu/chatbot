@@ -15,6 +15,8 @@ import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
 import eu.torvian.chatbot.server.data.dao.error.InsertModelError
 import eu.torvian.chatbot.server.data.dao.error.LLMProviderError
 import eu.torvian.chatbot.server.data.dao.error.ModelError
+import eu.torvian.chatbot.server.service.core.UserGroupService
+import eu.torvian.chatbot.server.service.core.UserService
 import eu.torvian.chatbot.server.data.dao.error.UpdateModelError as DaoUpdateModelError
 import eu.torvian.chatbot.server.service.core.error.model.*
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
@@ -41,6 +43,8 @@ class LLMModelServiceImplTest {
     private lateinit var modelOwnershipDao: ModelOwnershipDao
     private lateinit var modelAccessDao: ModelAccessDao
     private lateinit var userGroupDao: UserGroupDao
+    private lateinit var userGroupService: UserGroupService
+    private lateinit var userService: UserService
 
     // Class under test
     private lateinit var llmModelService: LLMModelServiceImpl
@@ -82,13 +86,18 @@ class LLMModelServiceImplTest {
         modelOwnershipDao = mockk()
         modelAccessDao = mockk()
         userGroupDao = mockk()
+        userGroupService = mockk()
+        userService = mockk()
 
         // Create the service instance with mocked dependencies
         llmModelService = LLMModelServiceImpl(
             modelDao,
             llmProviderDao,
             transactionScope,
-            modelOwnershipDao
+            modelOwnershipDao,
+            modelAccessDao,
+            userGroupService,
+            userService
         )
 
         // Mock the transaction scope to execute blocks directly
