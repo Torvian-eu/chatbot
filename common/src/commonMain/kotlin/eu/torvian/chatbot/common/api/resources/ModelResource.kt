@@ -8,6 +8,12 @@ import io.ktor.resources.*
 @Resource("models")
 class ModelResource(val parent: Api = Api()) {
     /**
+     * Resource for getting detailed information for all models: /api/v1/models/details
+     */
+    @Resource("details")
+    class Details(val parent: ModelResource = ModelResource())
+
+    /**
      * Resource for a specific model by ID: /api/v1/models/{modelId}
      */
     @Resource("{modelId}")
@@ -43,15 +49,9 @@ class ModelResource(val parent: Api = Api()) {
         data class MakePrivate(val parent: ById)
 
         /**
-         * Resource for checking if a model is public: /api/v1/models/{modelId}/is-public
+         * Resource for getting details for a specific model: /api/v1/models/{modelId}/details
          */
-        @Resource("is-public")
-        data class IsPublic(val parent: ById)
-
-        /**
-         * Resource for getting model owner information: /api/v1/models/{modelId}/owner
-         */
-        @Resource("owner")
-        data class Owner(val parent: ById)
+        @Resource("details")
+        class Details(val parent: ById)
     }
 }

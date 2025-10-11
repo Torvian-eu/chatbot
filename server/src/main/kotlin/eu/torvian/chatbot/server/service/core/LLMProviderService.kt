@@ -2,13 +2,9 @@ package eu.torvian.chatbot.server.service.core
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.api.AccessMode
-import eu.torvian.chatbot.common.models.api.access.IsPublicResponse
-import eu.torvian.chatbot.common.models.api.access.OwnerInfo
-import eu.torvian.chatbot.common.models.api.access.ResourceAccessResponse
+import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
-import eu.torvian.chatbot.server.service.core.error.access.CheckResourcePublicError
-import eu.torvian.chatbot.server.service.core.error.access.GetResourceAccessError
 import eu.torvian.chatbot.server.service.core.error.access.GrantResourceAccessError
 import eu.torvian.chatbot.server.service.core.error.access.MakeResourcePrivateError
 import eu.torvian.chatbot.server.service.core.error.access.MakeResourcePublicError
@@ -125,12 +121,12 @@ interface LLMProviderService {
     ): Either<RevokeResourceAccessError, Unit>
 
     /**
-     * Retrieves all access information for a provider, including the owner and all groups with access.
+     * Retrieves provider details, including the owner and all groups with access.
      *
      * @param providerId The ID of the provider to query
-     * @return Either [GetResourceAccessError] or [ResourceAccessResponse]
+     * @return Either [GetProviderError] or [LLMProviderDetails]
      */
-    suspend fun getProviderAccess(providerId: Long): Either<GetResourceAccessError, ResourceAccessResponse>
+    suspend fun getProviderDetails(providerId: Long): Either<GetProviderError, LLMProviderDetails>
 
     // --- Convenience Methods ---
 
@@ -156,22 +152,4 @@ interface LLMProviderService {
      * @return Either [MakeResourcePrivateError] or Unit on success
      */
     suspend fun makeProviderPrivate(providerId: Long): Either<MakeResourcePrivateError, Unit>
-
-    /**
-     * Checks if a provider is publicly accessible.
-     *
-     * A provider is considered public if the "All Users" group has READ access.
-     *
-     * @param providerId The ID of the provider to check
-     * @return Either [CheckResourcePublicError] or [IsPublicResponse]
-     */
-    suspend fun isProviderPublic(providerId: Long): Either<CheckResourcePublicError, IsPublicResponse>
-
-    /**
-     * Retrieves the owner information for a provider.
-     *
-     * @param providerId The ID of the provider
-     * @return Either [GetProviderError] if provider not found, or [OwnerInfo]
-     */
-    suspend fun getProviderOwner(providerId: Long): Either<GetProviderError, OwnerInfo>
 }

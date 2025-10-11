@@ -135,23 +135,6 @@ fun Route.configureSettingsRoutes(
 
         // --- Access Management for settings ---
 
-        // GET /api/v1/settings/{settingsId}/access - Get access information
-        get<SettingsResource.ById.Access> { resource ->
-            val userId = call.getUserId()
-            val settingsId = resource.parent.settingsId
-
-            either {
-                requireSettingsAccess(authorizationService, userId, settingsId, AccessMode.MANAGE)
-
-                // Get access information
-                withError({ error: GetResourceAccessError -> error.toApiError() }) {
-                    modelSettingsService.getSettingsAccess(settingsId).bind()
-                }
-            }.let { result ->
-                call.respondEither(result, HttpStatusCode.OK)
-            }
-        }
-
         // POST /api/v1/settings/{settingsId}/access - Grant access to a group
         post<SettingsResource.ById.Access> { resource ->
             val userId = call.getUserId()
@@ -234,38 +217,49 @@ fun Route.configureSettingsRoutes(
             }
         }
 
-        // GET /api/v1/settings/{settingsId}/is-public - Check if settings is public
-        get<SettingsResource.ById.IsPublic> { resource ->
+        // --- Details Endpoints ---
+
+        // GET /api/v1/settings/{settingsId}/details - Get settings details
+        get<SettingsResource.ById.Details> { resource ->
             val userId = call.getUserId()
             val settingsId = resource.parent.settingsId
 
             either {
-                requireSettingsAccess(authorizationService, userId, settingsId, AccessMode.READ)
+                // Require MANAGE access to view details
+                requireSettingsAccess(authorizationService, userId, settingsId, AccessMode.MANAGE)
 
-                // Check public status
-                withError({ error: CheckResourcePublicError -> error.toApiError() }) {
-                    modelSettingsService.isSettingsPublic(settingsId).bind()
+                // Get settings details
+                withError({ error: GetSettingsByIdError -> error.toApiError() }) {
+                    modelSettingsService.getSettingsDetails(settingsId).bind()
                 }
             }.let { result ->
-                call.respondEither(result, HttpStatusCode.OK)
+                call.respondEither(result)
             }
         }
 
-        // GET /api/v1/settings/{settingsId}/owner - Get settings owner information
-        get<SettingsResource.ById.Owner> { resource ->
+        // GET /api/v1/settings/details - List all settings with details (filtered by user access)
+        get<SettingsResource.Details> {
             val userId = call.getUserId()
-            val settingsId = resource.parent.settingsId
 
             either {
-                // Require READ access to view owner
-                requireSettingsAccess(authorizationService, userId, settingsId, AccessMode.READ)
-
-                // Get owner information
                 withError({ error: GetSettingsByIdError -> error.toApiError() }) {
-                    modelSettingsService.getSettingsOwner(settingsId).bind()
+                    val settings =
+                        // If user has MANAGE_LLM_MODEL_SETTINGS permission, show all settings
+                        if (authorizationService.hasPermission(userId, CommonPermissions.MANAGE_LLM_MODEL_SETTINGS)) {
+                            modelSettingsService.getAllSettings()
+                        }
+                        // Otherwise, show only settings owned or accessible to the user
+                        else {
+                            modelSettingsService.getAllAccessibleSettings(userId, AccessMode.MANAGE)
+                        }
+
+                    // Get details for each settings profile
+                    settings.map { s ->
+                        modelSettingsService.getSettingsDetails(s.id).bind()
+                    }
                 }
             }.let { result ->
-                call.respondEither(result, HttpStatusCode.OK)
+                call.respondEither(result)
             }
         }
     }
