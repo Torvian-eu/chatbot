@@ -2,6 +2,9 @@ package eu.torvian.chatbot.app.repository
 
 import arrow.core.Either
 import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
+import eu.torvian.chatbot.common.models.api.access.ModelSettingsDetails
+import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,9 +21,9 @@ import kotlinx.coroutines.flow.StateFlow
  * managing the lifecycle of individual observations, leaving state management to consumers.
  */
 interface SettingsRepository {
-    
+
     /**
-     * Reactive stream of all model settings profiles.
+     * Reactive stream of all LLM settings profiles, including ownership and access details.
      *
      * This StateFlow provides real-time updates whenever the settings data changes,
      * allowing ViewModels and other consumers to automatically react to data changes
@@ -28,10 +31,19 @@ interface SettingsRepository {
      *
      * @return StateFlow containing the current state of all settings wrapped in DataState
      */
-    val settings: StateFlow<DataState<RepositoryError, List<ModelSettings>>>
+    val allSettingsDetails: StateFlow<DataState<RepositoryError, List<ModelSettingsDetails>>>
 
     /**
-     * Returns a cold Flow for a specific model settings profile that derives from the main settings StateFlow.
+     * Reactive stream of all LLM settings profiles.
+     *
+     * This one should be used instead of allSettingsDetails() when access details are not needed.
+     *
+     * @return StateFlow containing the current state of all settings wrapped in DataState
+     */
+    val allSettings: StateFlow<DataState<RepositoryError, List<ModelSettings>>>
+
+    /**
+     * Returns a cold Flow for a specific LLM settings profile that derives from the main settings StateFlow.
      *
      * This method provides a cold Flow that transforms the main `settings` stream to emit
      * the state of an individual settings profile whenever it changes. As a cold flow, it only
@@ -41,68 +53,55 @@ interface SettingsRepository {
      * @param settingsId The unique identifier of the settings profile to observe
      * @return Flow containing the current state of the specific settings profile wrapped in DataState
      */
-    fun getSettingsFlow(settingsId: Long): Flow<DataState<RepositoryError, ModelSettings>>
+    fun getSettingsFlow(settingsId: Long): Flow<DataState<RepositoryError, ModelSettingsDetails?>>
 
     /**
-     * Loads all model settings profiles from the backend.
+     * Loads all LLM settings profiles from the backend, including ownership and access details.
      *
      * This operation fetches the latest settings data and updates the internal StateFlow.
      * If a load operation is already in progress, this method returns immediately
      * without starting a duplicate operation.
      *
-     * @return Either.Right with List<ModelSettings> on successful load, or Either.Left with RepositoryError on failure
+     * @return Either.Right with Unit on successful load, or Either.Left with RepositoryError on failure
      */
-    suspend fun loadSettings(): Either<RepositoryError, List<ModelSettings>>
+    suspend fun loadAllSettingsDetails(): Either<RepositoryError, Unit>
 
     /**
-     * Loads a specific model settings profile from the backend.
+     * Loads all LLM settings profiles from the backend.
      *
-     * This operation fetches the latest settings data for the specified ID and updates
-     * the individual settings StateFlow. If a load operation for this settings profile is already
-     * in progress, this method returns immediately without starting a duplicate operation.
+     * This one should be used instead of loadAllSettingsDetails() when access details are not needed.
+     *
+     * @return Either.Right with Unit on successful load, or Either.Left with RepositoryError on failure
+     */
+    suspend fun loadAllSettings(): Either<RepositoryError, Unit>
+
+    /**
+     * Loads detailed information about a specific LLM settings profile, including owner and access list.
+     *
+     * This operation fetches the latest settings details and updates the internal StateFlow.
+     * If a load operation is already in progress, this method returns immediately
+     * without starting a duplicate operation.
      *
      * @param settingsId The unique identifier of the settings profile to load
-     * @return Either.Right with the loaded ModelSettings on successful load, or Either.Left with RepositoryError on failure
+     * @return Either.Right with ModelSettingsDetails on success, or Either.Left with RepositoryError on failure
      */
-    suspend fun loadSettingsDetails(settingsId: Long): Either<RepositoryError, ModelSettings>
-
-    /**
-     * Loads settings profiles for a specific model from the backend.
-     *
-     * This operation fetches settings data for a particular model and can be used
-     * to filter the settings data by model ID.
-     *
-     * @param modelId The unique identifier of the model whose settings to load
-     * @return Either.Right with a list of ModelSettings on success, or Either.Left with RepositoryError on failure
-     */
-    suspend fun loadSettingsByModelId(modelId: Long): Either<RepositoryError, List<ModelSettings>>
+    suspend fun loadSettingsDetails(settingsId: Long): Either<RepositoryError, ModelSettingsDetails>
 
     /**
      * Creates a new model settings profile.
      *
-     * Upon successful creation, the new settings profile is automatically added to the internal
+     * Upon successful creation, the new settings profile's details are automatically added to the internal
      * StateFlow, triggering updates to all observers.
      *
      * @param settings The ModelSettings object to create
-     * @return Either.Right with the created ModelSettings on success, or Either.Left with RepositoryError on failure
+     * @return Either.Right with the created ModelSettingsDetails on success, or Either.Left with RepositoryError on failure
      */
-    suspend fun addModelSettings(settings: ModelSettings): Either<RepositoryError, ModelSettings>
-
-    /**
-     * Retrieves a specific model settings profile by its ID.
-     *
-     * This method provides direct access to a single settings profile without affecting
-     * the main settings StateFlow.
-     *
-     * @param settingsId The unique identifier of the settings profile to retrieve
-     * @return Either.Right with the ModelSettings on success, or Either.Left with RepositoryError on failure
-     */
-    suspend fun getSettingsById(settingsId: Long): Either<RepositoryError, ModelSettings>
+    suspend fun addModelSettings(settings: ModelSettings): Either<RepositoryError, ModelSettingsDetails>
 
     /**
      * Updates an existing model settings profile.
      *
-     * Upon successful update, the modified settings profile replaces the existing one in the
+     * Upon successful update, the modified settings profile's details replace the existing one in the
      * internal StateFlow, triggering updates to all observers.
      *
      * @param settings The updated settings object with the same ID as the existing profile
@@ -113,11 +112,59 @@ interface SettingsRepository {
     /**
      * Deletes a model settings profile.
      *
-     * Upon successful deletion, the settings profile is automatically removed from the internal
+     * Upon successful deletion, the settings profile's details are automatically removed from the internal
      * StateFlow, triggering updates to all observers.
      *
      * @param settingsId The unique identifier of the settings profile to delete
      * @return Either.Right with Unit on successful deletion, or Either.Left with RepositoryError on failure
      */
     suspend fun deleteSettings(settingsId: Long): Either<RepositoryError, Unit>
+
+    /**
+     * Makes a settings profile publicly accessible by granting READ access to the "All Users" group.
+     *
+     * Upon successful operation, the internal StateFlow of settings details is updated.
+     *
+     * @param settingsId The ID of the settings profile to make public.
+     * @return Either.Right with [Unit] on success, or Either.Left with [RepositoryError](psi_element://eu.torvian.chatbot.app.repository.RepositoryError) on failure.
+     */
+    suspend fun makeSettingsPublic(settingsId: Long): Either<RepositoryError, Unit>
+
+    /**
+     * Makes a settings profile private by revoking all access from the "All Users" group.
+     *
+     * Upon successful operation, the internal StateFlow of settings details is updated.
+     *
+     * @param settingsId The ID of the settings profile to make private.
+     * @return Either.Right with [Unit] on success, or Either.Left with [RepositoryError](psi_element://eu.torvian.chatbot.app.repository.RepositoryError) on failure.
+     */
+    suspend fun makeSettingsPrivate(settingsId: Long): Either<RepositoryError, Unit>
+
+    /**
+     * Grants access to a settings profile for a specific user group with the specified access mode.
+     *
+     * Upon successful operation, the internal StateFlow of settings details is updated.
+     *
+     * @param settingsId The ID of the settings profile.
+     * @param request The grant access request containing groupId and accessMode.
+     * @return Either.Right with [ModelSettingsDetails] on success, or Either.Left with [RepositoryError](psi_element://eu.torvian.chatbot.app.repository.RepositoryError) on failure.
+     */
+    suspend fun grantSettingsAccess(
+        settingsId: Long,
+        request: GrantAccessRequest
+    ): Either<RepositoryError, ModelSettingsDetails>
+
+    /**
+     * Revokes access to a settings profile from a specific user group for the specified access mode.
+     *
+     * Upon successful operation, the internal StateFlow of settings details is updated.
+     *
+     * @param settingsId The ID of the settings profile.
+     * @param request The revoke access request containing groupId and accessMode.
+     * @return Either.Right with [ModelSettingsDetails] on success, or Either.Left with [RepositoryError](psi_element://eu.torvian.chatbot.app.repository.RepositoryError) on failure.
+     */
+    suspend fun revokeSettingsAccess(
+        settingsId: Long,
+        request: RevokeAccessRequest
+    ): Either<RepositoryError, ModelSettingsDetails>
 }

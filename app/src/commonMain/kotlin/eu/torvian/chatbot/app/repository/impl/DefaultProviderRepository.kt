@@ -1,16 +1,22 @@
 package eu.torvian.chatbot.app.repository.impl
 
 import arrow.core.Either
+import arrow.core.raise.either
+import arrow.core.raise.withError
 import arrow.core.right
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.ProviderRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.service.api.ProviderApi
+import eu.torvian.chatbot.app.utils.misc.kmpLogger
+import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
+import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
+import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
 import eu.torvian.chatbot.common.models.api.llm.AddProviderRequest
+import eu.torvian.chatbot.common.models.api.llm.UpdateProviderCredentialRequest
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
-import eu.torvian.chatbot.common.models.api.llm.UpdateProviderCredentialRequest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,93 +38,169 @@ class DefaultProviderRepository(
     private val providerApi: ProviderApi
 ) : ProviderRepository {
 
+    companion object {
+        private val logger = kmpLogger<DefaultModelRepository>()
+    }
+
+    private val _providersDetails =
+        MutableStateFlow<DataState<RepositoryError, List<LLMProviderDetails>>>(DataState.Idle)
+    override val providersDetails: StateFlow<DataState<RepositoryError, List<LLMProviderDetails>>> =
+        _providersDetails.asStateFlow()
+
     private val _providers = MutableStateFlow<DataState<RepositoryError, List<LLMProvider>>>(DataState.Idle)
     override val providers: StateFlow<DataState<RepositoryError, List<LLMProvider>>> = _providers.asStateFlow()
 
-    override suspend fun loadProviders(): Either<RepositoryError, Unit> {
+    override suspend fun loadProvidersDetails(): Either<RepositoryError, Unit> = either {
+        // Prevent duplicate loading operations
+        if (_providersDetails.value.isLoading) return Unit.right()
+
+        _providersDetails.update { DataState.Loading }
+
+        withError({ apiResourceError ->
+            apiResourceError.toRepositoryError("Failed to load all provider details")
+        }) {
+            providerApi.getAllProviderDetails().bind()
+        }.also { detailsList ->
+            _providersDetails.update { DataState.Success(detailsList) }
+        }
+    }
+
+    override suspend fun loadProviders(): Either<RepositoryError, Unit> = either {
         // Prevent duplicate loading operations
         if (_providers.value.isLoading) return Unit.right()
 
         _providers.update { DataState.Loading }
 
-        return providerApi.getAllProviders()
-            .map { providerList ->
-                _providers.update { DataState.Success(providerList) }
-            }
-            .mapLeft { apiResourceError ->
-                val repositoryError = apiResourceError.toRepositoryError("Failed to load providers")
-                _providers.update { DataState.Error(repositoryError) }
-                repositoryError
-            }
+        withError({ apiResourceError ->
+            apiResourceError.toRepositoryError("Failed to load all providers")
+        }) {
+            providerApi.getAllProviders().bind()
+        }.also { providerList ->
+            _providers.update { DataState.Success(providerList) }
+        }
     }
 
-    override suspend fun addProvider(request: AddProviderRequest): Either<RepositoryError, LLMProvider> {
-        return providerApi.addProvider(request)
-            .map { newProvider ->
-                updateProvidersState { it + newProvider }
-                newProvider
+    override suspend fun loadProviderDetails(providerId: Long): Either<RepositoryError, LLMProviderDetails> = either {
+        withError({ apiResourceError ->
+            apiResourceError.toRepositoryError("Failed to load provider details")
+        }) {
+            providerApi.getProviderDetails(providerId).bind()
+        }.also { providerDetails ->
+            updateProviderDetailsState { list ->
+                if (list.any { it.provider.id == providerDetails.provider.id }) {
+                    list.map { if (it.provider.id == providerDetails.provider.id) providerDetails else it }
+                } else {
+                    list + providerDetails
+                }
             }
-            .mapLeft { apiResourceError ->
+        }
+    }
+
+    override suspend fun addProvider(request: AddProviderRequest): Either<RepositoryError, LLMProviderDetails> =
+        either {
+            val newProvider = withError({ apiResourceError ->
                 apiResourceError.toRepositoryError("Failed to add provider")
+            }) {
+                providerApi.addProvider(request).bind()
             }
+            loadProviderDetails(newProvider.id).bind()
+        }
+
+    override suspend fun updateProvider(provider: LLMProvider): Either<RepositoryError, Unit> = either {
+        withError({ apiResourceError ->
+            apiResourceError.toRepositoryError("Failed to update provider")
+        }) {
+            providerApi.updateProvider(provider).bind()
+        }
+        // After update, fetch updated details to refresh cache
+        loadProviderDetails(provider.id).bind()
     }
 
-    override suspend fun getProviderById(providerId: Long): Either<RepositoryError, LLMProvider> {
-        return providerApi.getProviderById(providerId)
-            .mapLeft { apiResourceError ->
-                apiResourceError.toRepositoryError("Failed to get provider by ID")
-            }
-    }
-
-    override suspend fun updateProvider(provider: LLMProvider): Either<RepositoryError, Unit> {
-        return providerApi.updateProvider(provider)
-            .map {
-                updateProvidersState { list -> list.map { if (it.id == provider.id) provider else it } }
-            }
-            .mapLeft { apiResourceError ->
-                apiResourceError.toRepositoryError("Failed to update provider")
-            }
-    }
-
-    override suspend fun deleteProvider(providerId: Long): Either<RepositoryError, Unit> {
-        return providerApi.deleteProvider(providerId)
-            .map {
-                updateProvidersState { list -> list.filter { it.id != providerId } }
-            }
-            .mapLeft { apiResourceError ->
-                apiResourceError.toRepositoryError("Failed to delete provider")
-            }
+    override suspend fun deleteProvider(providerId: Long): Either<RepositoryError, Unit> = either {
+        withError({ apiResourceError ->
+            apiResourceError.toRepositoryError("Failed to delete provider")
+        }) {
+            providerApi.deleteProvider(providerId).bind()
+        }
+        updateProviderDetailsState { list -> list.filter { it.provider.id != providerId } }
     }
 
     override suspend fun updateProviderCredential(
         providerId: Long,
         request: UpdateProviderCredentialRequest
-    ): Either<RepositoryError, Unit> {
-        return providerApi.updateProviderCredential(providerId, request)
-            .mapLeft { apiResourceError ->
-                apiResourceError.toRepositoryError("Failed to update provider credential")
-            }
+    ): Either<RepositoryError, Unit> = either {
+        withError({ apiResourceError ->
+            apiResourceError.toRepositoryError("Failed to update provider credential")
+        }) {
+            providerApi.updateProviderCredential(providerId, request).bind()
+        }
         // Note: Credential updates don't affect the provider metadata in the StateFlow
         // The provider list remains unchanged as credentials are stored separately
     }
 
-    override suspend fun getModelsByProviderId(providerId: Long): Either<RepositoryError, List<LLMModel>> {
-        return providerApi.getModelsByProviderId(providerId)
-            .mapLeft { apiResourceError ->
-                apiResourceError.toRepositoryError("Failed to get models by provider ID")
-            }
+    override suspend fun getModelsByProviderId(providerId: Long): Either<RepositoryError, List<LLMModel>> = either {
+        withError({ apiResourceError ->
+            apiResourceError.toRepositoryError("Failed to get models by provider ID")
+        }) {
+            providerApi.getModelsByProviderId(providerId).bind()
+        }
+    }
+
+    override suspend fun makeProviderPublic(providerId: Long): Either<RepositoryError, Unit> = either {
+        withError({ apiResourceError ->
+            apiResourceError.toRepositoryError("Failed to make provider public")
+        }) {
+            providerApi.makeProviderPublic(providerId).bind()
+        }
+        loadProviderDetails(providerId).bind()
+    }
+
+    override suspend fun makeProviderPrivate(providerId: Long): Either<RepositoryError, Unit> = either {
+        withError({ apiResourceError ->
+            apiResourceError.toRepositoryError("Failed to make provider private")
+        }) {
+            providerApi.makeProviderPrivate(providerId).bind()
+        }
+        loadProviderDetails(providerId).bind()
+    }
+
+    override suspend fun grantProviderAccess(
+        providerId: Long,
+        request: GrantAccessRequest
+    ): Either<RepositoryError, LLMProviderDetails> = either {
+        withError({ apiResourceError ->
+            apiResourceError.toRepositoryError("Failed to grant provider access")
+        }) {
+            providerApi.grantProviderAccess(providerId, request).bind()
+        }
+        loadProviderDetails(providerId).bind()
+    }
+
+    override suspend fun revokeProviderAccess(
+        providerId: Long,
+        request: RevokeAccessRequest
+    ): Either<RepositoryError, LLMProviderDetails> = either {
+        withError({ apiResourceError ->
+            apiResourceError.toRepositoryError("Failed to revoke provider access")
+        }) {
+            providerApi.revokeProviderAccess(providerId, request).bind()
+        }
+        loadProviderDetails(providerId).bind()
     }
 
     /**
-     * Updates the internal StateFlow of providers using the provided transformation.
+     * Updates the internal StateFlow of provider details using the provided transformation.
      *
-     * @param transform A function that takes the current list of providers and returns an updated list.
+     * @param transform A function that takes the current list of provider details and returns an updated list.
      */
-    private fun updateProvidersState(transform: (List<LLMProvider>) -> List<LLMProvider>) {
-        _providers.update { currentState ->
+    private fun updateProviderDetailsState(transform: (List<LLMProviderDetails>) -> List<LLMProviderDetails>) {
+        _providersDetails.update { currentState ->
             when (currentState) {
                 is DataState.Success -> DataState.Success(transform(currentState.data))
-                else -> currentState
+                else -> {
+                    logger.warn("Tried to update provider details but they're not in Success state")
+                    currentState
+                }
             }
         }
     }

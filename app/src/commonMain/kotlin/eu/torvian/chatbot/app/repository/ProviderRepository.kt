@@ -2,10 +2,13 @@ package eu.torvian.chatbot.app.repository
 
 import arrow.core.Either
 import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
+import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
+import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
 import eu.torvian.chatbot.common.models.api.llm.AddProviderRequest
+import eu.torvian.chatbot.common.models.api.llm.UpdateProviderCredentialRequest
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
-import eu.torvian.chatbot.common.models.api.llm.UpdateProviderCredentialRequest
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -20,20 +23,29 @@ import kotlinx.coroutines.flow.StateFlow
  * all observers when changes occur, ensuring data consistency across the application.
  */
 interface ProviderRepository {
-    
+
     /**
-     * Reactive stream of all LLM provider configurations.
-     * 
+     * Reactive stream of all LLM provider configurations, including ownership and access details.
+     *
      * This StateFlow provides real-time updates whenever the provider data changes,
      * allowing ViewModels and other consumers to automatically react to data changes
      * without manual refresh operations.
      *
      * @return StateFlow containing the current state of all providers wrapped in DataState
      */
+    val providersDetails: StateFlow<DataState<RepositoryError, List<LLMProviderDetails>>>
+
+    /**
+     * Reactive stream of all LLM provider configurations.
+     *
+     * This one should be used instead of providersDetails() when access details are not needed.
+     *
+     * @return StateFlow containing the current state of all providers wrapped in DataState
+     */
     val providers: StateFlow<DataState<RepositoryError, List<LLMProvider>>>
 
     /**
-     * Loads all LLM provider configurations from the backend.
+     * Loads all LLM provider configurations from the backend, including ownership and access details.
      *
      * This operation fetches the latest provider data and updates the internal StateFlow.
      * If a load operation is already in progress, this method returns immediately
@@ -41,29 +53,39 @@ interface ProviderRepository {
      *
      * @return Either.Right with Unit on successful load, or Either.Left with RepositoryError on failure
      */
+    suspend fun loadProvidersDetails(): Either<RepositoryError, Unit>
+
+    /**
+     * Loads all LLM provider configurations from the backend.
+     *
+     * This one should be used instead of loadProvidersDetails() when access details are not needed.
+     *
+     * @return Either.Right with Unit on successful load, or Either.Left with RepositoryError on failure
+     */
     suspend fun loadProviders(): Either<RepositoryError, Unit>
+
+    /**
+     * Loads detailed information about a specific LLM provider, including owner and access list.
+     *
+     * This operation fetches the latest provider details and updates the internal StateFlow.
+     * If a load operation is already in progress, this method returns immediately
+     * without starting a duplicate operation.
+     *
+     * @param providerId The unique identifier of the provider to load
+     * @return Either.Right with LLMProviderDetails on success, or Either.Left with RepositoryError on failure
+     */
+    suspend fun loadProviderDetails(providerId: Long): Either<RepositoryError, LLMProviderDetails>
 
     /**
      * Adds a new LLM provider configuration.
      *
-     * Upon successful creation, the new provider is automatically added to the internal
+     * Upon successful creation, the new provider's details are automatically added to the internal
      * StateFlow, triggering updates to all observers.
      *
      * @param request The provider creation request containing all necessary details including optional credentials
-     * @return Either.Right with the created LLMProvider on success, or Either.Left with RepositoryError on failure
+     * @return Either.Right with the created LLMProviderDetails on success, or Either.Left with RepositoryError on failure
      */
-    suspend fun addProvider(request: AddProviderRequest): Either<RepositoryError, LLMProvider>
-
-    /**
-     * Retrieves a specific LLM provider configuration by its ID.
-     *
-     * This method provides direct access to a single provider without affecting
-     * the main providers StateFlow.
-     *
-     * @param providerId The unique identifier of the provider to retrieve
-     * @return Either.Right with the LLMProvider on success, or Either.Left with RepositoryError on failure
-     */
-    suspend fun getProviderById(providerId: Long): Either<RepositoryError, LLMProvider>
+    suspend fun addProvider(request: AddProviderRequest): Either<RepositoryError, LLMProviderDetails>
 
     /**
      * Updates an existing LLM provider configuration.
@@ -71,7 +93,7 @@ interface ProviderRepository {
      * This method updates the provider's metadata but does NOT update credentials.
      * Use updateProviderCredential() for credential updates.
      *
-     * Upon successful update, the modified provider replaces the existing one in the
+     * Upon successful update, the modified provider's details replace the existing one in the
      * internal StateFlow, triggering updates to all observers.
      *
      * @param provider The updated provider object with the same ID as the existing provider
@@ -83,7 +105,7 @@ interface ProviderRepository {
      * Deletes an LLM provider configuration.
      *
      * This operation will fail if there are still models linked to this provider.
-     * Upon successful deletion, the provider is automatically removed from the internal
+     * Upon successful deletion, the provider's details are automatically removed from the internal
      * StateFlow, triggering updates to all observers.
      *
      * @param providerId The unique identifier of the provider to delete
@@ -116,4 +138,52 @@ interface ProviderRepository {
      * @return Either.Right with a list of LLMModel on success, or Either.Left with RepositoryError on failure
      */
     suspend fun getModelsByProviderId(providerId: Long): Either<RepositoryError, List<LLMModel>>
+
+    /**
+     * Makes a provider publicly accessible by granting READ access to the "All Users" group.
+     *
+     * Upon successful operation, the internal StateFlow of provider details is updated.
+     *
+     * @param providerId The ID of the provider to make public.
+     * @return Either.Right with [Unit] on success, or Either.Left with [RepositoryError](psi_element://eu.torvian.chatbot.app.repository.RepositoryError) on failure.
+     */
+    suspend fun makeProviderPublic(providerId: Long): Either<RepositoryError, Unit>
+
+    /**
+     * Makes a provider private by revoking all access from the "All Users" group.
+     *
+     * Upon successful operation, the internal StateFlow of provider details is updated.
+     *
+     * @param providerId The ID of the provider to make private.
+     * @return Either.Right with [Unit] on success, or Either.Left with [RepositoryError](psi_element://eu.torvian.chatbot.app.repository.RepositoryError) on failure.
+     */
+    suspend fun makeProviderPrivate(providerId: Long): Either<RepositoryError, Unit>
+
+    /**
+     * Grants access to a provider for a specific user group with the specified access mode.
+     *
+     * Upon successful operation, the internal StateFlow of provider details is updated.
+     *
+     * @param providerId The ID of the provider.
+     * @param request The grant access request containing groupId and accessMode.
+     * @return Either.Right with [LLMProviderDetails] on success, or Either.Left with [RepositoryError](psi_element://eu.torvian.chatbot.app.repository.RepositoryError) on failure.
+     */
+    suspend fun grantProviderAccess(
+        providerId: Long,
+        request: GrantAccessRequest
+    ): Either<RepositoryError, LLMProviderDetails>
+
+    /**
+     * Revokes access to a provider from a specific user group for the specified access mode.
+     *
+     * Upon successful operation, the internal StateFlow of provider details is updated.
+     *
+     * @param providerId The ID of the provider.
+     * @param request The revoke access request containing groupId and accessMode.
+     * @return Either.Right with [LLMProviderDetails] on success, or Either.Left with [RepositoryError](psi_element://eu.torvian.chatbot.app.repository.RepositoryError) on failure.
+     */
+    suspend fun revokeProviderAccess(
+        providerId: Long,
+        request: RevokeAccessRequest
+    ): Either<RepositoryError, LLMProviderDetails>
 }
