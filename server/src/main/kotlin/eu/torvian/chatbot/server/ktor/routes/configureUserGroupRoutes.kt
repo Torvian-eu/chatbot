@@ -18,6 +18,7 @@ import io.ktor.server.request.*
 import io.ktor.server.resources.*
 import io.ktor.server.resources.post
 import io.ktor.server.resources.put
+import io.ktor.server.response.respond
 import io.ktor.server.routing.*
 
 /**
@@ -32,13 +33,15 @@ fun Route.configureUserGroupRoutes(
     authenticate(AuthSchemes.USER_JWT) {
         // GET /api/v1/user-groups - List all user groups
         get<UserGroupResource> {
-            val requestingUserId = call.getUserId()
-
-            val result = either {
-                requirePermission(authorizationService, requestingUserId, CommonPermissions.MANAGE_USER_GROUPS)
-                userGroupService.getAllGroups()
-            }
-            call.respondEither(result)
+//            val requestingUserId = call.getUserId()
+//
+//            val result = either {
+//                // TODO: Make user group a shareable resource, and allow users to see groups for which they have read access
+//                requirePermission(authorizationService, requestingUserId, CommonPermissions.MANAGE_USER_GROUPS)
+//                userGroupService.getAllGroups()
+//            }
+//            call.respondEither(result)
+            call.respond(userGroupService.getAllGroups()) // currently no permission needed to list groups
         }
 
         // POST /api/v1/user-groups - Create new user group
