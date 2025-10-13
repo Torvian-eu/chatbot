@@ -9,6 +9,12 @@ import io.ktor.resources.*
 @Resource("settings")
 class SettingsResource(val parent: Api = Api()) {
     /**
+     * Resource for getting detailed information for all settings: /api/v1/settings/details
+     */
+    @Resource("details")
+    class Details(val parent: SettingsResource = SettingsResource())
+
+    /**
      * Resource for a specific setting by ID: /api/v1/settings/{settingsId}
      */
     @Resource("{settingsId}")
@@ -32,15 +38,9 @@ class SettingsResource(val parent: Api = Api()) {
         data class MakePrivate(val parent: ById)
 
         /**
-         * Resource for checking if a settings profile is public: /api/v1/settings/{settingsId}/is-public
+         * Resource for getting settings details: /api/v1/settings/{settingsId}/details
          */
-        @Resource("is-public")
-        data class IsPublic(val parent: ById)
-
-        /**
-         * Resource for getting settings owner information: /api/v1/settings/{settingsId}/owner
-         */
-        @Resource("owner")
-        data class Owner(val parent: ById)
+        @Resource("details")
+        class Details(val parent: ById)
     }
 }

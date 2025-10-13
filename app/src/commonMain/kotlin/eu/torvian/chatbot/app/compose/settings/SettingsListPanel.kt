@@ -7,6 +7,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -14,8 +16,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ConfigDropdown
+import eu.torvian.chatbot.app.compose.permissions.RequiresAnyPermission
+import eu.torvian.chatbot.app.repository.AuthState
+import eu.torvian.chatbot.common.api.CommonPermissions
+import eu.torvian.chatbot.common.models.api.access.ModelSettingsDetails
 import eu.torvian.chatbot.common.models.llm.LLMModel
-import eu.torvian.chatbot.common.models.llm.ModelSettings
 
 /**
  * Master panel for the Settings Config tab.
@@ -25,11 +30,12 @@ import eu.torvian.chatbot.common.models.llm.ModelSettings
 fun SettingsListPanel(
     models: List<LLMModel>,
     selectedModel: LLMModel?,
-    settingsList: List<ModelSettings>,
-    selectedSettings: ModelSettings?,
+    settingsList: List<ModelSettingsDetails>,
+    selectedSettings: ModelSettingsDetails?,
     onModelSelected: (LLMModel?) -> Unit,
-    onSettingsSelected: (ModelSettings) -> Unit,
+    onSettingsSelected: (ModelSettingsDetails) -> Unit,
     onAddNewSettings: () -> Unit,
+    authState: AuthState.Authenticated,
     modifier: Modifier = Modifier
 ) {
     Card(modifier = modifier) {
@@ -42,11 +48,16 @@ fun SettingsListPanel(
             ) {
                 Text("Settings Profiles", style = MaterialTheme.typography.headlineSmall)
                 if (selectedModel != null) {
-                    FloatingActionButton(
-                        onClick = onAddNewSettings,
-                        modifier = Modifier.size(40.dp)
+                    RequiresAnyPermission(
+                        authState = authState,
+                        permissions = listOf(CommonPermissions.CREATE_LLM_MODEL_SETTINGS, CommonPermissions.MANAGE_LLM_MODEL_SETTINGS)
                     ) {
-                        Icon(Icons.Default.Add, "Add new settings profile")
+                        FloatingActionButton(
+                            onClick = onAddNewSettings,
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(Icons.Default.Add, "Add new settings profile")
+                        }
                     }
                 }
             }
@@ -69,11 +80,11 @@ fun SettingsListPanel(
                 Text("No settings profiles found for this model.", textAlign = TextAlign.Center)
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(settingsList) { settings ->
+                    items(settingsList) { settingsDetails ->
                         SettingsListItem(
-                            settings = settings,
-                            isSelected = selectedSettings?.id == settings.id,
-                            onClick = { onSettingsSelected(settings) }
+                            settingsDetails = settingsDetails,
+                            isSelected = selectedSettings?.settings?.id == settingsDetails.settings.id,
+                            onClick = { onSettingsSelected(settingsDetails) }
                         )
                     }
                 }
@@ -87,10 +98,12 @@ fun SettingsListPanel(
  */
 @Composable
 private fun SettingsListItem(
-    settings: ModelSettings,
+    settingsDetails: ModelSettingsDetails,
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
+    val settings = settingsDetails.settings
+
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
@@ -104,6 +117,48 @@ private fun SettingsListItem(
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f)
             )
+
+            // Public/Private badge (matches ProviderListItem/ModelsListPanel style)
+            if (settingsDetails.isPublic()) {
+                AssistChip(
+                    onClick = {},
+                    label = { Text("Public", style = MaterialTheme.typography.labelSmall) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Public,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    },
+                    colors = AssistChipDefaults.assistChipColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                        labelColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                        leadingIconContentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                    ),
+                    border = null
+                )
+            } else {
+                AssistChip(
+                    onClick = {},
+                    label = { Text("Private", style = MaterialTheme.typography.labelSmall) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Lock,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    },
+                    colors = AssistChipDefaults.assistChipColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        labelColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        leadingIconContentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    ),
+                    border = null
+                )
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
             Surface(
                 color = MaterialTheme.colorScheme.secondaryContainer,
                 shape = RoundedCornerShape(12.dp)

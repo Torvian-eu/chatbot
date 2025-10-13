@@ -3,11 +3,17 @@ package eu.torvian.chatbot.app.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.app.domain.contracts.GrantAccessFormState
 import eu.torvian.chatbot.app.domain.contracts.ProviderFormState
 import eu.torvian.chatbot.app.domain.contracts.ProvidersDialogState
 import eu.torvian.chatbot.app.repository.ProviderRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.app.repository.UserGroupRepository
 import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
+import eu.torvian.chatbot.common.api.AccessMode
+import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
+import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
+import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
 import eu.torvian.chatbot.common.models.api.llm.AddProviderRequest
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.api.llm.UpdateProviderCredentialRequest
@@ -32,10 +38,12 @@ import kotlinx.coroutines.launch
  * - Managing the state for editing existing provider details (E4.S10).
  * - Managing the state for updating/removing provider API credentials (E4.S12).
  * - Deleting providers (E4.S11).
+ * - Managing provider access control (public/private, grant/revoke access).
  * - Communicating with the backend via [ProviderRepository].
  *
  * @constructor
  * @param providerRepository The repository for provider-related operations.
+ * @param userGroupRepository The repository for user group-related operations.
  * @param errorNotifier The service for handling and notifying about errors.
  * @param uiDispatcher The dispatcher to use for UI-related coroutines. Defaults to Main.
  *
@@ -45,6 +53,7 @@ import kotlinx.coroutines.launch
  */
 class ProviderConfigViewModel(
     private val providerRepository: ProviderRepository,
+    private val userGroupRepository: UserGroupRepository,
     private val errorNotifier: ErrorNotifier,
     private val uiDispatcher: CoroutineDispatcher = Dispatchers.Main
 ) : ViewModel() {
@@ -60,16 +69,16 @@ class ProviderConfigViewModel(
      * The state of the list of all configured LLM providers (E4.S9).
      * Includes loading, success with data, or error states.
      */
-    val providersState: StateFlow<DataState<RepositoryError, List<LLMProvider>>> = providerRepository.providers
+    val providersState: StateFlow<DataState<RepositoryError, List<LLMProviderDetails>>> = providerRepository.providersDetails
 
     /**
      * The currently selected provider in the master-detail UI.
      */
-    val selectedProvider: StateFlow<LLMProvider?> = combine(
+    val selectedProvider: StateFlow<LLMProviderDetails?> = combine(
         providersState.map { it.dataOrNull },
         userSelectedProviderId
     ) { providersList, currentSelectedId ->
-        providersList?.find { it.id == currentSelectedId }
+        providersList?.find { it.provider.id == currentSelectedId }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), null)
 
     /**
@@ -88,7 +97,7 @@ class ProviderConfigViewModel(
      */
     fun loadProviders() {
         viewModelScope.launch(uiDispatcher) {
-            providerRepository.loadProviders()
+            providerRepository.loadProvidersDetails()
                 .mapLeft { error ->
                     errorNotifier.repositoryError(
                         error = error,
@@ -101,8 +110,8 @@ class ProviderConfigViewModel(
     /**
      * Selects a provider (or clears selection when null).
      */
-    fun selectProvider(provider: LLMProvider?) {
-        userSelectedProviderId.value = provider?.id
+    fun selectProvider(providerDetails: LLMProviderDetails?) {
+        userSelectedProviderId.value = providerDetails?.provider?.id
     }
 
     /**
@@ -245,6 +254,163 @@ class ProviderConfigViewModel(
         _dialogState.value = ProvidersDialogState.None
     }
 
+    /**
+     * Makes a provider publicly accessible.
+     */
+    fun makeProviderPublic(providerDetails: LLMProviderDetails) {
+        viewModelScope.launch(uiDispatcher) {
+            providerRepository.makeProviderPublic(providerDetails.provider.id)
+                .mapLeft { error ->
+                    errorNotifier.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to make provider public"
+                    )
+                }
+        }
+    }
+
+    /**
+     * Makes a provider private.
+     */
+    fun makeProviderPrivate(providerDetails: LLMProviderDetails) {
+        viewModelScope.launch(uiDispatcher) {
+            providerRepository.makeProviderPrivate(providerDetails.provider.id)
+                .mapLeft { error ->
+                    errorNotifier.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to make provider private"
+                    )
+                }
+        }
+    }
+
+    /**
+     * Opens the manage access dialog for a provider.
+     */
+    fun openManageAccessDialog(providerDetails: LLMProviderDetails) {
+        viewModelScope.launch(uiDispatcher) {
+            userGroupRepository.loadGroups().fold(
+                ifLeft = { error ->
+                    errorNotifier.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to load user groups"
+                    )
+                },
+                ifRight = {
+                    // Get groups from repository state
+                    val groups = userGroupRepository.groups.value.dataOrNull ?: emptyList()
+
+                    // Define available access modes for providers
+                    val availableAccessModes = listOf(AccessMode.READ.key, AccessMode.WRITE.key, AccessMode.MANAGE.key)
+
+                    _dialogState.value = ProvidersDialogState.ManageAccess(
+                        providerDetails = providerDetails,
+                        availableGroups = groups,
+                        grantAccessForm = GrantAccessFormState(
+                            selectedAccessMode = availableAccessModes.first(),
+                            availableAccessModes = availableAccessModes
+                        )
+                    )
+                }
+            )
+        }
+    }
+
+    /**
+     * Opens the grant access dialog within the manage access dialog.
+     */
+    fun openGrantAccessDialog() {
+        _dialogState.update { state ->
+            if (state is ProvidersDialogState.ManageAccess) {
+                state.copy(showGrantDialog = true)
+            } else state
+        }
+    }
+
+    /**
+     * Closes the grant access dialog.
+     */
+    fun closeGrantAccessDialog() {
+        _dialogState.update { state ->
+            if (state is ProvidersDialogState.ManageAccess) {
+                state.copy(
+                    showGrantDialog = false,
+                    grantAccessForm = GrantAccessFormState() // Reset form
+                )
+            } else state
+        }
+    }
+
+    /**
+     * Updates the grant access form state.
+     */
+    fun updateGrantAccessForm(update: (GrantAccessFormState) -> GrantAccessFormState) {
+        _dialogState.update { state ->
+            if (state is ProvidersDialogState.ManageAccess) {
+                state.copy(grantAccessForm = update(state.grantAccessForm))
+            } else state
+        }
+    }
+
+    /**
+     * Grants access to a provider for a specific user group.
+     */
+    fun grantProviderAccess(providerId: Long, groupId: Long, accessMode: String) {
+        viewModelScope.launch(uiDispatcher) {
+            providerRepository.grantProviderAccess(
+                providerId,
+                GrantAccessRequest(groupId = groupId, accessMode = accessMode)
+            ).fold(
+                ifLeft = { error ->
+                    errorNotifier.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to grant access"
+                    )
+                },
+                ifRight = { providerDetails ->
+                    // Refresh the dialog state to reflect the new access details
+                    _dialogState.update { state ->
+                        if (state is ProvidersDialogState.ManageAccess) {
+                            state.copy(
+                                providerDetails = providerDetails
+                            )
+                        } else state
+                    }
+                    closeGrantAccessDialog()
+                }
+            )
+        }
+    }
+
+    /**
+     * Revokes access to a provider from a specific user group.
+     */
+    fun revokeProviderAccess(providerId: Long, groupId: Long, accessMode: String) {
+        viewModelScope.launch(uiDispatcher) {
+            providerRepository.revokeProviderAccess(
+                providerId,
+                RevokeAccessRequest(groupId = groupId, accessMode = accessMode)
+            ).fold(
+                ifLeft = { error ->
+                    errorNotifier.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to revoke access"
+                    )
+                },
+                ifRight = { providerDetails ->
+                    // Refresh the dialog state to reflect the new access details
+                    _dialogState.update { state ->
+                        if (state is ProvidersDialogState.ManageAccess) {
+                            state.copy(
+                                providerDetails = providerDetails
+                            )
+                        } else state
+                    }
+                }
+            )
+        }
+    }
+
     // --- Private Helper Functions ---
 
     /**
@@ -275,9 +441,9 @@ class ProviderConfigViewModel(
                             shortMessage = "Failed to add provider"
                         )
                     },
-                    ifRight = { newProvider ->
+                    ifRight = { newProviderDetails ->
                         cancelDialog()
-                        selectProvider(newProvider)
+                        selectProvider(newProviderDetails)
                     }
                 )
         }

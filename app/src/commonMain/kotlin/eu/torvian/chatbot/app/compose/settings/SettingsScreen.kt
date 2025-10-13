@@ -9,6 +9,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import eu.torvian.chatbot.app.repository.AuthState
 
 /**
  * A tabbed interface for the Settings screen UI.
@@ -22,7 +23,9 @@ import androidx.compose.ui.unit.dp
  * for better modularity, testability, and separation of concerns.
  */
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(
+    authState: AuthState.Authenticated
+) {
     // Tab state management
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     val tabTitles = listOf("Providers", "Models", "Settings")
@@ -60,9 +63,9 @@ fun SettingsScreen() {
                 .padding(16.dp)
         ) {
             when (selectedTabIndex) {
-                0 -> ProvidersTabRoute()
-                1 -> ModelsTabRoute()
-                2 -> SettingsConfigTabRoute()
+                0 -> ProvidersTabRoute(authState = authState)
+                1 -> ModelsTabRoute(authState = authState)
+                2 -> SettingsConfigTabRoute(authState = authState)
             }
         }
     }

@@ -100,6 +100,8 @@ class InitialSetupService(
      */
     private fun createBasicPermissions(adminRoleId: Long, standardUserRoleId: Long) {
         // Create permissions using predefined PermissionSpec instances
+
+        // --- Manage permissions ---
         val manageUsersPermId = createPermission(CommonPermissions.MANAGE_USERS)
         val manageRolesPermId = createPermission(CommonPermissions.MANAGE_ROLES)
         val managePermissionsPermId = createPermission(CommonPermissions.MANAGE_PERMISSIONS)
@@ -108,7 +110,12 @@ class InitialSetupService(
         val manageLlmModelsPermId = createPermission(CommonPermissions.MANAGE_LLM_MODELS)
         val manageLlmModelSettingsPermId = createPermission(CommonPermissions.MANAGE_LLM_MODEL_SETTINGS)
 
-        // Assign all permissions to admin role
+        // --- Create permissions ---
+        createPermission(CommonPermissions.CREATE_LLM_PROVIDER)
+        createPermission(CommonPermissions.CREATE_LLM_MODEL)
+        createPermission(CommonPermissions.CREATE_LLM_MODEL_SETTINGS)
+
+        // Assign manage permissions to admin role
         assignPermissionToRole(adminRoleId, manageUsersPermId)
         assignPermissionToRole(adminRoleId, manageRolesPermId)
         assignPermissionToRole(adminRoleId, managePermissionsPermId)

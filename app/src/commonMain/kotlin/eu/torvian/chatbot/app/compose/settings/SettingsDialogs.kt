@@ -2,6 +2,7 @@ package eu.torvian.chatbot.app.compose.settings
 
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import eu.torvian.chatbot.app.compose.settings.dialogs.ManageAccessDialog
 import eu.torvian.chatbot.app.domain.contracts.SettingsDialogState
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 
@@ -37,6 +38,33 @@ fun SettingsDialogs(
             DeleteSettingsDialog(
                 settings = dialogState.settings,
                 onConfirm = { actions.onDeleteSettings(dialogState.settings.id) },
+                onDismiss = actions::onCancelDialog
+            )
+        }
+        is SettingsDialogState.ManageAccess -> {
+            ManageAccessDialog(
+                resourceName = dialogState.settingsDetails.settings.name,
+                accessDetails = dialogState.settingsDetails.accessDetails,
+                availableGroups = dialogState.availableGroups,
+                showGrantDialog = dialogState.showGrantDialog,
+                grantAccessForm = dialogState.grantAccessForm,
+                onOpenGrantDialog = actions::onOpenGrantAccessDialog,
+                onCloseGrantDialog = actions::onCloseGrantAccessDialog,
+                onUpdateGrantForm = actions::onUpdateGrantAccessForm,
+                onConfirmGrant = { groupId, accessMode ->
+                    actions.onGrantSettingsAccess(
+                        dialogState.settingsDetails.settings.id,
+                        groupId,
+                        accessMode
+                    )
+                },
+                onRevokeAccess = { groupId, accessMode ->
+                    actions.onRevokeSettingsAccess(
+                        dialogState.settingsDetails.settings.id,
+                        groupId,
+                        accessMode
+                    )
+                },
                 onDismiss = actions::onCancelDialog
             )
         }

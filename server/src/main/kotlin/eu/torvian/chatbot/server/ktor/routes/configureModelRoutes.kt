@@ -16,13 +16,7 @@ import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.service.core.LLMModelService
 import eu.torvian.chatbot.server.service.core.ModelSettingsService
-import eu.torvian.chatbot.server.service.core.error.access.GetResourceAccessError
-import eu.torvian.chatbot.server.service.core.error.access.GrantResourceAccessError
-import eu.torvian.chatbot.server.service.core.error.access.RevokeResourceAccessError
-import eu.torvian.chatbot.server.service.core.error.access.MakeResourcePublicError
-import eu.torvian.chatbot.server.service.core.error.access.MakeResourcePrivateError
-import eu.torvian.chatbot.server.service.core.error.access.CheckResourcePublicError
-import eu.torvian.chatbot.server.service.core.error.access.toApiError
+import eu.torvian.chatbot.server.service.core.error.access.*
 import eu.torvian.chatbot.server.service.core.error.model.*
 import eu.torvian.chatbot.server.service.security.AuthorizationService
 import io.ktor.http.*
@@ -184,24 +178,7 @@ fun Route.configureModelRoutes(
             }
         }
 
-        // --- Access Management for models ---
-
-        // GET /api/v1/models/{modelId}/access - Get access information
-        get<ModelResource.ById.Access> { resource ->
-            val userId = call.getUserId()
-            val modelId = resource.parent.modelId
-
-            either {
-                requireModelAccess(authorizationService, userId, modelId, AccessMode.MANAGE)
-
-                // Get access information
-                withError({ error: GetResourceAccessError -> error.toApiError() }) {
-                    llmModelService.getModelAccess(modelId).bind()
-                }
-            }.let { result ->
-                call.respondEither(result, HttpStatusCode.OK)
-            }
-        }
+        // --- Access Management ---
 
         // POST /api/v1/models/{modelId}/access - Grant access to a group
         post<ModelResource.ById.Access> { resource ->
@@ -287,39 +264,48 @@ fun Route.configureModelRoutes(
             }
         }
 
-        // GET /api/v1/models/{modelId}/is-public - Check if model is public
-        get<ModelResource.ById.IsPublic> { resource ->
+        // --- Details endpoints ---
+
+        // GET /api/v1/models/{modelId}/details - Get model details
+        get<ModelResource.ById.Details> { resource ->
             val userId = call.getUserId()
             val modelId = resource.parent.modelId
 
             either {
-                // Require READ access to check visibility
-                requireModelAccess(authorizationService, userId, modelId, AccessMode.READ)
+                // Require MANAGE access to view details
+                requireModelAccess(authorizationService, userId, modelId, AccessMode.MANAGE)
 
-                // Check public status
-                withError({ error: CheckResourcePublicError -> error.toApiError() }) {
-                    llmModelService.isModelPublic(modelId).bind()
+                // Get model details
+                withError({ error: GetModelError -> error.toApiError() }) {
+                    llmModelService.getModelDetails(modelId).bind()
                 }
             }.let { result ->
-                call.respondEither(result, HttpStatusCode.OK)
+                call.respondEither(result)
             }
         }
 
-        // GET /api/v1/models/{modelId}/owner - Get model owner information
-        get<ModelResource.ById.Owner> { resource ->
+        // GET /api/v1/models/details - List all models with details (filtered by user access)
+        get<ModelResource.Details> {
             val userId = call.getUserId()
-            val modelId = resource.parent.modelId
 
             either {
-                // Require READ access to view owner
-                requireModelAccess(authorizationService, userId, modelId, AccessMode.READ)
-
-                // Get owner information
                 withError({ error: GetModelError -> error.toApiError() }) {
-                    llmModelService.getModelOwner(modelId).bind()
+                    val models =
+                        // If user has MANAGE_LLM_MODELS permission, show all models
+                        if (authorizationService.hasPermission(userId, CommonPermissions.MANAGE_LLM_MODELS)) {
+                            llmModelService.getAllModels()
+                        }
+                        // Otherwise, show only models owned or accessible to the user
+                        else {
+                            llmModelService.getAllAccessibleModels(userId, AccessMode.MANAGE)
+                        }
+                    // Get details for each model
+                    models.map { model ->
+                        llmModelService.getModelDetails(model.id).bind()
+                    }
                 }
             }.let { result ->
-                call.respondEither(result, HttpStatusCode.OK)
+                call.respondEither(result)
             }
         }
     }

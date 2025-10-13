@@ -8,6 +8,12 @@ import io.ktor.resources.*
 @Resource("providers")
 class ProviderResource(val parent: Api = Api()) {
     /**
+     * Resource for getting detailed information for all providers: /api/v1/providers/details
+     */
+    @Resource("details")
+    class Details(val parent: ProviderResource = ProviderResource())
+
+    /**
      * Resource for a specific provider by ID: /api/v1/providers/{providerId}
      */
     @Resource("{providerId}")
@@ -43,15 +49,9 @@ class ProviderResource(val parent: Api = Api()) {
         data class MakePrivate(val parent: ById)
 
         /**
-         * Resource for checking if a provider is public: /api/v1/providers/{providerId}/is-public
+         * Resource for getting provider details: /api/v1/providers/{providerId}/details
          */
-        @Resource("is-public")
-        data class IsPublic(val parent: ById)
-
-        /**
-         * Resource for getting provider owner information: /api/v1/providers/{providerId}/owner
-         */
-        @Resource("owner")
-        data class Owner(val parent: ById)
+        @Resource("details")
+        class Details(val parent: ById)
     }
 }

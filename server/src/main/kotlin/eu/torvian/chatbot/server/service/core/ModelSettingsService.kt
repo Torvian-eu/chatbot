@@ -2,16 +2,12 @@ package eu.torvian.chatbot.server.service.core
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.api.AccessMode
-import eu.torvian.chatbot.common.models.api.access.ResourceAccessResponse
-import eu.torvian.chatbot.common.models.api.access.IsPublicResponse
-import eu.torvian.chatbot.common.models.api.access.OwnerInfo
+import eu.torvian.chatbot.common.models.api.access.ModelSettingsDetails
 import eu.torvian.chatbot.common.models.llm.ModelSettings
-import eu.torvian.chatbot.server.service.core.error.access.GetResourceAccessError
 import eu.torvian.chatbot.server.service.core.error.access.GrantResourceAccessError
 import eu.torvian.chatbot.server.service.core.error.access.RevokeResourceAccessError
 import eu.torvian.chatbot.server.service.core.error.access.MakeResourcePublicError
 import eu.torvian.chatbot.server.service.core.error.access.MakeResourcePrivateError
-import eu.torvian.chatbot.server.service.core.error.access.CheckResourcePublicError
 import eu.torvian.chatbot.server.service.core.error.settings.AddSettingsError
 import eu.torvian.chatbot.server.service.core.error.settings.DeleteSettingsError
 import eu.torvian.chatbot.server.service.core.error.settings.GetSettingsByIdError
@@ -118,12 +114,12 @@ interface ModelSettingsService {
     ): Either<RevokeResourceAccessError, Unit>
 
     /**
-     * Retrieves all access information for a settings profile, including the owner and all groups with access.
+     * Retrieves settings details, including the owner and all groups with access.
      *
      * @param settingsId The ID of the settings profile to query
-     * @return Either [GetResourceAccessError] or [ResourceAccessResponse]
+     * @return Either [GetSettingsByIdError] or [ModelSettingsDetails]
      */
-    suspend fun getSettingsAccess(settingsId: Long): Either<GetResourceAccessError, ResourceAccessResponse>
+    suspend fun getSettingsDetails(settingsId: Long): Either<GetSettingsByIdError, ModelSettingsDetails>
 
     // --- Convenience Methods ---
 
@@ -142,20 +138,4 @@ interface ModelSettingsService {
      * @return Either [MakeResourcePrivateError] or Unit on success
      */
     suspend fun makeSettingsPrivate(settingsId: Long): Either<MakeResourcePrivateError, Unit>
-
-    /**
-     * Checks if a settings profile is publicly accessible.
-     *
-     * @param settingsId The ID of the settings profile to check
-     * @return Either [CheckResourcePublicError] or [IsPublicResponse]
-     */
-    suspend fun isSettingsPublic(settingsId: Long): Either<CheckResourcePublicError, IsPublicResponse>
-
-    /**
-     * Retrieves the owner information for a settings profile.
-     *
-     * @param settingsId The ID of the settings profile
-     * @return Either [GetSettingsByIdError] if settings not found, or [OwnerInfo]
-     */
-    suspend fun getSettingsOwner(settingsId: Long): Either<GetSettingsByIdError, OwnerInfo>
 }

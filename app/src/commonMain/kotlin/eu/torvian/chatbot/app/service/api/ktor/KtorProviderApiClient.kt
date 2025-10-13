@@ -15,6 +15,13 @@ import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.resources.*
 import io.ktor.client.request.*
+import eu.torvian.chatbot.common.api.resources.ProviderResource.ById.Details
+import eu.torvian.chatbot.common.api.resources.ProviderResource.ById.Access
+import eu.torvian.chatbot.common.api.resources.ProviderResource.ById.MakePublic
+import eu.torvian.chatbot.common.api.resources.ProviderResource.ById.MakePrivate
+import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
+import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
+import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
 
 /**
  * Ktor HttpClient implementation of the [ProviderApi] interface.
@@ -78,6 +85,52 @@ class KtorProviderApiClient(client: HttpClient) : BaseApiResourceClient(client),
     override suspend fun getModelsByProviderId(providerId: Long): Either<ApiResourceError, List<LLMModel>> {
         return safeApiCall {
             client.get(Models(ById(providerId = providerId))).body<List<LLMModel>>()
+        }
+    }
+
+    override suspend fun getProviderDetails(providerId: Long): Either<ApiResourceError, LLMProviderDetails> {
+        return safeApiCall {
+            client.get(Details(ById(providerId = providerId))).body<LLMProviderDetails>()
+        }
+    }
+
+    override suspend fun getAllProviderDetails(): Either<ApiResourceError, List<LLMProviderDetails>> {
+        return safeApiCall {
+            client.get(ProviderResource.Details()).body<List<LLMProviderDetails>>()
+        }
+    }
+
+    override suspend fun makeProviderPublic(providerId: Long): Either<ApiResourceError, Unit> {
+        return safeApiCall {
+            client.post(MakePublic(ById(providerId = providerId))).body<Unit>()
+        }
+    }
+
+    override suspend fun makeProviderPrivate(providerId: Long): Either<ApiResourceError, Unit> {
+        return safeApiCall {
+            client.post(MakePrivate(ById(providerId = providerId))).body<Unit>()
+        }
+    }
+
+    override suspend fun grantProviderAccess(
+        providerId: Long,
+        request: GrantAccessRequest
+    ): Either<ApiResourceError, Unit> {
+        return safeApiCall {
+            client.post(Access(ById(providerId = providerId))) {
+                setBody(request)
+            }.body<Unit>()
+        }
+    }
+
+    override suspend fun revokeProviderAccess(
+        providerId: Long,
+        request: RevokeAccessRequest
+    ): Either<ApiResourceError, Unit> {
+        return safeApiCall {
+            client.delete(Access(ById(providerId = providerId))) {
+                setBody(request)
+            }.body<Unit>()
         }
     }
 }

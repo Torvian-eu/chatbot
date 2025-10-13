@@ -5,6 +5,9 @@ import eu.torvian.chatbot.common.models.api.llm.AddProviderRequest
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.api.llm.UpdateProviderCredentialRequest
+import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
+import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
+import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
 
 /**
  * Frontend API interface for interacting with LLM Provider-related endpoints.
@@ -100,4 +103,71 @@ interface ProviderApi {
      *         or [Either.Left] containing a [ApiResourceError] on failure (e.g., provider not found).
      */
     suspend fun getModelsByProviderId(providerId: Long): Either<ApiResourceError, List<LLMModel>>
+
+    /**
+     * Retrieves detailed information about a provider, including owner and access list.
+     *
+     * Corresponds to `GET /api/v1/providers/{providerId}/details`.
+     *
+     * @param providerId The ID of the provider
+     * @return Either.Right with [LLMProviderDetails] on success, or Either.Left with [ApiResourceError] on failure
+     */
+    suspend fun getProviderDetails(providerId: Long): Either<ApiResourceError, LLMProviderDetails>
+
+    /**
+     * Retrieves detailed information about all providers accessible to the current user.
+     *
+     * Corresponds to `GET /api/v1/providers/details`.
+     *
+     * @return Either.Right with list of [LLMProviderDetails] on success, or Either.Left with [ApiResourceError] on failure
+     */
+    suspend fun getAllProviderDetails(): Either<ApiResourceError, List<LLMProviderDetails>>
+
+    /**
+     * Makes a provider publicly accessible by granting READ access to the "All Users" group.
+     *
+     * Corresponds to `POST /api/v1/providers/{providerId}/make-public`.
+     *
+     * @param providerId The ID of the provider to make public
+     * @return Either.Right with [Unit] on success, or Either.Left with [ApiResourceError] on failure
+     */
+    suspend fun makeProviderPublic(providerId: Long): Either<ApiResourceError, Unit>
+
+    /**
+     * Makes a provider private by revoking all access from the "All Users" group.
+     *
+     * Corresponds to `POST /api/v1/providers/{providerId}/make-private`.
+     *
+     * @param providerId The ID of the provider to make private
+     * @return Either.Right with [Unit] on success, or Either.Left with [ApiResourceError] on failure
+     */
+    suspend fun makeProviderPrivate(providerId: Long): Either<ApiResourceError, Unit>
+
+    /**
+     * Grants access to a provider for a specific user group with the specified access mode.
+     *
+     * Corresponds to `POST /api/v1/providers/{providerId}/access`.
+     *
+     * @param providerId The ID of the provider
+     * @param request The grant access request containing groupId and accessMode
+     * @return Either.Right with [Unit] on success, or Either.Left with [ApiResourceError] on failure
+     */
+    suspend fun grantProviderAccess(
+        providerId: Long,
+        request: GrantAccessRequest
+    ): Either<ApiResourceError, Unit>
+
+    /**
+     * Revokes access to a provider from a specific user group for the specified access mode.
+     *
+     * Corresponds to `DELETE /api/v1/providers/{providerId}/access`.
+     *
+     * @param providerId The ID of the provider
+     * @param request The revoke access request containing groupId and accessMode
+     * @return Either.Right with [Unit] on success, or Either.Left with [ApiResourceError] on failure
+     */
+    suspend fun revokeProviderAccess(
+        providerId: Long,
+        request: RevokeAccessRequest
+    ): Either<ApiResourceError, Unit>
 }

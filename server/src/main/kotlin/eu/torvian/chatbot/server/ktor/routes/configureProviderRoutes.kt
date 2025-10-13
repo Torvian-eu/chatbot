@@ -181,23 +181,6 @@ fun Route.configureProviderRoutes(
 
         // --- Access Management ---
 
-        // GET /api/v1/providers/{providerId}/access - Get access information
-        get<ProviderResource.ById.Access> { resource ->
-            val userId = call.getUserId()
-            val providerId = resource.parent.providerId
-
-            either {
-                requireProviderAccess(authorizationService, userId, providerId, AccessMode.MANAGE)
-
-                // Get access information
-                withError({ error: GetResourceAccessError -> error.toApiError() }) {
-                    llmProviderService.getProviderAccess(providerId).bind()
-                }
-            }.let { result ->
-                call.respondEither(result, HttpStatusCode.OK)
-            }
-        }
-
         // POST /api/v1/providers/{providerId}/access - Grant access to a group
         post<ProviderResource.ById.Access> { resource ->
             val userId = call.getUserId()
@@ -282,39 +265,48 @@ fun Route.configureProviderRoutes(
             }
         }
 
-        // GET /api/v1/providers/{providerId}/is-public - Check if provider is public
-        get<ProviderResource.ById.IsPublic> { resource ->
+        // --- Details Endpoints ---
+
+        // GET /api/v1/providers/{providerId}/details - Get provider details
+        get<ProviderResource.ById.Details> { resource ->
             val userId = call.getUserId()
             val providerId = resource.parent.providerId
 
             either {
-                // Require READ access to check visibility
-                requireProviderAccess(authorizationService, userId, providerId, AccessMode.READ)
+                // Require MANAGE access to view details
+                requireProviderAccess(authorizationService, userId, providerId, AccessMode.MANAGE)
 
-                // Check public status
-                withError({ error: CheckResourcePublicError -> error.toApiError() }) {
-                    llmProviderService.isProviderPublic(providerId).bind()
+                // Get provider details
+                withError({ error: GetProviderError -> error.toApiError() }) {
+                    llmProviderService.getProviderDetails(providerId).bind()
                 }
             }.let { result ->
-                call.respondEither(result, HttpStatusCode.OK)
+                call.respondEither(result)
             }
         }
 
-        // GET /api/v1/providers/{providerId}/owner - Get provider owner information
-        get<ProviderResource.ById.Owner> { resource ->
+        // GET /api/v1/providers/details - List all providers with details (filtered by user access)
+        get<ProviderResource.Details> {
             val userId = call.getUserId()
-            val providerId = resource.parent.providerId
 
             either {
-                // Require READ access to view owner
-                requireProviderAccess(authorizationService, userId, providerId, AccessMode.READ)
-
-                // Get owner information
                 withError({ error: GetProviderError -> error.toApiError() }) {
-                    llmProviderService.getProviderOwner(providerId).bind()
+                    val providers =
+                        // If user has MANAGE_LLM_PROVIDERS permission, show all providers
+                        if (authorizationService.hasPermission(userId, CommonPermissions.MANAGE_LLM_PROVIDERS)) {
+                            llmProviderService.getAllProviders()
+                        }
+                        // Otherwise, show only providers owned or accessible to the user
+                        else {
+                            llmProviderService.getAllAccessibleProviders(userId, AccessMode.MANAGE)
+                        }
+                    // Get details for each provider
+                    providers.map { provider ->
+                        llmProviderService.getProviderDetails(provider.id).bind()
+                    }
                 }
             }.let { result ->
-                call.respondEither(result, HttpStatusCode.OK)
+                call.respondEither(result)
             }
         }
     }

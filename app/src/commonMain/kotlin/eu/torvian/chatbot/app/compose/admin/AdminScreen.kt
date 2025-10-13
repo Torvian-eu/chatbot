@@ -6,6 +6,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import eu.torvian.chatbot.app.compose.admin.usergroups.UserGroupManagementTabRoute
 import eu.torvian.chatbot.app.compose.admin.users.UserManagementTabRoute
 import eu.torvian.chatbot.app.compose.permissions.RequiresAllPermissions
 import eu.torvian.chatbot.app.repository.AuthState
@@ -34,7 +35,7 @@ fun AdminScreen(
         "Users",
         "Roles",          // TODO: Implement RoleManagementTab
         "Permissions",    // TODO: Implement PermissionManagementTab
-        "User Groups"     // TODO: Implement UserGroupManagementTab
+        "User Groups"
     )
 
     Column(modifier = modifier.fillMaxSize()) {
@@ -73,8 +74,15 @@ fun AdminScreen(
                     PlaceholderTab("Permission Management", "Coming soon...")
                 }
                 3 -> {
-                    // User Groups Tab - TODO: Implement
-                    PlaceholderTab("User Group Management", "Coming soon...")
+                    // User Groups Tab - requires MANAGE_USER_GROUPS
+                    RequiresAllPermissions(
+                        authState = authState,
+                        permissions = listOf(
+                            CommonPermissions.MANAGE_USER_GROUPS
+                        )
+                    ) {
+                        UserGroupManagementTabRoute(authState = authState)
+                    }
                 }
             }
         }

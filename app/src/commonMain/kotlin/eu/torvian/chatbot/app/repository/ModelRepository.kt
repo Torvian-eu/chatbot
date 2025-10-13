@@ -2,6 +2,9 @@ package eu.torvian.chatbot.app.repository
 
 import arrow.core.Either
 import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
+import eu.torvian.chatbot.common.models.api.access.LLMModelDetails
+import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
 import eu.torvian.chatbot.common.models.api.llm.AddModelRequest
 import eu.torvian.chatbot.common.models.api.llm.ApiKeyStatusResponse
 import eu.torvian.chatbot.common.models.llm.LLMModel
@@ -22,7 +25,7 @@ import kotlinx.coroutines.flow.StateFlow
 interface ModelRepository {
 
     /**
-     * Reactive stream of all LLM model configurations.
+     * Reactive stream of all LLM model configurations, including ownership and access details.
      *
      * This StateFlow provides real-time updates whenever the model data changes,
      * allowing ViewModels and other consumers to automatically react to data changes
@@ -30,12 +33,21 @@ interface ModelRepository {
      *
      * @return StateFlow containing the current state of all models wrapped in DataState
      */
+    val modelsDetails: StateFlow<DataState<RepositoryError, List<LLMModelDetails>>>
+
+    /**
+     * Reactive stream of all LLM model configurations.
+     *
+     * This one should be used instead of modelsDetails() when access details are not needed.
+     *
+     * @return StateFlow containing the current state of all models wrapped in DataState
+     */
     val models: StateFlow<DataState<RepositoryError, List<LLMModel>>>
 
     /**
-     * Returns a cold Flow for a specific LLM model that derives from the main models StateFlow.
+     * Returns a cold Flow for a specific LLM model that derives from the main modelDetails StateFlow.
      *
-     * This method provides a cold Flow that transforms the main `models` stream to emit
+     * This method provides a cold Flow that transforms the main `modelDetails` stream to emit
      * the state of an individual model whenever it changes. As a cold flow, it only
      * starts emitting when collected by a consumer (like a ViewModel).
      * The consumer is responsible for converting this to a hot StateFlow if needed.
@@ -43,46 +55,55 @@ interface ModelRepository {
      * @param modelId The unique identifier of the model to observe
      * @return Flow containing the current state of the specific model wrapped in DataState
      */
-    fun getModelFlow(modelId: Long): Flow<DataState<RepositoryError, LLMModel?>>
+    fun getModelFlow(modelId: Long): Flow<DataState<RepositoryError, LLMModelDetails?>>
 
     /**
-     * Loads all LLM model configurations from the backend.
+     * Loads all LLM model configurations from the backend, including ownership and access details.
      *
      * This operation fetches the latest model data and updates the internal StateFlow.
      * If a load operation is already in progress, this method returns immediately
      * without starting a duplicate operation.
      *
-     * @return Either.Right with List<LLMModel> on successful load, or Either.Left with RepositoryError on failure
+     * @return Either.Right with Unit on successful load, or Either.Left with RepositoryError on failure
      */
-    suspend fun loadModels(): Either<RepositoryError, List<LLMModel>>
+    suspend fun loadModelsDetails(): Either<RepositoryError, Unit>
 
     /**
-     * Loads a specific LLM model configuration from the backend.
+     * Loads all LLM model configurations from the backend.
      *
-     * This operation fetches the latest model data for the specified ID and updates
-     * the individual model StateFlow. If a load operation for this model is already
-     * in progress, this method returns immediately without starting a duplicate operation.
+     * This one should be used instead of loadModelsDetails() when access details are not needed.
+     *
+     * @return Either.Right with Unit on successful load, or Either.Left with RepositoryError on failure
+     */
+    suspend fun loadModels(): Either<RepositoryError, Unit>
+
+    /**
+     * Loads detailed information about a specific LLM model, including owner and access list.
+     *
+     * This operation fetches the latest model details and updates the internal StateFlow.
+     * If a load operation is already in progress, this method returns immediately
+     * without starting a duplicate operation.
      *
      * @param modelId The unique identifier of the model to load
-     * @return Either.Right with the loaded LLMModel on successful load, or Either.Left with RepositoryError on failure
+     * @return Either.Right with LLMModelDetails on success, or Either.Left with RepositoryError on failure
      */
-    suspend fun loadModelDetails(modelId: Long): Either<RepositoryError, LLMModel>
+    suspend fun loadModelDetails(modelId: Long): Either<RepositoryError, LLMModelDetails>
 
     /**
      * Adds a new LLM model configuration.
      *
-     * Upon successful creation, the new model is automatically added to the internal
+     * Upon successful creation, the new model's details are automatically added to the internal
      * StateFlow, triggering updates to all observers.
      *
      * @param request The model creation request containing all necessary details
-     * @return Either.Right with the created LLMModel on success, or Either.Left with RepositoryError on failure
+     * @return Either.Right with the created LLMModelDetails on success, or Either.Left with RepositoryError on failure
      */
-    suspend fun addModel(request: AddModelRequest): Either<RepositoryError, LLMModel>
+    suspend fun addModel(request: AddModelRequest): Either<RepositoryError, LLMModelDetails>
 
     /**
      * Updates an existing LLM model configuration.
      *
-     * Upon successful update, the modified model replaces the existing one in the
+     * Upon successful update, the modified model's details replace the existing one in the
      * internal StateFlow, triggering updates to all observers.
      *
      * @param model The updated model object with the same ID as the existing model
@@ -93,7 +114,7 @@ interface ModelRepository {
     /**
      * Deletes an LLM model configuration.
      *
-     * Upon successful deletion, the model is automatically removed from the internal
+     * Upon successful deletion, the model's details are automatically removed from the internal
      * StateFlow, triggering updates to all observers.
      *
      * @param modelId The unique identifier of the model to delete
@@ -111,4 +132,52 @@ interface ModelRepository {
      * @return Either.Right with ApiKeyStatusResponse on success, or Either.Left with RepositoryError on failure
      */
     suspend fun getModelApiKeyStatus(modelId: Long): Either<RepositoryError, ApiKeyStatusResponse>
+
+    /**
+     * Makes a model publicly accessible by granting READ access to the "All Users" group.
+     *
+     * Upon successful operation, the internal StateFlow of model details is updated.
+     *
+     * @param modelId The ID of the model to make public.
+     * @return Either.Right with [Unit] on success, or Either.Left with [RepositoryError](psi_element://eu.torvian.chatbot.app.repository.RepositoryError) on failure.
+     */
+    suspend fun makeModelPublic(modelId: Long): Either<RepositoryError, Unit>
+
+    /**
+     * Makes a model private by revoking all access from the "All Users" group.
+     *
+     * Upon successful operation, the internal StateFlow of model details is updated.
+     *
+     * @param modelId The ID of the model to make private.
+     * @return Either.Right with [Unit] on success, or Either.Left with [RepositoryError](psi_element://eu.torvian.chatbot.app.repository.RepositoryError) on failure.
+     */
+    suspend fun makeModelPrivate(modelId: Long): Either<RepositoryError, Unit>
+
+    /**
+     * Grants access to a model for a specific user group with the specified access mode.
+     *
+     * Upon successful operation, the internal StateFlow of model details is updated.
+     *
+     * @param modelId The ID of the model.
+     * @param request The grant access request containing groupId and accessMode.
+     * @return Either.Right with [LLMModelDetails] on success, or Either.Left with [RepositoryError](psi_element://eu.torvian.chatbot.app.repository.RepositoryError) on failure.
+     */
+    suspend fun grantModelAccess(
+        modelId: Long,
+        request: GrantAccessRequest
+    ): Either<RepositoryError, LLMModelDetails>
+
+    /**
+     * Revokes access to a model from a specific user group for the specified access mode.
+     *
+     * Upon successful operation, the internal StateFlow of model details is updated.
+     *
+     * @param modelId The ID of the model.
+     * @param request The revoke access request containing groupId and accessMode.
+     * @return Either.Right with [LLMModelDetails] on success, or Either.Left with [RepositoryError](psi_element://eu.torvian.chatbot.app.repository.RepositoryError) on failure.
+     */
+    suspend fun revokeModelAccess(
+        modelId: Long,
+        request: RevokeAccessRequest
+    ): Either<RepositoryError, LLMModelDetails>
 }

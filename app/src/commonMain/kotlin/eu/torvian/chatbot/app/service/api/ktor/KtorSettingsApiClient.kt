@@ -12,6 +12,13 @@ import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.resources.*
 import io.ktor.client.request.*
+import eu.torvian.chatbot.common.api.resources.SettingsResource.ById.Details
+import eu.torvian.chatbot.common.api.resources.SettingsResource.ById.Access
+import eu.torvian.chatbot.common.api.resources.SettingsResource.ById.MakePublic
+import eu.torvian.chatbot.common.api.resources.SettingsResource.ById.MakePrivate
+import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
+import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
+import eu.torvian.chatbot.common.models.api.access.ModelSettingsDetails
 
 /**
  * Ktor HttpClient implementation of the [SettingsApi] interface.
@@ -64,6 +71,52 @@ class KtorSettingsApiClient(client: HttpClient) : BaseApiResourceClient(client),
     override suspend fun getAllSettings(): Either<ApiResourceError, List<ModelSettings>> {
         return safeApiCall {
             client.get(SettingsResource()).body<List<ModelSettings>>()
+        }
+    }
+
+    override suspend fun getSettingsDetails(settingsId: Long): Either<ApiResourceError, ModelSettingsDetails> {
+        return safeApiCall {
+            client.get(Details(ById(settingsId = settingsId))).body<ModelSettingsDetails>()
+        }
+    }
+
+    override suspend fun getAllSettingsDetails(): Either<ApiResourceError, List<ModelSettingsDetails>> {
+        return safeApiCall {
+            client.get(SettingsResource.Details()).body<List<ModelSettingsDetails>>()
+        }
+    }
+
+    override suspend fun makeSettingsPublic(settingsId: Long): Either<ApiResourceError, Unit> {
+        return safeApiCall {
+            client.post(MakePublic(ById(settingsId = settingsId))).body<Unit>()
+        }
+    }
+
+    override suspend fun makeSettingsPrivate(settingsId: Long): Either<ApiResourceError, Unit> {
+        return safeApiCall {
+            client.post(MakePrivate(ById(settingsId = settingsId))).body<Unit>()
+        }
+    }
+
+    override suspend fun grantSettingsAccess(
+        settingsId: Long,
+        request: GrantAccessRequest
+    ): Either<ApiResourceError, Unit> {
+        return safeApiCall {
+            client.post(Access(ById(settingsId = settingsId))) {
+                setBody(request)
+            }.body<Unit>()
+        }
+    }
+
+    override suspend fun revokeSettingsAccess(
+        settingsId: Long,
+        request: RevokeAccessRequest
+    ): Either<ApiResourceError, Unit> {
+        return safeApiCall {
+            client.delete(Access(ById(settingsId = settingsId))) {
+                setBody(request)
+            }.body<Unit>()
         }
     }
 }

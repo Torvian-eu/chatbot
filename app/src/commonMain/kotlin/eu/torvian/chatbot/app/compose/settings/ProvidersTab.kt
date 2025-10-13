@@ -8,8 +8,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ErrorStateDisplay
 import eu.torvian.chatbot.app.compose.common.LoadingStateDisplay
+import eu.torvian.chatbot.app.compose.settings.dialogs.ManageAccessDialog
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.contracts.ProvidersDialogState
+import eu.torvian.chatbot.app.repository.AuthState
 
 /**
  * Providers management tab with master-detail layout.
@@ -19,6 +21,7 @@ import eu.torvian.chatbot.app.domain.contracts.ProvidersDialogState
 fun ProvidersTab(
     state: ProvidersTabState,
     actions: ProvidersTabActions,
+    authState: AuthState.Authenticated,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxSize()) {
@@ -49,6 +52,7 @@ fun ProvidersTab(
                         selectedProvider = state.selectedProvider,
                         onProviderSelected = { actions.onSelectProvider(it) },
                         onAddNewProvider = { actions.onStartAddingNewProvider() },
+                        authState = authState,
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
@@ -56,9 +60,12 @@ fun ProvidersTab(
 
                     // Detail: Provider Details/Edit
                     ProviderDetailPanel(
-                        provider = state.selectedProvider,
+                        providerDetails = state.selectedProvider,
                         onEditProvider = { actions.onStartEditingProvider(it) },
                         onDeleteProvider = { actions.onStartDeletingProvider(it) },
+                        onMakePublic = { actions.onMakeProviderPublic(it) },
+                        onMakePrivate = { actions.onMakeProviderPrivate(it) },
+                        onManageAccess = { actions.onOpenManageAccessDialog(it) },
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
@@ -132,6 +139,35 @@ fun ProvidersTab(
                     },
                     onDismiss = { actions.onCancelDialog() }
                 )
+            }
+
+            is ProvidersDialogState.ManageAccess -> {
+                val provider = dialogState.providerDetails.provider
+                ManageAccessDialog(
+                        resourceName = provider.name,
+                        accessDetails = dialogState.providerDetails.accessDetails,
+                        availableGroups = dialogState.availableGroups,
+                        showGrantDialog = dialogState.showGrantDialog,
+                        grantAccessForm = dialogState.grantAccessForm,
+                        onOpenGrantDialog = actions::onOpenGrantAccessDialog,
+                        onCloseGrantDialog = actions::onCloseGrantAccessDialog,
+                        onUpdateGrantForm = actions::onUpdateGrantAccessForm,
+                        onConfirmGrant = { groupId, accessMode ->
+                            actions.onGrantProviderAccess(
+                                provider.id,
+                                groupId,
+                                accessMode
+                            )
+                        },
+                        onRevokeAccess = { groupId, accessMode ->
+                            actions.onRevokeProviderAccess(
+                                provider.id,
+                                groupId,
+                                accessMode
+                            )
+                        },
+                        onDismiss = actions::onCancelDialog
+                    )
             }
         }
     }

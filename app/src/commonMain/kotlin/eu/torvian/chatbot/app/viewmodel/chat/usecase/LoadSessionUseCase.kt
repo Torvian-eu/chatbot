@@ -49,7 +49,7 @@ class LoadSessionUseCase(
         parZip(
             { sessionRepository.loadSessionDetails(sessionId) },
             { modelRepository.loadModels() },
-            { settingsRepository.loadSettings() }
+            { settingsRepository.loadAllSettings() }
 
         ) { sessionResult, _, _ ->
             sessionResult

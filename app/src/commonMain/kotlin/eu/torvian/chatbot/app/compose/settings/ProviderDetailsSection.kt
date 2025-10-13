@@ -39,7 +39,7 @@ fun ProviderDetailsSection(
             )
         }
 
-        // API Key Status (E5.S4)
+        // API Key Status
         DetailRow(
             label = "API Key Status",
             value = if (provider.apiKeyId != null) {

@@ -7,7 +7,12 @@ import eu.torvian.chatbot.app.domain.contracts.*
 import eu.torvian.chatbot.app.repository.ModelRepository
 import eu.torvian.chatbot.app.repository.ProviderRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.app.repository.UserGroupRepository
 import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
+import eu.torvian.chatbot.common.api.AccessMode
+import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
+import eu.torvian.chatbot.common.models.api.access.LLMModelDetails
+import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
 import eu.torvian.chatbot.common.models.api.llm.AddModelRequest
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import kotlinx.coroutines.CoroutineDispatcher
@@ -24,11 +29,13 @@ import kotlinx.coroutines.launch
  * - Managing the state for adding new models (E4.S1).
  * - Managing the state for editing existing model details (E4.S3).
  * - Deleting models (E4.S4).
+ * - Managing model access control (public/private, grant/revoke access).
  * - Communicating with the backend via [ModelRepository] and [ProviderRepository].
  *
  * @constructor
  * @param modelRepository The repository for LLM Model-related operations.
  * @param providerRepository The repository for LLM Provider-related operations.
+ * @param userGroupRepository The repository for user group-related operations.
  * @param errorNotifier The service for handling and notifying about errors.
  * @param uiDispatcher The dispatcher to use for UI-related coroutines. Defaults to Main.
  *
@@ -38,7 +45,8 @@ import kotlinx.coroutines.launch
  */
 class ModelConfigViewModel(
     private val modelRepository: ModelRepository,
-    private val providerRepository: ProviderRepository, // Needed to populate provider dropdown for model config
+    private val providerRepository: ProviderRepository,
+    private val userGroupRepository: UserGroupRepository,
     private val errorNotifier: ErrorNotifier,
     private val uiDispatcher: CoroutineDispatcher = Dispatchers.Main
 ) : ViewModel() {
@@ -57,7 +65,7 @@ class ModelConfigViewModel(
      * The state containing both models and providers data.
      */
     val modelConfigState: StateFlow<DataState<RepositoryError, ModelConfigData>> = combine(
-        modelRepository.models,
+        modelRepository.modelsDetails,
         providerRepository.providers
     ) { modelsState, providersState ->
         when {
@@ -79,11 +87,11 @@ class ModelConfigViewModel(
     /**
      * The currently selected model in the master-detail UI.
      */
-    val selectedModel: StateFlow<LLMModel?> = combine(
+    val selectedModel: StateFlow<LLMModelDetails?> = combine(
         modelConfigState.map { it.dataOrNull?.models },
         userSelectedModelId
     ) { modelsList, currentSelectedId ->
-        modelsList?.find { it.id == currentSelectedId }
+        modelsList?.find { it.model.id == currentSelectedId }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), null)
 
     /**
@@ -111,7 +119,7 @@ class ModelConfigViewModel(
     fun loadModelsAndProviders() {
         viewModelScope.launch(uiDispatcher) {
             parZip(
-                { modelRepository.loadModels() },
+                { modelRepository.loadModelsDetails() },
                 { providerRepository.loadProviders() }
             ) { modelsResult, providersResult ->
                 modelsResult.mapLeft { error ->
@@ -133,8 +141,8 @@ class ModelConfigViewModel(
     /**
      * Selects a model (or clears selection when null).
      */
-    fun selectModel(model: LLMModel?) {
-        userSelectedModelId.value = model?.id
+    fun selectModel(modelDetails: LLMModelDetails?) {
+        userSelectedModelId.value = modelDetails?.model?.id
     }
 
     /**
@@ -267,9 +275,9 @@ class ModelConfigViewModel(
                         )
                         updateModelForm { it.copy(errorMessage = "Error adding model: ${error.message}") }
                     },
-                    ifRight = { newModel ->
+                    ifRight = { newModelDetails ->
                         cancelDialog()
-                        selectModel(newModel)
+                        selectModel(newModelDetails)
                     }
                 )
         }
@@ -309,6 +317,167 @@ class ModelConfigViewModel(
                         cancelDialog()
                     }
                 )
+        }
+    }
+
+    /**
+     * Makes a model publicly accessible.
+     */
+    fun makeModelPublic(modelDetails: LLMModelDetails) {
+        viewModelScope.launch(uiDispatcher) {
+            modelRepository.makeModelPublic(modelDetails.model.id)
+                .mapLeft { error ->
+                    errorNotifier.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to make model public"
+                    )
+                }
+        }
+    }
+
+    /**
+     * Makes a model private.
+     */
+    fun makeModelPrivate(modelDetails: LLMModelDetails) {
+        viewModelScope.launch(uiDispatcher) {
+            modelRepository.makeModelPrivate(modelDetails.model.id)
+                .mapLeft { error ->
+                    errorNotifier.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to make model private"
+                    )
+                }
+        }
+    }
+
+    /**
+     * Opens the manage access dialog for a model.
+     */
+    fun openManageAccessDialog(modelDetails: LLMModelDetails) {
+        viewModelScope.launch(uiDispatcher) {
+            userGroupRepository.loadGroups().fold(
+                ifLeft = { error ->
+                    errorNotifier.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to load user groups"
+                    )
+                },
+                ifRight = {
+                    // Get groups from repository state
+                    val groups = userGroupRepository.groups.value.dataOrNull ?: emptyList()
+
+                    // Define available access modes for models
+                    val availableAccessModes = listOf(
+                        AccessMode.READ.key,
+                        AccessMode.WRITE.key,
+                        AccessMode.MANAGE.key
+                    )
+
+                    _dialogState.value = ModelsDialogState.ManageAccess(
+                        modelDetails = modelDetails,
+                        availableGroups = groups,
+                        grantAccessForm = GrantAccessFormState(
+                            selectedAccessMode = availableAccessModes.first(),
+                            availableAccessModes = availableAccessModes
+                        )
+                    )
+                }
+            )
+        }
+    }
+
+    /**
+     * Opens the grant access dialog within the manage access dialog.
+     */
+    fun openGrantAccessDialog() {
+        _dialogState.update { state ->
+            if (state is ModelsDialogState.ManageAccess) {
+                state.copy(showGrantDialog = true)
+            } else state
+        }
+    }
+
+    /**
+     * Closes the grant access dialog.
+     */
+    fun closeGrantAccessDialog() {
+        _dialogState.update { state ->
+            if (state is ModelsDialogState.ManageAccess) {
+                state.copy(
+                    showGrantDialog = false,
+                    grantAccessForm = GrantAccessFormState() // Reset form
+                )
+            } else state
+        }
+    }
+
+    /**
+     * Updates the grant access form state.
+     */
+    fun updateGrantAccessForm(update: (GrantAccessFormState) -> GrantAccessFormState) {
+        _dialogState.update { state ->
+            if (state is ModelsDialogState.ManageAccess) {
+                state.copy(grantAccessForm = update(state.grantAccessForm))
+            } else state
+        }
+    }
+
+    /**
+     * Grants access to a model for a specific user group.
+     */
+    fun grantModelAccess(modelId: Long, groupId: Long, accessMode: String) {
+        viewModelScope.launch(uiDispatcher) {
+            modelRepository.grantModelAccess(
+                modelId,
+                GrantAccessRequest(groupId = groupId, accessMode = accessMode)
+            ).fold(
+                ifLeft = { error ->
+                    errorNotifier.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to grant access"
+                    )
+                },
+                ifRight = { modelDetails ->
+                    // Refresh the dialog state to reflect the new access details
+                    _dialogState.update { state ->
+                        if (state is ModelsDialogState.ManageAccess) {
+                            state.copy(
+                                modelDetails = modelDetails
+                            )
+                        } else state
+                    }
+                    closeGrantAccessDialog()
+                }
+            )
+        }
+    }
+
+    /**
+     * Revokes access to a model from a specific user group.
+     */
+    fun revokeModelAccess(modelId: Long, groupId: Long, accessMode: String) {
+        viewModelScope.launch(uiDispatcher) {
+            modelRepository.revokeModelAccess(
+                modelId,
+                RevokeAccessRequest(groupId = groupId, accessMode = accessMode)
+            ).fold(
+                ifLeft = { error ->
+                    errorNotifier.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to revoke access"
+                    )
+                },
+                ifRight = { modelDetails ->
+                    // Refresh the dialog state to reflect the new access details
+                    _dialogState.update { state ->
+                        if (state is ModelsDialogState.ManageAccess) {
+                            state.copy(
+                                modelDetails = modelDetails
+                            )
+                        } else state
+                    }
+                }
+            )
         }
     }
 }

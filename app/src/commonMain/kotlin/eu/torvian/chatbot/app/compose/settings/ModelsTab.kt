@@ -11,6 +11,7 @@ import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ErrorStateDisplay
 import eu.torvian.chatbot.app.compose.common.LoadingStateDisplay
 import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.app.repository.AuthState
 
 /**
  * Models management tab with master-detail layout.
@@ -20,6 +21,7 @@ import eu.torvian.chatbot.app.domain.contracts.DataState
 fun ModelsTab(
     state: ModelsTabState,
     actions: ModelsTabActions,
+    authState: AuthState.Authenticated,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxSize()) {
@@ -52,6 +54,7 @@ fun ModelsTab(
                         selectedModel = state.selectedModel,
                         onModelSelected = { actions.onSelectModel(it) },
                         onAddNewModel = { actions.onStartAddingNewModel() },
+                        authState = authState,
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
@@ -59,11 +62,14 @@ fun ModelsTab(
 
                     // Detail: Model Details/Edit
                     ModelDetailPanel(
-                        model = state.selectedModel,
+                        modelDetails = state.selectedModel,
                         onEditModel = { actions.onStartEditingModel(it) },
                         onDeleteModel = { model ->
                             actions.onStartDeletingModel(model)
                         },
+                        onMakePublic = { actions.onMakeModelPublic(it) },
+                        onMakePrivate = { actions.onMakeModelPrivate(it) },
+                        onManageAccess = { actions.onOpenManageAccessDialog(it) },
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()

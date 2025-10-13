@@ -10,6 +10,7 @@ import eu.torvian.chatbot.app.viewmodel.ModelConfigViewModel
 import eu.torvian.chatbot.app.viewmodel.ProviderConfigViewModel
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
 import eu.torvian.chatbot.app.viewmodel.SettingsConfigViewModel
+import eu.torvian.chatbot.app.viewmodel.admin.UserGroupManagementViewModel
 import eu.torvian.chatbot.app.viewmodel.admin.UserManagementViewModel
 import eu.torvian.chatbot.app.viewmodel.auth.AuthViewModel
 import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
@@ -131,6 +132,9 @@ fun appModule(baseUri: String): Module = module {
     single<RoleApi> {
         KtorRoleApiClient(get())
     }
+    single<UserGroupApi> {
+        KtorUserGroupApiClient(get())
+    }
 
     // Provide Repository implementations, injecting the API clients
     single<ModelRepository> {
@@ -153,6 +157,9 @@ fun appModule(baseUri: String): Module = module {
     }
     single<RoleRepository> {
         DefaultRoleRepository(get())
+    }
+    single<UserGroupRepository> {
+        DefaultUserGroupRepository(get())
     }
 
     // Provide shared chat state with background scope for computed state flows
@@ -239,17 +246,13 @@ fun appModule(baseUri: String): Module = module {
         AuthViewModel(get<AuthRepository>(), get<ErrorNotifier>(), normalScope)
     }
     viewModel { SessionListViewModel(get<SessionRepository>(), get<GroupRepository>(), get<EventBus>(), get()) }
-    viewModel { ProviderConfigViewModel(get<ProviderRepository>(), get<ErrorNotifier>()) }
-    viewModel { ModelConfigViewModel(get<ModelRepository>(), get<ProviderRepository>(), get<ErrorNotifier>()) }
-    viewModel { SettingsConfigViewModel(get<SettingsRepository>(), get<ModelRepository>(), get<ErrorNotifier>()) }
+    viewModel { ProviderConfigViewModel(get<ProviderRepository>(), get<UserGroupRepository>(), get<ErrorNotifier>()) }
+    viewModel { ModelConfigViewModel(get<ModelRepository>(), get<ProviderRepository>(), get<UserGroupRepository>(), get<ErrorNotifier>()) }
+    viewModel { SettingsConfigViewModel(get<SettingsRepository>(), get<ModelRepository>(), get<UserGroupRepository>(), get<ErrorNotifier>()) }
     viewModel {
         val scopeProvider = get<CoroutineScopeProvider>()
         val normalScope = scopeProvider.createNormalScope()
-        UserManagementViewModel(
-            userRepository = get(),
-            roleRepository = get(),
-            errorNotifier = get(),
-            normalScope = normalScope
-        )
+        UserManagementViewModel(get<UserRepository>(), get<RoleRepository>(), get<ErrorNotifier>(), normalScope)
     }
+    viewModel { UserGroupManagementViewModel(get<UserGroupRepository>(), get<UserRepository>(), get<ErrorNotifier>()) }
 }

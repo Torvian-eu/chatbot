@@ -2,17 +2,13 @@ package eu.torvian.chatbot.server.service.core
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.api.AccessMode
-import eu.torvian.chatbot.common.models.api.access.ResourceAccessResponse
-import eu.torvian.chatbot.common.models.api.access.IsPublicResponse
-import eu.torvian.chatbot.common.models.api.access.OwnerInfo
+import eu.torvian.chatbot.common.models.api.access.LLMModelDetails
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType
-import eu.torvian.chatbot.server.service.core.error.access.GetResourceAccessError
 import eu.torvian.chatbot.server.service.core.error.access.GrantResourceAccessError
-import eu.torvian.chatbot.server.service.core.error.access.RevokeResourceAccessError
-import eu.torvian.chatbot.server.service.core.error.access.MakeResourcePublicError
 import eu.torvian.chatbot.server.service.core.error.access.MakeResourcePrivateError
-import eu.torvian.chatbot.server.service.core.error.access.CheckResourcePublicError
+import eu.torvian.chatbot.server.service.core.error.access.MakeResourcePublicError
+import eu.torvian.chatbot.server.service.core.error.access.RevokeResourceAccessError
 import eu.torvian.chatbot.server.service.core.error.model.AddModelError
 import eu.torvian.chatbot.server.service.core.error.model.DeleteModelError
 import eu.torvian.chatbot.server.service.core.error.model.GetModelError
@@ -139,12 +135,12 @@ interface LLMModelService {
     ): Either<RevokeResourceAccessError, Unit>
 
     /**
-     * Retrieves all access information for a model, including the owner and all groups with access.
+     * Retrieves model details, including the owner and all groups with access.
      *
      * @param modelId The ID of the model to query
-     * @return Either [GetResourceAccessError] or [ResourceAccessResponse]
+     * @return Either [GetModelError] or [LLMModelDetails]
      */
-    suspend fun getModelAccess(modelId: Long): Either<GetResourceAccessError, ResourceAccessResponse>
+    suspend fun getModelDetails(modelId: Long): Either<GetModelError, LLMModelDetails>
 
     // --- Convenience Methods ---
 
@@ -170,22 +166,4 @@ interface LLMModelService {
      * @return Either [MakeResourcePrivateError] or Unit on success
      */
     suspend fun makeModelPrivate(modelId: Long): Either<MakeResourcePrivateError, Unit>
-
-    /**
-     * Checks if a model is publicly accessible.
-     *
-     * A model is considered public if the "All Users" group has READ access.
-     *
-     * @param modelId The ID of the model to check
-     * @return Either [CheckResourcePublicError] or [IsPublicResponse]
-     */
-    suspend fun isModelPublic(modelId: Long): Either<CheckResourcePublicError, IsPublicResponse>
-
-    /**
-     * Retrieves the owner information for a model.
-     *
-     * @param modelId The ID of the model
-     * @return Either [GetModelError] if model not found, or [OwnerInfo]
-     */
-    suspend fun getModelOwner(modelId: Long): Either<GetModelError, OwnerInfo>
 }

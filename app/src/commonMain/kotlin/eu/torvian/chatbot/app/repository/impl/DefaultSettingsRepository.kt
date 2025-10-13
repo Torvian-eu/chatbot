@@ -1,12 +1,18 @@
 package eu.torvian.chatbot.app.repository.impl
 
 import arrow.core.Either
+import arrow.core.raise.either
+import arrow.core.raise.withError
+import arrow.core.right
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.SettingsRepository
 import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.service.api.SettingsApi
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
+import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
+import eu.torvian.chatbot.common.models.api.access.ModelSettingsDetails
+import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import kotlinx.coroutines.flow.*
 
@@ -27,15 +33,18 @@ class DefaultSettingsRepository(
         private val logger = kmpLogger<DefaultSettingsRepository>()
     }
 
-    private val _settings = MutableStateFlow<DataState<RepositoryError, List<ModelSettings>>>(DataState.Idle)
-    override val settings: StateFlow<DataState<RepositoryError, List<ModelSettings>>> = _settings.asStateFlow()
+    private val _allSettingsDetails = MutableStateFlow<DataState<RepositoryError, List<ModelSettingsDetails>>>(DataState.Idle)
+    override val allSettingsDetails: StateFlow<DataState<RepositoryError, List<ModelSettingsDetails>>> = _allSettingsDetails.asStateFlow()
 
-    override fun getSettingsFlow(settingsId: Long): Flow<DataState<RepositoryError, ModelSettings>> {
+    private val _allSettings = MutableStateFlow<DataState<RepositoryError, List<ModelSettings>>>(DataState.Idle)
+    override val allSettings: StateFlow<DataState<RepositoryError, List<ModelSettings>>> = _allSettings.asStateFlow()
+
+    override fun getSettingsFlow(settingsId: Long): Flow<DataState<RepositoryError, ModelSettingsDetails?>> {
         // Return a cold Flow that derives from the main settings StateFlow
-        return settings.map { dataState ->
+        return allSettingsDetails.map { dataState ->
             when (dataState) {
                 is DataState.Success -> {
-                    val settings = dataState.data.find { it.id == settingsId }
+                    val settings = dataState.data.find { it.settings.id == settingsId }
                     if (settings != null) {
                         DataState.Success(settings)
                     } else {
@@ -51,103 +60,132 @@ class DefaultSettingsRepository(
         }
     }
 
-    override suspend fun loadSettings(): Either<RepositoryError, List<ModelSettings>> {
-        _settings.update { DataState.Loading }
+    override suspend fun loadAllSettingsDetails(): Either<RepositoryError, Unit> = either {
+        // Prevent duplicate loading operations
+        if (_allSettingsDetails.value.isLoading) return Unit.right()
 
-        return settingsApi.getAllSettings()
-            .map { settingsList ->
-                _settings.update { DataState.Success(settingsList) }
-                settingsList
-            }
-            .mapLeft { apiResourceError ->
-                val repositoryError = apiResourceError.toRepositoryError("Failed to load settings")
-                _settings.update { DataState.Error(repositoryError) }
-                repositoryError
-            }
+        _allSettingsDetails.update { DataState.Loading }
+
+        withError({ apiResourceError ->
+            apiResourceError.toRepositoryError("Failed to load all settings details")
+        }) {
+            settingsApi.getAllSettingsDetails().bind()
+        }.also { detailsList ->
+            _allSettingsDetails.update { DataState.Success(detailsList) }
+        }
     }
 
-    override suspend fun loadSettingsDetails(settingsId: Long): Either<RepositoryError, ModelSettings> {
-        return settingsApi.getSettingsById(settingsId)
-            .map { settings ->
-                // Update the main list with the detailed settings data
-                updateSettingsState { list ->
-                    if (list.any { it.id == settings.id })
-                        list.map { if (it.id == settings.id) settings else it }
-                    else list + settings
+    override suspend fun loadAllSettings(): Either<RepositoryError, Unit> = either {
+        // Prevent duplicate loading operations
+        if (_allSettings.value.isLoading) return Unit.right()
+
+        _allSettings.update { DataState.Loading }
+
+        withError({ apiResourceError ->
+            apiResourceError.toRepositoryError("Failed to load all settings")
+        }) {
+            settingsApi.getAllSettings().bind()
+        }.also { settingsList ->
+            _allSettings.update { DataState.Success(settingsList) }
+        }
+    }
+
+    override suspend fun loadSettingsDetails(settingsId: Long): Either<RepositoryError, ModelSettingsDetails> = either {
+        withError({ apiResourceError ->
+            apiResourceError.toRepositoryError("Failed to load settings details")
+        }) {
+            settingsApi.getSettingsDetails(settingsId).bind()
+        }.also { settingsDetails ->
+            updateSettingsState { list ->
+                if (list.any { it.settings.id == settingsDetails.settings.id }) {
+                    list.map { if (it.settings.id == settingsDetails.settings.id) settingsDetails else it }
+                } else {
+                    list + settingsDetails
                 }
-                settings
             }
-            .mapLeft { apiResourceError ->
-                apiResourceError.toRepositoryError("Failed to load settings details")
-            }
+        }
     }
 
-    override suspend fun loadSettingsByModelId(modelId: Long): Either<RepositoryError, List<ModelSettings>> {
-        return settingsApi.getSettingsByModelId(modelId)
-            .map { settingsList ->
-                updateSettingsState { current ->
-                    val filteredSettings = current.filter { it.modelId != modelId }
-                    filteredSettings + settingsList
-                }
-                settingsList
-            }
-            .mapLeft { apiResourceError ->
-                val repositoryError = apiResourceError.toRepositoryError("Failed to load settings by model ID")
-                _settings.update { DataState.Error(repositoryError) }
-                repositoryError
-            }
-    }
-
-    override suspend fun addModelSettings(settings: ModelSettings): Either<RepositoryError, ModelSettings> {
-        return settingsApi.addModelSettings(settings)
-            .map { newSettings ->
-                updateSettingsState { it + newSettings }
-                newSettings
-            }
-            .mapLeft { apiResourceError ->
+    override suspend fun addModelSettings(settings: ModelSettings): Either<RepositoryError, ModelSettingsDetails> =
+        either {
+            val newSettings = withError({ apiResourceError ->
                 apiResourceError.toRepositoryError("Failed to add model settings")
+            }) {
+                settingsApi.addModelSettings(settings).bind()
             }
+            // After creation, fetch details to refresh cache
+            loadSettingsDetails(newSettings.id).bind()
+        }
+
+    override suspend fun updateSettings(settings: ModelSettings): Either<RepositoryError, Unit> = either {
+        withError({ apiResourceError ->
+            apiResourceError.toRepositoryError("Failed to update settings")
+        }) {
+            settingsApi.updateSettings(settings).bind()
+        }
+        loadSettingsDetails(settings.id).bind()
     }
 
-    override suspend fun getSettingsById(settingsId: Long): Either<RepositoryError, ModelSettings> {
-        return settingsApi.getSettingsById(settingsId)
-            .map { settings ->
-                updateSettingsState { list -> list.map { if (it.id == settings.id) settings else it } }
-                settings
-            }
-            .mapLeft { apiResourceError ->
-                apiResourceError.toRepositoryError("Failed to get settings by ID")
-            }
+    override suspend fun deleteSettings(settingsId: Long): Either<RepositoryError, Unit> = either {
+        withError({ apiResourceError ->
+            apiResourceError.toRepositoryError("Failed to delete settings")
+        }) {
+            settingsApi.deleteSettings(settingsId).bind()
+        }
+        updateSettingsState { list -> list.filter { it.settings.id != settingsId } }
     }
 
-    override suspend fun updateSettings(settings: ModelSettings): Either<RepositoryError, Unit> {
-        return settingsApi.updateSettings(settings)
-            .map {
-                updateSettingsState { list -> list.map { if (it.id == settings.id) settings else it } }
-            }
-            .mapLeft { apiResourceError ->
-                apiResourceError.toRepositoryError("Failed to update settings")
-            }
+    override suspend fun makeSettingsPublic(settingsId: Long): Either<RepositoryError, Unit> = either {
+        withError({ apiResourceError ->
+            apiResourceError.toRepositoryError("Failed to make settings public")
+        }) {
+            settingsApi.makeSettingsPublic(settingsId).bind()
+        }
+        loadSettingsDetails(settingsId).bind()
     }
 
-    override suspend fun deleteSettings(settingsId: Long): Either<RepositoryError, Unit> {
-        return settingsApi.deleteSettings(settingsId)
-            .map {
-                updateSettingsState { list -> list.filter { it.id != settingsId } }
-            }
-            .mapLeft { apiResourceError ->
-                apiResourceError.toRepositoryError("Failed to delete settings")
-            }
+    override suspend fun makeSettingsPrivate(settingsId: Long): Either<RepositoryError, Unit> = either {
+        withError({ apiResourceError ->
+            apiResourceError.toRepositoryError("Failed to make settings private")
+        }) {
+            settingsApi.makeSettingsPrivate(settingsId).bind()
+        }
+        loadSettingsDetails(settingsId).bind()
+    }
+
+    override suspend fun grantSettingsAccess(
+        settingsId: Long,
+        request: GrantAccessRequest
+    ): Either<RepositoryError, ModelSettingsDetails> = either {
+        withError({ apiResourceError ->
+            apiResourceError.toRepositoryError("Failed to grant settings access")
+        }) {
+            settingsApi.grantSettingsAccess(settingsId, request).bind()
+        }
+        loadSettingsDetails(settingsId).bind()
+    }
+
+    override suspend fun revokeSettingsAccess(
+        settingsId: Long,
+        request: RevokeAccessRequest
+    ): Either<RepositoryError, ModelSettingsDetails> = either {
+        withError({ apiResourceError ->
+            apiResourceError.toRepositoryError("Failed to revoke settings access")
+        }) {
+            settingsApi.revokeSettingsAccess(settingsId, request).bind()
+        }
+        loadSettingsDetails(settingsId).bind()
     }
 
     /**
-     * Updates the internal StateFlow of settings using the provided transformation.
+     * Updates the internal StateFlow of settings details using the provided transformation.
+     *
+     * @param transform A function that takes the current list of settings details and returns an updated list.
      */
-    private fun updateSettingsState(transform: (List<ModelSettings>) -> List<ModelSettings>) {
-        _settings.update { currentState ->
+    private fun updateSettingsState(transform: (List<ModelSettingsDetails>) -> List<ModelSettingsDetails>) {
+        _allSettingsDetails.update { currentState ->
             when (currentState) {
                 is DataState.Success -> DataState.Success(transform(currentState.data))
-                is DataState.Idle -> DataState.Success(transform(emptyList()))
                 else -> {
                     logger.warn("Tried to update settings but they're not in Success state")
                     currentState

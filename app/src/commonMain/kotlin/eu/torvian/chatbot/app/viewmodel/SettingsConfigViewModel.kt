@@ -9,8 +9,13 @@ import eu.torvian.chatbot.app.generated.resources.error_unsupported_model_type
 import eu.torvian.chatbot.app.repository.ModelRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.SettingsRepository
+import eu.torvian.chatbot.app.repository.UserGroupRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
+import eu.torvian.chatbot.common.api.AccessMode
+import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
+import eu.torvian.chatbot.common.models.api.access.ModelSettingsDetails
+import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import kotlinx.coroutines.CoroutineDispatcher
@@ -30,11 +35,13 @@ import kotlinx.coroutines.launch
  * - Managing the state for adding new settings profiles (E4.S5).
  * - Managing the state for editing existing settings profiles (E4.S6).
  * - Deleting settings profiles (E4.S5).
+ * - Managing settings access control (public/private, grant/revoke access).
  * - Communicating with the backend via [SettingsRepository] and [ModelRepository].
  *
  * @constructor
  * @param settingsRepository The repository for Settings-related operations.
  * @param modelRepository The repository for Model-related operations (needed for model selection).
+ * @param userGroupRepository The repository for user group-related operations.
  * @param errorNotifier The service for handling and notifying about errors.
  * @param uiDispatcher The dispatcher to use for UI-related coroutines. Defaults to Main.
  *
@@ -47,6 +54,7 @@ import kotlinx.coroutines.launch
 class SettingsConfigViewModel(
     private val settingsRepository: SettingsRepository,
     private val modelRepository: ModelRepository,
+    private val userGroupRepository: UserGroupRepository,
     private val errorNotifier: ErrorNotifier,
     private val uiDispatcher: CoroutineDispatcher = Dispatchers.Main
 ) : ViewModel() {
@@ -78,11 +86,11 @@ class SettingsConfigViewModel(
     /**
      * The state of the list of all configured settings profiles for the selected model.
      */
-    val settingsListForSelectedModel: StateFlow<List<ModelSettings>?> = settingsRepository.settings
+    val settingsListForSelectedModel: StateFlow<List<ModelSettingsDetails>?> = settingsRepository.allSettingsDetails
         .map { it.dataOrNull }
         .onEach { allSettingsList ->
             val supportedSettingsList = allSettingsList?.filter {
-                isModelSettingsSupported(it)
+                isModelSettingsSupported(it.settings)
             }
             if (supportedSettingsList?.size != allSettingsList?.size) {
                 logger.warn("Found unsupported ModelSettings types. Only supported types are displayed.")
@@ -90,7 +98,7 @@ class SettingsConfigViewModel(
         }
         .combine(userSelectedModelId) { allSettingsList, currentSelectedId ->
             allSettingsList?.filter {
-                isModelSettingsSupported(it) && it.modelId == currentSelectedId
+                isModelSettingsSupported(it.settings) && it.settings.modelId == currentSelectedId
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), null)
@@ -110,11 +118,11 @@ class SettingsConfigViewModel(
      * The currently selected settings profile in the master-detail UI.
      * If null, no settings profile is selected and no detail is displayed.
      */
-    val selectedSettings: StateFlow<ModelSettings?> = combine(
+    val selectedSettings: StateFlow<ModelSettingsDetails?> = combine(
         settingsListForSelectedModel,
         userSelectedSettingsId
     ) { settingsList, currentSelectedId ->
-        settingsList?.find { it.id == currentSelectedId }
+        settingsList?.find { it.settings.id == currentSelectedId }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), null)
 
     /**
@@ -145,7 +153,7 @@ class SettingsConfigViewModel(
         viewModelScope.launch(uiDispatcher) {
             parZip(
                 { modelRepository.loadModels() },
-                { settingsRepository.loadSettings() }
+                { settingsRepository.loadAllSettingsDetails() }
             ) { modelsResult, settingsResult ->
                 modelsResult.mapLeft { error ->
                     errorNotifier.repositoryError(
@@ -173,8 +181,8 @@ class SettingsConfigViewModel(
     /**
      * Selects a settings profile or clears selection when null.
      */
-    fun selectSettings(settings: ModelSettings?) {
-        userSelectedSettingsId.value = settings?.id
+    fun selectSettings(settingsDetails: ModelSettingsDetails?) {
+        userSelectedSettingsId.value = settingsDetails?.settings?.id
     }
 
     /**
@@ -272,6 +280,159 @@ class SettingsConfigViewModel(
      */
     fun cancelDialog() {
         _dialogState.value = SettingsDialogState.None
+    }
+
+    /**
+     * Makes a settings profile publicly accessible.
+     */
+    fun makeSettingsPublic(settingsDetails: ModelSettingsDetails) {
+        viewModelScope.launch(uiDispatcher) {
+            settingsRepository.makeSettingsPublic(settingsDetails.settings.id)
+                .mapLeft { error ->
+                    errorNotifier.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to make settings public"
+                    )
+                }
+        }
+    }
+
+    /**
+     * Makes a settings profile private.
+     */
+    fun makeSettingsPrivate(settingsDetails: ModelSettingsDetails) {
+        viewModelScope.launch(uiDispatcher) {
+            settingsRepository.makeSettingsPrivate(settingsDetails.settings.id)
+                .mapLeft { error ->
+                    errorNotifier.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to make settings private"
+                    )
+                }
+        }
+    }
+
+    /**
+     * Opens the manage access dialog for a settings profile.
+     */
+    fun openManageAccessDialog(settingsDetails: ModelSettingsDetails) {
+        viewModelScope.launch(uiDispatcher) {
+            userGroupRepository.loadGroups().fold(
+                ifLeft = { error ->
+                    errorNotifier.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to load user groups"
+                    )
+                },
+                ifRight = {
+                    // Get groups from repository state
+                    val groups = userGroupRepository.groups.value.dataOrNull ?: emptyList()
+
+                    // Define available access modes for settings
+                    val availableAccessModes = listOf(AccessMode.READ.key, AccessMode.WRITE.key, AccessMode.MANAGE.key)
+
+                    _dialogState.value = SettingsDialogState.ManageAccess(
+                        settingsDetails = settingsDetails,
+                        availableGroups = groups,
+                        grantAccessForm = GrantAccessFormState(
+                            selectedAccessMode = availableAccessModes.first(),
+                            availableAccessModes = availableAccessModes
+                        )
+                    )
+                }
+            )
+        }
+    }
+
+    /**
+     * Opens the grant access dialog within the manage access dialog.
+     */
+    fun openGrantAccessDialog() {
+        _dialogState.update { state ->
+            if (state is SettingsDialogState.ManageAccess) {
+                state.copy(showGrantDialog = true)
+            } else state
+        }
+    }
+
+    /**
+     * Closes the grant access dialog.
+     */
+    fun closeGrantAccessDialog() {
+        _dialogState.update { state ->
+            if (state is SettingsDialogState.ManageAccess) {
+                state.copy(
+                    showGrantDialog = false,
+                    grantAccessForm = GrantAccessFormState() // Reset form
+                )
+            } else state
+        }
+    }
+
+    /**
+     * Updates the grant access form state.
+     */
+    fun updateGrantAccessForm(update: (GrantAccessFormState) -> GrantAccessFormState) {
+        _dialogState.update { state ->
+            if (state is SettingsDialogState.ManageAccess) {
+                state.copy(grantAccessForm = update(state.grantAccessForm))
+            } else state
+        }
+    }
+
+    /**
+     * Grants access to a settings profile for a specific user group.
+     */
+    fun grantSettingsAccess(settingsId: Long, groupId: Long, accessMode: String) {
+        viewModelScope.launch(uiDispatcher) {
+            settingsRepository.grantSettingsAccess(
+                settingsId,
+                GrantAccessRequest(groupId = groupId, accessMode = accessMode)
+            ).fold(
+                ifLeft = { error ->
+                    errorNotifier.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to grant access"
+                    )
+                },
+                ifRight = { settingsDetails ->
+                    // Refresh dialog state to reflect new access details
+                    _dialogState.update { state ->
+                        if (state is SettingsDialogState.ManageAccess) {
+                            state.copy(settingsDetails = settingsDetails)
+                        } else state
+                    }
+                    closeGrantAccessDialog()
+                }
+            )
+        }
+    }
+
+    /**
+     * Revokes access to a settings profile from a specific user group.
+     */
+    fun revokeSettingsAccess(settingsId: Long, groupId: Long, accessMode: String) {
+        viewModelScope.launch(uiDispatcher) {
+            settingsRepository.revokeSettingsAccess(
+                settingsId,
+                RevokeAccessRequest(groupId = groupId, accessMode = accessMode)
+            ).fold(
+                ifLeft = { error ->
+                    errorNotifier.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to revoke access"
+                    )
+                },
+                ifRight = { settingsDetails ->
+                    // Refresh dialog state to reflect new access details
+                    _dialogState.update { state ->
+                        if (state is SettingsDialogState.ManageAccess) {
+                            state.copy(settingsDetails = settingsDetails)
+                        } else state
+                    }
+                }
+            )
+        }
     }
 
     // --- Private Helper Functions ---

@@ -1,6 +1,8 @@
 package eu.torvian.chatbot.app.domain.contracts
 
+import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
 import eu.torvian.chatbot.common.models.llm.LLMProvider
+import eu.torvian.chatbot.common.models.user.UserGroup
 
 /**
  * Consolidated state for all dialog management in the ProvidersTab.
@@ -20,4 +22,11 @@ sealed class ProvidersDialogState {
     ) : ProvidersDialogState()
 
     data class DeleteProvider(val provider: LLMProvider) : ProvidersDialogState()
+
+    data class ManageAccess(
+        val providerDetails: LLMProviderDetails,
+        val availableGroups: List<UserGroup>,
+        val showGrantDialog: Boolean = false,
+        val grantAccessForm: GrantAccessFormState = GrantAccessFormState()
+    ) : ProvidersDialogState()
 }

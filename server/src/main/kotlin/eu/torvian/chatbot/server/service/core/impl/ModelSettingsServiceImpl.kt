@@ -5,30 +5,26 @@ import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.api.AccessMode
-import eu.torvian.chatbot.common.api.CommonUserGroups
-import eu.torvian.chatbot.common.models.api.access.IsPublicResponse
-import eu.torvian.chatbot.common.models.api.access.OwnerInfo
+import eu.torvian.chatbot.common.models.api.access.ModelSettingsDetails
+import eu.torvian.chatbot.common.models.api.access.ResourceAccessDetails
 import eu.torvian.chatbot.common.models.api.access.ResourceAccessInfo
-import eu.torvian.chatbot.common.models.api.access.ResourceAccessResponse
+import eu.torvian.chatbot.common.models.api.access.toOwnerInfo
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.server.data.dao.SettingsAccessDao
 import eu.torvian.chatbot.server.data.dao.SettingsDao
 import eu.torvian.chatbot.server.data.dao.SettingsOwnershipDao
-import eu.torvian.chatbot.server.data.dao.error.SetOwnerError
-import eu.torvian.chatbot.server.data.dao.error.SettingsError
 import eu.torvian.chatbot.server.data.dao.error.GrantAccessError
 import eu.torvian.chatbot.server.data.dao.error.RevokeAccessError
+import eu.torvian.chatbot.server.data.dao.error.SetOwnerError
+import eu.torvian.chatbot.server.data.dao.error.SettingsError
 import eu.torvian.chatbot.server.service.core.LLMModelService
 import eu.torvian.chatbot.server.service.core.ModelSettingsService
 import eu.torvian.chatbot.server.service.core.UserGroupService
 import eu.torvian.chatbot.server.service.core.UserService
-import eu.torvian.chatbot.server.service.core.error.access.GetResourceAccessError
 import eu.torvian.chatbot.server.service.core.error.access.GrantResourceAccessError
-import eu.torvian.chatbot.server.service.core.error.access.RevokeResourceAccessError
-import eu.torvian.chatbot.server.service.core.error.access.MakeResourcePublicError
 import eu.torvian.chatbot.server.service.core.error.access.MakeResourcePrivateError
-import eu.torvian.chatbot.server.service.core.error.access.CheckResourcePublicError
-import eu.torvian.chatbot.server.service.core.error.auth.UserNotFoundError
+import eu.torvian.chatbot.server.service.core.error.access.MakeResourcePublicError
+import eu.torvian.chatbot.server.service.core.error.access.RevokeResourceAccessError
 import eu.torvian.chatbot.server.service.core.error.model.GetModelError
 import eu.torvian.chatbot.server.service.core.error.settings.AddSettingsError
 import eu.torvian.chatbot.server.service.core.error.settings.DeleteSettingsError
@@ -36,7 +32,6 @@ import eu.torvian.chatbot.server.service.core.error.settings.GetSettingsByIdErro
 import eu.torvian.chatbot.server.service.core.error.settings.UpdateSettingsError
 import eu.torvian.chatbot.server.service.core.error.usergroup.GetGroupByNameError
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
-import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
 
 /**
  * Implementation of the [ModelSettingsService] interface.
@@ -213,24 +208,22 @@ class ModelSettingsServiceImpl(
         }
     }
 
-    override suspend fun getSettingsAccess(settingsId: Long): Either<GetResourceAccessError, ResourceAccessResponse> =
+
+    override suspend fun getSettingsDetails(settingsId: Long): Either<GetSettingsByIdError, ModelSettingsDetails> =
         transactionScope.transaction {
             either {
                 // Verify settings exists
-                withError({ daoError: SettingsError.SettingsNotFound ->
-                    GetResourceAccessError.ResourceNotFound(daoError.id)
+                val settings = withError({ daoError: SettingsError.SettingsNotFound ->
+                    GetSettingsByIdError.SettingsNotFound(daoError.id)
                 }) {
                     settingsDao.getSettingsById(settingsId).bind()
                 }
 
-                // Get owner ID
-                val ownerId = withError({ error: GetOwnerError ->
-                    when (error) {
-                        is GetOwnerError.ResourceNotFound -> GetResourceAccessError.OwnerNotFound(settingsId)
+                // Get owner user details (optional)
+                val owner = settingsOwnershipDao.getOwner(settingsId).getOrNull()
+                    ?.let { ownerId ->
+                        userService.getUserById(ownerId).getOrNull()
                     }
-                }) {
-                    settingsOwnershipDao.getOwner(settingsId).bind()
-                }
 
                 // Get all access entries for all access modes
                 val allAccessGroups = settingsAccessDao.getAccessGroups(settingsId)
@@ -250,10 +243,13 @@ class ModelSettingsServiceImpl(
                     }
                 }
 
-                ResourceAccessResponse(
-                    resourceId = settingsId,
-                    ownerId = ownerId,
-                    accessList = accessList
+                ModelSettingsDetails(
+                    settings = settings,
+                    accessDetails = ResourceAccessDetails(
+                        resourceId = settingsId,
+                        owner = owner?.toOwnerInfo(),
+                        accessList = accessList
+                    )
                 )
             }
         }
@@ -279,6 +275,7 @@ class ModelSettingsServiceImpl(
                             is GrantAccessError.AlreadyGranted -> {
                                 // Already public - idempotent
                             }
+
                             is GrantAccessError.ForeignKeyViolation -> {
                                 raise(MakeResourcePublicError.InvalidRelatedEntity(settingsId, allUsersGroup.id))
                             }
@@ -306,51 +303,4 @@ class ModelSettingsServiceImpl(
             }
         }
 
-    override suspend fun isSettingsPublic(settingsId: Long): Either<CheckResourcePublicError, IsPublicResponse> =
-        transactionScope.transaction {
-            either {
-                val accessResponse = withError({ error: GetResourceAccessError ->
-                    when (error) {
-                        is GetResourceAccessError.ResourceNotFound, is GetResourceAccessError.OwnerNotFound ->
-                            CheckResourcePublicError.ResourceNotFound(settingsId)
-                    }
-                }) {
-                    getSettingsAccess(settingsId).bind()
-                }
-
-                val allUsersAccess = accessResponse.accessList.filter { it.groupName == CommonUserGroups.ALL_USERS }
-
-                IsPublicResponse(
-                    hasAllUsersReadAccess = allUsersAccess.any { it.accessMode == AccessMode.READ.key },
-                    hasAllUsersWriteAccess = allUsersAccess.any { it.accessMode == AccessMode.WRITE.key },
-                    hasAllUsersOtherAccess = allUsersAccess.any { it.accessMode != AccessMode.READ.key && it.accessMode != AccessMode.WRITE.key }
-                )
-            }
-        }
-
-    override suspend fun getSettingsOwner(settingsId: Long): Either<GetSettingsByIdError, OwnerInfo> =
-        transactionScope.transaction {
-            either {
-                // Get owner ID
-                val ownerId = withError({ error: GetOwnerError ->
-                    when (error) {
-                        is GetOwnerError.ResourceNotFound -> GetSettingsByIdError.SettingsNotFound(settingsId)
-                    }
-                }) {
-                    settingsOwnershipDao.getOwner(settingsId).bind()
-                }
-
-                // Get owner info from UserService
-                withError({ _: UserNotFoundError.ById ->
-                    GetSettingsByIdError.SettingsNotFound(settingsId)
-                }) {
-                    userService.getUserById(ownerId).bind()
-                }.let { user ->
-                    OwnerInfo(
-                        userId = user.id,
-                        username = user.username
-                    )
-                }
-            }
-        }
 }

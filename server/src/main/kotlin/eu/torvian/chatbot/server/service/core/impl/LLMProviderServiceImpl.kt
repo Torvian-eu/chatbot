@@ -6,24 +6,27 @@ import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.api.AccessMode
-import eu.torvian.chatbot.common.api.CommonUserGroups
-import eu.torvian.chatbot.common.models.api.access.IsPublicResponse
-import eu.torvian.chatbot.common.models.api.access.OwnerInfo
+import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
+import eu.torvian.chatbot.common.models.api.access.ResourceAccessDetails
 import eu.torvian.chatbot.common.models.api.access.ResourceAccessInfo
-import eu.torvian.chatbot.common.models.api.access.ResourceAccessResponse
+import eu.torvian.chatbot.common.models.api.access.toOwnerInfo
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import eu.torvian.chatbot.server.data.dao.LLMProviderDao
 import eu.torvian.chatbot.server.data.dao.ModelDao
 import eu.torvian.chatbot.server.data.dao.ProviderAccessDao
 import eu.torvian.chatbot.server.data.dao.ProviderOwnershipDao
-import eu.torvian.chatbot.server.data.dao.error.*
+import eu.torvian.chatbot.server.data.dao.error.GrantAccessError
+import eu.torvian.chatbot.server.data.dao.error.LLMProviderError
+import eu.torvian.chatbot.server.data.dao.error.RevokeAccessError
+import eu.torvian.chatbot.server.data.dao.error.SetOwnerError
 import eu.torvian.chatbot.server.service.core.LLMProviderService
 import eu.torvian.chatbot.server.service.core.UserGroupService
 import eu.torvian.chatbot.server.service.core.UserService
-import eu.torvian.chatbot.server.service.core.error.access.*
-import eu.torvian.chatbot.server.service.core.error.access.CheckResourcePublicError.ResourceNotFound
-import eu.torvian.chatbot.server.service.core.error.auth.UserNotFoundError
+import eu.torvian.chatbot.server.service.core.error.access.GrantResourceAccessError
+import eu.torvian.chatbot.server.service.core.error.access.MakeResourcePrivateError
+import eu.torvian.chatbot.server.service.core.error.access.MakeResourcePublicError
+import eu.torvian.chatbot.server.service.core.error.access.RevokeResourceAccessError
 import eu.torvian.chatbot.server.service.core.error.provider.*
 import eu.torvian.chatbot.server.service.core.error.usergroup.GetGroupByNameError
 import eu.torvian.chatbot.server.service.security.CredentialManager
@@ -265,24 +268,21 @@ class LLMProviderServiceImpl(
         }
     }
 
-    override suspend fun getProviderAccess(providerId: Long): Either<GetResourceAccessError, ResourceAccessResponse> =
+    override suspend fun getProviderDetails(providerId: Long): Either<GetProviderError, LLMProviderDetails> =
         transactionScope.transaction {
             either {
                 // Verify provider exists
-                withError({ daoError: LLMProviderError.LLMProviderNotFound ->
-                    GetResourceAccessError.ResourceNotFound(daoError.id)
+                val provider = withError({ _: LLMProviderError.LLMProviderNotFound ->
+                    GetProviderError.ProviderNotFound(providerId)
                 }) {
                     llmProviderDao.getProviderById(providerId).bind()
                 }
 
-                // Get owner ID
-                val ownerId = withError({ error: GetOwnerError ->
-                    when (error) {
-                        is GetOwnerError.ResourceNotFound -> GetResourceAccessError.OwnerNotFound(providerId)
+                // Get owner user details
+                val owner = providerOwnershipDao.getOwner(providerId).getOrNull()
+                    ?.let { ownerId ->
+                        userService.getUserById(ownerId).getOrNull()
                     }
-                }) {
-                    providerOwnershipDao.getOwner(providerId).bind()
-                }
 
                 // Get all access entries for all access modes
                 val allAccessGroups = providerAccessDao.getAccessGroups(providerId)
@@ -302,10 +302,13 @@ class LLMProviderServiceImpl(
                     }
                 }
 
-                ResourceAccessResponse(
-                    resourceId = providerId,
-                    ownerId = ownerId,
-                    accessList = accessList
+                LLMProviderDetails(
+                    provider = provider,
+                    accessDetails = ResourceAccessDetails(
+                        resourceId = providerId,
+                        owner = owner?.toOwnerInfo(),
+                        accessList = accessList
+                    )
                 )
             }
         }
@@ -356,54 +359,6 @@ class LLMProviderServiceImpl(
 
                 // Revoke any access that "All Users" group has for this provider (all modes)
                 providerAccessDao.revokeAllAccess(providerId, allUsersGroup.id)
-            }
-        }
-
-    override suspend fun isProviderPublic(providerId: Long): Either<CheckResourcePublicError, IsPublicResponse> =
-        transactionScope.transaction {
-            either {
-                val accessResponse = withError({ error: GetResourceAccessError ->
-                    when (error) {
-                        is GetResourceAccessError.ResourceNotFound, is GetResourceAccessError.OwnerNotFound ->
-                            ResourceNotFound(providerId)
-                    }
-                }) {
-                    getProviderAccess(providerId).bind()
-                }
-
-                val allUsersAccess = accessResponse.accessList.filter { it.groupName == CommonUserGroups.ALL_USERS }
-
-                IsPublicResponse(
-                    hasAllUsersReadAccess = allUsersAccess.any { it.accessMode == AccessMode.READ.key },
-                    hasAllUsersWriteAccess = allUsersAccess.any { it.accessMode == AccessMode.WRITE.key },
-                    hasAllUsersOtherAccess = allUsersAccess.any { it.accessMode != AccessMode.READ.key && it.accessMode != AccessMode.WRITE.key }
-                )
-            }
-        }
-
-    override suspend fun getProviderOwner(providerId: Long): Either<GetProviderError, OwnerInfo> =
-        transactionScope.transaction {
-            either {
-                // Get owner ID
-                val ownerId = withError({ error: GetOwnerError ->
-                    when (error) {
-                        is GetOwnerError.ResourceNotFound -> GetProviderError.ProviderNotFound(providerId)
-                    }
-                }) {
-                    providerOwnershipDao.getOwner(providerId).bind()
-                }
-
-                // Get owner info from UserService
-                withError({ _: UserNotFoundError.ById ->
-                    GetProviderError.ProviderNotFound(providerId)
-                }) {
-                    userService.getUserById(ownerId).bind()
-                }.let { user ->
-                    OwnerInfo(
-                        userId = user.id,
-                        username = user.username
-                    )
-                }
             }
         }
 }

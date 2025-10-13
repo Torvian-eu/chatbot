@@ -1,8 +1,12 @@
 package eu.torvian.chatbot.app.compose.settings
 
+import eu.torvian.chatbot.app.domain.contracts.GrantAccessFormState
 import eu.torvian.chatbot.app.domain.contracts.ProviderFormState
 import eu.torvian.chatbot.app.domain.contracts.ModelFormState
 import eu.torvian.chatbot.app.domain.contracts.SettingsFormState
+import eu.torvian.chatbot.common.models.api.access.LLMModelDetails
+import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
+import eu.torvian.chatbot.common.models.api.access.ModelSettingsDetails
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.ModelSettings
@@ -12,7 +16,7 @@ import eu.torvian.chatbot.common.models.llm.ModelSettings
  */
 interface ProvidersTabActions {
     fun onLoadProviders()
-    fun onSelectProvider(provider: LLMProvider?)
+    fun onSelectProvider(providerDetails: LLMProviderDetails?)
     fun onStartAddingNewProvider()
     fun onCancelDialog()
     fun onSaveProvider()
@@ -20,9 +24,17 @@ interface ProvidersTabActions {
     fun onStartDeletingProvider(provider: LLMProvider)
     fun onDeleteProvider(providerId: Long)
     fun onUpdateProviderCredential()
-
-    // Unified form field updates
     fun onUpdateProviderForm(update: (ProviderFormState) -> ProviderFormState)
+
+    // Access management actions
+    fun onMakeProviderPublic(providerDetails: LLMProviderDetails)
+    fun onMakeProviderPrivate(providerDetails: LLMProviderDetails)
+    fun onOpenManageAccessDialog(providerDetails: LLMProviderDetails)
+    fun onOpenGrantAccessDialog()
+    fun onCloseGrantAccessDialog()
+    fun onUpdateGrantAccessForm(form: GrantAccessFormState)
+    fun onGrantProviderAccess(providerId: Long, groupId: Long, accessMode: String)
+    fun onRevokeProviderAccess(providerId: Long, groupId: Long, accessMode: String)
 }
 
 /**
@@ -35,12 +47,19 @@ interface ModelsTabActions {
     fun onStartEditingModel(model: LLMModel)
     fun onStartDeletingModel(model: LLMModel)
     fun onDeleteModel(modelId: Long)
-    fun onSelectModel(model: LLMModel?)
-
-    // Unified form field updates
+    fun onSelectModel(modelDetails: LLMModelDetails?)
     fun onUpdateModelForm(update: (ModelFormState) -> ModelFormState)
-
     fun onCancelDialog()
+
+    // Access management actions
+    fun onMakeModelPublic(modelDetails: LLMModelDetails)
+    fun onMakeModelPrivate(modelDetails: LLMModelDetails)
+    fun onOpenManageAccessDialog(modelDetails: LLMModelDetails)
+    fun onOpenGrantAccessDialog()
+    fun onCloseGrantAccessDialog()
+    fun onUpdateGrantAccessForm(form: GrantAccessFormState)
+    fun onGrantModelAccess(modelId: Long, groupId: Long, accessMode: String)
+    fun onRevokeModelAccess(modelId: Long, groupId: Long, accessMode: String)
 }
 
 /**
@@ -49,7 +68,7 @@ interface ModelsTabActions {
 interface SettingsConfigTabActions {
     fun onLoadModelsAndSettings()
     fun onSelectModel(model: LLMModel?)
-    fun onSelectSettings(settings: ModelSettings?)
+    fun onSelectSettings(settingsDetails: ModelSettingsDetails?)
     fun onStartAddingNewSettings()
     fun onStartEditingSettings(settings: ModelSettings)
     fun onStartDeletingSettings(settings: ModelSettings)
@@ -57,4 +76,14 @@ interface SettingsConfigTabActions {
     fun onSaveSettings()
     fun onDeleteSettings(settingsId: Long)
     fun onCancelDialog()
+
+    // Access management actions
+    fun onMakeSettingsPublic(settingsDetails: ModelSettingsDetails)
+    fun onMakeSettingsPrivate(settingsDetails: ModelSettingsDetails)
+    fun onOpenManageAccessDialog(settingsDetails: ModelSettingsDetails)
+    fun onOpenGrantAccessDialog()
+    fun onCloseGrantAccessDialog()
+    fun onUpdateGrantAccessForm(form: GrantAccessFormState)
+    fun onGrantSettingsAccess(settingsId: Long, groupId: Long, accessMode: String)
+    fun onRevokeSettingsAccess(settingsId: Long, groupId: Long, accessMode: String)
 }
