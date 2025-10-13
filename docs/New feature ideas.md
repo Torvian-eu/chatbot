@@ -255,6 +255,30 @@ Here are detailed user stories for the new feature ideas, following the format a
     *   Clicking the button smoothly scrolls the messages list to the bottom.
     *   The button is only visible when the messages list is not already at the bottom.
 
+### NF.S18 - Copy Message Content to Clipboard
+*   **Description:** As a user, I want to be able to copy the content of a specific message to the clipboard, so I can easily share or use the message elsewhere.
+*   **Estimate:** S
+*   **Acceptance Criteria:**
+    *   A "Copy" button or similar UI element is available for each message.
+    *   Clicking the "Copy" button copies the message content to the clipboard.
+    *   A brief visual confirmation (e.g., a "Copied!" tooltip) is shown to the user.
+
+### NF.S19 - Copy Visible Thread Branch to Clipboard
+*   **Description:** As a user, I want to be able to copy the content of the currently visible thread branch to the clipboard, so I can easily share or use the conversation elsewhere.
+*   **Estimate:** M
+*   **Acceptance Criteria:**
+    *   A "Copy Branch" button or similar UI element is available.
+    *   Clicking the "Copy Branch" button copies the content of the currently visible thread branch to the clipboard.
+    *   A brief visual confirmation (e.g., a "Copied!" tooltip) is shown to the user.
+
+### NF.S20 - Switch Between User Accounts
+*   **Description:** As a user, I want to be able to switch between my personal account and any other accounts I have access to (for instance, admin account), without logging out, so I can easily switch between different personas or roles within the application.
+*   **Estimate:** L
+*   **Acceptance Criteria:**
+    *   A "Switch Account" button or similar UI element is available.
+    *   Clicking the "Switch Account" button displays a list of available accounts.
+    *   Selecting an account does not log out the current user but simply switches the active account context.
+
 ---
 
 ## New Features: Intermediate
