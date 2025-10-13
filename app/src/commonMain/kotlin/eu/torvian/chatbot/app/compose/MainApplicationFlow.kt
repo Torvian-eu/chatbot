@@ -154,7 +154,7 @@ fun MainApplicationFlow(
                         ChatScreen(sessionListViewModel, chatViewModel)
                     }
                     composable<Settings> {
-                        SettingsScreen()
+                        SettingsScreen(authState = authState)
                     }
                     composable<Admin> {
                         AdminScreen(authState = authState)

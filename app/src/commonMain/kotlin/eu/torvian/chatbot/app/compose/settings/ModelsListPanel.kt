@@ -8,6 +8,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -15,7 +17,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ScrollbarWrapper
-import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.app.compose.permissions.RequiresAnyPermission
+import eu.torvian.chatbot.app.repository.AuthState
+import eu.torvian.chatbot.common.api.CommonPermissions
+import eu.torvian.chatbot.common.models.api.access.LLMModelDetails
 
 /**
  * Panel displaying the list of configured LLM models with selection support.
@@ -23,10 +28,11 @@ import eu.torvian.chatbot.common.models.llm.LLMModel
  */
 @Composable
 fun ModelsListPanel(
-    models: List<LLMModel>,
-    selectedModel: LLMModel?,
-    onModelSelected: (LLMModel) -> Unit,
+    models: List<LLMModelDetails>,
+    selectedModel: LLMModelDetails?,
+    onModelSelected: (LLMModelDetails) -> Unit,
     onAddNewModel: () -> Unit,
+    authState: AuthState.Authenticated,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -50,16 +56,21 @@ fun ModelsListPanel(
                     color = MaterialTheme.colorScheme.onSurface
                 )
 
-                FloatingActionButton(
-                    onClick = onAddNewModel,
-                    modifier = Modifier.size(40.dp),
-                    containerColor = MaterialTheme.colorScheme.primary
+                RequiresAnyPermission(
+                    authState = authState,
+                    permissions = listOf(CommonPermissions.CREATE_LLM_MODEL, CommonPermissions.MANAGE_LLM_MODELS)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "Add new model",
-                        tint = MaterialTheme.colorScheme.onPrimary
-                    )
+                    FloatingActionButton(
+                        onClick = onAddNewModel,
+                        modifier = Modifier.size(40.dp),
+                        containerColor = MaterialTheme.colorScheme.primary
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Add new model",
+                            tint = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
                 }
             }
 
@@ -97,8 +108,8 @@ fun ModelsListPanel(
                     ) {
                         items(models) { model ->
                             ModelListItem(
-                                model = model,
-                                isSelected = selectedModel?.id == model.id,
+                                modelDetails = model,
+                                isSelected = selectedModel?.model?.id == model.model.id,
                                 onClick = { onModelSelected(model) }
                             )
                         }
@@ -114,7 +125,7 @@ fun ModelsListPanel(
  */
 @Composable
 private fun ModelListItem(
-    model: LLMModel,
+    modelDetails: LLMModelDetails,
     isSelected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -131,6 +142,8 @@ private fun ModelListItem(
         MaterialTheme.colorScheme.onSurface
     }
 
+    val model = modelDetails.model
+
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -145,12 +158,57 @@ private fun ModelListItem(
                 .fillMaxWidth()
                 .padding(12.dp)
         ) {
-            // Model display name or name
-            Text(
-                text = model.displayName?.takeIf { it.isNotBlank() } ?: model.name,
-                style = MaterialTheme.typography.titleMedium,
-                color = contentColor
-            )
+            // Name row with optional public/private badge
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = model.displayName?.takeIf { it.isNotBlank() } ?: model.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = contentColor
+                )
+
+                // Public/Private badge (matches ProviderListItem style)
+                if (modelDetails.isPublic()) {
+                    AssistChip(
+                        onClick = {},
+                        label = { Text("Public", style = MaterialTheme.typography.labelSmall) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Public,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                            labelColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                            leadingIconContentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                        ),
+                        border = null
+                    )
+                } else {
+                    AssistChip(
+                        onClick = {},
+                        label = { Text("Private", style = MaterialTheme.typography.labelSmall) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            labelColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                            leadingIconContentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                        ),
+                        border = null
+                    )
+                }
+            }
 
             // Model name (if different from display name)
             if (model.displayName?.isNotBlank() == true && model.displayName != model.name) {

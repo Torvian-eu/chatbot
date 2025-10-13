@@ -4,6 +4,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import eu.torvian.chatbot.app.compose.settings.dialogs.ManageAccessDialog
 import eu.torvian.chatbot.app.domain.contracts.ModelsDialogState
 import eu.torvian.chatbot.common.models.llm.LLMModel
 
@@ -53,7 +54,36 @@ fun ModelsDialogs(
             )
         }
 
-        ModelsDialogState.None -> { /* No dialog to show */ }
+        is ModelsDialogState.ManageAccess -> {
+            ManageAccessDialog(
+                resourceName = dialogState.modelDetails.model.displayName ?: dialogState.modelDetails.model.name,
+                accessDetails = dialogState.modelDetails.accessDetails,
+                availableGroups = dialogState.availableGroups,
+                showGrantDialog = dialogState.showGrantDialog,
+                grantAccessForm = dialogState.grantAccessForm,
+                onOpenGrantDialog = actions::onOpenGrantAccessDialog,
+                onCloseGrantDialog = actions::onCloseGrantAccessDialog,
+                onUpdateGrantForm = actions::onUpdateGrantAccessForm,
+                onConfirmGrant = { groupId, accessMode ->
+                    actions.onGrantModelAccess(
+                        dialogState.modelDetails.model.id,
+                        groupId,
+                        accessMode
+                    )
+                },
+                onRevokeAccess = { groupId, accessMode ->
+                    actions.onRevokeModelAccess(
+                        dialogState.modelDetails.model.id,
+                        groupId,
+                        accessMode
+                    )
+                },
+                onDismiss = actions::onCancelDialog
+            )
+        }
+
+        ModelsDialogState.None -> { /* No dialog to show */
+        }
     }
 }
 

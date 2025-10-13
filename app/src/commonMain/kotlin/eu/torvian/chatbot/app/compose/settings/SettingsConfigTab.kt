@@ -10,6 +10,7 @@ import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ErrorStateDisplay
 import eu.torvian.chatbot.app.compose.common.LoadingStateDisplay
 import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.app.repository.AuthState
 
 /**
  * Settings management tab with master-detail layout.
@@ -19,6 +20,7 @@ import eu.torvian.chatbot.app.domain.contracts.DataState
 fun SettingsConfigTab(
     state: SettingsConfigTabState,
     actions: SettingsConfigTabActions,
+    authState: AuthState.Authenticated,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxSize()) {
@@ -41,13 +43,17 @@ fun SettingsConfigTab(
                         onModelSelected = actions::onSelectModel,
                         onSettingsSelected = actions::onSelectSettings,
                         onAddNewSettings = actions::onStartAddingNewSettings,
+                        authState = authState,
                         modifier = Modifier.weight(1f).fillMaxHeight()
                     )
                     // Detail Panel (Right)
                     SettingsDetailPanel(
-                        settings = state.selectedSettings,
+                        settingsDetails = state.selectedSettings,
                         onEdit = actions::onStartEditingSettings,
                         onDelete = actions::onStartDeletingSettings,
+                        onMakePublic = actions::onMakeSettingsPublic,
+                        onMakePrivate = actions::onMakeSettingsPrivate,
+                        onManageAccess = actions::onOpenManageAccessDialog,
                         modifier = Modifier.weight(1f).fillMaxHeight().padding(start = 16.dp)
                     )
                 }

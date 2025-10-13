@@ -21,17 +21,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.EmptyStateDisplay
-import eu.torvian.chatbot.common.models.llm.LLMProvider
+import eu.torvian.chatbot.app.compose.permissions.RequiresAnyPermission
+import eu.torvian.chatbot.app.repository.AuthState
+import eu.torvian.chatbot.common.api.CommonPermissions
+import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
 
 /**
  * Master panel showing the list of providers with selection support.
  */
 @Composable
 fun ProvidersListPanel(
-    providers: List<LLMProvider>,
-    selectedProvider: LLMProvider?,
-    onProviderSelected: (LLMProvider) -> Unit,
+    providers: List<LLMProviderDetails>,
+    selectedProvider: LLMProviderDetails?,
+    onProviderSelected: (LLMProviderDetails) -> Unit,
     onAddNewProvider: () -> Unit,
+    authState: AuthState,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
@@ -47,16 +51,21 @@ fun ProvidersListPanel(
                 color = MaterialTheme.colorScheme.onSurface
             )
 
-            FloatingActionButton(
-                onClick = onAddNewProvider,
-                modifier = Modifier.size(40.dp),
-                containerColor = MaterialTheme.colorScheme.primary
+            RequiresAnyPermission(
+                authState = authState,
+                permissions = listOf(CommonPermissions.CREATE_LLM_PROVIDER, CommonPermissions.MANAGE_LLM_PROVIDERS)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "Add new provider",
-                    tint = MaterialTheme.colorScheme.onPrimary
-                )
+                FloatingActionButton(
+                    onClick = onAddNewProvider,
+                    modifier = Modifier.size(40.dp),
+                    containerColor = MaterialTheme.colorScheme.primary
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Add new provider",
+                        tint = MaterialTheme.colorScheme.onPrimary
+                    )
+                }
             }
         }
 
@@ -73,8 +82,8 @@ fun ProvidersListPanel(
             ) {
                 items(providers) { provider ->
                     ProviderListItem(
-                        provider = provider,
-                        isSelected = selectedProvider?.id == provider.id,
+                        providerDetails = provider,
+                        isSelected = selectedProvider?.provider?.id == provider.provider.id,
                         onClick = { onProviderSelected(provider) }
                     )
                 }
