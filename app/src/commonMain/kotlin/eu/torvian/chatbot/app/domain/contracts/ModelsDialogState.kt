@@ -1,7 +1,9 @@
 package eu.torvian.chatbot.app.domain.contracts
 
+import eu.torvian.chatbot.common.models.api.access.LLMModelDetails
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
+import eu.torvian.chatbot.common.models.user.UserGroup
 
 /**
  * Consolidated state for all dialog management in the ModelsTab.
@@ -22,4 +24,11 @@ sealed class ModelsDialogState {
     ) : ModelsDialogState()
 
     data class DeleteModel(val model: LLMModel) : ModelsDialogState()
+
+    data class ManageAccess(
+        val modelDetails: LLMModelDetails,
+        val availableGroups: List<UserGroup>,
+        val showGrantDialog: Boolean = false,
+        val grantAccessForm: GrantAccessFormState = GrantAccessFormState()
+    ) : ModelsDialogState()
 }

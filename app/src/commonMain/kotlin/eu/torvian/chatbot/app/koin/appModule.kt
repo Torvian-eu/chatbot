@@ -246,24 +246,13 @@ fun appModule(baseUri: String): Module = module {
         AuthViewModel(get<AuthRepository>(), get<ErrorNotifier>(), normalScope)
     }
     viewModel { SessionListViewModel(get<SessionRepository>(), get<GroupRepository>(), get<EventBus>(), get()) }
-    viewModel { ProviderConfigViewModel(get<ProviderRepository>(), get<ErrorNotifier>()) }
-    viewModel { ModelConfigViewModel(get<ModelRepository>(), get<ProviderRepository>(), get<ErrorNotifier>()) }
-    viewModel { SettingsConfigViewModel(get<SettingsRepository>(), get<ModelRepository>(), get<ErrorNotifier>()) }
+    viewModel { ProviderConfigViewModel(get<ProviderRepository>(), get<UserGroupRepository>(), get<ErrorNotifier>()) }
+    viewModel { ModelConfigViewModel(get<ModelRepository>(), get<ProviderRepository>(), get<UserGroupRepository>(), get<ErrorNotifier>()) }
+    viewModel { SettingsConfigViewModel(get<SettingsRepository>(), get<ModelRepository>(), get<UserGroupRepository>(), get<ErrorNotifier>()) }
     viewModel {
         val scopeProvider = get<CoroutineScopeProvider>()
         val normalScope = scopeProvider.createNormalScope()
-        UserManagementViewModel(
-            userRepository = get(),
-            roleRepository = get(),
-            errorNotifier = get(),
-            normalScope = normalScope
-        )
+        UserManagementViewModel(get<UserRepository>(), get<RoleRepository>(), get<ErrorNotifier>(), normalScope)
     }
-    viewModel {
-        UserGroupManagementViewModel(
-            userGroupRepository = get(),
-            userRepository = get(),
-            errorNotifier = get()
-        )
-    }
+    viewModel { UserGroupManagementViewModel(get<UserGroupRepository>(), get<UserRepository>(), get<ErrorNotifier>()) }
 }

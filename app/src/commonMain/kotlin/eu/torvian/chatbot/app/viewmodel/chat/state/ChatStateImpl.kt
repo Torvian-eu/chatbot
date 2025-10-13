@@ -95,7 +95,7 @@ class ChatStateImpl(
 
     // All settings from repository, filtered for chat model settings only
     private val allSettings: StateFlow<DataState<RepositoryError, List<ChatModelSettings>>> =
-        settingsRepository.settings.map { dataState ->
+        settingsRepository.allSettings.map { dataState ->
             when (dataState) {
                 is DataState.Success -> {
                     val filteredSettings = dataState.data.filterIsInstance<ChatModelSettings>()
