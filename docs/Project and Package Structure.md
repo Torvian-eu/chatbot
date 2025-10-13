@@ -54,9 +54,11 @@ common/src/commonMain/kotlin/eu/torvian/chatbot/common/
 │   ├── api/                      # API request/response DTOs
 │   │   ├── access/               # Access management API DTOs
 │   │   │   ├── GrantAccessRequest.kt     # Request DTO for granting access
-│   │   │   ├── IsPublicResponse.kt       # Response DTO for public accessibility status
+│   │   │   ├── LLMModelDetails.kt        # Detailed LLM model info with access
+│   │   │   ├── LLMProviderDetails.kt     # Detailed LLM provider info with access
+│   │   │   ├── ModelSettingsDetails.kt   # Detailed model settings info with access
 │   │   │   ├── OwnerInfo.kt              # Data class for owner details
-│   │   │   ├── ResourceAccessInfo.kt     # Resource access information DTO
+│   │   │   ├── ResourceAccessDetails.kt  # Resource access details DTO
 │   │   │   └── RevokeAccessRequest.kt    # Request DTO for revoking access
 │   │   ├── admin/                # Admin-specific API DTOs
 │   │   │   ├── AddUserToGroupRequest.kt  # Request DTO for adding user to group
@@ -337,6 +339,7 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   ├── SettingsScreen.kt # Settings configuration interface (providers, models, settings)
 │   ├── admin/        # Admin UI components
 │   │   ├── AdminScreen.kt
+│   │   ├── usergroups/ # User group management UI components
 │   │   └── users/    # User management UI components
 │   ├── auth/          # Authentication UI components
 │   │   ├── LoginScreen.kt
@@ -364,6 +367,7 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   ├── contracts/    # UI State and Action contracts (interfaces between UI and ViewModels)
 │   │   ├── DataState.kt  # Data state contract
 │   │   ├── FormMode.kt  # Form mode enum
+│   │   ├── GrantAccessFormState.kt # Form state for granting resource access
 │   │   ├── ModelConfigData.kt  # Model configuration data
 │   │   ├── ModelFormState.kt  # Model form state
 │   │   ├── ModelsDialogState.kt  # Models dialog state
@@ -400,6 +404,7 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   ├── SessionRepository.kt  # Session repository
 │   ├── SettingsRepository.kt # Settings repository
 │   ├── UserRepository.kt   # Interface for managing user accounts and details
+│   ├── UserGroupRepository.kt # User group management repository
 │   └── impl/             # Repository implementations
 ├── service/          # Frontend services (API clients)
 │   ├── api/          # API interfaces
@@ -430,6 +435,8 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
     ├── SessionListViewModel.kt # Session List ViewModel (manages session list state)
     ├── SettingsConfigViewModel.kt # Settings Config ViewModel (manages model settings state)
     ├── admin/          # Admin-specific ViewModels
+    │   ├── UserGroupManagementState.kt # State for user group management UI
+    │   ├── UserGroupManagementViewModel.kt # ViewModel for user group management
     │   ├── UserManagementState.kt      # State for user management UI
     │   └── UserManagementViewModel.kt  # ViewModel for admin user management
     ├── auth/
