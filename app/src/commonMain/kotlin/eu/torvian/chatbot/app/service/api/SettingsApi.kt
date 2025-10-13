@@ -2,6 +2,9 @@ package eu.torvian.chatbot.app.service.api
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.llm.ModelSettings
+import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
+import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
+import eu.torvian.chatbot.common.models.api.access.ModelSettingsDetails
 
 /**
  * Frontend API interface for interacting with Model Settings Profile-related endpoints.
@@ -77,4 +80,71 @@ interface SettingsApi {
      *         or [Either.Left] containing a [ApiResourceError] on failure.
      */
     suspend fun getAllSettings(): Either<ApiResourceError, List<ModelSettings>>
+
+    /**
+     * Retrieves detailed information about a settings profile, including owner and access list.
+     *
+     * Corresponds to `GET /api/v1/settings/{settingsId}/details`.
+     *
+     * @param settingsId The ID of the settings profile
+     * @return Either.Right with [ModelSettingsDetails] on success, or Either.Left with [ApiResourceError] on failure
+     */
+    suspend fun getSettingsDetails(settingsId: Long): Either<ApiResourceError, ModelSettingsDetails>
+
+    /**
+     * Retrieves detailed information about all settings profiles accessible to the current user.
+     *
+     * Corresponds to `GET /api/v1/settings/details`.
+     *
+     * @return Either.Right with list of [ModelSettingsDetails] on success, or Either.Left with [ApiResourceError] on failure
+     */
+    suspend fun getAllSettingsDetails(): Either<ApiResourceError, List<ModelSettingsDetails>>
+
+    /**
+     * Makes a settings profile publicly accessible by granting READ access to the "All Users" group.
+     *
+     * Corresponds to `POST /api/v1/settings/{settingsId}/make-public`.
+     *
+     * @param settingsId The ID of the settings profile to make public
+     * @return Either.Right with [Unit] on success, or Either.Left with [ApiResourceError] on failure
+     */
+    suspend fun makeSettingsPublic(settingsId: Long): Either<ApiResourceError, Unit>
+
+    /**
+     * Makes a settings profile private by revoking all access from the "All Users" group.
+     *
+     * Corresponds to `POST /api/v1/settings/{settingsId}/make-private`.
+     *
+     * @param settingsId The ID of the settings profile to make private
+     * @return Either.Right with [Unit] on success, or Either.Left with [ApiResourceError] on failure
+     */
+    suspend fun makeSettingsPrivate(settingsId: Long): Either<ApiResourceError, Unit>
+
+    /**
+     * Grants access to a settings profile for a specific user group with the specified access mode.
+     *
+     * Corresponds to `POST /api/v1/settings/{settingsId}/access`.
+     *
+     * @param settingsId The ID of the settings profile
+     * @param request The grant access request containing groupId and accessMode
+     * @return Either.Right with [Unit] on success, or Either.Left with [ApiResourceError] on failure
+     */
+    suspend fun grantSettingsAccess(
+        settingsId: Long,
+        request: GrantAccessRequest
+    ): Either<ApiResourceError, Unit>
+
+    /**
+     * Revokes access to a settings profile from a specific user group for the specified access mode.
+     *
+     * Corresponds to `DELETE /api/v1/settings/{settingsId}/access`.
+     *
+     * @param settingsId The ID of the settings profile
+     * @param request The revoke access request containing groupId and accessMode
+     * @return Either.Right with [Unit] on success, or Either.Left with [ApiResourceError] on failure
+     */
+    suspend fun revokeSettingsAccess(
+        settingsId: Long,
+        request: RevokeAccessRequest
+    ): Either<ApiResourceError, Unit>
 }

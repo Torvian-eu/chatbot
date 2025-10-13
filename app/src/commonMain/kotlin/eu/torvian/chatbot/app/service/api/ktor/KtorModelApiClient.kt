@@ -13,6 +13,13 @@ import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.resources.*
 import io.ktor.client.request.*
+import eu.torvian.chatbot.common.api.resources.ModelResource.ById.Details
+import eu.torvian.chatbot.common.api.resources.ModelResource.ById.Access
+import eu.torvian.chatbot.common.api.resources.ModelResource.ById.MakePublic
+import eu.torvian.chatbot.common.api.resources.ModelResource.ById.MakePrivate
+import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
+import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
+import eu.torvian.chatbot.common.models.api.access.LLMModelDetails
 
 /**
  * Ktor HttpClient implementation of the [ModelApi] interface.
@@ -65,6 +72,52 @@ class KtorModelApiClient(client: HttpClient) : BaseApiResourceClient(client), Mo
     override suspend fun getModelApiKeyStatus(modelId: Long): Either<ApiResourceError, ApiKeyStatusResponse> {
         return safeApiCall {
             client.get(ApiKeyStatus(ById(modelId = modelId))).body<ApiKeyStatusResponse>()
+        }
+    }
+
+    override suspend fun getModelDetails(modelId: Long): Either<ApiResourceError, LLMModelDetails> {
+        return safeApiCall {
+            client.get(Details(ById(modelId = modelId))).body<LLMModelDetails>()
+        }
+    }
+
+    override suspend fun getAllModelDetails(): Either<ApiResourceError, List<LLMModelDetails>> {
+        return safeApiCall {
+            client.get(ModelResource.Details()).body<List<LLMModelDetails>>()
+        }
+    }
+
+    override suspend fun makeModelPublic(modelId: Long): Either<ApiResourceError, Unit> {
+        return safeApiCall {
+            client.post(MakePublic(ById(modelId = modelId))).body<Unit>()
+        }
+    }
+
+    override suspend fun makeModelPrivate(modelId: Long): Either<ApiResourceError, Unit> {
+        return safeApiCall {
+            client.post(MakePrivate(ById(modelId = modelId))).body<Unit>()
+        }
+    }
+
+    override suspend fun grantModelAccess(
+        modelId: Long,
+        request: GrantAccessRequest
+    ): Either<ApiResourceError, Unit> {
+        return safeApiCall {
+            client.post(Access(ById(modelId = modelId))) {
+                setBody(request)
+            }.body<Unit>()
+        }
+    }
+
+    override suspend fun revokeModelAccess(
+        modelId: Long,
+        request: RevokeAccessRequest
+    ): Either<ApiResourceError, Unit> {
+        return safeApiCall {
+            client.delete(Access(ById(modelId = modelId))) {
+                setBody(request)
+            }.body<Unit>()
         }
     }
 }
