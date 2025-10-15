@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import eu.torvian.chatbot.app.repository.AuthRepository
 import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.app.service.auth.AccountData
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
 import eu.torvian.chatbot.common.models.api.auth.LoginRequest
@@ -25,6 +26,7 @@ import kotlinx.coroutines.launch
  * - Login and registration form state
  * - Form validation and error handling
  * - User authentication operations
+ * - Multi-account management (listing, switching, removing accounts)
  *
  * @param authRepository Repository for authentication operations
  * @param errorNotifier Service for handling and notifying about errors
@@ -57,6 +59,25 @@ class AuthViewModel(
 
     private val _passwordChangeFormState = MutableStateFlow(PasswordChangeFormState())
     val passwordChangeFormState: StateFlow<PasswordChangeFormState> = _passwordChangeFormState.asStateFlow()
+
+    // --- Account Management State ---
+
+    /**
+     * List of all stored user accounts available for switching.
+     */
+    val availableAccounts: StateFlow<List<AccountData>> = authRepository.availableAccounts
+
+    /**
+     * Indicates whether an account switch operation is currently in progress.
+     * Used to show loading states in the UI during account switching.
+     */
+    private val _accountSwitchInProgress = MutableStateFlow(false)
+    val accountSwitchInProgress: StateFlow<Boolean> = _accountSwitchInProgress.asStateFlow()
+
+    // --- Dialog State Management ---
+
+    private val _dialogState = MutableStateFlow<AuthDialogState>(AuthDialogState.None)
+    val dialogState: StateFlow<AuthDialogState> = _dialogState.asStateFlow()
 
     // --- Authentication Operations ---
 
@@ -119,6 +140,10 @@ class AuthViewModel(
                     }
                     // Clear form on successful login
                     clearLoginForm()
+                    // Close the add account dialog if it's open
+                    if (_dialogState.value is AuthDialogState.AddAccount) {
+                        _dialogState.value = AuthDialogState.None
+                    }
                 }
             )
         }
@@ -198,22 +223,14 @@ class AuthViewModel(
      */
     fun logout() {
         viewModelScope.launch {
-            logger.info("Attempting logout")
-
-            val result = authRepository.logout()
-            result.fold(
-                ifLeft = { error ->
-                    logger.warn("Logout failed: ${error.message}")
-                    errorNotifier.repositoryError(
-                        error = error,
-                        shortMessage = "Logout failed"
-                    )
-                },
-                ifRight = {
-                    logger.info("Logout successful")
-                    clearAllForms()
-                }
-            )
+            authRepository.logout().onLeft { error ->
+                errorNotifier.repositoryError(
+                    error = error,
+                    shortMessage = "Logout failed"
+                )
+            }.onRight {
+                clearAllForms()
+            }
         }
     }
 
@@ -285,8 +302,95 @@ class AuthViewModel(
      * Checks the initial authentication state on app startup.
      */
     suspend fun checkInitialAuthState() {
-        logger.info("Checking initial authentication state")
         authRepository.checkInitialAuthState()
+    }
+
+    // --- Account Management Operations ---
+
+    /**
+     * Switches to a different user account.
+     *
+     * This method changes the active account without requiring the user to log out and log back in.
+     * The authentication state will be automatically updated to reflect the new account, and the
+     * available accounts list will be refreshed to update the "last used" timestamp.
+     *
+     * @param userId The ID of the account to switch to
+     */
+    fun switchAccount(userId: Long) {
+        viewModelScope.launch {
+            _accountSwitchInProgress.value = true
+
+            authRepository.switchAccount(userId)
+                .onLeft { error ->
+                    errorNotifier.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to switch account"
+                    )
+                }
+                .onRight {
+                    // Close dialog on successful switch
+                    _dialogState.value = AuthDialogState.None
+                }
+
+            _accountSwitchInProgress.value = false
+        }
+    }
+
+    /**
+     * Removes an account from local storage.
+     *
+     * This permanently deletes the specified account's stored authentication data.
+     * If the removed account is the currently active account, the user will be logged out
+     * and the authentication state will become [AuthState.Unauthenticated].
+     *
+     * @param userId The ID of the account to remove
+     */
+    fun removeAccount(userId: Long) {
+        viewModelScope.launch {
+            authRepository.removeAccount(userId)
+                .onLeft { error ->
+                    errorNotifier.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to remove account"
+                    )
+                }
+                .onRight {
+                    // Close dialog on successful removal
+                    _dialogState.value = AuthDialogState.None
+                }
+        }
+    }
+
+    // --- Dialog State Management ---
+
+    /**
+     * Opens the account switcher dialog.
+     */
+    fun openAccountSwitcher() {
+        _dialogState.value = AuthDialogState.SwitchAccount
+    }
+
+    /**
+     * Opens the add account dialog.
+     */
+    fun openAddAccount() {
+        _dialogState.value = AuthDialogState.AddAccount
+    }
+
+    /**
+     * Opens the remove account confirmation dialog.
+     *
+     * @param account The account to be removed
+     */
+    fun openRemoveAccountConfirmation(account: AccountData) {
+        _dialogState.value = AuthDialogState.RemoveAccountConfirmation(account)
+    }
+
+    /**
+     * Closes any open authentication dialog.
+     */
+    fun closeDialog() {
+        _dialogState.value = AuthDialogState.None
     }
 
     // --- Form State Updates ---

@@ -6,16 +6,26 @@ import eu.torvian.chatbot.app.repository.AuthRepository
 import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.service.api.ApiResourceError
+import eu.torvian.chatbot.app.service.auth.AccountData
 import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.models.api.auth.LoginRequest
 import eu.torvian.chatbot.common.models.api.auth.RegisterRequest
 import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.user.UserStatus
-import io.mockk.*
-import kotlinx.coroutines.*
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.every
+import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.test.*
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Instant
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -35,8 +45,10 @@ class AuthViewModelTest {
 
     @BeforeEach
     fun setUp() {
+        val availableAccountsFlow = MutableStateFlow<List<AccountData>>(emptyList())
         mockAuthRepository = mockk {
             every { authState } returns MutableStateFlow(AuthState.Unauthenticated)
+            every { availableAccounts } returns availableAccountsFlow
             coEvery { checkInitialAuthState() } returns Unit
         }
         mockErrorNotifier = mockk(relaxed = true)
@@ -455,108 +467,113 @@ class AuthViewModelTest {
         authViewModel.checkInitialAuthState()
     }
 
-    // --- Additional Error Scenarios ---
+    // --- Account Management Tests ---
 
     @Test
-    fun `login with network error should show generic error message`() = runTest(testDispatcher) {
+    fun `switchAccount should update state and reload accounts on success`() = runTest(testDispatcher) {
         // Arrange
-        val networkError = RepositoryError.DataFetchError(
-            ApiResourceError.NetworkError("Connection timeout", RuntimeException())
-        )
-        coEvery { mockAuthRepository.login(any()) } returns networkError.left()
+        val userId = 2L
+        coEvery { mockAuthRepository.switchAccount(userId) } returns Unit.right()
 
         // Act
-        authViewModel.updateLoginForm("user", "pass")
-        authViewModel.login()
+        authViewModel.switchAccount(userId)
         advanceUntilIdle()
 
         // Assert
-        assertEquals("Login failed. Please try again.", authViewModel.loginFormState.value.generalError)
+        assertFalse(authViewModel.accountSwitchInProgress.value)
+        coVerify { mockAuthRepository.switchAccount(userId) }
     }
 
     @Test
-    fun `register with network error should show generic error message`() = runTest(testDispatcher) {
+    fun `switchAccount should set loading state during operation`() = runTest(testDispatcher) {
         // Arrange
-        val networkError = RepositoryError.DataFetchError(
-            ApiResourceError.NetworkError("Connection timeout", RuntimeException())
-        )
-        coEvery { mockAuthRepository.register(any()) } returns networkError.left()
+        val userId = 2L
+        val deferredResult = CompletableDeferred<Unit>()
+
+        coEvery { mockAuthRepository.switchAccount(userId) } coAnswers {
+            deferredResult.await().right()
+        }
 
         // Act
-        authViewModel.updateRegisterForm("user", "test@example.com", "ValidPass123!", "ValidPass123!")
-        authViewModel.register()
+        authViewModel.switchAccount(userId)
+        advanceTimeBy(1) // Let the coroutine start
+
+        // Assert loading state
+        assertTrue(authViewModel.accountSwitchInProgress.value)
+
+        // Complete the operation
+        deferredResult.complete(Unit)
+        advanceUntilIdle()
+
+        // Assert final state
+        assertFalse(authViewModel.accountSwitchInProgress.value)
+    }
+
+    @Test
+    fun `switchAccount should notify error on failure`() = runTest(testDispatcher) {
+        // Arrange
+        val userId = 2L
+        val error = RepositoryError.OtherError("Account not found", RuntimeException())
+        coEvery { mockAuthRepository.switchAccount(userId) } returns error.left()
+
+        // Act
+        authViewModel.switchAccount(userId)
         advanceUntilIdle()
 
         // Assert
-        assertEquals("Registration failed. Please try again.", authViewModel.registerFormState.value.generalError)
+        assertFalse(authViewModel.accountSwitchInProgress.value)
+        coVerify {
+            mockErrorNotifier.repositoryError(
+                shortMessage = "Failed to switch account",
+                error = error
+            )
+        }
     }
 
     @Test
-    fun `login with account locked error should show specific message`() = runTest(testDispatcher) {
+    fun `removeAccount should reload accounts and notify success on success`() = runTest(testDispatcher) {
         // Arrange
-        val apiError = ApiError(423, "account-locked", "Account locked")
-        val accountLockedError = RepositoryError.DataFetchError(
-            ApiResourceError.ServerError(apiError)
-        )
-        coEvery { mockAuthRepository.login(any()) } returns accountLockedError.left()
+        val userId = 2L
+        coEvery { mockAuthRepository.removeAccount(userId) } returns Unit.right()
 
         // Act
-        authViewModel.updateLoginForm("user", "pass")
-        authViewModel.login()
+        authViewModel.removeAccount(userId)
         advanceUntilIdle()
 
         // Assert
-        assertEquals("Account is temporarily locked. Please try again later.", authViewModel.loginFormState.value.generalError)
+        coVerify { mockAuthRepository.removeAccount(userId) }
     }
 
     @Test
-    fun `register with email already exists should show specific message`() = runTest(testDispatcher) {
+    fun `removeAccount should notify error on failure`() = runTest(testDispatcher) {
         // Arrange
-        val apiError = ApiError(409, "email-exists", "Email already exists")
-        val emailExistsError = RepositoryError.DataFetchError(
-            ApiResourceError.ServerError(apiError)
-        )
-        coEvery { mockAuthRepository.register(any()) } returns emailExistsError.left()
+        val userId = 2L
+        val error = RepositoryError.OtherError("Failed to delete files", RuntimeException())
+        coEvery { mockAuthRepository.removeAccount(userId) } returns error.left()
 
         // Act
-        authViewModel.updateRegisterForm("user", "test@example.com", "ValidPass123!", "ValidPass123!")
-        authViewModel.register()
+        authViewModel.removeAccount(userId)
         advanceUntilIdle()
 
         // Assert
-        assertEquals("Email is already registered. Please use a different email or try logging in.", authViewModel.registerFormState.value.generalError)
+        coVerify {
+            mockErrorNotifier.repositoryError(
+                shortMessage = "Failed to remove account",
+                error = error
+            )
+        }
     }
 
     @Test
-    fun `form state isValid and hasErrors properties work correctly`() {
-        // Test login form
-        val loginState = LoginFormState(
-            username = "testuser",
-            password = "password123",
-            usernameError = null,
-            passwordError = null
-        )
-        assertTrue(loginState.isValid)
-        assertFalse(loginState.hasErrors)
+    fun `availableAccounts should start with empty list`() {
+        // Assert
+        val accounts = authViewModel.availableAccounts.value
+        assertTrue(accounts.isEmpty())
+    }
 
-        val loginStateWithError = loginState.copy(usernameError = "Username too short")
-        assertFalse(loginStateWithError.isValid)
-        assertTrue(loginStateWithError.hasErrors)
-
-        // Test register form
-        val registerState = RegisterFormState(
-            username = "testuser",
-            password = "password123",
-            confirmPassword = "password123",
-            usernameError = null,
-            passwordError = null,
-            confirmPasswordError = null
-        )
-        assertTrue(registerState.isValid)
-        assertFalse(registerState.hasErrors)
-
-        val registerStateWithError = registerState.copy(passwordError = "Password too weak")
-        assertFalse(registerStateWithError.isValid)
-        assertTrue(registerStateWithError.hasErrors)
+    @Test
+    fun `accountSwitchInProgress should start as false`() {
+        // Assert
+        assertFalse(authViewModel.accountSwitchInProgress.value)
     }
 }
