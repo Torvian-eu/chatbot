@@ -54,4 +54,10 @@ interface AuthApi {
      * @return Either an [ApiResourceError] on failure or [User] with user details on success
      */
     suspend fun getCurrentUser(): Either<ApiResourceError, User>
+
+    /**
+     * Clears the currently stored token from the in-memory cache.
+     * This is used when the token must be reloaded from storage. For example, when switching accounts
+     */
+    suspend fun clearToken()
 }
