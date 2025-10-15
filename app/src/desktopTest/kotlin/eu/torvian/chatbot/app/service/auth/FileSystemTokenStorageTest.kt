@@ -223,19 +223,24 @@ class FileSystemTokenStorageTest {
     fun `clearTokens should succeed even when no tokens exist`() = runTest {
         val tokenStorage = createTestTokenStorage()
 
-        // Act
+        // Act - now expects to fail since there's no active account
         val result = tokenStorage.clearAuthData()
 
-        // Assert
-        assertTrue(result.isRight())
+        // Assert - should fail with NotFound since there's no active account
+        assertTrue(result.isLeft())
+        assertTrue(result.leftOrNull() is TokenStorageError.NotFound)
     }
 
     @Test
     fun `should handle missing key file gracefully`() = runTest {
         val tokenStorage = createTestTokenStorage()
+        val user = createTestUser()
 
-        // Create only the data file without the key file
-        tokenStorage.testFileSystem.createDirectories(tokenStorage.testDataFilePath.parent!!)
+        // First save an account to make it active
+        tokenStorage.saveAuthData("access", "refresh", Clock.System.now() + 1.hours, user, emptyList())
+
+        // Then corrupt the key file
+        tokenStorage.testFileSystem.delete(tokenStorage.testKeyFilePath)
         tokenStorage.testFileSystem.sink(tokenStorage.testDataFilePath).buffered().use { sink ->
             sink.writeString("encrypted-data")
         }
@@ -251,9 +256,14 @@ class FileSystemTokenStorageTest {
     @Test
     fun `should handle missing data file gracefully`() = runTest {
         val tokenStorage = createTestTokenStorage()
+        val user = createTestUser()
 
-        // Create only the key file without the data file
-        tokenStorage.testFileSystem.createDirectories(tokenStorage.testKeyFilePath.parent!!)
+        // First save an account to make it active
+        tokenStorage.saveAuthData("access", "refresh", Clock.System.now() + 1.hours, user, emptyList())
+
+        // Then corrupt by deleting data file and replacing key file
+        tokenStorage.testFileSystem.delete(tokenStorage.testDataFilePath)
+        tokenStorage.testFileSystem.delete(tokenStorage.testKeyFilePath)
         tokenStorage.testFileSystem.sink(tokenStorage.testKeyFilePath).buffered().use { sink ->
             sink.writeString("""{"wrappedDek":"test","kekVersion":1}""")
         }
@@ -269,14 +279,14 @@ class FileSystemTokenStorageTest {
     @Test
     fun `should handle corrupted metadata file gracefully`() = runTest {
         val tokenStorage = createTestTokenStorage()
+        val user = createTestUser()
 
-        // Create corrupted metadata file
-        tokenStorage.testFileSystem.createDirectories(tokenStorage.testKeyFilePath.parent!!)
+        // First save an account to make it active
+        tokenStorage.saveAuthData("access", "refresh", Clock.System.now() + 1.hours, user, emptyList())
+
+        // Then corrupt the metadata file
         tokenStorage.testFileSystem.sink(tokenStorage.testKeyFilePath).buffered().use { sink ->
             sink.writeString("invalid-json")
-        }
-        tokenStorage.testFileSystem.sink(tokenStorage.testDataFilePath).buffered().use { sink ->
-            sink.writeString("encrypted-data")
         }
 
         // Act
@@ -481,6 +491,342 @@ class FileSystemTokenStorageTest {
         assertTrue(result.isRight())
         assertTrue(tokenStorage.testFileSystem.exists(tokenStorage.testStorageDir))
     }
+
+    // ===== Multi-Account Tests =====
+
+    @Test
+    fun `listStoredAccounts should return empty list when no accounts are stored`() = runTest {
+        val tokenStorage = createTestTokenStorage()
+
+        // Act
+        val result = tokenStorage.listStoredAccounts()
+
+        // Assert
+        assertTrue(result.isRight())
+        assertEquals(0, result.getOrNull()?.size)
+    }
+
+    @Test
+    fun `listStoredAccounts should return all stored accounts`() = runTest {
+        val tokenStorage = createTestTokenStorage()
+
+        // Arrange - save three accounts
+        val user1 = createTestUser(1L, "user1")
+        val user2 = createTestUser(2L, "user2")
+        val user3 = createTestUser(3L, "user3")
+        val expiresAt = Clock.System.now() + 1.hours
+
+        tokenStorage.saveAuthData("access1", "refresh1", expiresAt, user1, emptyList())
+        tokenStorage.saveAuthData("access2", "refresh2", expiresAt, user2, emptyList())
+        tokenStorage.saveAuthData("access3", "refresh3", expiresAt, user3, emptyList())
+
+        // Act
+        val result = tokenStorage.listStoredAccounts()
+
+        // Assert
+        assertTrue(result.isRight())
+        val accounts = result.getOrNull()!!
+        assertEquals(3, accounts.size)
+
+        // Verify all three users are present
+        val userIds = accounts.map { it.user.id }.toSet()
+        assertEquals(setOf(1L, 2L, 3L), userIds, "All three users should be present")
+    }
+
+    @Test
+    fun `getCurrentAccountId should return null when no account is active`() = runTest {
+        val tokenStorage = createTestTokenStorage()
+
+        // Act
+        val result = tokenStorage.getCurrentAccountId()
+
+        // Assert
+        assertTrue(result.isRight())
+        assertEquals(null, result.getOrNull())
+    }
+
+    @Test
+    fun `getCurrentAccountId should return active account after saving`() = runTest {
+        val tokenStorage = createTestTokenStorage()
+        val user = createTestUser(42L, "activeuser")
+
+        // Arrange - save account
+        tokenStorage.saveAuthData("access", "refresh", Clock.System.now() + 1.hours, user, emptyList())
+
+        // Act
+        val result = tokenStorage.getCurrentAccountId()
+
+        // Assert
+        assertTrue(result.isRight())
+        assertEquals(42L, result.getOrNull())
+    }
+
+    @Test
+    fun `switchAccount should switch to existing account`() = runTest {
+        val tokenStorage = createTestTokenStorage()
+
+        // Arrange - save two accounts
+        val user1 = createTestUser(1L, "user1")
+        val user2 = createTestUser(2L, "user2")
+
+        tokenStorage.saveAuthData("access1", "refresh1", Clock.System.now() + 1.hours, user1, emptyList())
+        tokenStorage.saveAuthData("access2", "refresh2", Clock.System.now() + 1.hours, user2, emptyList())
+
+        // User 2 is currently active
+        assertEquals(2L, tokenStorage.getCurrentAccountId().getOrNull())
+
+        // Act - switch to user 1
+        val switchResult = tokenStorage.switchAccount(1L)
+
+        // Assert
+        assertTrue(switchResult.isRight())
+        assertEquals(1L, tokenStorage.getCurrentAccountId().getOrNull())
+
+        // Verify we can access user 1's tokens
+        val accessToken = tokenStorage.getAccessToken()
+        assertTrue(accessToken.isRight())
+        assertEquals("access1", accessToken.getOrNull())
+    }
+
+    @Test
+    fun `switchAccount should fail when account does not exist`() = runTest {
+        val tokenStorage = createTestTokenStorage()
+
+        // Act - try to switch to non-existent account
+        val result = tokenStorage.switchAccount(999L)
+
+        // Assert
+        assertTrue(result.isLeft())
+        assertTrue(result.leftOrNull() is TokenStorageError.NotFound)
+    }
+
+    @Test
+    fun `switchAccount should fail when account exists but data files are missing`() = runTest {
+        val tokenStorage = createTestTokenStorage()
+        val user = createTestUser(1L, "user1")
+
+        // Save account
+        tokenStorage.saveAuthData("access", "refresh", Clock.System.now() + 1.hours, user, emptyList())
+
+        // Delete the data files but leave account in index
+        tokenStorage.testFileSystem.delete(tokenStorage.testKeyFilePath(1L))
+        tokenStorage.testFileSystem.delete(tokenStorage.testDataFilePath(1L))
+
+        // Act - try to switch to account with missing files
+        val result = tokenStorage.switchAccount(1L)
+
+        // Assert
+        assertTrue(result.isLeft())
+        assertTrue(result.leftOrNull() is TokenStorageError.NotFound)
+    }
+
+    @Test
+    fun `removeAccount should remove account and its files`() = runTest {
+        val tokenStorage = createTestTokenStorage()
+
+        // Arrange - save two accounts
+        val user1 = createTestUser(1L, "user1")
+        val user2 = createTestUser(2L, "user2")
+
+        tokenStorage.saveAuthData("access1", "refresh1", Clock.System.now() + 1.hours, user1, emptyList())
+        tokenStorage.saveAuthData("access2", "refresh2", Clock.System.now() + 1.hours, user2, emptyList())
+
+        // Verify both accounts exist
+        assertEquals(2, tokenStorage.listStoredAccounts().getOrNull()?.size)
+
+        // Act - remove user 1
+        val removeResult = tokenStorage.removeAccount(1L)
+
+        // Assert
+        assertTrue(removeResult.isRight())
+
+        // Verify account is removed from index
+        val accounts = tokenStorage.listStoredAccounts().getOrNull()!!
+        assertEquals(1, accounts.size)
+        assertEquals(2L, accounts[0].user.id)
+
+        // Verify files are deleted
+        val userDir = tokenStorage.getUserDirectory(1L)
+        assertTrue(!tokenStorage.testFileSystem.exists(userDir))
+    }
+
+    @Test
+    fun `removeAccount should set activeUserId to null when removing active account`() = runTest {
+        val tokenStorage = createTestTokenStorage()
+        val user = createTestUser(1L, "user1")
+
+        // Arrange - save account
+        tokenStorage.saveAuthData("access", "refresh", Clock.System.now() + 1.hours, user, emptyList())
+
+        // Verify account is active
+        assertEquals(1L, tokenStorage.getCurrentAccountId().getOrNull())
+
+        // Act - remove active account
+        val removeResult = tokenStorage.removeAccount(1L)
+
+        // Assert
+        assertTrue(removeResult.isRight())
+        assertEquals(null, tokenStorage.getCurrentAccountId().getOrNull())
+    }
+
+    @Test
+    fun `removeAccount should keep other account active when removing non-active account`() = runTest {
+        val tokenStorage = createTestTokenStorage()
+
+        // Arrange - save two accounts
+        val user1 = createTestUser(1L, "user1")
+        val user2 = createTestUser(2L, "user2")
+
+        tokenStorage.saveAuthData("access1", "refresh1", Clock.System.now() + 1.hours, user1, emptyList())
+        tokenStorage.saveAuthData("access2", "refresh2", Clock.System.now() + 1.hours, user2, emptyList())
+
+        // User 2 is currently active
+        assertEquals(2L, tokenStorage.getCurrentAccountId().getOrNull())
+
+        // Act - remove user 1 (not active)
+        val removeResult = tokenStorage.removeAccount(1L)
+
+        // Assert
+        assertTrue(removeResult.isRight())
+        // User 2 should still be active
+        assertEquals(2L, tokenStorage.getCurrentAccountId().getOrNull())
+    }
+
+    @Test
+    fun `removeAccount should succeed for non-existent account`() = runTest {
+        val tokenStorage = createTestTokenStorage()
+
+        // Act - remove non-existent account
+        val result = tokenStorage.removeAccount(999L)
+
+        // Assert
+        assertTrue(result.isRight())
+    }
+
+    @Test
+    fun `clearAuthData should remove active account using removeAccount`() = runTest {
+        val tokenStorage = createTestTokenStorage()
+
+        // Arrange - save two accounts
+        val user1 = createTestUser(1L, "user1")
+        val user2 = createTestUser(2L, "user2")
+
+        tokenStorage.saveAuthData("access1", "refresh1", Clock.System.now() + 1.hours, user1, emptyList())
+        tokenStorage.saveAuthData("access2", "refresh2", Clock.System.now() + 1.hours, user2, emptyList())
+
+        // Switch to user 1
+        tokenStorage.switchAccount(1L)
+        assertEquals(1L, tokenStorage.getCurrentAccountId().getOrNull())
+
+        // Act - clear auth data (should remove user 1)
+        val clearResult = tokenStorage.clearAuthData()
+
+        // Assert
+        assertTrue(clearResult.isRight())
+
+        // Verify user 1 is removed but user 2 still exists
+        val accounts = tokenStorage.listStoredAccounts().getOrNull()!!
+        assertEquals(1, accounts.size)
+        assertEquals(2L, accounts[0].user.id)
+
+        // No account is active now
+        assertEquals(null, tokenStorage.getCurrentAccountId().getOrNull())
+    }
+
+    @Test
+    fun `saveAuthData should create user-specific directories`() = runTest {
+        val tokenStorage = createTestTokenStorage()
+
+        // Arrange - save multiple accounts
+        val user1 = createTestUser(1L, "user1")
+        val user2 = createTestUser(2L, "user2")
+
+        // Act
+        tokenStorage.saveAuthData("access1", "refresh1", Clock.System.now() + 1.hours, user1, emptyList())
+        tokenStorage.saveAuthData("access2", "refresh2", Clock.System.now() + 1.hours, user2, emptyList())
+
+        // Assert - verify separate directories exist
+        val user1Dir = tokenStorage.getUserDirectory(1L)
+        val user2Dir = tokenStorage.getUserDirectory(2L)
+
+        assertTrue(tokenStorage.testFileSystem.exists(user1Dir))
+        assertTrue(tokenStorage.testFileSystem.exists(user2Dir))
+
+        assertTrue(tokenStorage.testFileSystem.exists(tokenStorage.testKeyFilePath(1L)))
+        assertTrue(tokenStorage.testFileSystem.exists(tokenStorage.testDataFilePath(1L)))
+        assertTrue(tokenStorage.testFileSystem.exists(tokenStorage.testKeyFilePath(2L)))
+        assertTrue(tokenStorage.testFileSystem.exists(tokenStorage.testDataFilePath(2L)))
+    }
+
+    @Test
+    fun `saveAuthData should update existing account and set it as active`() = runTest {
+        val tokenStorage = createTestTokenStorage()
+
+        // Arrange - save two accounts
+        val user1 = createTestUser(1L, "user1")
+        val user2 = createTestUser(2L, "user2")
+
+        tokenStorage.saveAuthData("access1", "refresh1", Clock.System.now() + 1.hours, user1, emptyList())
+        tokenStorage.saveAuthData("access2", "refresh2", Clock.System.now() + 1.hours, user2, emptyList())
+
+        // User 2 is currently active
+        assertEquals(2L, tokenStorage.getCurrentAccountId().getOrNull())
+
+        // Act - save new tokens for user 1
+        tokenStorage.saveAuthData("new_access1", "new_refresh1", Clock.System.now() + 2.hours, user1, emptyList())
+
+        // Assert - user 1 should now be active
+        assertEquals(1L, tokenStorage.getCurrentAccountId().getOrNull())
+
+        // Verify new tokens are stored
+        assertEquals("new_access1", tokenStorage.getAccessToken().getOrNull())
+
+        // Verify only 2 accounts still exist (no duplicate)
+        assertEquals(2, tokenStorage.listStoredAccounts().getOrNull()?.size)
+    }
+
+    @Test
+    fun `getAccountData and getPermissions should work with multi-account setup`() = runTest {
+        val tokenStorage = createTestTokenStorage()
+
+        // Arrange - save two accounts with different permissions
+        val user1 = createTestUser(1L, "user1")
+        val user2 = createTestUser(2L, "user2")
+        val permissions1 = listOf(Permission(1L, "read", "conversations"))
+        val permissions2 = listOf(
+            Permission(2L, "write", "conversations"),
+            Permission(3L, "delete", "conversations")
+        )
+
+        tokenStorage.saveAuthData("access1", "refresh1", Clock.System.now() + 1.hours, user1, permissions1)
+        tokenStorage.saveAuthData("access2", "refresh2", Clock.System.now() + 1.hours, user2, permissions2)
+
+        // Act - switch to user 1
+        tokenStorage.switchAccount(1L)
+
+        // Assert - verify user 1's data
+        val accountData1 = tokenStorage.getAccountData().getOrNull()!!
+        assertEquals(1L, accountData1.user.id)
+        assertEquals("user1", accountData1.user.username)
+
+        val userPermissions1 = accountData1.permissions
+        assertEquals(1, userPermissions1.size)
+        assertEquals("read", userPermissions1[0].action)
+        assertEquals("conversations", userPermissions1[0].subject)
+
+        // Act - switch to user 2
+        tokenStorage.switchAccount(2L)
+
+        // Assert - verify user 2's data
+        val accountData2 = tokenStorage.getAccountData().getOrNull()!!
+        assertEquals(2L, accountData2.user.id)
+        assertEquals("user2", accountData2.user.username)
+
+        val userPermissions2 = accountData2.permissions
+        assertEquals(2, userPermissions2.size)
+        assertTrue(userPermissions2.any { it.action == "write" && it.subject == "conversations" })
+        assertTrue(userPermissions2.any { it.action == "delete" && it.subject == "conversations" })
+    }
 }
 
 /**
@@ -582,9 +928,12 @@ private class TestFileSystemTokenStorage(
     private val testId = UUID.randomUUID().toString()
     val testStorageDir = Path(System.getProperty("java.io.tmpdir"), "chatbot-fs-test-$testId")
 
-    // Public accessors for testing
-    val testKeyFilePath: Path get() = Path(testStorageDir, "dek.json")
-    val testDataFilePath: Path get() = Path(testStorageDir, "tokens.enc")
+    // Public accessors for testing - now user-specific
+    fun getUserDirectory(userId: Long): Path = Path(testStorageDir, userId.toString())
+    fun testKeyFilePath(userId: Long): Path = Path(getUserDirectory(userId), "dek.json")
+    fun testDataFilePath(userId: Long): Path = Path(getUserDirectory(userId), "tokens.enc")
+    val testKeyFilePath: Path get() = testKeyFilePath(1L) // Default to user 1 for backward compatibility
+    val testDataFilePath: Path get() = testDataFilePath(1L) // Default to user 1 for backward compatibility
 
     // Create the actual FileSystemTokenStorage instance
     private val tokenStorage = FileSystemTokenStorage(
@@ -601,8 +950,25 @@ private class TestFileSystemTokenStorage(
 
     suspend fun getExpiry() = tokenStorage.getExpiry()
 
-    suspend fun saveAuthData(accessToken: String, refreshToken: String, expiresAt: Instant, user: User, permissions: List<Permission> = emptyList()) =
+    suspend fun getAccountData() = tokenStorage.getAccountData()
+
+    suspend fun saveAuthData(
+        accessToken: String,
+        refreshToken: String,
+        expiresAt: Instant,
+        user: User,
+        permissions: List<Permission> = emptyList()
+    ) =
         tokenStorage.saveAuthData(accessToken, refreshToken, expiresAt, user, permissions)
 
     suspend fun clearAuthData() = tokenStorage.clearAuthData()
+
+    // New multi-account methods
+    suspend fun listStoredAccounts() = tokenStorage.listStoredAccounts()
+
+    suspend fun switchAccount(userId: Long) = tokenStorage.switchAccount(userId)
+
+    suspend fun getCurrentAccountId() = tokenStorage.getCurrentAccountId()
+
+    suspend fun removeAccount(userId: Long) = tokenStorage.removeAccount(userId)
 }
