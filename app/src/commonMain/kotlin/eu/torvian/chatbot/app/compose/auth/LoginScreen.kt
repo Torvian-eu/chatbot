@@ -12,6 +12,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import eu.torvian.chatbot.app.service.auth.AccountData
 import eu.torvian.chatbot.app.viewmodel.auth.AuthViewModel
 import eu.torvian.chatbot.app.viewmodel.auth.LoginFormState
 import org.koin.compose.viewmodel.koinViewModel
@@ -28,10 +29,14 @@ fun LoginScreen(
     authViewModel: AuthViewModel = koinViewModel()
 ) {
     val loginFormState by authViewModel.loginFormState.collectAsState()
+    val availableAccounts by authViewModel.availableAccounts.collectAsState()
+    val accountSwitchInProgress by authViewModel.accountSwitchInProgress.collectAsState()
     val scrollState = rememberScrollState()
 
     LoginScreenContent(
         loginFormState = loginFormState,
+        availableAccounts = availableAccounts,
+        accountSwitchInProgress = accountSwitchInProgress,
         scrollState = scrollState,
         onUsernameChange = { username ->
             authViewModel.updateLoginForm(username = username)
@@ -42,18 +47,24 @@ fun LoginScreen(
         onLogin = {
             authViewModel.login()
         },
-        onNavigateToRegister = onNavigateToRegister
+        onNavigateToRegister = onNavigateToRegister,
+        onSwitchAccount = { userId ->
+            authViewModel.switchAccount(userId)
+        }
     )
 }
 
 @Composable
 fun LoginScreenContent(
     loginFormState: LoginFormState,
+    availableAccounts: List<AccountData>,
+    accountSwitchInProgress: Boolean,
     scrollState: ScrollState,
     onUsernameChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
     onLogin: () -> Unit,
-    onNavigateToRegister: () -> Unit
+    onNavigateToRegister: () -> Unit,
+    onSwitchAccount: (Long) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -78,6 +89,33 @@ fun LoginScreenContent(
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(bottom = 32.dp)
         )
+
+        // Available Accounts Section (if any exist)
+        if (availableAccounts.isNotEmpty()) {
+            AvailableAccountsSection(
+                accounts = availableAccounts,
+                accountSwitchInProgress = accountSwitchInProgress,
+                onSwitchAccount = onSwitchAccount,
+                modifier = Modifier.padding(bottom = 24.dp)
+            )
+
+            // Divider with "OR" text
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                HorizontalDivider(modifier = Modifier.weight(1f))
+                Text(
+                    text = "OR",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+                HorizontalDivider(modifier = Modifier.weight(1f))
+            }
+        }
 
         // Login Form
         Card(
