@@ -1,10 +1,8 @@
 package eu.torvian.chatbot.server.ktor.routes
 
-import arrow.core.raise.Raise
 import arrow.core.raise.either
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.api.AccessMode
-import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.resources.GroupResource
 import eu.torvian.chatbot.common.models.api.core.CreateGroupRequest
 import eu.torvian.chatbot.common.models.api.core.RenameGroupRequest
@@ -16,9 +14,6 @@ import eu.torvian.chatbot.server.service.core.error.group.DeleteGroupError
 import eu.torvian.chatbot.server.service.core.error.group.RenameGroupError
 import eu.torvian.chatbot.server.service.core.error.group.toApiError
 import eu.torvian.chatbot.server.service.security.AuthorizationService
-import eu.torvian.chatbot.server.service.security.ResourceType
-import eu.torvian.chatbot.server.service.security.error.ResourceAuthorizationError
-import eu.torvian.chatbot.server.service.security.error.toApiError
 import io.ktor.http.*
 import io.ktor.server.auth.*
 import io.ktor.server.request.*
@@ -82,13 +77,3 @@ fun Route.configureGroupRoutes(groupService: GroupService, authorizationService:
         }
     }
 }
-
-private suspend inline fun Raise<ApiError>.requireGroupAccess(
-    authorizationService: AuthorizationService,
-    userId: Long,
-    groupId: Long,
-    accessMode: AccessMode
-): Unit =
-    withError({ authError: ResourceAuthorizationError -> authError.toApiError() }) {
-        authorizationService.requireAccess(userId, ResourceType.GROUP, groupId, accessMode).bind()
-    }

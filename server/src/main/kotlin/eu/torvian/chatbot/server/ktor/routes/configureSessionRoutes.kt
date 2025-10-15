@@ -1,10 +1,8 @@
 package eu.torvian.chatbot.server.ktor.routes
 
-import arrow.core.raise.Raise
 import arrow.core.raise.either
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.api.AccessMode
-import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.SessionResource
@@ -18,9 +16,6 @@ import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageEr
 import eu.torvian.chatbot.server.service.core.error.message.toApiError
 import eu.torvian.chatbot.server.service.core.error.session.*
 import eu.torvian.chatbot.server.service.security.AuthorizationService
-import eu.torvian.chatbot.server.service.security.ResourceType
-import eu.torvian.chatbot.server.service.security.error.ResourceAuthorizationError
-import eu.torvian.chatbot.server.service.security.error.toApiError
 import io.ktor.http.*
 import io.ktor.server.auth.*
 import io.ktor.server.request.*
@@ -112,6 +107,9 @@ fun Route.configureSessionRoutes(
             val request = call.receive<UpdateSessionModelRequest>()
             val result = either {
                 requireSessionAccess(authorizationService, userId, sessionId, AccessMode.WRITE)
+                request.modelId?.let { modelId ->
+                    requireModelAccess(authorizationService, userId, modelId, AccessMode.READ)
+                }
                 withError({ e: UpdateSessionCurrentModelIdError -> e.toApiError() }) {
                     sessionService.updateSessionCurrentModelId(sessionId, request.modelId).bind()
                 }
@@ -126,6 +124,9 @@ fun Route.configureSessionRoutes(
             val request = call.receive<UpdateSessionSettingsRequest>()
             val result = either {
                 requireSessionAccess(authorizationService, userId, sessionId, AccessMode.WRITE)
+                request.settingsId?.let { settingsId ->
+                    requireSettingsAccess(authorizationService, userId, settingsId, AccessMode.READ)
+                }
                 withError({ e: UpdateSessionCurrentSettingsIdError -> e.toApiError() }) {
                     sessionService.updateSessionCurrentSettingsId(sessionId, request.settingsId).bind()
                 }
@@ -154,6 +155,9 @@ fun Route.configureSessionRoutes(
             val request = call.receive<UpdateSessionGroupRequest>()
             val result = either {
                 requireSessionAccess(authorizationService, userId, sessionId, AccessMode.WRITE)
+                request.groupId?.let { groupId ->
+                    requireGroupAccess(authorizationService, userId, groupId, AccessMode.READ)
+                }
                 withError({ e: UpdateSessionGroupIdError -> e.toApiError() }) {
                     sessionService.updateSessionGroupId(sessionId, request.groupId).bind()
                 }
@@ -290,13 +294,3 @@ fun Route.configureSessionRoutes(
         }
     } // End authenticate block
 }
-
-private suspend inline fun Raise<ApiError>.requireSessionAccess(
-    authorizationService: AuthorizationService,
-    userId: Long,
-    sessionId: Long,
-    accessMode: AccessMode
-) =
-    withError({ rae: ResourceAuthorizationError -> rae.toApiError() }) {
-        authorizationService.requireAccess(userId, ResourceType.SESSION, sessionId, accessMode).bind()
-    }
