@@ -70,4 +70,8 @@ class KtorAuthApiClient(
             authenticatedClient.get(AuthResource.Me()).body<User>()
         }
     }
+
+    override suspend fun clearToken() {
+        authenticatedClient.authProvider<BearerAuthProvider>()?.clearToken()
+    }
 }

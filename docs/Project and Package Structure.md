@@ -337,6 +337,7 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   ├── ChatScreen.kt # Main chat interface (displays session list, chat messages, input area)
 │   ├── ChatScreenContent.kt # Stateless content composable for chat interface
 │   ├── SettingsScreen.kt # Settings configuration interface (providers, models, settings)
+│   ├── UserMenu.kt   # User menu composable
 │   ├── admin/        # Admin UI components
 │   │   ├── AdminScreen.kt
 │   │   ├── usergroups/ # User group management UI components
@@ -423,6 +424,14 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   │       ├── KtorChatApiClient.kt
 │   │       ├── KtorGroupApiClient.kt
 │   │       └── ...
+│   ├── auth/         # Auth services (token storage, account management, http client)
+│   │   ├── AccountData.kt # Account data model (for local storage)
+│   │   ├── AuthenticationFailureEvent.kt # Authentication failure event
+│   │   ├── createAuthenticatedHttpClient.kt # Authenticated HTTP client creation
+│   │   ├── FilePermissions.kt # File permissions utility
+│   │   ├── FileSystemTokenStorage.kt # File system-based token storage implementation
+│   │   ├── TokenStorage.kt  # Token storage interface
+│   │   └── TokenStorageError.kt # Token storage error hierarchy
 │   └── misc/          # Miscellaneous frontend services
 │       └── EventBus.kt  # Event bus for frontend events
 ├── utils/            # Utility classes
@@ -440,6 +449,7 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
     │   ├── UserManagementState.kt      # State for user management UI
     │   └── UserManagementViewModel.kt  # ViewModel for admin user management
     ├── auth/
+    │   ├── AuthDialogState.kt # Auth dialog state
     │   └── AuthViewModel.kt  # Authentication ViewModel
     ├── chat/
     │   ├── ChatViewModel.kt  # Chat ViewModel (manages chat session state)

@@ -7,8 +7,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
-import androidx.compose.material.icons.automirrored.filled.ExitToApp
-import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -20,14 +18,15 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import eu.torvian.chatbot.app.compose.admin.AdminScreen
+import eu.torvian.chatbot.app.compose.auth.AuthDialogs
+import eu.torvian.chatbot.app.compose.auth.LoginScreen
+import eu.torvian.chatbot.app.compose.auth.RegisterScreen
 import eu.torvian.chatbot.app.compose.common.OverflowTooltipText
 import eu.torvian.chatbot.app.compose.permissions.RequiresAnyPermission
 import eu.torvian.chatbot.app.compose.settings.SettingsScreen
 import eu.torvian.chatbot.app.compose.snackbar.SharedSnackbar
 import eu.torvian.chatbot.app.compose.snackbar.SnackbarVisualsWithError
-import eu.torvian.chatbot.app.domain.navigation.Admin
-import eu.torvian.chatbot.app.domain.navigation.Chat
-import eu.torvian.chatbot.app.domain.navigation.Settings
+import eu.torvian.chatbot.app.domain.navigation.*
 import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.app_name
 import eu.torvian.chatbot.app.repository.AuthState
@@ -56,9 +55,21 @@ fun MainApplicationFlow(
     val chatViewModel: ChatViewModel = koinViewModel()
     val scope = rememberCoroutineScope()
 
+    // Collect account switching state
+    val availableAccounts by authViewModel.availableAccounts.collectAsState()
+    val accountSwitchInProgress by authViewModel.accountSwitchInProgress.collectAsState()
+    val dialogState by authViewModel.dialogState.collectAsState()
+
     // Load initial data for authenticated user (improved data loading)
     LaunchedEffect(authState.userId) {
         sessionListViewModel.loadSessionsAndGroups()
+        navController.navigate(Chat) {
+            popUpTo(navController.graph.findStartDestination().id) {
+                saveState = true
+            }
+            launchSingleTop = true
+            restoreState = true
+        }
     }
 
     MaterialTheme(colorScheme = lightColorScheme()) {
@@ -73,8 +84,21 @@ fun MainApplicationFlow(
                     actions = {
                         UserMenu(
                             username = authState.username,
+                            availableAccounts = availableAccounts,
+                            accountSwitchInProgress = accountSwitchInProgress,
+                            onSwitchAccount = { authViewModel.openAccountSwitcher() },
+                            onAddAccount = { authViewModel.openAddAccount() },
                             onLogout = {
                                 scope.launch { authViewModel.logout() }
+                            },
+                            onLogin = {
+                                navController.navigate(Login) {
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
                             }
                         )
                     },
@@ -159,61 +183,43 @@ fun MainApplicationFlow(
                     composable<Admin> {
                         AdminScreen(authState = authState)
                     }
+                    composable<Login> {
+                        LoginScreen(
+                            onNavigateToRegister = {
+                                navController.navigate(Register) {
+                                    // Don't add to back stack to prevent back navigation to login
+                                    popUpTo(Login) { inclusive = true }
+                                }
+                            },
+                            authViewModel = authViewModel
+                        )
+                    }
+                    composable<Register> {
+                        RegisterScreen(
+                            onNavigateToLogin = {
+                                navController.navigate(Login) {
+                                    popUpTo(Register) { inclusive = true }
+                                }
+                            },
+                            onRegistrationSuccess = {
+                                navController.navigate(Login) {
+                                    popUpTo(Register) { inclusive = true }
+                                }
+                            },
+                            authViewModel = authViewModel
+                        )
+                    }
                 }
             }
         }
-    }
-}
 
-/**
- * User menu dropdown for authenticated users.
- */
-@Composable
-private fun UserMenu(
-    username: String,
-    onLogout: () -> Unit
-) {
-    var expanded by remember { mutableStateOf(false) }
-
-    Box {
-        IconButton(onClick = { expanded = true }) {
-            Icon(
-                imageVector = Icons.Default.AccountCircle,
-                contentDescription = "User menu"
-            )
-        }
-
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
-        ) {
-            // User info header
-            DropdownMenuItem(
-                text = {
-                    Text(
-                        text = username,
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                },
-                onClick = { /* Future: navigate to profile */ },
-                leadingIcon = {
-                    Icon(Icons.Default.AccountCircle, contentDescription = null)
-                }
-            )
-
-            HorizontalDivider()
-
-            // Logout option
-            DropdownMenuItem(
-                text = { Text("Logout") },
-                onClick = {
-                    expanded = false
-                    onLogout()
-                },
-                leadingIcon = {
-                    Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null)
-                }
-            )
-        }
+        // Render authentication dialogs
+        AuthDialogs(
+            dialogState = dialogState,
+            availableAccounts = availableAccounts,
+            currentAuthState = authState,
+            accountSwitchInProgress = accountSwitchInProgress,
+            authViewModel = authViewModel
+        )
     }
 }

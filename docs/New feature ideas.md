@@ -43,20 +43,24 @@ The user should be able to configure this in their profile. (Requires: user acco
 
 ### Allow user to see LLM metadata for assistant responses
 
-### Allow user to quickly scroll to the bottom of the messages list
+### (done) Allow user to quickly scroll to the bottom of the messages list
 
-### Allow user to switch accounts without logging out (requires: user accounts feature)
+### (done) Allow user to switch accounts without logging out (requires: user accounts feature)
 
 ### Allow admin to create new accounts for other users. (requires: user accounts feature)
 Users will be forced to change their password on first login.
+
+### Only allow connections to the server over HTTPS.
+For security, the server should only be accessible over HTTPS, and not HTTP. This applies to connections over the internet, as well as local network connections.
 
 ---
 
 ## Intermediate features
 
-### User accounts
+### (done) User accounts
 Each user has their own set of credentials, models, settings, and chat history. Some things could be shared between users, such as public providers, models and settings. Certain users could be assigned special privileges, such as the ability to manage other users, or add public providers, models and settings. There must be at least one admin user, who has all privileges (or has at least the capability to assign privileges to theirself and other users)
 
+### Chat message content formatting (Markdown, HTML, etc.)
 ---
 
 ## Advanced features
@@ -247,7 +251,7 @@ Here are detailed user stories for the new feature ideas, following the format a
     *   A "Show Metadata" button or similar UI element is available for assistant messages.
     *   Clicking the button displays a panel or dialog with the assistant message's metadata.
 
-### NF.S17 - Quickly scroll to the bottom of the messages list
+### (done) NF.S17 - Quickly scroll to the bottom of the messages list
 *   **Description:** As a user, I want to be able to quickly scroll to the bottom of the messages list to see the latest messages, so I can easily follow the conversation.
 *   **Estimate:** S
 *   **Acceptance Criteria:**
@@ -271,7 +275,7 @@ Here are detailed user stories for the new feature ideas, following the format a
     *   Clicking the "Copy Branch" button copies the content of the currently visible thread branch to the clipboard.
     *   A brief visual confirmation (e.g., a "Copied!" tooltip) is shown to the user.
 
-### NF.S20 - Switch Between User Accounts
+### (done) NF.S20 - Switch Between User Accounts
 *   **Description:** As a user, I want to be able to switch between my personal account and any other accounts I have access to (for instance, admin account), without logging out, so I can easily switch between different personas or roles within the application.
 *   **Estimate:** L
 *   **Acceptance Criteria:**
@@ -279,15 +283,23 @@ Here are detailed user stories for the new feature ideas, following the format a
     *   Clicking the "Switch Account" button displays a list of available accounts.
     *   Selecting an account does not log out the current user but simply switches the active account context.
 
+### NF.S21 - Secure Communication with Server
+*   **Description:** As a user, I want all communication between the client and server to be encrypted, so my data is protected from interception.
+*   **Estimate:** M
+*   **Acceptance Criteria:**
+    *   All communication between the client and server is encrypted using HTTPS.
+    *   The server has a valid SSL/TLS certificate.
+    *   The client verifies the server's certificate to prevent man-in-the-middle attacks.
+    *   For local network (LAN) connections only: On first connection to the server, the client displays a warning if the server's certificate is self-signed. The user must confirm they trust the certificate before proceeding. The client stores the certificate for future use.
 ---
 
 ## New Features: Intermediate
 
-### NF.E1 - User Accounts and Permissions (Epic)
+### (done) NF.E1 - User Accounts and Permissions (Epic)
 *   **Description:** This epic covers the foundational work for implementing a multi-user environment where each user has their own secure account, distinct chat history, personal configurations, and definable privileges. It also addresses the sharing of public resources across users and robust administration capabilities.
 *   **Estimate:** XL
 
-### NF.E1.S1 - Register and Log In to Personal Account
+#### NF.E1.S1 - Register and Log In to Personal Account
 *   **Description:** As a user, I want to register for a new account with unique credentials and subsequently log in, so that my chat history, personal model configurations, and settings are private, securely stored, and distinct from other users of the application.
 *   **Estimate:** L
 *   **Acceptance Criteria:**
@@ -299,7 +311,7 @@ Here are detailed user stories for the new feature ideas, following the format a
     *   Passwords are securely hashed and stored (not plaintext).
     *   There is a clear indication in the UI of the currently logged-in user.
 
-### NF.E1.S2 - Manage User Accounts and Privileges (Admin)
+#### NF.E1.S2 - Manage User Accounts and Privileges (Admin)
 *   **Description:** As an administrator, I want to view, create, edit, and delete user accounts, and assign specific roles or privileges (e.g., create public resources, manage other users' permissions), so I can control access levels and administrative capabilities across the application.
 *   **Estimate:** L
 *   **Dependencies:** NF.E1.S1 - Register and Log In to Personal Account
@@ -311,7 +323,7 @@ Here are detailed user stories for the new feature ideas, following the format a
     *   Admins can delete user accounts (with confirmation), ensuring all associated user data is handled according to policy.
     *   At least one admin user is guaranteed to exist or be created during initial setup.
 
-### NF.E1.S3 - Access Shared Public Resources
+#### NF.E1.S3 - Access Shared Public Resources
 *   **Description:** As a user, I want certain application resources, such as specific LLM providers, models, or settings profiles, to be marked as "public" and accessible to all users, so I don't have to reconfigure commonly used or institutionally provided resources myself.
 *   **Estimate:** M
 *   **Dependencies:** NF.E1.S2 - Manage User Accounts and Privileges (Admin)
@@ -321,9 +333,16 @@ Here are detailed user stories for the new feature ideas, following the format a
     *   All users, regardless of their individual account, can view and select public LLM providers, models, and settings for their chat sessions.
     *   Standard users cannot edit or delete public resources.
 
+### NF.SM1 - Chat message content rendering support for Markdown and other formats
+*   **Description:** As a user, I want chat message content to support rendering of Markdown and other formats, so I can read assistant responses with formatting, links, and other rich content.
+*   **Estimate:** M
+*   **Acceptance Criteria:**
+    *   Chat message content supports rendering of Markdown and other formats.
+    *   The UI provides a toggle to enable/disable Markdown rendering.
+
 ## New Features: Advanced
 
-### NF.S16 - Define and Register Custom LLM Tools
+### NF.SA1 - Define and Register Custom LLM Tools
 *   **Description:** As an advanced user or developer, I want to define and register custom external functions or API calls as "tools" with the server, providing their schema and description, so that compatible LLMs can discover and invoke these tools to extend their capabilities (e.g., web search, custom data retrieval).
 *   **Estimate:** L
 *   **Acceptance Criteria:**
@@ -333,7 +352,7 @@ Here are detailed user stories for the new feature ideas, following the format a
     *   Registered tools are persisted on the server.
     *   The server exposes a mechanism for LLMs to query available tools and their schemas.
 
-### NF.S17 - LLM Agent Automated Tool Use
+### NF.SA2 - LLM Agent Automated Tool Use
 *   **Description:** As a user, when interacting with an LLM that has access to configured tools (NF.S16), I want it to automatically identify and use the appropriate tools to perform actions or retrieve real-world information that is relevant to my requests, so I receive more accurate, dynamic, and action-oriented responses without manually invoking tools.
 *   **Estimate:** L
 *   **Dependencies:** NF.S16 - Define and Register Custom LLM Tools
@@ -345,7 +364,7 @@ Here are detailed user stories for the new feature ideas, following the format a
     *   The LLM generates a final response, potentially incorporating or summarizing the tool's output.
     *   The UI indicates when a tool is being used by the LLM (e.g., "LLM is using [Tool Name]...").
 
-### NF.S18 - Manage Structured Knowledge Base
+### NF.SA3 - Manage Structured Knowledge Base
 *   **Description:** As an advanced user, I want to import, view, and manage a structured knowledge base within the server, consisting of entities and relationships between them, so I can provide the LLM with specific, domain-relevant factual information that goes beyond its general training data.
 *   **Estimate:** L
 *   **Acceptance Criteria:**
@@ -354,7 +373,7 @@ Here are detailed user stories for the new feature ideas, following the format a
     *   A UI is available to view and potentially edit (basic CRUD) the loaded entities and relationships.
     *   The knowledge base is persisted on the server.
 
-### NF.S19 - LLM Agent Query Knowledge Base
+### NF.SA4 - LLM Agent Query Knowledge Base
 *   **Description:** As a user, when I ask questions that rely on factual information present within the loaded knowledge base (NF.S18), I want the LLM to query and utilize that knowledge base to provide specific and contextually rich answers, including traversing relationships to give deeper insights (e.g., a "level 2" query for related entities).
 *   **Estimate:** L
 *   **Dependencies:** NF.S18 - Manage Structured Knowledge Base
@@ -365,7 +384,7 @@ Here are detailed user stories for the new feature ideas, following the format a
     *   The LLM incorporates the retrieved knowledge into its final response, explicitly citing information from the knowledge base when appropriate.
     *   For example, asking "Tell me about John" after loading a knowledge base containing "John is 30 years old" and "John lives in New York" will result in the LLM stating those facts.
 
-### NF.S20 - LLM Agent Control over Chat Session Management
+### NF.SA5 - LLM Agent Control over Chat Session Management
 *   **Description:** As a user, I want to be able to issue natural language commands to the LLM agent to perform application-level actions related to chat session management (e.g., "Summarize this session," "Create a new session about [topic]," "Delete all messages before [date] in this chat"), so I can manage my conversations more intuitively without direct manual UI interaction.
 *   **Estimate:** L
 *   **Acceptance Criteria:**
@@ -375,7 +394,7 @@ Here are detailed user stories for the new feature ideas, following the format a
     *   The LLM agent provides feedback to the user regarding the execution of the command (e.g., "Session 'New Topic' created successfully.").
     *   Appropriate confirmation dialogs are triggered for destructive actions (e.g., "Are you sure you want to delete messages?").
 
-### NF.S21 - LLM Agent Control over Application Configuration
+### NF.SA6 - LLM Agent Control over Application Configuration
 *   **Description:** As a user, I want to issue natural language commands to the LLM agent to manage application settings and configurations (e.g., "Show me available models," "Set the temperature for this session to 0.7," "Select OpenAI as the provider for this session"), so I can manage various aspects of the application directly through conversation.
 *   **Estimate:** L
 *   **Acceptance Criteria:**

@@ -7,13 +7,7 @@ import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
-import eu.torvian.chatbot.common.models.api.core.CreateSessionRequest
-import eu.torvian.chatbot.common.models.api.core.ProcessNewMessageRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionGroupRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionLeafMessageRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionModelRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionNameRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionSettingsRequest
+import eu.torvian.chatbot.common.models.api.core.*
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
@@ -142,8 +136,12 @@ class SessionRoutesTest {
                 Table.ASSISTANT_MESSAGES,
                 Table.SESSION_CURRENT_LEAF,
                 Table.USERS,
+                Table.ROLES, Table.USER_ROLE_ASSIGNMENTS,
                 Table.USER_SESSIONS,
                 Table.CHAT_SESSION_OWNERS,
+                Table.CHAT_GROUP_OWNERS,
+                Table.LLM_MODEL_OWNERS,
+                Table.MODEL_SETTINGS_OWNERS
             )
         )
 
@@ -432,7 +430,8 @@ class SessionRoutesTest {
         // Arrange
         testDataManager.insertChatSession(testSession)
         testDataManager.insertSessionOwnership(testSession.id, authHelper.defaultTestUser.id)
-        val newModelId = 2L
+        testDataManager.insertModelOwnership(testModel2.id, authHelper.defaultTestUser.id)
+        val newModelId = testModel2.id
         val updateRequest = UpdateSessionModelRequest(modelId = newModelId)
 
         // Act
@@ -459,6 +458,7 @@ class SessionRoutesTest {
         // Arrange
         testDataManager.insertChatSession(testSession)
         testDataManager.insertSessionOwnership(testSession.id, authHelper.defaultTestUser.id)
+        testDataManager.insertSettingsOwnership(testSettings3.id, authHelper.defaultTestUser.id)
         val newSettingsId = testSettings3.id // Use settings that belong to the same model as the session
         val updateRequest = UpdateSessionSettingsRequest(settingsId = newSettingsId)
 
@@ -486,7 +486,8 @@ class SessionRoutesTest {
         // Arrange
         testDataManager.insertChatSession(testSession)
         testDataManager.insertSessionOwnership(testSession.id, authHelper.defaultTestUser.id)
-        val newGroupId = 2L
+        testDataManager.insertGroupOwnership(testGroup2.id, authHelper.defaultTestUser.id)
+        val newGroupId = testGroup2.id
         val updateRequest = UpdateSessionGroupRequest(groupId = newGroupId)
 
         // Act
@@ -684,11 +685,12 @@ class SessionRoutesTest {
         testDataManager.insertSessionOwnership(testSession.id, otherUser.id)
 
         // Act
-        val response = client.put(href(SessionResource.ById.Name(parent = SessionResource.ById(sessionId = testSession.id)))) {
-            contentType(ContentType.Application.Json)
-            setBody(UpdateSessionNameRequest(name = "New Name"))
-            authenticate(authToken)
-        }
+        val response =
+            client.put(href(SessionResource.ById.Name(parent = SessionResource.ById(sessionId = testSession.id)))) {
+                contentType(ContentType.Application.Json)
+                setBody(UpdateSessionNameRequest(name = "New Name"))
+                authenticate(authToken)
+            }
 
         // Assert
         assertEquals(HttpStatusCode.Forbidden, response.status)
@@ -709,11 +711,12 @@ class SessionRoutesTest {
         val updateRequest = UpdateSessionModelRequest(modelId = 2L)
 
         // Act
-        val response = client.put(href(SessionResource.ById.Model(parent = SessionResource.ById(sessionId = testSession.id)))) {
-            contentType(ContentType.Application.Json)
-            setBody(updateRequest)
-            authenticate(authToken)
-        }
+        val response =
+            client.put(href(SessionResource.ById.Model(parent = SessionResource.ById(sessionId = testSession.id)))) {
+                contentType(ContentType.Application.Json)
+                setBody(updateRequest)
+                authenticate(authToken)
+            }
 
         // Assert
         assertEquals(HttpStatusCode.Forbidden, response.status)
@@ -734,11 +737,12 @@ class SessionRoutesTest {
         val updateRequest = UpdateSessionSettingsRequest(settingsId = testSettings3.id)
 
         // Act
-        val response = client.put(href(SessionResource.ById.Settings(parent = SessionResource.ById(sessionId = testSession.id)))) {
-            contentType(ContentType.Application.Json)
-            setBody(updateRequest)
-            authenticate(authToken)
-        }
+        val response =
+            client.put(href(SessionResource.ById.Settings(parent = SessionResource.ById(sessionId = testSession.id)))) {
+                contentType(ContentType.Application.Json)
+                setBody(updateRequest)
+                authenticate(authToken)
+            }
 
         // Assert
         assertEquals(HttpStatusCode.Forbidden, response.status)
@@ -759,11 +763,12 @@ class SessionRoutesTest {
         val updateRequest = UpdateSessionGroupRequest(groupId = 42L)
 
         // Act
-        val response = client.put(href(SessionResource.ById.Group(parent = SessionResource.ById(sessionId = testSession.id)))) {
-            contentType(ContentType.Application.Json)
-            setBody(updateRequest)
-            authenticate(authToken)
-        }
+        val response =
+            client.put(href(SessionResource.ById.Group(parent = SessionResource.ById(sessionId = testSession.id)))) {
+                contentType(ContentType.Application.Json)
+                setBody(updateRequest)
+                authenticate(authToken)
+            }
 
         // Assert
         assertEquals(HttpStatusCode.Forbidden, response.status)
@@ -787,11 +792,12 @@ class SessionRoutesTest {
         val updateRequest = UpdateSessionLeafMessageRequest(leafMessageId = testAssistantMessage.id)
 
         // Act
-        val response = client.put(href(SessionResource.ById.LeafMessage(parent = SessionResource.ById(sessionId = testSession.id)))) {
-            contentType(ContentType.Application.Json)
-            setBody(updateRequest)
-            authenticate(authToken)
-        }
+        val response =
+            client.put(href(SessionResource.ById.LeafMessage(parent = SessionResource.ById(sessionId = testSession.id)))) {
+                contentType(ContentType.Application.Json)
+                setBody(updateRequest)
+                authenticate(authToken)
+            }
 
         // Assert
         assertEquals(HttpStatusCode.Forbidden, response.status)
@@ -812,11 +818,12 @@ class SessionRoutesTest {
         val processRequest = ProcessNewMessageRequest(content = "Hi", parentMessageId = null, isStreaming = false)
 
         // Act
-        val response = client.post(href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = testSession.id)))) {
-            contentType(ContentType.Application.Json)
-            setBody(processRequest)
-            authenticate(authToken)
-        }
+        val response =
+            client.post(href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = testSession.id)))) {
+                contentType(ContentType.Application.Json)
+                setBody(processRequest)
+                authenticate(authToken)
+            }
 
         // Assert
         assertEquals(HttpStatusCode.Forbidden, response.status)

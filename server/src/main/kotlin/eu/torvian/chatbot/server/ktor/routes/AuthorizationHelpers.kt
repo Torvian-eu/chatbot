@@ -64,6 +64,44 @@ suspend inline fun Raise<ApiError>.requireAllPermissions(
 }
 
 /**
+ * Helper function to require access to a group resource.
+ *
+ * @param authorizationService The authorization service to use
+ * @param userId The ID of the user requesting access
+ * @param groupId The ID of the group resource
+ * @param accessMode The access mode required (READ or WRITE)
+ */
+suspend inline fun Raise<ApiError>.requireGroupAccess(
+    authorizationService: AuthorizationService,
+    userId: Long,
+    groupId: Long,
+    accessMode: AccessMode
+) {
+    withError({ authError: ResourceAuthorizationError -> authError.toApiError() }) {
+        authorizationService.requireAccess(userId, ResourceType.GROUP, groupId, accessMode).bind()
+    }
+}
+
+/**
+ * Helper function to require access to a session resource.
+ *
+ * @param authorizationService The authorization service to use
+ * @param userId The ID of the user requesting access
+ * @param sessionId The ID of the session resource
+ * @param accessMode The access mode required (READ or WRITE)
+ */
+suspend inline fun Raise<ApiError>.requireSessionAccess(
+    authorizationService: AuthorizationService,
+    userId: Long,
+    sessionId: Long,
+    accessMode: AccessMode
+) {
+    withError({ rae: ResourceAuthorizationError -> rae.toApiError() }) {
+        authorizationService.requireAccess(userId, ResourceType.SESSION, sessionId, accessMode).bind()
+    }
+}
+
+/**
  * Helper function to require access to a provider resource.
  *
  * @param authorizationService The authorization service to use
