@@ -21,6 +21,7 @@ dependencies {
     implementation(libs.bundles.exposed)         // Exposed ORM for database handling
     implementation(libs.bundles.log4j)           // Logging with Log4j
     implementation(libs.bundles.koin)            // Koin dependency injection
+    implementation(libs.bundles.bouncycastle)    // Bouncy Castle for certificate operations
 
     // Individual libraries
     implementation(libs.serialization.json)           // KotlinX Serialization JSON
