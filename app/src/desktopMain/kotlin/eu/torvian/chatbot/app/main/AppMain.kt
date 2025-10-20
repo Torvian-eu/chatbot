@@ -28,9 +28,10 @@ fun main() {
     logger.info("Base user data storage path: $baseUserDataStoragePath")
 
     val appConfig = AppConfig(
-        serverUrl = "http://localhost:8080",
+        serverUrl = "https://localhost:8443",
         baseUserDataStoragePath = baseUserDataStoragePath.toString(),
-        tokenStorageDir = "tokens"
+        tokenStorageDir = "tokens",
+        certificateStorageDir = "certs"
     )
 
     val encryptionConfig = EncryptionConfig(
