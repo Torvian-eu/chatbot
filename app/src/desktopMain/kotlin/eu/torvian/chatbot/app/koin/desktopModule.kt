@@ -3,6 +3,8 @@ package eu.torvian.chatbot.app.koin
 import eu.torvian.chatbot.app.main.AppConfig
 import eu.torvian.chatbot.app.service.auth.FileSystemTokenStorage
 import eu.torvian.chatbot.app.service.auth.TokenStorage
+import eu.torvian.chatbot.app.service.security.CertificateStorage
+import eu.torvian.chatbot.app.service.security.FileSystemCertificateStorage
 import eu.torvian.chatbot.common.security.AESCryptoProvider
 import eu.torvian.chatbot.common.security.CryptoProvider
 import eu.torvian.chatbot.common.security.EncryptionConfig
@@ -27,6 +29,12 @@ fun desktopModule(appConfig: AppConfig, encryptionConfig: EncryptionConfig) = mo
         FileSystemTokenStorage(
             cryptoProvider = get(),
             storageDirectoryPath = Path(appConfig.baseUserDataStoragePath, appConfig.tokenStorageDir).toString()
+        )
+    }
+
+    single<CertificateStorage> {
+        FileSystemCertificateStorage(
+            storageDirectoryPath = Path(appConfig.baseUserDataStoragePath, appConfig.certificateStorageDir).toString()
         )
     }
 }
