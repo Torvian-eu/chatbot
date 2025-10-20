@@ -28,6 +28,7 @@ dependencies {
     implementation(libs.coroutines.core)              // KotlinX Coroutines Core
     implementation(libs.kotlinx.datetime)             // KotlinX DateTime
     implementation(libs.ktor.serialization.json)      // Ktor JSON serialization support
+    implementation(libs.ktor.network.tls.certificates) // Ktor TLS certificates for SSL/HTTPS
     implementation(libs.sqlite.jdbc)                  // SQLite JDBC Driver
     implementation(libs.jbcrypt)                      // Password hashing library
     implementation(libs.typesafe.config)              // Typesafe Config for configuration
