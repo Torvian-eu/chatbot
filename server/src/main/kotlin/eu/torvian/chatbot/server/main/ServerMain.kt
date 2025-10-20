@@ -1,5 +1,7 @@
 package eu.torvian.chatbot.server.main
 
+import eu.torvian.chatbot.server.domain.config.SslConfig
+import eu.torvian.chatbot.server.service.security.DefaultCertificateManager
 import kotlinx.coroutines.runBlocking
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
@@ -9,13 +11,29 @@ import java.io.InputStreamReader
 val logger: Logger = LogManager.getLogger("ServerMain")
 
 /**
- * Main entry point for the **standalone** chatbot server application.
+ * Main entry point for the chatbot server.
  * Sets up logging and starts the server.
  */
 fun main() {
     // TODO: Load server config from application.conf
-    val serverConfig = ServerConfig("http", "localhost", 8080, "")
-    val serverControlService = ServerControlServiceImpl(serverConfig)
+    val sslConfig = SslConfig(
+        enabled = true,
+        port = 8443,
+        keystorePath = "keystore.jks",
+        keystorePassword = System.getenv("SSL_KEYSTORE_PASSWORD") ?: "changeit",
+        keyAlias = "serverKey",
+        keyPassword = System.getenv("SSL_KEY_PASSWORD") ?: "changeit",
+        generateSelfSigned = true
+    )
+    val serverConfig = ServerConfig(
+        host = "localhost",
+        port = 8080, // HTTP port
+        path = "",
+        sslConfig = sslConfig,
+        allowHttpAndHttps = false // Disable HTTP connector
+    )
+    val certificateManager = DefaultCertificateManager(sslConfig)
+    val serverControlService = ServerControlServiceImpl(serverConfig, certificateManager)
 
     try {
         runBlocking {
@@ -61,4 +79,3 @@ fun main() {
         logger.error("An unhandled error occurred: ${e.message}", e)
     }
 }
-

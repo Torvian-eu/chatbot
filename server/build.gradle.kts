@@ -9,6 +9,7 @@ description = "Central server module for the chatbot application"
 plugins {
     id("common-module-convention")  // Apply custom convention plugin
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.ktor)
     application
 }
 
