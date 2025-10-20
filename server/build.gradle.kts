@@ -34,6 +34,7 @@ dependencies {
     implementation(libs.jbcrypt)                      // Password hashing library
     implementation(libs.typesafe.config)              // Typesafe Config for configuration
     implementation(libs.arrow.core)                   // Arrow Core for functional programming
+    implementation(libs.hikaricp)                     // HikariCP for connection pooling
 
     // Testing dependencies
     testImplementation(libs.bundles.ktor.server.test)  // Ktor server testing
