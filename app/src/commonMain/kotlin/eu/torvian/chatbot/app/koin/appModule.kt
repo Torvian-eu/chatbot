@@ -6,6 +6,7 @@ import eu.torvian.chatbot.app.service.api.*
 import eu.torvian.chatbot.app.service.api.ktor.*
 import eu.torvian.chatbot.app.service.auth.createAuthenticatedHttpClient
 import eu.torvian.chatbot.app.service.misc.EventBus
+import eu.torvian.chatbot.app.service.security.CertificateTrustService
 import eu.torvian.chatbot.app.viewmodel.ModelConfigViewModel
 import eu.torvian.chatbot.app.viewmodel.ProviderConfigViewModel
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
@@ -23,6 +24,7 @@ import eu.torvian.chatbot.app.viewmodel.common.CoroutineScopeProvider
 import eu.torvian.chatbot.app.viewmodel.common.DefaultCoroutineScopeProvider
 import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
 import io.ktor.client.*
+import io.ktor.client.plugins.logging.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.Json
@@ -52,14 +54,19 @@ fun appModule(baseUri: String): Module = module {
 
     // Provide the unauthenticated Ktor HttpClient for auth operations
     single<HttpClient>(named("unauthenticated")) {
-        createHttpClient(baseUri, Json)
+        createPlatformHttpClient(
+            baseUri = baseUri,
+            json = Json,
+            logLevel = LogLevel.INFO,
+            certificateStorage = get(),
+            certificateTrustService = get()
+        )
     }
 
     // Provide the authenticated Ktor HttpClient with Auth plugin
     single<HttpClient>(named("authenticated")) {
         createAuthenticatedHttpClient(
-            baseUri = baseUri,
-            json = Json,
+            baseClient = get(named("unauthenticated")),
             tokenStorage = get(),
             unauthenticatedHttpClient = get(named("unauthenticated")),
             eventBus = get()
