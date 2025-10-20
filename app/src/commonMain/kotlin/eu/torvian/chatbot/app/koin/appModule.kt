@@ -45,6 +45,11 @@ import org.koin.dsl.module
  * @return A Koin module with frontend dependencies
  */
 fun appModule(baseUri: String): Module = module {
+    // Provide CertificateTrustService singleton for certificate trust decisions
+    single<CertificateTrustService> {
+        CertificateTrustService()
+    }
+
     // Provide the unauthenticated Ktor HttpClient for auth operations
     single<HttpClient>(named("unauthenticated")) {
         createHttpClient(baseUri, Json)
