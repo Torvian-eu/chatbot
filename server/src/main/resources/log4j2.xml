@@ -1,13 +1,31 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Configuration>
+<Configuration status="WARN">
     <Appenders>
         <Console name="Console" target="SYSTEM_OUT">
-            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss} [%t] %-5level %logger{36} - %msg%n" />
+            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss} [%t] %-5level %logger{36} - %msg%n"/>
         </Console>
     </Appenders>
     <Loggers>
+        <!-- Set the default logging level for the application -->
         <Root level="debug">
-            <AppenderRef ref="Console" />
+            <AppenderRef ref="Console"/>
         </Root>
+        <!--
+        Sets the logging level for the SslHandler class to INFO.
+        This silences the "Swallowing a harmless error" DEBUG message,
+        but will still show any real WARN or ERROR messages from it.
+        -->
+        <Logger name="io.netty.handler.ssl.SslHandler" level="info" additivity="false">
+            <AppenderRef ref="Console"/>
+        </Logger>
+
+        <!--
+        Sets the logging level for HikariCP to INFO.
+        This silences the repetitive DEBUG messages from the housekeeper thread,
+        but will still show important lifecycle messages (start/stop) and errors.
+        -->
+        <Logger name="com.zaxxer.hikari" level="info" additivity="false">
+            <AppenderRef ref="Console"/>
+        </Logger>
     </Loggers>
 </Configuration>
