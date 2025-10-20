@@ -6,6 +6,7 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.*
 import eu.torvian.chatbot.app.compose.auth.AuthLoadingScreen
 import eu.torvian.chatbot.app.compose.auth.ForcePasswordChangeScreen
+import eu.torvian.chatbot.app.compose.dialogs.CertificateWarningDialog
 import eu.torvian.chatbot.app.compose.snackbar.SnackbarVisualsWithError
 import eu.torvian.chatbot.app.domain.events.AppError
 import eu.torvian.chatbot.app.domain.events.AppSuccess
@@ -15,6 +16,7 @@ import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.action_retry
 import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.app.service.misc.EventBus
+import eu.torvian.chatbot.app.service.security.CertificateTrustService
 import eu.torvian.chatbot.app.viewmodel.auth.AuthViewModel
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.getString
@@ -29,12 +31,20 @@ import org.koin.compose.viewmodel.koinViewModel
  * - Conditional navigation between auth flow and main app
  * - Global error handling and snackbar display
  * - User context management
+ * - Certificate trust decisions via dialog
  */
 @Composable
 fun AppShell() {
     val authViewModel: AuthViewModel = koinViewModel()
     val authState by authViewModel.authState.collectAsState()
     val eventBus: EventBus = currentKoinScope().get()
+
+    // Get the CertificateTrustService from Koin
+    val certificateTrustService: CertificateTrustService = currentKoinScope().get()
+
+    // Collect the dialog state from the service
+    val certificateDetails by certificateTrustService.trustRequestState.collectAsState()
+
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -125,5 +135,15 @@ fun AppShell() {
                 )
             }
         }
+    }
+
+    // Display the CertificateWarningDialog when a trust request is active.
+    // This ensures it can be displayed at any time, overlaying the entire application.
+    certificateDetails?.let { details ->
+        CertificateWarningDialog(
+            details = details,
+            onAccept = { certificateTrustService.onUserResponse(true) },
+            onReject = { certificateTrustService.onUserResponse(false) }
+        )
     }
 }
