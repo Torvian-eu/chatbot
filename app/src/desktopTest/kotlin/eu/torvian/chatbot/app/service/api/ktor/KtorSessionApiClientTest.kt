@@ -16,6 +16,7 @@ import eu.torvian.chatbot.common.models.api.core.UpdateSessionSettingsRequest
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
+import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.*
 import io.ktor.http.*
 import kotlinx.coroutines.test.runTest
@@ -32,7 +33,9 @@ class KtorSessionApiClientTest {
     }
 
     private fun createTestClient(mockEngine: MockEngine): SessionApi {
-        val httpClient = createHttpClient("http://localhost", json, mockEngine)
+        val httpClient = HttpClient(mockEngine) {
+            configureHttpClient("http://localhost", json)
+        }
         return KtorSessionApiClient(httpClient)
     }
 

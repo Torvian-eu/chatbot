@@ -83,12 +83,10 @@ class CreateAuthenticatedHttpClientTest {
 
         // When
         val client = createAuthenticatedHttpClient(
-            baseUri = baseUri,
-            json = json,
             tokenStorage = mockTokenStorage,
             unauthenticatedHttpClient = unauthenticatedHttpClient,
             eventBus = mockEventBus,
-            baseHttpClient = baseHttpClient
+            baseClient = baseHttpClient
         )
 
         // Then
@@ -139,12 +137,10 @@ class CreateAuthenticatedHttpClientTest {
         }
 
         val client = createAuthenticatedHttpClient(
-            baseUri = baseUri,
-            json = json,
             tokenStorage = mockTokenStorage,
             unauthenticatedHttpClient = unauthenticatedHttpClient,
             eventBus = mockEventBus,
-            baseHttpClient = baseHttpClient
+            baseClient = baseHttpClient
         )
 
         // When - Make a request to a protected endpoint
@@ -182,12 +178,10 @@ class CreateAuthenticatedHttpClientTest {
         }
 
         val client = createAuthenticatedHttpClient(
-            baseUri = baseUri,
-            json = json,
             tokenStorage = mockTokenStorage,
             unauthenticatedHttpClient = unauthenticatedHttpClient,
             eventBus = mockEventBus,
-            baseHttpClient = baseHttpClient
+            baseClient = baseHttpClient
         )
 
         // When - Make a request that will trigger token loading
@@ -222,12 +216,10 @@ class CreateAuthenticatedHttpClientTest {
         }
 
         val client = createAuthenticatedHttpClient(
-            baseUri = baseUri,
-            json = json,
             tokenStorage = mockTokenStorage,
             unauthenticatedHttpClient = unauthenticatedHttpClient,
             eventBus = mockEventBus,
-            baseHttpClient = baseHttpClient
+            baseClient = baseHttpClient
         )
 
         // When - Make a request that will trigger token loading
@@ -323,12 +315,10 @@ class CreateAuthenticatedHttpClientTest {
         }
 
         val client = createAuthenticatedHttpClient(
-            baseUri = baseUri,
-            json = json,
             tokenStorage = mockTokenStorage,
             unauthenticatedHttpClient = unauthenticatedHttpClient,
             eventBus = mockEventBus,
-            baseHttpClient = baseHttpClient
+            baseClient = baseHttpClient
         )
 
         // When - Make a request that will trigger token refresh
@@ -392,12 +382,10 @@ class CreateAuthenticatedHttpClientTest {
         }
 
         val client = createAuthenticatedHttpClient(
-            baseUri = baseUri,
-            json = json,
             tokenStorage = mockTokenStorage,
             unauthenticatedHttpClient = unauthenticatedHttpClient,
             eventBus = mockEventBus,
-            baseHttpClient = baseHttpClient
+            baseClient = baseHttpClient
         )
 
         // When - Make a request that will trigger failed token refresh
@@ -454,12 +442,10 @@ class CreateAuthenticatedHttpClientTest {
         }
 
         val client = createAuthenticatedHttpClient(
-            baseUri = baseUri,
-            json = json,
             tokenStorage = mockTokenStorage,
             unauthenticatedHttpClient = unauthenticatedHttpClient,
             eventBus = mockEventBus,
-            baseHttpClient = baseHttpClient
+            baseClient = baseHttpClient
         )
 
         // When - Make a request to an auth endpoint

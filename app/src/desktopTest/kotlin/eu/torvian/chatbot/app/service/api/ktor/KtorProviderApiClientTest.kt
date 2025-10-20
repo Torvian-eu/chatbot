@@ -13,6 +13,7 @@ import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
+import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.*
 import io.ktor.http.*
 import kotlinx.coroutines.test.runTest
@@ -28,7 +29,9 @@ class KtorProviderApiClientTest {
     }
 
     private fun createTestClient(mockEngine: MockEngine): ProviderApi {
-        val httpClient = createHttpClient("http://localhost", json, mockEngine)
+        val httpClient = HttpClient(mockEngine) {
+            configureHttpClient("http://localhost", json)
+        }
         return KtorProviderApiClient(httpClient)
     }
 

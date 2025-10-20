@@ -10,6 +10,7 @@ import eu.torvian.chatbot.common.api.resources.SettingsResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.ModelSettings
+import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.*
 import io.ktor.http.*
 import kotlinx.coroutines.test.runTest
@@ -26,7 +27,9 @@ class KtorSettingsApiClientTest {
     }
 
     private fun createTestClient(mockEngine: MockEngine): SettingsApi {
-        val httpClient = createHttpClient("http://localhost", json, mockEngine)
+        val httpClient = HttpClient(mockEngine) {
+            configureHttpClient("http://localhost", json)
+        }
         return KtorSettingsApiClient(httpClient)
     }
 
