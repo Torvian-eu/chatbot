@@ -96,11 +96,18 @@ class DefaultSettingsRepository(
         }) {
             settingsApi.getSettingsDetails(settingsId).bind()
         }.also { settingsDetails ->
-            updateSettingsState { list ->
+            updateSettingsDetailsState { list ->
                 if (list.any { it.settings.id == settingsDetails.settings.id }) {
                     list.map { if (it.settings.id == settingsDetails.settings.id) settingsDetails else it }
                 } else {
                     list + settingsDetails
+                }
+            }
+            updateSettingsState { list ->
+                if (list.any { it.id == settingsDetails.settings.id }) {
+                    list.map { if (it.id == settingsDetails.settings.id) settingsDetails.settings else it }
+                } else {
+                    list + settingsDetails.settings
                 }
             }
         }
@@ -132,7 +139,8 @@ class DefaultSettingsRepository(
         }) {
             settingsApi.deleteSettings(settingsId).bind()
         }
-        updateSettingsState { list -> list.filter { it.settings.id != settingsId } }
+        updateSettingsDetailsState { list -> list.filter { it.settings.id != settingsId } }
+        updateSettingsState { list -> list.filter { it.id != settingsId } }
     }
 
     override suspend fun makeSettingsPublic(settingsId: Long): Either<RepositoryError, Unit> = either {
@@ -182,7 +190,7 @@ class DefaultSettingsRepository(
      *
      * @param transform A function that takes the current list of settings details and returns an updated list.
      */
-    private fun updateSettingsState(transform: (List<ModelSettingsDetails>) -> List<ModelSettingsDetails>) {
+    private fun updateSettingsDetailsState(transform: (List<ModelSettingsDetails>) -> List<ModelSettingsDetails>) {
         _allSettingsDetails.update { currentState ->
             when (currentState) {
                 is DataState.Success -> DataState.Success(transform(currentState.data))
@@ -193,4 +201,18 @@ class DefaultSettingsRepository(
             }
         }
     }
+
+    private fun updateSettingsState(transform: (List<ModelSettings>) -> List<ModelSettings>) {
+        _allSettings.update { currentState ->
+            when (currentState) {
+                is DataState.Success -> DataState.Success(transform(currentState.data))
+                else -> {
+                    logger.warn("Tried to update settings but they're not in Success state")
+                    currentState
+                }
+            }
+        }
+    }
+
+
 }
