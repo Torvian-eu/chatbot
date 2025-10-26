@@ -107,6 +107,13 @@ class DefaultModelRepository(
                     list + modelDetails
                 }
             }
+            updateModelState { list ->
+                if (list.any { it.id == modelDetails.model.id }) {
+                    list.map { if (it.id == modelDetails.model.id) modelDetails.model else it }
+                } else {
+                    list + modelDetails.model
+                }
+            }
         }
     }
 
@@ -137,6 +144,7 @@ class DefaultModelRepository(
             modelApi.deleteModel(modelId).bind()
         }
         updateModelDetailsState { list -> list.filter { it.model.id != modelId } }
+        updateModelState { list -> list.filter { it.id != modelId } }
     }
 
     override suspend fun getModelApiKeyStatus(modelId: Long): Either<RepositoryError, ApiKeyStatusResponse> = either {
@@ -200,6 +208,23 @@ class DefaultModelRepository(
                 is DataState.Success -> DataState.Success(transform(currentState.data))
                 else -> {
                     logger.warn("Tried to update model details but they're not in Success state")
+                    currentState
+                }
+            }
+        }
+    }
+
+    /**
+     * Updates the internal StateFlow of models using the provided transformation.
+     *
+     * @param transform A function that takes the current list of models and returns an updated list.
+     */
+    private fun updateModelState(transform: (List<LLMModel>) -> List<LLMModel>) {
+        _models.update { currentState ->
+            when (currentState) {
+                is DataState.Success -> DataState.Success(transform(currentState.data))
+                else -> {
+                    logger.warn("Tried to update models but they're not in Success state")
                     currentState
                 }
             }

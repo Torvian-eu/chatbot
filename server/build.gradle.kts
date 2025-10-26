@@ -9,6 +9,7 @@ description = "Central server module for the chatbot application"
 plugins {
     id("common-module-convention")  // Apply custom convention plugin
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.ktor)
     application
 }
 
@@ -21,16 +22,19 @@ dependencies {
     implementation(libs.bundles.exposed)         // Exposed ORM for database handling
     implementation(libs.bundles.log4j)           // Logging with Log4j
     implementation(libs.bundles.koin)            // Koin dependency injection
+    implementation(libs.bundles.bouncycastle)    // Bouncy Castle for certificate operations
 
     // Individual libraries
     implementation(libs.serialization.json)           // KotlinX Serialization JSON
     implementation(libs.coroutines.core)              // KotlinX Coroutines Core
     implementation(libs.kotlinx.datetime)             // KotlinX DateTime
     implementation(libs.ktor.serialization.json)      // Ktor JSON serialization support
+    implementation(libs.ktor.network.tls.certificates) // Ktor TLS certificates for SSL/HTTPS
     implementation(libs.sqlite.jdbc)                  // SQLite JDBC Driver
     implementation(libs.jbcrypt)                      // Password hashing library
     implementation(libs.typesafe.config)              // Typesafe Config for configuration
     implementation(libs.arrow.core)                   // Arrow Core for functional programming
+    implementation(libs.hikaricp)                     // HikariCP for connection pooling
 
     // Testing dependencies
     testImplementation(libs.bundles.ktor.server.test)  // Ktor server testing

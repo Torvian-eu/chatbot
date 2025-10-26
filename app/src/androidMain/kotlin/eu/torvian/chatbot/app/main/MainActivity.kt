@@ -18,9 +18,11 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         val appConfig = AppConfig(
-            serverUrl = "http://localhost:8080",
+            serverUrl = "https://localhost:8443",
+//            serverUrl = "https://10.0.2.2:8443",  // For emulator?
             baseUserDataStoragePath = applicationContext.filesDir.absolutePath,
-            tokenStorageDir = "tokens"
+            tokenStorageDir = "tokens",
+            certificateStorageDir = "certs"
         )
 
         val encryptionConfig = EncryptionConfig(

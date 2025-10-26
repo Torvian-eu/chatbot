@@ -91,10 +91,22 @@ kotlin {
     // iosArm64()
     // iosSimulatorArm64()
 
+    // Apply the default hierarchy template again. Needed for custom source sets to work correctly.
+    applyDefaultHierarchyTemplate()
+
     // Define the source sets for this module
     // Source sets are used to share code between targets
     sourceSets {
-        val desktopMain by getting
+        // Create a new source set for shared Android/Desktop code
+        val desktopAndroidMain by creating {
+            dependsOn(commonMain.get())
+        }
+        val desktopMain by getting {
+            dependsOn(desktopAndroidMain)
+        }
+        androidMain {
+            dependsOn(desktopAndroidMain)
+        }
         val desktopTest by getting
 
         commonMain.dependencies {
@@ -126,6 +138,8 @@ kotlin {
             implementation(libs.ktor.client.resources)
             implementation(libs.ktor.client.logging)
             implementation(libs.ktor.client.auth)
+            // CIO engine for Desktop, Android and WasmJs
+            implementation(libs.ktor.client.cio)
 
             // Arrow dependencies for Either
             implementation(libs.arrow.core)
@@ -158,8 +172,6 @@ kotlin {
             runtimeOnly(compose.desktop.currentOs)
             // KotlinX Coroutines Swing for JVM Main Dispatcher
             runtimeOnly(libs.kotlinx.coroutines.swing)
-            // Ktor Client Engine (JVM-specific)
-            implementation(libs.ktor.client.cio)
             // Logging (JVM-specific)
             implementation(libs.log4j.api)
             runtimeOnly(libs.log4j.core)
@@ -171,11 +183,14 @@ kotlin {
             implementation(libs.mockk)
         }
 
+        desktopAndroidMain.dependencies {
+            // Use OkHttp engine for Desktop and Android (works better than CIO engine)
+            implementation(libs.ktor.client.okhttp)
+        }
+
         androidMain.dependencies {
             implementation(compose.preview)
             implementation(libs.androidx.activity.compose)
-            // Ktor Client Engine (Android-specific)
-            implementation(libs.ktor.client.cio)
             // Logging
             implementation(libs.slf4j.simple)
         }

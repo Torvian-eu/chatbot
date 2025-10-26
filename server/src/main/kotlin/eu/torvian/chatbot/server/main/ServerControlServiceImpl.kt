@@ -1,8 +1,10 @@
 package eu.torvian.chatbot.server.main
 
+import eu.torvian.chatbot.server.service.security.CertificateManager
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
+import io.ktor.server.engine.ConnectorType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,13 +14,18 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
+import java.io.File
 
 /**
  * Implementation of [ServerControlService] that manages the lifecycle of a Ktor server.
  *
  * @property serverConfig The configuration for the server.
+ * @property certificateManager Manager for SSL certificate operations.
  */
-class ServerControlServiceImpl(val serverConfig: ServerConfig) : ServerControlService {
+class ServerControlServiceImpl(
+    val serverConfig: ServerConfig,
+    private val certificateManager: CertificateManager
+) : ServerControlService {
     private val logger: Logger = LogManager.getLogger(this::class.java)
     private var serverInstance: EmbeddedServer<*, *>? = null
     private var serverInfo: ServerInstanceInfo? = null
@@ -37,6 +44,14 @@ class ServerControlServiceImpl(val serverConfig: ServerConfig) : ServerControlSe
 
         logger.info("Starting Chatbot Server...")
 
+        // Generate self-signed certificate if needed
+        serverConfig.sslConfig?.let {
+            if (it.generateSelfSigned && !File(it.keystorePath).exists()) {
+                logger.info("Generating self-signed server certificate at ${it.keystorePath}...")
+                certificateManager.generateServerCertificate()
+            }
+        }
+
         val server = createEmbeddedServer(
             Netty, port = serverConfig.port, host = serverConfig.host,
             onStarting = {
@@ -46,22 +61,34 @@ class ServerControlServiceImpl(val serverConfig: ServerConfig) : ServerControlSe
             onStarted = {
                 logger.info("Ktor server started.")
                 CoroutineScope(Dispatchers.IO).launch {
-                    val actualPort = it.engine.resolvedConnectors().firstOrNull()?.port
-                    if (actualPort == null) {
-                        logger.error("Failed to determine port after server start. Aborting.")
+                    val connectors = it.engine.resolvedConnectors()
+                    if (connectors.isEmpty()) {
+                        logger.error("Failed to determine any active connectors after server start. Aborting.")
                         _serverStatus.value =
-                            ServerStatus.Error(IllegalStateException("Failed to determine port after server start."))
+                            ServerStatus.Error(IllegalStateException("Failed to determine any active connectors after server start."))
                         return@launch
                     }
+
+                    // Log all active connectors
+                    val connectorInfo = connectors.joinToString { c ->
+                        val scheme = if (c.type == ConnectorType.HTTPS) "https" else "http"
+                        "$scheme://${c.host}:${c.port}"
+                    }
+                    logger.info("Ktor server listening on: $connectorInfo")
+
+                    // Determine the primary connector for ServerInstanceInfo
+                    // The primary is HTTPS if available, otherwise HTTP.
+                    val primaryConnector = connectors.find { c -> c.type == ConnectorType.HTTPS } ?: connectors.first()
+
                     val info = ServerInstanceInfo(
-                        scheme = serverConfig.scheme,
-                        host = serverConfig.host,
-                        port = actualPort,
+                        scheme = if (primaryConnector.type == ConnectorType.HTTPS) "https" else "http",
+                        host = primaryConnector.host,
+                        port = primaryConnector.port,
                         path = serverConfig.path,
                         startTime = Clock.System.now()
                     )
                     serverInfo = info
-                    logger.info("Ktor server started successfully on uri: ${info.baseUri}")
+                    logger.info("Primary server URI set to: ${info.baseUri}")
                     _serverStatus.value = ServerStatus.Started(info)
                 }
             },
@@ -129,10 +156,34 @@ class ServerControlServiceImpl(val serverConfig: ServerConfig) : ServerControlSe
         onStopping: (Application) -> Unit,
         onStopped: (Application) -> Unit,
     ): EmbeddedServer<TEngine, TConfiguration> {
+        val currentSslConfig = this.serverConfig.sslConfig
+
         return embeddedServer(
             factory = factory,
-            port = port,
-            host = host
+            configure = {
+                val isSslEnabled = currentSslConfig?.enabled == true
+
+                // Configure HTTPS connector if SSL is enabled
+                if (isSslEnabled) {
+                    sslConnector(
+                        keyStore = certificateManager.loadCertificateFromKeystore(),
+                        keyAlias = currentSslConfig.keyAlias,
+                        keyStorePassword = { currentSslConfig.keystorePassword.toCharArray() },
+                        privateKeyPassword = { currentSslConfig.keyPassword.toCharArray() }
+                    ) {
+                        this.port = currentSslConfig.port
+                        this.host = host
+                    }
+                }
+
+                // Configure HTTP connector if SSL is disabled OR if both are allowed
+                if (!isSslEnabled || serverConfig.allowHttpAndHttps) {
+                    connector {
+                        this.port = port
+                        this.host = host
+                    }
+                }
+            }
         ) {
             this.monitor.subscribe(ApplicationStarting) {
                 onStarting(it)

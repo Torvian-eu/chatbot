@@ -22,7 +22,16 @@ suspend inline fun <reified R : Any, reified L : Any> ApplicationCall.respondEit
     noinline errorMapping: (L) -> ApiError
 ) {
     when (either) {
-        is Either.Right -> respond(successCode, either.value)
+        is Either.Right -> {
+            if (either.value is Unit) {
+                // If the value is Unit, there is no body to send.
+                // This is crucial for 204 No Content to work correctly.
+                respond(successCode)
+            } else {
+                // For all other types, send the value as the body.
+                respond(successCode, either.value)
+            }
+        }
         is Either.Left -> {
             val apiError = errorMapping(either.value)
             val status = HttpStatusCode.fromValue(apiError.statusCode)
@@ -36,7 +45,16 @@ suspend inline fun <reified R : Any> ApplicationCall.respondEither(
     successCode: HttpStatusCode = HttpStatusCode.OK
 ) {
     when (either) {
-        is Either.Right -> respond(successCode, either.value)
+        is Either.Right -> {
+            if (either.value is Unit) {
+                // If the value is Unit, there is no body to send.
+                // This is crucial for 204 No Content to work correctly.
+                respond(successCode)
+            } else {
+                // For all other types, send the value as the body.
+                respond(successCode, either.value)
+            }
+        }
         is Either.Left -> respond(HttpStatusCode.fromValue(either.value.statusCode), either.value)
     }
 }

@@ -23,9 +23,10 @@ fun main() {
     logger.info("WASM/JS application starting...")
 
     val appConfig = AppConfig(
-        serverUrl = "http://localhost:8080",
+        serverUrl = "https://localhost:8443",
         baseUserDataStoragePath = APPLICATION_NAME,
-        tokenStorageDir = "tokens"
+        tokenStorageDir = "tokens",
+        certificateStorageDir = "certs" // Not used in WASM, but needed for Koin setup
     )
 
     val encryptionConfig = EncryptionConfig(

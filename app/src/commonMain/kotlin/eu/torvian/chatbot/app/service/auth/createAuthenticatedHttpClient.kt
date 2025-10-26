@@ -2,7 +2,6 @@ package eu.torvian.chatbot.app.service.auth
 
 import arrow.core.getOrElse
 import arrow.core.raise.either
-import eu.torvian.chatbot.app.service.api.ktor.createHttpClient
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.utils.misc.createKmpLogger
 import eu.torvian.chatbot.common.api.resources.AuthResource
@@ -16,32 +15,27 @@ import io.ktor.client.plugins.auth.providers.*
 import io.ktor.client.plugins.resources.*
 import io.ktor.client.request.*
 import io.ktor.http.*
-import kotlinx.serialization.json.Json
 
 private val logger = createKmpLogger("createAuthenticatedHttpClient")
 
 /**
- * Creates an authenticated HTTP client with token refresh capabilities.
+ * Adds authentication capabilities (with token refresh) to an EXISTING client.
  *
- * @param baseUri Base URI for the API
- * @param json JSON serializer configuration
+ * @param baseClient The pre-configured base HttpClient to add authentication to.
+ *   This client should already have shared plugins and platform-specific engine config (e.g., SSL).
  * @param tokenStorage Token storage implementation
- * @param unauthenticatedHttpClient HTTP client for refresh token calls
+ * @param unauthenticatedHttpClient HTTP client for refresh token calls. It's crucial that this
+ *   client does NOT have the Auth plugin to prevent infinite refresh loops.
  * @param eventBus Event bus for emitting authentication events
- * @param baseHttpClient Optional base HTTP client to use instead of creating a new one (useful for testing)
- * @return A configured HttpClient with authentication support
+ * @return A new HttpClient instance configured with authentication support.
  */
 fun createAuthenticatedHttpClient(
-    baseUri: String,
-    json: Json,
+    baseClient: HttpClient,
     tokenStorage: TokenStorage,
     unauthenticatedHttpClient: HttpClient,
-    eventBus: EventBus,
-    baseHttpClient: HttpClient? = null
+    eventBus: EventBus
 ): HttpClient {
-    val client = baseHttpClient ?: createHttpClient(baseUri, json)
-
-    return client.config {
+    return baseClient.config {
         install(Auth) {
             bearer {
                 loadTokens {

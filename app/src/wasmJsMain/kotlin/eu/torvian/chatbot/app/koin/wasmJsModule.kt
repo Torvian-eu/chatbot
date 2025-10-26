@@ -3,6 +3,8 @@ package eu.torvian.chatbot.app.koin
 import eu.torvian.chatbot.app.main.AppConfig
 import eu.torvian.chatbot.app.service.auth.FileSystemTokenStorage
 import eu.torvian.chatbot.app.service.auth.TokenStorage
+import eu.torvian.chatbot.app.service.security.BrowserCertificateStorage
+import eu.torvian.chatbot.app.service.security.CertificateStorage
 import eu.torvian.chatbot.common.security.CryptoProvider
 import eu.torvian.chatbot.common.security.EncryptionConfig
 import eu.torvian.chatbot.common.security.WasmJsWebCryptoProvider
@@ -30,5 +32,9 @@ fun wasmJsModule(appConfig: AppConfig, encryptionConfig: EncryptionConfig) = mod
             cryptoProvider = get(),
             storageDirectoryPath = Path(appConfig.baseUserDataStoragePath, appConfig.tokenStorageDir).toString()
         )
+    }
+
+    single<CertificateStorage> {
+        BrowserCertificateStorage()
     }
 }

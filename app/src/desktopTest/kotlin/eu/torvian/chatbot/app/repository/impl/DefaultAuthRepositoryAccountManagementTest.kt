@@ -94,6 +94,7 @@ class DefaultAuthRepositoryAccountManagementTest {
             AccountData(testUser1, testPermissions, Clock.System.now()),
             AccountData(testUser2, testPermissions, Clock.System.now())
         ).right()
+        coEvery { authApi.clearToken() } returns Unit
 
         // Act
         val result = repository.switchAccount(2L)
@@ -117,6 +118,7 @@ class DefaultAuthRepositoryAccountManagementTest {
         coEvery { tokenStorage.listStoredAccounts() } returns listOf(
             AccountData(testUser1, testPermissions, Clock.System.now())
         ).right()
+        coEvery { authApi.clearToken() } returns Unit
         repository.switchAccount(1L)
 
         // Now switch to user 2
@@ -165,6 +167,7 @@ class DefaultAuthRepositoryAccountManagementTest {
             AccountData(testUser1, testPermissions, Clock.System.now()),
             AccountData(testUser2, testPermissions, Clock.System.now())
         ).right()
+        coEvery { authApi.clearToken() } returns Unit
         repository.switchAccount(1L)
 
         // Remove user 2 (not active)
@@ -192,6 +195,7 @@ class DefaultAuthRepositoryAccountManagementTest {
         coEvery { tokenStorage.listStoredAccounts() } returns listOf(
             AccountData(testUser1, testPermissions, Clock.System.now())
         ).right()
+        coEvery { authApi.clearToken() } returns Unit
         repository.switchAccount(1L)
 
         // Remove user 1 (active)
@@ -243,6 +247,7 @@ class DefaultAuthRepositoryAccountManagementTest {
     fun `checkInitialAuthState should set Unauthenticated when user data cannot be loaded`() = runTest {
         // Arrange
         coEvery { tokenStorage.getAccountData() } returns TokenStorageError.NotFound("User data not found").left()
+        coEvery { tokenStorage.listStoredAccounts() } returns emptyList<AccountData>().right()
 
         // Act
         repository.checkInitialAuthState()
@@ -261,6 +266,7 @@ class DefaultAuthRepositoryAccountManagementTest {
         coEvery { tokenStorage.listStoredAccounts() } returns listOf(
             AccountData(testUser1, testPermissions, Clock.System.now())
         ).right()
+        coEvery { authApi.clearToken() } returns Unit
         repository.switchAccount(1L)
         assertTrue(repository.authState.value is AuthState.Authenticated)
 
@@ -285,6 +291,7 @@ class DefaultAuthRepositoryAccountManagementTest {
         coEvery { tokenStorage.listStoredAccounts() } returns listOf(
             AccountData(testUser1, testPermissions, Clock.System.now())
         ).right()
+        coEvery { authApi.clearToken() } returns Unit
         repository.switchAccount(1L)
         assertTrue(repository.authState.value is AuthState.Authenticated)
 

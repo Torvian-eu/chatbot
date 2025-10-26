@@ -195,7 +195,8 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │       └── mappers/              # Entity mapping utilities
 ├── domain/                       # Domain models and configuration
 │   ├── config/                   # Configuration classes
-│   │   └── DatabaseConfig.kt     # Database configuration
+│   │   ├── DatabaseConfig.kt     # Database configuration
+│   │   └── SslConfig.kt          # SSL/TLS configuration for the server.
 │   └── security/                 # Security-related classes
 │       ├── AuthSchemes.kt        # Authentication schemes
 │       ├── JwtConfig.kt          # JWT configuration
@@ -267,8 +268,10 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   │   ├── AuthenticationService.kt # Authentication service interface
 │   │   ├── AuthorizationService.kt # Authorization service interface
 │   │   ├── BCryptPasswordService.kt # BCrypt password service implementation
+│   │   ├── CertificateManager.kt   # Interface for managing server SSL certificates.
 │   │   ├── CredentialManager.kt  # Credential management interface
 │   │   ├── DbEncryptedCredentialManager.kt # Database-backed credential manager
+│   │   ├── DefaultCertificateManager.kt # Default implementation for server SSL certificate management.
 │   │   ├── PasswordService.kt    # Password service interface
 │   │   ├── ResourceType.kt       # Resource type enumeration
 │   │   └── error/                # Domain-specific error types
@@ -318,6 +321,7 @@ server/src/test/kotlin/eu/torvian/chatbot/server/
     ├── koin/                     # Test DI modules
     │   ├── defaultTestConfigModule.kt # Default test config module
     │   ├── defaultTestContainer.kt # Default test container
+    │   ├── testDatabaseModule.kt # Koin module for test database configuration.
     │   └── testSetupModule.kt    # Test setup DI module
     └── ktor/                     # Ktor test utilities
         └── myTestApplication.kt  # Custom test application setup
@@ -390,7 +394,7 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   │   └── SnackbarInteractionEvent.kt # Snackbar interaction event
 │   └── navigation/   # Navigation related classes
 │       └── AppRoute.kt  # Application routes
-├── koin/            # Koin modules 
+├── koin/            # Koin modules
 │   └── appModule.kt  # main app DI module
 ├── main/            
 │   └── AppConfig.kt  # Application configuration
@@ -420,7 +424,8 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   │   ├── UserApi.kt      # Interface for user management operations
 │   │   └── ktor/       # Ktor-based API client implementations
 │   │       ├── BaseApiClient.kt  # Base API client implementation
-│   │       ├── createHttpClient.kt # Ktor HTTP client setup
+│   │       ├── configureHttpClient.kt # Common Ktor HTTP client configuration.
+│   │       ├── createPlatformHttpClient.kt # Expect declaration for platform-specific HTTP client creation.
 │   │       ├── KtorChatApiClient.kt
 │   │       ├── KtorGroupApiClient.kt
 │   │       └── ...
@@ -432,8 +437,14 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   │   ├── FileSystemTokenStorage.kt # File system-based token storage implementation
 │   │   ├── TokenStorage.kt  # Token storage interface
 │   │   └── TokenStorageError.kt # Token storage error hierarchy
-│   └── misc/          # Miscellaneous frontend services
-│       └── EventBus.kt  # Event bus for frontend events
+│   ├── misc/          # Miscellaneous frontend services
+│   │   └── EventBus.kt  # Event bus for frontend events
+│   └── security/      # Frontend security services
+│       ├── CertificateDetails.kt # DTO for presenting certificate information to the user.
+│       ├── CertificateStorage.kt # Interface for managing server certificates for pinning.
+│       ├── CertificateStorageError.kt # Error types for certificate storage operations.
+│       ├── CertificateTrustService.kt # Service to mediate user trust decisions for certificates.
+│       └── FileSystemCertificateStorage.kt # KMP-compatible implementation of certificate storage.
 ├── utils/            # Utility classes
 │   └── misc/       # Miscellaneous utilities
 │       ├── ioDispatcher.kt  # IO dispatcher (expect/actual)
@@ -473,7 +484,7 @@ app/src/commonMain/composeResources/  # Compose resources (strings, etc.)
 ├── values-es/  # Spanish resources
 │    └── strings.xml  # Spanish string resources
 └── ... other resources ...
-   
+
 app/src/commonTest/kotlin/eu/torvian/chatbot/app/  # Common tests
 └── testutils/     # Test utilities
     ├── data/
@@ -504,7 +515,13 @@ app/src/desktopTest/kotlin/eu/torvian/chatbot/app/ # Desktop-specific tests
 │        └── TestMockkExtensions.kt # Mockk test extensions
 └── viewmodel/
     └── ChatViewModelTest.kt
-    
+
+app/src/desktopAndroidMain/kotlin/eu/torvian/chatbot/app/  # Desktop- and Android-specific implementations
+├── service/api/ktor/
+│   └── createPlatformHttpClient.kt # Actual implementation of platform HTTP client for Desktop/Android.
+└── security/ 
+    └── CustomTrustManager.kt # Custom X.509 trust manager for certificate pinning. 
+
 app/src/androidMain/kotlin/eu/torvian/chatbot/app/  # Android-specific implementations
 ├── compose/
 │   └── ... android-specific UI components ...
@@ -519,6 +536,10 @@ app/src/wasmJsMain/kotlin/eu/torvian/chatbot/app/  # WebAssembly-specific implem
 │   └── ... wasm-specific UI components ...
 ├── main/         # Main entry point
 │   └── AppMain.kt    # Application entry point, setup (UI launch, DI)
+├── service/api/ktor/ # Ktor API client WASM/JS-specific implementations
+│   └── createPlatformHttpClient.kt # Actual implementation of platform HTTP client for WASM/JS.
+├── service/security/ # WASM/JS-specific security implementations
+│   └── BrowserCertificateStorage.kt # No-op certificate storage for WASM/JS, relying on browser's TLS.
 └── utils/        
     └── misc/       # Miscellaneous utilities
         └── createKmpLogger.wasmJs.kt # WebAssembly-specific KMP logger

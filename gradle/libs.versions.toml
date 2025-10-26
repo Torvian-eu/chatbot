@@ -26,6 +26,7 @@ android-compileSdk = "36"    # The API level to compile against: https://develop
 android-minSdk = "26"        # The minimum Android version supported
 android-targetSdk = "36"     # The target Android version for testing
 slf4j = "2.0.17"             # SLF4J version used for logging
+hikaricp = "7.0.2"           # HikariCP version for connection pooling
 
 [libraries]
 # Kotlin
@@ -59,6 +60,10 @@ ktor-server-call-logging = { module = "io.ktor:ktor-server-call-logging", versio
 ktor-server-double-receive = { module = "io.ktor:ktor-server-double-receive", version.ref = "ktor" }
 ktor-server-cors = { module = "io.ktor:ktor-server-cors", version.ref = "ktor" }
 ktor-server-sse = { module = "io.ktor:ktor-server-sse", version.ref = "ktor" }
+ktor-network-tls-certificates = { module = "io.ktor:ktor-network-tls-certificates", version.ref = "ktor" }
+
+# HikariCP for connection pooling
+hikaricp = { module = "com.zaxxer:HikariCP", version.ref = "hikaricp" }
 
 # Ktor Client
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
@@ -69,6 +74,7 @@ ktor-client-serialization = { module = "io.ktor:ktor-client-serialization", vers
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
 ktor-client-resources = { module = "io.ktor:ktor-client-resources", version.ref = "ktor" }
 ktor-client-logging = { module = "io.ktor:ktor-client-logging", version.ref = "ktor" }
+ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
 
 # Ktor Serialization
 ktor-serialization-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }

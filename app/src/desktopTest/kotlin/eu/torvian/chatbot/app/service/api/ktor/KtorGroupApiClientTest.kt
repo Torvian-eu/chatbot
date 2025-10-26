@@ -10,6 +10,7 @@ import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.models.core.ChatGroup
 import eu.torvian.chatbot.common.models.api.core.CreateGroupRequest
 import eu.torvian.chatbot.common.models.api.core.RenameGroupRequest
+import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.*
 import io.ktor.http.*
 import kotlinx.coroutines.test.runTest
@@ -26,7 +27,9 @@ class KtorGroupApiClientTest {
     }
 
     private fun createTestClient(mockEngine: MockEngine): GroupApi {
-        val httpClient = createHttpClient("http://localhost", json, mockEngine)
+        val httpClient = HttpClient(mockEngine) {
+            configureHttpClient("http://localhost", json)
+        }
         return KtorGroupApiClient(httpClient)
     }
 
