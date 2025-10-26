@@ -39,18 +39,18 @@ A "Regenerate" button is already available in the message actions menu, but it n
 This action should trigger a new response from the assistant/LLM, based on the current message context. It must also create a new branch in the conversation. (See MessageActionRow.kt)
 
 ### Allow certain features to be disabled on a per-user basis
-The user should be able to configure this in their profile. (Requires: user accounts feature)
+The user should be able to configure this in their profile.
 
 ### Allow user to see LLM metadata for assistant responses
 
 ### (done) Allow user to quickly scroll to the bottom of the messages list
 
-### (done) Allow user to switch accounts without logging out (requires: user accounts feature)
+### (done) Allow user to switch accounts without logging out
 
-### Allow admin to create new accounts for other users. (requires: user accounts feature)
+### Allow admin to create new accounts for other users.
 Users will be forced to change their password on first login.
 
-### Only allow connections to the server over HTTPS.
+### (done) Only allow connections to the server over HTTPS.
 For security, the server should only be accessible over HTTPS, and not HTTP. This applies to connections over the internet, as well as local network connections.
 
 ---
@@ -60,12 +60,26 @@ For security, the server should only be accessible over HTTPS, and not HTTP. Thi
 ### (done) User accounts
 Each user has their own set of credentials, models, settings, and chat history. Some things could be shared between users, such as public providers, models and settings. Certain users could be assigned special privileges, such as the ability to manage other users, or add public providers, models and settings. There must be at least one admin user, who has all privileges (or has at least the capability to assign privileges to theirself and other users)
 
+### User profile customization (name, avatar, etc.)
+
+### User settings customization (theme, language, feature toggles, etc.)
+
 ### Chat message content formatting (Markdown, HTML, etc.)
+
+### Select available models for adding by querying LLM provider API
+
+### Allow user to select predefined LLM Tools for a specific prompt
+Predefined tools could include: Web search, calculator, current weather, etc.
+
 ---
 
 ## Advanced features
 
-### Allow basic tool calling for LLM models that support it
+### Allow users to add local MCP servers
+Users should be able to add local (STDIO) MCP servers to their account, by specifying a local command to launch the MCP server. This command will run on the client machine, and communicate with the AIChat app over STDIO.
+
+### Allow users to add remote MCP servers
+Users should be able to add remote (Streamable HTTP) MCP servers to their account, by specifying the server URL.
 
 ### Add option to add tools to MCP server
 Tools are functions that the LLM can execute. They are defined by the user and can be used to interact with the outside world. For instance a tool could be defined to search the web for information. The LLM could then use this tool to search the web for information to answer a question.
@@ -283,7 +297,7 @@ Here are detailed user stories for the new feature ideas, following the format a
     *   Clicking the "Switch Account" button displays a list of available accounts.
     *   Selecting an account does not log out the current user but simply switches the active account context.
 
-### NF.S21 - Secure Communication with Server
+### (done) NF.S21 - Secure Communication with Server
 *   **Description:** As a user, I want all communication between the client and server to be encrypted, so my data is protected from interception.
 *   **Estimate:** M
 *   **Acceptance Criteria:**
@@ -295,11 +309,11 @@ Here are detailed user stories for the new feature ideas, following the format a
 
 ## New Features: Intermediate
 
-### (done) NF.E1 - User Accounts and Permissions (Epic)
+### (done, partial) NF.E1 - User Accounts and Permissions (Epic)
 *   **Description:** This epic covers the foundational work for implementing a multi-user environment where each user has their own secure account, distinct chat history, personal configurations, and definable privileges. It also addresses the sharing of public resources across users and robust administration capabilities.
 *   **Estimate:** XL
 
-#### NF.E1.S1 - Register and Log In to Personal Account
+#### (done) NF.E1.S1 - Register and Log In to Personal Account
 *   **Description:** As a user, I want to register for a new account with unique credentials and subsequently log in, so that my chat history, personal model configurations, and settings are private, securely stored, and distinct from other users of the application.
 *   **Estimate:** L
 *   **Acceptance Criteria:**
@@ -311,19 +325,19 @@ Here are detailed user stories for the new feature ideas, following the format a
     *   Passwords are securely hashed and stored (not plaintext).
     *   There is a clear indication in the UI of the currently logged-in user.
 
-#### NF.E1.S2 - Manage User Accounts and Privileges (Admin)
+#### (done, partial) NF.E1.S2 - Manage User Accounts and Privileges (Admin)
 *   **Description:** As an administrator, I want to view, create, edit, and delete user accounts, and assign specific roles or privileges (e.g., create public resources, manage other users' permissions), so I can control access levels and administrative capabilities across the application.
 *   **Estimate:** L
 *   **Dependencies:** NF.E1.S1 - Register and Log In to Personal Account
 *   **Acceptance Criteria:**
     *   A dedicated "User Management" section is accessible only to users with administrator privileges.
     *   Admins can view a list of all registered users, their usernames, and assigned roles/privileges.
-    *   Admins can create new user accounts, assigning an initial role (e.g., standard user, admin).
-    *   Admins can modify existing user roles and assign/revoke specific privileges (e.g., "Can create public providers", "Can manage other users").
+    *   (todo) Admins can create new user accounts, assigning an initial role (e.g., standard user, admin).
+    *   (todo) Admins can modify existing user roles and assign/revoke specific privileges (e.g., "Can create public providers", "Can manage other users").
     *   Admins can delete user accounts (with confirmation), ensuring all associated user data is handled according to policy.
     *   At least one admin user is guaranteed to exist or be created during initial setup.
 
-#### NF.E1.S3 - Access Shared Public Resources
+#### (done) NF.E1.S3 - Access Shared Public Resources
 *   **Description:** As a user, I want certain application resources, such as specific LLM providers, models, or settings profiles, to be marked as "public" and accessible to all users, so I don't have to reconfigure commonly used or institutionally provided resources myself.
 *   **Estimate:** M
 *   **Dependencies:** NF.E1.S2 - Manage User Accounts and Privileges (Admin)
@@ -339,6 +353,31 @@ Here are detailed user stories for the new feature ideas, following the format a
 *   **Acceptance Criteria:**
     *   Chat message content supports rendering of Markdown and other formats.
     *   The UI provides a toggle to enable/disable Markdown rendering.
+
+### NF.SM2 - Predefined LLM Tools
+*   **Description:** As a user, I want to be able to select predefined tools (e.g web search), which the assistant can use to extend its capabilities.
+*   **Estimate:** L
+*   **Acceptance Criteria:**
+    *   The user can select which tools are available for a specific prompt.
+    *   Predefined tools are only available for LLMs that support tool calling.
+    *   An admin user can configure predefined tools. (For instance, a web search tool that uses DuckDuckGo)
+    *   When a tool is called, the UI displays a notification that the tool is being used.
+    *   When an assistant message is generated, it includes a list of tools that were used to generate it.
+    *   The user can select an item in the list to view the tool's output.
+
+### NF.SM3 - Web search tool for assistant
+*   **Description:** As a user, I want to be able to let the assistant perform a web search, so that I can get answers to questions that require real-time or up-to-date information.
+*   **Estimate:** L
+*   **Acceptance Criteria:**
+    *    A web search tool can be turned on/off for a specific prompt.
+    *    The tool is only available for LLMs that support tool calling.
+    *    The tool uses DuckDuckGo to perform the search.
+    *    The tool returns the search results to the assistant.
+    *    The tool can be configured to use a different search engine.
+    *    When the tool is called, the UI displays a notification that the tool is being used.
+    *    When an assistant message is generated, it includes a list of tools that were used to generate it.
+    *    The user can select an item in the list to view the tool's output.
+
 
 ## New Features: Advanced
 
@@ -402,6 +441,18 @@ Here are detailed user stories for the new feature ideas, following the format a
     *   Upon receiving such a command, the LLM agent invokes the corresponding backend service method or updates frontend state.
     *   Successfully executed commands result in the expected application state changes (e.g., the session's model/settings are updated, a list of models is displayed).
     *   The LLM agent provides feedback to the user regarding the execution of the command (e.g., "Session temperature set to 0.7.").
+
+### NF.EA1 - Local MCP Servers (Epic)
+*   **Description:** As a user, I want to run a local MCP server on my machine, so that the exposed MCP tools can be used by the LLMs.
+*   **Estimate:** L
+*   **Acceptance Criteria:**
+    *   A user can add/remove their own local MCP servers.
+    *   A local MCP server can be started/stopped from within the application.
+    *   A list of tools is retrieved from the MCP server automatically.
+    *   The user can configure to enable or disable which tools by default.
+    *   The user can select an MCP server to use for a specific prompt.
+    *   The user can select which tools are available for a specific prompt.
+
 
 ## Non-Functional Requirements (NFRs)
 
