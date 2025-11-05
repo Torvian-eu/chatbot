@@ -7,6 +7,7 @@ import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
+import eu.torvian.chatbot.common.models.llm.RawChatMessage
 import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.server.data.entities.ApiSecretEntity
 import eu.torvian.chatbot.server.data.entities.ChatSessionEntity
@@ -255,4 +256,16 @@ object TestDefaults {
         name = "Test Role 1",
         description = "Test Role 1"
     )
+
+    // --- RawChatMessage Test Data ---
+
+    val rawChatMessage1 = RawChatMessage.User(
+        content = "Hello, what can you help me with today?"
+    )
+
+    val rawChatMessage2 = RawChatMessage.Assistant(
+        content = "I'm here to help with your questions and tasks. What would you like to know about?"
+    )
+
+    val rawChatMessages = listOf(rawChatMessage1, rawChatMessage2)
 }
