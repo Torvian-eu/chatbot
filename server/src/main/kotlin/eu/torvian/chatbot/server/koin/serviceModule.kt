@@ -7,7 +7,7 @@ import eu.torvian.chatbot.server.service.core.*
 import eu.torvian.chatbot.server.service.core.impl.*
 import eu.torvian.chatbot.server.service.security.*
 import eu.torvian.chatbot.server.service.security.authorizer.*
-import eu.torvian.chatbot.server.service.setup.InitialSetupService
+import eu.torvian.chatbot.server.service.setup.*
 import eu.torvian.chatbot.server.service.tool.ToolExecutorFactory
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
@@ -68,7 +68,20 @@ fun serviceModule() = module {
     }
 
     // --- Setup Services ---
-    single<InitialSetupService> { InitialSetupService(get(), get(), get()) }
+    // Individual initializers
+    single<UserAccountInitializer> { UserAccountInitializer(get(), get(), get()) }
+    single<ToolDefinitionInitializer> { ToolDefinitionInitializer(get(), get(), get()) }
+
+    // Initialization coordinator that runs all initializers
+    single<InitializationCoordinator> {
+        InitializationCoordinator(
+            listOf(
+                get<UserAccountInitializer>(),
+                get<ToolDefinitionInitializer>()
+            )
+        )
+    }
+
 
     // --- Tool Executors ---
     // Add more executors as they are implemented:
