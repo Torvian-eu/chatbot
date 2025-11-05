@@ -4,11 +4,12 @@ import arrow.core.Either
 import arrow.core.getOrElse
 import arrow.core.left
 import arrow.core.right
-import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
+import eu.torvian.chatbot.common.models.llm.RawChatMessage
+import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.*
@@ -45,11 +46,12 @@ class LLMApiClientKtor(
     }
 
     override suspend fun completeChat(
-        messages: List<ChatMessage>,
+        messages: List<RawChatMessage>,
         modelConfig: LLMModel,
         provider: LLMProvider,
         settings: ChatModelSettings,
-        apiKey: String?
+        apiKey: String?,
+        tools: List<ToolDefinition>?
     ): Either<LLMCompletionError, LLMCompletionResult> {
 
         logger.info("LLMApiClientKtor: Received request for model ${modelConfig.name} (Provider: ${provider.name}, Type: ${provider.type})")
@@ -72,7 +74,8 @@ class LLMApiClientKtor(
             modelConfig = modelConfig,
             provider = provider,
             settings = settings,
-            apiKey = apiKey
+            apiKey = apiKey,
+            tools = tools
         ).getOrElse { error -> // Handle ConfigurationError returned by the strategy
             logger.error("Strategy ${strategy::class.simpleName} failed to prepare request: ${error.message}")
             return error.left() // Propagate the specific error returned by the strategy
@@ -154,11 +157,12 @@ class LLMApiClientKtor(
     }
 
     override fun completeChatStreaming(
-        messages: List<ChatMessage>,
+        messages: List<RawChatMessage>,
         modelConfig: LLMModel,
         provider: LLMProvider,
         settings: ChatModelSettings,
-        apiKey: String?
+        apiKey: String?,
+        tools: List<ToolDefinition>?
     ): Flow<Either<LLMCompletionError, LLMStreamChunk>> = channelFlow {
         logger.info("LLMApiClientKtor: Received streaming request for model ${modelConfig.name} (Provider: ${provider.name}, Type: ${provider.type})")
 
@@ -175,7 +179,8 @@ class LLMApiClientKtor(
             modelConfig = modelConfig,
             provider = provider,
             settings = settings,
-            apiKey = apiKey
+            apiKey = apiKey,
+            tools = tools
         ).getOrElse { error ->
             logger.error("Strategy ${strategy::class.simpleName} failed to prepare streaming request: ${error.message}")
             send(error.left())
