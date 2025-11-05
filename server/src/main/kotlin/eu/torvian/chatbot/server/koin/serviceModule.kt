@@ -6,13 +6,9 @@ import eu.torvian.chatbot.common.security.EncryptionService
 import eu.torvian.chatbot.server.service.core.*
 import eu.torvian.chatbot.server.service.core.impl.*
 import eu.torvian.chatbot.server.service.security.*
-import eu.torvian.chatbot.server.service.security.authorizer.GroupResourceAuthorizer
-import eu.torvian.chatbot.server.service.security.authorizer.ModelResourceAuthorizer
-import eu.torvian.chatbot.server.service.security.authorizer.ProviderResourceAuthorizer
-import eu.torvian.chatbot.server.service.security.authorizer.ResourceAuthorizer
-import eu.torvian.chatbot.server.service.security.authorizer.SessionResourceAuthorizer
-import eu.torvian.chatbot.server.service.security.authorizer.SettingsResourceAuthorizer
+import eu.torvian.chatbot.server.service.security.authorizer.*
 import eu.torvian.chatbot.server.service.setup.InitialSetupService
+import eu.torvian.chatbot.server.service.tool.ToolExecutorFactory
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
@@ -20,8 +16,9 @@ import org.koin.dsl.module
  * Dependency injection module for configuring the application's service layer.
  *
  * This module provides:
- * - Core Servics (session, group, model, settings, message, LLM provider)
+ * - Core Services (session, group, model, settings, message, LLM provider, tool)
  * - Security services (credential management, encryption)
+ * - Tool execution services
  */
 fun serviceModule() = module {
     // --- Core Services ---
@@ -30,9 +27,12 @@ fun serviceModule() = module {
     single<LLMModelService> { LLMModelServiceImpl(get(), get(), get(), get(), get(), get(), get()) }
     single<ModelSettingsService> { ModelSettingsServiceImpl(get(), get(), get(), get(), get(), get(), get()) }
     single<LLMProviderService> { LLMProviderServiceImpl(get(), get(), get(), get(), get(), get(), get(), get()) }
-    single<MessageService> { MessageServiceImpl(get(), get(), get(), get(), get(), get(), get(), get()) }
+    single<MessageService> { MessageServiceImpl(get(), get(), get()) }
+    single<ChatService> { ChatServiceImpl(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
+
     single<RoleService> { RoleServiceImpl(get(), get(), get()) }
     single<UserGroupService> { UserGroupServiceImpl(get(), get(), get()) }
+    single<ToolService> { ToolServiceImpl(get(), get(), get()) }
 
     // --- Security Services ---
     single<CryptoProvider> { AESCryptoProvider(get()) }
@@ -58,9 +58,27 @@ fun serviceModule() = module {
     }
 
     // --- Authorization Services ---
-    single<AuthorizationService> { AuthorizationServiceImpl(getAll<ResourceAuthorizer>().associateBy { it.resourceType }, get(), get(), get()) }
+    single<AuthorizationService> {
+        AuthorizationServiceImpl(
+            getAll<ResourceAuthorizer>().associateBy { it.resourceType },
+            get(),
+            get(),
+            get()
+        )
+    }
 
     // --- Setup Services ---
     single<InitialSetupService> { InitialSetupService(get(), get(), get()) }
 
+    // --- Tool Executors ---
+    // Add more executors as they are implemented:
+    // single<CalculatorToolExecutor> { CalculatorToolExecutor() }
+
+    // --- Tool Executor Factory ---
+    single<ToolExecutorFactory> {
+        ToolExecutorFactory(
+            webSearchExecutor = get(named("web_search"))
+            // Add more executors here as they are implemented
+        )
+    }
 }
