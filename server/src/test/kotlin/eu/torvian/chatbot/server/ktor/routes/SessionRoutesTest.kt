@@ -21,13 +21,19 @@ import eu.torvian.chatbot.server.testutils.koin.defaultTestContainer
 import eu.torvian.chatbot.server.testutils.ktor.KtorTestApp
 import eu.torvian.chatbot.server.testutils.ktor.myTestApplication
 import io.ktor.client.call.*
+import io.ktor.client.plugins.sse.*
 import io.ktor.client.request.*
 import io.ktor.http.*
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.serializer
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import kotlin.test.*
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * Integration tests for Session API routes.
@@ -50,6 +56,7 @@ class SessionRoutesTest {
     private lateinit var testDataManager: TestDataManager
     private lateinit var authHelper: TestAuthHelper
     private lateinit var authToken: String
+    private val json = Json
 
     // Test data
     private val testGroup = TestDefaults.chatGroup1.copy(id = 1L)
@@ -135,6 +142,7 @@ class SessionRoutesTest {
                 Table.CHAT_MESSAGES,
                 Table.ASSISTANT_MESSAGES,
                 Table.SESSION_CURRENT_LEAF,
+                Table.TOOL_CALLS,
                 Table.USERS,
                 Table.ROLES, Table.USER_ROLE_ASSIGNMENTS,
                 Table.USER_SESSIONS,
@@ -538,7 +546,7 @@ class SessionRoutesTest {
     // --- POST /api/v1/sessions/{sessionId}/messages Tests ---
 
     @Test
-    fun `POST session message should process new message successfully`() = sessionTestApplication {
+    fun `POST session message should process new message successfully and emit SSE events`() = sessionTestApplication {
         // Arrange
         testDataManager.insertChatSession(testNonStreamingSession)
         testDataManager.insertSessionOwnership(testNonStreamingSession.id, authHelper.defaultTestUser.id)
@@ -546,90 +554,139 @@ class SessionRoutesTest {
         val processRequest = ProcessNewMessageRequest(content = messageContent, isStreaming = false)
 
         // Act
-        val response =
-            client.post(href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = testNonStreamingSession.id)))) {
-                contentType(ContentType.Application.Json)
+        val receivedEvents = mutableListOf<ChatEvent>()
+        client.sse(
+            urlString = href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = testNonStreamingSession.id))),
+            deserialize = { typeInfo, jsonString ->
+                json.decodeFromString(json.serializersModule.serializer(typeInfo.kotlinType!!), jsonString)
+            },
+            request = {
+                method = HttpMethod.Post
                 setBody(processRequest)
+                contentType(ContentType.Application.Json)
                 authenticate(authToken)
             }
+        ) {
+            incoming.collect { event ->
+                val chatEvent = deserialize<ChatEvent>(event.data)
+                assertNotNull(chatEvent, "Failed to deserialize SSE data chunk: '${event.data}'")
+                receivedEvents.add(chatEvent)
+            }
+        }
 
-        // Assert
-        assertEquals(HttpStatusCode.Created, response.status)
-        val messages = response.body<List<ChatMessage>>()
-        assertEquals(2, messages.size) // User message and assistant response
-        assertEquals(messageContent, messages[0].content)
-        assertEquals(testNonStreamingSession.id, messages[0].sessionId)
+        // Assert - SSE events
+        assertTrue(receivedEvents.isNotEmpty(), "Should have received SSE events")
 
-        // Verify the session leaf message ID was actually updated in the database
-        testDataManager.getSessionCurrentLeaf(testNonStreamingSession.id)?.let { leaf ->
-            assertEquals(messages[1].id, leaf.messageId)
-        } ?: fail("Expected leaf message to be created")
+        // Should have user_message_saved event
+        val userMessageEvent = receivedEvents.filterIsInstance<ChatEvent.UserMessageSaved>().firstOrNull()
+        assertNotNull(userMessageEvent, "Should receive user_message_saved event")
+        assertEquals(messageContent, userMessageEvent.userMessage.content)
+
+        // Should have assistant_message_saved event
+        val assistantMessageEvent = receivedEvents.filterIsInstance<ChatEvent.AssistantMessageSaved>().firstOrNull()
+        assertNotNull(assistantMessageEvent, "Should receive assistant_message_saved event")
+        assertNotNull(assistantMessageEvent.assistantMessage)
+
+        // Should end with done event
+        val doneEvent = receivedEvents.filterIsInstance<ChatEvent.StreamCompleted>().firstOrNull()
+        assertNotNull(doneEvent, "Should receive done event")
 
         // Verify the messages were actually created in the database
-        testDataManager.getChatMessage(messages[0].id)?.let { chatMessage ->
-            assertTrue(chatMessage is ChatMessage.UserMessage)
-            assertEquals(messages[0].id, chatMessage.id)
-            assertEquals(testNonStreamingSession.id, chatMessage.sessionId)
-            assertEquals(messageContent, chatMessage.content)
-            assertNull(chatMessage.parentMessageId)
-        } ?: fail("Expected user message to be created")
+        val messages = testDataManager.getChatMessagesForSession(testNonStreamingSession.id)
+        assertEquals(2, messages.size, "Should create 2 messages (user and assistant)")
 
-        testDataManager.getChatMessage(messages[1].id)?.let { chatMessage ->
-            assertTrue(chatMessage is ChatMessage.AssistantMessage)
-            assertEquals(messages[1].id, chatMessage.id)
-            assertEquals(testNonStreamingSession.id, chatMessage.sessionId)
-            assertEquals(messages[0].id, chatMessage.parentMessageId)
-            assertEquals(testModel.id, chatMessage.modelId)
-            assertEquals(testNonStreamingSettings.id, chatMessage.settingsId)
-        } ?: fail("Expected assistant message to be created")
+        val userMessage = messages.find { it is ChatMessage.UserMessage } as? ChatMessage.UserMessage
+        assertNotNull(userMessage, "Should have created user message")
+        assertEquals(messageContent, userMessage.content)
+        assertEquals(testNonStreamingSession.id, userMessage.sessionId)
+        assertNull(userMessage.parentMessageId)
+
+        val assistantMessage = messages.find { it is ChatMessage.AssistantMessage } as? ChatMessage.AssistantMessage
+        assertNotNull(assistantMessage, "Should have created assistant message")
+        assertEquals(testNonStreamingSession.id, assistantMessage.sessionId)
+        assertEquals(userMessage.id, assistantMessage.parentMessageId)
+        assertEquals(testModel.id, assistantMessage.modelId)
+        assertEquals(testNonStreamingSettings.id, assistantMessage.settingsId)
+
+        // Verify the session leaf message ID was actually updated
+        val leaf = testDataManager.getSessionCurrentLeaf(testNonStreamingSession.id)
+        assertNotNull(leaf, "Expected leaf message to be created")
+        assertEquals(assistantMessage.id, leaf.messageId)
     }
 
     @Test
-    fun `POST session message should return 404 for non-existent session`() = sessionTestApplication {
+    fun `POST session message should emit error event for non-existent session`() = sessionTestApplication {
         // Arrange
         val nonExistentId = 999L
         val processRequest = ProcessNewMessageRequest(content = "Test message", isStreaming = false)
 
         // Act
-        val response =
-            client.post(href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = nonExistentId)))) {
-                contentType(ContentType.Application.Json)
+        val receivedEvents = mutableListOf<ChatEvent>()
+        client.sse(
+            urlString = href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = nonExistentId))),
+            deserialize = { typeInfo, jsonString ->
+                json.decodeFromString(json.serializersModule.serializer(typeInfo.kotlinType!!), jsonString)
+            },
+            request = {
+                method = HttpMethod.Post
                 setBody(processRequest)
+                contentType(ContentType.Application.Json)
                 authenticate(authToken)
             }
+        ) {
+            incoming.collect { event ->
+                val chatEvent = deserialize<ChatEvent>(event.data)
+                assertNotNull(chatEvent, "Failed to deserialize SSE data chunk: '${event.data}'")
+                receivedEvents.add(chatEvent)
+            }
+        }
 
-        // Assert
-        assertEquals(HttpStatusCode.NotFound, response.status)
-        val error = response.body<ApiError>()
-        assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
-        assertEquals("Resource not found", error.message)
-        assert(error.details?.containsKey("id") == true)
-        assertEquals(nonExistentId.toString(), error.details?.get("id"))
+        // Assert - SSE error event
+        val errorEvent = receivedEvents.filterIsInstance<ChatEvent.ErrorOccurred>().firstOrNull()
+        assertNotNull(errorEvent, "Should receive error event")
+        assertEquals(CommonApiErrorCodes.NOT_FOUND.code, errorEvent.error.code)
     }
 
     @Test
-    fun `POST session message should return 400 for missing model`() = sessionTestApplication {
+    fun `POST session message should emit error event for missing model`() = sessionTestApplication {
         // Arrange
         testDataManager.insertChatSession(testSession.copy(currentModelId = null))
         testDataManager.insertSessionOwnership(testSession.id, authHelper.defaultTestUser.id)
         val processRequest = ProcessNewMessageRequest(content = "Test message", isStreaming = false)
 
         // Act
-        val response =
-            client.post(href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = testSession.id)))) {
-                contentType(ContentType.Application.Json)
+        val receivedEvents = mutableListOf<ChatEvent>()
+        client.sse(
+            urlString = href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = testSession.id))),
+            deserialize = { typeInfo, jsonString ->
+                json.decodeFromString(json.serializersModule.serializer(typeInfo.kotlinType!!), jsonString)
+            },
+            request = {
+                method = HttpMethod.Post
                 setBody(processRequest)
+                contentType(ContentType.Application.Json)
                 authenticate(authToken)
             }
+        ) {
+            incoming.collect { event ->
+                val chatEvent = deserialize<ChatEvent>(event.data)
+                assertNotNull(chatEvent, "Failed to deserialize SSE data chunk: '${event.data}'")
+                receivedEvents.add(chatEvent)
+            }
+        }
 
-        // Assert
-        assertEquals(HttpStatusCode.BadRequest, response.status)
-        val error = response.body<ApiError>()
-        assertEquals(ChatbotApiErrorCodes.MODEL_CONFIGURATION_ERROR.code, error.code)
-        assertEquals("LLM configuration error", error.message)
+        // Assert - SSE error event
+        val errorEvent = receivedEvents.filterIsInstance<ChatEvent.ErrorOccurred>().firstOrNull()
+        assertNotNull(errorEvent, "Should receive error event")
+        assertTrue(
+            errorEvent.error.message.contains("LLM configuration error", ignoreCase = true) ||
+                    errorEvent.error.code == ChatbotApiErrorCodes.MODEL_CONFIGURATION_ERROR.code,
+            "Error should indicate missing model"
+        )
 
         // Verify no messages were created
-        assertEquals(0, testDataManager.getChatMessagesForSession(testSession.id).size)
+        val messages = testDataManager.getChatMessagesForSession(testSession.id)
+        assertEquals(0, messages.size, "No messages should be created on error")
     }
 
     // --- 403 (Forbidden) tests for non-owner access ---
@@ -808,7 +865,7 @@ class SessionRoutesTest {
     }
 
     @Test
-    fun `POST session message as non-owner should return 403`() = sessionTestApplication {
+    fun `POST session message as non-owner should emit error event for forbidden access`() = sessionTestApplication {
         // Arrange
         val otherUser = authHelper.createTestUser(id = 992L, email = "otheruser8@example.com", username = "otheruser8")
         testDataManager.insertUser(otherUser)
@@ -818,18 +875,29 @@ class SessionRoutesTest {
         val processRequest = ProcessNewMessageRequest(content = "Hi", parentMessageId = null, isStreaming = false)
 
         // Act
-        val response =
-            client.post(href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = testSession.id)))) {
-                contentType(ContentType.Application.Json)
+        val receivedEvents = mutableListOf<ChatEvent>()
+        client.sse(
+            urlString = href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = testSession.id))),
+            deserialize = { typeInfo, jsonString ->
+                json.decodeFromString(json.serializersModule.serializer(typeInfo.kotlinType!!), jsonString)
+            },
+            request = {
+                method = HttpMethod.Post
                 setBody(processRequest)
+                contentType(ContentType.Application.Json)
                 authenticate(authToken)
             }
+        ) {
+            incoming.collect { event ->
+                val chatEvent = deserialize<ChatEvent>(event.data)
+                assertNotNull(chatEvent, "Failed to deserialize SSE data chunk: '${event.data}'")
+                receivedEvents.add(chatEvent)
+            }
+        }
 
-        // Assert
-        assertEquals(HttpStatusCode.Forbidden, response.status)
-        val error = response.body<ApiError>()
-        assertEquals(CommonApiErrorCodes.PERMISSION_DENIED.code, error.code)
-        assertEquals(403, error.statusCode)
-        assertEquals("Access denied", error.message)
+        // Assert - SSE error event
+        val errorEvent = receivedEvents.filterIsInstance<ChatEvent.ErrorOccurred>().firstOrNull()
+        assertNotNull(errorEvent, "Should receive error event")
+        assertEquals(CommonApiErrorCodes.PERMISSION_DENIED.code, errorEvent.error.code)
     }
 }
