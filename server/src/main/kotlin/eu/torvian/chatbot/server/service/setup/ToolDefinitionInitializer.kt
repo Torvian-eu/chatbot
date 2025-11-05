@@ -40,8 +40,9 @@ class ToolDefinitionInitializer(
             return@either
         }
 
-        // Create the default web search tool
+        // Create the default tools
         createWebSearchTool().bind()
+        createWeatherTool().bind()
     }
 
     /**
@@ -90,6 +91,81 @@ class ToolDefinitionInitializer(
                                     })
                                 })
                             })
+                        })
+                    })
+                },
+                isEnabled = true
+            ).bind()
+        }
+    }
+
+    /**
+     * Creates the default weather tool with mock data.
+     */
+    private suspend fun createWeatherTool(): Either<String, Unit> = either {
+        withError({ error: CreateToolError ->
+            "Failed to create weather tool: ${error.toErrorMessage()}"
+        }) {
+            toolService.createTool(
+                name = "get_weather",
+                description = "Get current weather information for major cities (London, Paris, Amsterdam, Berlin, Rome, Madrid, Barcelona, Brussels, Vienna, Lisbon). This is a mock implementation for testing purposes.",
+                type = ToolType.WEATHER,
+                config = buildJsonObject {
+                    // No specific config needed for mock weather tool
+                },
+                inputSchema = buildJsonObject {
+                    put("type", JsonPrimitive("object"))
+                    put("properties", buildJsonObject {
+                        put("city", buildJsonObject {
+                            put("type", JsonPrimitive("string"))
+                            put("description", JsonPrimitive("The city name (e.g., London, Paris, Amsterdam)"))
+                            put("enum", buildJsonArray {
+                                add(JsonPrimitive("London"))
+                                add(JsonPrimitive("Paris"))
+                                add(JsonPrimitive("Amsterdam"))
+                                add(JsonPrimitive("Berlin"))
+                                add(JsonPrimitive("Rome"))
+                                add(JsonPrimitive("Madrid"))
+                                add(JsonPrimitive("Barcelona"))
+                                add(JsonPrimitive("Brussels"))
+                                add(JsonPrimitive("Vienna"))
+                                add(JsonPrimitive("Lisbon"))
+                            })
+                        })
+                    })
+                    put("required", buildJsonArray {
+                        add(JsonPrimitive("city"))
+                    })
+                },
+                outputSchema = buildJsonObject {
+                    put("type", JsonPrimitive("object"))
+                    put("properties", buildJsonObject {
+                        put("city", buildJsonObject {
+                            put("type", JsonPrimitive("string"))
+                        })
+                        put("country", buildJsonObject {
+                            put("type", JsonPrimitive("string"))
+                        })
+                        put("temperature", buildJsonObject {
+                            put("type", JsonPrimitive("number"))
+                        })
+                        put("temperature_unit", buildJsonObject {
+                            put("type", JsonPrimitive("string"))
+                        })
+                        put("condition", buildJsonObject {
+                            put("type", JsonPrimitive("string"))
+                        })
+                        put("humidity", buildJsonObject {
+                            put("type", JsonPrimitive("integer"))
+                        })
+                        put("wind_speed", buildJsonObject {
+                            put("type", JsonPrimitive("number"))
+                        })
+                        put("wind_speed_unit", buildJsonObject {
+                            put("type", JsonPrimitive("string"))
+                        })
+                        put("description", buildJsonObject {
+                            put("type", JsonPrimitive("string"))
                         })
                     })
                 },

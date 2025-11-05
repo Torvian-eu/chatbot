@@ -13,13 +13,15 @@ import org.apache.logging.log4j.Logger
  * Manages the registry of available executors.
  */
 class ToolExecutorFactory(
-    private val webSearchExecutor: ToolExecutor
+    private val webSearchExecutor: ToolExecutor,
+    private val weatherExecutor: ToolExecutor
     // Add more executors as they are implemented
 ) {
     private val logger: Logger = LogManager.getLogger(ToolExecutorFactory::class.java)
 
     private val executors: Map<ToolType, ToolExecutor> = mapOf(
-        ToolType.WEB_SEARCH to webSearchExecutor
+        ToolType.WEB_SEARCH to webSearchExecutor,
+        ToolType.WEATHER to weatherExecutor
         // ToolType.CALCULATOR to calculatorExecutor,
         // etc.
     )

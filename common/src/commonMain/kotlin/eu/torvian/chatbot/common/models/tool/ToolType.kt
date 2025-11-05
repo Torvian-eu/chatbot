@@ -16,6 +16,9 @@ enum class ToolType {
     /** Mathematical calculation tools */
     CALCULATOR,
 
+    /** Weather information tools */
+    WEATHER,
+
     /** Custom or user-defined tools */
     CUSTOM
 }

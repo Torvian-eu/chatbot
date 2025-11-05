@@ -90,12 +90,12 @@ class ToolDefinitionInitializerTest {
 
         assertTrue(result.isRight(), "Expected successful initialization")
 
-        // Verify web search tool was created
+        // Verify tools were created
         val tools = toolService.getAllTools()
-        assertEquals(1, tools.size, "Expected exactly one tool")
+        assertEquals(2, tools.size, "Expected exactly two tools (web_search and get_weather)")
 
-        val webSearchTool = tools.first()
-        assertEquals("web_search", webSearchTool.name, "Expected web_search tool name")
+        val webSearchTool = tools.firstOrNull { it.name == "web_search" }
+        assertNotNull(webSearchTool, "Expected web_search tool to be created")
         assertEquals(
             "Search the web for current information using DuckDuckGo",
             webSearchTool.description,
@@ -103,6 +103,12 @@ class ToolDefinitionInitializerTest {
         )
         assertEquals(ToolType.WEB_SEARCH, webSearchTool.type, "Expected WEB_SEARCH type")
         assertTrue(webSearchTool.isEnabled, "Web search tool should be enabled by default")
+
+        // Verify weather tool was also created
+        val weatherTool = tools.firstOrNull { it.name == "get_weather" }
+        assertNotNull(weatherTool, "Expected get_weather tool to be created")
+        assertEquals(ToolType.WEATHER, weatherTool.type, "Expected WEATHER type")
+        assertTrue(weatherTool.isEnabled, "Weather tool should be enabled by default")
     }
 
     @Test
@@ -110,7 +116,8 @@ class ToolDefinitionInitializerTest {
         toolDefinitionInitializer.initialize()
 
         val tools = toolService.getAllTools()
-        val webSearchTool = tools.first()
+        val webSearchTool = tools.firstOrNull { it.name == "web_search" }
+        assertNotNull(webSearchTool, "Expected web_search tool to exist")
 
         // Verify config
         val config = webSearchTool.config
@@ -129,7 +136,8 @@ class ToolDefinitionInitializerTest {
         toolDefinitionInitializer.initialize()
 
         val tools = toolService.getAllTools()
-        val webSearchTool = tools.first()
+        val webSearchTool = tools.firstOrNull { it.name == "web_search" }
+        assertNotNull(webSearchTool, "Expected web_search tool to exist")
 
         // Verify input schema has required JSON Schema properties
         val inputSchema = webSearchTool.inputSchema
@@ -156,7 +164,8 @@ class ToolDefinitionInitializerTest {
         toolDefinitionInitializer.initialize()
 
         val tools = toolService.getAllTools()
-        val webSearchTool = tools.first()
+        val webSearchTool = tools.firstOrNull { it.name == "web_search" }
+        assertNotNull(webSearchTool, "Expected web_search tool to exist")
 
         // Verify output schema exists
         val outputSchema = webSearchTool.outputSchema
@@ -180,10 +189,11 @@ class ToolDefinitionInitializerTest {
         assertTrue(firstResult.isRight(), "Expected successful first initialization")
         assertTrue(secondResult.isRight(), "Expected successful second initialization")
 
-        // Verify only one tool exists
+        // Verify only two tools exist (web_search and get_weather)
         val tools = toolService.getAllTools()
-        assertEquals(1, tools.size, "Expected exactly one tool after repeated initialization")
-        assertEquals("web_search", tools.first().name, "Expected web_search tool")
+        assertEquals(2, tools.size, "Expected exactly two tools after repeated initialization")
+        assertTrue(tools.any { it.name == "web_search" }, "Expected web_search tool")
+        assertTrue(tools.any { it.name == "get_weather" }, "Expected get_weather tool")
     }
 
     @Test
@@ -192,17 +202,18 @@ class ToolDefinitionInitializerTest {
         toolDefinitionInitializer.initialize()
         assertTrue(toolDefinitionInitializer.isInitialized(), "Should be initialized after first run")
 
-        // Get initial tool count
+        // Get initial tool count and IDs
         val toolsAfterFirst = toolService.getAllTools()
-        val firstToolId = toolsAfterFirst.first().id
+        val firstToolIds = toolsAfterFirst.map { it.id }.toSet()
 
         // Second initialization
         toolDefinitionInitializer.initialize()
 
-        // Should still have the same tool
+        // Should still have the same tools
         val toolsAfterSecond = toolService.getAllTools()
-        assertEquals(1, toolsAfterSecond.size, "Expected exactly one tool")
-        assertEquals(firstToolId, toolsAfterSecond.first().id, "Expected same tool ID")
+        assertEquals(2, toolsAfterSecond.size, "Expected exactly two tools")
+        val secondToolIds = toolsAfterSecond.map { it.id }.toSet()
+        assertEquals(firstToolIds, secondToolIds, "Expected same tool IDs")
     }
 
     @Test

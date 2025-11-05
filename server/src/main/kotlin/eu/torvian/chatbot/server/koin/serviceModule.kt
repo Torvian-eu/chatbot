@@ -90,7 +90,8 @@ fun serviceModule() = module {
     // --- Tool Executor Factory ---
     single<ToolExecutorFactory> {
         ToolExecutorFactory(
-            webSearchExecutor = get(named("web_search"))
+            webSearchExecutor = get(named("web_search")),
+            weatherExecutor = get(named("weather"))
             // Add more executors here as they are implemented
         )
     }

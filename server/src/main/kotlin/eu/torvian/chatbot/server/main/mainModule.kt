@@ -7,6 +7,7 @@ import eu.torvian.chatbot.server.service.llm.strategy.OllamaChatStrategy
 import eu.torvian.chatbot.server.service.llm.strategy.OpenAIChatStrategy
 import eu.torvian.chatbot.server.service.tool.ToolExecutor
 import eu.torvian.chatbot.server.service.tool.impl.WebSearchToolExecutor
+import eu.torvian.chatbot.server.service.tool.impl.WeatherToolExecutor
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.*
@@ -65,5 +66,9 @@ fun mainModule(application: Application) = module {
         WebSearchToolExecutor(
             httpClient = get()
         )
+    }
+
+    single<ToolExecutor>(named("weather")) {
+        WeatherToolExecutor()
     }
 }
