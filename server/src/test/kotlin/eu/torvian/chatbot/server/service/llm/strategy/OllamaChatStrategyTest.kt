@@ -1,16 +1,15 @@
 package eu.torvian.chatbot.server.service.llm.strategy
 
 import arrow.core.getOrElse
-import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
+import eu.torvian.chatbot.common.models.llm.RawChatMessage
 import eu.torvian.chatbot.server.service.llm.GenericContentType
 import eu.torvian.chatbot.server.service.llm.GenericHttpMethod
 import eu.torvian.chatbot.server.service.llm.LLMCompletionError
-import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
 import kotlin.test.*
 
@@ -53,14 +52,8 @@ class OllamaChatStrategyTest {
     )
 
     private val testMessages = listOf(
-        ChatMessage.UserMessage(
-            id = 1L,
-            sessionId = 1L,
-            content = "Hello, how are you?",
-            createdAt = Instant.parse("2023-01-01T00:00:00Z"),
-            updatedAt = Instant.parse("2023-01-01T00:00:00Z"),
-            parentMessageId = null,
-            childrenMessageIds = emptyList()
+        RawChatMessage.User(
+            content = "Hello, how are you?"
         )
     )
 

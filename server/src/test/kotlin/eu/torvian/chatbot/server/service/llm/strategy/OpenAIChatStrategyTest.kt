@@ -1,11 +1,11 @@
 package eu.torvian.chatbot.server.service.llm.strategy
 
-import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
+import eu.torvian.chatbot.common.models.llm.RawChatMessage
 import eu.torvian.chatbot.server.service.llm.GenericContentType
 import eu.torvian.chatbot.server.service.llm.GenericHttpMethod
 import eu.torvian.chatbot.server.service.llm.LLMCompletionError
@@ -15,7 +15,6 @@ import io.ktor.http.*
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
-import kotlinx.datetime.Instant
 import kotlinx.serialization.json.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -41,25 +40,9 @@ class OpenAIChatStrategyTest {
     fun prepareRequest_successWithApiKey() {
         // Given
         val messages = listOf(
-            ChatMessage.UserMessage(1, 1, "Hello", TestDefaults.DEFAULT_INSTANT, TestDefaults.DEFAULT_INSTANT, null),
-            ChatMessage.AssistantMessage(
-                2,
-                1,
-                "Hi there!",
-                TestDefaults.DEFAULT_INSTANT,
-                TestDefaults.DEFAULT_INSTANT,
-                1,
-                modelId = 1,
-                settingsId = 1
-            ),
-            ChatMessage.UserMessage(
-                3,
-                1,
-                "Tell me a story",
-                TestDefaults.DEFAULT_INSTANT,
-                TestDefaults.DEFAULT_INSTANT,
-                2
-            )
+            RawChatMessage.User("Hello"),
+            RawChatMessage.Assistant("Hi there!"),
+            RawChatMessage.User("Tell me a story")
         )
         val modelConfig = TestDefaults.llmModel1.copy(name = "gpt-4o") // Use a specific model name
         val provider = TestDefaults.llmProvider1.copy(apiKeyId = "test-key-id", baseUrl = "https://api.openai.com/v1")
@@ -111,14 +94,7 @@ class OpenAIChatStrategyTest {
     fun prepareRequest_successWithoutApiKeyIfApiKeyIdNull() {
         // Given
         val messages = listOf(
-            ChatMessage.UserMessage(
-                1,
-                1,
-                "Test message",
-                TestDefaults.DEFAULT_INSTANT,
-                TestDefaults.DEFAULT_INSTANT,
-                null
-            )
+            RawChatMessage.User("Test message")
         )
         val modelConfig = TestDefaults.llmModel1.copy(name = "local-model")
         val provider =
@@ -165,14 +141,7 @@ class OpenAIChatStrategyTest {
     fun prepareRequest_errorIfApiKeyRequiredButNull() {
         // Given
         val messages = listOf(
-            ChatMessage.UserMessage(
-                1,
-                1,
-                "Test message",
-                TestDefaults.DEFAULT_INSTANT,
-                TestDefaults.DEFAULT_INSTANT,
-                null
-            )
+            RawChatMessage.User("Test message")
         )
         val modelConfig = TestDefaults.llmModel1.copy(name = "gpt-4o")
         val provider = TestDefaults.llmProvider1.copy(
@@ -200,7 +169,7 @@ class OpenAIChatStrategyTest {
     fun prepareRequest_flexibleJsonStringWithCustomParams() {
         // Given
         val messages = listOf(
-            ChatMessage.UserMessage(1, 1, "Test message", TestDefaults.DEFAULT_INSTANT, TestDefaults.DEFAULT_INSTANT, null)
+            RawChatMessage.User("Test message")
         )
         val modelConfig = TestDefaults.llmModel1.copy(name = "gpt-4")
         val provider = TestDefaults.llmProvider1.copy(apiKeyId = "test-key-id")
@@ -257,7 +226,7 @@ class OpenAIChatStrategyTest {
     fun prepareRequest_structuredSettingsOverrideCustomParams() {
         // Given
         val messages = listOf(
-            ChatMessage.UserMessage(1, 1, "Test", TestDefaults.DEFAULT_INSTANT, TestDefaults.DEFAULT_INSTANT, null)
+            RawChatMessage.User("Test")
         )
         val modelConfig = TestDefaults.llmModel1.copy(name = "gpt-3.5-turbo")
         val provider = TestDefaults.llmProvider1.copy(apiKeyId = "test-key-id")
@@ -303,7 +272,7 @@ class OpenAIChatStrategyTest {
     fun prepareRequest_emptyCustomParamsHandledGracefully() {
         // Given
         val messages = listOf(
-            ChatMessage.UserMessage(1, 1, "Test", TestDefaults.DEFAULT_INSTANT, TestDefaults.DEFAULT_INSTANT, null)
+            RawChatMessage.User("Test")
         )
         val modelConfig = TestDefaults.llmModel1.copy(name = "gpt-4")
         val provider = TestDefaults.llmProvider1.copy(apiKeyId = "test-key-id")
@@ -668,7 +637,7 @@ class OpenAIChatStrategyTest {
         assertTrue(result[1].isLeft())
         val error = result[1].leftOrNull()
         assertTrue(error is LLMCompletionError.InvalidResponseError)
-        assertTrue(error.message.contains("Failed to parse OpenAI stream JSON chunk"))
+        assertTrue(error.message.contains("Failed to parse OpenAI streaming JSON chunk"))
 
         // Third chunk should be successful
         assertTrue(result[2].isRight())
@@ -818,15 +787,7 @@ class OpenAIChatStrategyTest {
     fun prepareRequest_withStreamingEnabled_includesStreamOptions() {
         // Given
         val messages = listOf(
-            ChatMessage.UserMessage(
-                id = 1L,
-                sessionId = 1L,
-                content = "Hello",
-                createdAt = Instant.fromEpochMilliseconds(1234567890),
-                updatedAt = Instant.fromEpochMilliseconds(1234567890),
-                parentMessageId = null,
-                childrenMessageIds = emptyList()
-            )
+            RawChatMessage.User("Hello")
         )
         val modelConfig = LLMModel(
             id = 1L,
@@ -879,15 +840,7 @@ class OpenAIChatStrategyTest {
     fun prepareRequest_withStreamingDisabled_excludesStreamOptions() {
         // Given
         val messages = listOf(
-            ChatMessage.UserMessage(
-                id = 1L,
-                sessionId = 1L,
-                content = "Hello",
-                createdAt = Instant.fromEpochMilliseconds(1234567890),
-                updatedAt = Instant.fromEpochMilliseconds(1234567890),
-                parentMessageId = null,
-                childrenMessageIds = emptyList()
-            )
+            RawChatMessage.User("Hello")
         )
         val modelConfig = LLMModel(
             id = 1L,
