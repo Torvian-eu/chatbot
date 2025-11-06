@@ -78,6 +78,7 @@ common/src/commonMain/kotlin/eu/torvian/chatbot/common/
 │   │   │   └── RegisterRequest.kt    # User registration request DTO
 │   │   ├── core/                 # Core API request/response DTOs
 │   │   │   ├── AssignSessionToGroupRequest.kt # Request DTO for assigning session to group
+│   │   │   ├── ChatEvent.kt              # Sealed interface for server-sent chat events
 │   │   │   ├── ChatStreamEvent.kt        # Chat stream event DTO
 │   │   │   ├── CreateGroupRequest.kt     # Group creation request DTO
 │   │   │   ├── CreateSessionRequest.kt   # Session creation request DTO
@@ -89,11 +90,14 @@ common/src/commonMain/kotlin/eu/torvian/chatbot/common/
 │   │   │   ├── UpdateSessionModelRequest.kt # Request DTO for updating session model
 │   │   │   ├── UpdateSessionNameRequest.kt # Request DTO for updating session name
 │   │   │   └── UpdateSessionSettingsRequest.kt # Request DTO for updating session settings
-│   │   └── llm/                  # LLM-specific API DTOs
-│   │       ├── AddModelRequest.kt        # Request DTO for adding LLM models
-│   │       ├── AddProviderRequest.kt     # Request DTO for adding LLM providers
-│   │       ├── ApiKeyStatusResponse.kt   # Response DTO for API key status
-│   │       └── UpdateProviderCredentialRequest.kt # Request DTO for updating provider credentials
+│   │   ├── llm/                  # LLM-specific API DTOs
+│   │   │   ├── AddModelRequest.kt        # Request DTO for adding LLM models
+│   │   │   ├── AddProviderRequest.kt     # Request DTO for adding LLM providers
+│   │   │   ├── ApiKeyStatusResponse.kt   # Response DTO for API key status
+│   │   │   └── UpdateProviderCredentialRequest.kt # Request DTO for updating provider credentials
+│   │   └── tool/                 # Tool-specific API DTOs
+│   │       ├── CreateToolRequest.kt      # Request DTO for creating a new tool definition
+│   │       └── SetToolEnabledRequest.kt  # Request DTO for enabling/disabling a tool for a session
 │   ├── core/                     # Core domain models
 │   │   ├── ChatGroup.kt              # Chat group data model
 │   │   ├── ChatMessage.kt            # Chat message with threading support
@@ -107,6 +111,11 @@ common/src/commonMain/kotlin/eu/torvian/chatbot/common/
 │   │   ├── LLMProvider.kt            # LLM provider configuration
 │   │   ├── LLMProviderType.kt        # Enum for LLM provider types
 │   │   └── ModelSettings.kt          # Model settings and parameters
+│   ├── tool/                     # Tool-related domain models
+│   │   ├── ToolCall.kt               # Data model for a tool call
+│   │   ├── ToolCallStatus.kt         # Enum for tool call status
+│   │   ├── ToolDefinition.kt         # Data model for a tool definition
+│   │   └── ToolType.kt               # Enum for tool types
 │   └── user/                     # User-related domain models
 │       ├── Permission.kt             # Permission data model
 │       ├── Role.kt                   # Role data model
@@ -171,9 +180,12 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   │   ├── RolePermissionDao.kt  # role-permission assignments
 │   │   ├── SessionDao.kt         # Session operations interface
 │   │   ├── SessionOwnershipDao.kt # Session ownership management interface
+│   │   ├── SessionToolConfigDao.kt # Session-specific tool configuration DAO
 │   │   ├── SettingsAccessDao.kt  # Settings access management interface
 │   │   ├── SettingsDao.kt        # Settings management interface
 │   │   ├── SettingsOwnershipDao.kt # Settings ownership management interface
+│   │   ├── ToolCallDao.kt        # Tool call management interface
+│   │   ├── ToolDefinitionDao.kt  # Tool definition management interface
 │   │   ├── UserDao.kt            # User account management interface
 │   │   ├── UserGroupDao.kt       # User group management interface
 │   │   ├── UserRoleAssignmentDao.kt # User-role assignments
@@ -222,6 +234,7 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │       ├── configureRoleRoutes.kt    # Ktor routes for role management
 │       ├── configureSessionRoutes.kt
 │       ├── configureSettingsRoutes.kt
+│       ├── configureToolRoutes.kt    # Ktor routes for tool management
 │       ├── configureUserGroupRoutes.kt # Ktor routes for user group management
 │       └── configureUserRoutes.kt    # Ktor routes for user management
 ├── main/
@@ -237,14 +250,17 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   └── ServerStatus.kt           # Server status sealed interface
 ├── service/                      # Business logic services
 │   ├── core/                     # Core services
+│   │   ├── ChatService.kt        # Service for processing chat messages
 │   │   ├── GroupService.kt       # Group management service interface
 │   │   ├── LLMModelService.kt    # LLM Model management service interface
 │   │   ├── LLMProviderService.kt # LLM Provider management service interface
+│   │   ├── MessageEvent.kt       # Message event type for non-streaming
 │   │   ├── MessageService.kt     # Message handling service interface
 │   │   ├── MessageStreamEvent.kt # Message stream event type
 │   │   ├── ModelSettingsService.kt # Model Settings management service interface
 │   │   ├── RoleService.kt        # Role management service interface
 │   │   ├── SessionService.kt     # Session management service interface
+│   │   ├── ToolService.kt        # Service for managing tool definitions and session configurations
 │   │   ├── UserGroupService.kt   # User group management service interface
 │   │   ├── UserService.kt        # User account management service interface
 │   │   ├── error/                # Service-specific error types
@@ -259,6 +275,7 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   │   ├── LLMCompletionError.kt # LLM completion error type
 │   │   ├── LLMCompletionResult.kt # LLM completion result type
 │   │   ├── LLMStreamChunk.kt     # LLM stream chunk type
+│   │   ├── RawChatMessage.kt     # Raw chat message for LLM API communication
 │   │   └── strategy/             # LLM completion strategy implementations
 │   │       ├── OllamaApiModels.kt # Ollama API models (DTOs)
 │   │       ├── OllamaChatStrategy.kt # Ollama chat completion strategy
@@ -275,8 +292,20 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   │   ├── PasswordService.kt    # Password service interface
 │   │   ├── ResourceType.kt       # Resource type enumeration
 │   │   └── error/                # Domain-specific error types
-│   └── setup/                    # Initial setup services
-│       └── InitialSetupService.kt # Service for initial database and user setup
+│   ├── setup/                    # Initial setup services
+│   │   ├── DataInitializer.kt        # Interface for defining startup data setup tasks
+│   │   ├── InitializationCoordinator.kt # Orchestrates and runs initializers sequentially
+│   │   ├── InitialSetupService.kt    # Service for initial database and user setup
+│   │   ├── ToolDefinitionInitializer.kt # Initializes default tool definitions
+│   │   └── UserAccountInitializer.kt # Initializes default admin user, roles, and groups
+│   └── tool/                     # Tool execution services
+│       ├── ToolExecutor.kt           # Interface for generic tool execution
+│       ├── ToolExecutorFactory.kt    # Manages and provides tool executors
+│       ├── error/                    # Tool execution error types
+│       │   └── ToolExecutionError.kt   # Structured error hierarchy for tool execution
+│       └── impl/                     # Tool executor implementations
+│           ├── WeatherToolExecutor.kt    # Provides mock weather data
+│           └── WebSearchToolExecutor.kt  # Performs web searches using DuckDuckGo
 └── utils/                        # Utility classes
     └── transactions/             # Transaction management
         ├── ExposedTransactionScope.kt # Exposed-specific transaction scope
@@ -291,6 +320,7 @@ server/src/test/kotlin/eu/torvian/chatbot/server/
 ├── ktor/routes/                  # Ktor route tests
 ├── service                      # Service layer tests
 │   ├── core/impl/               # Core service tests
+│   │   ├── ChatServiceImplTest.kt    # Unit tests for ChatService message processing
 │   │   ├── GroupServiceImplTest.kt
 │   │   ├── LLMModelServiceImplTest.kt
 │   │   ├── LLMProviderServiceImplTest.kt
@@ -308,7 +338,10 @@ server/src/test/kotlin/eu/torvian/chatbot/server/
 │   │   ├── DbEncryptedCredentialManagerTest.kt
 │   │   └── EncryptionServiceTest.kt
 │   └── setup/                    # Setup service tests
-│       └── InitialSetupServiceTest.kt
+│       ├── InitializationCoordinatorTest.kt # Tests for InitializationCoordinator
+│       ├── InitialSetupServiceTest.kt
+│       ├── ToolDefinitionInitializerTest.kt # Tests for ToolDefinitionInitializer
+│       └── UserAccountInitializerTest.kt # Tests for UserAccountInitializer
 └── testutils/                    # Test utilities
     ├── auth/
     │   └── TestAuthHelper.kt     # Test authentication helper
