@@ -2,22 +2,13 @@ package eu.torvian.chatbot.server.testutils.data
 
 import eu.torvian.chatbot.common.models.core.ChatGroup
 import eu.torvian.chatbot.common.models.core.ChatMessage
-import eu.torvian.chatbot.common.models.llm.ChatModelSettings
-import eu.torvian.chatbot.common.models.llm.LLMModel
-import eu.torvian.chatbot.common.models.llm.LLMModelType
-import eu.torvian.chatbot.common.models.llm.LLMProvider
-import eu.torvian.chatbot.common.models.llm.LLMProviderType
+import eu.torvian.chatbot.common.models.llm.*
 import eu.torvian.chatbot.common.models.user.UserStatus
-import eu.torvian.chatbot.server.data.entities.ApiSecretEntity
-import eu.torvian.chatbot.server.data.entities.ChatSessionEntity
-import eu.torvian.chatbot.server.data.entities.SessionCurrentLeafEntity
-import eu.torvian.chatbot.server.domain.config.DatabaseConfig
 import eu.torvian.chatbot.common.security.EncryptedSecret
 import eu.torvian.chatbot.common.security.EncryptionConfig
-import eu.torvian.chatbot.server.data.entities.RoleEntity
-import eu.torvian.chatbot.server.data.entities.UserEntity
-import eu.torvian.chatbot.server.data.entities.UserGroupEntity
-import eu.torvian.chatbot.server.data.entities.UserSessionEntity
+import eu.torvian.chatbot.server.data.entities.*
+import eu.torvian.chatbot.server.domain.config.DatabaseConfig
+import eu.torvian.chatbot.server.service.llm.RawChatMessage
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
 
@@ -255,4 +246,16 @@ object TestDefaults {
         name = "Test Role 1",
         description = "Test Role 1"
     )
+
+    // --- RawChatMessage Test Data ---
+
+    val rawChatMessage1 = RawChatMessage.User(
+        content = "Hello, what can you help me with today?"
+    )
+
+    val rawChatMessage2 = RawChatMessage.Assistant(
+        content = "I'm here to help with your questions and tasks. What would you like to know about?"
+    )
+
+    val rawChatMessages = listOf(rawChatMessage1, rawChatMessage2)
 }

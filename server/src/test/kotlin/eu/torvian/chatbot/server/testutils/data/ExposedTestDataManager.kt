@@ -84,7 +84,12 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
             // Access tables (must come after both resources and user groups)
             Table.LLM_PROVIDER_ACCESS to LLMProviderAccessTable,
             Table.LLM_MODEL_ACCESS to LLMModelAccessTable,
-            Table.MODEL_SETTINGS_ACCESS to ModelSettingsAccessTable
+            Table.MODEL_SETTINGS_ACCESS to ModelSettingsAccessTable,
+
+            // Tool tables (must come after chat messages for tool calls)
+            Table.TOOL_DEFINITIONS to ToolDefinitionTable,
+            Table.TOOL_CALLS to ToolCallTable,
+            Table.SESSION_TOOL_CONFIG to SessionToolConfigTable
         )
 
         /**

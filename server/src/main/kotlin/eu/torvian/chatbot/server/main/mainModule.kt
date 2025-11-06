@@ -5,6 +5,9 @@ import eu.torvian.chatbot.server.service.llm.LLMApiClient
 import eu.torvian.chatbot.server.service.llm.LLMApiClientKtor
 import eu.torvian.chatbot.server.service.llm.strategy.OllamaChatStrategy
 import eu.torvian.chatbot.server.service.llm.strategy.OpenAIChatStrategy
+import eu.torvian.chatbot.server.service.tool.ToolExecutor
+import eu.torvian.chatbot.server.service.tool.impl.WebSearchToolExecutor
+import eu.torvian.chatbot.server.service.tool.impl.WeatherToolExecutor
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.*
@@ -12,6 +15,7 @@ import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import kotlinx.serialization.json.Json
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
 /**
@@ -55,5 +59,16 @@ fun mainModule(application: Application) = module {
             // LLMProviderType.ANTHROPIC to get<AnthropicChatStrategy>(),
         )
         LLMApiClientKtor(get(), strategies)
+    }
+
+    // --- Tool Executors ---
+    single<ToolExecutor>(named("web_search")) {
+        WebSearchToolExecutor(
+            httpClient = get()
+        )
+    }
+
+    single<ToolExecutor>(named("weather")) {
+        WeatherToolExecutor()
     }
 }

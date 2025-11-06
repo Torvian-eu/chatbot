@@ -3,14 +3,12 @@ package eu.torvian.chatbot.server.service.llm.strategy
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
-import eu.torvian.chatbot.common.models.core.ChatMessage
-import eu.torvian.chatbot.common.models.llm.ChatModelSettings
-import eu.torvian.chatbot.common.models.llm.LLMModel
-import eu.torvian.chatbot.common.models.llm.LLMProvider
-import eu.torvian.chatbot.common.models.llm.LLMProviderType
+import eu.torvian.chatbot.common.models.llm.*
+import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.server.service.llm.*
 import io.ktor.http.*
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.*
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
@@ -30,58 +28,48 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
     override val providerType: LLMProviderType = LLMProviderType.OPENAI
 
     override fun prepareRequest(
-        messages: List<ChatMessage>,
+        messages: List<RawChatMessage>,
         modelConfig: LLMModel,
         provider: LLMProvider,
         settings: ChatModelSettings,
-        apiKey: String?
+        apiKey: String?,
+        tools: List<ToolDefinition>?
     ): Either<LLMCompletionError.ConfigurationError, ApiRequestConfig> {
 
-        logger.debug("OpenAIChatStrategy: Preparing request for model ${modelConfig.name}")
+        logger.debug("Preparing request for model ${modelConfig.name}")
 
         // 1. Perform validation specific to OpenAI (e.g., requires apiKey)
         if (provider.apiKeyId != null && apiKey == null) {
-            return LLMCompletionError.ConfigurationError("OpenAI provider '${provider.name}' requires an API key, but none was provided.")
-                .left()
-        }
-        // Note: apiKey being null might be valid if provider.apiKeyId is null (e.g., self-hosted OpenAI API compatible)
-        // Consider if a null apiKey should always be an error if apiKeyId is NOT null.
-        // The MessageServiceImpl checks apiKeyId != null AND apiKey == null, which is more accurate.
-
-        // 2. Map generic ChatMessage list to OpenAI API specific RequestMessage list
-        fun ChatMessage.toOpenAiApiMessage(): OpenAiApiModels.ChatCompletionRequest.RequestMessage {
-            // Ensure roles are mapped correctly to OpenAI's expected string values
-            return OpenAiApiModels.ChatCompletionRequest.RequestMessage(
-                role = when (this.role) {
-                    ChatMessage.Role.USER -> "user"
-                    ChatMessage.Role.ASSISTANT -> "assistant"
-                },
-                content = this.content
-            )
+            return LLMCompletionError.ConfigurationError(
+                "OpenAI provider '${provider.name}' requires an API key, but none was provided."
+            ).left()
         }
 
-        // Add system message if present in settings
-        val systemMessage = settings.systemMessage
+        // 2. Build the messages list with system message if present
         val apiMessages = buildList {
+            // Add system message if present in settings
+            val systemMessage = settings.systemMessage
             if (!systemMessage.isNullOrBlank()) {
-                add(OpenAiApiModels.ChatCompletionRequest.RequestMessage(role = "system", content = systemMessage))
+                add(buildJsonObject {
+                    put("role", JsonPrimitive("system"))
+                    put("content", JsonPrimitive(systemMessage))
+                })
             }
-            // Add user and assistant messages from the conversation history
+
+            // Add all conversation messages
             addAll(messages.map { it.toOpenAiApiMessage() })
         }
 
-        // 3. Build the request body as a flexible JsonObject.
-        // This allows passing any parameter from customParams to the OpenAI API.
-        // Specific settings (e.g., temperature) will override any values from customParams.
+        // 3. Build the request body as a flexible JsonObject
         val requestBodyJson = buildJsonObject {
-            // Start with custom parameters from settings.
+            // Start with custom parameters from settings
             settings.customParams?.let { params ->
                 params.forEach { (key, value) -> put(key, value) }
             }
 
-            // Add/overwrite with standard and required parameters.
+            // Add/overwrite with standard and required parameters
             put("model", JsonPrimitive(modelConfig.name))
-            put("messages", json.encodeToJsonElement(apiMessages))
+            put("messages", JsonArray(apiMessages))
             put("stream", JsonPrimitive(settings.stream))
 
             // Add stream_options when streaming is enabled to request usage statistics
@@ -98,9 +86,19 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
             settings.stopSequences?.takeIf { it.isNotEmpty() }?.let {
                 put("stop", json.encodeToJsonElement(it))
             }
+
+            // 4. Add tools if provided and not empty
+            if (!tools.isNullOrEmpty()) {
+                val apiTools = tools.map { mapToolDefinitionToOpenAiApi(it) }
+                put("tools", json.encodeToJsonElement(apiTools))
+                // Set tool_choice to "auto" to let the model decide when to use tools
+                put("tool_choice", JsonPrimitive("auto"))
+
+                logger.debug("Added ${tools.size} tools to request")
+            }
         }
 
-        // 4. Determine API specific path and headers
+        // 5. Determine API specific path and headers
         val path = "/chat/completions"
         val customHeaders = mutableMapOf<String, String>()
 
@@ -110,15 +108,13 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
         }
 
         // Pre-serialize the JsonObject to avoid Ktor serialization issues
-        val requestBodyString = json.encodeToString(requestBodyJson)
+        val requestBodyString = json.encodeToString(JsonObject.serializer(), requestBodyJson)
 
         logger.debug(
-            "OpenAIChatStrategy: Prepared request body: ${
-                requestBodyString.take(500)
-            }..."
-        ) // Log part of the body
+            "Prepared request body: ${requestBodyString.take(500)}..."
+        )
 
-        // 5. Return the generic ApiRequestConfig
+        // 6. Return the generic ApiRequestConfig
         return ApiRequestConfig(
             path = path,
             method = GenericHttpMethod.POST,
@@ -129,7 +125,7 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
     }
 
     override fun processSuccessResponse(responseBody: String): Either<LLMCompletionError.InvalidResponseError, LLMCompletionResult> {
-        logger.debug("OpenAIChatStrategy: Processing success response body: ${responseBody.take(500)}...") // Log part of the body
+        logger.debug("Processing success response body: ${responseBody.take(500)}...")
         return try {
             // 1. Deserialize the raw string body into the API-specific success response DTO
             val successResponse: OpenAiApiModels.ChatCompletionResponse = json.decodeFromString(responseBody)
@@ -138,12 +134,22 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
             val result = LLMCompletionResult(
                 id = successResponse.id,
                 choices = successResponse.choices.map { choice ->
+                    // Map tool calls from API response if present
+                    val toolCalls = choice.message.tool_calls?.map { apiToolCall ->
+                        LLMCompletionResult.CompletionChoice.ToolCallRequest(
+                            name = apiToolCall.function.name,
+                            arguments = apiToolCall.function.arguments,
+                            toolCallId = apiToolCall.id
+                        )
+                    }
+
                     // Map each API choice to a generic CompletionChoice
                     LLMCompletionResult.CompletionChoice(
                         role = choice.message.role,
                         content = choice.message.content,
                         finishReason = choice.finish_reason,
-                        index = choice.index
+                        index = choice.index,
+                        toolCalls = toolCalls
                     )
                 },
                 usage = LLMCompletionResult.UsageStats(
@@ -157,19 +163,19 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
                     "api_model" to successResponse.model
                 )
             )
-            logger.debug("OpenAIChatStrategy: Successfully processed response to LLMCompletionResult")
+            logger.debug("Successfully parsed response with ${result.choices.size} choice(s)")
             result.right()
 
         } catch (e: Exception) {
             // Handle any exceptions during deserialization or mapping
-            logger.error("OpenAIChatStrategy: Failed to parse OpenAI success response body", e)
+            logger.error("Failed to parse OpenAI success response body", e)
             LLMCompletionError.InvalidResponseError("Failed to parse OpenAI success response body: ${e.message}", e)
                 .left()
         }
     }
 
     override fun processErrorResponse(statusCode: Int, errorBody: String): LLMCompletionError {
-        logger.debug("OpenAIChatStrategy: Processing error response body (Status $statusCode): ${errorBody.take(500)}...")
+        logger.debug("Processing error response body (Status $statusCode): ${errorBody.take(500)}...")
         // 1. Attempt to parse the API-specific error structure from the raw error body
         // OpenAI errors typically have a specific {"error": {...}} structure.
         val apiErrorMessage = try {
@@ -177,7 +183,7 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
             errorResponse.error.message
         } catch (e: Exception) {
             // If parsing the specific error structure fails, fall back to a generic message
-            logger.warn("OpenAIChatStrategy: Failed to parse OpenAI specific error body, using raw body.", e)
+            logger.warn("Failed to parse OpenAI specific error body, using raw body.", e)
             errorBody.take(200) // Return start of the raw body if parsing failed
         }
 
@@ -207,29 +213,39 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
     override fun processStreamingResponse(
         responseStream: Flow<String>
     ): Flow<Either<LLMCompletionError.InvalidResponseError, LLMStreamChunk>> = flow {
-        responseStream.collect { line ->
-            if (line.isBlank()) return@collect // Ignore empty lines
+        logger.debug("Processing streaming response")
 
-            if (!line.startsWith("data: ")) {
-                logger.trace("OpenAIChatStrategy: Ignoring non-data SSE line: $line")
-                return@collect
-            }
-
-            // Extract JSON payload, removing the "data: " prefix and any leading space
-            val jsonData = line.substringAfter("data: ").trim()
-
-            // Check for the termination signal from the API
-            if (jsonData == "[DONE]") {
-                logger.debug("OpenAIChatStrategy: Received [DONE] signal, stream finished by API.")
-                return@collect // Exit the collector, the flow will proceed to the final 'Done' chunk emission.
-            }
-
+        responseStream.collect { rawChunk ->
             try {
-                val streamChunk = json.decodeFromString<OpenAiApiModels.ChatCompletionStreamChunk>(jsonData)
+                // OpenAI uses Server-Sent Events (SSE) format
+                // Each line starts with "data: " followed by JSON
+                // The stream ends with "data: [DONE]"
 
-                // 1. CHECK FOR AND EMIT USAGE STATS
+                if (rawChunk.isBlank()) {
+                    // Skip empty lines
+                    return@collect
+                }
+
+                if (!rawChunk.startsWith("data: ")) {
+                    // Skip lines that don't match SSE format
+                    logger.trace("Skipping non-data line: $rawChunk")
+                    return@collect
+                }
+
+                val dataContent = rawChunk.removePrefix("data: ").trim()
+
+                if (dataContent == "[DONE]") {
+                    // Stream end marker
+                    logger.debug("Received [DONE] marker")
+                    return@collect
+                }
+
+                // Parse the JSON chunk
+                val streamChunk: OpenAiApiModels.ChatCompletionStreamChunk =
+                    json.decodeFromString(dataContent)
+
+                // Process usage information if present
                 streamChunk.usage?.let { usage ->
-                    logger.trace("OpenAIChatStrategy: Received usage stats chunk")
                     emit(
                         LLMStreamChunk.UsageChunk(
                             promptTokens = usage.prompt_tokens,
@@ -239,30 +255,131 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
                     )
                 }
 
-                // 2. PROCESS CONTENT DELTAS (as before)
+                // Process each choice in the chunk
                 streamChunk.choices.forEach { choice ->
-                    // Extract content and finish reason from the choice
-                    val contentDelta = choice.delta.content
-                    val finishReason = choice.finish_reason
-
-                    // Emit a content chunk if there is new text or if this chunk signals the end
-                    if (!contentDelta.isNullOrEmpty() || finishReason != null) {
-                        emit(LLMStreamChunk.ContentChunk(contentDelta ?: "", finishReason).right())
+                    // 1. Handle tool call deltas
+                    choice.delta.tool_calls?.forEach { toolCallDelta ->
+                        emit(
+                            LLMStreamChunk.ToolCallChunk(
+                                index = toolCallDelta.index,
+                                id = toolCallDelta.id,
+                                name = toolCallDelta.function.name,
+                                argumentsDelta = toolCallDelta.function.arguments
+                            ).right()
+                        )
                     }
-                    // Note: We ignore chunks with neither content nor a finish reason (e.g., the first chunk that only has a role).
-                }
 
+                    // 2. Handle content deltas
+                    choice.delta.content?.let { content ->
+                        if (content.isNotEmpty()) {
+                            emit(
+                                LLMStreamChunk.ContentChunk(
+                                    deltaContent = content,
+                                    finishReason = choice.finish_reason
+                                ).right()
+                            )
+                        }
+                    }
+
+                    // 3. If finish_reason is present without content, emit a chunk for it
+                    if (choice.finish_reason != null && choice.delta.content == null) {
+                        emit(
+                            LLMStreamChunk.ContentChunk(
+                                deltaContent = "",
+                                finishReason = choice.finish_reason
+                            ).right()
+                        )
+                    }
+                }
             } catch (e: Exception) {
-                logger.error("OpenAIChatStrategy: Failed to parse OpenAI streaming JSON chunk: $jsonData", e)
-                val error = LLMCompletionError.InvalidResponseError(
-                    "Failed to parse OpenAI stream JSON chunk: ${e.message}",
-                    e
+                logger.error("Failed to parse OpenAI streaming JSON chunk: $rawChunk", e)
+                emit(
+                    LLMCompletionError.InvalidResponseError(
+                        "Failed to parse OpenAI streaming JSON chunk: ${e.message}"
+                    ).left()
                 )
-                emit(error.left())
             }
         }
-        // After the stream has been fully collected (or the [DONE] signal was received),
+        // After the stream has been fully collected (usually after the [DONE] signal was received),
         // emit the final Done chunk to signal completion to the consumer.
         emit(LLMStreamChunk.Done.right())
+    }
+
+    /**
+     * Converts a RawChatMessage to an OpenAI API message format as a JsonObject.
+     * This function handles User, Assistant, and Tool message types.
+     *
+     * Note: We build JsonObject directly rather than using RequestMessage DTO
+     * because the OpenAI message format is polymorphic and complex, especially
+     * for assistant messages with tool calls and tool result messages.
+     *
+     * @return JsonObject representing the message in OpenAI API format
+     */
+    private fun RawChatMessage.toOpenAiApiMessage(): JsonObject {
+        return when (this) {
+            is RawChatMessage.User -> buildJsonObject {
+                put("role", JsonPrimitive("user"))
+                put("content", JsonPrimitive(content))
+            }
+
+            is RawChatMessage.Assistant -> buildJsonObject {
+                put("role", JsonPrimitive("assistant"))
+
+                // Content is optional when tool calls are present
+                if (content != null) {
+                    put("content", JsonPrimitive(content))
+                }
+
+                // Add tool calls if present
+                val calls = toolCalls
+                if (!calls.isNullOrEmpty()) {
+                    put("tool_calls", buildJsonArray {
+                        calls.forEach { toolCall ->
+                            add(buildJsonObject {
+                                // id is required by OpenAI
+                                put("id", JsonPrimitive(toolCall.id ?: ""))
+                                put("type", JsonPrimitive("function"))
+                                put("function", buildJsonObject {
+                                    put("name", JsonPrimitive(toolCall.name))
+                                    // Arguments can be null for parameterless functions
+                                    if (toolCall.arguments != null) {
+                                        put("arguments", JsonPrimitive(toolCall.arguments))
+                                    }
+                                })
+                            })
+                        }
+                    })
+                }
+            }
+
+            is RawChatMessage.Tool -> buildJsonObject {
+                put("role", JsonPrimitive("tool"))
+                put("content", JsonPrimitive(content))
+                put("tool_call_id", JsonPrimitive(toolCallId))
+                // OpenAI doesn't require 'name' field for tool messages, but we can include it for clarity
+                // put("name", JsonPrimitive(name))
+            }
+        }
+    }
+
+    /**
+     * Converts a domain ToolDefinition to OpenAI API ToolDefinition format.
+     *
+     * The domain ToolDefinition contains all tool information including configuration,
+     * but the OpenAI API only needs the function name, description, and parameters schema.
+     *
+     * @param tool The domain tool definition
+     * @return OpenAI API ToolDefinition
+     */
+    private fun mapToolDefinitionToOpenAiApi(tool: ToolDefinition): OpenAiApiModels.ToolDefinition {
+        return OpenAiApiModels.ToolDefinition(
+            type = "function",
+            function = OpenAiApiModels.ToolDefinition.FunctionDefinition(
+                name = tool.name,
+                description = tool.description,
+                parameters = tool.inputSchema,
+                strict = false // Can be made configurable via tool.config if needed
+            )
+        )
     }
 }

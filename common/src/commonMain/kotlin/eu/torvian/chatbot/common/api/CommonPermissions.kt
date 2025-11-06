@@ -41,6 +41,7 @@ object CommonPermissions {
         const val LLM_PROVIDERS = "llm_providers"
         const val LLM_MODELS = "llm_models"
         const val LLM_MODEL_SETTINGS = "llm_model_settings"
+        const val TOOLS = "tools"
         const val USERS = "users"
         const val ROLES = "roles"
         const val PERMISSIONS = "permissions"
@@ -51,6 +52,7 @@ object CommonPermissions {
     val MANAGE_LLM_PROVIDERS = PermissionSpec(Actions.MANAGE, Subjects.LLM_PROVIDERS)
     val MANAGE_LLM_MODELS = PermissionSpec(Actions.MANAGE, Subjects.LLM_MODELS)
     val MANAGE_LLM_MODEL_SETTINGS = PermissionSpec(Actions.MANAGE, Subjects.LLM_MODEL_SETTINGS)
+    val MANAGE_TOOLS = PermissionSpec(Actions.MANAGE, Subjects.TOOLS)
     val MANAGE_USERS = PermissionSpec(Actions.MANAGE, Subjects.USERS)
     val MANAGE_ROLES = PermissionSpec(Actions.MANAGE, Subjects.ROLES)
     val MANAGE_PERMISSIONS = PermissionSpec(Actions.MANAGE, Subjects.PERMISSIONS)

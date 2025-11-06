@@ -2,10 +2,10 @@ package eu.torvian.chatbot.server.service.llm
 
 import arrow.core.Either
 import arrow.core.right
-import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
+import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -16,11 +16,12 @@ import kotlinx.coroutines.flow.Flow
  */
 class LLMApiClientStub : LLMApiClient {
     override suspend fun completeChat(
-        messages: List<ChatMessage>,
+        messages: List<RawChatMessage>,
         modelConfig: LLMModel,
         provider: LLMProvider,
         settings: ChatModelSettings,
-        apiKey: String?
+        apiKey: String?,
+        tools: List<ToolDefinition>?
     ): Either<LLMCompletionError, LLMCompletionResult> {
         return LLMCompletionResult(
             id = "test-completion-id",
@@ -33,9 +34,9 @@ class LLMApiClientStub : LLMApiClient {
                 )
             ),
             usage = LLMCompletionResult.UsageStats(
-                promptTokens = messages.sumOf { it.content.length / 4 + 1 } + 10,
+                promptTokens = messages.sumOf { (it.content ?: "").length / 4 + 1 } + 10,
                 completionTokens = 50,
-                totalTokens = messages.sumOf { it.content.length / 4 + 1 } + 60
+                totalTokens = messages.sumOf { (it.content ?: "").length / 4 + 1 } + 60
             ),
             metadata = mapOf(
                 "api_object" to "chat.completion",
@@ -46,11 +47,12 @@ class LLMApiClientStub : LLMApiClient {
     }
 
     override fun completeChatStreaming(
-        messages: List<ChatMessage>,
+        messages: List<RawChatMessage>,
         modelConfig: LLMModel,
         provider: LLMProvider,
         settings: ChatModelSettings,
-        apiKey: String?
+        apiKey: String?,
+        tools: List<ToolDefinition>?
     ): Flow<Either<LLMCompletionError, LLMStreamChunk>> {
         TODO("Not yet implemented")
     }

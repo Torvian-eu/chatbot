@@ -6,14 +6,17 @@ import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
+import eu.torvian.chatbot.server.data.dao.ToolCallDao
 import eu.torvian.chatbot.server.data.dao.error.MessageError
 import eu.torvian.chatbot.server.data.dao.error.SessionError
 import eu.torvian.chatbot.server.service.core.LLMModelService
 import eu.torvian.chatbot.server.service.core.LLMProviderService
 import eu.torvian.chatbot.server.service.core.ModelSettingsService
+import eu.torvian.chatbot.server.service.core.ToolService
 import eu.torvian.chatbot.server.service.core.error.message.DeleteMessageError
 import eu.torvian.chatbot.server.service.llm.LLMApiClient
 import eu.torvian.chatbot.server.service.security.CredentialManager
+import eu.torvian.chatbot.server.service.tool.ToolExecutorFactory
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
 import io.mockk.clearMocks
 import io.mockk.coEvery
@@ -42,11 +45,6 @@ class MessageServiceImplDeleteTest {
     // Mocked dependencies
     private lateinit var messageDao: MessageDao
     private lateinit var sessionDao: SessionDao
-    private lateinit var llmModelService: LLMModelService
-    private lateinit var modelSettingsService: ModelSettingsService
-    private lateinit var llmProviderService: LLMProviderService
-    private lateinit var llmApiClient: LLMApiClient
-    private lateinit var credentialManager: CredentialManager
     private lateinit var transactionScope: TransactionScope
 
     // Class under test
@@ -80,17 +78,11 @@ class MessageServiceImplDeleteTest {
         // Create mocks for all dependencies
         messageDao = mockk()
         sessionDao = mockk()
-        llmModelService = mockk()
-        modelSettingsService = mockk()
-        llmProviderService = mockk()
-        llmApiClient = mockk()
-        credentialManager = mockk()
         transactionScope = mockk()
 
         // Create the service instance with mocked dependencies
         messageService = MessageServiceImpl(
-            messageDao, sessionDao, llmModelService, modelSettingsService,
-            llmProviderService, llmApiClient, credentialManager, transactionScope
+            messageDao, sessionDao, transactionScope
         )
 
         // Mock the transaction scope to execute blocks directly
@@ -104,8 +96,7 @@ class MessageServiceImplDeleteTest {
     fun tearDown() {
         // Clear all mocks after each test to ensure isolation
         clearMocks(
-            messageDao, sessionDao, llmModelService, modelSettingsService,
-            llmProviderService, llmApiClient, credentialManager, transactionScope
+            messageDao, sessionDao, transactionScope
         )
     }
 

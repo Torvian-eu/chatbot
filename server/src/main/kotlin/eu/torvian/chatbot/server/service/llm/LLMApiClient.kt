@@ -1,10 +1,10 @@
 package eu.torvian.chatbot.server.service.llm
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.core.ChatMessage
+import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
-import eu.torvian.chatbot.common.models.llm.ChatModelSettings
+import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -17,35 +17,44 @@ interface LLMApiClient {
      * Sends a non-streaming chat completion request to the appropriate LLM API.
      * Delegates the API-specific details (request format, response parsing) to an internal strategy.
      *
-     * @param messages The list of messages forming the conversation context.
+     * @param messages The conversation context as a list of RawChatMessage
      * @param modelConfig Configuration details for the target LLM model.
      * @param provider Provider configuration containing base URL and type information.
      * @param settings Specific settings profile to use for this completion request.
      * @param apiKey The decrypted API key for authentication (nullable if not required by the provider).
+     * @param tools Optional list of tool definitions that the model can call
      * @return Either an [LLMCompletionError] if the process fails at any stage (configuration, network, API error, parsing),
      *         or the generic [LLMCompletionResult] on success.
      */
     suspend fun completeChat(
-        messages: List<ChatMessage>,
+        messages: List<RawChatMessage>,
         modelConfig: LLMModel,
         provider: LLMProvider,
         settings: ChatModelSettings,
-        apiKey: String?
+        apiKey: String?,
+        tools: List<ToolDefinition>? = null
     ): Either<LLMCompletionError, LLMCompletionResult>
 
     /**
      * Sends a streaming chat completion request to the appropriate LLM API.
      * Delegates API-specific details to a strategy.
      *
+     * @param messages The conversation context as a list of RawChatMessage
+     * @param modelConfig Configuration details for the target LLM model.
+     * @param provider Provider configuration containing base URL and type information.
+     * @param settings Specific settings profile to use for this completion request.
+     * @param apiKey The decrypted API key for authentication (nullable if not required by the provider).
+     * @param tools Optional list of tool definitions that the model can call
      * @return A Flow of Either<LLMCompletionError, LLMStreamChunk> representing the stream.
      *         An error emitted in the Flow indicates a problem during the stream.
      *         The flow terminates with `LLMStreamChunk.Done` on success or an error.
      */
     fun completeChatStreaming(
-        messages: List<ChatMessage>,
+        messages: List<RawChatMessage>,
         modelConfig: LLMModel,
         provider: LLMProvider,
         settings: ChatModelSettings,
-        apiKey: String?
+        apiKey: String?,
+        tools: List<ToolDefinition>? = null
     ): Flow<Either<LLMCompletionError, LLMStreamChunk>>
 }
