@@ -1,15 +1,7 @@
 package eu.torvian.chatbot.server.service.llm.strategy
 
-import eu.torvian.chatbot.common.models.llm.LLMModel
-import eu.torvian.chatbot.common.models.llm.LLMProvider
-import eu.torvian.chatbot.common.models.llm.LLMProviderType
-import eu.torvian.chatbot.common.models.llm.LLMModelType
-import eu.torvian.chatbot.common.models.llm.ChatModelSettings
-import eu.torvian.chatbot.common.models.llm.RawChatMessage
-import eu.torvian.chatbot.server.service.llm.GenericContentType
-import eu.torvian.chatbot.server.service.llm.GenericHttpMethod
-import eu.torvian.chatbot.server.service.llm.LLMCompletionError
-import eu.torvian.chatbot.server.service.llm.LLMStreamChunk
+import eu.torvian.chatbot.common.models.llm.*
+import eu.torvian.chatbot.server.service.llm.*
 import eu.torvian.chatbot.server.testutils.data.TestDefaults
 import io.ktor.http.*
 import kotlinx.coroutines.flow.flowOf
@@ -257,14 +249,20 @@ class OpenAIChatStrategyTest {
         val requestBodyJson = Json.decodeFromString<JsonObject>(requestBodyString)
 
         // Verify that structured settings override customParams
-        assertEquals(0.9f, requestBodyJson["temperature"]?.jsonPrimitive?.float,
-            "Structured temperature setting should override customParams")
-        assertEquals(200, requestBodyJson["max_tokens"]?.jsonPrimitive?.int,
-            "Structured maxTokens setting should override customParams")
+        assertEquals(
+            0.9f, requestBodyJson["temperature"]?.jsonPrimitive?.float,
+            "Structured temperature setting should override customParams"
+        )
+        assertEquals(
+            200, requestBodyJson["max_tokens"]?.jsonPrimitive?.int,
+            "Structured maxTokens setting should override customParams"
+        )
 
         // Verify that custom parameter not in structured settings is preserved
-        assertEquals(42, requestBodyJson["seed"]?.jsonPrimitive?.int,
-            "Custom seed parameter should be preserved")
+        assertEquals(
+            42, requestBodyJson["seed"]?.jsonPrimitive?.int,
+            "Custom seed parameter should be preserved"
+        )
     }
 
     @Test
@@ -882,7 +880,10 @@ class OpenAIChatStrategyTest {
         val requestBodyJson = Json.decodeFromString<JsonObject>(requestBodyString)
 
         // Verify stream_options is not present
-        assertFalse(requestBodyJson.containsKey("stream_options"), "Request should not contain stream_options when streaming is disabled")
+        assertFalse(
+            requestBodyJson.containsKey("stream_options"),
+            "Request should not contain stream_options when streaming is disabled"
+        )
     }
 
     @Test

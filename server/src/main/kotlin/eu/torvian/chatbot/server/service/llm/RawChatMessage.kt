@@ -1,22 +1,21 @@
-package eu.torvian.chatbot.common.models.llm
+package eu.torvian.chatbot.server.service.llm
 
-import eu.torvian.chatbot.common.models.core.ChatMessage
 import kotlinx.serialization.Serializable
 
 /**
  * Raw message types for LLM API communication.
  *
- * These are simplified versions of [ChatMessage] without threading information.
+ * These are simplified versions of [eu.torvian.chatbot.common.models.core.ChatMessage] without threading information.
  * They are used to build context for LLM requests and contain only the information
  * needed by the LLM provider APIs (OpenAI, Ollama, etc.).
  *
- * Key differences from [ChatMessage]:
+ * Key differences from [eu.torvian.chatbot.common.models.core.ChatMessage]:
  * - No message IDs or database references
  * - No parent/child relationships or threading
  * - No metadata like creation timestamps
  * - Focused on role, content, and tool-related information
  *
- * The conversion from [ChatMessage] to [RawChatMessage] happens in the service layer
+ * The conversion from [eu.torvian.chatbot.common.models.core.ChatMessage] to [RawChatMessage] happens in the service layer
  * when building context for LLM requests.
  */
 sealed class RawChatMessage {
@@ -97,7 +96,7 @@ sealed class RawChatMessage {
      *
      * Represents the output from a tool execution, sent back to the LLM
      * so it can incorporate the results into its response. These messages
-     * are not stored as separate [ChatMessage] records in the database;
+     * are not stored as separate [eu.torvian.chatbot.common.models.core.ChatMessage] records in the database;
      * instead, they are reconstructed from [eu.torvian.chatbot.common.models.tool.ToolCall]
      * records when building context.
      *

@@ -8,7 +8,6 @@ import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
-import eu.torvian.chatbot.common.models.llm.RawChatMessage
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import io.ktor.client.*
 import io.ktor.client.call.*

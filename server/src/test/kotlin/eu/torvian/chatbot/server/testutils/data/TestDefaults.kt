@@ -2,23 +2,13 @@ package eu.torvian.chatbot.server.testutils.data
 
 import eu.torvian.chatbot.common.models.core.ChatGroup
 import eu.torvian.chatbot.common.models.core.ChatMessage
-import eu.torvian.chatbot.common.models.llm.ChatModelSettings
-import eu.torvian.chatbot.common.models.llm.LLMModel
-import eu.torvian.chatbot.common.models.llm.LLMModelType
-import eu.torvian.chatbot.common.models.llm.LLMProvider
-import eu.torvian.chatbot.common.models.llm.LLMProviderType
-import eu.torvian.chatbot.common.models.llm.RawChatMessage
+import eu.torvian.chatbot.common.models.llm.*
 import eu.torvian.chatbot.common.models.user.UserStatus
-import eu.torvian.chatbot.server.data.entities.ApiSecretEntity
-import eu.torvian.chatbot.server.data.entities.ChatSessionEntity
-import eu.torvian.chatbot.server.data.entities.SessionCurrentLeafEntity
-import eu.torvian.chatbot.server.domain.config.DatabaseConfig
 import eu.torvian.chatbot.common.security.EncryptedSecret
 import eu.torvian.chatbot.common.security.EncryptionConfig
-import eu.torvian.chatbot.server.data.entities.RoleEntity
-import eu.torvian.chatbot.server.data.entities.UserEntity
-import eu.torvian.chatbot.server.data.entities.UserGroupEntity
-import eu.torvian.chatbot.server.data.entities.UserSessionEntity
+import eu.torvian.chatbot.server.data.entities.*
+import eu.torvian.chatbot.server.domain.config.DatabaseConfig
+import eu.torvian.chatbot.server.service.llm.RawChatMessage
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
 
