@@ -10,10 +10,11 @@ import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.api.resources.MessageResource
 import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.api.resources.href
-import eu.torvian.chatbot.common.models.core.ChatMessage
+import eu.torvian.chatbot.common.models.api.core.ChatEvent
 import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
 import eu.torvian.chatbot.common.models.api.core.ProcessNewMessageRequest
 import eu.torvian.chatbot.common.models.api.core.UpdateMessageRequest
+import eu.torvian.chatbot.common.models.core.ChatMessage
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.*
@@ -44,24 +45,71 @@ class KtorChatApiClient(client: HttpClient) : BaseApiResourceClient(client), Cha
 
     private val json: Json = Json
 
-    override suspend fun processNewMessage(
+    override fun processNewMessage(
         sessionId: Long,
         request: ProcessNewMessageRequest
-    ): Either<ApiResourceError, List<ChatMessage>> {
-        // Use safeApiCall to wrap the Ktor request
-        return safeApiCall {
-            // Use Ktor resources to build the URL: /api/v1/sessions/{sessionId}/messages
-            client.post(SessionResource.ById.Messages(SessionResource.ById(SessionResource(), sessionId))) {
-                // Set the request body with the ProcessNewMessageRequest DTO
-                setBody(request)
-                timeout {
-                    requestTimeoutMillis =
-                        HttpTimeoutConfig.INFINITE_TIMEOUT_MS // Allow indefinite timeout (for long LLM responses)
-                    socketTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS
+    ): Flow<Either<ApiResourceError, ChatEvent>> = flow {
+        try {
+            client.sse(
+                urlString = href(SessionResource.ById.Messages(SessionResource.ById(SessionResource(), sessionId))),
+                deserialize = { typeInfo, jsonString ->
+                    json.decodeFromString(json.serializersModule.serializer(typeInfo.kotlinType!!), jsonString)
+                },
+                request = {
+                    method = HttpMethod.Post
+                    setBody(request)
+                    contentType(ContentType.Application.Json)
+                    timeout {
+                        // Increase socket timeout to one minute to allow for long-running LLM requests
+                        // TODO: Allow user to cancel long-running requests, and set this timeout to infinity.
+                        socketTimeoutMillis = 60_000 // 1 minute
+                    }
                 }
-            }.body<List<ChatMessage>>() // Expect a List<ChatMessage> in the response body on success (HTTP 201)
+            ) {
+                incoming.collect { event ->
+                    try {
+                        val chatEvent = deserialize<ChatEvent>(event.data)
+                        if (chatEvent == null) {
+                            logger.error("Failed to deserialize SSE data chunk for session $sessionId: '${event.data}'")
+                            emit(
+                                ApiResourceError.SerializationError(
+                                    "Failed to parse SSE data chunk: ${event.data}",
+                                    null
+                                ).left()
+                            )
+                            return@collect
+                        }
+                        emit(chatEvent.right())
+                    } catch (e: SerializationException) {
+                        logger.error(
+                            "SerializationException during SSE deserialization for session $sessionId: '${event.data}'",
+                            e
+                        )
+                        emit(
+                            ApiResourceError.SerializationError(
+                                "Serialization error: ${e.message} for data: ${event.data}",
+                                null
+                            ).left()
+                        )
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            logger.error("Network or streaming error during processNewMessage for session $sessionId", e)
+            val apiResourceError = when (e) {
+                is SSEClientException -> ApiResourceError.NetworkError(
+                    "SSE Client Error: ${e.message}",
+                    e
+                )
+
+                else -> ApiResourceError.UnknownError(
+                    "Unexpected error during SSE request: ${e.message}",
+                    e
+                )
+            }
+            emit(apiResourceError.left())
         }
-    }
+    }.flowOn(ioDispatcher)
 
     override fun processNewMessageStreaming(
         sessionId: Long,
@@ -94,7 +142,10 @@ class KtorChatApiClient(client: HttpClient) : BaseApiResourceClient(client), Cha
                         }
                         emit(chatStreamEvent.right())
                     } catch (e: SerializationException) {
-                        logger.error("SerializationException during SSE deserialization for session $sessionId: '${event.data}'", e)
+                        logger.error(
+                            "SerializationException during SSE deserialization for session $sessionId: '${event.data}'",
+                            e
+                        )
                         emit(
                             ApiResourceError.SerializationError(
                                 "Serialization error: ${e.message} for data: ${event.data}",

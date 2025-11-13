@@ -2,6 +2,7 @@ package eu.torvian.chatbot.app.service.api
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.core.ChatMessage
+import eu.torvian.chatbot.common.models.api.core.ChatEvent
 import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
 import eu.torvian.chatbot.common.models.api.core.ProcessNewMessageRequest
 import eu.torvian.chatbot.common.models.api.core.UpdateMessageRequest
@@ -19,16 +20,16 @@ interface ChatApi {
 
     /**
      * Sends a new user message to a specified session and processes the LLM response.
-     * This is for **non-streaming** responses.
+     * This is for **non-streaming** responses, but still uses Server-Sent Events (SSE) to deliver progress updates.
      *
      * Corresponds to `POST /api/v1/sessions/{sessionId}/messages` with `stream=false`.
      *
      * @param sessionId The ID of the session to send the message to.
      * @param request The details of the new message, including content and optional parent ID.
-     * @return [arrow.core.Either.Right] containing a list with the newly created user and assistant messages (in that order) on success,
-     *         or [Either.Left] containing an [ApiResourceError] on failure.
+     * @return A [Flow] of [Either<ApiResourceError, ChatEvent>] representing discrete events during message processing.
+     *         The flow will emit various [ChatEvent] types until [ChatEvent.StreamCompleted] or an error.
      */
-    suspend fun processNewMessage(sessionId: Long, request: ProcessNewMessageRequest): Either<ApiResourceError, List<ChatMessage>>
+    fun processNewMessage(sessionId: Long, request: ProcessNewMessageRequest): Flow<Either<ApiResourceError, ChatEvent>>
 
     /**
      * Sends a new user message to a specified session and streams the LLM response back.
