@@ -4,6 +4,7 @@ import eu.torvian.chatbot.app.repository.*
 import eu.torvian.chatbot.app.repository.impl.*
 import eu.torvian.chatbot.app.service.api.*
 import eu.torvian.chatbot.app.service.api.ktor.*
+import eu.torvian.chatbot.app.service.api.ktor.KtorToolApiClient
 import eu.torvian.chatbot.app.service.auth.createAuthenticatedHttpClient
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.service.security.CertificateTrustService
@@ -146,6 +147,9 @@ fun appModule(baseUri: String): Module = module {
     }
     single<UserGroupApi> {
         KtorUserGroupApiClient(get())
+    }
+    single<ToolApi> {
+        KtorToolApiClient(get())
     }
 
     // Provide Repository implementations, injecting the API clients
