@@ -28,6 +28,7 @@ dependencies {
     implementation(libs.serialization.json)           // KotlinX Serialization JSON
     implementation(libs.coroutines.core)              // KotlinX Coroutines Core
     implementation(libs.kotlinx.datetime)             // KotlinX DateTime
+    implementation(libs.ktor.server.jetty)            // Ktor Jetty engine for server
     implementation(libs.ktor.serialization.json)      // Ktor JSON serialization support
     implementation(libs.ktor.network.tls.certificates) // Ktor TLS certificates for SSL/HTTPS
     implementation(libs.sqlite.jdbc)                  // SQLite JDBC Driver

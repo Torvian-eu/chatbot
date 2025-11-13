@@ -3,8 +3,7 @@ package eu.torvian.chatbot.server.main
 import eu.torvian.chatbot.server.service.security.CertificateManager
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
-import io.ktor.server.netty.*
-import io.ktor.server.engine.ConnectorType
+import io.ktor.server.jetty.jakarta.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -53,7 +52,7 @@ class ServerControlServiceImpl(
         }
 
         val server = createEmbeddedServer(
-            Netty, port = serverConfig.port, host = serverConfig.host,
+            Jetty, port = serverConfig.port, host = serverConfig.host,
             onStarting = {
                 logger.info("Ktor server starting...")
                 _serverStatus.value = ServerStatus.Starting
@@ -138,7 +137,7 @@ class ServerControlServiceImpl(
      * Creates an instance of the embedded Ktor server configured with the Chatbot module.
      * This function creates the engine instance but does not start it.
      *
-     * @param factory The engine factory to use (e.g., [Netty]).
+     * @param factory The engine factory to use (e.g., [Jetty]).
      * @param port The desired port. If 0, a random available port will be used when started.
      * @param host The host to bind to.
      * @param onStarting A callback to be invoked when the server is starting.
