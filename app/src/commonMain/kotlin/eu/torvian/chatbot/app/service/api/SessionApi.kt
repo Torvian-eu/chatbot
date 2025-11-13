@@ -9,6 +9,7 @@ import eu.torvian.chatbot.common.models.api.core.UpdateSessionLeafMessageRequest
 import eu.torvian.chatbot.common.models.api.core.UpdateSessionModelRequest
 import eu.torvian.chatbot.common.models.api.core.UpdateSessionNameRequest
 import eu.torvian.chatbot.common.models.api.core.UpdateSessionSettingsRequest
+import eu.torvian.chatbot.common.models.tool.ToolCall
 
 /**
  * Frontend API interface for interacting with Chat Session-related endpoints.
@@ -134,4 +135,16 @@ interface SessionApi {
      *         or [Either.Left] containing an [ApiResourceError] on failure.
      */
     suspend fun updateSessionGroup(sessionId: Long, request: UpdateSessionGroupRequest): Either<ApiResourceError, Unit>
+
+    /**
+     * Retrieves all tool calls for a specific chat session.
+     * Useful for building context about tool execution history and for audit trails.
+     *
+     * Corresponds to `GET /api/v1/sessions/{sessionId}/toolcalls`.
+     *
+     * @param sessionId The ID of the session to retrieve tool calls for.
+     * @return [Either.Right] containing a list of [ToolCall] on success,
+     *         or [Either.Left] containing an [ApiResourceError] on failure.
+     */
+    suspend fun getSessionToolCalls(sessionId: Long): Either<ApiResourceError, List<ToolCall>>
 }
