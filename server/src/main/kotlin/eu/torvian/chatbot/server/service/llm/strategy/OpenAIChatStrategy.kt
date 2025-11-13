@@ -3,7 +3,10 @@ package eu.torvian.chatbot.server.service.llm.strategy
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
-import eu.torvian.chatbot.common.models.llm.*
+import eu.torvian.chatbot.common.models.llm.ChatModelSettings
+import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.llm.LLMProvider
+import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.server.service.llm.*
 import io.ktor.http.*
@@ -177,9 +180,14 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
     override fun processErrorResponse(statusCode: Int, errorBody: String): LLMCompletionError {
         logger.debug("Processing error response body (Status $statusCode): ${errorBody.take(500)}...")
         // 1. Attempt to parse the API-specific error structure from the raw error body
-        // OpenAI errors typically have a specific {"error": {...}} structure.
+        // Gemini error responses are wrapped in an array. Needs to be unwrapped first.
+        val errorBodyUnwrapped = if (errorBody.startsWith("[")) {
+            errorBody.substring(1, errorBody.length - 1)
+        } else {
+            errorBody
+        }
         val apiErrorMessage = try {
-            val errorResponse = json.decodeFromString<OpenAiApiModels.OpenAiErrorResponse>(errorBody)
+            val errorResponse = json.decodeFromString<OpenAiApiModels.OpenAiErrorResponse>(errorBodyUnwrapped)
             errorResponse.error.message
         } catch (e: Exception) {
             // If parsing the specific error structure fails, fall back to a generic message
@@ -258,15 +266,27 @@ class OpenAIChatStrategy(private val json: Json) : ChatCompletionStrategy {
                 // Process each choice in the chunk
                 streamChunk.choices.forEach { choice ->
                     // 1. Handle tool call deltas
-                    choice.delta.tool_calls?.forEach { toolCallDelta ->
-                        emit(
-                            LLMStreamChunk.ToolCallChunk(
-                                index = toolCallDelta.index,
-                                id = toolCallDelta.id,
-                                name = toolCallDelta.function.name,
-                                argumentsDelta = toolCallDelta.function.arguments
-                            ).right()
+                    var toolCallChunks = choice.delta.tool_calls?.map { toolCallDelta ->
+                        LLMStreamChunk.ToolCallChunk(
+                            index = toolCallDelta.index,
+                            id = toolCallDelta.id,
+                            name = toolCallDelta.function.name,
+                            argumentsDelta = toolCallDelta.function.arguments
                         )
+                    }
+                    if (toolCallChunks != null) {
+                        // If multiple tool-call chunks exist but none have an index, assign them sequential indices starting at 0
+                        // This is a fallback for APIs that don't provide indices (e.g. Gemini in OpenAI mode)
+                        // (For Gemini, the tool calls are not sent in chunks, but rather all at once.)
+                        if (toolCallChunks.size > 1 && toolCallChunks.all { it.index == null }) {
+                            toolCallChunks = toolCallChunks.mapIndexed { index, chunk ->
+                                chunk.copy(index = index)
+                            }
+                        }
+                        // Emit tool call chunks
+                        toolCallChunks.forEach {
+                            emit(it.right())
+                        }
                     }
 
                     // 2. Handle content deltas

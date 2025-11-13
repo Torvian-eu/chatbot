@@ -197,7 +197,8 @@ object OllamaApiModels {
         @Serializable
         data class FunctionCall(
             val name: String,
-            val arguments: String? = null
+            val arguments: JsonObject? = null,
+            val index: Int? = null
         )
     }
 

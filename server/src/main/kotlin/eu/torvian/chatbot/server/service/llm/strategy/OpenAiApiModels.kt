@@ -185,7 +185,7 @@ object OpenAiApiModels {
                  */
                 @Serializable
                 data class ToolCallDelta(
-                    val index: Int,
+                    val index: Int? = null,
                     val id: String? = null,
                     val type: String = "function",
                     val function: FunctionCallDelta
@@ -276,7 +276,7 @@ object OpenAiApiModels {
         @Serializable
         data class FunctionCall(
             val name: String,
-            val arguments: String?
+            val arguments: String? = null
         )
     }
 
@@ -297,13 +297,15 @@ object OpenAiApiModels {
          * @property type The error type (e.g., "invalid_request_error")
          * @property param The parameter that caused the error, if applicable
          * @property code The error code, if applicable
+         * @property status Present only in Gemini error responses; serves a role analogous to `type`.
          */
         @Serializable
         data class OpenAiErrorDetail(
             val message: String,
-            val type: String?,
-            val param: String?,
-            val code: String?
+            val type: String? = null,
+            val param: String? = null,
+            val code: String? = null,
+            val status: String? = null
         )
     }
 }

@@ -793,6 +793,10 @@ class ChatServiceImpl(
                                     emptyList()
                                 }
 
+                                if (finishReason == null && toolCallRequests.isNotEmpty()) {
+                                    finishReason = "tool_calls"
+                                }
+
                                 // Call onStreamComplete with final content, tool calls, and finish reason
                                 onStreamComplete(accumulatedContent.toString(), toolCallRequests, finishReason)
                             }
