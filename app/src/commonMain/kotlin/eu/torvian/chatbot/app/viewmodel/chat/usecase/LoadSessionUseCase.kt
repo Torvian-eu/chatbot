@@ -6,6 +6,7 @@ import eu.torvian.chatbot.app.generated.resources.error_loading_session
 import eu.torvian.chatbot.app.repository.ModelRepository
 import eu.torvian.chatbot.app.repository.SessionRepository
 import eu.torvian.chatbot.app.repository.SettingsRepository
+import eu.torvian.chatbot.app.repository.ToolRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
@@ -22,6 +23,7 @@ class LoadSessionUseCase(
     private val sessionRepository: SessionRepository,
     private val settingsRepository: SettingsRepository,
     private val modelRepository: ModelRepository,
+    private val toolRepository: ToolRepository,
     private val state: ChatState,
     private val errorNotifier: ErrorNotifier
 ) {
@@ -48,26 +50,57 @@ class LoadSessionUseCase(
 
         parZip(
             { sessionRepository.loadSessionDetails(sessionId) },
+            { sessionRepository.loadSessionToolCalls(sessionId) },
             { modelRepository.loadModels() },
-            { settingsRepository.loadAllSettings() }
-
-        ) { sessionResult, _, _ ->
-            sessionResult
-        }.fold(
-            ifLeft = { repositoryError ->
-                val eventId = errorNotifier.repositoryError(
-                    error = repositoryError,
-                    shortMessageRes = Res.string.error_loading_session,
-                    isRetryable = true
+            { settingsRepository.loadAllSettings() },
+            { toolRepository.loadTools() },
+            { toolRepository.loadEnabledToolsForSession(sessionId) },
+        ) { sessionResult, toolCallsResult, modelsResult, settingsResult, toolsResult, enabledToolsResult ->
+            toolCallsResult.onLeft { error ->
+                errorNotifier.repositoryError(
+                    error = error,
+                    shortMessage = "Failed to load tool calls for session"
                 )
-                state.setRetryState(sessionId, eventId)
-            },
-            ifRight = { session ->
-                logger.info("Successfully loaded session $sessionId. Dependencies are loading in background.")
-                state.resetState()
-                state.setActiveSessionId(sessionId)
             }
-        )
+            modelsResult.onLeft { error ->
+                errorNotifier.repositoryError(
+                    error = error,
+                    shortMessage = "Failed to load models"
+                )
+            }
+            settingsResult.onLeft { error ->
+                errorNotifier.repositoryError(
+                    error = error,
+                    shortMessage = "Failed to load model settings"
+                )
+            }
+            toolsResult.onLeft { error ->
+                errorNotifier.repositoryError(
+                    error = error,
+                    shortMessage = "Failed to load tools"
+                )
+            }
+            enabledToolsResult.onLeft { error ->
+                errorNotifier.repositoryError(
+                    error = error,
+                    shortMessage = "Failed to load enabled tools for session"
+                )
+            }
+            sessionResult
+                .onLeft { error ->
+                    val eventId = errorNotifier.repositoryError(
+                        error = error,
+                        shortMessageRes = Res.string.error_loading_session,
+                        isRetryable = true
+                    )
+                    state.setRetryState(sessionId, eventId)
+                }
+                .onRight {
+                    logger.info("Successfully loaded session $sessionId. Dependencies are loading in background.")
+                    state.resetState()
+                    state.setActiveSessionId(sessionId)
+                }
+        }
     }
 
     /**

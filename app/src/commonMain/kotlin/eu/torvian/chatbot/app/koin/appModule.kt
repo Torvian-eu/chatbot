@@ -200,6 +200,7 @@ fun appModule(baseUri: String): Module = module {
             get<SessionRepository>(),
             get<SettingsRepository>(),
             get<ModelRepository>(),
+            get<ToolRepository>(),
             chatState,
             get()
         )
@@ -255,6 +256,8 @@ fun appModule(baseUri: String): Module = module {
             selectModelUC = get { parametersOf(chatState) },
             selectSettingsUC = get { parametersOf(chatState) },
             updateInputUC = get { parametersOf(chatState) },
+            toolRepository = get(),
+            errorNotifier = get(),
             eventBus = get(),
             normalScope = normalScope,
             backgroundScope = backgroundScope

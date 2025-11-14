@@ -4,15 +4,19 @@ import androidx.lifecycle.ViewModel
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.events.SnackbarInteractionEvent
 import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.app.repository.ToolCallsMap
+import eu.torvian.chatbot.app.repository.ToolRepository
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.usecase.*
+import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.ModelSettings
+import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.StateFlow
@@ -37,6 +41,8 @@ import kotlinx.coroutines.launch
  * @param selectModelUC Use case for selecting models
  * @param selectSettingsUC Use case for selecting settings
  * @param updateInputUC Use case for updating input content
+ * @param toolRepository Repository for tool management operations
+ * @param errorNotifier Notifier for error handling
  * @param eventBus Event bus for cross-cutting concerns
  * @param normalScope Coroutine scope for UI operations
  * @param backgroundScope Coroutine scope for background operations (should only differ from normalScope in tests)
@@ -52,6 +58,8 @@ class ChatViewModel(
     private val selectModelUC: SelectModelUseCase,
     private val selectSettingsUC: SelectSettingsUseCase,
     private val updateInputUC: UpdateInputUseCase,
+    private val toolRepository: ToolRepository,
+    private val errorNotifier: ErrorNotifier,
     private val eventBus: EventBus,
     private val normalScope: CoroutineScope,
     private val backgroundScope: CoroutineScope
@@ -79,7 +87,25 @@ class ChatViewModel(
     /**
      * The list of settings profiles available for the currently selected model.
      */
-    val availableSettingsForCurrentModel: StateFlow<DataState<RepositoryError, List<ModelSettings>>> = state.availableSettingsForCurrentModel
+    val availableSettingsForCurrentModel: StateFlow<DataState<RepositoryError, List<ModelSettings>>> =
+        state.availableSettingsForCurrentModel
+
+    /**
+     * The list of all available tool definitions.
+     */
+    val availableTools: StateFlow<DataState<RepositoryError, List<ToolDefinition>>> = state.availableTools
+
+    /**
+     * The list of tools enabled for the current session.
+     */
+    val enabledToolsForCurrentSession: StateFlow<DataState<RepositoryError, List<ToolDefinition>>> =
+        state.enabledToolsForCurrentSession
+
+    /**
+     * Tool calls for the current session, organized by message ID.
+     */
+    val toolCallsForCurrentSession: StateFlow<DataState<RepositoryError, ToolCallsMap>> =
+        state.toolCallsForCurrentSession
 
     /**
      * A map of model IDs to LLMModel objects for quick lookups.
@@ -269,7 +295,85 @@ class ChatViewModel(
         }
     }
 
+    // --- Tool Management ---
+
+    /**
+     * Loads all available tools.
+     */
+    fun loadTools() {
+        normalScope.launch {
+            toolRepository.loadTools().mapLeft { error ->
+                errorNotifier.repositoryError(
+                    error = error,
+                    shortMessage = "Failed to load tools"
+                )
+            }
+        }
+    }
+
+    /**
+     * Loads tools enabled for the current session.
+     */
+    fun loadToolsForSession() {
+        val sessionId = state.activeSessionId.value ?: return
+        normalScope.launch {
+            toolRepository.loadEnabledToolsForSession(sessionId).mapLeft { error ->
+                errorNotifier.repositoryError(
+                    error = error,
+                    shortMessage = "Failed to load session tools"
+                )
+            }
+        }
+    }
+
+    /**
+     * Toggles a tool for the current session.
+     */
+    fun toggleToolForSession(toolDefinition: ToolDefinition, enabled: Boolean) {
+        val sessionId = state.activeSessionId.value ?: return
+        normalScope.launch {
+            toolRepository.setToolEnabledForSession(sessionId, toolDefinition, enabled).mapLeft { error ->
+                errorNotifier.repositoryError(
+                    error = error,
+                    shortMessage = "Failed to toggle tool"
+                )
+            }
+        }
+    }
+
     // --- Dialog Management ---
+
+    /**
+     * Shows the tool configuration dialog for the current session.
+     */
+    fun showToolConfigDialog() {
+        state.setDialogState(
+            ChatAreaDialogState.ToolConfig(
+                enabledToolsFlow = state.enabledToolsForCurrentSession,
+                availableToolsFlow = state.availableTools,
+                onToggleTool = { toolDefinition, isEnabled ->
+                    toggleToolForSession(toolDefinition, isEnabled)
+                },
+                onDismiss = {
+                    state.setDialogState(ChatAreaDialogState.None)
+                }
+            )
+        )
+    }
+
+    /**
+     * Shows the tool call details dialog.
+     */
+    fun showToolCallDetails(toolCall: eu.torvian.chatbot.common.models.tool.ToolCall) {
+        state.setDialogState(
+            ChatAreaDialogState.ToolCallDetails(
+                toolCall = toolCall,
+                onDismiss = {
+                    state.setDialogState(ChatAreaDialogState.None)
+                }
+            )
+        )
+    }
 
     /**
      * Shows the delete message confirmation dialog with pre-bound actions.
@@ -278,14 +382,14 @@ class ChatViewModel(
     fun requestDeleteMessage(message: ChatMessage) {
         state.setDialogState(
             ChatAreaDialogState.DeleteMessage(
-            message = message,
-            onDeleteConfirm = {
-                deleteMessage(message.id)
-            },
-            onDismiss = {
-                cancelDialog()
-            }
-        ))
+                message = message,
+                onDeleteConfirm = {
+                    deleteMessage(message.id)
+                },
+                onDismiss = {
+                    cancelDialog()
+                }
+            ))
     }
 
     /**
