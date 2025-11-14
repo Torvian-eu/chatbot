@@ -177,6 +177,9 @@ fun appModule(baseUri: String): Module = module {
     single<UserGroupRepository> {
         DefaultUserGroupRepository(get())
     }
+    single<ToolRepository> {
+        DefaultToolRepository(get())
+    }
 
     // Provide shared chat state with background scope for computed state flows
     factory<ChatState> { (backgroundScope: CoroutineScope) ->
@@ -184,6 +187,7 @@ fun appModule(baseUri: String): Module = module {
             sessionRepository = get(),
             settingsRepository = get(),
             modelRepository = get(),
+            toolRepository = get(),
             threadBuilder = get(),
             backgroundScope = backgroundScope
         )
