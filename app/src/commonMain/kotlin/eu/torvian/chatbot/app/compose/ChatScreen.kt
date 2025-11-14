@@ -10,6 +10,7 @@ import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
 import eu.torvian.chatbot.common.models.core.ChatGroup
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
+import eu.torvian.chatbot.common.models.tool.ToolCall
 import org.koin.compose.viewmodel.koinViewModel
 
 /**
@@ -53,6 +54,14 @@ fun ChatScreen(
     val chatDisplayedMessages by chatViewModel.displayedMessages.collectAsState()
     val chatIsSendingMessage by chatViewModel.isSendingMessage.collectAsState()
     val chatDialogState by chatViewModel.dialogState.collectAsState()
+    val enabledToolsForCurrentSession by chatViewModel.enabledToolsForCurrentSession.collectAsState()
+    val toolCallsForCurrentSession by chatViewModel.toolCallsForCurrentSession.collectAsState()
+
+    // Derive enabled tools count
+    val enabledToolsCount = enabledToolsForCurrentSession.dataOrNull?.size ?: 0
+
+    // Derive tool calls map
+    val toolCallsMap = toolCallsForCurrentSession.dataOrNull ?: emptyMap()
 
     // --- State-Driven Effect to Load Sessions ---
     LaunchedEffect(selectedSession) {
@@ -116,7 +125,7 @@ fun ChatScreen(
     val chatAreaState = remember(
         chatSessionUiState, availableModels, availableSettings, currentModel, currentSettings, modelsById,
         chatInputContent, chatReplyTargetMessage, chatEditingMessage, chatEditingContent,
-        chatDisplayedMessages, chatIsSendingMessage, chatDialogState
+        chatDisplayedMessages, chatIsSendingMessage, chatDialogState, enabledToolsCount, toolCallsMap
     ) {
         ChatAreaState(
             sessionUiState = chatSessionUiState,
@@ -131,7 +140,9 @@ fun ChatScreen(
             editingContent = chatEditingContent,
             displayedMessages = chatDisplayedMessages,
             isSendingMessage = chatIsSendingMessage,
-            dialogState = chatDialogState
+            dialogState = chatDialogState,
+            enabledToolsCount = enabledToolsCount,
+            toolCallsMap = toolCallsMap
         )
     }
     val chatAreaActions = remember(chatViewModel, selectedSession) {
@@ -149,6 +160,9 @@ fun ChatScreen(
             override fun onSwitchBranchToMessage(messageId: Long) = chatViewModel.switchBranchToMessage(messageId)
             override fun onSelectModel(modelId: Long?) = chatViewModel.selectModel(modelId)
             override fun onSelectSettings(settingsId: Long?) = chatViewModel.selectSettings(settingsId)
+            override fun onShowToolConfig() = chatViewModel.showToolConfigDialog()
+            override fun onShowToolCallDetails(toolCall: ToolCall) =
+                chatViewModel.showToolCallDetails(toolCall)
             override fun onRetryLoadingSession() {
                 selectedSession?.id?.let { sessionId ->
                     chatViewModel.loadSession(sessionId, forceReload = true)

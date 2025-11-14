@@ -2,6 +2,8 @@ package eu.torvian.chatbot.app.compose.chatarea
 
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
 
 /**
@@ -15,6 +17,26 @@ fun Dialogs(dialogState: ChatAreaDialogState) {
         is ChatAreaDialogState.DeleteMessage -> {
             DeleteMessageDialog(
                 onDeleteConfirm = dialogState.onDeleteConfirm,
+                onDismiss = dialogState.onDismiss
+            )
+        }
+
+        is ChatAreaDialogState.ToolConfig -> {
+            // Collect reactive StateFlows for live updates
+            val enabledToolsState by dialogState.enabledToolsFlow.collectAsState()
+            val availableToolsState by dialogState.availableToolsFlow.collectAsState()
+
+            ToolConfigDialog(
+                availableTools = availableToolsState.dataOrNull ?: emptyList(),
+                enabledTools = enabledToolsState.dataOrNull ?: emptyList(),
+                onToggleTool = dialogState.onToggleTool,
+                onDismiss = dialogState.onDismiss
+            )
+        }
+
+        is ChatAreaDialogState.ToolCallDetails -> {
+            ToolCallDetailsDialog(
+                toolCall = dialogState.toolCall,
                 onDismiss = dialogState.onDismiss
             )
         }

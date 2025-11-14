@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.tool.ToolCall
 
 /**
  * Composable for the main chat message display area.
@@ -31,6 +32,8 @@ import eu.torvian.chatbot.common.models.llm.LLMModel
  * @param editingContent The content of the message currently being edited (E3.S1, E3.S2).
  * @param actions The actions contract for the chat area.
  * @param modelsById Map of model IDs to LLMModel objects for displaying model names with graceful degradation.
+ * @param toolCallsForMessage List of tool calls associated with this message.
+ * @param onShowToolCallDetails Callback to show tool call details.
  */
 @Composable
 fun MessageItem(
@@ -41,7 +44,9 @@ fun MessageItem(
     editingMessage: ChatMessage?,
     editingContent: String?,
     actions: ChatAreaActions,
-    modelsById: Map<Long, LLMModel> = emptyMap()
+    modelsById: Map<Long, LLMModel> = emptyMap(),
+    toolCallsForMessage: List<ToolCall> = emptyList(),
+    onShowToolCallDetails: (ToolCall) -> Unit = {}
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val hovered by interactionSource.collectIsHoveredAsState()
@@ -90,6 +95,15 @@ fun MessageItem(
             actions = actions,
             contentColor = contentColor
         )
+
+        // Tool Call Badges (for assistant messages)
+        if (message.role == ChatMessage.Role.ASSISTANT && toolCallsForMessage.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            ToolCallBadges(
+                toolCalls = toolCallsForMessage,
+                onToolCallClick = onShowToolCallDetails
+            )
+        }
 
         // All message actions (branch navigation and future controls)
         Spacer(Modifier.height(8.dp))

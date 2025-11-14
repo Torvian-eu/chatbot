@@ -10,6 +10,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -35,6 +36,7 @@ import org.jetbrains.compose.resources.stringResource
  * - Send button
  * - UI for replying to a specific message
  * - Loading indicator on send button (E1.S3)
+ * - Tool configuration button
  *
  * @param inputContent The current text content of the input field.
  * @param onUpdateInput Callback for when the input content changes.
@@ -42,6 +44,8 @@ import org.jetbrains.compose.resources.stringResource
  * @param replyTargetMessage The message being replied to, if any.
  * @param onCancelReply Callback to cancel the reply.
  * @param isSendingMessage Indicates if a message is currently being sent.
+ * @param onShowToolConfig Callback to show the tool configuration dialog.
+ * @param enabledToolsCount The number of tools currently enabled for the session.
  * @param modifier Modifier to be applied to the component.
  */
 @Composable
@@ -52,6 +56,8 @@ fun InputArea(
     replyTargetMessage: ChatMessage?,
     onCancelReply: () -> Unit,
     isSendingMessage: Boolean,
+    onShowToolConfig: () -> Unit,
+    enabledToolsCount: Int,
     modifier: Modifier = Modifier
 ) {
     val isSendButtonEnabled = inputContent.isNotBlank() && !isSendingMessage
@@ -101,6 +107,29 @@ fun InputArea(
                     }
                 )
             )
+
+            // Tool Configuration Button
+            PlainTooltipBox(text = "Configure Tools") {
+                BadgedBox(
+                    badge = {
+                        if (enabledToolsCount > 0) {
+                            Badge {
+                                Text(enabledToolsCount.toString())
+                            }
+                        }
+                    }
+                ) {
+                    IconButton(
+                        onClick = onShowToolConfig,
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Build,
+                            contentDescription = "Configure Tools"
+                        )
+                    }
+                }
+            }
 
             // Send Button or Loading Indicator
             if (isSendingMessage) { // Loading indicator (E1.S3)

@@ -3,11 +3,7 @@ package eu.torvian.chatbot.app.compose.chatarea
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -24,6 +20,7 @@ import eu.torvian.chatbot.app.compose.common.ScrollbarWrapper
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.tool.ToolCall
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 /**
@@ -38,6 +35,8 @@ fun MessageList(
     editingContent: String?,
     actions: ChatAreaActions,
     modelsById: Map<Long, LLMModel> = emptyMap(),
+    toolCallsMap: Map<Long, List<ToolCall>> = emptyMap(),
+    onShowToolCallDetails: (ToolCall) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     // Create LazyListState for scrollbar integration
@@ -130,7 +129,9 @@ fun MessageList(
                         editingMessage = editingMessage,
                         editingContent = editingContent,
                         actions = actions, // Pass actions for editing state access
-                        modelsById = modelsById // Pass map for graceful degradation
+                        modelsById = modelsById, // Pass map for graceful degradation
+                        toolCallsForMessage = toolCallsMap[message.id] ?: emptyList(),
+                        onShowToolCallDetails = onShowToolCallDetails
                     )
                 }
             }
