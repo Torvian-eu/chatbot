@@ -2,10 +2,12 @@ package eu.torvian.chatbot.app.viewmodel.chat.state
 
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.app.repository.ToolCallsMap
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -39,6 +41,25 @@ interface ChatState {
      * The list of settings profiles available for the currently selected model.
      */
     val availableSettingsForCurrentModel: StateFlow<DataState<RepositoryError, List<ChatModelSettings>>>
+
+    /**
+     * The list of all available tool definitions.
+     * Filtered to show only globally enabled tools.
+     */
+    val availableTools: StateFlow<DataState<RepositoryError, List<ToolDefinition>>>
+
+    /**
+     * The list of tools enabled for the current session.
+     * Returns empty list if no session is active.
+     */
+    val enabledToolsForCurrentSession: StateFlow<DataState<RepositoryError, List<ToolDefinition>>>
+
+    /**
+     * Tool calls for the current session, organized by message ID.
+     * Map structure: messageId -> List<ToolCall>
+     * Returns empty map if no session is active or no tool calls exist.
+     */
+    val toolCallsForCurrentSession: StateFlow<DataState<RepositoryError, ToolCallsMap>>
 
     // --- Derived Lookup Maps (for performance & graceful degradation) ---
     /**

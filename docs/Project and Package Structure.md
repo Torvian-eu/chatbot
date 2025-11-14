@@ -260,6 +260,7 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   │   ├── ModelSettingsService.kt # Model Settings management service interface
 │   │   ├── RoleService.kt        # Role management service interface
 │   │   ├── SessionService.kt     # Session management service interface
+│   │   ├── ToolCallService.kt    # Interface for managing tool calls
 │   │   ├── ToolService.kt        # Service for managing tool definitions and session configurations
 │   │   ├── UserGroupService.kt   # User group management service interface
 │   │   ├── UserService.kt        # User account management service interface
@@ -441,6 +442,7 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   ├── RoleRepository.kt   # Interface for managing user roles
 │   ├── SessionRepository.kt  # Session repository
 │   ├── SettingsRepository.kt # Settings repository
+│   ├── ToolRepository.kt   # Interface for managing tool definitions
 │   ├── UserRepository.kt   # Interface for managing user accounts and details
 │   ├── UserGroupRepository.kt # User group management repository
 │   └── impl/             # Repository implementations
@@ -454,6 +456,7 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   │   ├── RoleApi.kt      # Interface for managing user roles
 │   │   ├── SessionApi.kt
 │   │   ├── SettingsApi.kt
+│   │   ├── ToolApi.kt      # Interface for tool management
 │   │   ├── UserApi.kt      # Interface for user management operations
 │   │   └── ktor/       # Ktor-based API client implementations
 │   │       ├── BaseApiClient.kt  # Base API client implementation

@@ -128,7 +128,7 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
             val toolCalls = successResponse.message.tool_calls?.map { ollamaToolCall ->
                 LLMCompletionResult.CompletionChoice.ToolCallRequest(
                     name = ollamaToolCall.function.name,
-                    arguments = ollamaToolCall.function.arguments,
+                    arguments = ollamaToolCall.function.arguments?.toString(),
                     toolCallId = null // Ollama doesn't provide tool call IDs
                 )
             }
@@ -142,7 +142,9 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
             )
 
             // Determine finish reason based on done status
-            val finishReason = if (successResponse.done) "stop" else null
+            val finishReason = if (toolCalls != null) {
+                "tool_calls"
+            } else if (successResponse.done) "stop" else null
 
             val result = LLMCompletionResult(
                 id = null, // Ollama doesn't provide a completion ID
@@ -217,8 +219,6 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
                 // Process the message delta if present
                 streamChunk.message?.let { message ->
                     // Handle content delta
-                    // Note: Tool calls are NOT supported in streaming mode for Ollama
-                    // According to Ollama docs: "tools: ...Requires stream to be set to false"
                     message.content?.let { content ->
                         if (content.isNotEmpty()) {
                             emit(
@@ -232,6 +232,18 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
                         // This case should ideally not happen for non-done chunks, but for safety
                         logger.warn("Received a non-done chunk without a 'message' field: $rawChunk")
                     }
+                }
+
+                // Emit tool calls if available
+                streamChunk.message?.tool_calls?.forEach { toolCall ->
+                    emit(
+                        LLMStreamChunk.ToolCallChunk(
+                            index = toolCall.function.index,
+                            id = null,
+                            name = toolCall.function.name,
+                            argumentsDelta = toolCall.function.arguments?.toString()
+                        ).right()
+                    )
                 }
             } catch (e: Exception) {
                 logger.error("Error parsing stream chunk: $rawChunk", e)
@@ -324,7 +336,14 @@ class OllamaChatStrategy(private val json: Json) : ChatCompletionStrategy {
                                     put("name", JsonPrimitive(toolCall.name))
                                     // Arguments can be null for parameterless functions
                                     if (toolCall.arguments != null) {
-                                        put("arguments", JsonPrimitive(toolCall.arguments))
+                                        val jsonElement = try {
+                                            json.parseToJsonElement(toolCall.arguments)
+                                        } catch (_: SerializationException) {
+                                            null
+                                        }
+                                        if (jsonElement != null) {
+                                            put("arguments", jsonElement)
+                                        }
                                     }
                                 })
                             })

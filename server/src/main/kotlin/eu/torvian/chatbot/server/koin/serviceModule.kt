@@ -29,10 +29,11 @@ fun serviceModule() = module {
     single<LLMProviderService> { LLMProviderServiceImpl(get(), get(), get(), get(), get(), get(), get(), get()) }
     single<MessageService> { MessageServiceImpl(get(), get(), get()) }
     single<ChatService> { ChatServiceImpl(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
+    single<ToolService> { ToolServiceImpl(get(), get(), get()) }
+    single<ToolCallService> { ToolCallServiceImpl(get(), get()) }
 
     single<RoleService> { RoleServiceImpl(get(), get(), get()) }
     single<UserGroupService> { UserGroupServiceImpl(get(), get(), get()) }
-    single<ToolService> { ToolServiceImpl(get(), get(), get()) }
 
     // --- Security Services ---
     single<CryptoProvider> { AESCryptoProvider(get()) }

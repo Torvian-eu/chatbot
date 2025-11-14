@@ -19,6 +19,7 @@ class ApiRoutesKtor(
     private val messageService: MessageService,
     private val chatService: ChatService,
     private val toolService: ToolService,
+    private val toolCallService: ToolCallService,
     private val authenticationService: AuthenticationService,
     private val userService: UserService,
     private val userGroupService: UserGroupService,
@@ -76,7 +77,7 @@ class ApiRoutesKtor(
      * Configures routes related to Sessions (/api/v1/sessions).
      */
     fun configureSessionRoutes(route: Route) {
-        route.configureSessionRoutes(sessionService, chatService, authorizationService, json)
+        route.configureSessionRoutes(sessionService, chatService, toolCallService, authorizationService, json)
     }
 
     /**

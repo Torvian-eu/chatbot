@@ -18,5 +18,5 @@ fun miscModule() = module {
     single<TransactionScope> {
         ExposedTransactionScope(get())
     }
-    single { ApiRoutesKtor(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
+    single { ApiRoutesKtor(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
 }

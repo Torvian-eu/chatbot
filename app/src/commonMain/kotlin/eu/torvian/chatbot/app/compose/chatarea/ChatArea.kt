@@ -18,6 +18,7 @@ import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.ModelSettings
+import eu.torvian.chatbot.common.models.tool.ToolCall
 
 /**
  * Composable for the main chat message display area.
@@ -57,7 +58,9 @@ fun ChatArea(
                 currentSettings = state.currentSettings,
                 availableModels = state.availableModels,
                 availableSettingsForCurrentModel = state.availableSettingsForCurrentModel,
-                modelsById = state.modelsById
+                modelsById = state.modelsById,
+                enabledToolsCount = state.enabledToolsCount,
+                toolCallsMap = state.toolCallsMap
             )
         }
     }
@@ -114,6 +117,8 @@ private fun IdleStateDisplay(modifier: Modifier = Modifier) {
  * @param availableModels The state of all available LLM models.
  * @param availableSettingsForCurrentModel The state of settings available for the current model.
  * @param modelsById Map of model IDs to LLMModel objects for quick lookups.
+ * @param enabledToolsCount The number of tools currently enabled for the session.
+ * @param toolCallsMap Tool calls for the current session, organized by message ID.
  */
 @Composable
 private fun SuccessStateDisplay(
@@ -130,7 +135,9 @@ private fun SuccessStateDisplay(
     currentSettings: ModelSettings?,
     availableModels: DataState<RepositoryError, List<LLMModel>>,
     availableSettingsForCurrentModel: DataState<RepositoryError, List<ModelSettings>>,
-    modelsById: Map<Long, LLMModel>
+    modelsById: Map<Long, LLMModel>,
+    enabledToolsCount: Int,
+    toolCallsMap: Map<Long, List<ToolCall>>
 ) {
     // Prepare message actions to pass down
     val messageActions = remember(actions) {
@@ -167,6 +174,8 @@ private fun SuccessStateDisplay(
             editingContent = editingContent,
             actions = actions,
             modelsById = modelsById, // Pass map for graceful degradation
+            toolCallsMap = toolCallsMap,
+            onShowToolCallDetails = actions::onShowToolCallDetails,
             modifier = Modifier.weight(1f) // Messages take up most space
         )
 
@@ -177,6 +186,8 @@ private fun SuccessStateDisplay(
             replyTargetMessage = replyTargetMessage,
             onCancelReply = actions::onCancelReply,
             isSendingMessage = isSendingMessage,
+            onShowToolConfig = actions::onShowToolConfig,
+            enabledToolsCount = enabledToolsCount,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 8.dp) // Small padding between messages and input

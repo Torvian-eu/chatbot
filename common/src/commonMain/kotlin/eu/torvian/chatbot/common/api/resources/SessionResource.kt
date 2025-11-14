@@ -47,6 +47,12 @@ class SessionResource(val parent: Api = Api()) {
          */
         @Resource("messages")
         class Messages(val parent: ById)
+
+        /**
+         * Resource for tool calls nested under a session: /api/v1/sessions/{sessionId}/toolcalls
+         */
+        @Resource("toolcalls")
+        class ToolCalls(val parent: ById)
     }
 }
 

@@ -52,6 +52,7 @@ slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
 # Ktor Server
 ktor-server-core = { module = "io.ktor:ktor-server-core", version.ref = "ktor" }
 ktor-server-netty = { module = "io.ktor:ktor-server-netty", version.ref = "ktor" }
+ktor-server-jetty = { module = "io.ktor:ktor-server-jetty-jakarta", version.ref = "ktor" }
 ktor-server-auth = { module = "io.ktor:ktor-server-auth", version.ref = "ktor" }
 ktor-server-auth-jwt = { module = "io.ktor:ktor-server-auth-jwt", version.ref = "ktor" }
 ktor-server-status-pages = { module = "io.ktor:ktor-server-status-pages", version.ref = "ktor" }
@@ -143,7 +144,7 @@ mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
 # Ktor Server: Includes all necessary dependencies for a Ktor backend
 ktor-server = [
     "ktor-server-core",
-    "ktor-server-netty",
+#   "ktor-server-netty",
     "ktor-server-auth",
     "ktor-server-auth-jwt",
     "ktor-server-status-pages",

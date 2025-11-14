@@ -10,14 +10,10 @@ import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.models.api.core.*
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
-import eu.torvian.chatbot.server.service.core.ChatService
-import eu.torvian.chatbot.server.service.core.MessageService
-import eu.torvian.chatbot.server.service.core.SessionService
+import eu.torvian.chatbot.server.service.core.*
 import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageError
 import eu.torvian.chatbot.server.service.core.error.message.toApiError
 import eu.torvian.chatbot.server.service.core.error.session.*
-import eu.torvian.chatbot.server.service.core.toChatEvent
-import eu.torvian.chatbot.server.service.core.toChatStreamEvent
 import eu.torvian.chatbot.server.service.security.AuthorizationService
 import io.ktor.http.*
 import io.ktor.server.auth.*
@@ -37,6 +33,7 @@ import org.apache.logging.log4j.Logger
 fun Route.configureSessionRoutes(
     sessionService: SessionService,
     chatService: ChatService,
+    toolCallService: ToolCallService,
     authorizationService: AuthorizationService,
     json: Json
 ) {
@@ -306,6 +303,17 @@ fun Route.configureSessionRoutes(
                     }
                 }
             }))
+        }
+
+        // GET /api/v1/sessions/{sessionId}/toolcalls - Get all tool calls for a session
+        get<SessionResource.ById.ToolCalls> { resource ->
+            val userId = call.getUserId()
+            val sessionId = resource.parent.sessionId
+            val result = either {
+                requireSessionAccess(authorizationService, userId, sessionId, AccessMode.READ)
+                toolCallService.getToolCallsBySessionId(sessionId)
+            }
+            call.respondEither(result)
         }
     } // End authenticate block
 }
