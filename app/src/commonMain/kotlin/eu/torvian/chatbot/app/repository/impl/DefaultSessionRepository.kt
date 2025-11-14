@@ -5,23 +5,17 @@ import arrow.core.right
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.SessionRepository
+import eu.torvian.chatbot.app.repository.ToolCallsMap
 import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.service.api.ChatApi
 import eu.torvian.chatbot.app.service.api.SessionApi
 import eu.torvian.chatbot.app.utils.misc.LruCache
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
-import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
-import eu.torvian.chatbot.common.models.api.core.CreateSessionRequest
-import eu.torvian.chatbot.common.models.api.core.ProcessNewMessageRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateMessageRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionGroupRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionLeafMessageRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionModelRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionNameRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionSettingsRequest
+import eu.torvian.chatbot.common.models.api.core.*
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
+import eu.torvian.chatbot.common.models.tool.ToolCall
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -48,6 +42,7 @@ class DefaultSessionRepository(
     companion object {
         private val logger = kmpLogger<DefaultSessionRepository>()
         private const val SESSION_DETAILS_CACHE_SIZE = 10
+        private const val TOOL_CALLS_CACHE_SIZE = 10
     }
 
     private val _sessions = MutableStateFlow<DataState<RepositoryError, List<ChatSessionSummary>>>(DataState.Idle)
@@ -58,11 +53,25 @@ class DefaultSessionRepository(
     private val _sessionDetailsFlows =
         LruCache<Long, MutableStateFlow<DataState<RepositoryError, ChatSession>>>(SESSION_DETAILS_CACHE_SIZE)
 
+    // Cache for individual session tool call flows, guarded by a Mutex for thread safety
+    private val _toolCallsFlowsMutex = Mutex()
+    private val _toolCallsFlows =
+        LruCache<Long, MutableStateFlow<DataState<RepositoryError, ToolCallsMap>>>(TOOL_CALLS_CACHE_SIZE)
+
     override suspend fun getSessionDetailsFlow(sessionId: Long): StateFlow<DataState<RepositoryError, ChatSession>> {
         return _sessionDetailsFlowsMutex.withLock {
             _sessionDetailsFlows.getOrPut(sessionId) {
                 // If not found, create a new flow initialized to Idle
                 MutableStateFlow(DataState.Idle)
+            }.asStateFlow()
+        }
+    }
+
+    override suspend fun getToolCallsFlow(sessionId: Long): StateFlow<DataState<RepositoryError, ToolCallsMap>> {
+        return _toolCallsFlowsMutex.withLock {
+            _toolCallsFlows.getOrPut(sessionId) {
+                // If not found, create a new flow initialized to Success with an empty map
+                MutableStateFlow(DataState.Success(emptyMap()))
             }.asStateFlow()
         }
     }
@@ -119,26 +128,41 @@ class DefaultSessionRepository(
     }
 
     override suspend fun loadSessionDetails(sessionId: Long): Either<RepositoryError, ChatSession> {
-        // Get or create the MutableStateFlow for this sessionId, atomically.
-        // This ensures the flow exists before we try to update it.
         val sessionFlow = _sessionDetailsFlowsMutex.withLock {
             _sessionDetailsFlows.getOrPut(sessionId) {
                 MutableStateFlow(DataState.Idle)
             }
         }
-
-        // Update the specific session flow to Loading
         sessionFlow.update { DataState.Loading }
-
         return sessionApi.getSessionDetails(sessionId)
-            .map { sessionDetails ->
-                sessionFlow.update { DataState.Success(sessionDetails) }
-                sessionDetails
-            }
             .mapLeft { apiResourceError ->
                 val repositoryError = apiResourceError.toRepositoryError("Failed to load session details")
                 sessionFlow.update { DataState.Error(repositoryError) }
                 repositoryError
+            }
+            .onRight { sessionDetails ->
+                sessionFlow.update { DataState.Success(sessionDetails) }
+            }
+
+    }
+
+    override suspend fun loadSessionToolCalls(sessionId: Long): Either<RepositoryError, ToolCallsMap> {
+        val toolCallsFlow = _toolCallsFlowsMutex.withLock {
+            _toolCallsFlows.getOrPut(sessionId) {
+                MutableStateFlow(DataState.Idle)
+            }
+        }
+        toolCallsFlow.update { DataState.Loading }
+        return sessionApi.getSessionToolCalls(sessionId)
+            .mapLeft { apiResourceError ->
+                val repositoryError = apiResourceError.toRepositoryError("Failed to load tool calls")
+                toolCallsFlow.update { DataState.Error(repositoryError) }
+                repositoryError
+            }
+            .map { toolCalls ->
+                val toolCallsMap = toolCalls.groupBy { it.messageId }
+                toolCallsFlow.update { DataState.Success(toolCallsMap) }
+                toolCallsMap
             }
     }
 
@@ -273,22 +297,18 @@ class DefaultSessionRepository(
 
     // --- Chat Message Operations ---
 
-    override suspend fun processNewMessage(
+    override fun processNewMessage(
         sessionId: Long,
         request: ProcessNewMessageRequest
-    ): Either<RepositoryError, Unit> {
+    ): Flow<Either<RepositoryError, ChatEvent>> {
         return chatApi.processNewMessage(sessionId, request)
-            .map { newMessages ->
-                // Update the cached ChatSession with the new messages
-                updateSessionDetailsInCache(sessionId) { session ->
-                    session.copy(
-                        messages = session.messages + newMessages,
-                        currentLeafMessageId = newMessages.last().id
-                    )
+            .onEach { either ->
+                either.map { event ->
+                    applyEvent(sessionId, event)
                 }
             }
-            .mapLeft { apiResourceError ->
-                apiResourceError.toRepositoryError("Failed to process new message")
+            .map {
+                it.mapLeft { err -> err.toRepositoryError("Failed to process new message") }
             }
     }
 
@@ -303,7 +323,7 @@ class DefaultSessionRepository(
                 }
             }
             .map {
-                it.mapLeft { err -> err.toRepositoryError("Streaming Error") }
+                it.mapLeft { err -> err.toRepositoryError("Failed to process new message") }
             }
     }
 
@@ -339,45 +359,110 @@ class DefaultSessionRepository(
     }
 
     /**
+     * Applies a non-streaming ChatEvent to update the cached session.
+     * Handles events from the non-streaming message processing endpoint.
+     */
+    private suspend fun applyEvent(sessionId: Long, event: ChatEvent) {
+        when (event) {
+            is ChatEvent.UserMessageSaved -> {
+                logger.debug("User message saved: ${event.userMessage.id}")
+                updateSessionDetailsInCache(sessionId) { session ->
+                    val updatedParent = event.updatedParentMessage
+                    val updatedMessages = if (updatedParent != null) {
+                        // Replace parent message with updated version
+                        session.messages.map { msg ->
+                            if (msg.id == updatedParent.id) {
+                                updatedParent
+                            } else {
+                                msg
+                            }
+                        } + event.userMessage
+                    } else {
+                        session.messages + event.userMessage
+                    }
+                    session.copy(
+                        messages = updatedMessages,
+                        currentLeafMessageId = event.userMessage.id
+                    )
+                }
+            }
+
+            is ChatEvent.AssistantMessageSaved -> {
+                logger.debug("Assistant message saved: ${event.assistantMessage.id}")
+                updateSessionDetailsInCache(sessionId) { session ->
+                    val updatedParent = event.updatedParentMessage
+                    val updatedMessages = session.messages.map { msg ->
+                        if (msg.id == updatedParent.id) {
+                            updatedParent
+                        } else {
+                            msg
+                        }
+                    } + event.assistantMessage
+                    session.copy(
+                        messages = updatedMessages,
+                        currentLeafMessageId = event.assistantMessage.id
+                    )
+                }
+            }
+
+            is ChatEvent.ToolCallsReceived -> {
+                logger.debug("Tool calls received: ${event.toolCalls.size} calls")
+                updateToolCallsInCache(sessionId, event.toolCalls)
+            }
+
+            is ChatEvent.ToolExecutionCompleted -> {
+                logger.debug("Tool execution completed: ${event.toolCall.toolName} - ${event.toolCall.status}")
+                updateToolCallInCache(sessionId, event.toolCall)
+            }
+
+            is ChatEvent.ErrorOccurred -> {
+                logger.error("Chat event error: ${event.error}")
+            }
+
+            ChatEvent.StreamCompleted -> {
+                logger.info("Event stream completed for session $sessionId")
+            }
+        }
+    }
+
+    /**
      * Applies a streaming event to update the cached session.
      */
     private suspend fun applyStreamEvent(sessionId: Long, event: ChatStreamEvent) {
         when (event) {
             is ChatStreamEvent.UserMessageSaved -> {
-                logger.debug("User message saved: ${event.message.id}")
-                // Add the user message to the session's messages and update parent's children list
+                logger.debug("User message saved: ${event.userMessage.id}")
                 updateSessionDetailsInCache(sessionId) { session ->
-                    val updatedMessages = session.messages.map { message ->
-                        if (message.id == event.message.parentMessageId) {
-                            val newChildren = message.childrenMessageIds + event.message.id
-                            val now = Clock.System.now()
-                            when (message) {
-                                is ChatMessage.UserMessage -> message.copy(
-                                    childrenMessageIds = newChildren,
-                                    updatedAt = now
-                                )
-
-                                is ChatMessage.AssistantMessage -> message.copy(
-                                    childrenMessageIds = newChildren,
-                                    updatedAt = now
-                                )
+                    val updatedParent = event.updatedParentMessage
+                    val updatedMessages = if (updatedParent != null) {
+                        session.messages.map { msg ->
+                            if (msg.id == updatedParent.id) {
+                                updatedParent
+                            } else {
+                                msg
                             }
-                        } else {
-                            message
-                        }
-                    } + event.message
+                        } + event.userMessage
+                    } else {
+                        session.messages + event.userMessage
+                    }
                     session.copy(
                         messages = updatedMessages,
-                        currentLeafMessageId = event.message.id
+                        currentLeafMessageId = event.userMessage.id
                     )
                 }
             }
 
             is ChatStreamEvent.AssistantMessageStart -> {
                 logger.debug("Assistant message started: ${event.assistantMessage.id}")
-                // Add the assistant message to the session's messages
                 updateSessionDetailsInCache(sessionId) { session ->
-                    val updatedMessages = session.messages + event.assistantMessage
+                    val updatedParent = event.updatedParentMessage
+                    val updatedMessages = session.messages.map { msg ->
+                        if (msg.id == updatedParent.id) {
+                            updatedParent
+                        } else {
+                            msg
+                        }
+                    } + event.assistantMessage
                     session.copy(
                         messages = updatedMessages,
                         currentLeafMessageId = event.assistantMessage.id
@@ -403,17 +488,36 @@ class DefaultSessionRepository(
             }
 
             is ChatStreamEvent.AssistantMessageEnd -> {
-                logger.info("Assistant message completed: ${event.finalAssistantMessage.id}")
-                // Remove the temporary messages from the session's messages and add the final ones
+                logger.info("Assistant message completed: ${event.assistantMessage.id}")
                 updateSessionDetailsInCache(sessionId) { session ->
-                    val updatedMessages = session.messages.filter {
-                        it.id != event.tempMessageId && it.id != event.finalUserMessage.id
-                    } + event.finalUserMessage + event.finalAssistantMessage
+                    val updatedMessages = session.messages.map { msg ->
+                        if (msg.id == event.assistantMessage.id) {
+                            event.assistantMessage
+                        } else {
+                            msg
+                        }
+                    }
                     session.copy(
                         messages = updatedMessages,
-                        currentLeafMessageId = event.finalAssistantMessage.id
+                        currentLeafMessageId = event.assistantMessage.id
                     )
                 }
+            }
+
+            is ChatStreamEvent.ToolCallDelta -> {
+                logger.trace("Tool call delta: ${event.name}")
+                // Optional: Could accumulate for real-time display
+                // For now, can be ignored - wait for ToolCallsReceived
+            }
+
+            is ChatStreamEvent.ToolCallsReceived -> {
+                logger.debug("Tool calls received: ${event.toolCalls.size} calls")
+                updateToolCallsInCache(sessionId, event.toolCalls)
+            }
+
+            is ChatStreamEvent.ToolExecutionCompleted -> {
+                logger.debug("Tool execution completed: ${event.toolCall.toolName}")
+                updateToolCallInCache(sessionId, event.toolCall)
             }
 
             is ChatStreamEvent.ErrorOccurred -> {
@@ -436,17 +540,104 @@ class DefaultSessionRepository(
      */
     private suspend fun updateSessionDetailsInCache(sessionId: Long, updateFunction: (ChatSession) -> ChatSession) {
         _sessionDetailsFlowsMutex.withLock {
-            _sessionDetailsFlows[sessionId]?.update { currentState ->
-                when (currentState) {
-                    is DataState.Success -> {
-                        DataState.Success(updateFunction(currentState.data))
-                    }
+            _sessionDetailsFlows[sessionId]?.let { sessionFlow ->
+                sessionFlow.update { currentState ->
+                    when (currentState) {
+                        is DataState.Success -> {
+                            DataState.Success(updateFunction(currentState.data))
+                        }
 
-                    else -> {
-                        logger.warn("Tried to update session $sessionId but it's not in Success state")
-                        currentState // Keep other states (Loading, Error) unchanged for the individual flow
+                        else -> {
+                            logger.warn("Tried to update session $sessionId but it's not in Success state")
+                            currentState // Keep other states (Loading, Error) unchanged for the individual flow
+                        }
                     }
                 }
+            } ?: run {
+                logger.warn("Tried to update session $sessionId but it's not in the cache")
+                _sessionDetailsFlows.put(
+                    sessionId, MutableStateFlow(
+                        DataState.Error(RepositoryError.OtherError("Tried to update session $sessionId but it's not in the cache"))
+                    )
+                )
+            }
+        }
+    }
+
+    /**
+     * Updates the tool calls cache for a session with a new list of tool calls for a specific message.
+     *
+     * @param sessionId The ID of the session containing the tool calls
+     * @param toolCalls The list of tool calls to add to the cache
+     */
+    private suspend fun updateToolCallsInCache(sessionId: Long, toolCalls: List<ToolCall>) {
+        _toolCallsFlowsMutex.withLock {
+            _toolCallsFlows[sessionId]?.let { toolCallsFlow ->
+                toolCallsFlow.update { currentState ->
+                    when (currentState) {
+                        is DataState.Success -> {
+                            val sessionToolCalls = currentState.data
+                            toolCalls.firstOrNull()?.messageId?.let { messageId ->
+                                val updatedSessionToolCalls = sessionToolCalls + (messageId to toolCalls)
+                                DataState.Success(updatedSessionToolCalls)
+                            } ?: run {
+                                logger.warn("Received empty list of tool calls")
+                                currentState
+                            }
+                        }
+
+                        else -> {
+                            logger.warn("Tried to update tool calls for session $sessionId but flow is not in Success state")
+                            currentState // Keep other states (Loading, Error) unchanged for the individual flow
+                        }
+                    }
+                }
+            } ?: run {
+                logger.warn("Tried to update tool calls for session $sessionId but flow is not in the cache")
+                _toolCallsFlows.put(
+                    sessionId, MutableStateFlow(
+                        DataState.Error(RepositoryError.OtherError("Tried to update tool calls for session $sessionId but flow is not in the cache"))
+                    )
+                )
+            }
+        }
+    }
+
+    /**
+     * Updates a single tool call in the cache (typically after execution completes).
+     *
+     * @param sessionId The ID of the session containing the tool call
+     * @param toolCall The updated tool call to replace the existing one in the cache
+     */
+    private suspend fun updateToolCallInCache(sessionId: Long, toolCall: ToolCall) {
+        _toolCallsFlowsMutex.withLock {
+            _toolCallsFlows[sessionId]?.let { toolCallsFlow ->
+                toolCallsFlow.update { currentState ->
+                    when (currentState) {
+                        is DataState.Success -> {
+                            val sessionToolCalls = currentState.data
+                            val messageToolCalls = sessionToolCalls[toolCall.messageId] ?: emptyList()
+                            val updatedMessageToolCalls = messageToolCalls.map {
+                                if (it.id == toolCall.id) toolCall else it
+                            }
+                            val updatedSessionToolCalls =
+                                sessionToolCalls + (toolCall.messageId to updatedMessageToolCalls)
+                            DataState.Success(updatedSessionToolCalls)
+                        }
+
+                        else -> {
+                            logger.warn("Tried to update tool call for session $sessionId but flow is not in Success state")
+                            currentState // Keep other states (Loading, Error) unchanged for the individual flow
+                        }
+                    }
+                }
+            } ?: run {
+                logger.warn("Tried to update tool call for session $sessionId but flow is not in the cache")
+                _toolCallsFlows.put(
+                    sessionId, MutableStateFlow(
+                        DataState.Error(RepositoryError.OtherError("Tried to update tool call for session $sessionId but flow is not in the cache"))
+                    )
+                )
             }
         }
     }

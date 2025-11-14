@@ -3,6 +3,7 @@ import arrow.core.Either
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
+import eu.torvian.chatbot.common.models.api.core.ChatEvent
 import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
 import eu.torvian.chatbot.common.models.api.core.CreateSessionRequest
 import eu.torvian.chatbot.common.models.api.core.ProcessNewMessageRequest
@@ -12,8 +13,16 @@ import eu.torvian.chatbot.common.models.api.core.UpdateSessionLeafMessageRequest
 import eu.torvian.chatbot.common.models.api.core.UpdateSessionModelRequest
 import eu.torvian.chatbot.common.models.api.core.UpdateSessionNameRequest
 import eu.torvian.chatbot.common.models.api.core.UpdateSessionSettingsRequest
+import eu.torvian.chatbot.common.models.tool.ToolCall
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+
+/**
+ * Type alias for the map structure holding tool calls for a session.
+ * Map of (messageId -> List<ToolCall>)
+ */
+typealias ToolCallsMap = Map<Long, List<ToolCall>>
+
 /**
  * Repository interface for managing chat sessions.
  *
@@ -53,6 +62,20 @@ interface SessionRepository {
     suspend fun getSessionDetailsFlow(sessionId: Long): StateFlow<DataState<RepositoryError, ChatSession>>
 
     /**
+     * Retrieves a reactive stream for the tool calls of a specific chat session.
+     *
+     * This method always returns a non-nullable StateFlow. If the tool calls
+     * have not yet been loaded or are not in the cache, the returned flow will
+     * initially emit `DataState.Idle`. Consumers should then call `loadSessionDetails(sessionId)`
+     * to trigger the actual data fetch and update the flow.
+     *
+     * @param sessionId The unique identifier of the session.
+     * @return A StateFlow containing the current state of the tool calls wrapped in DataState.
+     *         It will initially be `DataState.Idle` if the tool calls have not been loaded.
+     */
+    suspend fun getToolCallsFlow(sessionId: Long): StateFlow<DataState<RepositoryError, ToolCallsMap>>
+
+    /**
      * Loads all chat session summaries from the backend.
      *
      * This operation fetches the latest session data and updates the internal StateFlow.
@@ -85,6 +108,18 @@ interface SessionRepository {
      * @return Either.Right with the ChatSession on success, or Either.Left with RepositoryError on failure
      */
     suspend fun loadSessionDetails(sessionId: Long): Either<RepositoryError, ChatSession>
+
+
+    /**
+     * Loads all tool calls for a specific chat session.
+     *
+     * This operation fetches the tool calls and updates the internal cache of tool call flows.
+     * The specific flow for the `sessionId` will emit the loading, success, or error state.
+     *
+     * @param sessionId The unique identifier of the session to load tool calls for
+     * @return Either.Right with the ToolCallsMap on success, or Either.Left with RepositoryError on failure
+     */
+    suspend fun loadSessionToolCalls(sessionId: Long): Either<RepositoryError, ToolCallsMap>
 
     /**
      * Deletes a chat session and all its associated messages.
@@ -162,14 +197,16 @@ interface SessionRepository {
     /**
      * Processes a new user message in a session and gets the LLM response (non-streaming).
      *
-     * This operation sends the message to the backend and updates the cached ChatSession
-     * with both the user message and the assistant's response.
+     * This operation sends the message to the backend and returns a Flow of ChatEvent updates.
+     * The repository will update the cached ChatSession as events are received.
+     * Even though this is "non-streaming" (meaning the LLM doesn't stream tokens), the backend
+     * still uses SSE to provide progress updates during tool execution and message processing.
      *
      * @param sessionId The ID of the session to send the message to
      * @param request The message processing request containing content and optional parent ID
-     * @return Either.Right with Unit on success, or Either.Left with RepositoryError on failure
+     * @return Flow of Either containing ChatEvent updates or RepositoryError on failure
      */
-    suspend fun processNewMessage(sessionId: Long, request: ProcessNewMessageRequest): Either<RepositoryError, Unit>
+    fun processNewMessage(sessionId: Long, request: ProcessNewMessageRequest): Flow<Either<RepositoryError, ChatEvent>>
 
     /**
      * Processes a new user message in a session with streaming LLM response.
@@ -197,7 +234,8 @@ interface SessionRepository {
     suspend fun updateMessageContent(messageId: Long, sessionId: Long, request: UpdateMessageRequest): Either<RepositoryError, Unit>
 
     /**
-     * Deletes a specific message and its children.
+     * Deletes a specific message. This operation performs a non-recursive deletion,
+     * meaning only the specified message is removed, not its children.
      *
      * Upon successful deletion, the message is automatically removed from the cached ChatSession,
      * triggering updates to all observers.
