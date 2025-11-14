@@ -5,12 +5,15 @@ import eu.torvian.chatbot.app.repository.ModelRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.SessionRepository
 import eu.torvian.chatbot.app.repository.SettingsRepository
+import eu.torvian.chatbot.app.repository.ToolCallsMap
+import eu.torvian.chatbot.app.repository.ToolRepository
 import eu.torvian.chatbot.app.viewmodel.chat.util.ThreadBuilder
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType
+import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -29,6 +32,7 @@ class ChatStateImpl(
     private val sessionRepository: SessionRepository,
     private val settingsRepository: SettingsRepository,
     private val modelRepository: ModelRepository,
+    private val toolRepository: ToolRepository,
     private val threadBuilder: ThreadBuilder,
     private val backgroundScope: CoroutineScope
 ) : ChatState {
@@ -159,6 +163,46 @@ class ChatStateImpl(
                 is DataState.Idle -> DataState.Idle
             }
         }.stateIn(backgroundScope, SharingStarted.WhileSubscribed(5000), DataState.Idle)
+
+    // Available tools from repository, filtered for enabled tools only
+    override val availableTools: StateFlow<DataState<RepositoryError, List<ToolDefinition>>> =
+        toolRepository.tools.map { dataState ->
+            when (dataState) {
+                is DataState.Success -> {
+                    val enabledTools = dataState.data.filter { it.isEnabled }
+                    DataState.Success(enabledTools)
+                }
+                is DataState.Error -> dataState
+                is DataState.Loading -> dataState
+                is DataState.Idle -> dataState
+            }
+        }.stateIn(
+            scope = backgroundScope,
+            started = SharingStarted.Eagerly,
+            initialValue = DataState.Idle
+        )
+
+    // Session-specific enabled tools - switches based on active session
+    override val enabledToolsForCurrentSession: StateFlow<DataState<RepositoryError, List<ToolDefinition>>> =
+        _activeSessionId.flatMapLatest { sessionId ->
+            if (sessionId == null) flowOf(DataState.Idle)
+            else toolRepository.getEnabledToolsForSessionFlow(sessionId)
+        }.stateIn(
+            scope = backgroundScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = DataState.Idle
+        )
+
+    // Tool calls for current session - switches based on active session
+    override val toolCallsForCurrentSession: StateFlow<DataState<RepositoryError, ToolCallsMap>> =
+        _activeSessionId.flatMapLatest { sessionId ->
+            if (sessionId == null) flowOf(DataState.Success(emptyMap()))
+            else sessionRepository.getToolCallsFlow(sessionId)
+        }.stateIn(
+            scope = backgroundScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = DataState.Success(emptyMap())
+        )
 
     // Derived displayedMessages from sessionDataState
     override val displayedMessages: StateFlow<List<ChatMessage>> =

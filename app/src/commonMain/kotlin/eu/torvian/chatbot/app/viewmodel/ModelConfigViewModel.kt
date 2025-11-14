@@ -263,7 +263,8 @@ class ModelConfigViewModel(
                 providerId = form.providerId,
                 type = form.type,
                 active = form.active,
-                displayName = form.displayName.trim().takeIf { it.isNotBlank() }
+                displayName = form.displayName.trim().takeIf { it.isNotBlank() },
+                capabilities = form.capabilities.takeIf { it.isNotEmpty() }
             )
 
             modelRepository.addModel(request)
@@ -301,7 +302,8 @@ class ModelConfigViewModel(
                 providerId = form.providerId,
                 type = form.type,
                 active = form.active,
-                displayName = form.displayName.trim().takeIf { it.isNotBlank() }
+                displayName = form.displayName.trim().takeIf { it.isNotBlank() },
+                capabilities = form.capabilities.takeIf { it.isNotEmpty() }
             )
 
             modelRepository.updateModel(updatedModel)

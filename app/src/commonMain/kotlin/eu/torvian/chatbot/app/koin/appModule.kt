@@ -4,6 +4,7 @@ import eu.torvian.chatbot.app.repository.*
 import eu.torvian.chatbot.app.repository.impl.*
 import eu.torvian.chatbot.app.service.api.*
 import eu.torvian.chatbot.app.service.api.ktor.*
+import eu.torvian.chatbot.app.service.api.ktor.KtorToolApiClient
 import eu.torvian.chatbot.app.service.auth.createAuthenticatedHttpClient
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.service.security.CertificateTrustService
@@ -147,6 +148,9 @@ fun appModule(baseUri: String): Module = module {
     single<UserGroupApi> {
         KtorUserGroupApiClient(get())
     }
+    single<ToolApi> {
+        KtorToolApiClient(get())
+    }
 
     // Provide Repository implementations, injecting the API clients
     single<ModelRepository> {
@@ -173,6 +177,9 @@ fun appModule(baseUri: String): Module = module {
     single<UserGroupRepository> {
         DefaultUserGroupRepository(get())
     }
+    single<ToolRepository> {
+        DefaultToolRepository(get())
+    }
 
     // Provide shared chat state with background scope for computed state flows
     factory<ChatState> { (backgroundScope: CoroutineScope) ->
@@ -180,6 +187,7 @@ fun appModule(baseUri: String): Module = module {
             sessionRepository = get(),
             settingsRepository = get(),
             modelRepository = get(),
+            toolRepository = get(),
             threadBuilder = get(),
             backgroundScope = backgroundScope
         )
@@ -192,6 +200,7 @@ fun appModule(baseUri: String): Module = module {
             get<SessionRepository>(),
             get<SettingsRepository>(),
             get<ModelRepository>(),
+            get<ToolRepository>(),
             chatState,
             get()
         )
@@ -247,6 +256,8 @@ fun appModule(baseUri: String): Module = module {
             selectModelUC = get { parametersOf(chatState) },
             selectSettingsUC = get { parametersOf(chatState) },
             updateInputUC = get { parametersOf(chatState) },
+            toolRepository = get(),
+            errorNotifier = get(),
             eventBus = get(),
             normalScope = normalScope,
             backgroundScope = backgroundScope

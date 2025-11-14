@@ -137,4 +137,20 @@ enum class Table {
      * Table for granting group access to model settings.
      */
     MODEL_SETTINGS_ACCESS,
+
+    // Tool tables
+    /**
+     * Table for storing tool definitions.
+     */
+    TOOL_DEFINITIONS,
+
+    /**
+     * Table for storing tool call records.
+     */
+    TOOL_CALLS,
+
+    /**
+     * Table for storing session-specific tool configurations.
+     */
+    SESSION_TOOL_CONFIG,
 }

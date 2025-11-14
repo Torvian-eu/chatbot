@@ -33,7 +33,7 @@ class LLMApiClientKtorTest {
     private lateinit var client: LLMApiClientKtor
 
     // Test data using TestDefaults
-    private val testMessages = listOf(TestDefaults.chatMessage1)
+    private val testMessages = TestDefaults.rawChatMessages
     private val testModel = TestDefaults.llmModel1 // OpenAI model
     private val testProvider = TestDefaults.llmProvider1 // OpenAI provider
     private val testSettings = TestDefaults.modelSettings1 // Settings for OpenAI model

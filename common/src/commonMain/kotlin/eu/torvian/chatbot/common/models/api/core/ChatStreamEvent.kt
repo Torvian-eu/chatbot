@@ -2,6 +2,7 @@ package eu.torvian.chatbot.common.models.api.core
 
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.models.core.ChatMessage
+import eu.torvian.chatbot.common.models.tool.ToolCall
 import kotlinx.serialization.Serializable
 
 /**
@@ -19,23 +20,29 @@ sealed interface ChatStreamEvent {
      * Sent once the user's message has been successfully processed and saved on the server.
      * This typically signals the start of the assistant's response generation on the client side.
      *
-     * @property message The fully saved user message.
+     * @property userMessage The fully saved user message.
+     * @property updatedParentMessage If provided, the parent message has been updated with the new child reference
      */
     @Serializable
-    data class UserMessageSaved(val message: ChatMessage.UserMessage) : ChatStreamEvent {
+    data class UserMessageSaved(
+        val userMessage: ChatMessage.UserMessage,
+        val updatedParentMessage: ChatMessage?
+    ) : ChatStreamEvent {
         override val eventType: String = "user_message"
     }
 
     /**
      * Sent when the assistant's message generation begins.
-     * Provides an initial `ChatMessage.AssistantMessage` object, typically with empty content,
-     * but containing a temporary ID that the client should use until the final message is sent.
+     * Provides an initial `ChatMessage.AssistantMessage` object with a real database ID,
+     * but initially with empty content.
      *
-     * @property assistantMessage The initial assistant message, including a temporary client-side ID.
+     * @property assistantMessage The initial assistant message from the database.
+     * @property updatedParentMessage The parent message has been updated with the new child reference
      */
     @Serializable
     data class AssistantMessageStart(
-        val assistantMessage: ChatMessage.AssistantMessage
+        val assistantMessage: ChatMessage.AssistantMessage,
+        val updatedParentMessage: ChatMessage
     ) : ChatStreamEvent {
         override val eventType: String = "assistant_message_start"
     }
@@ -43,9 +50,8 @@ sealed interface ChatStreamEvent {
     /**
      * Sent for each new content chunk received from the Large Language Model (LLM).
      * Clients should append `deltaContent` to the existing message identified by `messageId`.
-     * The `messageId` here refers to the client-side temporary ID provided in `AssistantMessageStart`.
      *
-     * @property messageId The temporary ID of the assistant message being updated.
+     * @property messageId The database ID of the assistant message being updated.
      * @property deltaContent The new content chunk to append.
      */
     @Serializable
@@ -54,18 +60,61 @@ sealed interface ChatStreamEvent {
     }
 
     /**
+     * Sent for each new tool call chunk received from the LLM during streaming.
+     * The LLM streams tool call arguments as they are generated.
+     *
+     * @property messageId The database ID of the assistant message.
+     * @property index Position of this tool call in the array (null for Ollama).
+     * @property id Unique identifier from LLM provider (null for Ollama).
+     * @property name Name of the tool being called.
+     * @property argumentsDelta Incremental JSON string chunk for arguments.
+     */
+    @Serializable
+    data class ToolCallDelta(
+        val messageId: Long,
+        val index: Int?,
+        val id: String?,
+        val name: String,
+        val argumentsDelta: String?
+    ) : ChatStreamEvent {
+        override val eventType: String = "tool_call_delta"
+    }
+
+    /**
+     * Sent when all tool calls have been received from the LLM and saved to the database.
+     * The tool calls are saved with PENDING status.
+     *
+     * @property toolCalls List of tool calls in PENDING status.
+     */
+    @Serializable
+    data class ToolCallsReceived(
+        val toolCalls: List<ToolCall>
+    ) : ChatStreamEvent {
+        override val eventType: String = "tool_calls_received"
+    }
+
+    /**
+     * Sent when a single tool execution completes.
+     * The tool call has been updated in the database with results.
+     *
+     * @property toolCall The completed tool call with results.
+     */
+    @Serializable
+    data class ToolExecutionCompleted(
+        val toolCall: ToolCall
+    ) : ChatStreamEvent {
+        override val eventType: String = "tool_execution_completed"
+    }
+
+    /**
      * Sent when the assistant's message generation is complete and the message has been persisted.
      * This signals the end of a specific assistant message's stream.
      *
-     * @property tempMessageId The temporary ID used during streaming for this assistant message.
-     * @property finalAssistantMessage The final, persisted assistant message with its real, permanent ID and full content.
-     * @property finalUserMessage The updated user message, which now includes the generated assistant message as a child.
+     * @property assistantMessage The final, persisted assistant message with full content.
      */
     @Serializable
     data class AssistantMessageEnd(
-        val tempMessageId: Long,
-        val finalAssistantMessage: ChatMessage.AssistantMessage,
-        val finalUserMessage: ChatMessage.UserMessage
+        val assistantMessage: ChatMessage.AssistantMessage
     ) : ChatStreamEvent {
         override val eventType: String = "assistant_message_end"
     }

@@ -12,6 +12,7 @@ import eu.torvian.chatbot.common.models.api.core.UpdateSessionNameRequest
 import eu.torvian.chatbot.common.models.api.core.UpdateSessionSettingsRequest
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
+import eu.torvian.chatbot.common.models.tool.ToolCall
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.resources.*
@@ -125,6 +126,15 @@ class KtorSessionApiClient(client: HttpClient) : BaseApiResourceClient(client), 
             client.put(SessionResource.ById.Group(SessionResource.ById(sessionId = sessionId))) {
                 setBody(request)
             }.body<Unit>() // Expect Unit body (HTTP 200/204)
+        }
+    }
+
+    override suspend fun getSessionToolCalls(sessionId: Long): Either<ApiResourceError, List<ToolCall>> {
+        // Use safeApiCall to wrap the Ktor request
+        return safeApiCall {
+            // Use Ktor resources: /api/v1/sessions/{sessionId}/toolcalls
+            client.get(SessionResource.ById.ToolCalls(SessionResource.ById(sessionId = sessionId)))
+                .body<List<ToolCall>>() // Expect a List<ToolCall> on success (HTTP 200)
         }
     }
 }

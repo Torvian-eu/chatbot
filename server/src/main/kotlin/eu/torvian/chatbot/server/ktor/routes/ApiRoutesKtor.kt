@@ -4,6 +4,7 @@ import eu.torvian.chatbot.server.service.core.*
 import eu.torvian.chatbot.server.service.security.AuthenticationService
 import eu.torvian.chatbot.server.service.security.AuthorizationService
 import io.ktor.server.routing.*
+import kotlinx.serialization.json.Json
 
 /**
  * Ktor route configuration using type-safe Resources plugin.
@@ -16,11 +17,15 @@ class ApiRoutesKtor(
     private val llmModelService: LLMModelService,
     private val modelSettingsService: ModelSettingsService,
     private val messageService: MessageService,
+    private val chatService: ChatService,
+    private val toolService: ToolService,
+    private val toolCallService: ToolCallService,
     private val authenticationService: AuthenticationService,
     private val userService: UserService,
     private val userGroupService: UserGroupService,
     private val roleService: RoleService,
-    private val authorizationService: AuthorizationService
+    private val authorizationService: AuthorizationService,
+    private val json: Json
 ) {
     /**
      * Configures the API routes using the Ktor Resources plugin.
@@ -37,6 +42,7 @@ class ApiRoutesKtor(
         configureModelRoutes(route)
         configureSettingsRoutes(route)
         configureMessageRoutes(route)
+        configureToolRoutes(route)
     }
 
     /**
@@ -71,7 +77,7 @@ class ApiRoutesKtor(
      * Configures routes related to Sessions (/api/v1/sessions).
      */
     fun configureSessionRoutes(route: Route) {
-        route.configureSessionRoutes(sessionService, messageService, authorizationService)
+        route.configureSessionRoutes(sessionService, chatService, toolCallService, authorizationService, json)
     }
 
     /**
@@ -107,5 +113,12 @@ class ApiRoutesKtor(
      */
     fun configureMessageRoutes(route: Route) {
         route.configureMessageRoutes(messageService, authorizationService)
+    }
+
+    /**
+     * Configures routes related to Tool Management (/api/v1/tools).
+     */
+    fun configureToolRoutes(route: Route) {
+        route.configureToolRoutes(toolService, authorizationService)
     }
 }

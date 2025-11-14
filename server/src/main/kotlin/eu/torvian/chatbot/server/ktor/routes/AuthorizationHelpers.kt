@@ -166,3 +166,20 @@ suspend inline fun Raise<ApiError>.requireSettingsAccess(
         authorizationService.requireAccess(userId, ResourceType.SETTINGS, settingsId, accessMode).bind()
     }
 }
+
+/**
+ * Helper function to require tool management permissions.
+ * Only users with the MANAGE_TOOLS permission can create, update, or delete tools.
+ *
+ * @param authorizationService The authorization service to use
+ * @param userId The ID of the user requesting access
+ */
+suspend inline fun Raise<ApiError>.requireToolManagementAccess(
+    authorizationService: AuthorizationService,
+    userId: Long
+) {
+    withError({ ae: AuthorizationError -> ae.toApiError() }) {
+        authorizationService.requirePermission(userId, CommonPermissions.MANAGE_TOOLS).bind()
+    }
+}
+

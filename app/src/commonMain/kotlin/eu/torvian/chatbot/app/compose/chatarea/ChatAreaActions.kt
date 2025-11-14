@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.app.compose.chatarea
 
 import eu.torvian.chatbot.common.models.core.ChatMessage
+import eu.torvian.chatbot.common.models.tool.ToolCall
 
 /**
  * Defines all UI actions that can be triggered from the main Chat Area.
@@ -85,6 +86,17 @@ interface ChatAreaActions {
      * Callback for when the user requests to retry loading the current chat session after a failure.
      */
     fun onRetryLoadingSession()
+
+    /**
+     * Callback for when the user requests to show the tool configuration dialog.
+     */
+    fun onShowToolConfig()
+
+    /**
+     * Callback for when the user requests to show the tool call details dialog.
+     * @param toolCall The tool call to display details for.
+     */
+    fun onShowToolCallDetails(toolCall: ToolCall)
 
     // Will include copy actions (E2.S7, E3.S5) in future PRs
 }

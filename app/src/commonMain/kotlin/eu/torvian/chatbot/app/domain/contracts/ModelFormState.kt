@@ -2,6 +2,7 @@ package eu.torvian.chatbot.app.domain.contracts
 
 import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.llm.LLMModel
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Data class representing the state of model configuration forms.
@@ -14,6 +15,7 @@ data class ModelFormState(
     val type: LLMModelType = LLMModelType.CHAT, // Default to CHAT type
     val active: Boolean = true,
     val displayName: String = "", // Optional, display name for UI
+    val capabilities: JsonObject = JsonObject(emptyMap()), // Raw JsonObject for flexibility
     val errorMessage: String? = null // For inline validation/API errors
 ) {
     /**
@@ -31,7 +33,8 @@ data class ModelFormState(
             providerId = model.providerId,
             type = model.type,
             active = model.active,
-            displayName = model.displayName ?: ""
+            displayName = model.displayName ?: "",
+            capabilities = model.capabilities ?: JsonObject(emptyMap())
         )
     }
 }

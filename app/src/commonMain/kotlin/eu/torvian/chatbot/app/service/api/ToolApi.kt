@@ -1,0 +1,101 @@
+package eu.torvian.chatbot.app.service.api
+
+import arrow.core.Either
+import eu.torvian.chatbot.common.models.api.tool.CreateToolRequest
+import eu.torvian.chatbot.common.models.api.tool.SetToolEnabledRequest
+import eu.torvian.chatbot.common.models.tool.ToolDefinition
+
+/**
+ * Frontend API interface for interacting with tool-related endpoints.
+ *
+ * This interface defines the operations for managing tool definitions
+ * and retrieving session-specific tool configurations. Implementations use the internal HTTP API.
+ * All methods are suspend functions and return [Either<ApiResourceError, T>].
+ */
+interface ToolApi {
+    /**
+     * Retrieves a list of all available tool definitions.
+     *
+     * Corresponds to `GET /api/v1/tools`.
+     *
+     * @return [Either.Right] containing a list of [ToolDefinition] on success,
+     *         or [Either.Left] containing a [ApiResourceError] on failure.
+     */
+    suspend fun getAllTools(): Either<ApiResourceError, List<ToolDefinition>>
+
+    /**
+     * Retrieves details for a specific tool definition.
+     *
+     * Corresponds to `GET /api/v1/tools/{toolId}`.
+     *
+     * @param toolId The ID of the tool to retrieve.
+     * @return [Either.Right] containing the requested [ToolDefinition] on success,
+     *         or [Either.Left] containing a [ApiResourceError] on failure (e.g., not found).
+     */
+    suspend fun getToolById(toolId: Long): Either<ApiResourceError, ToolDefinition>
+
+    /**
+     * Creates a new tool definition.
+     *
+     * Corresponds to `POST /api/v1/tools`.
+     * Requires MANAGE_TOOLS permission.
+     *
+     * @param request The request body with tool details.
+     * @return [Either.Right] containing the newly created [ToolDefinition] on success,
+     *         or [Either.Left] containing a [ApiResourceError] on failure.
+     */
+    suspend fun createTool(request: CreateToolRequest): Either<ApiResourceError, ToolDefinition>
+
+    /**
+     * Updates an existing tool definition.
+     *
+     * Corresponds to `PUT /api/v1/tools/{toolId}`.
+     * Requires MANAGE_TOOLS permission.
+     *
+     * @param tool The [ToolDefinition] object with updated details. The ID must match the path.
+     * @return [Either.Right] with [Unit] on successful update,
+     *         or [Either.Left] containing a [ApiResourceError] on failure (e.g., not found, invalid input).
+     */
+    suspend fun updateTool(tool: ToolDefinition): Either<ApiResourceError, Unit>
+
+    /**
+     * Deletes a tool definition.
+     *
+     * Corresponds to `DELETE /api/v1/tools/{toolId}`.
+     * Requires MANAGE_TOOLS permission.
+     *
+     * @param toolId The ID of the tool to delete.
+     * @return [Either.Right] with [Unit] on successful deletion (typically HTTP 204 No Content),
+     *         or [Either.Left] containing a [ApiResourceError] on failure (e.g., not found).
+     */
+    suspend fun deleteTool(toolId: Long): Either<ApiResourceError, Unit>
+
+    /**
+     * Retrieves the list of tools enabled for a specific session.
+     *
+     * Corresponds to `GET /api/v1/sessions/{sessionId}/tools`.
+     *
+     * @param sessionId The ID of the session.
+     * @return [Either.Right] containing a list of enabled [ToolDefinition] on success,
+     *         or [Either.Left] containing a [ApiResourceError] on failure.
+     */
+    suspend fun getEnabledToolsForSession(sessionId: Long): Either<ApiResourceError, List<ToolDefinition>>
+
+    /**
+     * Enables or disables a tool for a specific session.
+     *
+     * Corresponds to `PUT /api/v1/sessions/{sessionId}/tools/{toolId}`.
+     *
+     * @param sessionId The ID of the session.
+     * @param toolId The ID of the tool.
+     * @param request The request body containing the enabled flag.
+     * @return [Either.Right] with [Unit] on successful update,
+     *         or [Either.Left] containing a [ApiResourceError] on failure.
+     */
+    suspend fun setToolEnabledForSession(
+        sessionId: Long,
+        toolId: Long,
+        request: SetToolEnabledRequest
+    ): Either<ApiResourceError, Unit>
+}
+

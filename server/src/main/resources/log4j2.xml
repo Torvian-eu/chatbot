@@ -20,6 +20,14 @@
         </Logger>
 
         <!--
+        Sets the logging level for Jetty's core components to INFO.
+        This will suppress most DEBUG messages from Jetty.
+        -->
+        <Logger name="org.eclipse.jetty" level="info" additivity="false">
+            <AppenderRef ref="Console"/>
+        </Logger>
+
+        <!--
         Sets the logging level for HikariCP to INFO.
         This silences the repetitive DEBUG messages from the housekeeper thread,
         but will still show important lifecycle messages (start/stop) and errors.

@@ -7,6 +7,7 @@ import eu.torvian.chatbot.app.repository.SessionRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
+import eu.torvian.chatbot.common.models.api.core.ChatEvent
 import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
 import eu.torvian.chatbot.common.models.api.core.ProcessNewMessageRequest
 
@@ -95,6 +96,21 @@ class SendMessageUseCase(
                             state.setReplyTarget(null)
                         }
 
+                        is ChatStreamEvent.ToolCallsReceived -> {
+                            logger.debug("Tools executing: ${chatUpdate.toolCalls.size} calls")
+                            // UI can show tool execution indicator
+                        }
+
+                        is ChatStreamEvent.ToolExecutionCompleted -> {
+                            logger.debug("Tool completed: ${chatUpdate.toolCall.toolName}")
+                            // UI updates automatically via repository cache
+                        }
+
+                        is ChatStreamEvent.ToolCallDelta -> {
+                            // Optional: Show tool call arguments being built
+                            logger.trace("Tool call delta: ${chatUpdate.name}")
+                        }
+
                         is ChatStreamEvent.ErrorOccurred -> {
                             errorNotifier.apiError(
                                 error = chatUpdate.error,
@@ -119,20 +135,37 @@ class SendMessageUseCase(
         sessionId: Long,
         request: ProcessNewMessageRequest
     ) {
-        sessionRepository.processNewMessage(sessionId, request).fold(
-            ifLeft = { repositoryError ->
-                logger.error("Send message repository error: ${repositoryError.message}")
-                errorNotifier.repositoryError(
-                    error = repositoryError,
-                    shortMessageRes = Res.string.error_sending_message_short
-                )
-            },
-            ifRight = {
-                logger.info("Successfully sent non-streaming message")
-                // Clear input and reply state
-                state.setReplyTarget(null)
-                state.setInputContent("")
-            }
-        )
+        sessionRepository.processNewMessage(sessionId, request).collect { eitherEvent ->
+            eitherEvent.fold(
+                ifLeft = { repositoryError ->
+                    logger.error("Non-streaming message repository error: ${repositoryError.message}")
+                    errorNotifier.repositoryError(
+                        error = repositoryError,
+                        shortMessageRes = Res.string.error_sending_message_short
+                    )
+                },
+                ifRight = { event ->
+                    // Handle specific events that require UI state updates
+                    when (event) {
+                        is ChatEvent.UserMessageSaved -> {
+                            // Clear input and reply target after user message is confirmed
+                            state.setInputContent("")
+                            state.setReplyTarget(null)
+                        }
+
+                        is ChatEvent.ErrorOccurred -> {
+                            errorNotifier.apiError(
+                                error = event.error,
+                                shortMessageRes = Res.string.error_sending_message_short
+                            )
+                        }
+
+                        else -> {
+                            // AssistantMessageSaved, StreamCompleted handled by repository
+                        }
+                    }
+                }
+            )
+        }
     }
 }

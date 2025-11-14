@@ -6,3 +6,4 @@
 - Limit number of registration attempts per hour (in total and per IP address).
 - User should be given the standard user role (CommonRoles.STANDARD_USER) upon registration. (see UserServiceImpl)
 - Errors from Ktor's authentication middleware (on the server) should be mapped to proper API errors. (ApiError class)
+- Improve LLM API error display to the user.

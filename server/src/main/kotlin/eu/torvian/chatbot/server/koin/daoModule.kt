@@ -23,6 +23,9 @@ import eu.torvian.chatbot.server.data.dao.exposed.ModelOwnershipDaoExposed
 import eu.torvian.chatbot.server.data.dao.exposed.ModelAccessDaoExposed
 import eu.torvian.chatbot.server.data.dao.exposed.SettingsOwnershipDaoExposed
 import eu.torvian.chatbot.server.data.dao.exposed.SettingsAccessDaoExposed
+import eu.torvian.chatbot.server.data.dao.exposed.ToolDefinitionDaoExposed
+import eu.torvian.chatbot.server.data.dao.exposed.ToolCallDaoExposed
+import eu.torvian.chatbot.server.data.dao.exposed.SessionToolConfigDaoExposed
 import eu.torvian.chatbot.server.utils.transactions.TransactionScope
 import org.koin.dsl.module
 
@@ -65,4 +68,9 @@ fun daoModule() = module {
     single<PermissionDao> { PermissionDaoExposed(get()) }
     single<UserRoleAssignmentDao> { UserRoleAssignmentDaoExposed(get()) }
     single<RolePermissionDao> { RolePermissionDaoExposed(get()) }
+
+    // Tool-related DAOs
+    single<ToolDefinitionDao> { ToolDefinitionDaoExposed(get()) }
+    single<ToolCallDao> { ToolCallDaoExposed(get()) }
+    single<SessionToolConfigDao> { SessionToolConfigDaoExposed(get()) }
 }

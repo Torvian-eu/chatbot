@@ -24,20 +24,20 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * Tests for [InitialSetupService].
+ * Tests for [UserAccountInitializer].
  *
- * This test suite verifies the initial database setup functionality:
+ * This test suite verifies the user account initialization functionality:
  * - Creating basic roles and permissions
  * - Creating the initial admin user
  * - Creating the "All Users" group
  * - Assigning roles and group memberships
- * - Handling repeated setup calls
+ * - Handling repeated initialization calls
  *
  * The tests rely on an in-memory SQLite database managed by [TestDataManager].
  */
-class InitialSetupServiceTest {
+class UserAccountInitializerTest {
     private lateinit var container: DIContainer
-    private lateinit var initialSetupService: InitialSetupService
+    private lateinit var userAccountInitializer: UserAccountInitializer
     private lateinit var userDao: UserDao
     private lateinit var userGroupService: UserGroupService
     private lateinit var testDataManager: TestDataManager
@@ -46,7 +46,7 @@ class InitialSetupServiceTest {
     fun setUp() = runTest {
         container = defaultTestContainer()
 
-        initialSetupService = container.get()
+        userAccountInitializer = container.get()
         userDao = container.get()
         userGroupService = container.get()
         testDataManager = container.get()
@@ -72,38 +72,42 @@ class InitialSetupServiceTest {
     }
 
     @Test
-    fun `isSetupComplete should return false when no users exist`() = runTest {
-        val isComplete = initialSetupService.isSetupComplete()
-        assertFalse(isComplete, "Setup should not be complete when no users exist")
+    fun `isInitialized should return false when no users exist`() = runTest {
+        val isInitialized = userAccountInitializer.isInitialized()
+        assertFalse(isInitialized, "Should not be initialized when no users exist")
     }
 
     @Test
-    fun `isSetupComplete should return true when users exist`() = runTest {
+    fun `isInitialized should return true when users exist`() = runTest {
         // Create a user manually
         val userResult = userDao.insertUser("testuser", "hashedpassword", "test@example.com", UserStatus.ACTIVE)
         assertTrue(userResult.isRight(), "Failed to create test user")
 
-        val isComplete = initialSetupService.isSetupComplete()
-        assertTrue(isComplete, "Setup should be complete when users exist")
+        val isInitialized = userAccountInitializer.isInitialized()
+        assertTrue(isInitialized, "Should be initialized when users exist")
     }
 
     @Test
-    fun `performInitialSetup should create admin user successfully`() = runTest {
-        val result = initialSetupService.performInitialSetup()
+    fun `initialize should create admin user successfully`() = runTest {
+        val result = userAccountInitializer.initialize()
 
-        assertTrue(result.isRight(), "Expected successful initial setup")
-        val adminUser = result.getOrNull()
-        assertNotNull(adminUser, "Expected non-null admin user")
-        assertEquals(InitialSetupService.DEFAULT_ADMIN_USERNAME, adminUser.username, "Expected default admin username")
+        assertTrue(result.isRight(), "Expected successful initialization")
+
+        // Verify admin user was created
+        val users = userDao.getAllUsers()
+        assertEquals(1, users.size, "Expected exactly one user")
+        val adminUser = users.first()
+        assertEquals(UserAccountInitializer.DEFAULT_ADMIN_USERNAME, adminUser.username, "Expected default admin username")
         assertNotNull(adminUser.passwordHash, "Expected non-null password hash")
         assertNotNull(adminUser.createdAt, "Expected non-null createdAt")
         assertNotNull(adminUser.updatedAt, "Expected non-null updatedAt")
+        assertTrue(adminUser.requiresPasswordChange, "Admin should require password change on first login")
     }
 
     @Test
-    fun `performInitialSetup should create basic roles`() = runTest {
-        val result = initialSetupService.performInitialSetup()
-        assertTrue(result.isRight(), "Expected successful initial setup")
+    fun `initialize should create basic roles`() = runTest {
+        val result = userAccountInitializer.initialize()
+        assertTrue(result.isRight(), "Expected successful initialization")
 
         // Verify roles were created
         val transactionScope = container.get<TransactionScope>()
@@ -118,9 +122,9 @@ class InitialSetupServiceTest {
     }
 
     @Test
-    fun `performInitialSetup should create basic permissions`() = runTest {
-        val result = initialSetupService.performInitialSetup()
-        assertTrue(result.isRight(), "Expected successful initial setup")
+    fun `initialize should create basic permissions`() = runTest {
+        val result = userAccountInitializer.initialize()
+        assertTrue(result.isRight(), "Expected successful initialization")
 
         // Verify permissions were created
         val transactionScope = container.get<TransactionScope>()
@@ -134,10 +138,11 @@ class InitialSetupServiceTest {
     }
 
     @Test
-    fun `performInitialSetup should assign admin role to admin user`() = runTest {
-        val result = initialSetupService.performInitialSetup()
-        assertTrue(result.isRight(), "Expected successful initial setup")
-        val adminUser = result.getOrNull()!!
+    fun `initialize should assign admin role to admin user`() = runTest {
+        val result = userAccountInitializer.initialize()
+        assertTrue(result.isRight(), "Expected successful initialization")
+
+        val adminUser = userDao.getAllUsers().first()
 
         // Verify admin user has admin role
         val transactionScope = container.get<TransactionScope>()
@@ -163,9 +168,9 @@ class InitialSetupServiceTest {
     }
 
     @Test
-    fun `performInitialSetup should create All Users group`() = runTest {
-        val result = initialSetupService.performInitialSetup()
-        assertTrue(result.isRight(), "Expected successful initial setup")
+    fun `initialize should create All Users group`() = runTest {
+        val result = userAccountInitializer.initialize()
+        assertTrue(result.isRight(), "Expected successful initialization")
 
         // Verify "All Users" group was created
         val allUsersGroupResult = userGroupService.getGroupByName(CommonUserGroups.ALL_USERS)
@@ -177,10 +182,11 @@ class InitialSetupServiceTest {
     }
 
     @Test
-    fun `performInitialSetup should add admin user to All Users group`() = runTest {
-        val result = initialSetupService.performInitialSetup()
-        assertTrue(result.isRight(), "Expected successful initial setup")
-        val adminUser = result.getOrNull()!!
+    fun `initialize should add admin user to All Users group`() = runTest {
+        val result = userAccountInitializer.initialize()
+        assertTrue(result.isRight(), "Expected successful initialization")
+
+        val adminUser = userDao.getAllUsers().first()
 
         // Get All Users group
         val allUsersGroupResult = userGroupService.getGroupByName(CommonUserGroups.ALL_USERS)
@@ -202,10 +208,10 @@ class InitialSetupServiceTest {
     }
 
     @Test
-    fun `performInitialSetup should not duplicate All Users group on repeated calls`() = runTest {
-        // Perform initial setup twice
-        initialSetupService.performInitialSetup()
-        initialSetupService.performInitialSetup()
+    fun `initialize should not duplicate All Users group on repeated calls`() = runTest {
+        // Initialize twice
+        userAccountInitializer.initialize()
+        userAccountInitializer.initialize()
 
         val transactionScope = container.get<TransactionScope>()
 
@@ -215,37 +221,23 @@ class InitialSetupServiceTest {
                 .where { UserGroupsTable.name eq CommonUserGroups.ALL_USERS }
                 .count()
         }
-        assertEquals(1, allUsersGroupCount, "Expected exactly one All Users group after repeated setup")
+        assertEquals(1, allUsersGroupCount, "Expected exactly one All Users group after repeated initialization")
     }
 
     @Test
-    fun `performInitialSetup should return existing user when setup already completed`() = runTest {
-        // Perform initial setup first time
-        val firstResult = initialSetupService.performInitialSetup()
-        assertTrue(firstResult.isRight(), "Expected successful first setup")
-        val firstAdminUser = firstResult.getOrNull()!!
+    fun `initialize should be idempotent`() = runTest {
+        // Initialize twice
+        val firstResult = userAccountInitializer.initialize()
+        val secondResult = userAccountInitializer.initialize()
 
-        // Perform initial setup second time
-        val secondResult = initialSetupService.performInitialSetup()
-        assertTrue(secondResult.isRight(), "Expected successful second setup")
-        val secondAdminUser = secondResult.getOrNull()!!
-
-        // Should return the same user (first one created)
-        assertEquals(firstAdminUser.id, secondAdminUser.id, "Expected same admin user ID")
-        assertEquals(firstAdminUser.username, secondAdminUser.username, "Expected same admin username")
-    }
-
-    @Test
-    fun `performInitialSetup should not create duplicate data on repeated calls`() = runTest {
-        // Perform initial setup twice
-        initialSetupService.performInitialSetup()
-        initialSetupService.performInitialSetup()
+        assertTrue(firstResult.isRight(), "Expected successful first initialization")
+        assertTrue(secondResult.isRight(), "Expected successful second initialization")
 
         val transactionScope = container.get<TransactionScope>()
 
         // Verify only one admin user exists
         val users = userDao.getAllUsers()
-        assertEquals(1, users.size, "Expected exactly one user after repeated setup")
+        assertEquals(1, users.size, "Expected exactly one user after repeated initialization")
 
         // Verify roles are not duplicated
         val adminRoles = transactionScope.transaction {
@@ -253,6 +245,26 @@ class InitialSetupServiceTest {
                 .where { RolesTable.name eq CommonRoles.ADMIN }
                 .count()
         }
-        assertEquals(1, adminRoles, "Expected exactly one Admin role after repeated setup")
+        assertEquals(1, adminRoles, "Expected exactly one Admin role after repeated initialization")
+    }
+
+    @Test
+    fun `initialize should skip when already initialized`() = runTest {
+        // First initialization
+        userAccountInitializer.initialize()
+        assertTrue(userAccountInitializer.isInitialized(), "Should be initialized after first run")
+
+        // Get the admin user
+        val firstAdminUser = userDao.getAllUsers().first()
+
+        // Second initialization
+        userAccountInitializer.initialize()
+
+        // Should still have the same user
+        val users = userDao.getAllUsers()
+        assertEquals(1, users.size, "Expected exactly one user")
+        assertEquals(firstAdminUser.id, users.first().id, "Expected same admin user ID")
+        assertEquals(firstAdminUser.username, users.first().username, "Expected same admin username")
     }
 }
+

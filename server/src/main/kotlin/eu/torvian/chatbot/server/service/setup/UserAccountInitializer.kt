@@ -20,36 +20,39 @@ import org.jetbrains.exposed.sql.selectAll
 import org.mindrot.jbcrypt.BCrypt
 
 /**
- * Service responsible for performing initial database setup for the user accounts system.
+ * Initializer responsible for setting up the user accounts system.
  *
- * This service creates the essential data required for the multi-user system to function:
+ * This initializer creates the essential data required for the multi-user system to function:
  * - The initial administrator user account with full system access
  * - Basic roles and permissions for the authorization system
  * - The "All Users" group for public resource sharing
  */
-class InitialSetupService(
+class UserAccountInitializer(
     private val userDao: UserDao,
     private val userGroupService: UserGroupService,
     private val transactionScope: TransactionScope
-) {
+) : DataInitializer {
+
     companion object {
         const val DEFAULT_ADMIN_USERNAME = "admin"
         const val DEFAULT_ADMIN_PASSWORD = "admin123" // Should be changed on first login
     }
 
-    /**
-     * Performs the complete initial setup if the database is empty.
-     * This should be called once when the application starts for the first time.
-     *
-     * @return Either an error message if setup fails, or the created admin user entity on success.
-     */
-    suspend fun performInitialSetup(): Either<String, UserEntity> =
+    override val name: String = "User Account System"
+
+    override suspend fun isInitialized(): Boolean {
+        return transactionScope.transaction {
+            UsersTable.selectAll().count() > 0
+        }
+    }
+
+    override suspend fun initialize(): Either<String, Unit> =
         transactionScope.transaction {
             either {
-                // Check if setup has already been performed
+                // Double-check if setup has already been performed
                 val existingUsers = userDao.getAllUsers()
                 if (existingUsers.isNotEmpty()) {
-                    return@transaction existingUsers.first().right()
+                    return@transaction Unit.right()
                 }
 
                 // 1. Create basic roles
@@ -60,8 +63,8 @@ class InitialSetupService(
                 createBasicPermissions(adminRoleId, standardUserRoleId)
 
                 // 3. Create the "All Users" group for public resource sharing
-                val allUsersGroup = withError({
-                    error -> "Failed to create All Users group: $error"
+                val allUsersGroup = withError({ error ->
+                    "Failed to create All Users group: $error"
                 }) {
                     userGroupService.createGroup(
                         name = CommonUserGroups.ALL_USERS,
@@ -78,11 +81,8 @@ class InitialSetupService(
                 // 6. Add admin user to the "All Users" group
                 userGroupService.addUserToGroup(adminUser.id, allUsersGroup.id)
                     .mapLeft { error -> "Failed to add admin to All Users group: $error" }.bind()
-
-                adminUser
             }
         }
-
 
     /**
      * Creates a role with the given name and description.
@@ -98,6 +98,7 @@ class InitialSetupService(
     /**
      * Creates basic permissions and assigns them to roles.
      */
+    @Suppress("UNUSED_PARAMETER")
     private fun createBasicPermissions(adminRoleId: Long, standardUserRoleId: Long) {
         // Create permissions using predefined PermissionSpec instances
 
@@ -179,13 +180,5 @@ class InitialSetupService(
             it[UserRoleAssignmentsTable.roleId] = roleId
         }
     }
-
-    /**
-     * Checks if the initial setup has been completed by looking for existing users.
-     */
-    suspend fun isSetupComplete(): Boolean {
-        return transactionScope.transaction {
-            UsersTable.selectAll().count() > 0
-        }
-    }
 }
+

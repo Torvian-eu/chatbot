@@ -47,6 +47,11 @@ class ExposedDataManager(
             AssistantMessageTable,
             SessionCurrentLeafTable,
 
+            // Tool-related tables
+            ToolDefinitionTable,
+            ToolCallTable,
+            SessionToolConfigTable,
+
             // Ownership tables (must come after the resources they reference)
             ChatSessionOwnersTable,
             ChatGroupOwnersTable,

@@ -326,5 +326,15 @@ private fun ModelDetailsContent(
             label = "Model ID",
             value = model.id.toString()
         )
+
+        // Capabilities (raw JSON display)
+        model.capabilities?.let { caps ->
+            if (caps.isNotEmpty()) {
+                DetailRow(
+                    label = "Capabilities",
+                    value = caps.toString()
+                )
+            }
+        }
     }
 }

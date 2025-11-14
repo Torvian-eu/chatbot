@@ -9,6 +9,7 @@ import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.llm.LLMModelType
+import eu.torvian.chatbot.common.models.tool.ToolCall
 import kotlinx.datetime.Instant
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -82,6 +83,8 @@ fun ChatAreaPreview() {
             override fun onSelectModel(modelId: Long?) {}
             override fun onSelectSettings(settingsId: Long?) {}
             override fun onRetryLoadingSession() {}
+            override fun onShowToolConfig() {}
+            override fun onShowToolCallDetails(toolCall: ToolCall) {}
         }
     )
 }

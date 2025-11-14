@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.service.llm.strategy
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Data Transfer Objects for OpenAI-compatible API responses and requests.
@@ -46,14 +47,17 @@ object OpenAiApiModels {
             /**
              * Represents a message within a choice.
              * Contains the role and content of the generated message.
+             * Can also include tool calls when the model decides to use tools.
              *
              * @property role Role string (e.g., "assistant")
-             * @property content The generated text
+             * @property content The generated text. Nullable when tool_calls is present without text.
+             * @property tool_calls List of tool calls made by the assistant. Present when finish_reason is "tool_calls".
              */
             @Serializable
             data class Message(
                 val role: String,
-                val content: String
+                val content: String? = null,
+                val tool_calls: List<ToolCallRequest>? = null
             )
         }
 
@@ -89,6 +93,8 @@ object OpenAiApiModels {
      * @property presence_penalty Presence penalty parameter
      * @property stop Stop sequences
      * @property seed Seed for deterministic generation
+     * @property tools List of tools the model may call. Requires models with tool calling support.
+     * @property tool_choice Controls which (if any) tool is called by the model. "auto" means the model can pick between generating a message or calling one or more tools. "none" means the model will not call any tool. Default is "auto". Note: In reality this type is polymorphic and can also be an object specifying a specific tool.
      */
     @Serializable
     data class ChatCompletionRequest(
@@ -101,7 +107,9 @@ object OpenAiApiModels {
         val frequency_penalty: Float? = null,
         val presence_penalty: Float? = null,
         val stop: List<String>? = null,
-        val seed: Int? = null // Added for completeness
+        val seed: Int? = null, // Added for completeness
+        val tools: List<ToolDefinition>? = null,
+        val tool_choice: String? = null
     ) {
         /**
          * Represents a message in the chat completion request.
@@ -154,15 +162,47 @@ object OpenAiApiModels {
         ) {
             /**
              * The actual content delta. One of these fields will typically be non-null in any given chunk.
+             * Tool calls are streamed incrementally with deltas.
              *
              * @property role The role of the author of this message, usually "assistant" and present only in the first chunk.
              * @property content The text content delta.
+             * @property tool_calls Incremental tool call information. Each element represents a tool call being constructed.
              */
             @Serializable
             data class Delta(
                 val role: String? = null,
-                val content: String? = null
-            )
+                val content: String? = null,
+                val tool_calls: List<ToolCallDelta>? = null
+            ) {
+                /**
+                 * Represents an incremental update to a tool call during streaming.
+                 * Tool calls are built up over multiple chunks, identified by index.
+                 *
+                 * @property index The index of this tool call in the list of tool calls being made
+                 * @property id The unique identifier for this tool call (appears in the first delta for this index)
+                 * @property type The type of tool being called. Always "function" for OpenAI.
+                 * @property function The function call delta
+                 */
+                @Serializable
+                data class ToolCallDelta(
+                    val index: Int? = null,
+                    val id: String? = null,
+                    val type: String = "function",
+                    val function: FunctionCallDelta
+                ) {
+                    /**
+                     * Represents incremental function call information.
+                     *
+                     * @property name The name of the function (appears in the first delta for this tool call)
+                     * @property arguments Incremental arguments string. Multiple deltas will be concatenated to form the complete arguments JSON string.
+                     */
+                    @Serializable
+                    data class FunctionCallDelta(
+                        val name: String? = null,
+                        val arguments: String? = null
+                    )
+                }
+            }
         }
 
         /**
@@ -178,6 +218,65 @@ object OpenAiApiModels {
             val completion_tokens: Int,
             val prompt_tokens: Int,
             val total_tokens: Int
+        )
+    }
+
+    /**
+     * Represents a tool definition in OpenAI API format.
+     * Tools are external functions that the model can choose to call.
+     * This is separate from the domain ToolDefinition model and represents the API format.
+     *
+     * @property type The type of the tool. Always "function" for OpenAI.
+     * @property function The function definition
+     */
+    @Serializable
+    data class ToolDefinition(
+        val type: String = "function",
+        val function: FunctionDefinition
+    ) {
+        /**
+         * Represents a function that can be called by the model.
+         *
+         * @property name The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.
+         * @property description A description of what the function does, used by the model to choose when and how to call the function.
+         * @property parameters The parameters the function accepts, described as a JSON Schema object. See json-schema.org for details.
+         * @property strict Whether to enable strict schema adherence when generating the function call. If true, the model will follow the exact schema. Default is false.
+         */
+        @Serializable
+        data class FunctionDefinition(
+            val name: String,
+            val description: String? = null,
+            val parameters: JsonObject? = null,
+            val strict: Boolean? = false
+        )
+    }
+
+    /**
+     * Represents a tool call request from the LLM in OpenAI format.
+     * This appears in the assistant's response when the model decides to call a tool.
+     *
+     * @property id A unique identifier for this tool call
+     * @property type The type of tool being called. Always "function" for OpenAI.
+     * @property function The function call details
+     */
+    @Serializable
+    data class ToolCallRequest(
+        val id: String,
+        val type: String = "function",
+        val function: FunctionCall
+    ) {
+        /**
+         * Represents the function being called and its arguments.
+         *
+         * @property name The name of the function to call
+         * @property arguments The arguments to call the function with, as a JSON string generated by the model.
+         *                     Note: This may not be valid JSON, and arguments may be hallucinated by the model.
+         *                     It's nullable to support parameterless functions.
+         */
+        @Serializable
+        data class FunctionCall(
+            val name: String,
+            val arguments: String? = null
         )
     }
 
@@ -198,13 +297,15 @@ object OpenAiApiModels {
          * @property type The error type (e.g., "invalid_request_error")
          * @property param The parameter that caused the error, if applicable
          * @property code The error code, if applicable
+         * @property status Present only in Gemini error responses; serves a role analogous to `type`.
          */
         @Serializable
         data class OpenAiErrorDetail(
             val message: String,
-            val type: String?,
-            val param: String?,
-            val code: String?
+            val type: String? = null,
+            val param: String? = null,
+            val code: String? = null,
+            val status: String? = null
         )
     }
 }
