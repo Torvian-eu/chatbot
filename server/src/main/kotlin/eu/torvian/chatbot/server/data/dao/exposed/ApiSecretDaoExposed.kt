@@ -7,7 +7,7 @@ import eu.torvian.chatbot.server.data.dao.ApiSecretDao
 import eu.torvian.chatbot.server.data.dao.error.ApiSecretError.SecretAlreadyExists
 import eu.torvian.chatbot.server.data.dao.error.ApiSecretError.SecretNotFound
 import eu.torvian.chatbot.server.data.tables.ApiSecretTable
-import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import org.jetbrains.exposed.exceptions.ExposedSQLException
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.deleteWhere

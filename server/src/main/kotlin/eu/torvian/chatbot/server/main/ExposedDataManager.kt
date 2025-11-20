@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.server.main
 
 import eu.torvian.chatbot.server.data.tables.*
-import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.exists
 

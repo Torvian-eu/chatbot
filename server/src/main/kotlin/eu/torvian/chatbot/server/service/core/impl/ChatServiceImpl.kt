@@ -28,7 +28,7 @@ import eu.torvian.chatbot.server.service.llm.*
 import eu.torvian.chatbot.server.service.security.CredentialManager
 import eu.torvian.chatbot.server.service.security.error.CredentialError
 import eu.torvian.chatbot.server.service.tool.ToolExecutorFactory
-import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.flow

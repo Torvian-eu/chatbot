@@ -26,7 +26,7 @@ import eu.torvian.chatbot.server.data.dao.exposed.SettingsAccessDaoExposed
 import eu.torvian.chatbot.server.data.dao.exposed.ToolDefinitionDaoExposed
 import eu.torvian.chatbot.server.data.dao.exposed.ToolCallDaoExposed
 import eu.torvian.chatbot.server.data.dao.exposed.SessionToolConfigDaoExposed
-import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import org.koin.dsl.module
 
 /**

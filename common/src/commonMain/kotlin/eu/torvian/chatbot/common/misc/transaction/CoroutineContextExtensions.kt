@@ -1,4 +1,4 @@
-package eu.torvian.chatbot.server.utils.transactions
+package eu.torvian.chatbot.common.misc.transaction
 
 import kotlin.coroutines.CoroutineContext
 

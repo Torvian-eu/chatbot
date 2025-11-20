@@ -14,7 +14,7 @@ import eu.torvian.chatbot.server.data.tables.AssistantMessageTable
 import eu.torvian.chatbot.server.data.tables.ChatMessageTable
 import eu.torvian.chatbot.server.data.tables.mappers.toAssistantMessage
 import eu.torvian.chatbot.server.data.tables.mappers.toUserMessage
-import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
 import org.apache.logging.log4j.LogManager

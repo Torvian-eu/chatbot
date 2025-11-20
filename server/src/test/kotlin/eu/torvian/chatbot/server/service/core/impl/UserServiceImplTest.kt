@@ -16,7 +16,7 @@ import eu.torvian.chatbot.server.service.core.UserGroupService
 import eu.torvian.chatbot.server.service.core.error.auth.RegisterUserError
 import eu.torvian.chatbot.server.service.core.error.auth.UserNotFoundError
 import eu.torvian.chatbot.server.service.security.PasswordService
-import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import io.mockk.*
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Instant

@@ -1,11 +1,14 @@
 package eu.torvian.chatbot.server.utils.transactions
 
 import arrow.core.Either
+import eu.torvian.chatbot.common.misc.transaction.TransactionMarker
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
+import kotlin.uuid.ExperimentalUuidApi
 
 /**
  * Exposed-based implementation of [TransactionScope] using coroutine-safe transactions.
@@ -20,6 +23,7 @@ import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransacti
  * @param db The target [Database] to run the transaction on.
  */
 class ExposedTransactionScope(private val db: Database) : TransactionScope {
+    @OptIn(ExperimentalUuidApi::class)
     override suspend fun <T> transaction(block: suspend () -> T): T {
         return if (currentCoroutineContext()[TransactionMarker] != null) {
             // Already in a transaction managed by this scope; avoid creating a new nested one.
@@ -41,5 +45,14 @@ class ExposedTransactionScope(private val db: Database) : TransactionScope {
                 }
             }
         }
+    }
+
+    /**
+     * For Exposed, all DSL operations must run within a transaction context.
+     * Therefore, this function behaves identically to [transaction] to ensure safety.
+     * It ensures the block is executed within a transaction, creating one if necessary.
+     */
+    override suspend fun <T> execute(block: suspend () -> T): T {
+        return transaction(block)
     }
 }

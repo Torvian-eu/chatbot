@@ -11,7 +11,7 @@ import eu.torvian.chatbot.server.data.entities.UserGroupEntity
 import eu.torvian.chatbot.server.data.tables.LLMModelAccessTable
 import eu.torvian.chatbot.server.data.tables.UserGroupsTable
 import eu.torvian.chatbot.server.data.tables.mappers.toUserGroupEntity
-import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import org.jetbrains.exposed.exceptions.ExposedSQLException
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and

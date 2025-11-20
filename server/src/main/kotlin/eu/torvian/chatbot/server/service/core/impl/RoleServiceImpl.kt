@@ -15,7 +15,7 @@ import eu.torvian.chatbot.server.service.core.error.auth.CreateRoleError
 import eu.torvian.chatbot.server.service.core.error.auth.DeleteRoleError
 import eu.torvian.chatbot.server.service.core.error.auth.RoleNotFoundError
 import eu.torvian.chatbot.server.service.core.error.auth.UpdateRoleError
-import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 

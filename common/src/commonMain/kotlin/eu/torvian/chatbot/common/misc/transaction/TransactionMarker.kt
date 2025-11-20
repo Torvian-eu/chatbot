@@ -1,7 +1,8 @@
-package eu.torvian.chatbot.server.utils.transactions
+package eu.torvian.chatbot.common.misc.transaction
 
-import java.util.UUID
+import kotlin.uuid.Uuid
 import kotlin.coroutines.CoroutineContext
+import kotlin.uuid.ExperimentalUuidApi
 
 /**
  * Coroutine context element used to mark that a transaction initiated by [TransactionScope] is active
@@ -15,7 +16,8 @@ import kotlin.coroutines.CoroutineContext
  *
  * @property id Optional unique ID to trace the transaction context (useful for logging/debugging).
  */
-data class TransactionMarker(val id: UUID = UUID.randomUUID()) : CoroutineContext.Element {
+@OptIn(ExperimentalUuidApi::class)
+data class TransactionMarker(val id: Uuid = Uuid.random()) : CoroutineContext.Element {
     override val key: CoroutineContext.Key<*> = Key
     companion object Key : CoroutineContext.Key<TransactionMarker>
 }

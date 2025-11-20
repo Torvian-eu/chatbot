@@ -2,7 +2,7 @@ package eu.torvian.chatbot.server.koin
 
 import eu.torvian.chatbot.server.ktor.routes.ApiRoutesKtor
 import eu.torvian.chatbot.server.utils.transactions.ExposedTransactionScope
-import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import org.koin.dsl.module
 
 /**

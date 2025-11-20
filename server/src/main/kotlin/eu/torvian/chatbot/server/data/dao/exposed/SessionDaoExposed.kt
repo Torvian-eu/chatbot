@@ -15,7 +15,7 @@ import eu.torvian.chatbot.server.data.dao.error.SessionError
 import eu.torvian.chatbot.server.data.tables.ChatGroupTable
 import eu.torvian.chatbot.server.data.tables.ChatSessionTable
 import eu.torvian.chatbot.server.data.tables.SessionCurrentLeafTable
-import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import kotlinx.datetime.Instant
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger

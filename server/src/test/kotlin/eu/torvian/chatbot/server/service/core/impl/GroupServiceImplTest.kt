@@ -10,7 +10,7 @@ import eu.torvian.chatbot.server.data.dao.error.GroupError
 import eu.torvian.chatbot.server.service.core.error.group.CreateGroupError
 import eu.torvian.chatbot.server.service.core.error.group.DeleteGroupError
 import eu.torvian.chatbot.server.service.core.error.group.RenameGroupError
-import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import io.mockk.*
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Instant

@@ -15,7 +15,7 @@ import eu.torvian.chatbot.server.data.dao.error.ToolDefinitionError
 import eu.torvian.chatbot.server.data.dao.error.UpdateToolDefinitionError
 import eu.torvian.chatbot.server.data.tables.ToolDefinitionTable
 import eu.torvian.chatbot.server.data.tables.mappers.toToolDefinition
-import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.exceptions.ExposedSQLException

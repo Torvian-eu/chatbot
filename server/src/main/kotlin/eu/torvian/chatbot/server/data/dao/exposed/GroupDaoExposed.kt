@@ -7,7 +7,7 @@ import eu.torvian.chatbot.server.data.dao.GroupDao
 import eu.torvian.chatbot.server.data.dao.error.GroupError
 import eu.torvian.chatbot.server.data.tables.ChatGroupTable
 import eu.torvian.chatbot.server.data.tables.mappers.toChatGroup
-import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 

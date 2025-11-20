@@ -16,7 +16,7 @@ import eu.torvian.chatbot.server.data.dao.error.UpdateToolCallError
 import eu.torvian.chatbot.server.data.tables.ChatMessageTable
 import eu.torvian.chatbot.server.data.tables.ToolCallTable
 import eu.torvian.chatbot.server.data.tables.mappers.toToolCall
-import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import kotlinx.datetime.Instant
 import org.jetbrains.exposed.exceptions.ExposedSQLException
 import org.jetbrains.exposed.sql.*
