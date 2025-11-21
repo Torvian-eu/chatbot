@@ -5,6 +5,7 @@ import app.cash.sqldelight.db.SqlDriver
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import eu.torvian.chatbot.app.database.LocalDatabase
 import eu.torvian.chatbot.app.database.LocalDatabaseProvider
+import eu.torvian.chatbot.app.database.dao.error.DeleteEncryptedSecretError
 import eu.torvian.chatbot.app.utils.transaction.SqlDelightTransactionScope
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import kotlinx.coroutines.Dispatchers
@@ -198,6 +199,7 @@ class EncryptedSecretLocalDaoTest {
 
         // Then
         assertTrue(result.isLeft(), "Should return Left for foreign key violation")
+        assertTrue(result.leftOrNull() is DeleteEncryptedSecretError.ForeignKeyViolation)
 
         // Verify it still exists
         val still = dao.getById(secretId)
