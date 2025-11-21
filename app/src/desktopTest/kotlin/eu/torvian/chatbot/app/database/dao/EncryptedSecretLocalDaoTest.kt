@@ -4,6 +4,7 @@ import app.cash.sqldelight.async.coroutines.synchronous
 import app.cash.sqldelight.db.SqlDriver
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import eu.torvian.chatbot.app.database.LocalDatabase
+import eu.torvian.chatbot.app.database.LocalDatabaseProvider
 import eu.torvian.chatbot.app.utils.transaction.SqlDelightTransactionScope
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import kotlinx.coroutines.Dispatchers
@@ -33,7 +34,7 @@ class EncryptedSecretLocalDaoTest {
             },
             schema = LocalDatabase.Schema.synchronous()
         )
-        database = LocalDatabase(driver)
+        database = LocalDatabaseProvider.createDatabase(driver)
 
         // Create a transaction scope specifically for testing.
         // Dispatchers.Unconfined is ideal for tests as it executes coroutines immediately.

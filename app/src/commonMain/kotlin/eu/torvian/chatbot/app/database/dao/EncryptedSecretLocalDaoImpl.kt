@@ -35,7 +35,7 @@ class EncryptedSecretLocalDaoImpl(
         queries.insert(
             encryptedSecret = encryptedSecret,
             encryptedDEK = encryptedDEK,
-            keyVersion = keyVersion.toLong(),
+            keyVersion = keyVersion,
             createdAt = createdAt,
             updatedAt = updatedAt
         ).let { rowsUpdated ->
@@ -68,7 +68,7 @@ class EncryptedSecretLocalDaoImpl(
             queries.update(
                 encryptedSecret = encryptedSecret,
                 encryptedDEK = encryptedDEK,
-                keyVersion = keyVersion.toLong(),
+                keyVersion = keyVersion,
                 updatedAt = updatedAt,
                 id = id
             ).let { rowsUpdated ->
