@@ -4,6 +4,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import eu.torvian.chatbot.app.compose.AppShell
 import eu.torvian.chatbot.app.koin.appModule
+import eu.torvian.chatbot.app.koin.databaseModule
 import eu.torvian.chatbot.app.koin.desktopModule
 import eu.torvian.chatbot.app.utils.misc.KmpLogger
 import eu.torvian.chatbot.app.utils.misc.createKmpLogger
@@ -45,6 +46,7 @@ fun main() {
             KoinApplication(application = {
                 modules(
                     desktopModule(appConfig, encryptionConfig),
+                    databaseModule,
                     appModule(appConfig.serverUrl)
                 )
             }) {
