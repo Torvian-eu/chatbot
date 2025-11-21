@@ -25,6 +25,9 @@ class LocalDatabaseProvider(driverFactory: DriverFactory) {
                 driver = driver,
                 EncryptedSecretTableAdapter = EncryptedSecretTable.Adapter(
                     keyVersionAdapter = IntColumnAdapter
+                ),
+                LocalMCPServerLocalTableAdapter = LocalMCPServerLocalTable.Adapter(
+                    autoStopAfterInactivitySecondsAdapter = IntColumnAdapter
                 )
             )
         }

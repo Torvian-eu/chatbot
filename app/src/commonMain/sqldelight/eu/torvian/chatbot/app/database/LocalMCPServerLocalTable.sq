@@ -1,0 +1,152 @@
+import kotlin.Boolean;
+import kotlin.Int;
+
+-- Local MCP Server configuration storage (client-side only)
+--
+-- This table stores the complete configuration for Local MCP Servers, including
+-- command, arguments, environment variables, and auto-start settings.
+--
+-- Each platform (Desktop, Android, WASM) has its own independent database instance
+-- with no synchronization between platforms (commands/paths differ per platform).
+--
+-- Environment variables are encrypted and stored separately in EncryptedSecretTable,
+-- referenced via environmentVariablesSecretId foreign key.
+
+CREATE TABLE LocalMCPServerLocalTable (
+    -- Server-generated ID (from server API)
+    id INTEGER NOT NULL PRIMARY KEY,
+
+    -- User identifier (owner)
+    userId INTEGER NOT NULL,
+
+    -- Display name (unique per user, enforced at application level)
+    name TEXT NOT NULL,
+
+    -- Optional description
+    description TEXT,
+
+    -- Executable command (e.g., "java", "uv", "docker", "npx")
+    command TEXT NOT NULL,
+
+    -- Command arguments as JSON array (e.g., '["run", "server.py"]')
+    arguments TEXT NOT NULL,
+
+    -- Foreign key to EncryptedSecretTable (nullable - no env vars needed)
+    -- References the encrypted environment variables JSON
+    environmentVariablesSecretId INTEGER,
+
+    -- Optional working directory for process execution
+    workingDirectory TEXT,
+
+    -- Global enable/disable flag
+    -- If false, ALL tools from this server are unavailable
+    isEnabled INTEGER AS Boolean NOT NULL DEFAULT 1,
+
+    -- Auto-start when tool is enabled for session
+    autoStartOnEnable INTEGER AS Boolean NOT NULL DEFAULT 0,
+
+    -- Auto-start when application launches
+    autoStartOnLaunch INTEGER AS Boolean NOT NULL DEFAULT 0,
+
+    -- Auto-stop after inactivity (seconds)
+    -- NULL = use default (300s), 0 = never stop
+    autoStopAfterInactivitySeconds INTEGER AS Int,
+
+    -- Default enablement for tools in NEW chat sessions
+    -- NULL = false (tools disabled by default)
+    -- TRUE = tools enabled by default for new sessions
+    toolsEnabledByDefault INTEGER AS Boolean,
+
+    -- Timestamps
+    createdAt INTEGER NOT NULL,
+    updatedAt INTEGER NOT NULL,
+
+    -- Foreign key constraint to EncryptedSecretTable
+    FOREIGN KEY (environmentVariablesSecretId)
+        REFERENCES EncryptedSecretTable(id)
+        ON DELETE RESTRICT
+);
+
+-- Index for user-based queries
+CREATE INDEX idx_local_mcp_server_user ON LocalMCPServerLocalTable(userId);
+
+-- Index for enabled servers
+CREATE INDEX idx_local_mcp_server_enabled ON LocalMCPServerLocalTable(isEnabled);
+
+-- Common queries
+
+-- Insert new MCP server configuration
+insertServer:
+INSERT INTO LocalMCPServerLocalTable (
+    id,
+    userId,
+    name,
+    description,
+    command,
+    arguments,
+    environmentVariablesSecretId,
+    workingDirectory,
+    isEnabled,
+    autoStartOnEnable,
+    autoStartOnLaunch,
+    autoStopAfterInactivitySeconds,
+    toolsEnabledByDefault,
+    createdAt,
+    updatedAt
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- Get all servers for a user
+getAllByUserId:
+SELECT * FROM LocalMCPServerLocalTable
+WHERE userId = ?
+ORDER BY name ASC;
+
+-- Get server by ID
+getById:
+SELECT * FROM LocalMCPServerLocalTable
+WHERE id = ?;
+
+-- Get all enabled servers for a user
+getAllEnabledByUserId:
+SELECT * FROM LocalMCPServerLocalTable
+WHERE userId = ? AND isEnabled = 1
+ORDER BY name ASC;
+
+-- Get servers with auto-start on launch
+getAllAutoStartOnLaunch:
+SELECT * FROM LocalMCPServerLocalTable
+WHERE userId = ? AND autoStartOnLaunch = 1 AND isEnabled = 1;
+
+-- Update server configuration
+updateServer:
+UPDATE LocalMCPServerLocalTable
+SET name = ?,
+    description = ?,
+    command = ?,
+    arguments = ?,
+    environmentVariablesSecretId = ?,
+    workingDirectory = ?,
+    isEnabled = ?,
+    autoStartOnEnable = ?,
+    autoStartOnLaunch = ?,
+    autoStopAfterInactivitySeconds = ?,
+    toolsEnabledByDefault = ?,
+    updatedAt = ?
+WHERE id = ?;
+
+-- Delete server
+deleteById:
+DELETE FROM LocalMCPServerLocalTable
+WHERE id = ?;
+
+-- Check if server name exists for user (for uniqueness validation)
+existsByNameAndUserId:
+SELECT COUNT(*) > 0 AS doesExist
+FROM LocalMCPServerLocalTable
+WHERE name = ? AND userId = ? AND id != ?;
+
+-- Count servers for a user
+countByUserId:
+SELECT COUNT(*) FROM LocalMCPServerLocalTable
+WHERE userId = ?;
+
