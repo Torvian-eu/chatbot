@@ -3,6 +3,8 @@ package eu.torvian.chatbot.app.koin
 import eu.torvian.chatbot.app.database.LocalDatabaseProvider
 import eu.torvian.chatbot.app.database.dao.EncryptedSecretLocalDao
 import eu.torvian.chatbot.app.database.dao.EncryptedSecretLocalDaoImpl
+import eu.torvian.chatbot.app.database.dao.LocalMCPServerLocalDao
+import eu.torvian.chatbot.app.database.dao.LocalMCPServerLocalDaoImpl
 import eu.torvian.chatbot.app.service.misc.EncryptedSecretService
 import eu.torvian.chatbot.app.service.misc.EncryptedSecretServiceImpl
 import eu.torvian.chatbot.app.utils.transaction.SqlDelightTransactionScope
@@ -37,6 +39,14 @@ val databaseModule = module {
     single<EncryptedSecretLocalDao> {
         EncryptedSecretLocalDaoImpl(
             queries = get<LocalDatabaseProvider>().database.encryptedSecretTableQueries,
+            transactionScope = get()
+        )
+    }
+
+    single<LocalMCPServerLocalDao> {
+        LocalMCPServerLocalDaoImpl(
+            queries = get<LocalDatabaseProvider>().database.localMCPServerLocalTableQueries,
+            encryptedSecretService = get(),
             transactionScope = get()
         )
     }
