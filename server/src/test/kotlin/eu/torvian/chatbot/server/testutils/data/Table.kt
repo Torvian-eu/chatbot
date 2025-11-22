@@ -158,4 +158,9 @@ enum class Table {
      * Table for storing local MCP server configurations (server-side ID generation).
      */
     LOCAL_MCP_SERVERS,
+
+    /**
+     * Table for linking MCP tools to their source servers.
+     */
+    LOCAL_MCP_TOOL_DEFINITIONS,
 }

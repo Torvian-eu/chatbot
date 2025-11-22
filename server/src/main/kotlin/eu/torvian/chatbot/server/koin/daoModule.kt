@@ -27,6 +27,7 @@ import eu.torvian.chatbot.server.data.dao.exposed.ToolDefinitionDaoExposed
 import eu.torvian.chatbot.server.data.dao.exposed.ToolCallDaoExposed
 import eu.torvian.chatbot.server.data.dao.exposed.SessionToolConfigDaoExposed
 import eu.torvian.chatbot.server.data.dao.exposed.LocalMCPServerDaoExposed
+import eu.torvian.chatbot.server.data.dao.exposed.LocalMCPToolDefinitionDaoExposed
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import org.koin.dsl.module
 
@@ -77,4 +78,5 @@ fun daoModule() = module {
 
     // MCP server DAOs
     single<LocalMCPServerDao> { LocalMCPServerDaoExposed(get()) }
+    single<LocalMCPToolDefinitionDao> { LocalMCPToolDefinitionDaoExposed(get()) }
 }
