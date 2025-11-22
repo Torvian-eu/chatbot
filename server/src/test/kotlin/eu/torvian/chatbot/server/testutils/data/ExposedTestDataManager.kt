@@ -89,7 +89,10 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
             // Tool tables (must come after chat messages for tool calls)
             Table.TOOL_DEFINITIONS to ToolDefinitionTable,
             Table.TOOL_CALLS to ToolCallTable,
-            Table.SESSION_TOOL_CONFIG to SessionToolConfigTable
+            Table.SESSION_TOOL_CONFIG to SessionToolConfigTable,
+
+            // MCP server tables (must come after users)
+            Table.LOCAL_MCP_SERVERS to LocalMCPServerTable
         )
 
         /**
