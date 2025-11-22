@@ -124,9 +124,13 @@ common/src/commonMain/kotlin/eu/torvian/chatbot/common/
 │       ├── UserStatus.kt             # User status enum
 │       └── UserWithDetails.kt        # Comprehensive user data for admin UIs
 ├── misc/                         # Miscellaneous utilities
-│   └── di/                       # Dependency injection abstractions
-│       ├── DIContainer.kt        # Framework-agnostic DI interface
-│       └── KoinDIContainer.kt    # Koin-specific DI implementation
+│   ├── di/                       # Dependency injection abstractions
+│   │   ├── DIContainer.kt        # Framework-agnostic DI interface
+│   │   └── KoinDIContainer.kt    # Koin-specific DI implementation
+│   └── transaction/              # Transaction management abstractions
+│       ├── CoroutineContextExtensions.kt # Coroutine context extensions for transactions
+│       ├── TransactionMarker.kt  # Coroutine context element for transactions
+│       └── TransactionScope.kt   # Transaction scope interface
 └── security/                     # Core security utilities
     ├── CryptoError.kt            # Sealed class for cryptographic errors
     ├── CryptoProvider.kt         # Interface for crypto operations
@@ -168,6 +172,8 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   │   ├── ApiSecretDao.kt       # API secret management interface
 │   │   ├── GroupDao.kt           # Group operations interface
 │   │   ├── GroupOwnershipDao.kt  # Group ownership management interface
+│   │   ├── LocalMCPServerDao.kt    # Interface for server-side MCP server data
+│   │   ├── LocalMCPToolDefinitionDao.kt # Interface for MCP tool-server linkages
 │   │   ├── MessageDao.kt         # Message operations interface
 │   │   ├── ModelAccessDao.kt     # Model access management interface
 │   │   ├── ModelDao.kt           # Model management interface
@@ -309,8 +315,7 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │           └── WebSearchToolExecutor.kt  # Performs web searches using DuckDuckGo
 └── utils/                        # Utility classes
     └── transactions/             # Transaction management
-        ├── ExposedTransactionScope.kt # Exposed-specific transaction scope
-        └── TransactionScope.kt   # Transaction scope interface
+        └── ExposedTransactionScope.kt # Exposed-specific transaction scope
 ```
 
 **Test Structure**:
@@ -402,6 +407,18 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   │   ├── SettingsScreen.kt
 │   │   └── ... other settings components ...
 │   └── snackbar/    # Snackbar components
+├── database/        # Local database management (SQLDelight)
+│   ├── dao/         # Data Access Objects for local DB
+│   │   ├── EncryptedSecretLocalDao.kt # Interface for local secret DAO
+│   │   ├── EncryptedSecretLocalDaoImpl.kt # SQLDelight implementation for secret DAO
+│   │   ├── LocalMCPServerLocalDao.kt  # Interface for local MCP server DAO
+│   │   ├── LocalMCPServerLocalDaoImpl.kt # SQLDelight implementation for MCP server DAO
+│   │   ├── error/                   # Local DAO error types
+│   │   └── isForeignKeyConstraintException.kt # Platform-specific exception checker
+│   ├── model/       # Local database entity models
+│   │   └── EncryptedSecretEntity.kt
+│   ├── DriverFactory.kt # Expect declaration for platform-specific DB driver
+│   └── LocalDatabaseProvider.kt # Provides the SQLDelight database instance
 ├── domain/          # Domain models specific to the *application's presentation layer*
 │   ├── contracts/    # UI State and Action contracts (interfaces between UI and ViewModels)
 │   │   ├── DataState.kt  # Data state contract
@@ -426,10 +443,13 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   │   ├── GenericAppWarning.kt # Generic application warning event
 │   │   ├── RepositoryAppError.kt # Repository error event
 │   │   └── SnackbarInteractionEvent.kt # Snackbar interaction event
+│   ├── models/       # UI-specific domain models
+│   │   └── LocalMCPServer.kt # Data model for local MCP server configuration
 │   └── navigation/   # Navigation related classes
 │       └── AppRoute.kt  # Application routes
 ├── koin/            # Koin modules
-│   └── appModule.kt  # main app DI module
+│   ├── appModule.kt  # main app DI module
+│   └── databaseModule.kt # DI module for local database
 ├── main/            
 │   └── AppConfig.kt  # Application configuration
 ├── repository/      # Data repository for frontend
@@ -474,6 +494,7 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   │   ├── TokenStorage.kt  # Token storage interface
 │   │   └── TokenStorageError.kt # Token storage error hierarchy
 │   ├── misc/          # Miscellaneous frontend services
+│   │   ├── EncryptedSecretService.kt # Interface for managing local encrypted secrets
 │   │   └── EventBus.kt  # Event bus for frontend events
 │   └── security/      # Frontend security services
 │       ├── CertificateDetails.kt # DTO for presenting certificate information to the user.
@@ -482,9 +503,12 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │       ├── CertificateTrustService.kt # Service to mediate user trust decisions for certificates.
 │       └── FileSystemCertificateStorage.kt # KMP-compatible implementation of certificate storage.
 ├── utils/            # Utility classes
-│   └── misc/       # Miscellaneous utilities
-│       ├── ioDispatcher.kt  # IO dispatcher (expect/actual)
-│       └── KmpLogger.kt  # KMP-compatible logger
+│   ├── misc/       # Miscellaneous utilities
+│   │   ├── ioDispatcher.kt  # IO dispatcher (expect/actual)
+│   │   └── KmpLogger.kt  # KMP-compatible logger
+│   └── transaction/  # Local database transaction utilities
+│       ├── SqlDelightTransactionScope.kt # SQLDelight transaction scope implementation
+│       └── databaseDispatcher.kt # Expect/actual for DB dispatcher
 └── viewmodel/        # ViewModels for UI state management
     ├── ModelConfigViewModel.kt # Model Config ViewModel (manages LLM model state)
     ├── ProviderConfigViewModel.kt # Provider Config ViewModel (manages LLM provider state)
@@ -531,21 +555,34 @@ app/src/commonTest/kotlin/eu/torvian/chatbot/app/  # Common tests
 app/src/desktopMain/kotlin/eu/torvian/chatbot/app/  # Desktop-specific implementations
 ├── compose/
 │   └── ... desktop-specific UI components ...
+├── database/     # Desktop-specific database implementations
+│   ├── DriverFactoryDesktop.kt # Desktop implementation for SQLDelight driver
+│   └── dao/
+│       └── ExceptionCheckerDesktop.kt # Desktop implementation for FK exception check
 ├── main/         # Main entry point
 │   └── AppMain.kt    # Application entry point, setup (UI launch, DI)
 └── utils/        
-    └── misc/       # Miscellaneous utilities
-        └── createKmpLogger.desktop.kt # Desktop-specific KMP logger
+    ├── misc/       # Miscellaneous utilities
+    │   └── createKmpLogger.desktop.kt # Desktop-specific KMP logger
+    └── transaction/ # Desktop-specific transaction implementations
+        └── databaseDispatcher.desktop.kt # Desktop implementation for DB dispatcher
 
 app/src/desktopTest/kotlin/eu/torvian/chatbot/app/ # Desktop-specific tests
 ├── compose/          # Compose UI component tests
-│   ├── ChatAreaTest.kt 
+│   ├── ChatAreaTest.kt
 │   └── common/       # Common compose component tests
 │       └── LoadingOverlayTest.kt
-├── service/api/ktor/    # Ktor API client tests
-│   ├── KtorChatApiClientTest.kt  
-│   ├── KtorSessionApiClientTest.kt 
-│   └── ... 
+├── database/         # Local database tests
+│   └── dao/          # Local DAO tests
+│       ├── EncryptedSecretLocalDaoTest.kt
+│       └── LocalMCPServerLocalDaoTest.kt
+├── service/
+│   ├── api/ktor/    # Ktor API client tests
+│   │   ├── KtorChatApiClientTest.kt  
+│   │   ├── KtorSessionApiClientTest.kt
+│   │   └── ...
+│   └── misc/        # Miscellaneous service tests
+│       └── EncryptedSecretServiceImplTest.kt
 ├── testutils/           
 │   └── viewmodel/        
 │        └── TestMockkExtensions.kt # Mockk test extensions
@@ -561,15 +598,24 @@ app/src/desktopAndroidMain/kotlin/eu/torvian/chatbot/app/  # Desktop- and Androi
 app/src/androidMain/kotlin/eu/torvian/chatbot/app/  # Android-specific implementations
 ├── compose/
 │   └── ... android-specific UI components ...
+├── database/     # Android-specific database implementations
+│   ├── DriverFactoryAndroid.kt # Android implementation for SQLDelight driver
+│   └── dao/
+│       └── ExceptionCheckerAndroid.kt # Android implementation for FK exception check
 ├── main/         # Main entry point
 │   └── MainActivity.kt    # Application entry point, setup (UI launch, DI)
 └── utils/        
-    └── misc/       # Miscellaneous utilities
-        └── KmpLogger.android.kt # Android-specific KMP logger
-        
+    ├── misc/       # Miscellaneous utilities
+    │   └── KmpLogger.android.kt # Android-specific KMP logger
+    └── transaction/ # Android-specific transaction implementations
+        └── databaseDispatcher.android.kt # Android implementation for DB dispatcher
+
 app/src/wasmJsMain/kotlin/eu/torvian/chatbot/app/  # WebAssembly-specific implementations
 ├── compose/
 │   └── ... wasm-specific UI components ...
+├── database/     # WasmJs-specific database implementations
+│   └── dao/
+│       └── ExceptionCheckerWasm.kt # WasmJs implementation for FK exception check
 ├── main/         # Main entry point
 │   └── AppMain.kt    # Application entry point, setup (UI launch, DI)
 ├── service/api/ktor/ # Ktor API client WASM/JS-specific implementations
@@ -577,8 +623,10 @@ app/src/wasmJsMain/kotlin/eu/torvian/chatbot/app/  # WebAssembly-specific implem
 ├── service/security/ # WASM/JS-specific security implementations
 │   └── BrowserCertificateStorage.kt # No-op certificate storage for WASM/JS, relying on browser's TLS.
 └── utils/        
-    └── misc/       # Miscellaneous utilities
-        └── createKmpLogger.wasmJs.kt # WebAssembly-specific KMP logger
+    ├── misc/       # Miscellaneous utilities
+    │   └── createKmpLogger.wasmJs.kt # WebAssembly-specific KMP logger
+    └── transaction/ # WasmJs-specific transaction implementations
+        └── databaseDispatcher.wasmJs.kt # WasmJs implementation for DB dispatcher
 ```
 
 ## Architecture Overview
