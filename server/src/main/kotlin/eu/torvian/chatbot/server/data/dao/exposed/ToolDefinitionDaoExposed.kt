@@ -74,7 +74,8 @@ class ToolDefinitionDaoExposed(
         config: JsonObject,
         inputSchema: JsonObject,
         outputSchema: JsonObject?,
-        isEnabled: Boolean
+        isEnabled: Boolean,
+        isEnabledByDefault: Boolean?
     ): Either<InsertToolDefinitionError, ToolDefinition> =
         transactionScope.transaction {
             either {
@@ -88,6 +89,7 @@ class ToolDefinitionDaoExposed(
                         it[inputSchemaJson] = inputSchema.toString()
                         it[outputSchemaJson] = outputSchema?.toString()
                         it[ToolDefinitionTable.isEnabled] = isEnabled
+                        it[ToolDefinitionTable.isEnabledByDefault] = isEnabledByDefault
                         it[createdAt] = now
                         it[updatedAt] = now
                     }
@@ -115,6 +117,7 @@ class ToolDefinitionDaoExposed(
                         it[inputSchemaJson] = toolDefinition.inputSchema.toString()
                         it[outputSchemaJson] = toolDefinition.outputSchema?.toString()
                         it[isEnabled] = toolDefinition.isEnabled
+                        it[isEnabledByDefault] = toolDefinition.isEnabledByDefault
                         it[updatedAt] = now
                     }
                     ensure(updatedRowCount != 0) { UpdateToolDefinitionError.NotFound(toolDefinition.id) }

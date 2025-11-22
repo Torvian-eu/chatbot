@@ -24,6 +24,7 @@ fun ResultRow.toToolDefinition() = ToolDefinition(
         Json.parseToJsonElement(it) as JsonObject
     },
     isEnabled = this[ToolDefinitionTable.isEnabled],
+    isEnabledByDefault = this[ToolDefinitionTable.isEnabledByDefault],
     createdAt = Instant.fromEpochMilliseconds(this[ToolDefinitionTable.createdAt]),
     updatedAt = Instant.fromEpochMilliseconds(this[ToolDefinitionTable.updatedAt])
 )

@@ -7,7 +7,6 @@ import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
 import eu.torvian.chatbot.server.data.dao.error.DeleteToolDefinitionError
-import eu.torvian.chatbot.server.data.dao.error.InsertToolDefinitionError
 import eu.torvian.chatbot.server.data.dao.error.ToolDefinitionError
 import eu.torvian.chatbot.server.data.dao.error.UpdateToolDefinitionError
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
@@ -194,11 +193,11 @@ class ToolDefinitionDaoExposedTest {
     }
 
     @Test
-    fun `insertToolDefinition with duplicate name returns DuplicateName error`() = runTest {
+    fun `insertToolDefinition allows duplicate names`() = runTest {
         // Setup: Create initial tool
-        createTestTool(name = "web_search")
+        val first = createTestTool(name = "web_search")
 
-        // Execute: Try to create another tool with the same name
+        // Execute: Create another tool with the same name (now allowed)
         val config = buildJsonObject { put("key", "value") }
         val inputSchema = buildJsonObject { put("type", "object") }
         val result = toolDefinitionDao.insertToolDefinition(
@@ -211,12 +210,14 @@ class ToolDefinitionDaoExposedTest {
             isEnabled = true
         )
 
-        // Verify
-        assertTrue(result.isLeft(), "Expected Left (error)")
-        result.onLeft { error ->
-            assertTrue(error is InsertToolDefinitionError.DuplicateName, "Expected DuplicateName error")
-            assertEquals("web_search", (error as InsertToolDefinitionError.DuplicateName).name)
-        }
+        // Verify: Should succeed since duplicate names are now allowed
+        val second = result.getOrElse { throw AssertionError("Expected Right but got Left: $it") }
+        assertEquals("web_search", second.name)
+        assertTrue(second.id != first.id, "Should have different IDs")
+
+        // Verify both tools exist
+        val allTools = toolDefinitionDao.getAllToolDefinitions()
+        assertEquals(2, allTools.count { it.name == "web_search" }, "Expected 2 tools with name 'web_search'")
     }
 
     @Test
@@ -310,21 +311,27 @@ class ToolDefinitionDaoExposedTest {
     }
 
     @Test
-    fun `updateToolDefinition with duplicate name returns DuplicateName error`() = runTest {
+    fun `updateToolDefinition allows duplicate names`() = runTest {
         // Setup: Create two tools
         createTestTool(name = "web_search")
         val tool2 = createTestTool(name = "calculator", type = ToolType.CALCULATOR)
 
-        // Execute: Try to rename tool2 to tool1's name
+        // Execute: Rename tool2 to tool1's name (now allowed)
         val updated = tool2.copy(name = "web_search")
         val result = toolDefinitionDao.updateToolDefinition(updated)
 
-        // Verify
-        assertTrue(result.isLeft(), "Expected Left (error)")
-        result.onLeft { error ->
-            assertTrue(error is UpdateToolDefinitionError.DuplicateName, "Expected DuplicateName error")
-            assertEquals("web_search", (error as UpdateToolDefinitionError.DuplicateName).name)
+        // Verify: Should succeed since duplicate names are now allowed
+        assertTrue(result.isRight(), "Expected Right (success)")
+
+        // Verify the update was persisted
+        val retrieved = toolDefinitionDao.getToolDefinitionById(tool2.id).getOrElse {
+            throw AssertionError("Failed to retrieve updated tool")
         }
+        assertEquals("web_search", retrieved.name)
+
+        // Verify both tools have the same name
+        val allTools = toolDefinitionDao.getAllToolDefinitions()
+        assertEquals(2, allTools.count { it.name == "web_search" }, "Expected 2 tools with name 'web_search'")
     }
 
     @Test
