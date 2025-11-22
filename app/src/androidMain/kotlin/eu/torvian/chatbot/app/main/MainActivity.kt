@@ -7,6 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import eu.torvian.chatbot.app.compose.AppShell
 import eu.torvian.chatbot.app.koin.androidModule
 import eu.torvian.chatbot.app.koin.appModule
+import eu.torvian.chatbot.app.koin.databaseModule
 import eu.torvian.chatbot.common.security.EncryptionConfig
 import org.koin.compose.KoinApplication
 
@@ -35,6 +36,7 @@ class MainActivity : ComponentActivity() {
             KoinApplication(application = {
                 modules(
                     androidModule(appConfig, encryptionConfig),
+                    databaseModule,
                     appModule(appConfig.serverUrl)
                 )
             }) {

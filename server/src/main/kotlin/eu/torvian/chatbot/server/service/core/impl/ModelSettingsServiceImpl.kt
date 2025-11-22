@@ -31,7 +31,7 @@ import eu.torvian.chatbot.server.service.core.error.settings.DeleteSettingsError
 import eu.torvian.chatbot.server.service.core.error.settings.GetSettingsByIdError
 import eu.torvian.chatbot.server.service.core.error.settings.UpdateSettingsError
 import eu.torvian.chatbot.server.service.core.error.usergroup.GetGroupByNameError
-import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 
 /**
  * Implementation of the [ModelSettingsService] interface.

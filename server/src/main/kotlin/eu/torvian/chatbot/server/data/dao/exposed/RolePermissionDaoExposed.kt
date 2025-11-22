@@ -7,7 +7,7 @@ import arrow.core.raise.ensure
 import eu.torvian.chatbot.server.data.dao.RolePermissionDao
 import eu.torvian.chatbot.server.data.dao.error.RolePermissionError
 import eu.torvian.chatbot.server.data.tables.RolePermissionsTable
-import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import org.jetbrains.exposed.exceptions.ExposedSQLException
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and

@@ -19,11 +19,23 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.compose.hotreload)
     alias(libs.plugins.android.application)
+    alias(libs.plugins.sqldelight)
 }
 
 repositories {
     mavenCentral()
     google()
+}
+
+// SQLDelight configuration for local database
+sqldelight {
+    databases {
+        create("LocalDatabase") {
+            packageName.set("eu.torvian.chatbot.app.database") // The package for generated database classes
+            srcDirs.setFrom("src/commonMain/sqldelight") // The location of SQLDelight schema files (tables and queries)
+            generateAsync.set(true) // Allows using suspend functions in transactions
+        }
+    }
 }
 
 // Define the Kotlin targets for this multiplatform module
@@ -154,6 +166,11 @@ kotlin {
             implementation(libs.koin.core)
             implementation(libs.koin.compose)
             implementation(libs.koin.compose.viewmodel)
+
+            // SQLDelight
+            implementation(libs.sqldelight.runtime)
+            implementation(libs.sqldelight.coroutines.extensions)
+            implementation(libs.sqldelight.primitive.adapters)
         }
 
         commonTest.dependencies {
@@ -177,6 +194,8 @@ kotlin {
             runtimeOnly(libs.log4j.core)
             runtimeOnly(libs.log4j.slf4j2)
 
+            // SQLDelight JVM/SQLite driver
+            implementation(libs.sqldelight.sqlite.driver)
         }
         desktopTest.dependencies {
             // Mocking library (JVM-specific)
@@ -193,6 +212,9 @@ kotlin {
             implementation(libs.androidx.activity.compose)
             // Logging
             implementation(libs.slf4j.simple)
+
+            // SQLDelight Android driver
+            implementation(libs.sqldelight.android.driver)
         }
     }
 }

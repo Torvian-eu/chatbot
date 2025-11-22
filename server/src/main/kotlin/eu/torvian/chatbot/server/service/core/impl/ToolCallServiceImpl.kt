@@ -3,7 +3,7 @@ package eu.torvian.chatbot.server.service.core.impl
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.server.data.dao.ToolCallDao
 import eu.torvian.chatbot.server.service.core.ToolCallService
-import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 
 /**
  * Implementation of the [ToolCallService] interface.

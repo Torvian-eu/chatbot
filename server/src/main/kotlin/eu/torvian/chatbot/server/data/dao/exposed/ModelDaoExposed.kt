@@ -14,7 +14,7 @@ import eu.torvian.chatbot.server.data.dao.error.ModelError
 import eu.torvian.chatbot.server.data.dao.error.UpdateModelError
 import eu.torvian.chatbot.server.data.tables.LLMModelTable
 import eu.torvian.chatbot.server.data.tables.mappers.toLLMModel
-import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.exceptions.ExposedSQLException

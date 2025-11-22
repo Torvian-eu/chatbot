@@ -12,7 +12,7 @@ import eu.torvian.chatbot.server.service.security.authorizer.ResourceAuthorizer
 import eu.torvian.chatbot.server.service.security.authorizer.ResourceAuthorizerError
 import eu.torvian.chatbot.server.service.security.error.AuthorizationError
 import eu.torvian.chatbot.server.service.security.error.ResourceAuthorizationError
-import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk

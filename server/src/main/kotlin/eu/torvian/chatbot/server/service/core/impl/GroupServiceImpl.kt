@@ -14,7 +14,7 @@ import eu.torvian.chatbot.server.service.core.GroupService
 import eu.torvian.chatbot.server.service.core.error.group.CreateGroupError
 import eu.torvian.chatbot.server.service.core.error.group.DeleteGroupError
 import eu.torvian.chatbot.server.service.core.error.group.RenameGroupError
-import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 
 /**
  * Implementation of the [GroupService] interface.

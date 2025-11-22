@@ -57,6 +57,7 @@ interface ToolDefinitionDao {
      * @param inputSchema JSON Schema defining expected input parameters
      * @param outputSchema Optional JSON Schema defining expected output structure
      * @param isEnabled Whether this tool is globally available
+     * @param isEnabledByDefault Whether this tool is enabled by default for NEW chat sessions
      * @return Either [InsertToolDefinitionError] or the newly created [ToolDefinition]
      */
     suspend fun insertToolDefinition(
@@ -66,7 +67,8 @@ interface ToolDefinitionDao {
         config: JsonObject,
         inputSchema: JsonObject,
         outputSchema: JsonObject?,
-        isEnabled: Boolean
+        isEnabled: Boolean,
+        isEnabledByDefault: Boolean? = null
     ): Either<InsertToolDefinitionError, ToolDefinition>
 
     /**

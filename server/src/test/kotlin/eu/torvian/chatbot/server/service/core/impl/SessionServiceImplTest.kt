@@ -15,7 +15,7 @@ import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
 import eu.torvian.chatbot.server.data.dao.error.SessionError
 import eu.torvian.chatbot.server.service.core.error.session.*
 import eu.torvian.chatbot.server.testutils.data.TestDefaults
-import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import io.mockk.clearMocks
 import io.mockk.coEvery
 import io.mockk.coVerify

@@ -16,7 +16,7 @@ import eu.torvian.chatbot.server.data.tables.ModelSettingsTable
 import eu.torvian.chatbot.server.data.tables.UserGroupMembershipsTable
 import eu.torvian.chatbot.server.data.tables.mappers.toModelSettings
 import eu.torvian.chatbot.server.data.toEntity
-import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import org.jetbrains.exposed.exceptions.ExposedSQLException
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq

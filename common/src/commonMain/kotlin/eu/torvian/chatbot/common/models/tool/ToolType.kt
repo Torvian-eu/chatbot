@@ -20,6 +20,12 @@ enum class ToolType {
     WEATHER,
 
     /** Custom or user-defined tools */
-    CUSTOM
+    CUSTOM,
+
+    /** Local MCP (Model Context Protocol) tools running via STDIO */
+    MCP_LOCAL,
+
+    /** Remote MCP tools accessible via HTTP/SSE transport (future) */
+    MCP_REMOTE
 }
 

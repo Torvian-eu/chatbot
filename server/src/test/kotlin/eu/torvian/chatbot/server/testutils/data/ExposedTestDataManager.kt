@@ -19,7 +19,7 @@ import eu.torvian.chatbot.server.data.entities.UserGroupEntity
 import eu.torvian.chatbot.server.data.tables.*
 import eu.torvian.chatbot.server.data.tables.mappers.*
 import eu.torvian.chatbot.server.data.toEntity
-import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.insert
@@ -89,7 +89,11 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
             // Tool tables (must come after chat messages for tool calls)
             Table.TOOL_DEFINITIONS to ToolDefinitionTable,
             Table.TOOL_CALLS to ToolCallTable,
-            Table.SESSION_TOOL_CONFIG to SessionToolConfigTable
+            Table.SESSION_TOOL_CONFIG to SessionToolConfigTable,
+
+            // MCP server tables (must come after users and tool definitions)
+            Table.LOCAL_MCP_SERVERS to LocalMCPServerTable,
+            Table.LOCAL_MCP_TOOL_DEFINITIONS to LocalMCPToolDefinitionTable
         )
 
         /**

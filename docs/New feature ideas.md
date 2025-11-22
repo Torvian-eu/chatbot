@@ -443,15 +443,29 @@ Here are detailed user stories for the new feature ideas, following the format a
     *   The LLM agent provides feedback to the user regarding the execution of the command (e.g., "Session temperature set to 0.7.").
 
 ### NF.EA1 - Local MCP Servers (Epic)
-*   **Description:** As a user, I want to run a local MCP server on my machine, so that the exposed MCP tools can be used by the LLMs.
-*   **Estimate:** L
+*   **Description:** As a user, I want the LLM to be able to call local tools via MCP, so that the LLM can access real-time data and perform actions in the external world (such as searching the web, accessing local files, controlling Github repos, etc.).
+*   **Estimate:** XL
 *   **Acceptance Criteria:**
-    *   A user can add/remove their own local MCP servers.
-    *   A local MCP server can be started/stopped from within the application.
-    *   A list of tools is retrieved from the MCP server automatically.
-    *   The user can configure to enable or disable which tools by default.
-    *   The user can select an MCP server to use for a specific prompt.
-    *   The user can select which tools are available for a specific prompt.
+  *   The user can configure their own local (STDIO) MCP servers. This configuration is comprised of:
+      *   A name for the server
+      *   An executable command to launch the server (e.g., "java", "uv", "docker")
+      *   Arguments to pass to the command
+      *   Environment variables to set before launching the server (e.g., Github access token)
+      *   A working directory to launch the server in (optional)
+  *   The user can test the connection to the MCP server. (For instance, by executing an MCP tool manually, and seeing the result).
+  *   The list of available MCP tools can be retrieved from the MCP server and added to the tool definitions table in the database (on the server). This has to be done at least once, when the user adds the MCP server.
+  *   The user should be able to view the list of available MCP servers and tools from the UI.
+  *   The user should be able to refresh the list of tools from the MCP server. (which will update the tool definitions table)
+  *   The MCP server configuration is stored in the database and is linked to the user's account. (through a separate ownership table)
+  *   The MCP tools are stored in the tool definitions table, and are linked to the MCP server that provides them. (through a separate linkage table)
+  *   MCP servers can be started/stopped from within the application.
+  *   The MCP clients are managed by the application. (i.e. the application launches the MCP server process, and manages the STDIO communication)
+  *   The user can select which MCP servers are enabled for the current chat session.
+  *   The user can select which tools from each MCP server are enabled for the current chat session.  
+  *   The user can configure which tools from each MCP server are enabled/disabled by default.
+  *   The LLM can request to call tools exposed by local MCP servers.
+  *   The server can request the client application to execute MCP tools locally on behalf of the LLM (using WebSocket protocol). (Note: the server controls the LLM, and the client executes MCP tools locally)
+  *   The application can send tool results back to the server (using WebSocket protocol). (The tool results are used by the LLM to generate a response.)
 
 
 ## Non-Functional Requirements (NFRs)

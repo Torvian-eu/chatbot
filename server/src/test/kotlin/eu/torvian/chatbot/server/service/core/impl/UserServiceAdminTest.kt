@@ -15,7 +15,7 @@ import eu.torvian.chatbot.server.service.core.UserGroupService
 import eu.torvian.chatbot.server.service.core.UserService
 import eu.torvian.chatbot.server.service.core.error.auth.*
 import eu.torvian.chatbot.server.service.security.PasswordService
-import eu.torvian.chatbot.server.utils.transactions.TransactionScope
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
