@@ -151,6 +151,9 @@ fun appModule(baseUri: String): Module = module {
     single<ToolApi> {
         KtorToolApiClient(get())
     }
+    single<LocalMCPServerApi> {
+        KtorLocalMCPServerApiClient(get())
+    }
 
     // Provide Repository implementations, injecting the API clients
     single<ModelRepository> {
@@ -179,6 +182,14 @@ fun appModule(baseUri: String): Module = module {
     }
     single<ToolRepository> {
         DefaultToolRepository(get())
+    }
+    single<LocalMCPServerRepository> {
+        DefaultLocalMCPServerRepository(
+            localDao = get(),
+            api = get(),
+            toolRepository = get(),
+            authRepository = get<AuthRepository>()
+        )
     }
 
     // Provide shared chat state with background scope for computed state flows
