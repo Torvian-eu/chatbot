@@ -31,6 +31,7 @@ fun serviceModule() = module {
     single<ChatService> { ChatServiceImpl(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     single<ToolService> { ToolServiceImpl(get(), get(), get()) }
     single<ToolCallService> { ToolCallServiceImpl(get(), get()) }
+    single<LocalMCPServerService> { LocalMCPServerServiceImpl(get(), get()) }
 
     single<RoleService> { RoleServiceImpl(get(), get(), get()) }
     single<UserGroupService> { UserGroupServiceImpl(get(), get(), get()) }
