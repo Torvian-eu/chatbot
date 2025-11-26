@@ -5,6 +5,8 @@ import eu.torvian.chatbot.app.database.DriverFactoryDesktop
 import eu.torvian.chatbot.app.main.AppConfig
 import eu.torvian.chatbot.app.service.auth.FileSystemTokenStorage
 import eu.torvian.chatbot.app.service.auth.TokenStorage
+import eu.torvian.chatbot.app.service.mcp.LocalMCPServerProcessManager
+import eu.torvian.chatbot.app.service.mcp.LocalMCPServerProcessManagerDesktop
 import eu.torvian.chatbot.app.service.security.CertificateStorage
 import eu.torvian.chatbot.app.service.security.FileSystemCertificateStorage
 import eu.torvian.chatbot.common.security.AESCryptoProvider
@@ -13,6 +15,7 @@ import eu.torvian.chatbot.common.security.EncryptionConfig
 import eu.torvian.chatbot.common.security.EncryptionService
 import kotlinx.io.files.Path
 import org.koin.dsl.module
+import org.koin.dsl.onClose
 
 /**
  * Desktop-specific Koin module.
@@ -48,5 +51,13 @@ fun desktopModule(appConfig: AppConfig, encryptionConfig: EncryptionConfig) = mo
     single<DriverFactory> {
         val databasePath = Path(appConfig.baseUserDataStoragePath, "local.db").toString()
         DriverFactoryDesktop(databasePath = databasePath)
+    }
+
+    single<LocalMCPServerProcessManager> {
+        LocalMCPServerProcessManagerDesktop(
+            clock = get()
+        )
+    }.onClose { manager ->
+        manager?.close()
     }
 }
