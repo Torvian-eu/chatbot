@@ -28,6 +28,7 @@ android-targetSdk = "36"     # The target Android version for testing
 slf4j = "2.0.17"             # SLF4J version used for logging
 hikaricp = "7.0.2"           # HikariCP version for connection pooling
 sqldelight = "2.2.1"         # SQLDelight version for multiplatform database
+mcp-sdk = "0.7.3"            # MCP Kotlin SDK version
 
 [libraries]
 # Kotlin
@@ -147,6 +148,10 @@ kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-t
 ktor-server-test-host = { module = "io.ktor:ktor-server-test-host", version.ref = "ktor" }
 commons-codec = { module = "commons-codec:commons-codec", version = "1.15" } # Security patch WS-2019-0379
 mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
+
+# MCP Kotlin SDK
+mcp-sdk-core = { module = "io.modelcontextprotocol:kotlin-sdk-core", version.ref = "mcp-sdk" }
+mcp-sdk-client = { module = "io.modelcontextprotocol:kotlin-sdk-client", version.ref = "mcp-sdk" }
 
 [bundles]
 # Ktor Server: Includes all necessary dependencies for a Ktor backend

@@ -171,6 +171,9 @@ kotlin {
             implementation(libs.sqldelight.runtime)
             implementation(libs.sqldelight.coroutines.extensions)
             implementation(libs.sqldelight.primitive.adapters)
+
+            // MCP Kotlin SDK
+            implementation(libs.mcp.sdk.core)
         }
 
         commonTest.dependencies {
@@ -205,6 +208,9 @@ kotlin {
         desktopAndroidMain.dependencies {
             // Use OkHttp engine for Desktop and Android (works better than CIO engine)
             implementation(libs.ktor.client.okhttp)
+
+            // MCP SDK Client (for process communication)
+            implementation(libs.mcp.sdk.client)
         }
 
         androidMain.dependencies {
