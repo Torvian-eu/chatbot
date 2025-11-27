@@ -1,14 +1,17 @@
 package eu.torvian.chatbot.server.service.tool.impl
 
 import arrow.core.getOrElse
-import eu.torvian.chatbot.common.models.tool.ToolDefinition
+import eu.torvian.chatbot.common.models.tool.MiscToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.server.service.tool.error.ToolExecutionError
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.*
 import org.junit.jupiter.api.Test
-import kotlin.test.*
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
+import kotlin.test.fail
 
 /**
  * Tests for [WeatherToolExecutor].
@@ -23,9 +26,9 @@ class WeatherToolExecutorTest {
 
     private val weatherExecutor = WeatherToolExecutor()
 
-    private fun createWeatherToolDefinition(): ToolDefinition {
+    private fun createWeatherToolDefinition(): MiscToolDefinition {
         val now = Clock.System.now()
-        return ToolDefinition(
+        return MiscToolDefinition(
             id = 1L,
             name = "get_weather",
             description = "Get weather information for major cities",

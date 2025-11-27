@@ -18,23 +18,27 @@ import kotlinx.serialization.json.JsonObject
  * @property inputSchema JSON Schema defining expected input parameters
  * @property outputSchema Optional JSON Schema defining expected output structure
  * @property isEnabled Whether this tool is globally available
- * @property isEnabledByDefault Whether this tool is enabled by default for NEW chat sessions
- *   (null = use server-level default, true = enable, false = disable)
  * @property createdAt Timestamp when the tool was created
  * @property updatedAt Timestamp when the tool was last modified
  */
 @Serializable
-data class ToolDefinition(
-    val id: Long,
-    val name: String,
-    val description: String,
-    val type: ToolType,
-    val config: JsonObject,
-    val inputSchema: JsonObject,
-    val outputSchema: JsonObject? = null,
-    val isEnabled: Boolean,
-    val isEnabledByDefault: Boolean? = null,
-    val createdAt: Instant,
-    val updatedAt: Instant
-)
+sealed class ToolDefinition {
+    abstract val id: Long
+    abstract val name: String
+    abstract val description: String
+    abstract val type: ToolType
+    abstract val config: JsonObject
+    abstract val inputSchema: JsonObject
+    abstract val outputSchema: JsonObject?
+    abstract val isEnabled: Boolean
+    abstract val createdAt: Instant
+    abstract val updatedAt: Instant
 
+    /**
+     * Creates a copy of this tool definition with a new `updatedAt` timestamp.
+     *
+     * @param newUpdatedAt The new timestamp.
+     * @return A new [ToolDefinition] instance with the updated timestamp.
+     */
+    abstract fun withUpdatedAt(newUpdatedAt: Instant): ToolDefinition
+}

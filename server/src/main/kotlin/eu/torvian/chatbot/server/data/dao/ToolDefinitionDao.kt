@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.data.dao
 
 import arrow.core.Either
+import eu.torvian.chatbot.common.models.tool.MiscToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.server.data.dao.error.DeleteToolDefinitionError
@@ -57,7 +58,6 @@ interface ToolDefinitionDao {
      * @param inputSchema JSON Schema defining expected input parameters
      * @param outputSchema Optional JSON Schema defining expected output structure
      * @param isEnabled Whether this tool is globally available
-     * @param isEnabledByDefault Whether this tool is enabled by default for NEW chat sessions
      * @return Either [InsertToolDefinitionError] or the newly created [ToolDefinition]
      */
     suspend fun insertToolDefinition(
@@ -67,9 +67,8 @@ interface ToolDefinitionDao {
         config: JsonObject,
         inputSchema: JsonObject,
         outputSchema: JsonObject?,
-        isEnabled: Boolean,
-        isEnabledByDefault: Boolean? = null
-    ): Either<InsertToolDefinitionError, ToolDefinition>
+        isEnabled: Boolean
+    ): Either<InsertToolDefinitionError, MiscToolDefinition>
 
     /**
      * Updates an existing tool definition with all fields from the provided entity.

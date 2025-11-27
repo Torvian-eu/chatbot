@@ -6,6 +6,8 @@ import arrow.core.raise.catch
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.right
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
+import eu.torvian.chatbot.common.models.tool.MiscToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
@@ -15,7 +17,6 @@ import eu.torvian.chatbot.server.data.dao.error.ToolDefinitionError
 import eu.torvian.chatbot.server.data.dao.error.UpdateToolDefinitionError
 import eu.torvian.chatbot.server.data.tables.ToolDefinitionTable
 import eu.torvian.chatbot.server.data.tables.mappers.toToolDefinition
-import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.exceptions.ExposedSQLException
@@ -74,9 +75,8 @@ class ToolDefinitionDaoExposed(
         config: JsonObject,
         inputSchema: JsonObject,
         outputSchema: JsonObject?,
-        isEnabled: Boolean,
-        isEnabledByDefault: Boolean?
-    ): Either<InsertToolDefinitionError, ToolDefinition> =
+        isEnabled: Boolean
+    ): Either<InsertToolDefinitionError, MiscToolDefinition> =
         transactionScope.transaction {
             either {
                 catch({
@@ -89,7 +89,6 @@ class ToolDefinitionDaoExposed(
                         it[inputSchemaJson] = inputSchema.toString()
                         it[outputSchemaJson] = outputSchema?.toString()
                         it[ToolDefinitionTable.isEnabled] = isEnabled
-                        it[ToolDefinitionTable.isEnabledByDefault] = isEnabledByDefault
                         it[createdAt] = now
                         it[updatedAt] = now
                     }
@@ -117,7 +116,6 @@ class ToolDefinitionDaoExposed(
                         it[inputSchemaJson] = toolDefinition.inputSchema.toString()
                         it[outputSchemaJson] = toolDefinition.outputSchema?.toString()
                         it[isEnabled] = toolDefinition.isEnabled
-                        it[isEnabledByDefault] = toolDefinition.isEnabledByDefault
                         it[updatedAt] = now
                     }
                     ensure(updatedRowCount != 0) { UpdateToolDefinitionError.NotFound(toolDefinition.id) }

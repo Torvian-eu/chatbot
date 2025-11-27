@@ -19,6 +19,8 @@ import org.jetbrains.exposed.sql.Table
  * @property mcpServerId Reference to the MCP server in LocalMCPServerTable
  * @property mcpToolName FUTURE: Original tool name from MCP server for name mapping.
  *   If null, use ToolDefinition.name as-is. If set, maps LLM tool name to MCP tool name.
+ * @property isEnabledByDefault Whether this tool is enabled by default for NEW chat sessions.
+ *   (null = use server-level default, true = enable, false = disable)
  */
 object LocalMCPToolDefinitionTable : Table("local_mcp_tool_definitions") {
     val toolDefinitionId = reference(
@@ -32,6 +34,7 @@ object LocalMCPToolDefinitionTable : Table("local_mcp_tool_definitions") {
         onDelete = ReferenceOption.CASCADE
     )
     val mcpToolName = varchar("mcp_tool_name", 255).nullable()
+    val isEnabledByDefault = bool("is_enabled_by_default").nullable()
 
     // Composite primary key: one tool can only be linked to one server
     override val primaryKey = PrimaryKey(toolDefinitionId, mcpServerId)

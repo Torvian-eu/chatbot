@@ -3,7 +3,7 @@ package eu.torvian.chatbot.server.data.dao.exposed
 import arrow.core.getOrElse
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
-import eu.torvian.chatbot.common.models.tool.ToolDefinition
+import eu.torvian.chatbot.common.models.tool.MiscToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
 import eu.torvian.chatbot.server.data.dao.error.DeleteToolDefinitionError
@@ -65,7 +65,7 @@ class ToolDefinitionDaoExposedTest {
         description: String = "Search the web for information",
         type: ToolType = ToolType.WEB_SEARCH,
         isEnabled: Boolean = true
-    ): ToolDefinition {
+    ): MiscToolDefinition {
         val config = buildJsonObject {
             put("searchEngine", "duckduckgo")
             put("maxResults", 5)
@@ -286,7 +286,7 @@ class ToolDefinitionDaoExposedTest {
         // Setup: Create a tool definition object with non-existent ID
         val config = buildJsonObject { put("key", "value") }
         val inputSchema = buildJsonObject { put("type", "object") }
-        val nonExistentTool = ToolDefinition(
+        val nonExistentTool = MiscToolDefinition(
             id = 999L,
             name = "test",
             description = "Test",

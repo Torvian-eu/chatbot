@@ -86,8 +86,7 @@ class LocalMCPToolDefinitionDaoExposedTest {
             config = buildJsonObject {},
             inputSchema = buildJsonObject {},
             outputSchema = null,
-            isEnabled = true,
-            isEnabledByDefault = null
+            isEnabled = true
         ).getOrElse { throw IllegalStateException("Failed to create test tool") }
     }
 

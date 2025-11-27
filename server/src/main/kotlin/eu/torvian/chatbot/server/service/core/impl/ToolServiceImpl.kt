@@ -148,7 +148,7 @@ class ToolServiceImpl(
                             UpdateToolError.InvalidInputSchema(daoError.reason)
                     }
                 }) {
-                    val updatedTool = tool.copy(updatedAt = Clock.System.now())
+                    val updatedTool = tool.withUpdatedAt(Clock.System.now())
                     toolDefinitionDao.updateToolDefinition(updatedTool).bind()
                 }
             }
