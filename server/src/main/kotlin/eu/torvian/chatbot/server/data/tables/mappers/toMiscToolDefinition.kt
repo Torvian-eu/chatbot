@@ -13,7 +13,7 @@ import org.jetbrains.exposed.sql.ResultRow
  * Converts database representation (with timestamps as Long milliseconds and JSON as strings)
  * to domain model (with Instant timestamps and JsonObject).
  */
-fun ResultRow.toToolDefinition() = MiscToolDefinition(
+fun ResultRow.toMiscToolDefinition() = MiscToolDefinition(
     id = this[ToolDefinitionTable.id].value,
     name = this[ToolDefinitionTable.name],
     description = this[ToolDefinitionTable.description],

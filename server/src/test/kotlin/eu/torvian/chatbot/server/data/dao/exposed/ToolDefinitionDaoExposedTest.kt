@@ -6,9 +6,7 @@ import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.tool.MiscToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
-import eu.torvian.chatbot.server.data.dao.error.DeleteToolDefinitionError
 import eu.torvian.chatbot.server.data.dao.error.ToolDefinitionError
-import eu.torvian.chatbot.server.data.dao.error.UpdateToolDefinitionError
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
 import eu.torvian.chatbot.server.testutils.koin.defaultTestContainer
 import kotlinx.coroutines.test.runTest
@@ -89,7 +87,7 @@ class ToolDefinitionDaoExposedTest {
             inputSchema = inputSchema,
             outputSchema = null,
             isEnabled = isEnabled
-        ).getOrElse { throw IllegalStateException("Failed to create test tool: $it") }
+        )
     }
 
     @Test
@@ -171,7 +169,7 @@ class ToolDefinitionDaoExposedTest {
         val inputSchema = buildJsonObject { put("type", "object") }
 
         // Execute
-        val result = toolDefinitionDao.insertToolDefinition(
+        val tool = toolDefinitionDao.insertToolDefinition(
             name = "test_tool",
             description = "A test tool",
             type = ToolType.CUSTOM,
@@ -182,7 +180,6 @@ class ToolDefinitionDaoExposedTest {
         )
 
         // Verify
-        val tool = result.getOrElse { throw AssertionError("Expected Right but got Left: $it") }
         assertTrue(tool.id > 0, "Expected valid ID")
         assertEquals("test_tool", tool.name)
         assertEquals("A test tool", tool.description)
@@ -200,7 +197,7 @@ class ToolDefinitionDaoExposedTest {
         // Execute: Create another tool with the same name (now allowed)
         val config = buildJsonObject { put("key", "value") }
         val inputSchema = buildJsonObject { put("type", "object") }
-        val result = toolDefinitionDao.insertToolDefinition(
+        val second = toolDefinitionDao.insertToolDefinition(
             name = "web_search",
             description = "Another web search",
             type = ToolType.WEB_SEARCH,
@@ -211,7 +208,6 @@ class ToolDefinitionDaoExposedTest {
         )
 
         // Verify: Should succeed since duplicate names are now allowed
-        val second = result.getOrElse { throw AssertionError("Expected Right but got Left: $it") }
         assertEquals("web_search", second.name)
         assertTrue(second.id != first.id, "Should have different IDs")
 
@@ -267,7 +263,7 @@ class ToolDefinitionDaoExposedTest {
             inputSchema = inputSchema,
             outputSchema = outputSchema,
             isEnabled = true
-        ).getOrElse { throw IllegalStateException("Failed to create tool") }
+        )
 
         // Execute: Update to set outputSchema to null
         val updated = created.copy(outputSchema = null)
@@ -303,11 +299,7 @@ class ToolDefinitionDaoExposedTest {
         val result = toolDefinitionDao.updateToolDefinition(nonExistentTool)
 
         // Verify
-        assertTrue(result.isLeft(), "Expected Left (error)")
-        result.onLeft { error ->
-            assertTrue(error is UpdateToolDefinitionError.NotFound, "Expected NotFound error")
-            assertEquals(999L, (error as UpdateToolDefinitionError.NotFound).id)
-        }
+        assertTrue(result.leftOrNull() is ToolDefinitionError.NotFound, "Expected NotFound error")
     }
 
     @Test
@@ -356,11 +348,7 @@ class ToolDefinitionDaoExposedTest {
         val result = toolDefinitionDao.deleteToolDefinition(999L)
 
         // Verify
-        assertTrue(result.isLeft(), "Expected Left (error)")
-        result.onLeft { error ->
-            assertTrue(error is DeleteToolDefinitionError.NotFound, "Expected NotFound error")
-            assertEquals(999L, (error as DeleteToolDefinitionError.NotFound).id)
-        }
+        assertTrue(result.leftOrNull() is ToolDefinitionError.NotFound, "Expected NotFound error")
     }
 
     @Test

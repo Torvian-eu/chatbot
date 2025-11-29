@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.server.data.dao
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.tool.ToolDefinition
+import eu.torvian.chatbot.common.models.tool.MiscToolDefinition
 import eu.torvian.chatbot.server.data.dao.error.ClearToolConfigError
 import eu.torvian.chatbot.server.data.dao.error.SetToolEnabledError
 
@@ -20,7 +20,7 @@ interface SessionToolConfigDao {
      * @param sessionId The ID of the session
      * @return List of enabled tool definitions for the session
      */
-    suspend fun getEnabledToolsForSession(sessionId: Long): List<ToolDefinition>
+    suspend fun getEnabledToolsForSession(sessionId: Long): List<MiscToolDefinition>
 
     /**
      * Checks if a specific tool is enabled for a session.
