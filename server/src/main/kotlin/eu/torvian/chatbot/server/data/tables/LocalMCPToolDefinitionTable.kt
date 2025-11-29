@@ -36,7 +36,6 @@ object LocalMCPToolDefinitionTable : Table("local_mcp_tool_definitions") {
     val mcpToolName = varchar("mcp_tool_name", 255).nullable()
     val isEnabledByDefault = bool("is_enabled_by_default").nullable()
 
-    // Composite primary key: one tool can only be linked to one server
-    override val primaryKey = PrimaryKey(toolDefinitionId, mcpServerId)
+    override val primaryKey = PrimaryKey(toolDefinitionId)
 }
 

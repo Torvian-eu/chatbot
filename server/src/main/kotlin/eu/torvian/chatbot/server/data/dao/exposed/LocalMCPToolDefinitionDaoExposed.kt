@@ -6,23 +6,27 @@ import arrow.core.raise.catch
 import arrow.core.raise.either
 import arrow.core.right
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
+import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import eu.torvian.chatbot.server.data.dao.LocalMCPToolDefinitionDao
-import eu.torvian.chatbot.server.data.dao.error.CreateLinkageError
+import eu.torvian.chatbot.server.data.dao.error.InsertToolError
 import eu.torvian.chatbot.server.data.dao.error.LocalMCPToolDefinitionError
 import eu.torvian.chatbot.server.data.tables.LocalMCPToolDefinitionTable
+import eu.torvian.chatbot.server.data.tables.ToolDefinitionTable
+import eu.torvian.chatbot.server.data.tables.mappers.toLocalMCPToolDefinition
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 import org.jetbrains.exposed.exceptions.ExposedSQLException
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inSubQuery
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.update
 
 /**
  * Exposed-based implementation of LocalMCPToolDefinitionDao.
  *
- * Manages the junction table linking MCP servers to their tool definitions.
+ * Manages the many-to-many relationship between MCP servers and tool definitions,
+ * performing joins to return complete LocalMCPToolDefinition domain models.
  */
 class LocalMCPToolDefinitionDaoExposed(
     private val transactionScope: TransactionScope
@@ -32,11 +36,12 @@ class LocalMCPToolDefinitionDaoExposed(
         private val logger: Logger = LogManager.getLogger(LocalMCPToolDefinitionDaoExposed::class.java)
     }
 
-    override suspend fun createLinkage(
+    override suspend fun insertTool(
         toolDefinitionId: Long,
         mcpServerId: Long,
-        mcpToolName: String?
-    ): Either<CreateLinkageError, Unit> =
+        mcpToolName: String?,
+        isEnabledByDefault: Boolean?
+    ): Either<InsertToolError, Unit> =
         transactionScope.transaction {
             either {
                 catch({
@@ -44,16 +49,17 @@ class LocalMCPToolDefinitionDaoExposed(
                         it[LocalMCPToolDefinitionTable.toolDefinitionId] = toolDefinitionId
                         it[LocalMCPToolDefinitionTable.mcpServerId] = mcpServerId
                         it[LocalMCPToolDefinitionTable.mcpToolName] = mcpToolName
+                        it[LocalMCPToolDefinitionTable.isEnabledByDefault] = isEnabledByDefault
                     }
                 }) { e: ExposedSQLException ->
-                    logger.error("Failed to create linkage between tool $toolDefinitionId and server $mcpServerId: ${e.message}")
+                    logger.error("Failed to create local MCP tool for tool $toolDefinitionId and server $mcpServerId: ${e.message}")
                     when {
                         e.isUniqueConstraintViolation() ->
-                            raise(CreateLinkageError.DuplicateLinkage(toolDefinitionId, mcpServerId))
+                            raise(InsertToolError.DuplicateLinkage(toolDefinitionId))
 
                         e.isForeignKeyViolation() ->
                             raise(
-                                CreateLinkageError.ReferencedEntityNotFound(
+                                InsertToolError.ReferencedEntityNotFound(
                                     toolDefinitionId = toolDefinitionId,
                                     mcpServerId = mcpServerId
                                 )
@@ -65,68 +71,56 @@ class LocalMCPToolDefinitionDaoExposed(
             }
         }
 
-    override suspend fun getToolIdsByServerId(mcpServerId: Long): List<Long> =
+    override suspend fun getToolById(
+        toolDefinitionId: Long
+    ): Either<LocalMCPToolDefinitionError.NotFound, LocalMCPToolDefinition> =
         transactionScope.transaction {
-            LocalMCPToolDefinitionTable
+            ToolDefinitionTable
+                .innerJoin(LocalMCPToolDefinitionTable)
+                .selectAll()
+                .where { LocalMCPToolDefinitionTable.toolDefinitionId eq toolDefinitionId }
+                .singleOrNull()
+                ?.toLocalMCPToolDefinition()
+                ?.right()
+                ?: LocalMCPToolDefinitionError.NotFound(toolDefinitionId).left()
+        }
+
+    override suspend fun getToolsByServerId(mcpServerId: Long): List<LocalMCPToolDefinition> =
+        transactionScope.transaction {
+            ToolDefinitionTable
+                .innerJoin(LocalMCPToolDefinitionTable)
                 .selectAll()
                 .where { LocalMCPToolDefinitionTable.mcpServerId eq mcpServerId }
-                .map { it[LocalMCPToolDefinitionTable.toolDefinitionId].value }
+                .map { it.toLocalMCPToolDefinition() }
         }
 
-    override suspend fun getServerIdByToolId(
-        toolDefinitionId: Long
-    ): Either<LocalMCPToolDefinitionError.NotFound, Long> =
-        transactionScope.transaction {
-            LocalMCPToolDefinitionTable
-                .selectAll()
-                .where { LocalMCPToolDefinitionTable.toolDefinitionId eq toolDefinitionId }
-                .singleOrNull()
-                ?.let { it[LocalMCPToolDefinitionTable.mcpServerId].value.right() }
-                ?: LocalMCPToolDefinitionError.NotFound(toolDefinitionId).left()
-        }
-
-    override suspend fun deleteLinkage(
+    override suspend fun updateTool(
         toolDefinitionId: Long,
-        mcpServerId: Long
+        mcpToolName: String?,
+        isEnabledByDefault: Boolean?
     ): Either<LocalMCPToolDefinitionError.NotFound, Unit> =
         transactionScope.transaction {
-            val deletedCount = LocalMCPToolDefinitionTable.deleteWhere {
-                (LocalMCPToolDefinitionTable.toolDefinitionId eq toolDefinitionId) and
-                        (LocalMCPToolDefinitionTable.mcpServerId eq mcpServerId)
+            val updatedCount = LocalMCPToolDefinitionTable.update(
+                where = { LocalMCPToolDefinitionTable.toolDefinitionId eq toolDefinitionId }
+            ) {
+                it[LocalMCPToolDefinitionTable.mcpToolName] = mcpToolName
+                it[LocalMCPToolDefinitionTable.isEnabledByDefault] = isEnabledByDefault
             }
-            if (deletedCount > 0) {
+            if (updatedCount > 0) {
                 Unit.right()
             } else {
-                LocalMCPToolDefinitionError.NotFound(toolDefinitionId, mcpServerId).left()
+                LocalMCPToolDefinitionError.NotFound(toolDefinitionId).left()
             }
         }
 
-    override suspend fun deleteAllLinkagesForServer(mcpServerId: Long): Int =
+    override suspend fun deleteToolsByServerId(mcpServerId: Long): Int =
         transactionScope.transaction {
-            LocalMCPToolDefinitionTable.deleteWhere {
-                LocalMCPToolDefinitionTable.mcpServerId eq mcpServerId
+            // Delete from ToolDefinitionTable (cascade will handle junction table)
+            ToolDefinitionTable.deleteWhere {
+                ToolDefinitionTable.id inSubQuery LocalMCPToolDefinitionTable
+                    .select(LocalMCPToolDefinitionTable.toolDefinitionId)
+                    .where { LocalMCPToolDefinitionTable.mcpServerId eq mcpServerId }
             }
-        }
-
-    override suspend fun isLinked(toolDefinitionId: Long, mcpServerId: Long): Boolean =
-        transactionScope.transaction {
-            LocalMCPToolDefinitionTable
-                .selectAll()
-                .where {
-                    (LocalMCPToolDefinitionTable.toolDefinitionId eq toolDefinitionId) and
-                            (LocalMCPToolDefinitionTable.mcpServerId eq mcpServerId)
-                }
-                .count() > 0
-        }
-
-    override suspend fun getMcpToolName(toolDefinitionId: Long): Either<LocalMCPToolDefinitionError.NotFound, String?> =
-        transactionScope.transaction {
-            LocalMCPToolDefinitionTable
-                .selectAll()
-                .where { LocalMCPToolDefinitionTable.toolDefinitionId eq toolDefinitionId }
-                .singleOrNull()
-                ?.let { it[LocalMCPToolDefinitionTable.mcpToolName].right() }
-                ?: LocalMCPToolDefinitionError.NotFound(toolDefinitionId).left()
         }
 }
 
