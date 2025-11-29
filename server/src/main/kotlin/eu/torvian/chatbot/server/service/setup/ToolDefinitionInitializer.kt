@@ -6,8 +6,8 @@ import arrow.core.raise.withError
 import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
 import eu.torvian.chatbot.server.service.core.ToolService
-import eu.torvian.chatbot.server.service.core.error.tool.CreateToolError
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
+import eu.torvian.chatbot.server.service.core.error.tool.ValidateToolError
 import kotlinx.serialization.json.*
 
 /**
@@ -49,7 +49,7 @@ class ToolDefinitionInitializer(
      * Creates the default web search tool using DuckDuckGo.
      */
     private suspend fun createWebSearchTool(): Either<String, Unit> = either {
-        withError({ error: CreateToolError ->
+        withError({ error: ValidateToolError ->
             "Failed to create web search tool: ${error.toErrorMessage()}"
         }) {
             toolService.createTool(
@@ -103,7 +103,7 @@ class ToolDefinitionInitializer(
      * Creates the default weather tool with mock data.
      */
     private suspend fun createWeatherTool(): Either<String, Unit> = either {
-        withError({ error: CreateToolError ->
+        withError({ error: ValidateToolError ->
             "Failed to create weather tool: ${error.toErrorMessage()}"
         }) {
             toolService.createTool(
@@ -177,13 +177,11 @@ class ToolDefinitionInitializer(
     /**
      * Converts a CreateToolError to a human-readable error message.
      */
-    private fun CreateToolError.toErrorMessage(): String = when (this) {
-        is CreateToolError.DuplicateName -> "Tool with name '$name' already exists"
-        is CreateToolError.InvalidName -> message
-        is CreateToolError.InvalidDescription -> message
-        is CreateToolError.InvalidInputSchema -> message
-        is CreateToolError.InvalidConfig -> message
-        is CreateToolError.PersistenceError -> message
+    private fun ValidateToolError.toErrorMessage(): String = when (this) {
+        is ValidateToolError.InvalidName -> "Invalid tool name: $message"
+        is ValidateToolError.InvalidDescription -> "Invalid tool description: $message"
+        is ValidateToolError.InvalidInputSchema -> "Invalid input schema: $message"
+        is ValidateToolError.InvalidOutputSchema -> "Invalid output schema: $message"
     }
 }
 

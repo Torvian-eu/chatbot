@@ -58,7 +58,7 @@ fun Route.configureToolRoutes(
                 // Only users with MANAGE_TOOLS permission can create tools
                 requireToolManagementAccess(authorizationService, userId)
 
-                withError({ e: CreateToolError -> e.toApiError() }) {
+                withError({ e: ValidateToolError -> e.toApiError() }) {
                     toolService.createTool(
                         name = request.name,
                         description = request.description,
