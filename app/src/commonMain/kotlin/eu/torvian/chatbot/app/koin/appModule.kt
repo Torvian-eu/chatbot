@@ -161,6 +161,9 @@ fun appModule(appConfig: AppConfig): Module = module {
     single<LocalMCPServerApi> {
         KtorLocalMCPServerApiClient(get())
     }
+    single<LocalMCPToolApi> {
+        KtorLocalMCPToolApiClient(get())
+    }
 
     // Provide Repository implementations, injecting the API clients
     single<ModelRepository> {
