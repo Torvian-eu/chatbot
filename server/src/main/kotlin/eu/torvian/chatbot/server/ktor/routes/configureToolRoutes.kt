@@ -46,7 +46,7 @@ fun Route.configureToolRoutes(
         // GET /api/v1/tools - List all tools
         get<ToolResource> {
             // All authenticated users can view available tools
-            call.respond(toolService.getAllTools())
+            call.respond(toolService.getAllTools().map { it as ToolDefinition })
         }
 
         // POST /api/v1/tools - Create a new tool (admin only)
