@@ -21,12 +21,12 @@ import eu.torvian.chatbot.server.testutils.koin.defaultTestContainer
 import eu.torvian.chatbot.server.testutils.ktor.KtorTestApp
 import eu.torvian.chatbot.server.testutils.ktor.myTestApplication
 import io.ktor.client.call.*
-import io.ktor.client.plugins.sse.*
+import io.ktor.client.plugins.websocket.*
 import io.ktor.client.request.*
 import io.ktor.http.*
+import io.ktor.websocket.*
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.serializer
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -48,7 +48,7 @@ import kotlin.test.assertTrue
  * - PUT /api/v1/sessions/{sessionId}/settings - Update session settings
  * - PUT /api/v1/sessions/{sessionId}/leafMessage - Update session leaf message
  * - PUT /api/v1/sessions/{sessionId}/group - Update session group
- * - POST /api/v1/sessions/{sessionId}/messages - Process new message
+ * - WS /api/v1/sessions/{sessionId}/messages - Process new message
  */
 class SessionRoutesTest {
     private lateinit var container: DIContainer
@@ -543,10 +543,10 @@ class SessionRoutesTest {
         assertEquals(testAssistantMessage.id, retrievedLeaf.messageId)
     }
 
-    // --- POST /api/v1/sessions/{sessionId}/messages Tests ---
+    // --- WS /api/v1/sessions/{sessionId}/messages Tests ---
 
     @Test
-    fun `POST session message should process new message successfully and emit SSE events`() = sessionTestApplication {
+    fun `WS session message should process new message successfully and emit WebSocket events`() = sessionTestApplication {
         // Arrange
         testDataManager.insertChatSession(testNonStreamingSession)
         testDataManager.insertSessionOwnership(testNonStreamingSession.id, authHelper.defaultTestUser.id)
@@ -555,27 +555,24 @@ class SessionRoutesTest {
 
         // Act
         val receivedEvents = mutableListOf<ChatEvent>()
-        client.sse(
+        client.webSocket(
             urlString = href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = testNonStreamingSession.id))),
-            deserialize = { typeInfo, jsonString ->
-                json.decodeFromString(json.serializersModule.serializer(typeInfo.kotlinType!!), jsonString)
-            },
-            request = {
-                method = HttpMethod.Post
-                setBody(processRequest)
-                contentType(ContentType.Application.Json)
-                authenticate(authToken)
-            }
+            request = { authenticate(authToken) }
         ) {
-            incoming.collect { event ->
-                val chatEvent = deserialize<ChatEvent>(event.data)
-                assertNotNull(chatEvent, "Failed to deserialize SSE data chunk: '${event.data}'")
+            // Send initial message
+            val initialEvent: ChatClientEvent = ChatClientEvent.ProcessNewMessage(processRequest)
+            send(Frame.Text(json.encodeToString(initialEvent)))
+
+            // Collect incoming events
+            for (frame in incoming) {
+                val textFrame = frame as? Frame.Text ?: continue
+                val chatEvent = json.decodeFromString<ChatEvent>(textFrame.readText())
                 receivedEvents.add(chatEvent)
             }
         }
 
-        // Assert - SSE events
-        assertTrue(receivedEvents.isNotEmpty(), "Should have received SSE events")
+        // Assert - WebSocket events
+        assertTrue(receivedEvents.isNotEmpty(), "Should have received WebSocket events")
 
         // Should have user_message_saved event
         val userMessageEvent = receivedEvents.filterIsInstance<ChatEvent.UserMessageSaved>().firstOrNull()
@@ -615,40 +612,35 @@ class SessionRoutesTest {
     }
 
     @Test
-    fun `POST session message should emit error event for non-existent session`() = sessionTestApplication {
+    fun `WS session message should emit error event for non-existent session`() = sessionTestApplication {
         // Arrange
         val nonExistentId = 999L
         val processRequest = ProcessNewMessageRequest(content = "Test message", isStreaming = false)
 
         // Act
         val receivedEvents = mutableListOf<ChatEvent>()
-        client.sse(
+        client.webSocket(
             urlString = href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = nonExistentId))),
-            deserialize = { typeInfo, jsonString ->
-                json.decodeFromString(json.serializersModule.serializer(typeInfo.kotlinType!!), jsonString)
-            },
-            request = {
-                method = HttpMethod.Post
-                setBody(processRequest)
-                contentType(ContentType.Application.Json)
-                authenticate(authToken)
-            }
+            request = { authenticate(authToken) }
         ) {
-            incoming.collect { event ->
-                val chatEvent = deserialize<ChatEvent>(event.data)
-                assertNotNull(chatEvent, "Failed to deserialize SSE data chunk: '${event.data}'")
+            val initialEvent: ChatClientEvent = ChatClientEvent.ProcessNewMessage(processRequest)
+            send(Frame.Text(json.encodeToString(initialEvent)))
+
+            for (frame in incoming) {
+                val textFrame = frame as? Frame.Text ?: continue
+                val chatEvent = json.decodeFromString<ChatEvent>(textFrame.readText())
                 receivedEvents.add(chatEvent)
             }
         }
 
-        // Assert - SSE error event
+        // Assert - WebSocket error event
         val errorEvent = receivedEvents.filterIsInstance<ChatEvent.ErrorOccurred>().firstOrNull()
         assertNotNull(errorEvent, "Should receive error event")
         assertEquals(CommonApiErrorCodes.NOT_FOUND.code, errorEvent.error.code)
     }
 
     @Test
-    fun `POST session message should emit error event for missing model`() = sessionTestApplication {
+    fun `WS session message should emit error event for missing model`() = sessionTestApplication {
         // Arrange
         testDataManager.insertChatSession(testSession.copy(currentModelId = null))
         testDataManager.insertSessionOwnership(testSession.id, authHelper.defaultTestUser.id)
@@ -656,26 +648,21 @@ class SessionRoutesTest {
 
         // Act
         val receivedEvents = mutableListOf<ChatEvent>()
-        client.sse(
+        client.webSocket(
             urlString = href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = testSession.id))),
-            deserialize = { typeInfo, jsonString ->
-                json.decodeFromString(json.serializersModule.serializer(typeInfo.kotlinType!!), jsonString)
-            },
-            request = {
-                method = HttpMethod.Post
-                setBody(processRequest)
-                contentType(ContentType.Application.Json)
-                authenticate(authToken)
-            }
+            request = { authenticate(authToken) }
         ) {
-            incoming.collect { event ->
-                val chatEvent = deserialize<ChatEvent>(event.data)
-                assertNotNull(chatEvent, "Failed to deserialize SSE data chunk: '${event.data}'")
+            val initialEvent: ChatClientEvent = ChatClientEvent.ProcessNewMessage(processRequest)
+            send(Frame.Text(json.encodeToString(initialEvent)))
+
+            for (frame in incoming) {
+                val textFrame = frame as? Frame.Text ?: continue
+                val chatEvent = json.decodeFromString<ChatEvent>(textFrame.readText())
                 receivedEvents.add(chatEvent)
             }
         }
 
-        // Assert - SSE error event
+        // Assert - WebSocket error event
         val errorEvent = receivedEvents.filterIsInstance<ChatEvent.ErrorOccurred>().firstOrNull()
         assertNotNull(errorEvent, "Should receive error event")
         assertTrue(
@@ -865,7 +852,7 @@ class SessionRoutesTest {
     }
 
     @Test
-    fun `POST session message as non-owner should emit error event for forbidden access`() = sessionTestApplication {
+    fun `WS session message as non-owner should emit error event for forbidden access`() = sessionTestApplication {
         // Arrange
         val otherUser = authHelper.createTestUser(id = 992L, email = "otheruser8@example.com", username = "otheruser8")
         testDataManager.insertUser(otherUser)
@@ -876,26 +863,21 @@ class SessionRoutesTest {
 
         // Act
         val receivedEvents = mutableListOf<ChatEvent>()
-        client.sse(
+        client.webSocket(
             urlString = href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = testSession.id))),
-            deserialize = { typeInfo, jsonString ->
-                json.decodeFromString(json.serializersModule.serializer(typeInfo.kotlinType!!), jsonString)
-            },
-            request = {
-                method = HttpMethod.Post
-                setBody(processRequest)
-                contentType(ContentType.Application.Json)
-                authenticate(authToken)
-            }
+            request = { authenticate(authToken) }
         ) {
-            incoming.collect { event ->
-                val chatEvent = deserialize<ChatEvent>(event.data)
-                assertNotNull(chatEvent, "Failed to deserialize SSE data chunk: '${event.data}'")
+            val initialEvent: ChatClientEvent = ChatClientEvent.ProcessNewMessage(processRequest)
+            send(Frame.Text(json.encodeToString(initialEvent)))
+
+            for (frame in incoming) {
+                val textFrame = frame as? Frame.Text ?: continue
+                val chatEvent = json.decodeFromString<ChatEvent>(textFrame.readText())
                 receivedEvents.add(chatEvent)
             }
         }
 
-        // Assert - SSE error event
+        // Assert - WebSocket error event
         val errorEvent = receivedEvents.filterIsInstance<ChatEvent.ErrorOccurred>().firstOrNull()
         assertNotNull(errorEvent, "Should receive error event")
         assertEquals(CommonApiErrorCodes.PERMISSION_DENIED.code, errorEvent.error.code)

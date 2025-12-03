@@ -10,6 +10,8 @@ import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.models.api.core.*
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
+import eu.torvian.chatbot.server.ktor.mappers.toChatEvent
+import eu.torvian.chatbot.server.ktor.mappers.toChatStreamEvent
 import eu.torvian.chatbot.server.service.core.*
 import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageError
 import eu.torvian.chatbot.server.service.core.error.message.toApiError
@@ -21,8 +23,10 @@ import io.ktor.server.request.*
 import io.ktor.server.resources.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.Route
-import io.ktor.server.sse.*
-import io.ktor.sse.*
+import io.ktor.websocket.*
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.serialization.json.Json
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
@@ -164,145 +168,105 @@ fun Route.configureSessionRoutes(
             call.respondEither(result)
         }
 
-        // POST /api/v1/sessions/{sessionId}/messages - Process a new message for a session
-        post<SessionResource.ById.Messages> { resource ->
-            val userId = call.getUserId()
+
+//      WebSocket /api/v1/sessions/{sessionId}/messages - Process a new message for a session
+        webSocket<SessionResource.ById.Messages> { resource ->
             val sessionId = resource.parent.sessionId
-            val request = call.receive<ProcessNewMessageRequest>()
-            val parentMessageId = request.parentMessageId
-            val isStreaming = request.isStreaming
+            val userId = call.getUserId()
 
-            // Step 1: Perform validation.
-            val validationResult = either {
-                requireSessionAccess(authorizationService, userId, sessionId, AccessMode.WRITE)
-                withError({ validateError: ValidateNewMessageError ->
-                    validateError.toApiError()
-                }) {
-                    chatService.validateProcessNewMessageRequest(
-                        sessionId,
-                        parentMessageId,
-                        isStreaming
-                    ).bind()
+            try {
+                // Step 1: Receive the initial request frame from the client
+                val initialFrame = incoming.receive() as? Frame.Text
+                    ?: return@webSocket close(
+                        CloseReason(
+                            CloseReason.Codes.VIOLATED_POLICY,
+                            "Invalid frame type for initial request"
+                        )
+                    )
+                val initialEvent = json.decodeFromString<ChatClientEvent>(initialFrame.readText())
+
+                val request = (initialEvent as? ChatClientEvent.ProcessNewMessage)?.request
+                    ?: return@webSocket close(
+                        CloseReason(
+                            CloseReason.Codes.VIOLATED_POLICY,
+                            "First message must be ProcessNewMessage"
+                        )
+                    )
+
+                // Step 2: Perform validation
+                val validationResult = either {
+                    requireSessionAccess(authorizationService, userId, sessionId, AccessMode.WRITE)
+                    withError({ validateError: ValidateNewMessageError -> validateError.toApiError() }) {
+                        chatService.validateProcessNewMessageRequest(
+                            sessionId,
+                            request.parentMessageId,
+                            request.isStreaming
+                        ).bind()
+                    }
                 }
-            }
 
-            // Step 2: Respond with SSE.
-            call.respond(SSEServerContent(call, handle = {
                 val (session, llmConfig) = validationResult.getOrElse { apiError ->
                     logger.error("Validation failed for session $sessionId: $apiError")
-                    // Send a single SSE 'error' event and close the stream.
-                    if (isStreaming) {
-                        val errorEvent: ChatStreamEvent = ChatStreamEvent.ErrorOccurred(apiError)
-                        send(
-                            ServerSentEvent(
-                                event = errorEvent.eventType,
-                                data = json.encodeToString(errorEvent)
-                            )
-                        )
-                    } else {
-                        val errorEvent: ChatEvent = ChatEvent.ErrorOccurred(apiError)
-                        send(
-                            ServerSentEvent(
-                                event = errorEvent.eventType,
-                                data = json.encodeToString(errorEvent)
-                            )
-                        )
-                    }
-                    return@SSEServerContent
+                    val errorEvent: ChatEvent = ChatEvent.ErrorOccurred(apiError)
+                    outgoing.send(Frame.Text(json.encodeToString(errorEvent)))
+                    close(CloseReason(CloseReason.Codes.NORMAL, "Validation failed"))
+                    return@webSocket
                 }
-                if (isStreaming) {
-                    try {
-                        chatService.processNewMessageStreaming(
-                            session,
-                            llmConfig,
-                            request.content,
-                            parentMessageId
-                        ).collect { eitherStreamEvent ->
-                            eitherStreamEvent
-                                .onLeft { streamError ->
-                                    val apiError = streamError.toApiError()
-                                    val chatStreamEvent: ChatStreamEvent =
-                                        ChatStreamEvent.ErrorOccurred(apiError)
-                                    send(
-                                        ServerSentEvent(
-                                            event = "error",
-                                            data = json.encodeToString(chatStreamEvent)
-                                        )
-                                    )
-                                }
-                                .onRight { streamEvent ->
-                                    val chatStreamEvent = streamEvent.toChatStreamEvent()
-                                    send(
-                                        ServerSentEvent(
-                                            event = chatStreamEvent.eventType,
-                                            data = json.encodeToString(chatStreamEvent)
-                                        )
-                                    )
-                                }
-                        }
-                    } catch (e: Exception) {
-                        logger.error(
-                            "Unexpected error during streaming message processing for session $sessionId: ${e.message}",
-                            e
-                        )
-                        val chatStreamEvent: ChatStreamEvent = ChatStreamEvent.ErrorOccurred(
-                            apiError(
-                                CommonApiErrorCodes.INTERNAL,
-                                "An unexpected error occurred during streaming."
-                            )
-                        )
-                        send(
-                            ServerSentEvent(
-                                event = chatStreamEvent.eventType,
-                                data = json.encodeToString(chatStreamEvent)
-                            )
-                        )
-                    }
+                // Step 3: Create a flow for incoming MCP tool results
+                val mcpResponseFlow = incoming.receiveAsFlow()
+                    .filterIsInstance<Frame.Text>()
+                    .map { frame -> json.decodeFromString<ChatClientEvent>(frame.readText()) }
+                    .filterIsInstance<ChatClientEvent.LocalMCPToolResult>()
+                    .map { event -> event.result }
+
+                // Step 4: Start processing and stream events back to the client
+                val eventFlow = if (request.isStreaming) {
+                    chatService.processNewMessageStreaming(
+                        session,
+                        llmConfig,
+                        request.content,
+                        request.parentMessageId,
+                        mcpResponseFlow
+                    )
                 } else {
-                    // Non-streaming processing
-                    try {
-                        chatService.processNewMessage(session, llmConfig, request.content, parentMessageId)
-                            .collect { eitherEvent ->
-                                eitherEvent
-                                    .onLeft { messageError ->
-                                        val chatEvent: ChatEvent = ChatEvent.ErrorOccurred(messageError.toApiError())
-                                        send(
-                                            ServerSentEvent(
-                                                event = chatEvent.eventType,
-                                                data = json.encodeToString(chatEvent)
-                                            )
-                                        )
-                                    }
-                                    .onRight { messageEvent ->
-                                        val chatEvent = messageEvent.toChatEvent()
-                                        send(
-                                            ServerSentEvent(
-                                                event = chatEvent.eventType,
-                                                data = json.encodeToString(chatEvent)
-                                            )
-                                        )
-                                    }
-                            }
-                    } catch (e: Exception) {
-                        logger.error(
-                            "Unexpected error during non-streaming message processing for session $sessionId: ${e.message}",
-                            e
-                        )
-                        val chatEvent: ChatEvent = ChatEvent.ErrorOccurred(
-                            apiError(
-                                CommonApiErrorCodes.INTERNAL,
-                                "An unexpected error occurred during non-streaming processing."
-                            )
-                        )
-                        send(
-                            ServerSentEvent(
-                                event = chatEvent.eventType,
-                                data = json.encodeToString(chatEvent)
-                            )
-                        )
-                    }
+                    chatService.processNewMessage(
+                        session,
+                        llmConfig,
+                        request.content,
+                        request.parentMessageId,
+                        mcpResponseFlow
+                    )
                 }
-            }))
+
+                eventFlow.collect { eitherEvent ->
+                    eitherEvent.fold(
+                        ifLeft = { processError ->
+                            val apiError = processError.toApiError()
+                            val errorEvent: ChatEvent = ChatEvent.ErrorOccurred(apiError)
+                            outgoing.send(Frame.Text(json.encodeToString(errorEvent)))
+                        },
+                        ifRight = { event ->
+                            val frameData = when (event) {
+                                is MessageEvent -> json.encodeToString(event.toChatEvent())
+                                is MessageStreamEvent -> json.encodeToString(event.toChatStreamEvent())
+                                else -> ""
+                            }
+                            if (frameData.isNotEmpty()) {
+                                outgoing.send(Frame.Text(frameData))
+                            }
+                        }
+                    )
+                }
+
+            } catch (e: Exception) {
+                logger.error("Error in WebSocket session for session $sessionId: ${e.message}", e)
+                val errorEvent =
+                    ChatEvent.ErrorOccurred(apiError(CommonApiErrorCodes.INTERNAL, "An unexpected error occurred."))
+                outgoing.send(Frame.Text(json.encodeToString(errorEvent)))
+            } finally {
+                // The WebSocket session will be closed automatically when the block finishes.
+                logger.info("WebSocket session closed for session $sessionId")
+            }
         }
 
         // GET /api/v1/sessions/{sessionId}/toolcalls - Get all tool calls for a session
