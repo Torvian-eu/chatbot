@@ -4,6 +4,7 @@ import arrow.core.Either
 import eu.torvian.chatbot.app.domain.models.LocalMCPServer
 import io.modelcontextprotocol.kotlin.sdk.CallToolResultBase
 import io.modelcontextprotocol.kotlin.sdk.Tool
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Service interface for MCP-specific operations.
@@ -89,13 +90,13 @@ interface MCPClientService : AutoCloseable {
      *
      * @param serverId Server identifier
      * @param toolName MCP tool name to invoke
-     * @param arguments Tool arguments as a map (serialized by the SDK)
+     * @param arguments Tool arguments as a JsonObject
      * @return Either.Right(CallToolResultBase?) on success or Either.Left(CallToolError)
      */
     suspend fun callTool(
         serverId: Long,
         toolName: String,
-        arguments: Map<String, Any?>
+        arguments: JsonObject
     ): Either<CallToolError, CallToolResultBase?>
 
     // ----- Status & health -----

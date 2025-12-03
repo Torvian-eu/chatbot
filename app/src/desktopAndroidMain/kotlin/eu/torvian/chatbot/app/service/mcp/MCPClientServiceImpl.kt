@@ -6,6 +6,7 @@ import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.app.domain.models.LocalMCPServer
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
+import io.modelcontextprotocol.kotlin.sdk.CallToolRequest
 import io.modelcontextprotocol.kotlin.sdk.CallToolResultBase
 import io.modelcontextprotocol.kotlin.sdk.Implementation
 import io.modelcontextprotocol.kotlin.sdk.ListToolsRequest
@@ -17,6 +18,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
+import kotlinx.serialization.json.JsonObject
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -223,7 +225,7 @@ class MCPClientServiceImpl(
     override suspend fun callTool(
         serverId: Long,
         toolName: String,
-        arguments: Map<String, Any?>
+        arguments: JsonObject
     ): Either<CallToolError, CallToolResultBase?> {
         logger.info("Calling tool '$toolName' on MCP server $serverId")
         logger.debug("Tool arguments: $arguments")
@@ -236,8 +238,10 @@ class MCPClientServiceImpl(
             // Call MCP SDK to execute tool and return the result directly
             val result = withContext(Dispatchers.IO) {
                 mcpClient.sdkClient.callTool(
-                    name = toolName,
-                    arguments = arguments
+                    request = CallToolRequest(
+                        name = toolName,
+                        arguments = arguments
+                    )
                 )
             }
             logger.info("Tool '$toolName' executed successfully on server $serverId")
