@@ -7,6 +7,10 @@ import eu.torvian.chatbot.app.service.auth.FileSystemTokenStorage
 import eu.torvian.chatbot.app.service.auth.TokenStorage
 import eu.torvian.chatbot.app.service.mcp.LocalMCPServerProcessManager
 import eu.torvian.chatbot.app.service.mcp.LocalMCPServerProcessManagerDesktop
+import eu.torvian.chatbot.app.service.mcp.LocalMCPToolCallMediator
+import eu.torvian.chatbot.app.service.mcp.LocalMCPToolCallMediatorImpl
+import eu.torvian.chatbot.app.service.mcp.MCPClientService
+import eu.torvian.chatbot.app.service.mcp.MCPClientServiceDesktop
 import eu.torvian.chatbot.app.service.security.CertificateStorage
 import eu.torvian.chatbot.app.service.security.FileSystemCertificateStorage
 import eu.torvian.chatbot.common.security.AESCryptoProvider
@@ -59,5 +63,15 @@ fun desktopModule(appConfig: AppConfig, encryptionConfig: EncryptionConfig) = mo
         )
     }.onClose { manager ->
         manager?.close()
+    }
+
+    single<MCPClientService> {
+        MCPClientServiceDesktop(
+            processManager = get()
+        )
+    }
+
+    single<LocalMCPToolCallMediator> {
+        LocalMCPToolCallMediatorImpl(get(), get())
     }
 }
