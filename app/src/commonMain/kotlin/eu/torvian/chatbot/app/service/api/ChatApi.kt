@@ -1,10 +1,10 @@
 package eu.torvian.chatbot.app.service.api
 
 import arrow.core.Either
+import eu.torvian.chatbot.common.models.api.core.ChatClientEvent
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.api.core.ChatEvent
 import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
-import eu.torvian.chatbot.common.models.api.core.ProcessNewMessageRequest
 import eu.torvian.chatbot.common.models.api.core.UpdateMessageRequest
 import kotlinx.coroutines.flow.Flow
 
@@ -19,29 +19,32 @@ import kotlinx.coroutines.flow.Flow
 interface ChatApi {
 
     /**
-     * Sends a new user message to a specified session and processes the LLM response.
-     * This is for **non-streaming** responses, but still uses Server-Sent Events (SSE) to deliver progress updates.
+     * Establishes a WebSocket connection to process a new message for a session and handles non-streaming events.
      *
-     * Corresponds to `POST /api/v1/sessions/{sessionId}/messages` with `stream=false`.
+     * Corresponds to a WebSocket connection to `WS /api/v1/sessions/{sessionId}/messages`.
      *
      * @param sessionId The ID of the session to send the message to.
-     * @param request The details of the new message, including content and optional parent ID.
-     * @return A [Flow] of [Either<ApiResourceError, ChatEvent>] representing discrete events during message processing.
-     *         The flow will emit various [ChatEvent] types until [ChatEvent.StreamCompleted] or an error.
+     * @param clientEvents A flow of events from the client to the server. The first event must be
+     *                     [ChatClientEvent.ProcessNewMessage] with `isStreaming=false`. Subsequent events
+     *                     can be [ChatClientEvent.LocalMCPToolResult] for tool execution.
+     * @return A [Flow] of [Either<ApiResourceError, ChatEvent>] representing discrete events from the server.
+     *         The flow will emit various [ChatEvent] types until the connection is closed.
      */
-    fun processNewMessage(sessionId: Long, request: ProcessNewMessageRequest): Flow<Either<ApiResourceError, ChatEvent>>
+    fun processNewMessage(sessionId: Long, clientEvents: Flow<ChatClientEvent>): Flow<Either<ApiResourceError, ChatEvent>>
 
     /**
-     * Sends a new user message to a specified session and streams the LLM response back.
+     * Establishes a WebSocket connection to process a new message for a session and handles streaming events.
      *
-     * Corresponds to `POST /api/v1/sessions/{sessionId}/messages` with `stream=true`.
+     * Corresponds to a WebSocket connection to `WS /api/v1/sessions/{sessionId}/messages`.
      *
      * @param sessionId The ID of the session to send the message to.
-     * @param request The details of the new message.
-     * @return A [Flow] of [Either<ApiResourceError, ChatStreamEvent>] representing the stream of updates.
-     *         The flow will emit various [ChatStreamEvent] types until [ChatStreamEvent.StreamCompleted] or an error.
+     * @param clientEvents A flow of events from the client to the server. The first event must be
+     *                     [ChatClientEvent.ProcessNewMessage] with `isStreaming=true`. Subsequent events
+     *                     can be [ChatClientEvent.LocalMCPToolResult] for tool execution.
+     * @return A [Flow] of [Either<ApiResourceError, ChatStreamEvent>] representing the stream of updates from the server.
+     *         The flow will emit various [ChatStreamEvent] types until the connection is closed.
      */
-    fun processNewMessageStreaming(sessionId: Long, request: ProcessNewMessageRequest): Flow<Either<ApiResourceError, ChatStreamEvent>>
+    fun processNewMessageStreaming(sessionId: Long, clientEvents: Flow<ChatClientEvent>): Flow<Either<ApiResourceError, ChatStreamEvent>>
 
     /**
      * Updates the content of an existing message.
