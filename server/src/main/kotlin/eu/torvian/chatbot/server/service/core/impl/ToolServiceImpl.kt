@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.service.core.impl
 
 import arrow.core.Either
+import arrow.core.getOrElse
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.raise.withError
@@ -8,6 +9,7 @@ import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.tool.MiscToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolType
+import eu.torvian.chatbot.server.data.dao.LocalMCPToolDefinitionDao
 import eu.torvian.chatbot.server.data.dao.SessionToolConfigDao
 import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
 import eu.torvian.chatbot.server.data.dao.error.ToolDefinitionError
@@ -26,6 +28,7 @@ import eu.torvian.chatbot.server.data.dao.error.SetToolEnabledError as DaoSetToo
 class ToolServiceImpl(
     private val toolDefinitionDao: ToolDefinitionDao,
     private val sessionToolConfigDao: SessionToolConfigDao,
+    private val localMCPToolDefinitionDao: LocalMCPToolDefinitionDao,
     private val transactionScope: TransactionScope,
 ) : ToolService {
 
@@ -110,9 +113,19 @@ class ToolServiceImpl(
             }
         }
 
-    override suspend fun getEnabledToolsForSession(sessionId: Long): List<MiscToolDefinition> {
+    override suspend fun getEnabledToolsForSession(sessionId: Long): List<ToolDefinition> {
         return transactionScope.transaction {
             sessionToolConfigDao.getEnabledToolsForSession(sessionId)
+                // TODO: for better performance, modify sessionToolConfigDao.getEnabledToolsForSession to return polymorphic ToolDefinition
+            .map { toolDefinition ->
+                if (toolDefinition.type == ToolType.MCP_LOCAL) {
+                    localMCPToolDefinitionDao.getToolById(toolDefinition.id).getOrElse {
+                        throw IllegalStateException("Failed to retrieve local MCP tool definition")
+                    }
+                } else {
+                    toolDefinition
+                }
+            }
         }
     }
 

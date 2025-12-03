@@ -71,7 +71,7 @@ interface ToolService {
      * @param sessionId The ID of the session.
      * @return A list of [ToolDefinition] objects enabled for this session.
      */
-    suspend fun getEnabledToolsForSession(sessionId: Long): List<MiscToolDefinition>
+    suspend fun getEnabledToolsForSession(sessionId: Long): List<ToolDefinition>
 
     /**
      * Enables or disables a specific tool for a session.
