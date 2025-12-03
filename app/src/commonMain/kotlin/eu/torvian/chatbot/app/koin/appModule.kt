@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.app.koin
 
+import eu.torvian.chatbot.app.main.AppConfig
 import eu.torvian.chatbot.app.repository.*
 import eu.torvian.chatbot.app.repository.impl.*
 import eu.torvian.chatbot.app.service.api.*
@@ -44,10 +45,16 @@ import org.koin.dsl.module
  * - Authentication components (TokenStorage, AuthApi, AuthRepository)
  * - ViewModels for managing the application's state
  *
- * @param baseUri The base URI for the API endpoint
+ * @param appConfig The application configuration containing server URL and other settings.
  * @return A Koin module with frontend dependencies
  */
-fun appModule(baseUri: String): Module = module {
+fun appModule(appConfig: AppConfig): Module = module {
+    // Provide application config
+    single<AppConfig> { appConfig }
+
+    // Provide JSON serializer singleton
+    single<Json> { Json }
+
     // Provide CertificateTrustService singleton for certificate trust decisions
     single<CertificateTrustService> {
         CertificateTrustService()
@@ -56,8 +63,8 @@ fun appModule(baseUri: String): Module = module {
     // Provide the unauthenticated Ktor HttpClient for auth operations
     single<HttpClient>(named("unauthenticated")) {
         createPlatformHttpClient(
-            baseUri = baseUri,
-            json = Json,
+            baseUri = appConfig.serverUrl,
+            json = get(),
             logLevel = LogLevel.INFO,
             certificateStorage = get(),
             certificateTrustService = get()
@@ -122,7 +129,7 @@ fun appModule(baseUri: String): Module = module {
 
     // Provide concrete API client implementations, injecting the HttpClient
     single<ChatApi> {
-        KtorChatApiClient(get())
+        KtorChatApiClient(get(), wss = appConfig.serverUrl.startsWith("https"))
     }
     single<SessionApi> {
         KtorSessionApiClient(get())
@@ -238,7 +245,7 @@ fun appModule(baseUri: String): Module = module {
     }
 
     factory<SendMessageUseCase> { (chatState: ChatState) ->
-        SendMessageUseCase(get<SessionRepository>(), chatState, get())
+        SendMessageUseCase(get<SessionRepository>(), get(),chatState, get())
     }
 
     factory<EditMessageUseCase> { (chatState: ChatState) ->
