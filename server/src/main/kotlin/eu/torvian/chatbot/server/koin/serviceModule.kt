@@ -5,6 +5,7 @@ import eu.torvian.chatbot.common.security.CryptoProvider
 import eu.torvian.chatbot.common.security.EncryptionService
 import eu.torvian.chatbot.server.service.core.*
 import eu.torvian.chatbot.server.service.core.impl.*
+import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutor
 import eu.torvian.chatbot.server.service.security.*
 import eu.torvian.chatbot.server.service.security.authorizer.*
 import eu.torvian.chatbot.server.service.setup.*
@@ -28,11 +29,12 @@ fun serviceModule() = module {
     single<ModelSettingsService> { ModelSettingsServiceImpl(get(), get(), get(), get(), get(), get(), get()) }
     single<LLMProviderService> { LLMProviderServiceImpl(get(), get(), get(), get(), get(), get(), get(), get()) }
     single<MessageService> { MessageServiceImpl(get(), get(), get()) }
-    single<ChatService> { ChatServiceImpl(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
-    single<ToolService> { ToolServiceImpl(get(), get(), get()) }
+    single<ChatService> { ChatServiceImpl(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
+    single<ToolService> { ToolServiceImpl(get(), get(), get(), get()) }
     single<ToolCallService> { ToolCallServiceImpl(get(), get()) }
     single<LocalMCPServerService> { LocalMCPServerServiceImpl(get(), get()) }
     single<LocalMCPToolDefinitionService> { LocalMCPToolDefinitionServiceImpl(get(), get(), get(), get(), get()) }
+    single<LocalMCPExecutor> { LocalMCPExecutor() }
 
     single<RoleService> { RoleServiceImpl(get(), get(), get()) }
     single<UserGroupService> { UserGroupServiceImpl(get(), get(), get()) }
