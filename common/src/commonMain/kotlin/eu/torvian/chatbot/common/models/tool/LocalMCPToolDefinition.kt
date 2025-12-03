@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.common.models.tool
 
 import kotlinx.datetime.Instant
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 
@@ -27,6 +28,7 @@ data class LocalMCPToolDefinition(
     val mcpToolName: String? = null,
     val isEnabledByDefault: Boolean? = null,
 ) : ToolDefinition() {
+    @SerialName("tool_type") // 'type' is a reserved property used by serialization
     override val type: ToolType = ToolType.MCP_LOCAL
 
     override fun withUpdatedAt(newUpdatedAt: Instant): ToolDefinition {
