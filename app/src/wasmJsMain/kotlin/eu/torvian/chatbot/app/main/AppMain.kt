@@ -39,7 +39,7 @@ fun main() {
         KoinApplication(application = {
             modules(
                 wasmJsModule(appConfig, encryptionConfig),
-                appModule(appConfig.serverUrl)
+                appModule(appConfig)
             )
         }) {
             AppShell()
