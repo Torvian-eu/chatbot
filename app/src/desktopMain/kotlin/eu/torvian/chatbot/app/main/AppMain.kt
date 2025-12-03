@@ -47,7 +47,7 @@ fun main() {
                 modules(
                     desktopModule(appConfig, encryptionConfig),
                     databaseModule,
-                    appModule(appConfig.serverUrl)
+                    appModule(appConfig)
                 )
             }) {
                 AppShell()
