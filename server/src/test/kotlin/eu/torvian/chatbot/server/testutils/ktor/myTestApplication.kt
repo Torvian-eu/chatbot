@@ -8,6 +8,7 @@ import io.ktor.client.*
 import io.ktor.client.engine.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.plugins.sse.*
+import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
@@ -88,6 +89,8 @@ val defaultClientConfig: HttpClientConfig<out HttpClientEngineConfig>.() -> Unit
         json(Json)
     }
     install(SSE)
+
+    install(WebSockets)
 }
 
 /**
