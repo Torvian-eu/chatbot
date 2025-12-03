@@ -37,7 +37,7 @@ class MainActivity : ComponentActivity() {
                 modules(
                     androidModule(appConfig, encryptionConfig),
                     databaseModule,
-                    appModule(appConfig.serverUrl)
+                    appModule(appConfig)
                 )
             }) {
                 AppShell()
