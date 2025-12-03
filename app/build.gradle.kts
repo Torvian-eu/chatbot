@@ -150,6 +150,7 @@ kotlin {
             implementation(libs.ktor.client.resources)
             implementation(libs.ktor.client.logging)
             implementation(libs.ktor.client.auth)
+            implementation(libs.ktor.client.websockets)
             // CIO engine for Desktop, Android and WasmJs
             implementation(libs.ktor.client.cio)
 

@@ -7,6 +7,7 @@ import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.plugins.logging.*
 import io.ktor.client.plugins.resources.*
 import io.ktor.client.plugins.sse.*
+import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
@@ -64,4 +65,6 @@ fun <T : HttpClientEngineConfig> HttpClientConfig<T>.configureHttpClient(
     }
 
     install(SSE)
+
+    install(WebSockets)
 }
