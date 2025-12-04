@@ -199,6 +199,11 @@ fun appModule(appConfig: AppConfig): Module = module {
             api = get()
         )
     }
+    single<LocalMCPToolRepository> {
+        DefaultLocalMCPToolRepository(
+            localMCPToolApi = get()
+        )
+    }
 
     // Provide shared chat state with background scope for computed state flows
     factory<ChatState> { (backgroundScope: CoroutineScope) ->
