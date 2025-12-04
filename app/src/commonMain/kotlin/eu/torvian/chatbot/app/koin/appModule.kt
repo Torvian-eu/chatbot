@@ -196,9 +196,7 @@ fun appModule(appConfig: AppConfig): Module = module {
     single<LocalMCPServerRepository> {
         DefaultLocalMCPServerRepository(
             localDao = get(),
-            api = get(),
-            toolRepository = get(),
-            authRepository = get<AuthRepository>()
+            api = get()
         )
     }
 

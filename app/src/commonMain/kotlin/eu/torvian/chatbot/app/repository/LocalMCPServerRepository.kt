@@ -3,7 +3,6 @@ package eu.torvian.chatbot.app.repository
 import arrow.core.Either
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.models.LocalMCPServer
-import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -42,23 +41,15 @@ interface LocalMCPServerRepository {
     val servers: StateFlow<DataState<RepositoryError, List<LocalMCPServer>>>
 
     /**
-     * Loads all MCP server configurations from the local database.
+     * Loads all MCP server configurations for the current user from the local database.
      *
      * This operation fetches the latest MCP server data and updates the internal StateFlow.
      * If a load operation is already in progress, this method returns immediately
      * without starting a duplicate operation.
      *
-     * @return Either.Right with Unit on successful load, or Either.Left with RepositoryError on failure
+     * @param userId The ID of the current user whose MCP servers should be loaded.
      */
-    suspend fun loadServers(): Either<RepositoryError, Unit>
-
-    /**
-     * Retrieves a specific MCP server configuration by ID.
-     *
-     * @param serverId The unique identifier of the MCP server to retrieve
-     * @return Either.Right with the LocalMCPServer on success, or Either.Left with RepositoryError on failure
-     */
-    suspend fun getServerById(serverId: Long): Either<RepositoryError, LocalMCPServer>
+    suspend fun loadServers(userId: Long)
 
     /**
      * Creates a new MCP server configuration.
@@ -109,4 +100,3 @@ interface LocalMCPServerRepository {
      */
     suspend fun deleteServer(serverId: Long): Either<RepositoryError, Unit>
 }
-
