@@ -26,6 +26,12 @@ import io.ktor.client.request.*
  */
 class KtorLocalMCPToolApiClient(client: HttpClient) : BaseApiResourceClient(client), LocalMCPToolApi {
 
+    override suspend fun getAllMCPTools(): Either<ApiResourceError, List<LocalMCPToolDefinition>> {
+        return safeApiCall {
+            client.get(LocalMCPToolResource()).body<List<LocalMCPToolDefinition>>()
+        }
+    }
+
     override suspend fun createMCPToolsForServer(
         serverId: Long,
         tools: List<LocalMCPToolDefinition>

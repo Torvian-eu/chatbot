@@ -127,6 +127,10 @@ class LocalMCPToolDefinitionServiceImpl(
         }
     }
 
+    override suspend fun getMCPToolsForUser(userId: Long): List<LocalMCPToolDefinition> = transactionScope.transaction {
+        localMCPToolDefinitionDao.getToolsForUser(userId)
+    }
+
     override suspend fun getMCPToolById(
         toolId: Long
     ): Either<GetMCPToolByIdError, LocalMCPToolDefinition> = transactionScope.transaction {

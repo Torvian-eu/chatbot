@@ -36,6 +36,14 @@ interface LocalMCPToolDefinitionService {
     ): Either<GetMCPToolsByServerIdError, List<LocalMCPToolDefinition>>
 
     /**
+     * Retrieves all MCP tools for all servers owned by a specific user.
+     *
+     * @param userId The ID of the user
+     * @return List of [LocalMCPToolDefinition] objects (empty list if no tools)
+     */
+    suspend fun getMCPToolsForUser(userId: Long): List<LocalMCPToolDefinition>
+
+    /**
      * Retrieves a single MCP tool by its ID.
      * Validates that the tool is actually an MCP tool.
      *

@@ -58,6 +58,17 @@ interface LocalMCPToolDefinitionDao {
     suspend fun getToolsByServerId(mcpServerId: Long): List<LocalMCPToolDefinition>
 
     /**
+     * Retrieves all Local MCP tool definitions for a specific user.
+     *
+     * Performs joins between LocalMCPServerTable, ToolDefinitionTable, and LocalMCPToolDefinitionTable
+     * to return all MCP tools that belong to servers owned by the user.
+     *
+     * @param userId The ID of the user
+     * @return List of [LocalMCPToolDefinition] (empty if none)
+     */
+    suspend fun getToolsForUser(userId: Long): List<LocalMCPToolDefinition>
+
+    /**
      * Updates the MCP-specific fields for a Local MCP tool.
      *
      * This allows updating mcpToolName and isEnabledByDefault without modifying

@@ -25,6 +25,7 @@ import kotlin.to
  * using Ktor Resources.
  *
  * This function sets up the following endpoints:
+ * - GET /api/v1/local-mcp-tools - Get all MCP tools for the current user
  * - POST /api/v1/local-mcp-tools/batch - Batch create MCP tools for a server
  * - POST /api/v1/local-mcp-tools/refresh - Refresh MCP tools (differential update)
  * - GET /api/v1/local-mcp-tools/server/{serverId} - Get all tools for a server
@@ -40,6 +41,13 @@ fun Route.configureLocalMCPToolRoutes(
     localMCPServerService: LocalMCPServerService
 ) {
     authenticate(AuthSchemes.USER_JWT) {
+        // GET /api/v1/local-mcp-tools - Get all MCP tools for the current user
+        get<LocalMCPToolResource> {
+            val userId = call.getUserId()
+            val tools = localMCPToolDefinitionService.getMCPToolsForUser(userId)
+            call.respond(HttpStatusCode.OK, tools)
+        }
+
         // POST /api/v1/local-mcp-tools/batch - Batch create MCP tools
         post<LocalMCPToolResource.Batch> {
             val userId = call.getUserId()

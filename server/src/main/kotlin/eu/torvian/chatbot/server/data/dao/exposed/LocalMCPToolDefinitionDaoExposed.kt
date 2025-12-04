@@ -10,6 +10,7 @@ import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import eu.torvian.chatbot.server.data.dao.LocalMCPToolDefinitionDao
 import eu.torvian.chatbot.server.data.dao.error.InsertToolError
 import eu.torvian.chatbot.server.data.dao.error.LocalMCPToolDefinitionError
+import eu.torvian.chatbot.server.data.tables.LocalMCPServerTable
 import eu.torvian.chatbot.server.data.tables.LocalMCPToolDefinitionTable
 import eu.torvian.chatbot.server.data.tables.ToolDefinitionTable
 import eu.torvian.chatbot.server.data.tables.mappers.toLocalMCPToolDefinition
@@ -91,6 +92,18 @@ class LocalMCPToolDefinitionDaoExposed(
                 .innerJoin(LocalMCPToolDefinitionTable)
                 .selectAll()
                 .where { LocalMCPToolDefinitionTable.mcpServerId eq mcpServerId }
+                .map { it.toLocalMCPToolDefinition() }
+        }
+
+    override suspend fun getToolsForUser(userId: Long): List<LocalMCPToolDefinition> =
+        transactionScope.transaction {
+            // Join ToolDefinitionTable -> LocalMCPToolDefinitionTable -> LocalMCPServerTable
+            // Filter by userId to get all tools from servers owned by this user
+            ToolDefinitionTable
+                .innerJoin(LocalMCPToolDefinitionTable)
+                .innerJoin(LocalMCPServerTable)
+                .selectAll()
+                .where { LocalMCPServerTable.userId eq userId }
                 .map { it.toLocalMCPToolDefinition() }
         }
 

@@ -16,6 +16,18 @@ import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
  */
 interface LocalMCPToolApi {
     /**
+     * Retrieves all MCP tools for the current user.
+     *
+     * Returns all MCP tools from all servers owned by the authenticated user.
+     *
+     * Corresponds to `GET /api/v1/local-mcp-tools`.
+     *
+     * @return [Either.Right] containing a list of [LocalMCPToolDefinition] on success,
+     *         or [Either.Left] containing a [ApiResourceError] on failure.
+     */
+    suspend fun getAllMCPTools(): Either<ApiResourceError, List<LocalMCPToolDefinition>>
+
+    /**
      * Creates multiple MCP tools for a specific server in a single batch operation.
      *
      * The server will create both ToolDefinition entries and LocalMCPToolDefinition entries
