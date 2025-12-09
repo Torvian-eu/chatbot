@@ -1,6 +1,5 @@
 package eu.torvian.chatbot.server.data.dao.exposed
 
-import arrow.core.getOrElse
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
@@ -19,21 +18,22 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
  * Tests for [LocalMCPToolDefinitionDaoExposed].
  *
  * This test suite verifies the core functionality of the Exposed-based implementation of [LocalMCPToolDefinitionDao]:
- * - Creating linkages between tools and MCP servers
- * - Getting tool IDs by server ID
- * - Getting server ID by tool ID
- * - Deleting linkages
- * - Deleting all linkages for a server
- * - Checking if a tool is linked to a server
- * - Getting MCP tool name mappings
+ * - Creating local MCP tools with linkage to MCP servers
+ * - Getting local MCP tools by ID and by server ID
+ * - Updating MCP-specific fields
+ * - Deleting local MCP tools
+ * - Deleting all local MCP tools for a server
  * - Cascade delete behavior
+ * - MCP tool name mappings
+ * - isEnabledByDefault flag handling
  *
  * The tests rely on an in-memory SQLite database managed by [TestDataManager].
  */
@@ -86,301 +86,342 @@ class LocalMCPToolDefinitionDaoExposedTest {
             config = buildJsonObject {},
             inputSchema = buildJsonObject {},
             outputSchema = null,
-            isEnabled = true,
-            isEnabledByDefault = null
-        ).getOrElse { throw IllegalStateException("Failed to create test tool") }
+            isEnabled = true
+        )
     }
 
     @Test
-    fun `createLinkage - successfully creates linkage between tool and server`() = runTest {
+    fun `createLocalMCPTool - successfully creates local MCP tool with linkage`() = runTest {
         // Given
         val userId = 1L
         val serverId = localMCPServerDao.generateId(userId)
         val toolDef = createTestTool("test_tool")
 
         // When
-        val result = localMCPToolDefinitionDao.createLinkage(
+        val result = localMCPToolDefinitionDao.insertTool(
             toolDefinitionId = toolDef.id,
             mcpServerId = serverId,
-            mcpToolName = null
+            mcpToolName = null,
+            isEnabledByDefault = null
         )
 
         // Then
         assertTrue(result.isRight())
-        assertTrue(localMCPToolDefinitionDao.isLinked(toolDef.id, serverId))
+        val tool = localMCPToolDefinitionDao.getToolById(toolDef.id)
+        assertTrue(tool.isRight())
+        assertEquals(serverId, tool.getOrNull()?.serverId)
+        assertEquals(toolDef.name, tool.getOrNull()?.name)
     }
 
     @Test
-    fun `getToolIdsByServerId - returns all tools for a server`() = runTest {
+    fun `createLocalMCPTool - successfully creates local MCP tool with mcpToolName`() = runTest {
+        // Given
+        val userId = 1L
+        val serverId = localMCPServerDao.generateId(userId)
+        val toolDef = createTestTool("test_tool")
+        val mcpToolName = "original_mcp_name"
+
+        // When
+        val result = localMCPToolDefinitionDao.insertTool(
+            toolDefinitionId = toolDef.id,
+            mcpServerId = serverId,
+            mcpToolName = mcpToolName,
+            isEnabledByDefault = null
+        )
+
+        // Then
+        assertTrue(result.isRight())
+        val tool = localMCPToolDefinitionDao.getToolById(toolDef.id).getOrNull()
+        assertNotNull(tool)
+        assertEquals(mcpToolName, tool.mcpToolName)
+    }
+
+    @Test
+    fun `createLocalMCPTool - successfully creates local MCP tool with isEnabledByDefault true`() = runTest {
+        // Given
+        val userId = 1L
+        val serverId = localMCPServerDao.generateId(userId)
+        val toolDef = createTestTool("test_tool")
+
+        // When
+        val result = localMCPToolDefinitionDao.insertTool(
+            toolDefinitionId = toolDef.id,
+            mcpServerId = serverId,
+            mcpToolName = null,
+            isEnabledByDefault = true
+        )
+
+        // Then
+        assertTrue(result.isRight())
+        val tool = localMCPToolDefinitionDao.getToolById(toolDef.id).getOrNull()
+        assertNotNull(tool)
+        assertEquals(true, tool.isEnabledByDefault)
+    }
+
+    @Test
+    fun `createLocalMCPTool - successfully creates local MCP tool with isEnabledByDefault false`() = runTest {
+        // Given
+        val userId = 1L
+        val serverId = localMCPServerDao.generateId(userId)
+        val toolDef = createTestTool("test_tool")
+
+        // When
+        val result = localMCPToolDefinitionDao.insertTool(
+            toolDefinitionId = toolDef.id,
+            mcpServerId = serverId,
+            mcpToolName = null,
+            isEnabledByDefault = false
+        )
+
+        // Then
+        assertTrue(result.isRight())
+        val tool = localMCPToolDefinitionDao.getToolById(toolDef.id).getOrNull()
+        assertNotNull(tool)
+        assertEquals(false, tool.isEnabledByDefault)
+    }
+
+    @Test
+    fun `createLocalMCPTool - isEnabledByDefault defaults to null when not specified`() = runTest {
+        // Given
+        val userId = 1L
+        val serverId = localMCPServerDao.generateId(userId)
+        val toolDef = createTestTool("test_tool")
+
+        // When
+        val result = localMCPToolDefinitionDao.insertTool(
+            toolDefinitionId = toolDef.id,
+            mcpServerId = serverId,
+            mcpToolName = null,
+            isEnabledByDefault = null
+        )
+
+        // Then
+        assertTrue(result.isRight())
+        val tool = localMCPToolDefinitionDao.getToolById(toolDef.id).getOrNull()
+        assertNotNull(tool)
+        assertNull(tool.isEnabledByDefault)
+    }
+
+    @Test
+    fun `getLocalMCPToolsByServerId - returns all tools for a server`() = runTest {
         // Given
         val userId = 1L
         val serverId = localMCPServerDao.generateId(userId)
         val tool1 = createTestTool("tool1")
         val tool2 = createTestTool("tool2")
 
-        localMCPToolDefinitionDao.createLinkage(tool1.id, serverId)
-        localMCPToolDefinitionDao.createLinkage(tool2.id, serverId)
+        localMCPToolDefinitionDao.insertTool(tool1.id, serverId)
+        localMCPToolDefinitionDao.insertTool(tool2.id, serverId)
 
         // When
-        val toolIds = localMCPToolDefinitionDao.getToolIdsByServerId(serverId)
+        val tools = localMCPToolDefinitionDao.getToolsByServerId(serverId)
 
         // Then
-        assertEquals(2, toolIds.size)
-        assertTrue(toolIds.contains(tool1.id))
-        assertTrue(toolIds.contains(tool2.id))
+        assertEquals(2, tools.size)
+        assertTrue(tools.any { it.id == tool1.id })
+        assertTrue(tools.any { it.id == tool2.id })
     }
 
     @Test
-    fun `getServerIdByToolId - returns correct server ID`() = runTest {
+    fun `getLocalMCPToolById - returns correct tool`() = runTest {
         // Given
         val userId = 1L
         val serverId = localMCPServerDao.generateId(userId)
-        val tool = createTestTool("test_tool")
-        localMCPToolDefinitionDao.createLinkage(tool.id, serverId)
+        val toolDef = createTestTool("test_tool")
+        val mcpToolName = "original_name"
+        localMCPToolDefinitionDao.insertTool(
+            toolDefinitionId = toolDef.id,
+            mcpServerId = serverId,
+            mcpToolName = mcpToolName,
+            isEnabledByDefault = true
+        )
 
         // When
-        val result = localMCPToolDefinitionDao.getServerIdByToolId(tool.id)
+        val result = localMCPToolDefinitionDao.getToolById(toolDef.id)
 
         // Then
         assertTrue(result.isRight())
-        assertEquals(serverId, result.getOrNull())
+        val tool = result.getOrNull()
+        assertNotNull(tool)
+        assertEquals(toolDef.id, tool.id)
+        assertEquals(serverId, tool.serverId)
+        assertEquals(mcpToolName, tool.mcpToolName)
+        assertEquals(true, tool.isEnabledByDefault)
     }
 
     @Test
-    fun `deleteLinkage - successfully removes linkage`() = runTest {
-        // Given
-        val userId = 1L
-        val serverId = localMCPServerDao.generateId(userId)
-        val tool = createTestTool("test_tool")
-        localMCPToolDefinitionDao.createLinkage(tool.id, serverId)
-
-        // When
-        val result = localMCPToolDefinitionDao.deleteLinkage(tool.id, serverId)
-
-        // Then
-        assertTrue(result.isRight())
-        assertFalse(localMCPToolDefinitionDao.isLinked(tool.id, serverId))
-    }
-
-    @Test
-    fun `deleteAllLinkagesForServer - removes all linkages for server`() = runTest {
+    fun `deleteLocalMCPToolsByServerId - removes all tools for server`() = runTest {
         // Given
         val userId = 1L
         val serverId = localMCPServerDao.generateId(userId)
         val tool1 = createTestTool("tool1")
         val tool2 = createTestTool("tool2")
-        localMCPToolDefinitionDao.createLinkage(tool1.id, serverId)
-        localMCPToolDefinitionDao.createLinkage(tool2.id, serverId)
+        localMCPToolDefinitionDao.insertTool(tool1.id, serverId)
+        localMCPToolDefinitionDao.insertTool(tool2.id, serverId)
 
         // When
-        val deletedCount = localMCPToolDefinitionDao.deleteAllLinkagesForServer(serverId)
+        val deletedCount = localMCPToolDefinitionDao.deleteToolsByServerId(serverId)
 
         // Then
         assertEquals(2, deletedCount)
-        val toolIds = localMCPToolDefinitionDao.getToolIdsByServerId(serverId)
-        assertTrue(toolIds.isEmpty())
+        val tools = localMCPToolDefinitionDao.getToolsByServerId(serverId)
+        assertTrue(tools.isEmpty())
     }
 
     @Test
-    fun `cascade delete - deleting server removes tool linkages`() = runTest {
+    fun `cascade delete - deleting server removes local MCP tools`() = runTest {
         // Given
         val userId = 1L
         val serverId = localMCPServerDao.generateId(userId)
         val tool = createTestTool("test_tool")
-        localMCPToolDefinitionDao.createLinkage(tool.id, serverId)
+        localMCPToolDefinitionDao.insertTool(tool.id, serverId)
 
         // When
         localMCPServerDao.deleteById(serverId)
 
         // Then
-        assertFalse(localMCPToolDefinitionDao.isLinked(tool.id, serverId))
+        val result = localMCPToolDefinitionDao.getToolById(tool.id)
+        assertTrue(result.isLeft())
     }
 
     @Test
-    fun `cascade delete - deleting tool removes tool linkages`() = runTest {
+    fun `cascade delete - deleting tool removes local MCP tools`() = runTest {
         // Given
         val userId = 1L
         val serverId = localMCPServerDao.generateId(userId)
         val tool = createTestTool("test_tool")
-        localMCPToolDefinitionDao.createLinkage(tool.id, serverId)
+        localMCPToolDefinitionDao.insertTool(tool.id, serverId)
 
         // When
         toolDefinitionDao.deleteToolDefinition(tool.id)
 
         // Then
-        val result = localMCPToolDefinitionDao.getServerIdByToolId(tool.id)
+        val result = localMCPToolDefinitionDao.getToolById(tool.id)
         assertTrue(result.isLeft())
     }
 
     @Test
-    fun `getMcpToolName - returns null when no name mapping exists`() = runTest {
+    fun `getLocalMCPToolsByServerId - returns empty list when server has no tools`() = runTest {
         // Given
         val userId = 1L
         val serverId = localMCPServerDao.generateId(userId)
-        val tool = createTestTool("test_tool")
-        localMCPToolDefinitionDao.createLinkage(tool.id, serverId, mcpToolName = null)
 
         // When
-        val result = localMCPToolDefinitionDao.getMcpToolName(tool.id)
+        val tools = localMCPToolDefinitionDao.getToolsByServerId(serverId)
 
         // Then
-        assertTrue(result.isRight())
-        assertEquals(null, result.getOrNull())
+        assertTrue(tools.isEmpty())
     }
 
     @Test
-    fun `getMcpToolName - returns mapped name when exists`() = runTest {
-        // Given
-        val userId = 1L
-        val serverId = localMCPServerDao.generateId(userId)
-        val tool = createTestTool("test_tool")
-        val mappedName = "original_mcp_tool_name"
-        localMCPToolDefinitionDao.createLinkage(tool.id, serverId, mcpToolName = mappedName)
-
-        // When
-        val result = localMCPToolDefinitionDao.getMcpToolName(tool.id)
-
-        // Then
-        assertTrue(result.isRight())
-        assertEquals(mappedName, result.getOrNull())
-    }
-
-    @Test
-    fun `getMcpToolName - returns NotFound when tool is not linked`() = runTest {
+    fun `getLocalMCPToolById - returns NotFound when local MCP tool does not exist`() = runTest {
         // Given
         val tool = createTestTool("unlinked_tool")
 
         // When
-        val result = localMCPToolDefinitionDao.getMcpToolName(tool.id)
+        val result = localMCPToolDefinitionDao.getToolById(tool.id)
 
         // Then
         assertTrue(result.isLeft())
     }
 
     @Test
-    fun `getToolIdsByServerId - returns empty list when server has no tools`() = runTest {
+    fun `deleteLocalMCPToolsByServerId - returns zero when server has no tools`() = runTest {
         // Given
         val userId = 1L
         val serverId = localMCPServerDao.generateId(userId)
 
         // When
-        val toolIds = localMCPToolDefinitionDao.getToolIdsByServerId(serverId)
-
-        // Then
-        assertTrue(toolIds.isEmpty())
-    }
-
-    @Test
-    fun `getServerIdByToolId - returns NotFound when tool is not linked`() = runTest {
-        // Given
-        val tool = createTestTool("unlinked_tool")
-
-        // When
-        val result = localMCPToolDefinitionDao.getServerIdByToolId(tool.id)
-
-        // Then
-        assertTrue(result.isLeft())
-    }
-
-    @Test
-    fun `deleteLinkage - returns NotFound when linkage does not exist`() = runTest {
-        // Given
-        val userId = 1L
-        val serverId = localMCPServerDao.generateId(userId)
-        val tool = createTestTool("test_tool")
-        // Note: No linkage created
-
-        // When
-        val result = localMCPToolDefinitionDao.deleteLinkage(tool.id, serverId)
-
-        // Then
-        assertTrue(result.isLeft())
-    }
-
-    @Test
-    fun `deleteAllLinkagesForServer - returns zero when server has no linkages`() = runTest {
-        // Given
-        val userId = 1L
-        val serverId = localMCPServerDao.generateId(userId)
-
-        // When
-        val deletedCount = localMCPToolDefinitionDao.deleteAllLinkagesForServer(serverId)
+        val deletedCount = localMCPToolDefinitionDao.deleteToolsByServerId(serverId)
 
         // Then
         assertEquals(0, deletedCount)
     }
 
     @Test
-    fun `isLinked - returns false when no linkage exists`() = runTest {
+    fun `createLocalMCPTool - returns DuplicateLinkage error when tool already linked`() = runTest {
         // Given
         val userId = 1L
         val serverId = localMCPServerDao.generateId(userId)
         val tool = createTestTool("test_tool")
+        localMCPToolDefinitionDao.insertTool(tool.id, serverId)
 
         // When
-        val isLinked = localMCPToolDefinitionDao.isLinked(tool.id, serverId)
-
-        // Then
-        assertFalse(isLinked)
-    }
-
-    @Test
-    fun `createLinkage - returns DuplicateLinkage error when linkage already exists`() = runTest {
-        // Given
-        val userId = 1L
-        val serverId = localMCPServerDao.generateId(userId)
-        val tool = createTestTool("test_tool")
-        localMCPToolDefinitionDao.createLinkage(tool.id, serverId)
-
-        // When
-        val result = localMCPToolDefinitionDao.createLinkage(tool.id, serverId)
+        val result = localMCPToolDefinitionDao.insertTool(tool.id, serverId)
 
         // Then
         assertTrue(result.isLeft())
     }
 
     @Test
-    fun `createLinkage - returns ReferencedEntityNotFound when tool does not exist`() = runTest {
+    fun `createLocalMCPTool - returns ReferencedEntityNotFound when tool does not exist`() = runTest {
         // Given
         val userId = 1L
         val serverId = localMCPServerDao.generateId(userId)
         val nonExistentToolId = 99999L
 
         // When
-        val result = localMCPToolDefinitionDao.createLinkage(nonExistentToolId, serverId)
+        val result = localMCPToolDefinitionDao.insertTool(nonExistentToolId, serverId)
 
         // Then
         assertTrue(result.isLeft())
     }
 
     @Test
-    fun `createLinkage - returns ReferencedEntityNotFound when server does not exist`() = runTest {
+    fun `createLocalMCPTool - returns ReferencedEntityNotFound when server does not exist`() = runTest {
         // Given
         val tool = createTestTool("test_tool")
         val nonExistentServerId = 99999L
 
         // When
-        val result = localMCPToolDefinitionDao.createLinkage(tool.id, nonExistentServerId)
+        val result = localMCPToolDefinitionDao.insertTool(tool.id, nonExistentServerId)
 
         // Then
         assertTrue(result.isLeft())
     }
 
     @Test
-    fun `multiple servers can link to same tool`() = runTest {
+    fun `updateLocalMCPToolFields - successfully updates MCP-specific fields`() = runTest {
         // Given
         val userId = 1L
-        val server1 = localMCPServerDao.generateId(userId)
-        val server2 = localMCPServerDao.generateId(userId)
-        val tool = createTestTool("shared_tool")
+        val serverId = localMCPServerDao.generateId(userId)
+        val tool = createTestTool("test_tool")
+        localMCPToolDefinitionDao.insertTool(
+            toolDefinitionId = tool.id,
+            mcpServerId = serverId,
+            mcpToolName = "old_name",
+            isEnabledByDefault = false
+        )
 
         // When
-        localMCPToolDefinitionDao.createLinkage(tool.id, server1)
-        localMCPToolDefinitionDao.createLinkage(tool.id, server2)
+        val result = localMCPToolDefinitionDao.updateTool(
+            toolDefinitionId = tool.id,
+            mcpToolName = "new_name",
+            isEnabledByDefault = true
+        )
 
         // Then
-        assertTrue(localMCPToolDefinitionDao.isLinked(tool.id, server1))
-        assertTrue(localMCPToolDefinitionDao.isLinked(tool.id, server2))
+        assertTrue(result.isRight())
+        val updated = localMCPToolDefinitionDao.getToolById(tool.id).getOrNull()
+        assertNotNull(updated)
+        assertEquals("new_name", updated.mcpToolName)
+        assertEquals(true, updated.isEnabledByDefault)
+    }
+
+    @Test
+    fun `updateLocalMCPToolFields - returns NotFound when tool does not exist`() = runTest {
+        // Given
+        val tool = createTestTool("test_tool")
+
+        // When
+        val result = localMCPToolDefinitionDao.updateTool(
+            toolDefinitionId = tool.id,
+            mcpToolName = "new_name",
+            isEnabledByDefault = true
+        )
+
+        // Then
+        assertTrue(result.isLeft())
     }
 }
 

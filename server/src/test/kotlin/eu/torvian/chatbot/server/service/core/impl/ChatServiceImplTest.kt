@@ -20,10 +20,12 @@ import eu.torvian.chatbot.server.service.llm.LLMCompletionResult
 import eu.torvian.chatbot.server.service.security.CredentialManager
 import eu.torvian.chatbot.server.service.tool.ToolExecutorFactory
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
+import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutor
 import io.mockk.clearMocks
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Instant
 import org.junit.jupiter.api.AfterEach
@@ -34,9 +36,9 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * Unit tests for [MessageServiceImpl].
+ * Unit tests for [ChatServiceImpl].
  *
- * This test suite verifies that [MessageServiceImpl] correctly orchestrates
+ * This test suite verifies that [ChatServiceImpl] correctly orchestrates
  * calls to the underlying DAOs and services, and handles business logic validation.
  * All dependencies are mocked using MockK.
  */
@@ -54,6 +56,7 @@ class ChatServiceImplTest {
     private lateinit var toolCallDao: ToolCallDao
     private lateinit var toolExecutorFactory: ToolExecutorFactory
     private lateinit var transactionScope: TransactionScope
+    private lateinit var localMcpExecutor: LocalMCPExecutor
 
     // Class under test
     private lateinit var chatService: ChatServiceImpl
@@ -118,7 +121,8 @@ class ChatServiceImplTest {
         systemMessage = "You are a helpful assistant.",
         temperature = 0.7f,
         maxTokens = 1000,
-        customParams = null
+        customParams = null,
+        stream = false
     )
 
     private val testLlmConfig = LLMConfig(
@@ -164,11 +168,12 @@ class ChatServiceImplTest {
         toolCallDao = mockk()
         toolExecutorFactory = mockk()
         transactionScope = mockk()
+        localMcpExecutor = mockk()
 
         // Create the service instance with mocked dependencies
         chatService = ChatServiceImpl(
             messageDao, sessionDao, llmApiClient, toolCallDao, toolExecutorFactory, toolService, llmModelService,
-            modelSettingsService, llmProviderService, credentialManager, transactionScope
+            modelSettingsService, llmProviderService, credentialManager, transactionScope, localMcpExecutor
         )
         
         // Mock the transaction scope to execute blocks directly
@@ -184,7 +189,7 @@ class ChatServiceImplTest {
         clearMocks(
             messageDao, sessionDao, llmModelService, modelSettingsService,
             llmProviderService, llmApiClient, credentialManager, toolService,
-            toolCallDao, toolExecutorFactory, transactionScope
+            toolCallDao, toolExecutorFactory, transactionScope, localMcpExecutor
         )
     }
     
@@ -289,11 +294,13 @@ class ChatServiceImplTest {
     fun `validateProcessNewMessageRequest should return session and LLMConfig when validation succeeds`() = runTest {
         // Arrange
         val sessionId = 1L
+        val streamingSettings = testSettings.copy(stream = true)
         coEvery { sessionDao.getSessionById(sessionId) } returns testSession.right()
         coEvery { llmModelService.getModelById(testSession.currentModelId!!) } returns testModel.right()
-        coEvery { modelSettingsService.getSettingsById(testSession.currentSettingsId!!) } returns testSettings.right()
+        coEvery { modelSettingsService.getSettingsById(testSession.currentSettingsId!!) } returns streamingSettings.right()
         coEvery { llmProviderService.getProviderById(testModel.providerId) } returns testProvider.right()
         coEvery { credentialManager.getCredential(testProvider.apiKeyId!!) } returns "test-api-key".right()
+        coEvery { toolService.getEnabledToolsForSession(sessionId) } returns emptyList()
 
         // Act
         val result = chatService.validateProcessNewMessageRequest(sessionId, null, true)
@@ -304,7 +311,7 @@ class ChatServiceImplTest {
         assertEquals(testSession, session, "Should return the correct session")
         assertEquals(testProvider, llmConfig.provider, "Should return correct provider")
         assertEquals(testModel, llmConfig.model, "Should return correct model")
-        assertEquals(testSettings, llmConfig.settings, "Should return correct settings")
+        assertEquals(streamingSettings, llmConfig.settings, "Should return correct settings")
         assertEquals("test-api-key", llmConfig.apiKey, "Should return correct API key")
 
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
@@ -329,7 +336,6 @@ class ChatServiceImplTest {
         coEvery { messageDao.insertUserMessage(testSession.id, content, null) } returns userMessage.right()
         coEvery { messageDao.getMessageById(userMessage.id) } returns userMessage.right()
         coEvery { sessionDao.updateSessionLeafMessageId(testSession.id, userMessage.id) } returns Unit.right()
-        coEvery { messageDao.getMessagesBySessionId(testSession.id) } returns listOf(userMessage)
         coEvery { toolCallDao.getToolCallsBySessionId(testSession.id) } returns emptyList()
         coEvery {
             llmApiClient.completeChat(
@@ -355,7 +361,7 @@ class ChatServiceImplTest {
 
         // Act
         val events = mutableListOf<Either<ProcessNewMessageError, MessageEvent>>()
-        chatService.processNewMessage(testSession, testLlmConfig, content, null)
+        chatService.processNewMessage(testSession, testLlmConfig, content, null, emptyFlow())
             .collect { event -> events.add(event) }
 
         // Assert
@@ -406,7 +412,6 @@ class ChatServiceImplTest {
         coEvery { messageDao.insertUserMessage(testSession.id, content, parentMessageId) } returns userMessage.right()
         coEvery { messageDao.getMessageById(userMessage.id) } returns userMessage.right()
         coEvery { sessionDao.updateSessionLeafMessageId(testSession.id, userMessage.id) } returns Unit.right()
-        coEvery { messageDao.getMessagesBySessionId(testSession.id) } returns listOf(parentMessage, userMessage)
         coEvery { toolCallDao.getToolCallsBySessionId(testSession.id) } returns emptyList()
         coEvery {
             llmApiClient.completeChat(
@@ -432,7 +437,7 @@ class ChatServiceImplTest {
 
         // Act
         val events = mutableListOf<Either<ProcessNewMessageError, MessageEvent>>()
-        chatService.processNewMessage(testSession, testLlmConfig, content, parentMessageId)
+        chatService.processNewMessage(testSession, testLlmConfig, content, parentMessageId, emptyFlow())
             .collect { event -> events.add(event) }
 
         // Assert
@@ -465,7 +470,6 @@ class ChatServiceImplTest {
         coEvery { messageDao.insertUserMessage(testSession.id, content, null) } returns userMessage.right()
         coEvery { messageDao.getMessageById(userMessage.id) } returns userMessage.right()
         coEvery { sessionDao.updateSessionLeafMessageId(testSession.id, userMessage.id) } returns Unit.right()
-        coEvery { messageDao.getMessagesBySessionId(testSession.id) } returns listOf(userMessage)
         coEvery { toolCallDao.getToolCallsBySessionId(testSession.id) } returns emptyList()
         coEvery {
             llmApiClient.completeChat(
@@ -480,7 +484,7 @@ class ChatServiceImplTest {
 
         // Act
         val events = mutableListOf<Either<ProcessNewMessageError, MessageEvent>>()
-        chatService.processNewMessage(testSession, testLlmConfig, content, null)
+        chatService.processNewMessage(testSession, testLlmConfig, content, null, emptyFlow())
             .collect { event -> events.add(event) }
 
         // Assert

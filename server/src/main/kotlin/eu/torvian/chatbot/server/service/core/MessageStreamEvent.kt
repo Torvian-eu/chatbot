@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.server.service.core
 
-import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
 import eu.torvian.chatbot.common.models.core.ChatMessage
+import eu.torvian.chatbot.common.models.tool.LocalMCPToolCallRequest
 import eu.torvian.chatbot.common.models.tool.ToolCall
 
 /**
@@ -24,6 +24,7 @@ import eu.torvian.chatbot.common.models.tool.ToolCall
  *    - ToolCallDelta (for each tool call argument chunk)
  *    - AssistantMessageFinished (assistant message updated and complete)
  *    - ToolCallsReceived (if LLM wants to call tools)
+ *    - LocalMCPToolCallReceived (for each local MCP tool)
  *    - ToolExecutionCompleted (for each tool, as it completes)
  * 3. StreamCompleted (once)
  */
@@ -113,6 +114,19 @@ sealed class MessageStreamEvent {
     ) : MessageStreamEvent()
 
     /**
+     * Emitted when a local MCP tool call is requested from the client.
+     *
+     * The client should handle this event by executing the specified tool on the
+     * designated local MCP server and sending a `LocalMCPToolCallResult` back to the
+     * server via the appropriate channel (e.g., WebSocket).
+     *
+     * @property request The details of the tool call request.
+     */
+    data class LocalMCPToolCallReceived(
+        val request: LocalMCPToolCallRequest
+    ) : MessageStreamEvent()
+
+    /**
      * Emitted when a single tool execution completes.
      *
      * The tool call has been updated in the database with:
@@ -160,48 +174,4 @@ sealed class MessageStreamEvent {
      * Emitted as the final signal to indicate the end of the entire stream.
      */
     data object StreamCompleted : MessageStreamEvent()
-}
-
-/**
- * Converts internal MessageStreamEvent to external ChatStreamEvent for API response.
- */
-fun MessageStreamEvent.toChatStreamEvent(): ChatStreamEvent {
-    return when (this) {
-        is MessageStreamEvent.UserMessageSaved -> ChatStreamEvent.UserMessageSaved(
-            this.userMessage,
-            this.updatedParentMessage
-        )
-
-        is MessageStreamEvent.AssistantMessageStarted -> ChatStreamEvent.AssistantMessageStart(
-            this.assistantMessage,
-            this.updatedParentMessage
-        )
-
-        is MessageStreamEvent.AssistantMessageDelta -> ChatStreamEvent.AssistantMessageDelta(
-            this.messageId,
-            this.deltaContent
-        )
-
-        is MessageStreamEvent.AssistantMessageFinished -> ChatStreamEvent.AssistantMessageEnd(
-            this.assistantMessage
-        )
-
-        is MessageStreamEvent.ToolCallDelta -> ChatStreamEvent.ToolCallDelta(
-            this.messageId,
-            this.index,
-            this.id,
-            this.name,
-            this.argumentsDelta
-        )
-
-        is MessageStreamEvent.ToolCallsReceived -> ChatStreamEvent.ToolCallsReceived(
-            this.toolCalls
-        )
-
-        is MessageStreamEvent.ToolExecutionCompleted -> ChatStreamEvent.ToolExecutionCompleted(
-            this.toolCall
-        )
-
-        is MessageStreamEvent.StreamCompleted -> ChatStreamEvent.StreamCompleted
-    }
 }

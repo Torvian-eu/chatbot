@@ -10,24 +10,21 @@ import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.api.resources.MessageResource
 import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.api.resources.href
+import eu.torvian.chatbot.common.models.api.core.ChatClientEvent
 import eu.torvian.chatbot.common.models.api.core.ChatEvent
 import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
-import eu.torvian.chatbot.common.models.api.core.ProcessNewMessageRequest
 import eu.torvian.chatbot.common.models.api.core.UpdateMessageRequest
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import io.ktor.client.*
 import io.ktor.client.call.*
-import io.ktor.client.plugins.*
 import io.ktor.client.plugins.resources.*
-import io.ktor.client.plugins.sse.*
 import io.ktor.client.request.*
-import io.ktor.http.*
+import io.ktor.websocket.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.serialization.SerializationException
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.serializer
 
 /**
  * Ktor HttpClient implementation of the [ChatApi] interface.
@@ -38,7 +35,10 @@ import kotlinx.serialization.serializer
  *
  * @property client The Ktor HttpClient instance injected for making requests.
  */
-class KtorChatApiClient(client: HttpClient) : BaseApiResourceClient(client), ChatApi {
+class KtorChatApiClient(
+    client: HttpClient,
+    private val wss: Boolean = false
+) : BaseApiResourceClient(client), ChatApi {
     companion object {
         private val logger = kmpLogger<KtorChatApiClient>()
     }
@@ -47,128 +47,74 @@ class KtorChatApiClient(client: HttpClient) : BaseApiResourceClient(client), Cha
 
     override fun processNewMessage(
         sessionId: Long,
-        request: ProcessNewMessageRequest
-    ): Flow<Either<ApiResourceError, ChatEvent>> = flow {
-        try {
-            client.sse(
-                urlString = href(SessionResource.ById.Messages(SessionResource.ById(SessionResource(), sessionId))),
-                deserialize = { typeInfo, jsonString ->
-                    json.decodeFromString(json.serializersModule.serializer(typeInfo.kotlinType!!), jsonString)
-                },
-                request = {
-                    method = HttpMethod.Post
-                    setBody(request)
-                    contentType(ContentType.Application.Json)
-                    timeout {
-                        // Increase socket timeout to one minute to allow for long-running LLM requests
-                        // TODO: Allow user to cancel long-running requests, and set this timeout to infinity.
-                        socketTimeoutMillis = 60_000 // 1 minute
-                    }
-                }
-            ) {
-                incoming.collect { event ->
-                    try {
-                        val chatEvent = deserialize<ChatEvent>(event.data)
-                        if (chatEvent == null) {
-                            logger.error("Failed to deserialize SSE data chunk for session $sessionId: '${event.data}'")
-                            emit(
-                                ApiResourceError.SerializationError(
-                                    "Failed to parse SSE data chunk: ${event.data}",
-                                    null
-                                ).left()
-                            )
-                            return@collect
-                        }
-                        emit(chatEvent.right())
-                    } catch (e: SerializationException) {
-                        logger.error(
-                            "SerializationException during SSE deserialization for session $sessionId: '${event.data}'",
-                            e
-                        )
-                        emit(
-                            ApiResourceError.SerializationError(
-                                "Serialization error: ${e.message} for data: ${event.data}",
-                                null
-                            ).left()
-                        )
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            logger.error("Network or streaming error during processNewMessage for session $sessionId", e)
-            val apiResourceError = when (e) {
-                is SSEClientException -> ApiResourceError.NetworkError(
-                    "SSE Client Error: ${e.message}",
-                    e
-                )
-
-                else -> ApiResourceError.UnknownError(
-                    "Unexpected error during SSE request: ${e.message}",
-                    e
-                )
-            }
-            emit(apiResourceError.left())
-        }
-    }.flowOn(ioDispatcher)
+        clientEvents: Flow<ChatClientEvent>
+    ): Flow<Either<ApiResourceError, ChatEvent>> =
+        connectAndProcessMessages(sessionId, clientEvents)
 
     override fun processNewMessageStreaming(
         sessionId: Long,
-        request: ProcessNewMessageRequest
-    ): Flow<Either<ApiResourceError, ChatStreamEvent>> = flow {
+        clientEvents: Flow<ChatClientEvent>
+    ): Flow<Either<ApiResourceError, ChatStreamEvent>> =
+        connectAndProcessMessages(sessionId, clientEvents)
+
+    /**
+     * Generic helper function to establish a WebSocket connection and handle the bidirectional event flow.
+     *
+     * @param sessionId The ID of the session to connect to.
+     * @param clientEvents The outbound flow of events to send to the server.
+     * @return An inbound flow of deserialized events from the server.
+     */
+    private inline fun <reified T : Any> connectAndProcessMessages(
+        sessionId: Long,
+        clientEvents: Flow<ChatClientEvent>
+    ): Flow<Either<ApiResourceError, T>> = flow {
         try {
-            client.sse(
-                urlString = href(SessionResource.ById.Messages(SessionResource.ById(SessionResource(), sessionId))),
-                deserialize = { typeInfo, jsonString ->
-                    json.decodeFromString(json.serializersModule.serializer(typeInfo.kotlinType!!), jsonString)
-                },
-                request = {
-                    method = HttpMethod.Post
-                    setBody(request)
-                    contentType(ContentType.Application.Json)
-                }
-            ) {
-                incoming.collect { event ->
-                    try {
-                        val chatStreamEvent = deserialize<ChatStreamEvent>(event.data)
-                        if (chatStreamEvent == null) {
-                            logger.error("Failed to deserialize SSE data chunk for session $sessionId: '${event.data}'")
-                            emit(
-                                ApiResourceError.SerializationError(
-                                    "Failed to parse SSE data chunk: ${event.data}",
-                                    null
-                                ).left()
-                            )
-                            return@collect
+            val sessionUrl = href(SessionResource.ById.Messages(SessionResource.ById(SessionResource(), sessionId)))
+            logger.info("Connecting to WebSocket: $sessionUrl")
+
+            client.webSocket(path = sessionUrl, wss = wss) {
+                // Launch a coroutine to send client events to the server
+                val senderJob = launch {
+                    clientEvents.collect { event ->
+                        try {
+                            val jsonString = json.encodeToString(ChatClientEvent.serializer(), event)
+                            logger.debug("Sending WS frame: $jsonString")
+                            send(Frame.Text(jsonString))
+                        } catch (e: Exception) {
+                            logger.error("Failed to send WebSocket frame for session $sessionId", e)
+                            // Error sending, might need to close the connection or emit an error
+                            // For now, we let the receiver handle connection termination
                         }
-                        emit(chatStreamEvent.right())
-                    } catch (e: SerializationException) {
-                        logger.error(
-                            "SerializationException during SSE deserialization for session $sessionId: '${event.data}'",
-                            e
-                        )
-                        emit(
-                            ApiResourceError.SerializationError(
-                                "Serialization error: ${e.message} for data: ${event.data}",
-                                null
-                            ).left()
-                        )
                     }
                 }
+
+                // Listen for incoming server events
+                for (frame in incoming) {
+                    if (frame is Frame.Text) {
+                        val jsonString = frame.readText()
+                        logger.debug("Received WS frame: $jsonString")
+                        try {
+                            val serverEvent = json.decodeFromString<T>(jsonString)
+                            emit(serverEvent.right())
+                        } catch (e: Exception) {
+                            logger.error("Deserialization error for incoming frame: $jsonString", e)
+                            emit(
+                                ApiResourceError.SerializationError("Failed to parse server event: $jsonString", e)
+                                    .left()
+                            )
+                        }
+                    }
+                }
+
+                // When incoming channel is closed, cancel the sender job
+                senderJob.cancel()
+                logger.info("WebSocket incoming channel closed for session $sessionId.")
             }
         } catch (e: Exception) {
-            logger.error("Network or streaming error during processNewMessageStreaming for session $sessionId", e)
-            val apiResourceError = when (e) {
-                is SSEClientException -> ApiResourceError.NetworkError(
-                    "SSE Client Error: ${e.message}",
-                    e
-                )
-
-                else -> ApiResourceError.UnknownError(
-                    "Unexpected error during SSE request: ${e.message}",
-                    e
-                )
-            }
-            emit(apiResourceError.left())
+            logger.error("WebSocket connection error for session $sessionId", e)
+            val apiError =
+                ApiResourceError.UnknownError("An unexpected error occurred during WebSocket communication.", e)
+            emit(apiError.left())
         }
     }.flowOn(ioDispatcher)
 

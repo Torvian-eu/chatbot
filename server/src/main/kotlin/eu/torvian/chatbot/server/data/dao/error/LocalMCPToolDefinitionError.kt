@@ -5,31 +5,27 @@ package eu.torvian.chatbot.server.data.dao.error
  */
 sealed class LocalMCPToolDefinitionError {
     /**
-     * Error when the requested linkage is not found.
+     * Error when a tool definition is not found.
      *
-     * @property toolDefinitionId The tool definition ID that was not found
-     * @property mcpServerId The MCP server ID (optional, if searching by tool ID only)
+     * @property toolDefinitionId The tool definition ID
      */
     data class NotFound(
         val toolDefinitionId: Long,
-        val mcpServerId: Long? = null
     ) : LocalMCPToolDefinitionError()
 }
 
 /**
- * Sealed hierarchy of errors specific to createLinkage operation.
+ * Sealed hierarchy of errors specific to insertTool operation.
  */
-sealed class CreateLinkageError {
+sealed class InsertToolError : LocalMCPToolDefinitionError() {
     /**
-     * Error when a linkage already exists between the tool and server.
+     * Error when a tool definition is already linked to an MCP server.
      *
      * @property toolDefinitionId The tool definition ID
-     * @property mcpServerId The MCP server ID
      */
     data class DuplicateLinkage(
-        val toolDefinitionId: Long,
-        val mcpServerId: Long
-    ) : CreateLinkageError()
+        val toolDefinitionId: Long
+    ) : InsertToolError()
 
     /**
      * Error when either the tool definition or MCP server does not exist.
@@ -43,6 +39,6 @@ sealed class CreateLinkageError {
         val toolDefinitionId: Long,
         val mcpServerId: Long,
         val message: String = "Tool definition or MCP server does not exist"
-    ) : CreateLinkageError()
+    ) : InsertToolError()
 }
 

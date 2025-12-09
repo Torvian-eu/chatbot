@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.service.core
 
 import arrow.core.Either
+import eu.torvian.chatbot.common.models.tool.MiscToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.server.service.core.error.tool.*
@@ -13,16 +14,16 @@ import kotlinx.serialization.json.JsonObject
 interface ToolService {
     /**
      * Retrieves all tool definitions from the system.
-     * @return A list of all [ToolDefinition] objects. Returns an empty list if no tools exist.
+     * @return A list of all [MiscToolDefinition] objects. Returns an empty list if no tools exist.
      */
-    suspend fun getAllTools(): List<ToolDefinition>
+    suspend fun getAllTools(): List<MiscToolDefinition>
 
     /**
      * Retrieves a specific tool definition by ID.
      * @param id The ID of the tool to retrieve.
-     * @return Either a [GetToolError] if the tool doesn't exist, or the [ToolDefinition].
+     * @return Either a [GetToolError] if the tool doesn't exist, or the [MiscToolDefinition].
      */
-    suspend fun getToolById(id: Long): Either<GetToolError, ToolDefinition>
+    suspend fun getToolById(id: Long): Either<GetToolError, MiscToolDefinition>
 
     /**
      * Creates a new tool definition.
@@ -34,7 +35,7 @@ interface ToolService {
      * @param inputSchema JSON Schema describing the expected input parameters.
      * @param outputSchema Optional JSON Schema describing the output format.
      * @param isEnabled Whether the tool is enabled by default.
-     * @return Either a [CreateToolError] if validation or creation fails,
+     * @return Either a [ValidateToolError] if validation fails,
      *         or the newly created [ToolDefinition].
      */
     suspend fun createTool(
@@ -45,15 +46,15 @@ interface ToolService {
         inputSchema: JsonObject,
         outputSchema: JsonObject?,
         isEnabled: Boolean
-    ): Either<CreateToolError, ToolDefinition>
+    ): Either<ValidateToolError, MiscToolDefinition>
 
     /**
      * Updates an existing tool definition.
      * Validates all fields before persisting changes.
      * @param tool The updated tool definition.
-     * @return Either an [UpdateToolError] if validation or update fails, or Unit if successful.
+     * @return Either an [UpdateToolError] if validation or update fails, or [ToolDefinition] if successful.
      */
-    suspend fun updateTool(tool: ToolDefinition): Either<UpdateToolError, Unit>
+    suspend fun updateTool(tool: ToolDefinition): Either<UpdateToolError, ToolDefinition>
 
     /**
      * Deletes a tool definition.
@@ -86,5 +87,27 @@ interface ToolService {
         toolId: Long,
         enabled: Boolean
     ): Either<SetToolEnabledError, Unit>
+
+    /**
+     * Validates a tool definition without persisting it.
+     * @param tool The tool definition to validate.
+     * @return Either a [ValidateToolError] if validation fails, or Unit if successful.
+     */
+    suspend fun validateToolDefinition(tool: ToolDefinition): Either<ValidateToolError, Unit>
+
+    /**
+     * Validates a tool definition without persisting it.
+     * @param name The name of the tool.
+     * @param description The description of the tool.
+     * @param inputSchema The input schema of the tool.
+     * @param outputSchema The output schema of the tool.
+     * @return Either a [ValidateToolError] if validation fails, or Unit if successful.
+     */
+    suspend fun validateToolDefinition(
+        name: String,
+        description: String,
+        inputSchema: JsonObject,
+        outputSchema: JsonObject?
+    ): Either<ValidateToolError, Unit>
 }
 

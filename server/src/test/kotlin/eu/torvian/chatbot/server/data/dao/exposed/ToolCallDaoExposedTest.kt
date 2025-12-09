@@ -106,7 +106,7 @@ class ToolCallDaoExposedTest {
             inputSchema = inputSchema,
             outputSchema = null,
             isEnabled = true
-        ).getOrElse { throw IllegalStateException("Failed to create test tool definition") }
+        )
     }
 
     @AfterEach

@@ -20,6 +20,8 @@ class ApiRoutesKtor(
     private val chatService: ChatService,
     private val toolService: ToolService,
     private val toolCallService: ToolCallService,
+    private val localMCPServerService: LocalMCPServerService,
+    private val localMCPToolDefinitionService: LocalMCPToolDefinitionService,
     private val authenticationService: AuthenticationService,
     private val userService: UserService,
     private val userGroupService: UserGroupService,
@@ -43,6 +45,8 @@ class ApiRoutesKtor(
         configureSettingsRoutes(route)
         configureMessageRoutes(route)
         configureToolRoutes(route)
+        configureLocalMCPServerRoutes(route)
+        configureLocalMCPToolRoutes(route)
     }
 
     /**
@@ -120,5 +124,19 @@ class ApiRoutesKtor(
      */
     fun configureToolRoutes(route: Route) {
         route.configureToolRoutes(toolService, authorizationService)
+    }
+
+    /**
+     * Configures routes related to Local MCP Server ID management (/api/v1/mcp-servers).
+     */
+    fun configureLocalMCPServerRoutes(route: Route) {
+        route.configureLocalMCPServerRoutes(localMCPServerService)
+    }
+
+    /**
+     * Configures routes related to Local MCP Tool management (/api/v1/local-mcp-tools).
+     */
+    fun configureLocalMCPToolRoutes(route: Route) {
+        route.configureLocalMCPToolRoutes(localMCPToolDefinitionService, localMCPServerService)
     }
 }

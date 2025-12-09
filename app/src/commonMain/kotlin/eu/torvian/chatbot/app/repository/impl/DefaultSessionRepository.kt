@@ -299,9 +299,9 @@ class DefaultSessionRepository(
 
     override fun processNewMessage(
         sessionId: Long,
-        request: ProcessNewMessageRequest
+        clientEvents: Flow<ChatClientEvent>
     ): Flow<Either<RepositoryError, ChatEvent>> {
-        return chatApi.processNewMessage(sessionId, request)
+        return chatApi.processNewMessage(sessionId, clientEvents)
             .onEach { either ->
                 either.map { event ->
                     applyEvent(sessionId, event)
@@ -314,9 +314,9 @@ class DefaultSessionRepository(
 
     override fun processNewMessageStreaming(
         sessionId: Long,
-        request: ProcessNewMessageRequest
+        clientEvents: Flow<ChatClientEvent>
     ): Flow<Either<RepositoryError, ChatStreamEvent>> {
-        return chatApi.processNewMessageStreaming(sessionId, request)
+        return chatApi.processNewMessageStreaming(sessionId, clientEvents)
             .onEach { either ->
                 either.map { event ->
                     applyStreamEvent(sessionId, event)
@@ -410,6 +410,10 @@ class DefaultSessionRepository(
                 updateToolCallsInCache(sessionId, event.toolCalls)
             }
 
+            is ChatEvent.LocalMCPToolCallReceived -> {
+                logger.debug("Local MCP tool call received: ${event.request.toolName}")
+            }
+
             is ChatEvent.ToolExecutionCompleted -> {
                 logger.debug("Tool execution completed: ${event.toolCall.toolName} - ${event.toolCall.status}")
                 updateToolCallInCache(sessionId, event.toolCall)
@@ -419,7 +423,7 @@ class DefaultSessionRepository(
                 logger.error("Chat event error: ${event.error}")
             }
 
-            ChatEvent.StreamCompleted -> {
+            is ChatEvent.StreamCompleted -> {
                 logger.info("Event stream completed for session $sessionId")
             }
         }
@@ -515,6 +519,10 @@ class DefaultSessionRepository(
                 updateToolCallsInCache(sessionId, event.toolCalls)
             }
 
+            is ChatStreamEvent.LocalMCPToolCallReceived -> {
+                logger.debug("Local MCP tool call received: ${event.request.toolName}")
+            }
+
             is ChatStreamEvent.ToolExecutionCompleted -> {
                 logger.debug("Tool execution completed: ${event.toolCall.toolName}")
                 updateToolCallInCache(sessionId, event.toolCall)
@@ -524,7 +532,7 @@ class DefaultSessionRepository(
                 logger.error("Streaming error: ${event.error}")
             }
 
-            ChatStreamEvent.StreamCompleted -> {
+            is ChatStreamEvent.StreamCompleted -> {
                 logger.info("Streaming completed for session $sessionId")
             }
         }

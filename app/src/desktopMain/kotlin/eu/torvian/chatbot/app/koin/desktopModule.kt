@@ -5,14 +5,24 @@ import eu.torvian.chatbot.app.database.DriverFactoryDesktop
 import eu.torvian.chatbot.app.main.AppConfig
 import eu.torvian.chatbot.app.service.auth.FileSystemTokenStorage
 import eu.torvian.chatbot.app.service.auth.TokenStorage
+import eu.torvian.chatbot.app.service.mcp.LocalMCPServerProcessManager
+import eu.torvian.chatbot.app.service.mcp.LocalMCPServerProcessManagerDesktop
+import eu.torvian.chatbot.app.service.mcp.LocalMCPServerManager
+import eu.torvian.chatbot.app.service.mcp.LocalMCPServerManagerImpl
+import eu.torvian.chatbot.app.service.mcp.LocalMCPToolCallMediator
+import eu.torvian.chatbot.app.service.mcp.LocalMCPToolCallMediatorImpl
+import eu.torvian.chatbot.app.service.mcp.MCPClientService
+import eu.torvian.chatbot.app.service.mcp.MCPClientServiceImpl
 import eu.torvian.chatbot.app.service.security.CertificateStorage
 import eu.torvian.chatbot.app.service.security.FileSystemCertificateStorage
 import eu.torvian.chatbot.common.security.AESCryptoProvider
 import eu.torvian.chatbot.common.security.CryptoProvider
 import eu.torvian.chatbot.common.security.EncryptionConfig
 import eu.torvian.chatbot.common.security.EncryptionService
+import kotlinx.coroutines.runBlocking
 import kotlinx.io.files.Path
 import org.koin.dsl.module
+import org.koin.dsl.onClose
 
 /**
  * Desktop-specific Koin module.
@@ -48,5 +58,36 @@ fun desktopModule(appConfig: AppConfig, encryptionConfig: EncryptionConfig) = mo
     single<DriverFactory> {
         val databasePath = Path(appConfig.baseUserDataStoragePath, "local.db").toString()
         DriverFactoryDesktop(databasePath = databasePath)
+    }
+
+    single<LocalMCPServerProcessManager> {
+        LocalMCPServerProcessManagerDesktop(
+            clock = get()
+        )
+    }.onClose { manager ->
+        runBlocking { manager?.close() }
+    }
+
+    single<MCPClientService> {
+        MCPClientServiceImpl(
+            processManager = get()
+        )
+    }.onClose { service ->
+        runBlocking { service?.close() }
+    }
+
+    single<LocalMCPServerManager> {
+        LocalMCPServerManagerImpl(
+            serverRepository = get(),
+            toolRepository = get(),
+            mcpClientService = get(),
+            clock = get()
+        )
+    }.onClose { manager ->
+        runBlocking { manager?.close() }
+    }
+
+    single<LocalMCPToolCallMediator> {
+        LocalMCPToolCallMediatorImpl(get(), get())
     }
 }

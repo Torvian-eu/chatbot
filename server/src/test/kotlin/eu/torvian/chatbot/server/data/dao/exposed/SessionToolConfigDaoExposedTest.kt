@@ -103,7 +103,7 @@ class SessionToolConfigDaoExposedTest {
             inputSchema = inputSchema,
             outputSchema = null,
             isEnabled = isEnabled
-        ).getOrElse { throw IllegalStateException("Failed to create test tool: $it") }
+        )
     }
 
     @Test

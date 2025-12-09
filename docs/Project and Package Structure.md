@@ -78,6 +78,7 @@ common/src/commonMain/kotlin/eu/torvian/chatbot/common/
 │   │   │   └── RegisterRequest.kt    # User registration request DTO
 │   │   ├── core/                 # Core API request/response DTOs
 │   │   │   ├── AssignSessionToGroupRequest.kt # Request DTO for assigning session to group
+│   │   │   ├── ChatClientEvent.kt        # Sealed interface for client-to-server WebSocket events
 │   │   │   ├── ChatEvent.kt              # Sealed interface for server-sent chat events
 │   │   │   ├── ChatStreamEvent.kt        # Chat stream event DTO
 │   │   │   ├── CreateGroupRequest.kt     # Group creation request DTO
@@ -95,6 +96,9 @@ common/src/commonMain/kotlin/eu/torvian/chatbot/common/
 │   │   │   ├── AddProviderRequest.kt     # Request DTO for adding LLM providers
 │   │   │   ├── ApiKeyStatusResponse.kt   # Response DTO for API key status
 │   │   │   └── UpdateProviderCredentialRequest.kt # Request DTO for updating provider credentials
+│   │   ├── mcp/                  # MCP-specific API DTOs
+│   │   │   ├── LocalMCPServerDtos.kt     # DTOs for local MCP server management
+│   │   │   └── LocalMCPToolRequests.kt   # DTOs for local MCP tool management
 │   │   └── tool/                 # Tool-specific API DTOs
 │   │       ├── CreateToolRequest.kt      # Request DTO for creating a new tool definition
 │   │       └── SetToolEnabledRequest.kt  # Request DTO for enabling/disabling a tool for a session
@@ -112,9 +116,13 @@ common/src/commonMain/kotlin/eu/torvian/chatbot/common/
 │   │   ├── LLMProviderType.kt        # Enum for LLM provider types
 │   │   └── ModelSettings.kt          # Model settings and parameters
 │   ├── tool/                     # Tool-related domain models
+│   │   ├── LocalMCPToolCallRequest.kt # Request for LLM-initiated local MCP tool calls
+│   │   ├── LocalMCPToolCallResult.kt  # Result of local MCP tool executions
+│   │   ├── LocalMCPToolDefinition.kt # Data model for tools integrated from local MCP servers
+│   │   ├── MiscToolDefinition.kt     # Data model for general-purpose tools
 │   │   ├── ToolCall.kt               # Data model for a tool call
 │   │   ├── ToolCallStatus.kt         # Enum for tool call status
-│   │   ├── ToolDefinition.kt         # Data model for a tool definition
+│   │   ├── ToolDefinition.kt         # Sealed class for a tool definition hierarchy
 │   │   └── ToolType.kt               # Enum for tool types
 │   └── user/                     # User-related domain models
 │       ├── Permission.kt             # Permission data model
@@ -230,10 +238,14 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   ├── configureKtor.kt          # Ktor server plugin configuration
 │   ├── auth/
 │   │   └── AuthUtils.kt          # Authentication utilities
+│   ├── mappers/                  # Ktor mappers for API events
 │   └── routes/                   # Ktor API routes
 │       ├── ApiRoutesKtor.kt      # Ktor route configuration using type-safe Resources plugin
+│       ├── ResourceExtensions.kt   # Extension functions for Ktor routing
 │       ├── configureAuthRoutes.kt
 │       ├── configureGroupRoutes.kt
+│       ├── configureLocalMCPServerRoutes.kt # Ktor routes for local MCP server management
+│       ├── configureLocalMCPToolRoutes.kt # Ktor routes for local MCP tool management
 │       ├── configureMessageRoutes.kt
 │       ├── configureModelRoutes.kt
 │       ├── configureProviderRoutes.kt
@@ -260,6 +272,8 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   │   ├── GroupService.kt       # Group management service interface
 │   │   ├── LLMModelService.kt    # LLM Model management service interface
 │   │   ├── LLMProviderService.kt # LLM Provider management service interface
+│   │   ├── LocalMCPServerService.kt # Service for managing server-side local MCP server IDs
+│   │   ├── LocalMCPToolDefinitionService.kt # Service for managing local MCP tool definitions
 │   │   ├── MessageEvent.kt       # Message event type for non-streaming
 │   │   ├── MessageService.kt     # Message handling service interface
 │   │   ├── MessageStreamEvent.kt # Message stream event type
@@ -288,6 +302,10 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   │       ├── OllamaChatStrategy.kt # Ollama chat completion strategy
 │   │       ├── OpenAiApiModels.kt # OpenAI API models (DTOs)
 │   │       └── OpenAIChatStrategy.kt # OpenAI chat completion strategy
+│   ├── mcp/                      # MCP-specific services
+│   │   ├── LocalMCPExecutor.kt       # Interface for managing tool execution on client-side MCP servers
+│   │   ├── LocalMCPExecutorError.kt  # Error types for local MCP tool execution
+│   │   └── LocalMCPExecutorEvent.kt  # Events for local MCP tool call lifecycle
 │   ├── security/                 # Security services
 │   │   ├── AuthenticationService.kt # Authentication service interface
 │   │   ├── AuthorizationService.kt # Authorization service interface
@@ -416,7 +434,7 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   │   ├── error/                   # Local DAO error types
 │   │   └── isForeignKeyConstraintException.kt # Platform-specific exception checker
 │   ├── model/       # Local database entity models
-│   │   └── EncryptedSecretEntity.kt
+│   │   └── EncryptedSecretEntity.kt # Entity for encrypted secrets
 │   ├── DriverFactory.kt # Expect declaration for platform-specific DB driver
 │   └── LocalDatabaseProvider.kt # Provides the SQLDelight database instance
 ├── domain/          # Domain models specific to the *application's presentation layer*
@@ -456,6 +474,8 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   ├── AuthRepository.kt   # Interface for managing user authentication state
 │   ├── AuthState.kt        # Sealed class representing auth status (Loading, Auth, Unauth)
 │   ├── GroupRepository.kt  # Group repository
+│   ├── LocalMCPServerRepository.kt # Repository for managing client-side MCP server configurations
+│   ├── LocalMCPToolRepository.kt # Repository for managing local MCP tool definitions
 │   ├── ModelRepository.kt  # Model repository
 │   ├── ProviderRepository.kt # Provider repository
 │   ├── RepositoryError.kt  # Repository error hierarchy
@@ -471,6 +491,8 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   │   ├── AuthApi.kt
 │   │   ├── ChatApi.kt  
 │   │   ├── GroupApi.kt
+│   │   ├── LocalMCPServerApi.kt # Interface for managing local MCP server IDs
+│   │   ├── LocalMCPToolApi.kt # Interface for managing local MCP tool definitions
 │   │   ├── ModelApi.kt
 │   │   ├── ProviderApi.kt
 │   │   ├── RoleApi.kt      # Interface for managing user roles
@@ -482,8 +504,11 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   │       ├── BaseApiClient.kt  # Base API client implementation
 │   │       ├── configureHttpClient.kt # Common Ktor HTTP client configuration.
 │   │       ├── createPlatformHttpClient.kt # Expect declaration for platform-specific HTTP client creation.
+│   │       ├── HttpClientWebSocketExtension.kt # Helper for dynamic WebSocket protocol selection
 │   │       ├── KtorChatApiClient.kt
 │   │       ├── KtorGroupApiClient.kt
+│   │       ├── KtorLocalMCPServerApiClient.kt # Ktor client for local MCP server API
+│   │       ├── KtorLocalMCPToolApiClient.kt # Ktor client for local MCP tool API
 │   │       └── ...
 │   ├── auth/         # Auth services (token storage, account management, http client)
 │   │   ├── AccountData.kt # Account data model (for local storage)
@@ -493,8 +518,24 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   │   ├── FileSystemTokenStorage.kt # File system-based token storage implementation
 │   │   ├── TokenStorage.kt  # Token storage interface
 │   │   └── TokenStorageError.kt # Token storage error hierarchy
+│   ├── mcp/          # MCP-specific client-side services
+│   │   ├── LocalMCPServerManager.kt # Interface for orchestrating local MCP server workflows
+│   │   ├── LocalMCPServerManagerError.kt # Error hierarchy for local MCP server manager operations
+│   │   ├── LocalMCPServerManagerImpl.kt # Implementation for local MCP server manager
+│   │   ├── LocalMCPServerOverview.kt # Data class for aggregate server status
+│   │   ├── LocalMCPServerProcessManager.kt # Interface for platform-independent process control
+│   │   ├── LocalMCPToolCallMediator.kt # Interface for LLM-to-MCP tool call mediation
+│   │   ├── LocalMCPToolCallMediatorDummy.kt # Dummy implementation for platforms not supporting local MCP tool calls
+│   │   ├── LocalMCPToolCallMediatorImpl.kt # Implementation for local MCP tool call mediation
+│   │   ├── MCPClient.kt # Data class representing active MCP client connections
+│   │   ├── MCPClientService.kt # Interface for managing MCP client connections
+│   │   ├── MCPClientServiceError.kt # Error hierarchy for MCP client service operations
+│   │   ├── MCPClientServiceImpl.kt # Implementation for MCP client service (moved to commonMain)
+│   │   ├── ProcessManagerError.kt # Error hierarchy for process operations
+│   │   └── ProcessStatus.kt # Status and state for server processes
 │   ├── misc/          # Miscellaneous frontend services
 │   │   ├── EncryptedSecretService.kt # Interface for managing local encrypted secrets
+│   │   ├── EncryptedSecretServiceImpl.kt # Implementation for encrypted secret service
 │   │   └── EventBus.kt  # Event bus for frontend events
 │   └── security/      # Frontend security services
 │       ├── CertificateDetails.kt # DTO for presenting certificate information to the user.
@@ -545,6 +586,10 @@ app/src/commonMain/composeResources/  # Compose resources (strings, etc.)
 │    └── strings.xml  # Spanish string resources
 └── ... other resources ...
 
+app/src/commonMain/sqldelight/eu/torvian/chatbot/app/database/ # SQLDelight schema definitions
+├── EncryptedSecretTable.sq # SQLDelight table for encrypted secrets
+└── LocalMCPServerLocalTable.sq # SQLDelight table for client-side local MCP server configurations
+
 app/src/commonTest/kotlin/eu/torvian/chatbot/app/  # Common tests
 └── testutils/     # Test utilities
     ├── data/
@@ -561,6 +606,8 @@ app/src/desktopMain/kotlin/eu/torvian/chatbot/app/  # Desktop-specific implement
 │       └── ExceptionCheckerDesktop.kt # Desktop implementation for FK exception check
 ├── main/         # Main entry point
 │   └── AppMain.kt    # Application entry point, setup (UI launch, DI)
+├── service/mcp/  # Desktop-specific MCP services
+│   └── LocalMCPServerProcessManagerDesktop.kt # Desktop implementation for local MCP server process manager
 └── utils/        
     ├── misc/       # Miscellaneous utilities
     │   └── createKmpLogger.desktop.kt # Desktop-specific KMP logger
@@ -581,6 +628,8 @@ app/src/desktopTest/kotlin/eu/torvian/chatbot/app/ # Desktop-specific tests
 │   │   ├── KtorChatApiClientTest.kt  
 │   │   ├── KtorSessionApiClientTest.kt
 │   │   └── ...
+│   ├── mcp/
+│   │   └── LocalMCPServerProcessManagerTest.kt # Unit tests for process management
 │   └── misc/        # Miscellaneous service tests
 │       └── EncryptedSecretServiceImplTest.kt
 ├── testutils/           
@@ -604,6 +653,9 @@ app/src/androidMain/kotlin/eu/torvian/chatbot/app/  # Android-specific implement
 │       └── ExceptionCheckerAndroid.kt # Android implementation for FK exception check
 ├── main/         # Main entry point
 │   └── MainActivity.kt    # Application entry point, setup (UI launch, DI)
+├── service/mcp/  # Android-specific MCP services
+│   ├── LocalMCPProcessManagerAndroid.kt # Placeholder for Android local MCP process manager
+│   └── MCPClientServiceAndroid.kt # Android-specific type alias for MCPClientService
 └── utils/        
     ├── misc/       # Miscellaneous utilities
     │   └── KmpLogger.android.kt # Android-specific KMP logger

@@ -1,14 +1,16 @@
 package eu.torvian.chatbot.server.data.dao
 
 import arrow.core.Either
-import eu.torvian.chatbot.server.data.dao.error.CreateLinkageError
+import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
+import eu.torvian.chatbot.server.data.dao.error.InsertToolError
 import eu.torvian.chatbot.server.data.dao.error.LocalMCPToolDefinitionError
 
 /**
- * Data Access Object for LocalMCPToolDefinition linkages.
+ * Data Access Object for LocalMCPToolDefinition domain models.
  *
  * Manages the many-to-many relationship between MCP servers and tool definitions.
- * This DAO handles the junction table that tracks which MCP server provides which tools.
+ * This DAO handles queries that join the tool definitions table with the junction table
+ * to provide complete LocalMCPToolDefinition domain models.
  */
 interface LocalMCPToolDefinitionDao {
     /**
@@ -20,77 +22,79 @@ interface LocalMCPToolDefinitionDao {
      * @param toolDefinitionId The ID of the tool definition
      * @param mcpServerId The ID of the MCP server that provides this tool
      * @param mcpToolName Optional original tool name from MCP server (for future name mapping)
-     * @return Either [CreateLinkageError] or Unit on success
+     * @param isEnabledByDefault Whether this tool is enabled by default for NEW chat sessions
+     *   (null = use server-level default, true = enable, false = disable)
+     * @return Either [InsertToolError] or Unit on success
      */
-    suspend fun createLinkage(
+    suspend fun insertTool(
         toolDefinitionId: Long,
         mcpServerId: Long,
-        mcpToolName: String? = null
-    ): Either<CreateLinkageError, Unit>
+        mcpToolName: String? = null,
+        isEnabledByDefault: Boolean? = null
+    ): Either<InsertToolError, Unit>
 
     /**
-     * Retrieves all tool definition IDs linked to a specific MCP server.
+     * Retrieves a Local MCP tool definition by its tool definition ID.
      *
-     * @param mcpServerId The ID of the MCP server
-     * @return List of tool definition IDs (empty if none)
-     */
-    suspend fun getToolIdsByServerId(mcpServerId: Long): List<Long>
-
-    /**
-     * Retrieves the MCP server ID that provides a specific tool.
+     * Performs a join between ToolDefinitionTable and LocalMCPToolDefinitionTable
+     * to return the complete domain model.
      *
      * @param toolDefinitionId The ID of the tool definition
-     * @return Either [LocalMCPToolDefinitionError.NotFound] if not linked, or the server ID
+     * @return Either [LocalMCPToolDefinitionError.NotFound] if not found, or the [LocalMCPToolDefinition]
      */
-    suspend fun getServerIdByToolId(
+    suspend fun getToolById(
         toolDefinitionId: Long
-    ): Either<LocalMCPToolDefinitionError.NotFound, Long>
+    ): Either<LocalMCPToolDefinitionError.NotFound, LocalMCPToolDefinition>
 
     /**
-     * Deletes a linkage between a tool and an MCP server.
+     * Retrieves all Local MCP tool definitions linked to a specific MCP server.
      *
-     * Note: Due to CASCADE constraints, this is automatically handled when either
-     * the tool or server is deleted. This method is provided for explicit unlinking
-     * if needed (e.g., during tool refresh operations).
+     * Performs a join between ToolDefinitionTable and LocalMCPToolDefinitionTable
+     * to return complete domain models for all tools provided by the specified server.
+     *
+     * @param mcpServerId The ID of the MCP server
+     * @return List of [LocalMCPToolDefinition] (empty if none)
+     */
+    suspend fun getToolsByServerId(mcpServerId: Long): List<LocalMCPToolDefinition>
+
+    /**
+     * Retrieves all Local MCP tool definitions for a specific user.
+     *
+     * Performs joins between LocalMCPServerTable, ToolDefinitionTable, and LocalMCPToolDefinitionTable
+     * to return all MCP tools that belong to servers owned by the user.
+     *
+     * @param userId The ID of the user
+     * @return List of [LocalMCPToolDefinition] (empty if none)
+     */
+    suspend fun getToolsForUser(userId: Long): List<LocalMCPToolDefinition>
+
+    /**
+     * Updates the MCP-specific fields for a Local MCP tool.
+     *
+     * This allows updating mcpToolName and isEnabledByDefault without modifying
+     * the core tool definition fields.
      *
      * @param toolDefinitionId The ID of the tool definition
-     * @param mcpServerId The ID of the MCP server
+     * @param mcpToolName Optional original tool name from MCP server (for future name mapping)
+     * @param isEnabledByDefault Whether this tool is enabled by default for NEW chat sessions
+     *   (null = use server-level default, true = enable, false = disable)
      * @return Either [LocalMCPToolDefinitionError.NotFound] or Unit on success
      */
-    suspend fun deleteLinkage(
+    suspend fun updateTool(
         toolDefinitionId: Long,
-        mcpServerId: Long
+        mcpToolName: String?,
+        isEnabledByDefault: Boolean?
     ): Either<LocalMCPToolDefinitionError.NotFound, Unit>
 
     /**
-     * Deletes all linkages for a specific MCP server.
+     * Deletes all Local MCP tools linked to a specific MCP server.
      *
      * This is typically called before refreshing tools from a server, to remove
      * all existing linkages before creating new ones.
      *
      * @param mcpServerId The ID of the MCP server
-     * @return Number of linkages deleted
+     * @return Number of tools deleted
      */
-    suspend fun deleteAllLinkagesForServer(mcpServerId: Long): Int
-
-    /**
-     * Checks if a tool definition is linked to an MCP server.
-     *
-     * @param toolDefinitionId The ID of the tool definition
-     * @param mcpServerId The ID of the MCP server
-     * @return true if linked, false otherwise
-     */
-    suspend fun isLinked(toolDefinitionId: Long, mcpServerId: Long): Boolean
-
-    /**
-     * Retrieves the MCP tool name mapping for a specific tool.
-     *
-     * FUTURE FEATURE: Returns the original MCP server tool name if name mapping is configured.
-     * Returns NotFound error if tool is not linked to any server.
-     *
-     * @param toolDefinitionId The ID of the tool definition
-     * @return Either [LocalMCPToolDefinitionError.NotFound] if not linked, or the MCP tool name (null if no mapping)
-     */
-    suspend fun getMcpToolName(toolDefinitionId: Long): Either<LocalMCPToolDefinitionError.NotFound, String?>
+    suspend fun deleteToolsByServerId(mcpServerId: Long): Int
 }
 

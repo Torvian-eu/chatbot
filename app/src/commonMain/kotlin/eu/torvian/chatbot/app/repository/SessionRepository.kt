@@ -1,18 +1,10 @@
 package eu.torvian.chatbot.app.repository
+
 import arrow.core.Either
 import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.common.models.api.core.*
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
-import eu.torvian.chatbot.common.models.api.core.ChatEvent
-import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
-import eu.torvian.chatbot.common.models.api.core.CreateSessionRequest
-import eu.torvian.chatbot.common.models.api.core.ProcessNewMessageRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateMessageRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionGroupRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionLeafMessageRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionModelRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionNameRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionSettingsRequest
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
@@ -166,7 +158,10 @@ interface SessionRepository {
      * @param request The update request containing the new optional settings ID
      * @return Either.Right with Unit on successful update, or Either.Left with RepositoryError on failure
      */
-    suspend fun updateSessionSettings(sessionId: Long, request: UpdateSessionSettingsRequest): Either<RepositoryError, Unit>
+    suspend fun updateSessionSettings(
+        sessionId: Long,
+        request: UpdateSessionSettingsRequest
+    ): Either<RepositoryError, Unit>
 
     /**
      * Sets the current "active" leaf message for a session, affecting which branch is displayed.
@@ -178,7 +173,10 @@ interface SessionRepository {
      * @param request The update request containing the new optional leaf message ID
      * @return Either.Right with Unit on successful update, or Either.Left with RepositoryError on failure
      */
-    suspend fun updateSessionLeafMessage(sessionId: Long, request: UpdateSessionLeafMessageRequest): Either<RepositoryError, Unit>
+    suspend fun updateSessionLeafMessage(
+        sessionId: Long,
+        request: UpdateSessionLeafMessageRequest
+    ): Either<RepositoryError, Unit>
 
     /**
      * Assigns a specific chat session to a chat group, or ungroups it.
@@ -203,10 +201,15 @@ interface SessionRepository {
      * still uses SSE to provide progress updates during tool execution and message processing.
      *
      * @param sessionId The ID of the session to send the message to
-     * @param request The message processing request containing content and optional parent ID
+     * @param clientEvents A flow of events from the client to the server. The first event must be
+     *                     [ChatClientEvent.ProcessNewMessage] with `isStreaming=false`. Subsequent events
+     *                     can be [ChatClientEvent.LocalMCPToolResult] for tool execution.
      * @return Flow of Either containing ChatEvent updates or RepositoryError on failure
      */
-    fun processNewMessage(sessionId: Long, request: ProcessNewMessageRequest): Flow<Either<RepositoryError, ChatEvent>>
+    fun processNewMessage(
+        sessionId: Long,
+        clientEvents: Flow<ChatClientEvent>
+    ): Flow<Either<RepositoryError, ChatEvent>>
 
     /**
      * Processes a new user message in a session with streaming LLM response.
@@ -215,10 +218,15 @@ interface SessionRepository {
      * The repository will update the cached ChatSession as the streaming progresses.
      *
      * @param sessionId The ID of the session to send the message to
-     * @param request The message processing request containing content and optional parent ID
+     * @param clientEvents A flow of events from the client to the server. The first event must be
+     *                     [ChatClientEvent.ProcessNewMessage] with `isStreaming=true`. Subsequent events
+     *                     can be [ChatClientEvent.LocalMCPToolResult] for tool execution.
      * @return Flow of Either containing ChatStreamEvent updates or RepositoryError on failure
      */
-    fun processNewMessageStreaming(sessionId: Long, request: ProcessNewMessageRequest): Flow<Either<RepositoryError, ChatStreamEvent>>
+    fun processNewMessageStreaming(
+        sessionId: Long,
+        clientEvents: Flow<ChatClientEvent>
+    ): Flow<Either<RepositoryError, ChatStreamEvent>>
 
     /**
      * Updates the content of a specific message.
@@ -231,7 +239,11 @@ interface SessionRepository {
      * @param request The update request containing the new content
      * @return Either.Right with Unit on successful update, or Either.Left with RepositoryError on failure
      */
-    suspend fun updateMessageContent(messageId: Long, sessionId: Long, request: UpdateMessageRequest): Either<RepositoryError, Unit>
+    suspend fun updateMessageContent(
+        messageId: Long,
+        sessionId: Long,
+        request: UpdateMessageRequest
+    ): Either<RepositoryError, Unit>
 
     /**
      * Deletes a specific message. This operation performs a non-recursive deletion,

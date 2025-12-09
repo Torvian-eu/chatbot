@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.app.domain.models
 
+import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 
@@ -46,8 +47,8 @@ data class LocalMCPServer(
     val autoStartOnLaunch: Boolean = false,
     val autoStopAfterInactivitySeconds: Int? = null,
     val toolsEnabledByDefault: Boolean = false,
-    val createdAt: Instant,
-    val updatedAt: Instant
+    val createdAt: Instant = Clock.System.now(),
+    val updatedAt: Instant = Clock.System.now()
 ) {
     /**
      * Returns the effective auto-stop inactivity duration in seconds.

@@ -5,14 +5,14 @@ import arrow.core.raise.catch
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.right
-import eu.torvian.chatbot.common.models.tool.ToolDefinition
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
+import eu.torvian.chatbot.common.models.tool.MiscToolDefinition
 import eu.torvian.chatbot.server.data.dao.SessionToolConfigDao
 import eu.torvian.chatbot.server.data.dao.error.ClearToolConfigError
 import eu.torvian.chatbot.server.data.dao.error.SetToolEnabledError
 import eu.torvian.chatbot.server.data.tables.SessionToolConfigTable
 import eu.torvian.chatbot.server.data.tables.ToolDefinitionTable
-import eu.torvian.chatbot.server.data.tables.mappers.toToolDefinition
-import eu.torvian.chatbot.common.misc.transaction.TransactionScope
+import eu.torvian.chatbot.server.data.tables.mappers.toMiscToolDefinition
 import org.jetbrains.exposed.exceptions.ExposedSQLException
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -27,7 +27,7 @@ class SessionToolConfigDaoExposed(
     private val transactionScope: TransactionScope
 ) : SessionToolConfigDao {
 
-    override suspend fun getEnabledToolsForSession(sessionId: Long): List<ToolDefinition> =
+    override suspend fun getEnabledToolsForSession(sessionId: Long): List<MiscToolDefinition> =
         transactionScope.transaction {
             SessionToolConfigTable
                 .innerJoin(
@@ -40,7 +40,7 @@ class SessionToolConfigDaoExposed(
                             (SessionToolConfigTable.isEnabled eq true) and
                             (ToolDefinitionTable.isEnabled eq true)
                 }
-                .map { it.toToolDefinition() }
+                .map { it.toMiscToolDefinition() }
         }
 
     override suspend fun isToolEnabledForSession(sessionId: Long, toolDefinitionId: Long): Boolean =

@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.ktor
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.service.security.AuthenticationService
+import io.ktor.serialization.kotlinx.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
@@ -10,6 +11,7 @@ import io.ktor.server.auth.jwt.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.resources.*
 import io.ktor.server.sse.*
+import io.ktor.server.websocket.*
 import kotlinx.serialization.json.Json
 
 /**
@@ -26,6 +28,11 @@ fun Application.configureKtor(jwtConfig: JwtConfig, authService: AuthenticationS
 
     // Install the SSE plugin for server-sent events support
     install(SSE)
+
+    // Install the WebSockets plugin for bidirectional communication
+    install(WebSockets) {
+        contentConverter = KotlinxWebsocketSerializationConverter(Json)
+    }
 
     // Install Authentication plugin with JWT
     install(Authentication) {

@@ -150,6 +150,7 @@ kotlin {
             implementation(libs.ktor.client.resources)
             implementation(libs.ktor.client.logging)
             implementation(libs.ktor.client.auth)
+            implementation(libs.ktor.client.websockets)
             // CIO engine for Desktop, Android and WasmJs
             implementation(libs.ktor.client.cio)
 
@@ -171,6 +172,10 @@ kotlin {
             implementation(libs.sqldelight.runtime)
             implementation(libs.sqldelight.coroutines.extensions)
             implementation(libs.sqldelight.primitive.adapters)
+
+            // MCP Kotlin SDK
+            implementation(libs.mcp.sdk.core)
+            implementation(libs.mcp.sdk.client)
         }
 
         commonTest.dependencies {

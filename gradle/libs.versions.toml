@@ -28,6 +28,7 @@ android-targetSdk = "36"     # The target Android version for testing
 slf4j = "2.0.17"             # SLF4J version used for logging
 hikaricp = "7.0.2"           # HikariCP version for connection pooling
 sqldelight = "2.2.1"         # SQLDelight version for multiplatform database
+mcp-sdk = "0.7.3"            # MCP Kotlin SDK version
 
 [libraries]
 # Kotlin
@@ -62,6 +63,7 @@ ktor-server-call-logging = { module = "io.ktor:ktor-server-call-logging", versio
 ktor-server-double-receive = { module = "io.ktor:ktor-server-double-receive", version.ref = "ktor" }
 ktor-server-cors = { module = "io.ktor:ktor-server-cors", version.ref = "ktor" }
 ktor-server-sse = { module = "io.ktor:ktor-server-sse", version.ref = "ktor" }
+ktor-server-websockets = { module = "io.ktor:ktor-server-websockets", version.ref = "ktor" }
 ktor-network-tls-certificates = { module = "io.ktor:ktor-network-tls-certificates", version.ref = "ktor" }
 
 # HikariCP for connection pooling
@@ -77,6 +79,7 @@ ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
 ktor-client-resources = { module = "io.ktor:ktor-client-resources", version.ref = "ktor" }
 ktor-client-logging = { module = "io.ktor:ktor-client-logging", version.ref = "ktor" }
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
+ktor-client-websockets = { module = "io.ktor:ktor-client-websockets", version.ref = "ktor" }
 
 # Ktor Serialization
 ktor-serialization-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
@@ -148,6 +151,10 @@ ktor-server-test-host = { module = "io.ktor:ktor-server-test-host", version.ref 
 commons-codec = { module = "commons-codec:commons-codec", version = "1.15" } # Security patch WS-2019-0379
 mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
 
+# MCP Kotlin SDK
+mcp-sdk-core = { module = "io.modelcontextprotocol:kotlin-sdk-core", version.ref = "mcp-sdk" }
+mcp-sdk-client = { module = "io.modelcontextprotocol:kotlin-sdk-client", version.ref = "mcp-sdk" }
+
 [bundles]
 # Ktor Server: Includes all necessary dependencies for a Ktor backend
 ktor-server = [
@@ -161,7 +168,8 @@ ktor-server = [
     "ktor-server-double-receive",
     "ktor-server-resources",
     "ktor-server-cors",
-    "ktor-server-sse"
+    "ktor-server-sse",
+    "ktor-server-websockets"
 ]
 
 ktor-server-test = [

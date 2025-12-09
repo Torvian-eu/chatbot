@@ -4,6 +4,7 @@ import arrow.core.Either
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.server.service.core.error.message.ProcessNewMessageError
 import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageError
+import eu.torvian.chatbot.common.models.tool.LocalMCPToolCallResult
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -40,7 +41,8 @@ interface ChatService {
      * 2. Loop (if tool calling occurs):
      *    a. AssistantMessageSaved - LLM response (may include tool call intent)
      *    b. ToolCallsReceived - Tool calls saved with PENDING status
-     *    c. ToolExecutionCompleted - For each tool as it completes
+     *    c. LocalMCPToolCallReceived - For each local MCP tool that needs client-side execution
+     *    d. ToolExecutionCompleted - For each tool as it completes
      * 3. AssistantMessageSaved - Final response from LLM
      * 4. StreamCompleted - End of processing
      *
@@ -48,6 +50,7 @@ interface ChatService {
      * @param llmConfig The LLM configuration to use for the request.
      * @param content The user's message content.
      * @param parentMessageId Optional ID of the message being replied to.
+     * @param mcpResponseFlow A flow of tool execution results from the client for local MCP tools.
      * @return A Flow of Either<ProcessNewMessageError, MessageEvent>.
      *         The flow emits MessageEvent objects as processing progresses,
      *         or ProcessNewMessageError if an error occurs.
@@ -56,7 +59,8 @@ interface ChatService {
         session: ChatSession,
         llmConfig: LLMConfig,
         content: String,
-        parentMessageId: Long? = null
+        parentMessageId: Long? = null,
+        mcpResponseFlow: Flow<LocalMCPToolCallResult>
     ): Flow<Either<ProcessNewMessageError, MessageEvent>>
 
     /**
@@ -78,7 +82,8 @@ interface ChatService {
      * 4. AssistantMessageFinished - Assistant message is updated with final content
      * 5. If finish_reason == "tool_calls":
      *    a. ToolCallsReceived - Tool calls are saved with PENDING status
-     *    b. ToolExecutionCompleted - For each tool as it completes execution
+     *    b. LocalMCPToolCallReceived - For each local MCP tool that needs client-side execution
+     *    c. ToolExecutionCompleted - For each tool as it completes execution
      *    Then continues to next iteration (new assistant message, etc.)
      * 6. If finish_reason != "tool_calls":
      *    a. StreamCompleted - Final event indicating end of processing
@@ -97,6 +102,7 @@ interface ChatService {
      * @param content The user's message content.
      * @param parentMessageId Optional ID of the message being replied to. If provided, the new user
      *                        message will be threaded as a child of this message.
+     * @param mcpResponseFlow A flow of tool execution results from the client for local MCP tools.
      * @return A Flow of Either<ProcessNewMessageError, MessageStreamEvent>.
      *
      * @see MessageStreamEvent for detailed event type documentation
@@ -106,6 +112,7 @@ interface ChatService {
         session: ChatSession,
         llmConfig: LLMConfig,
         content: String,
-        parentMessageId: Long? = null
+        parentMessageId: Long? = null,
+        mcpResponseFlow: Flow<LocalMCPToolCallResult>
     ): Flow<Either<ProcessNewMessageError, MessageStreamEvent>>
 }
