@@ -11,7 +11,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 
 class LocalMCPToolCallMediatorImpl(
-    private val mcpClientService: MCPClientService,
+    private val localMCPServerManager: LocalMCPServerManager,
     private val json: Json
 ) : LocalMCPToolCallMediator {
     companion object {
@@ -36,7 +36,7 @@ class LocalMCPToolCallMediatorImpl(
             } ?: JsonObject(emptyMap())
 
             // Execute tool call
-            mcpClientService.callTool(
+            localMCPServerManager.callTool(
                 serverId = request.serverId,
                 toolName = request.toolName,
                 arguments = arguments
