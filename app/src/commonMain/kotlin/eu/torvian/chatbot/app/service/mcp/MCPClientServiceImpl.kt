@@ -142,14 +142,27 @@ class MCPClientServiceImpl(
 
     override suspend fun stopServer(
         serverId: Long
+    ): Either<MCPStopServerError, Unit> = stopServerInternal(serverId, fromTimer = false)
+
+    /**
+     * Internal implementation of stopServer with control over timer cancellation.
+     *
+     * @param serverId The ID of the server to stop
+     * @param fromTimer Whether this call originates from the auto-stop timer
+     */
+    private suspend fun stopServerInternal(
+        serverId: Long,
+        fromTimer: Boolean
     ): Either<MCPStopServerError, Unit> {
         logger.info("Stopping MCP server: $serverId")
 
         // Remove client from map (atomic operation)
         val mcpClient = clientsInternal.value[serverId]
         if (mcpClient != null) {
-            // Cancel any pending auto-stop timer
-            mcpClient.autoStopTimerJob?.cancel()
+            // Cancel any pending auto-stop timer ONLY if not called from the timer itself
+            if (!fromTimer) {
+                mcpClient.autoStopTimerJob?.cancel()
+            }
             _clients.update { it - serverId }
         }
 
@@ -390,7 +403,7 @@ class MCPClientServiceImpl(
                     "Auto-stopping MCP server $serverId (${config.name}) due to inactivity " +
                             "($effectiveAutoStopSeconds seconds threshold reached)"
                 )
-                stopServer(serverId).onLeft { error ->
+                stopServerInternal(serverId, fromTimer = true).onLeft { error ->
                     logger.error("Failed to auto-stop server $serverId: ${error.message}")
                 }
             } catch (e: Exception) {
