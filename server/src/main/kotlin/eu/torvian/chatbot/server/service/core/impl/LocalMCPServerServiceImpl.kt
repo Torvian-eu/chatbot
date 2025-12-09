@@ -5,6 +5,7 @@ import arrow.core.raise.either
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.server.data.dao.LocalMCPServerDao
+import eu.torvian.chatbot.server.data.dao.LocalMCPToolDefinitionDao
 import eu.torvian.chatbot.server.data.dao.error.DeleteLocalMCPServerError
 import eu.torvian.chatbot.server.data.dao.error.LocalMCPServerError
 import eu.torvian.chatbot.server.service.core.LocalMCPServerService
@@ -19,6 +20,7 @@ import org.apache.logging.log4j.Logger
  */
 class LocalMCPServerServiceImpl(
     private val localMCPServerDao: LocalMCPServerDao,
+    private val localMCPToolDefinitionDao: LocalMCPToolDefinitionDao,
     private val transactionScope: TransactionScope,
 ) : LocalMCPServerService {
 
@@ -35,6 +37,11 @@ class LocalMCPServerServiceImpl(
     override suspend fun deleteServer(serverId: Long): Either<DeleteServerError, Unit> =
         transactionScope.transaction {
             either {
+                // Step 1: Delete all associated tools first
+                val deletedCount = localMCPToolDefinitionDao.deleteToolsByServerId(serverId)
+                logger.info("Deleted $deletedCount tools for MCP server $serverId")
+
+                // Step 2: Delete the server itself
                 withError({ daoError: DeleteLocalMCPServerError ->
                     when (daoError) {
                         is DeleteLocalMCPServerError.NotFound ->
