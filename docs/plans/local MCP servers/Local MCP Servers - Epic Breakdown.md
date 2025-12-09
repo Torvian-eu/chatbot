@@ -6,9 +6,9 @@ This document breaks down the **NF.EA1 - Local MCP Servers** epic into implement
 
 **Total User Stories**: 26 (across 8 implementation phases)
 
-**Implementation Status** (as of 2025-12-03):
-- ✅ **COMPLETED**: 14 user stories (54%)
-- ❌ **NOT IMPLEMENTED**: 12 user stories (46%)
+**Implementation Status** (as of 2025-12-09):
+- ✅ **COMPLETED**: 16 user stories (62%)
+- ❌ **NOT IMPLEMENTED**: 10 user stories (38%)
 
 ### Completed Components:
 - ✅ **Phase 1 (Backend)**: All 6 user stories completed
@@ -19,21 +19,21 @@ This document breaks down the **NF.EA1 - Local MCP Servers** epic into implement
   - US1.3A: Local MCP Tool Definition Model
   - US1.3B: Local MCP Tool Definition Service Layer
   - US1.4: Local MCP Server Service Layer
-- ✅ **Phase 2 (Client Infrastructure)**: 2 of 4 completed
+- ✅ **Phase 2 (Client Infrastructure)**: 3 of 4 completed
   - US2.1: LocalMCPServerProcessManager (Desktop only)
+  - US2.2: LocalMCPServerManager (orchestration layer) ✅ **NEW**
   - US2.3: MCPClientService (Desktop/Android)
 - ✅ **Phase 5 (API Routes)**: 2 of 2 completed
   - US5.1: Local MCP Server API Routes
   - US5.2: Local MCP Tool Management API Routes
-- ✅ **Phase 6 (Frontend)**: 2 of 5 completed
+- ✅ **Phase 6 (Frontend)**: 3 of 5 completed
   - US6.1: LocalMCPServerRepository
+  - US6.1A: LocalMCPToolRepository
   - US6.2: LocalMCPToolApi
 - ✅ **Phase 7 (Tool Execution)**: 1 of 3 completed
   - US7.3: Local MCP Tool Execution via WebSocket (NEW)
 
 ### Missing Components:
-- ❌ **US2.2**: LocalMCPServerManager (orchestration layer)
-- ❌ **US6.1A**: LocalMCPToolRepository (separate from ToolRepository)
 - ❌ **US6.4-6.5**: Management UI and configuration dialogs
 - ❌ **US7.1-7.2**: Session tool configuration and auto-start
 - ❌ **US8.1-8.3**: Advanced features (default enablement, health monitoring, logs)
@@ -42,11 +42,11 @@ This document breaks down the **NF.EA1 - Local MCP Servers** epic into implement
 **Key Architecture**: 
 - **Client-Side Local Storage**: MCP server configurations stored locally using SQLDelight (Desktop, Android, WASM)
 - **Server-Side Minimal Storage**: Server only generates unique IDs and tracks ownership (linkage support)
-- **US2.2 (LocalMCPServerManager)** - High-level orchestration layer
-- **US2.3 (MCPClientService)** - MCP-specific operations layer (no Repository/API dependencies)
-- **US6.1A (LocalMCPToolRepository - NEW)** - Dedicated repository for MCP tool persistence (separate from ToolRepository)
-- **US6.2 (LocalMCPToolApi - NEW)** - Dedicated API client for MCP tool endpoints (separate from ToolApi)
-- **LocalMCPToolDefinition Model** - Dedicated model class for MCP tools (extends ToolDefinition sealed class)
+- **US2.2 (LocalMCPServerManager)** ✅ - High-level orchestration layer (coordinates workflows between repositories and services)
+- **US2.3 (MCPClientService)** ✅ - MCP-specific operations layer (no Repository/API dependencies)
+- **US6.1A (LocalMCPToolRepository)** ✅ - Dedicated repository for MCP tool persistence (separate from ToolRepository)
+- **US6.2 (LocalMCPToolApi)** ✅ - Dedicated API client for MCP tool endpoints (separate from ToolApi)
+- **LocalMCPToolDefinition Model** ✅ - Dedicated model class for MCP tools (extends ToolDefinition sealed class)
 - Clean separation: UI → Manager → (MCP Server Repo + MCP Tool Repo) → MCP Operations → Process Management
 - **Clean separation of concerns**:
   - **LocalMCPServerRepository** = MCP server configs (local storage)
@@ -81,24 +81,35 @@ This document breaks down the **NF.EA1 - Local MCP Servers** epic into implement
     - ✅ `toolsEnabledByDefault` - whether tools from this server are enabled by default
 
 #### MCP Server Management
-- [ ] The user can test the connection to an MCP server **NOT IMPLEMENTED** (MCPClientService exists but no UI/orchestration)
-  - Tests connection by listing available tools
-  - Shows success/failure status with tool count
+- [ ] The user can test the connection to an MCP server **PARTIALLY IMPLEMENTED** (orchestration layer complete, UI missing)
+  - ✅ LocalMCPServerManager.testConnection() orchestrates connection testing workflow
+  - ✅ Tests connection by listing available tools via MCP SDK
+  - ✅ Returns success/failure with tool count
+  - ❌ UI not implemented (no test button in management screen)
   - Client-side operation (no server API needed)
-- [ ] The user can discover tools from an MCP server **PARTIALLY IMPLEMENTED** (backend complete, UI/orchestration missing)
+- [ ] The user can discover tools from an MCP server **PARTIALLY IMPLEMENTED** (orchestration layer complete, UI missing)
+  - ✅ LocalMCPServerManager.createServer() discovers and persists tools during server creation
   - ✅ Lists all available tools via MCP SDK (MCPClientService.discoverTools)
+  - ✅ Converts MCP SDK Tool objects to LocalMCPToolDefinition format
   - ✅ Persists tools to database (ToolDefinitionTable + LocalMCPToolDefinitionTable)
   - ✅ Server creates both entries atomically (single transaction)
-  - ❌ UI and orchestration layer (LocalMCPServerManager) not implemented
-- [ ] The user can refresh the list of tools from an MCP server **PARTIALLY IMPLEMENTED** (backend complete, UI/orchestration missing)
-  - ✅ Compares current tools with existing tools (LocalMCPToolDefinitionService.refreshMCPTools)
+  - ❌ UI not implemented (no discover tools button in management screen)
+- [ ] The user can refresh the list of tools from an MCP server **PARTIALLY IMPLEMENTED** (orchestration layer complete, UI missing)
+  - ✅ LocalMCPServerManager.refreshTools() orchestrates differential refresh workflow
+  - ✅ Discovers current tools via MCP SDK
+  - ✅ Compares current tools with existing tools (LocalMCPToolRepository.refreshMCPTools)
   - ✅ Adds new tools, updates changed tools, removes deleted tools
+  - ✅ Returns summary of changes (added/updated/deleted counts)
   - ❌ Preserves user's per-session tool enablement settings (not implemented)
-  - ❌ UI and orchestration layer not implemented
-- [x] MCP servers can be started/stopped from within the application **IMPLEMENTED** (Desktop only)
+  - ❌ UI not implemented (no refresh tools button in management screen)
+- [x] MCP servers can be started/stopped from within the application **IMPLEMENTED** (Desktop/Android only)
+  - ✅ LocalMCPServerManager.startServer() orchestrates server start workflow
+  - ✅ LocalMCPServerManager.stopServer() orchestrates server stop workflow
   - ✅ Process lifecycle managed by LocalMCPServerProcessManager (client-side)
+  - ✅ MCP SDK client management by MCPClientService
   - ✅ Process status tracking (running/stopped/error)
   - ✅ Graceful shutdown and cleanup
+  - ❌ UI not implemented (no start/stop buttons in management screen)
 
 #### Data Persistence
 - [x] MCP server configurations are stored **locally on the client machine** (using SQLDelight) **IMPLEMENTED**
@@ -159,28 +170,35 @@ This document breaks down the **NF.EA1 - Local MCP Servers** epic into implement
   - ✅ Supports multi-turn tool calling loops
 
 #### Architecture & Technical Details
-- [ ] MCP clients are managed by the desktop application **PARTIALLY IMPLEMENTED**
+- [x] MCP clients are managed by the desktop application **FULLY IMPLEMENTED**
   - ✅ LocalMCPServerProcessManager launches MCP server processes (STDIO)
   - ✅ MCPClientService wraps MCP SDK Client for communication
-  - ❌ LocalMCPServerManager orchestrates high-level workflows (NOT IMPLEMENTED)
-- [ ] Clean separation of concerns by entity type: **PARTIALLY IMPLEMENTED**
+  - ✅ LocalMCPServerManager orchestrates high-level workflows
+  - ✅ Reactive serverOverviews StateFlow combines data from all layers
+- [x] Clean separation of concerns by entity type: **FULLY IMPLEMENTED**
   - ✅ LocalMCPServerRepository manages MCP server configuration data
-  - ❌ **LocalMCPToolRepository manages MCP tool data** (NOT IMPLEMENTED - planned but not created)
+  - ✅ LocalMCPToolRepository manages MCP tool data
   - ✅ ToolRepository continues to manage non-MCP tools only
-  - ❌ No cross-repository dependencies (LocalMCPToolRepository missing)
+  - ✅ No cross-repository dependencies (clean separation achieved)
 - [x] Dedicated model for MCP tools: **IMPLEMENTED**
   - ✅ **LocalMCPToolDefinition** - extends ToolDefinition sealed class
   - ✅ Includes `serverId`, `mcpToolName`, and `isEnabledByDefault` fields
   - ✅ Type is fixed to `ToolType.MCP_LOCAL`
   - ✅ **MiscToolDefinition** - for non-MCP tools
-- [ ] Process lifecycle management **PARTIALLY IMPLEMENTED**
+- [x] Process lifecycle management **FULLY IMPLEMENTED**
   - ✅ Auto-start modes: On Demand (default), On Enable, On Launch (fields exist in schema)
-  - ❌ Auto-stop after configurable inactivity (not implemented)
+  - ✅ Auto-stop after configurable inactivity (implemented in MCPClientService)
+    - ✅ Automatic timer reset on tool activity
+    - ✅ Configurable timeout per server (`effectiveAutoStopSeconds`)
+    - ✅ Respects `neverAutoStop` flag
   - ✅ Graceful shutdown and cleanup
-- [ ] Health monitoring and logging **NOT IMPLEMENTED**
-  - Server health status tracking
-  - Tool execution logs (in-memory, not persisted)
-  - Error notifications for failures
+- [ ] Health monitoring and logging **PARTIALLY IMPLEMENTED**
+  - ✅ Server health status tracking (MCPClientService.pingClient)
+  - ✅ Process status tracking (ProcessStatus enum)
+  - ✅ Connection status tracking (isConnected, isResponsive)
+  - ✅ Activity tracking (lastActivityAt timestamp)
+  - ❌ Tool execution logs (not persisted - only in application logs)
+  - ❌ Error notifications UI (not implemented)
 
 **Out of Scope** (Future Implementation):
 - Remote MCP servers (HTTP/SSE transport) - enum value reserved: `ToolType.MCP_REMOTE`
@@ -1211,53 +1229,83 @@ COMMIT (or ROLLBACK on error)
 
 ---
 
-#### US2.2 - Local MCP Server Manager (High-Level Orchestration) ❌ **NOT IMPLEMENTED**
+#### US2.2 - Local MCP Server Manager (High-Level Orchestration) ✅ **COMPLETED**
 **As a** desktop application
 **I want** a manager service to orchestrate MCP server workflows
 **So that** I can coordinate between data, MCP operations, and API persistence
 
-**Status**: ❌ **NOT IMPLEMENTED** - This orchestration layer was planned but not created
+**Status**: ✅ **FULLY IMPLEMENTED** (Desktop/Android, WASM stub)
 
 **Acceptance Criteria:**
-- [ ] Create `LocalMCPServerManager` class (desktop-only) with:
-  - `testConnection(serverId)` - orchestrates connection testing
-    - Gets config from repository
+- [x] Create `LocalMCPServerManager` interface (KMP common) with:
+  - `testConnectionForNewServer(...)` - tests connection to a new MCP server configuration
+    - Creates temporary server config
     - Calls MCPClientService to start and connect
-    - Returns success/failure with tool count
-  - `discoverTools(serverId)` - orchestrates tool discovery and persistence
-    - Gets config from LocalMCPServerRepository
-    - Calls MCPClientService to discover tools
-    - Converts MCP Tool objects to ToolDefinition format
-    - Calls LocalMCPToolRepository to persist tools (LocalMCPToolRepository handles API call)
-    - Returns list of discovered tools
+    - Discovers tools and returns count
+    - Cleans up (stops server)
+  - `createServer(...)` - creates and persists a new MCP server with tools
+    - Creates temporary config
+    - Starts and connects via MCPClientService
+    - Discovers tools via MCPClientService
+    - Persists server config via LocalMCPServerRepository
+    - Persists tools via LocalMCPToolRepository
+    - Cleans up (stops server)
+    - Returns created server
+  - `testConnection(serverId)` - tests connection to an existing MCP server
+    - Gets config from repository
+    - Starts and connects (if not already connected)
+    - Discovers tools and returns count
+    - Cleans up (stops server if started by this operation)
   - `refreshTools(serverId)` - orchestrates tool refresh
     - Gets config from LocalMCPServerRepository
-    - Calls MCPClientService to discover current tools
-    - Fetches existing tools from LocalMCPToolRepository
-    - Compares and identifies changes (new, updated, deleted)
-    - Calls LocalMCPToolRepository to persist changes (LocalMCPToolRepository handles API call)
-    - Returns summary of changes
-- [ ] Inject dependencies:
-  - `LocalMCPServerRepository` - for reading cached MCP server configs
+    - Starts and connects (if not already connected)
+    - Discovers current tools via MCPClientService
+    - Converts MCP Tool objects to LocalMCPToolDefinition format
+    - Calls LocalMCPToolRepository.refreshMCPTools() for differential sync
+    - Cleans up (stops server if started by this operation)
+    - Returns refresh summary (added/updated/deleted counts)
+  - `startServer(serverId)` - starts an MCP server and connects client
+  - `stopServer(serverId)` - stops an MCP server and disconnects client
+  - `callTool(serverId, toolName, arguments)` - executes a tool on an MCP server
+    - Ensures server is started and connected
+    - Calls MCPClientService.callTool()
+    - Returns CallToolResultBase or error
+- [x] Implement `LocalMCPServerManagerImpl` (commonMain) with:
+  - Reactive `serverOverviews` StateFlow (combines servers, clients, and tools)
+  - Comprehensive error handling via Arrow Either
+  - Detailed logging for all operations
+  - Automatic cleanup (stops servers after operations complete)
+  - Data transformation (MCP SDK Tool → LocalMCPToolDefinition)
+- [x] Inject dependencies:
+  - `LocalMCPServerRepository` - for reading/writing cached MCP server configs
   - `LocalMCPToolRepository` - for persisting discovered MCP tools (US6.1A)
   - `MCPClientService` - for MCP operations (US2.3)
-- [ ] Handle errors from all layers
-- [ ] Provide detailed error messages for UI
+  - `Clock` - for generating timestamps (injectable for testing)
+  - `CoroutineScope` - for managing background operations
+- [x] Handle errors from all layers with typed error hierarchies
+- [x] Provide detailed error messages for UI
 
-**Implementation Notes:**
-- ⚠️ **MISSING**: This class does not exist in the codebase
-- ⚠️ **IMPACT**: ViewModels would need to orchestrate these workflows directly or this layer needs to be created
-- ⚠️ **ALTERNATIVE**: Current implementation may have ViewModels calling repositories and services directly
+**Implementation Details:**
+- ✅ Interface at `app/src/commonMain/kotlin/eu/torvian/chatbot/app/service/mcp/LocalMCPServerManager.kt`
+- ✅ Implementation at `app/src/commonMain/kotlin/eu/torvian/chatbot/app/service/mcp/LocalMCPServerManagerImpl.kt`
+- ✅ Error types at `app/src/commonMain/kotlin/eu/torvian/chatbot/app/service/mcp/LocalMCPServerManagerError.kt`
+- ✅ KMP common implementation (platform-independent orchestration logic)
 
 **Technical Notes:**
 - **High-level orchestration layer** between UI and MCP operations
 - Coordinates data flow: LocalMCPServerRepository (configs) → MCPClientService (MCP ops) → LocalMCPToolRepository (tool persistence)
-- Handles data transformation (MCP Tool → ToolDefinition)
-- Does not manage state (that's Repository's job)
-- Does not manage processes (that's MCPClientService's job)
-- Does not call API directly (that's Repository's job)
+- Handles data transformation (MCP SDK Tool → LocalMCPToolDefinition)
+- **Reactive aggregate state**: `serverOverviews` combines data from 3 sources:
+  - LocalMCPServerRepository.servers (server configurations)
+  - MCPClientService.clients (active client connections)
+  - LocalMCPToolRepository.mcpTools (tool definitions by server)
+- Does not manage state directly (delegates to repositories)
+- Does not manage processes (delegates to MCPClientService)
+- Does not call API directly (delegates to repositories)
 - Pure business logic and workflow coordination
 - Called by ViewModels for user-initiated actions
+- **Automatic resource cleanup**: Always stops servers after test/create/refresh operations
+- **Smart connection management**: Only starts servers if needed, only stops if started by the operation
 - **Separation of concerns**:
   - LocalMCPServerRepository for MCP server data
   - LocalMCPToolRepository for MCP tool data (US6.1A)
@@ -1276,46 +1324,119 @@ COMMIT (or ROLLBACK on error)
 - [x] Create `MCPClientService` interface (KMP common) with:
   - **Lifecycle operations:**
     - `startAndConnect(config)` - starts process and establishes MCP SDK client connection
+      - Checks if already connected (returns AlreadyConnected error if so)
+      - Starts process via LocalMCPServerProcessManager
+      - Gets process I/O streams for STDIO transport
+      - Creates MCP SDK Client with unique name per server
+      - Connects SDK client to server process
+      - Stores client in internal map
+      - Starts auto-stop timer if configured
+      - Returns comprehensive error on failure
     - `stopServer(serverId)` - disconnects SDK client and stops process
+      - Cancels auto-stop timer
+      - Removes client from internal map
+      - Disconnects MCP SDK client
+      - Stops process via LocalMCPServerProcessManager
     - `disconnectAll()` - cleanup all clients during shutdown
+    - `close()` - cleanup and cancel service scope
   - **Tool operations:**
     - `discoverTools(serverId)` - lists available tools from MCP server via SDK
+      - Calls MCP SDK `listTools()` RPC
+      - Updates last activity timestamp
+      - Resets auto-stop timer
+      - Returns List<Tool>
     - `callTool(serverId, toolName, arguments)` - executes tool and returns raw SDK result
+      - Calls MCP SDK `callTool()` RPC
+      - Updates last activity timestamp
+      - Resets auto-stop timer
+      - Returns CallToolResultBase or error
   - **Status & health:**
-    - `getServerStatus(serverId)` - returns current ProcessStatus
-    - `isClientRegistered(serverId)` - quick synchronous check if client exists
-    - `pingClient(serverId)` - performs lightweight health-check via SDK transport
+    - `getServerStatus(serverId)` - returns current ProcessStatus from ProcessManager
+    - `isClientRegistered(serverId)` - quick synchronous check if client exists in map
+    - `pingClient(serverId)` - performs lightweight health-check via SDK ping()
+      - Returns false immediately if no client exists
+      - Performs I/O ping via SDK
+      - Updates lastPing status in client data
   - **Client enumeration:**
     - `getClient(serverId)` - returns MCPClient snapshot or null
     - `listClients()` - returns list of active MCPClient objects with status
-- [x] Implement `MCPClientServiceImpl` (desktopAndroid) with:
-  - Thread-safe client management using `ConcurrentHashMap<Long, MCPClientInternal>`
+  - **Reactive state:**
+    - `clients: StateFlow<Map<Long, MCPClient>>` - reactive stream of all active clients
+      - Automatically updates when client state changes
+      - Enables UI to react to connection state changes
+- [x] Implement `MCPClientServiceImpl` (commonMain - platform-agnostic) with:
+  - Thread-safe client management using `MutableStateFlow<Map<Long, MCPClientInternal>>`
   - Integration with `LocalMCPServerProcessManager` for process lifecycle
   - MCP SDK `Client` creation with STDIO transport using process streams
-  - Client metadata tracking (connectedAt, lastPing, serverConfig)
-  - Unique client naming per server: `chatbot-mcp-client-{serverName}-{serverId}`
+  - Client metadata tracking:
+    - `serverConfig` - full LocalMCPServer configuration
+    - `processStatus` - current process status
+    - `sdkClient` - MCP SDK Client instance
+    - `connectedAt` - connection timestamp
+    - `lastActivityAt` - timestamp of last operation (tool call/discovery)
+    - `lastPing` - result of last health check
+    - `autoStopTimerJob` - coroutine job for auto-stop timer
+  - Unique client naming per server: `chatbot-mcp-client-{sanitized-name}-{id}`
+    - Sanitizes server name (lowercase, alphanumeric + hyphens/underscores only)
+    - Maximum 64 characters total
+  - **Auto-stop timer management:**
+    - Starts timer after successful connection
+    - Resets timer on every tool operation (callTool, discoverTools)
+    - Cancels timer on manual stop
+    - Uses server's `effectiveAutoStopSeconds` configuration
+    - Respects `neverAutoStop` flag (no timer if true)
+  - **Activity tracking:**
+    - Updates `lastActivityAt` on every MCP operation
+    - Resets auto-stop timer when activity occurs
+    - Enables inactivity-based auto-stop
 - [x] Implement comprehensive error handling via Arrow Either:
-  - `StartAndConnectError` (AlreadyConnected, ProcessStartFailed, StreamsUnavailable, SDKConnectionFailed)
-  - `MCPStopServerError`, `DiscoverToolsError`, `CallToolError` sealed classes
+  - `StartAndConnectError` sealed class hierarchy:
+    - `AlreadyConnected(serverId)` - client already exists
+    - `ProcessStartFailed(serverId, reason, cause)` - process failed to start
+    - `StreamsUnavailable(serverId, reason)` - I/O streams not available
+    - `SDKConnectionFailed(serverId, reason, cause)` - SDK connection failed
+  - `MCPStopServerError` sealed class hierarchy:
+    - `DisconnectFailed(serverId, reason, cause)` - SDK disconnect failed
+    - `ProcessStopFailed(serverId, reason, cause)` - process stop failed
+  - `DiscoverToolsError` sealed class hierarchy:
+    - `NotConnected(serverId)` - no active client
+    - `SDKListToolsFailed(serverId, reason, cause)` - SDK RPC failed
+  - `CallToolError` sealed class hierarchy:
+    - `NotConnected(serverId, toolName)` - no active client
+    - `SDKCallToolFailed(serverId, toolName, reason, cause)` - SDK RPC failed
 - [x] Handle MCP SDK communication errors and edge cases
+- [x] WASM stub implementation (returns "not implemented" errors)
 
 **Implementation Details:**
 - ✅ Interface at `app/src/commonMain/kotlin/eu/torvian/chatbot/app/service/mcp/MCPClientService.kt`
-- ✅ Desktop/Android implementation at `app/src/desktopAndroidMain/kotlin/eu/torvian/chatbot/app/service/mcp/MCPClientServiceImpl.kt`
-- ✅ WASM stub at `app/src/wasmJsMain/kotlin/eu/torvian/chatbot/app/service/mcp/MCPClientServiceWasm.kt` (TODO)
+- ✅ Implementation at `app/src/commonMain/kotlin/eu/torvian/chatbot/app/service/mcp/MCPClientServiceImpl.kt` (commonMain - not platform-specific)
+- ✅ Error types at `app/src/commonMain/kotlin/eu/torvian/chatbot/app/service/mcp/MCPClientServiceError.kt`
+- ✅ WASM stub at `app/src/wasmJsMain/kotlin/eu/torvian/chatbot/app/service/mcp/MCPClientServiceWasm.kt`
 - ✅ Comprehensive tests at `app/src/desktopTest/kotlin/eu/torvian/chatbot/app/service/mcp/MCPClientServiceTest.kt`
 
 **Technical Notes:**
 - **Platform-independent interface** in `commonMain` for KMP compatibility
-- **Desktop/Android implementation** uses MCP Kotlin SDK with STDIO transport
+- **Implementation in commonMain** (not platform-specific) - relies on LocalMCPServerProcessManager for platform differences
+- **Desktop/Android support** via LocalMCPServerProcessManager implementation
 - **Pure MCP operations layer** - no Repository/API dependencies, config passed as parameter
-- **Thread-safe client management** via `ConcurrentHashMap` for concurrent operations
-- **Stateless design** except for active client connections (stored in memory map)
+- **Thread-safe client management** via `MutableStateFlow` for concurrent operations
+- **Stateless design** except for active client connections (stored in memory StateFlow)
+- **Reactive architecture** - StateFlow enables UI to observe connection state changes
 - **Automatic cleanup** - disconnects SDK clients and stops processes on stopServer()
 - **Wraps MCP Kotlin SDK** for easier testing, abstraction, and error handling
-- **Client lifecycle tracking** - stores connection time, ping status, and server config
-- Called by `LocalMCPServerManager` (US2.2) for high-level orchestration workflows (when implemented)
-- **WASM unavailable** - requires process management capabilities
+- **Client lifecycle tracking** - stores connection time, activity time, ping status, and server config
+- **Auto-stop timer management**:
+  - Prevents resource waste by stopping idle servers
+  - Configurable timeout per server
+  - Automatic reset on activity
+  - Graceful shutdown with cleanup
+- Called by `LocalMCPServerManager` (US2.2) for high-level orchestration workflows
+- **WASM unavailable** - requires process management capabilities (no Node.js child_process in browser)
+- **MCP SDK Integration**:
+  - Uses official MCP Kotlin SDK
+  - STDIO transport for local process communication
+  - Standard MCP RPC protocol (listTools, callTool, ping)
+  - Proper client identification with unique names
 
 ---
 
@@ -1324,13 +1445,13 @@ COMMIT (or ROLLBACK on error)
 **I want** to test my local MCP server connection
 **So that** I can verify it's configured correctly
 
-**Status**: ❌ **NOT IMPLEMENTED** - UI and orchestration layer missing
+**Status**: ❌ **NOT IMPLEMENTED** - UI missing (orchestration layer complete)
 
 **Acceptance Criteria:**
 - [ ] Add "Test Connection" button to MCP server management UI
 - [ ] Implement connection test flow:
   - User clicks button
-  - ViewModel calls `localMCPServerManager.testConnection(serverId)`
+  - ViewModel calls `localMCPServerManager.testConnection(serverId)` (✅ method exists)
   - Show loading indicator
   - Display success/failure result
   - Show discovered tool count on success
@@ -1339,18 +1460,19 @@ COMMIT (or ROLLBACK on error)
 - [ ] Provide user-friendly error messages
 
 **Implementation Notes:**
-- ⚠️ **MISSING**: LocalMCPServerManager (US2.2) not implemented
+- ✅ **AVAILABLE**: LocalMCPServerManager.testConnection(serverId) (US2.2) fully implemented
+- ✅ **AVAILABLE**: LocalMCPServerManager.testConnectionForNewServer(...) for testing new configs
 - ⚠️ **MISSING**: MCP server management UI not implemented
-- ✅ **AVAILABLE**: MCPClientService.startAndConnect() and discoverTools() can be used for testing
-- ⚠️ **WORKAROUND**: Could implement directly in ViewModel without Manager layer
+- ✅ **READY**: Backend orchestration is complete, only UI work remains
 
 **Technical Notes:**
-- Connection test is orchestrated by LocalMCPServerManager (US2.2)
-- LocalMCPServerManager delegates MCP operations to MCPClientService (US2.3)
-- Don't persist tools during test (that's a separate "Discover Tools" action)
-- Provide detailed error messages for common issues (command not found, invalid args, etc.)
-- Test should be idempotent
+- Connection test is orchestrated by LocalMCPServerManager (US2.2) ✅ **IMPLEMENTED**
+- LocalMCPServerManager delegates MCP operations to MCPClientService (US2.3) ✅ **IMPLEMENTED**
+- Don't persist tools during test (that's a separate "Discover Tools" action) ✅ **CORRECTLY IMPLEMENTED**
+- LocalMCPServerManager provides typed error results for UI error messages
+- Test is idempotent (can be run multiple times safely)
 - This is a client-side operation (no server API endpoint needed)
+- Auto-cleanup: Server is stopped after test if started by the test operation
 
 ---
 
@@ -1361,7 +1483,7 @@ COMMIT (or ROLLBACK on error)
 **I want** to persist discovered tools from local MCP servers
 **So that** they can be used by the LLM
 
-**Status**: ⚠️ **PARTIALLY IMPLEMENTED** - Backend complete, orchestration layer missing
+**Status**: ⚠️ **PARTIALLY IMPLEMENTED** - Backend and orchestration complete, UI missing
 
 **Acceptance Criteria:**
 - [x] Create server-side tool persistence logic:
@@ -1370,36 +1492,40 @@ COMMIT (or ROLLBACK on error)
   - ✅ Ensures consistency (no partial failures - either all succeed or all rollback)
   - ✅ Sets `type = ToolType.MCP_LOCAL` for all created tools
   - ✅ Returns created tool definitions with IDs
-- [ ] Convert MCP `Tool` objects to `ToolDefinition` entities: **PARTIALLY IMPLEMENTED**
-  - ✅ Backend service can accept LocalMCPToolDefinition objects
-  - ❌ Client-side conversion logic not implemented (would be in LocalMCPServerManager)
+- [x] Convert MCP `Tool` objects to `LocalMCPToolDefinition` entities:
+  - ✅ LocalMCPServerManager.createServer() converts MCP SDK Tool → LocalMCPToolDefinition
+  - ✅ Conversion includes: name, description, inputSchema, outputSchema, serverId
+  - ✅ Sets timestamps (createdAt, updatedAt) using Clock
+  - ✅ Sets default values for new tools
 - [x] Handle tool name conflicts (validation)
 - [x] Add proper error handling for duplicate tools
+- [ ] UI for tool discovery **NOT IMPLEMENTED**
 
 **Implementation Details:**
 - ✅ Server service at `server/src/main/kotlin/eu/torvian/chatbot/server/service/core/impl/LocalMCPToolDefinitionServiceImpl.kt`
 - ✅ API routes at `server/src/main/kotlin/eu/torvian/chatbot/server/ktor/routes/configureLocalMCPServerRoutes.kt`
+- ✅ Client orchestration at `LocalMCPServerManagerImpl.createServer()` method
+- ✅ LocalMCPToolRepository.persistMCPTools() handles client-side API call
 - ✅ MCPClientService.discoverTools() available for listing tools from MCP server
-- ❌ LocalMCPServerManager (orchestration) not implemented
-- ❌ LocalMCPToolRepository (client-side) not implemented
+- ❌ UI not implemented (no discover tools button in management screen)
 
 **Technical Notes:**
-- **Client-side orchestration** happens in `LocalMCPServerManager` (US2.2):
-  - LocalMCPServerManager calls MCPClientService (US2.3) to list tools from running MCP server
-  - LocalMCPServerManager converts MCP tools to ToolDefinition format
-  - LocalMCPServerManager calls LocalMCPToolRepository.persistMCPTools()
-  - LocalMCPToolRepository calls LocalMCPToolApi endpoint to persist tools (this user story)
-- **Server-side persistence** (this user story):
-  - ✅ Server validates and stores tool definitions
-  - ✅ Server creates BOTH ToolDefinition AND LocalMCPToolDefinitionTable in **atomic transaction**
-  - ✅ Server returns created tools to client
-  - ✅ **Atomicity ensures**: Either all tools persist successfully, or none do (rollback)
-- **Repository coordination** (client-side):
-  - ❌ LocalMCPToolRepository not implemented (would invalidate cache after successful API call)
-  - ✅ LocalMCPServerRepository doesn't need notification (it doesn't cache tools)
-- Tools are discovered on client, persisted on server
-- Discovery is triggered by user action (Discover Tools button)
-- This is NOT automatic discovery - it's a user-initiated operation
+- **Client-side orchestration** in `LocalMCPServerManager.createServer()` (US2.2) ✅ **IMPLEMENTED**:
+  - Calls MCPClientService (US2.3) to list tools from running MCP server
+  - Converts MCP SDK Tool objects to LocalMCPToolDefinition format
+  - Calls LocalMCPToolRepository.persistMCPTools()
+  - LocalMCPToolRepository calls LocalMCPToolApi endpoint to persist tools
+  - Returns created server with tools persisted
+- **Server-side persistence** (this user story) ✅ **IMPLEMENTED**:
+  - Server validates and stores tool definitions
+  - Server creates BOTH ToolDefinition AND LocalMCPToolDefinitionTable in **atomic transaction**
+  - Server returns created tools to client
+  - **Atomicity ensures**: Either all tools persist successfully, or none do (rollback)
+- **Repository coordination** (client-side) ✅ **IMPLEMENTED**:
+  - LocalMCPToolRepository updates cache after successful API call
+  - LocalMCPServerRepository doesn't need notification (it doesn't cache tools)
+- Tools are discovered on client during server creation, persisted on server
+- Discovery happens automatically during server creation (LocalMCPServerManager.createServer)
 
 ---
 
@@ -1408,35 +1534,43 @@ COMMIT (or ROLLBACK on error)
 **I want** to refresh the tool list from an MCP server
 **So that** I can get updated tools when the server changes
 
-**Status**: ⚠️ **PARTIALLY IMPLEMENTED** - Backend complete, orchestration layer and UI missing
+**Status**: ⚠️ **PARTIALLY IMPLEMENTED** - Backend and orchestration complete, UI missing
 
 **Acceptance Criteria:**
 - [ ] Add "Refresh Tools" button to MCP server management UI **NOT IMPLEMENTED**
-- [ ] Implement refresh logic in `LocalMCPServerManager.refreshTools(serverId)`: **PARTIALLY IMPLEMENTED**
-  - ❌ LocalMCPServerManager not implemented
-  - ✅ Backend service has `refreshMCPTools(serverId, currentTools)` method
-  - ✅ Compares tool lists (by name)
+- [x] Implement refresh logic in `LocalMCPServerManager.refreshTools(serverId)`: **FULLY IMPLEMENTED**
+  - ✅ LocalMCPServerManager.refreshTools() orchestrates complete workflow
+  - ✅ Gets config from LocalMCPServerRepository
+  - ✅ Starts and connects to server (if not already connected)
+  - ✅ Discovers current tools via MCPClientService.discoverTools()
+  - ✅ Converts MCP SDK Tool objects to LocalMCPToolDefinition format
+  - ✅ Calls LocalMCPToolRepository.refreshMCPTools() for differential sync
+  - ✅ Backend service compares tool lists (by name)
   - ✅ Identifies: new tools, changed tools (schema), deleted tools
   - ✅ Persists changes atomically
+  - ✅ Returns RefreshMCPToolsResponse with counts (added/updated/deleted)
+  - ✅ Stops server after refresh (if started by this operation)
 - [ ] Preserve user's per-session tool enablement settings **NOT IMPLEMENTED**
 - [x] Handle tool schema changes gracefully
-- [ ] Show summary of changes to user (X added, Y updated, Z removed) **NOT IMPLEMENTED**
-- [ ] Emit events for UI updates **NOT IMPLEMENTED**
+- [ ] Show summary of changes to user (X added, Y updated, Z removed) **NOT IMPLEMENTED** (backend returns this, UI doesn't exist)
+- [ ] Emit events for UI updates **PARTIALLY IMPLEMENTED** (StateFlow updates automatically, no explicit events)
 
 **Implementation Details:**
 - ✅ Server service method at `LocalMCPToolDefinitionServiceImpl.refreshMCPTools()`
 - ✅ API endpoint at `POST /api/v1/local-mcp-servers/{serverId}/tools/refresh`
-- ✅ MCPClientService.discoverTools() available for fetching current tools
-- ❌ LocalMCPServerManager (orchestration) not implemented
-- ❌ LocalMCPToolRepository (client-side) not implemented
-- ❌ UI not implemented
+- ✅ Client orchestration at `LocalMCPServerManagerImpl.refreshTools()`
+- ✅ LocalMCPToolRepository.refreshMCPTools() handles client-side API call
+- ✅ MCPClientService.discoverTools() fetches current tools from MCP server
+- ❌ UI not implemented (no refresh tools button in management screen)
 
 **Technical Notes:**
-- Use tool name as the comparison key
-- Don't delete tools that are currently enabled in active sessions (mark as deprecated instead)
-- Log all changes for audit trail
-- Refresh is orchestrated by LocalMCPServerManager (US2.2)
-- Server provides batch update API endpoint
+- Use tool name as the comparison key ✅ **IMPLEMENTED**
+- Don't delete tools that are currently enabled in active sessions (mark as deprecated instead) ❌ **NOT IMPLEMENTED**
+- Log all changes for audit trail ✅ **IMPLEMENTED** (in LocalMCPServerManager)
+- Refresh is orchestrated by LocalMCPServerManager (US2.2) ✅ **IMPLEMENTED**
+- Server provides batch update API endpoint ✅ **IMPLEMENTED**
+- Auto-cleanup: Server is stopped after refresh if started by the refresh operation ✅ **IMPLEMENTED**
+- Smart connection management: Only starts if needed, only stops if started by this operation ✅ **IMPLEMENTED**
 
 ---
 
@@ -1696,18 +1830,19 @@ COMMIT (or ROLLBACK on error)
 
 ---
 
-#### US6.1A - Local MCP Tool Repository (NEW - Separate from ToolRepository) ❌ **NOT IMPLEMENTED**
+#### US6.1A - Local MCP Tool Repository (NEW - Separate from ToolRepository) ✅ **COMPLETED**
 **As a** frontend developer
 **I want** a dedicated repository for MCP tools
 **So that** MCP tools can be managed separately from non-MCP tools with clear separation of concerns
 
-**Status**: ❌ **NOT IMPLEMENTED** - This repository was planned but not created
+**Status**: ✅ **FULLY IMPLEMENTED** - Dedicated repository created with map-based caching
 
 **Acceptance Criteria:**
-- [ ] Create new `LocalMCPToolRepository` interface with MCP-specific methods:
-  - `val mcpTools: StateFlow<DataState<Map<Long, List<LocalMCPToolDefinition>>>>>`
+- [x] Create new `LocalMCPToolRepository` interface with MCP-specific methods:
+  - `val mcpTools: StateFlow<DataState<RepositoryError, Map<Long, List<LocalMCPToolDefinition>>>>>`
     - Map structure: serverId → List of LocalMCPToolDefinition
     - Enables efficient lookup by server without filtering
+  - `loadMCPTools()` - loads all MCP tools for current user
   - `persistMCPTools(serverId, toolDefinitions)` - persist discovered MCP tools with linkages
     - Parameter: `List<LocalMCPToolDefinition>` (with serverId embedded)
     - Calls LocalMCPToolApi batch endpoint to create tools and linkages atomically
@@ -1720,17 +1855,24 @@ COMMIT (or ROLLBACK on error)
     - Parameter: `List<LocalMCPToolDefinition>` representing current state
     - Compares with existing tools (add new, update changed, remove deleted)
     - Calls API to persist changes
-    - Returns (added, updated, deleted) counts
+    - Returns `RefreshMCPToolsResponse` with (added, updated, deleted) counts
   - `deleteMCPToolsForServer(serverId)` - delete all tools for a server
     - Removes all LocalMCPToolDefinition entries for serverId
     - Returns count of deleted tools
   - `getMCPToolById(toolId)` - get single MCP tool by ID
-    - Returns `LocalMCPToolDefinition?`
-  - `loadMCPTools()` - loads all MCP tools for current user
-- [ ] Implement repository with independent caching
-- [ ] Handle API errors and map to `RepositoryError`
-- [ ] Maintain cache consistency
-- [ ] Use LocalMCPToolApi for all server communication
+    - Returns `LocalMCPToolDefinition`
+- [x] Implement repository with independent caching
+- [x] Handle API errors and map to `RepositoryError`
+- [x] Maintain cache consistency
+- [x] Use LocalMCPToolApi for all server communication
+
+**Implementation Details:**
+- ✅ Interface at `app/src/commonMain/kotlin/eu/torvian/chatbot/app/repository/LocalMCPToolRepository.kt`
+- ✅ Implementation at `app/src/commonMain/kotlin/eu/torvian/chatbot/app/repository/impl/DefaultLocalMCPToolRepository.kt`
+- ✅ Registered in Koin DI module at `app/src/commonMain/kotlin/eu/torvian/chatbot/app/koin/appModule.kt`
+- ✅ Backend endpoint added: `GET /api/v1/local-mcp-tools` to get all MCP tools for current user
+- ✅ Backend DAO method: `getToolsForUser(userId)` in LocalMCPToolDefinitionDao
+- ✅ Backend service method: `getMCPToolsForUser(userId)` in LocalMCPToolDefinitionService
 
 **Technical Notes:**
 - **New repository** (not an extension of ToolRepository)
@@ -2276,7 +2418,7 @@ COMMIT (or ROLLBACK on error)
 
 ---
 
-## Implementation Status Summary (as of 2025-12-03)
+## Implementation Status Summary (as of 2025-12-09)
 
 ### What's Been Implemented ✅
 
@@ -2290,14 +2432,14 @@ COMMIT (or ROLLBACK on error)
 - ✅ LocalMCPServerService for ID generation (US1.4)
 - ✅ API routes for server ID generation and tool management (US5.1, US5.2)
 
-**Client Infrastructure (Partial - 60% Complete)**
+**Client Infrastructure (100% Complete)** ✅ **NEWLY COMPLETED**
 - ✅ LocalMCPServerProcessManager for process lifecycle (Desktop only) (US2.1)
+- ✅ LocalMCPServerManager orchestration layer (Desktop/Android) (US2.2) ✅ **NEW**
 - ✅ MCPClientService for MCP SDK operations (Desktop/Android) (US2.3)
 - ✅ LocalMCPServerRepository for local storage (US6.1)
+- ✅ LocalMCPToolRepository for MCP tool state (US6.1A)
 - ✅ LocalMCPToolApi for MCP tool backend communication (US6.2)
 - ✅ LocalMCPServerApi for backend communication (US6.3)
-- ❌ LocalMCPServerManager orchestration layer (US2.2) - **NOT IMPLEMENTED**
-- ❌ LocalMCPToolRepository for MCP tool state (US6.1A) - **NOT IMPLEMENTED**
 
 **Tool Execution (100% Complete)**
 - ✅ LocalMCPExecutor for server-side tool execution orchestration (US7.3)
@@ -2307,15 +2449,11 @@ COMMIT (or ROLLBACK on error)
 
 ### What's Missing ❌
 
-**Orchestration & Management**
-- ❌ LocalMCPServerManager - High-level orchestration layer (US2.2)
-- ❌ LocalMCPToolRepository - Dedicated MCP tool repository (US6.1A)
-
 **User Interface**
 - ❌ Local MCP Server Management UI (US6.4)
 - ❌ Local MCP Server Configuration Dialog (US6.5)
-- ❌ Connection Testing UI (US2.4)
-- ❌ Tool Discovery/Refresh UI (US3.1, US3.2)
+- ❌ Connection Testing UI (US2.4) - backend ready, UI missing
+- ❌ Tool Discovery/Refresh UI (US3.1, US3.2) - backend ready, UI missing
 
 **Session & Tool Configuration**
 - ❌ Session-level tool configuration UI (US7.1)
@@ -2332,17 +2470,27 @@ COMMIT (or ROLLBACK on error)
 
 2. **Dedicated MCP Tool API Client**: Created LocalMCPToolApi as a separate API client for MCP-specific tool operations, distinct from the general ToolApi. This provides clear separation of concerns and type-safe handling of LocalMCPToolDefinition.
 
-3. **Missing Orchestration Layer**: LocalMCPServerManager was not implemented. Current architecture likely has ViewModels calling repositories and services directly, which works but lacks the planned orchestration layer.
+3. **Dedicated MCP Tool Repository**: Implemented LocalMCPToolRepository as a separate repository for MCP tools with map-based caching (serverId → List<LocalMCPToolDefinition>) for efficient server-based lookups. This maintains clean separation from ToolRepository which handles non-MCP tools.
 
-4. **Missing Tool Repository Layer**: LocalMCPToolRepository was not created as a separate component. MCP tools are currently managed through existing ToolRepository or directly via API calls.
+4. **Complete Orchestration Layer (NEW)**: LocalMCPServerManager was fully implemented with:
+   - Reactive aggregate state (serverOverviews StateFlow)
+   - Complete workflow orchestration (test, create, refresh, start/stop)
+   - Smart connection management (only start/stop when needed)
+   - Automatic resource cleanup
+   - Comprehensive error handling
+
+5. **Auto-stop Timer Management (NEW)**: MCPClientService implements sophisticated auto-stop functionality:
+   - Automatic timer reset on tool activity
+   - Configurable timeout per server
+   - Respects neverAutoStop flag
+   - Graceful cleanup on timer expiration
 
 ### Remaining Work Estimate
 
 **High Priority (Core Functionality)**
-- LocalMCPServerManager orchestration layer - 1 week
 - Management UI (US6.4, US6.5) - 2 weeks
-- Tool discovery/refresh workflows (US3.1, US3.2) - 1 week
-- Connection testing UI (US2.4) - 3 days
+- Tool discovery/refresh workflows UI (US3.1, US3.2) - 1 week (backend complete)
+- Connection testing UI (US2.4) - 3 days (backend complete)
 
 **Medium Priority (Enhanced UX)**
 - Session-level tool configuration (US7.1) - 1 week
@@ -2352,9 +2500,8 @@ COMMIT (or ROLLBACK on error)
 **Low Priority (Polish)**
 - Health monitoring (US8.2) - 3 days
 - Execution logs (US8.3) - 1 week
-- LocalMCPToolRepository separation (US6.1A) - 1 week (optional refactoring)
 
-**Total Remaining Effort**: ~7-9 weeks
+**Total Remaining Effort**: ~5-7 weeks (reduced from 6-8 weeks due to US2.2 completion)
 
 ---
 
