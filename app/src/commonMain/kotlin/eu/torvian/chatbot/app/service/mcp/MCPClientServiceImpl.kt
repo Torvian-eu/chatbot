@@ -6,20 +6,15 @@ import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.app.domain.models.LocalMCPServer
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
-import io.modelcontextprotocol.kotlin.sdk.CallToolRequest
-import io.modelcontextprotocol.kotlin.sdk.CallToolResultBase
-import io.modelcontextprotocol.kotlin.sdk.Implementation
-import io.modelcontextprotocol.kotlin.sdk.ListToolsRequest
-import io.modelcontextprotocol.kotlin.sdk.Tool
+import io.modelcontextprotocol.kotlin.sdk.*
 import io.modelcontextprotocol.kotlin.sdk.client.Client
 import io.modelcontextprotocol.kotlin.sdk.client.StdioClientTransport
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.JsonObject
-import java.util.concurrent.ConcurrentHashMap
+import eu.torvian.chatbot.app.utils.misc.ioDispatcher as defaultIODispatcher
 
 /**
  * Desktop/Android implementation of MCPClientService.
@@ -30,15 +25,18 @@ import java.util.concurrent.ConcurrentHashMap
  * Design principles:
  * - Pure MCP operations (no Repository/API dependencies)
  * - Stateless except for active client connections
- * - Thread-safe client management using ConcurrentHashMap
+ * - Thread-safe client management using StateFlow
  * - Comprehensive error handling via Either
  *
  * @property processManager The process manager for starting/stopping MCP servers
  * @property clock Clock instance for generating timestamps (injectable for testing)
+ * @property serviceScope Coroutine scope for managing client connections (injectable for testing)
  */
 class MCPClientServiceImpl(
     private val processManager: LocalMCPServerProcessManager,
-    private val clock: Clock = Clock.System
+    private val clock: Clock = Clock.System,
+    private val serviceScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    private val ioDispatcher: CoroutineDispatcher = defaultIODispatcher
 ) : MCPClientService {
 
     companion object {
@@ -49,8 +47,13 @@ class MCPClientServiceImpl(
         private const val CLIENT_VERSION = "1.0.0"
     }
 
-    // Thread-safe map of active MCP clients
-    private val clients = ConcurrentHashMap<Long, MCPClientInternal>()
+    // Thread-safe StateFlow of active MCP clients
+    private val _clients = MutableStateFlow<Map<Long, MCPClientInternal>>(emptyMap())
+    private val clientsInternal: StateFlow<Map<Long, MCPClientInternal>> = _clients.asStateFlow()
+
+    override val clients: StateFlow<Map<Long, MCPClient>> = clientsInternal.map { internalClients ->
+        internalClients.mapValues { (_, internal) -> toPublicClient(internal) }
+    }.stateIn(serviceScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     override suspend fun startAndConnect(
         config: LocalMCPServer
@@ -59,7 +62,7 @@ class MCPClientServiceImpl(
         logger.info("Starting and connecting to MCP server: $serverId (${config.name})")
 
         // Check if already connected
-        if (clients.containsKey(serverId)) {
+        if (clientsInternal.value.containsKey(serverId)) {
             logger.warn("MCP server $serverId is already connected")
             return StartAndConnectError.AlreadyConnected(serverId).left()
         }
@@ -106,18 +109,23 @@ class MCPClientServiceImpl(
             )
 
             // Connect to the MCP server
-            withContext(Dispatchers.IO) {
+            withContext(ioDispatcher) {
                 sdkClient.connect(transport)
             }
 
             // Store the client
-            clients[serverId] = MCPClientInternal(
-                serverConfig = config,
-                processStatus = processStatus,
-                sdkClient = sdkClient,
-                connectedAt = clock.now(),
-                lastPing = true
-            )
+            _clients.update { currentClients ->
+                currentClients + (serverId to MCPClientInternal(
+                    serverConfig = config,
+                    processStatus = processStatus,
+                    sdkClient = sdkClient,
+                    connectedAt = clock.now(),
+                    lastActivityAt = clock.now(),
+                    lastPing = true
+                ))
+            }
+            // Start the auto-stop timer for this client
+            startOrResetAutoStopTimer(serverId)
             logger.info("Successfully connected MCP SDK client to server $serverId")
             return Unit.right()
         } catch (e: Exception) {
@@ -138,12 +146,17 @@ class MCPClientServiceImpl(
         logger.info("Stopping MCP server: $serverId")
 
         // Remove client from map (atomic operation)
-        val mcpClient = clients.remove(serverId)
+        val mcpClient = clientsInternal.value[serverId]
+        if (mcpClient != null) {
+            // Cancel any pending auto-stop timer
+            mcpClient.autoStopTimerJob?.cancel()
+            _clients.update { it - serverId }
+        }
 
         // Disconnect MCP SDK client if it exists
         if (mcpClient != null) {
             try {
-                withContext(Dispatchers.IO) {
+                withContext(ioDispatcher) {
                     mcpClient.sdkClient.close()
                 }
                 logger.debug("Disconnected MCP SDK client for server $serverId")
@@ -182,7 +195,7 @@ class MCPClientServiceImpl(
     override suspend fun disconnectAll(): Int {
         logger.info("Disconnecting all MCP clients")
 
-        val serverIds = clients.keys.toList()
+        val serverIds = clients.value.keys.toList()
         var disconnectedCount = 0
 
         for (serverId in serverIds) {
@@ -200,16 +213,17 @@ class MCPClientServiceImpl(
         serverId: Long
     ): Either<DiscoverToolsError, List<Tool>> {
         logger.info("Discovering tools from MCP server: $serverId")
-        val client = clients[serverId] ?: return DiscoverToolsError.NotConnected(serverId).left()
+        val client = clientsInternal.value[serverId] ?: return DiscoverToolsError.NotConnected(serverId).left()
         try {
             // Call MCP SDK to list tools
-            val toolsResult = withContext(Dispatchers.IO) {
+            val toolsResult = withContext(ioDispatcher) {
                 client.sdkClient.listTools(
                     request = ListToolsRequest(),
                     options = null
                 )
             }
             val tools = toolsResult.tools
+            updateActivity(serverId)
             logger.info("Discovered ${tools.size} tools from MCP server $serverId")
             return tools.right()
         } catch (e: Exception) {
@@ -231,12 +245,12 @@ class MCPClientServiceImpl(
         logger.debug("Tool arguments: $arguments")
 
         // Ensure server is connected
-        val mcpClient = clients[serverId]
+        val mcpClient = clientsInternal.value[serverId]
             ?: return CallToolError.NotConnected(serverId, toolName).left()
 
         try {
             // Call MCP SDK to execute tool and return the result directly
-            val result = withContext(Dispatchers.IO) {
+            val result = withContext(ioDispatcher) {
                 mcpClient.sdkClient.callTool(
                     request = CallToolRequest(
                         name = toolName,
@@ -244,6 +258,7 @@ class MCPClientServiceImpl(
                     )
                 )
             }
+            updateActivity(serverId)
             logger.info("Tool '$toolName' executed successfully on server $serverId")
             return result.right()
         } catch (e: Exception) {
@@ -259,41 +274,48 @@ class MCPClientServiceImpl(
 
     override suspend fun getServerStatus(serverId: Long): ProcessStatus {
         return processManager.getServerStatus(serverId).also { status ->
-            clients[serverId]?.let {
-                clients[serverId] = it.copy(processStatus = status)
+            clientsInternal.value[serverId]?.let { client ->
+                _clients.update { currentClients ->
+                    currentClients + (serverId to client.copy(processStatus = status))
+                }
             }
         }
     }
 
     override fun isClientRegistered(serverId: Long): Boolean {
-        return clients.containsKey(serverId)
+        return clients.value.containsKey(serverId)
     }
 
     override suspend fun pingClient(serverId: Long): Boolean {
-        val mcpClient = clients[serverId] ?: return false
-        return withContext(Dispatchers.IO) {
+        val mcpClient = clientsInternal.value[serverId] ?: return false
+        return withContext(ioDispatcher) {
             try {
                 mcpClient.sdkClient.ping()
-                clients[serverId] = mcpClient.copy(lastPing = true)
+                _clients.update { currentClients ->
+                    currentClients + (serverId to mcpClient.copy(lastPing = true))
+                }
                 true
             } catch (e: Exception) {
                 logger.warn("Error pinging MCP SDK client for server $serverId", e)
-                clients[serverId] = mcpClient.copy(lastPing = false)
+                _clients.update { currentClients ->
+                    currentClients + (serverId to mcpClient.copy(lastPing = false))
+                }
                 false
             }
         }
     }
 
     override fun getClient(serverId: Long): MCPClient? {
-        return clients[serverId]?.let { toPublicClient(it) }
+        return clients.value[serverId]
     }
 
     override fun listClients(): List<MCPClient> {
-        return clients.values.map { toPublicClient(it) }.toList()
+        return clients.value.values.toList()
     }
 
-    override fun close() {
-        runBlocking { disconnectAll() }
+    override suspend fun close() {
+        disconnectAll()
+        serviceScope.cancel()
     }
 
     /**
@@ -306,6 +328,7 @@ class MCPClientServiceImpl(
         serverConfig = internal.serverConfig,
         processStatus = internal.processStatus,
         connectedAt = internal.connectedAt,
+        lastActivityAt = internal.lastActivityAt,
         isResponsive = internal.lastPing
     )
 
@@ -330,6 +353,73 @@ class MCPClientServiceImpl(
 
         return "$CLIENT_NAME-$namePart-$idStr"
     }
+
+    /**
+     * Starts or resets the auto-stop timer for a server.
+     *
+     * This method cancels any existing timer for the server and starts a new one.
+     * When the timer expires (after effectiveAutoStopSeconds of inactivity),
+     * the server is automatically stopped.
+     *
+     * If the server is configured to never auto-stop, no timer is started.
+     *
+     * @param serverId The ID of the server to start/reset the timer for
+     */
+    private fun startOrResetAutoStopTimer(serverId: Long) {
+        val mcpClient = clientsInternal.value[serverId] ?: return
+        val config = mcpClient.serverConfig
+
+        // Cancel existing timer if any
+        mcpClient.autoStopTimerJob?.cancel()
+
+        // Don't start a timer if configured to never stop
+        if (config.neverAutoStop) {
+            mcpClient.autoStopTimerJob = null
+            return
+        }
+
+        val effectiveAutoStopSeconds = config.effectiveAutoStopSeconds
+
+        // Start a new timer
+        val timerJob = serviceScope.launch {
+            try {
+                delay(effectiveAutoStopSeconds * 1000L)  // Convert to milliseconds
+
+                // Timer expired - auto-stop the server
+                logger.info(
+                    "Auto-stopping MCP server $serverId (${config.name}) due to inactivity " +
+                            "($effectiveAutoStopSeconds seconds threshold reached)"
+                )
+                stopServer(serverId).onLeft { error ->
+                    logger.error("Failed to auto-stop server $serverId: ${error.message}")
+                }
+            } catch (e: Exception) {
+                logger.debug("Auto-stop timer for server $serverId was cancelled or errored: ${e.message}")
+            }
+        }
+
+        // Update the timer job reference
+        _clients.update { currentClients ->
+            currentClients[serverId]?.let { client ->
+                currentClients + (serverId to client.copy(autoStopTimerJob = timerJob))
+            } ?: currentClients
+        }
+    }
+
+    /**
+     * Updates the last activity timestamp for a server and resets its auto-stop timer.
+     *
+     * @param serverId The ID of the server to update
+     */
+    private fun updateActivity(serverId: Long) {
+        clientsInternal.value[serverId]?.let { client ->
+            _clients.update { currentClients ->
+                currentClients + (serverId to client.copy(lastActivityAt = clock.now()))
+            }
+        }
+        // Reset auto-stop timer when activity occurs
+        startOrResetAutoStopTimer(serverId)
+    }
 }
 
 /**
@@ -339,12 +429,16 @@ class MCPClientServiceImpl(
  * @property processStatus The last known process status from the ProcessManager
  * @property sdkClient The MCP SDK Client instance
  * @property connectedAt When the client was connected
+ * @property lastActivityAt Timestamp of the last operation on this connection
  * @property lastPing Result of the last ping check
+ * @property autoStopTimerJob Optional coroutine job for the auto-stop timer (null if no timer active)
  */
 private data class MCPClientInternal(
     val serverConfig: LocalMCPServer,
     val processStatus: ProcessStatus,
     val sdkClient: Client,
     val connectedAt: Instant,
-    val lastPing: Boolean
+    var lastActivityAt: Instant,
+    val lastPing: Boolean,
+    var autoStopTimerJob: Job? = null
 )

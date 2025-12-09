@@ -4,6 +4,7 @@ import arrow.core.Either
 import eu.torvian.chatbot.app.domain.models.LocalMCPServer
 import io.modelcontextprotocol.kotlin.sdk.CallToolResultBase
 import io.modelcontextprotocol.kotlin.sdk.Tool
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.json.JsonObject
 
 /**
@@ -24,7 +25,18 @@ import kotlinx.serialization.json.JsonObject
  * - Android: ✅ Full support
  * - WASM: ❌ Not available (requires process management)
  */
-interface MCPClientService : AutoCloseable {
+interface MCPClientService {
+
+    /**
+     * Reactive stream of all active MCP clients.
+     *
+     * This StateFlow provides real-time updates whenever the MCP client data changes,
+     * allowing ViewModels and other consumers to automatically react to data changes
+     * without manual refresh operations.
+     *
+     * @return StateFlow containing the current state of all MCP clients
+     */
+    val clients: StateFlow<Map<Long, MCPClient>>
 
     // ----- Lifecycle operations -----
 
@@ -156,4 +168,12 @@ interface MCPClientService : AutoCloseable {
      * @return List of MCPClient objects representing current client state
      */
     fun listClients(): List<MCPClient>
+
+    /**
+     * Disconnects all MCP SDK clients and stops all running servers.
+     *
+     * This method should be called during application shutdown to ensure
+     * all resources are properly cleaned up.
+     */
+    suspend fun close()
 }

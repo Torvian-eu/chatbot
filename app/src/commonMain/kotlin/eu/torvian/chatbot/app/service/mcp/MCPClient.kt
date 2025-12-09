@@ -12,11 +12,13 @@ import kotlinx.datetime.Instant
  * @property serverConfig The full LocalMCPServer configuration
  * @property processStatus The last known process status from the ProcessManager
  * @property connectedAt When the client was connected
+ * @property lastActivityAt Timestamp of the last operation on this connection
  * @property isResponsive Result of a recent ping check
  */
 data class MCPClient(
     val serverConfig: LocalMCPServer,
     val processStatus: ProcessStatus,
     val connectedAt: Instant,
+    val lastActivityAt: Instant,
     val isResponsive: Boolean,
 )

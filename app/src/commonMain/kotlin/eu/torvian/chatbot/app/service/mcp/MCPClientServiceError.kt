@@ -78,18 +78,6 @@ sealed class StartAndConnectError : MCPClientError {
  */
 sealed class DiscoverToolsError : MCPClientError {
     /**
-     * Failed to start/connect before discovery.
-     */
-    data class StartConnectionFailed(
-        val serverId: Long,
-        val startError: StartAndConnectError
-    ) : DiscoverToolsError() {
-        override val message: String =
-            "Failed to start/connect before tool discovery (ID: $serverId): ${startError.message}"
-        override val cause: Throwable? = startError.cause
-    }
-
-    /**
      * The MCP SDK client is not connected.
      */
     data class NotConnected(
