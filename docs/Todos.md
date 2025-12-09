@@ -7,3 +7,4 @@
 - User should be given the standard user role (CommonRoles.STANDARD_USER) upon registration. (see UserServiceImpl)
 - Errors from Ktor's authentication middleware (on the server) should be mapped to proper API errors. (ApiError class)
 - Improve LLM API error display to the user.
+- Remove properties: LocalMCPServer.toolsEnabledByDefault and LocalMCPToolDefinition.isEnabledByDefault. This functionality should be replaced by user-level tool preferences, so that it works for all tool types.
