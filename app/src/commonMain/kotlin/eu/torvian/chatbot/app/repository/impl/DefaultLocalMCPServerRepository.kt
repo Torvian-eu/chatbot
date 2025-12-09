@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.datetime.Clock
 
 /**
  * Default implementation of [LocalMCPServerRepository] that manages MCP server configurations
@@ -65,7 +66,19 @@ class DefaultLocalMCPServerRepository(
 
     }
 
-    override suspend fun createServer(server: LocalMCPServer): Either<RepositoryError, LocalMCPServer> = either {
+    override suspend fun createServer(
+        name: String,
+        description: String?,
+        command: String,
+        arguments: List<String>,
+        environmentVariables: Map<String, String>,
+        workingDirectory: String?,
+        isEnabled: Boolean,
+        autoStartOnEnable: Boolean,
+        autoStartOnLaunch: Boolean,
+        autoStopAfterInactivitySeconds: Int?,
+        toolsEnabledByDefault: Boolean
+    ): Either<RepositoryError, LocalMCPServer> = either {
         // Step 1: Request ID from server API
         val serverIdResponse = withError({ apiResourceError ->
             apiResourceError.toRepositoryError("Failed to generate MCP server ID")
@@ -74,13 +87,26 @@ class DefaultLocalMCPServerRepository(
         }
 
         // Step 2: Create local server configuration with generated ID
-        val serverWithId = server.copy(
+        val server = LocalMCPServer(
             id = serverIdResponse.id,
-            userId = serverIdResponse.userId
+            userId = serverIdResponse.userId,
+            name = name,
+            description = description,
+            command = command,
+            arguments = arguments,
+            environmentVariables = environmentVariables,
+            workingDirectory = workingDirectory,
+            isEnabled = isEnabled,
+            autoStartOnEnable = autoStartOnEnable,
+            autoStartOnLaunch = autoStartOnLaunch,
+            autoStopAfterInactivitySeconds = autoStopAfterInactivitySeconds,
+            toolsEnabledByDefault = toolsEnabledByDefault,
+            createdAt = Clock.System.now(),
+            updatedAt = Clock.System.now()
         )
 
         // Step 3: Store in local database
-        val createdServer = localDao.insert(serverWithId)
+        val createdServer = localDao.insert(server)
 
         // Step 4: Update cache
         updateCache { it + createdServer }

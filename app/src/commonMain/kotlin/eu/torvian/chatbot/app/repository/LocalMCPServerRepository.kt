@@ -62,10 +62,32 @@ interface LocalMCPServerRepository {
      * Upon successful creation, the new server is automatically added to the internal
      * StateFlow, triggering updates to all observers.
      *
-     * @param server The MCP server configuration to create (id will be generated)
+     * @param name The name of the MCP server
+     * @param description Optional description of the MCP server
+     * @param command The command to start the MCP server
+     * @param arguments The arguments to start the MCP server
+     * @param environmentVariables The environment variables to start the MCP server
+     * @param workingDirectory The working directory to start the MCP server
+     * @param isEnabled Whether the server is globally enabled (if false, tools cannot be enabled for any session)
+     * @param autoStartOnEnable Whether the server should be started when a tool is enabled for a session
+     * @param autoStartOnLaunch Whether the server should be started when the application launches
+     * @param autoStopAfterInactivitySeconds The number of seconds after which the server should be stopped if no tool calls are made
+     * @param toolsEnabledByDefault Whether tools from this server are enabled by default for NEW chat sessions
      * @return Either.Right with the created LocalMCPServer on success, or Either.Left with RepositoryError on failure
      */
-    suspend fun createServer(server: LocalMCPServer): Either<RepositoryError, LocalMCPServer>
+    suspend fun createServer(
+        name: String,
+        description: String?,
+        command: String,
+        arguments: List<String>,
+        environmentVariables: Map<String, String>,
+        workingDirectory: String?,
+        isEnabled: Boolean,
+        autoStartOnEnable: Boolean,
+        autoStartOnLaunch: Boolean,
+        autoStopAfterInactivitySeconds: Int?,
+        toolsEnabledByDefault: Boolean
+    ): Either<RepositoryError, LocalMCPServer>
 
     /**
      * Updates an existing MCP server configuration.
