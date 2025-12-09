@@ -23,8 +23,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.datetime.Clock
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.encodeToJsonElement
 
 /**
  * Desktop/Android implementation of LocalMCPServerManager.
@@ -405,8 +407,8 @@ class LocalMCPServerManagerImpl(
             name = mcpTool.name,
             description = mcpTool.description ?: "",
             config = buildJsonObject { },
-            inputSchema = mcpTool.inputSchema.properties,
-            outputSchema = mcpTool.outputSchema?.properties,
+            inputSchema = Json.encodeToJsonElement(mcpTool.inputSchema) as JsonObject,
+            outputSchema = mcpTool.outputSchema?.let { Json.encodeToJsonElement(it) as JsonObject },
             isEnabled = true,
             createdAt = now,
             updatedAt = now,
