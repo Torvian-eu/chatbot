@@ -343,6 +343,28 @@ class LocalMCPServerManagerImpl(
         logger.info("Successfully stopped MCP server $serverId")
     }
 
+    override suspend fun deleteServer(serverId: Long): Either<DeleteServerError, Unit> = either {
+        logger.info("Deleting MCP server: $serverId")
+
+        // Step 1: Stop the server if it's running
+        if (mcpClientService.isClientRegistered(serverId)) {
+            logger.info("Stopping MCP server $serverId before deletion")
+            mcpClientService.stopServer(serverId).mapLeft { error ->
+                logger.error("Failed to stop MCP server $serverId before deletion: ${error.message}")
+                DeleteServerError.StopFailed(serverId, error)
+            }.bind()
+        }
+
+        // Step 2: Delete the server configuration (server-side will cascade delete tools)
+        logger.info("Deleting server configuration for MCP server $serverId")
+        serverRepository.deleteServer(serverId).mapLeft { error ->
+            logger.error("Failed to delete MCP server configuration $serverId: ${error.message}")
+            DeleteServerError.ServerDeletionFailed(serverId, error)
+        }.bind()
+
+        logger.info("Successfully deleted MCP server $serverId")
+    }
+
     override suspend fun callTool(
         serverId: Long,
         toolName: String,

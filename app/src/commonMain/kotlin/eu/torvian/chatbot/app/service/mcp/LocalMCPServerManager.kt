@@ -171,6 +171,18 @@ interface LocalMCPServerManager {
      */
     suspend fun stopServer(serverId: Long): Either<ManageStopServerError, Unit>
 
+    /**
+     * Deletes an MCP server and all its associated tools.
+     *
+     * This operation:
+     * 1. Stops the server if it's running (via MCPClientService)
+     * 2. Deletes all tools for the server (via LocalMCPToolRepository)
+     * 3. Deletes the server configuration (via LocalMCPServerRepository)
+     *
+     * @param serverId The ID of the MCP server to delete
+     * @return Either.Right with Unit on success, or Either.Left with DeleteServerError on failure
+     */
+    suspend fun deleteServer(serverId: Long): Either<DeleteServerError, Unit>
 
     /**
      * Executes a tool on an MCP server.

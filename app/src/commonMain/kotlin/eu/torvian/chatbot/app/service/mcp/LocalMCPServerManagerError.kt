@@ -206,6 +206,38 @@ sealed class ManageStopServerError : LocalMCPServerManagerError {
     }
 }
 
+/**
+ * Errors that can occur when deleting an MCP server.
+ *
+ * Used by: deleteServer()
+ */
+sealed class DeleteServerError : LocalMCPServerManagerError {
+    /**
+     * Failed to stop the MCP server before deletion.
+     */
+    data class StopFailed(
+        val serverId: Long,
+        val stopError: MCPStopServerError
+    ) : DeleteServerError() {
+        override val message: String =
+            "Failed to stop MCP server before deletion (ID: $serverId): ${stopError.message}"
+        override val cause: Any = stopError
+    }
+
+    /**
+     * Failed to delete server configuration from repository.
+     * Note: Server-side deletion automatically handles associated tool deletion.
+     */
+    data class ServerDeletionFailed(
+        val serverId: Long,
+        val repositoryError: RepositoryError
+    ) : DeleteServerError() {
+        override val message: String =
+            "Failed to delete MCP server configuration (ID: $serverId): ${repositoryError.message}"
+        override val cause: Any = repositoryError
+    }
+}
+
 sealed class ManageCallToolError : LocalMCPServerManagerError {
     /**
      * Failed to retrieve server configuration from repository.
