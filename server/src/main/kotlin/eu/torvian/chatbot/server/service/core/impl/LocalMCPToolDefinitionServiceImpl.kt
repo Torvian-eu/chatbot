@@ -228,20 +228,24 @@ class LocalMCPToolDefinitionServiceImpl(
             // Identify new tools (in current but not in existing)
             val newTools = currentTools.filter { it.name !in existingToolsByName }
 
-            // Create new tools
-            val createdTools = withError({ error: CreateMCPToolsError ->
-                when (error) {
-                    is CreateMCPToolsError.OtherError ->
-                        RefreshMCPToolsError.OtherError(error.message)
+            // Create new tools, if any
+            val createdTools = if (newTools.isEmpty()) {
+                emptyList()
+            } else {
+                withError({ error: CreateMCPToolsError ->
+                    when (error) {
+                        is CreateMCPToolsError.OtherError ->
+                            RefreshMCPToolsError.OtherError(error.message)
 
-                    is CreateMCPToolsError.DuplicateName ->
-                        RefreshMCPToolsError.DuplicateName(error.name)
+                        is CreateMCPToolsError.DuplicateName ->
+                            RefreshMCPToolsError.DuplicateName(error.name)
 
-                    is CreateMCPToolsError.ToolValidationError ->
-                        RefreshMCPToolsError.ToolValidationError(error.validationError)
+                        is CreateMCPToolsError.ToolValidationError ->
+                            RefreshMCPToolsError.ToolValidationError(error.validationError)
+                    }
+                }) {
+                    createMCPTools(serverId, newTools).bind()
                 }
-            }) {
-                createMCPTools(serverId, newTools).bind()
             }
 
             // Identify changed tools (in both, but with different schema/description)
@@ -300,4 +304,3 @@ class LocalMCPToolDefinitionServiceImpl(
         }
     }
 }
-
