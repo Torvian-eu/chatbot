@@ -193,17 +193,6 @@ fun appModule(appConfig: AppConfig): Module = module {
     single<ToolRepository> {
         DefaultToolRepository(get())
     }
-    single<LocalMCPServerRepository> {
-        DefaultLocalMCPServerRepository(
-            localDao = get(),
-            api = get()
-        )
-    }
-    single<LocalMCPToolRepository> {
-        DefaultLocalMCPToolRepository(
-            localMCPToolApi = get()
-        )
-    }
 
     // Provide shared chat state with background scope for computed state flows
     factory<ChatState> { (backgroundScope: CoroutineScope) ->
@@ -216,7 +205,6 @@ fun appModule(appConfig: AppConfig): Module = module {
             backgroundScope = backgroundScope
         )
     }
-
 
     // Provide use cases with updated dependencies (now using repositories)
     factory<LoadSessionUseCase> { (chatState: ChatState) ->
