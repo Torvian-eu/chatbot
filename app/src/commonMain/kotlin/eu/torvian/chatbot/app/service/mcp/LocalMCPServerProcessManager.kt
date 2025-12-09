@@ -35,7 +35,7 @@ import kotlinx.io.Source
  * - Desktop: LocalMCPServerProcessManagerDesktop (uses Java Process API)
  * - Other platforms: Can provide alternative implementations
  */
-interface LocalMCPServerProcessManager : AutoCloseable {
+interface LocalMCPServerProcessManager {
     /**
      * Starts an MCP server process.
      *
@@ -115,4 +115,11 @@ interface LocalMCPServerProcessManager : AutoCloseable {
      * @return The process error stream, or null if the process is not running
      */
     fun getProcessErrorStream(serverId: Long): Source?
+
+    /**
+     * Closes the process manager and releases any resources.
+     *
+     * This method is idempotent and can be called multiple times.
+     */
+    suspend fun close()
 }

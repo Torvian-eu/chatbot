@@ -6,7 +6,6 @@ import arrow.core.right
 import eu.torvian.chatbot.app.domain.models.LocalMCPServer
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
@@ -309,8 +308,8 @@ class LocalMCPServerProcessManagerDesktop(
         return processes[serverId]?.process?.errorStream?.asSource()?.buffered()
     }
 
-    override fun close() {
-        runBlocking { stopAllServers() }
+    override suspend fun close() {
+        stopAllServers()
     }
 
     // Private helper methods
