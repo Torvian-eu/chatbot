@@ -1,5 +1,7 @@
 package eu.torvian.chatbot.server.service.core.error.tool
 
+import kotlinx.serialization.json.JsonObject
+
 /**
  * Base interface for all tool-related service errors.
  */
@@ -66,24 +68,24 @@ sealed interface ValidateToolError : ToolServiceError {
      * The tool name is invalid (empty, blank, or too long).
      * @property message Description of the validation error.
      */
-    data class InvalidName(val message: String) : ValidateToolError
+    data class InvalidName(val message: String, val name: String) : ValidateToolError
 
     /**
      * The tool description is invalid (empty or too long).
      * @property message Description of the validation error.
      */
-    data class InvalidDescription(val message: String) : ValidateToolError
+    data class InvalidDescription(val message: String, val description: String) : ValidateToolError
 
     /**
      * The input schema JSON is invalid or not a valid JSON Schema.
      * @property message Description of the validation error.
      */
-    data class InvalidInputSchema(val message: String) : ValidateToolError
+    data class InvalidInputSchema(val message: String, val schema: JsonObject) : ValidateToolError
 
     /**
      * The output schema JSON is invalid or not a valid JSON Schema.
      * @property message Description of the validation error.
      */
-    data class InvalidOutputSchema(val message: String) : ValidateToolError
+    data class InvalidOutputSchema(val message: String, val schema: JsonObject) : ValidateToolError
 }
 

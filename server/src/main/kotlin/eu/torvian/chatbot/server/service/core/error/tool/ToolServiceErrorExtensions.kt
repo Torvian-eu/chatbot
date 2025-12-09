@@ -54,15 +54,15 @@ fun SetToolEnabledError.toApiError(): ApiError = when (this) {
  */
 fun ValidateToolError.toApiError(): ApiError = when (this) {
     is ValidateToolError.InvalidName ->
-        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid tool name: $message", "name" to message)
+        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid tool name: $message", "name" to name)
 
     is ValidateToolError.InvalidDescription ->
-        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid tool description: $message", "description" to message)
+        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid tool description: $message", "description" to description)
 
     is ValidateToolError.InvalidInputSchema ->
-        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid input schema: $message", "inputSchema" to message)
+        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid input schema: $message", "inputSchema" to schema.toString())
 
     is ValidateToolError.InvalidOutputSchema ->
-        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid output schema: $message", "outputSchema" to message)
+        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid output schema: $message", "outputSchema" to schema.toString())
 }
 

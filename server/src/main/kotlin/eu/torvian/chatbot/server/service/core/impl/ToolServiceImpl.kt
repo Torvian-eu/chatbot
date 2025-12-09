@@ -177,21 +177,22 @@ class ToolServiceImpl(
     ): Either<ValidateToolError, Unit> = either {
         // Validate name
         ensure(name.isNotBlank()) {
-            ValidateToolError.InvalidName("Tool name cannot be blank.")
+            ValidateToolError.InvalidName("Tool name cannot be blank.", name)
         }
         ensure(name.length <= 255) {
-            ValidateToolError.InvalidName("Tool name cannot exceed 255 characters.")
+            ValidateToolError.InvalidName("Tool name cannot exceed 255 characters.", name)
         }
 
         // Validate description
         ensure(description.isNotBlank()) {
-            ValidateToolError.InvalidDescription("Tool description cannot be blank.")
+            ValidateToolError.InvalidDescription("Tool description cannot be blank.", description)
         }
 
         // Validate input schema
         ensure(inputSchema.containsKey("type") || inputSchema.containsKey("properties")) {
             ValidateToolError.InvalidInputSchema(
-                "Input schema must be a valid JSON Schema with 'type' or 'properties'."
+                message = "Input schema must be a valid JSON Schema with 'type' or 'properties'.",
+                schema = inputSchema
             )
         }
 
@@ -199,7 +200,8 @@ class ToolServiceImpl(
         if (outputSchema != null) {
             ensure(outputSchema.containsKey("type") || outputSchema.containsKey("properties")) {
                 ValidateToolError.InvalidOutputSchema(
-                    "Output schema must be a valid JSON Schema with 'type' or 'properties'."
+                    message = "Output schema must be a valid JSON Schema with 'type' or 'properties'.",
+                    schema = outputSchema
                 )
             }
         }
