@@ -182,9 +182,6 @@ class LocalMCPServerManagerImpl(
                     logger.error("Failed to discover tools from MCP server $name: ${error.message}")
                     CreateServerError.DiscoveryFailed(config.id, error)
                 }
-                .map { tools ->
-                    tools.map { convertMCPToolToDefinition(it, config.id) }
-                }
                 .bind()
 
             // Step 4: Persist server config
@@ -208,7 +205,10 @@ class LocalMCPServerManagerImpl(
                 .bind()
 
             // Step 5: Persist tools
-            val createdTools = toolRepository.persistMCPTools(createdServer.id, tools)
+            val createdTools = toolRepository.persistMCPTools(
+                serverId = createdServer.id,
+                tools = tools.map { convertMCPToolToDefinition(it, createdServer.id) }
+            )
                 .mapLeft { error ->
                     logger.error("Failed to persist tools for MCP server $name: ${error.message}")
                     CreateServerError.ToolPersistenceFailed(createdServer.id, error)
