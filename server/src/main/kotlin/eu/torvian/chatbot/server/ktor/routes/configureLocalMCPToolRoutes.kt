@@ -91,9 +91,9 @@ fun Route.configureLocalMCPToolRoutes(
                         currentTools = request.currentTools
                     ).bind()
                     RefreshMCPToolsResponse(
-                        added = refreshResult.added,
-                        updated = refreshResult.updated,
-                        deleted = refreshResult.deleted
+                        addedTools = refreshResult.addedTools,
+                        updatedTools = refreshResult.updatedTools,
+                        deletedTools = refreshResult.deletedTools
                     )
                 }
             }

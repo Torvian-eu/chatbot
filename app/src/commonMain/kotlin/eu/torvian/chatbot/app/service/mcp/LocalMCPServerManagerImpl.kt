@@ -300,7 +300,7 @@ class LocalMCPServerManagerImpl(
                     RefreshToolsError.RefreshPersistFailed(serverId, error)
                 }
                 .onRight { response ->
-                    logger.info("Successfully refreshed tools for MCP server $serverId: +${response.added} ~${response.updated} -${response.deleted}")
+                    logger.info("Successfully refreshed tools for MCP server $serverId: +${response.addedTools.size} ~${response.updatedTools.size} -${response.deletedTools.size}")
                 }
                 .bind()
         } finally {

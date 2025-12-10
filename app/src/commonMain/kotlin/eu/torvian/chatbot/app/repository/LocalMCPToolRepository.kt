@@ -70,7 +70,7 @@ interface LocalMCPToolRepository {
      *
      * @param serverId The ID of the MCP server
      * @param currentTools The current list of tools from the MCP server
-     * @return [Either.Right] containing refresh response with counts of added/updated/deleted tools on success,
+     * @return [Either.Right] containing refresh response with lists of added/updated/deleted tools on success,
      *         or [Either.Left] with [RepositoryError] on failure
      */
     suspend fun refreshMCPTools(

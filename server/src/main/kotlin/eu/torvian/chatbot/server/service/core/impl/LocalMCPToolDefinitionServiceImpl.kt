@@ -258,7 +258,8 @@ class LocalMCPToolDefinitionServiceImpl(
                         )
             }
 
-            // Update changed tools
+            // Update changed tools and collect the updated tool definitions
+            val updatedTools = mutableListOf<LocalMCPToolDefinition>()
             for (tool in changedTools) {
                 // Validate tool definition
                 withError({ error: ValidateToolError ->
@@ -280,6 +281,7 @@ class LocalMCPToolDefinitionServiceImpl(
                 }) {
                     toolDefinitionDao.updateToolDefinition(updatedTool).bind()
                 }
+                updatedTools.add(updatedTool)
             }
 
             // Identify removed tools (in existing but not in current)
@@ -295,11 +297,11 @@ class LocalMCPToolDefinitionServiceImpl(
             }
 
             RefreshResult(
-                added = createdTools.size,
-                updated = changedTools.size,
-                deleted = removedTools.size
+                addedTools = createdTools,
+                updatedTools = updatedTools,
+                deletedTools = removedTools
             ).also {
-                logger.info("Refreshed MCP tools for server $serverId: added=${it.added}, updated=${it.updated}, deleted=${it.deleted}")
+                logger.info("Refreshed MCP tools for server $serverId: added=${it.addedTools.size}, updated=${it.updatedTools.size}, deleted=${it.deletedTools.size}")
             }
         }
     }

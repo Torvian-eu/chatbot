@@ -133,7 +133,14 @@ class KtorLocalMCPToolApiClientTest {
             mockMCPTool(0, serverId, "tool1", "Tool 1 Updated"),
             mockMCPTool(0, serverId, "new_tool", "New Tool")
         )
-        val response = RefreshMCPToolsResponse(added = 1, updated = 1, deleted = 1)
+        val addedTool = mockMCPTool(1, serverId, "new_tool", "New Tool")
+        val updatedTool = mockMCPTool(2, serverId, "tool1", "Tool 1 Updated")
+        val deletedTool = mockMCPTool(3, serverId, "old_tool", "Old Tool")
+        val response = RefreshMCPToolsResponse(
+            addedTools = listOf(addedTool),
+            updatedTools = listOf(updatedTool),
+            deletedTools = listOf(deletedTool)
+        )
 
         val mockEngine = MockEngine { req ->
             assertEquals(HttpMethod.Post, req.method)
@@ -148,9 +155,12 @@ class KtorLocalMCPToolApiClientTest {
         val apiClient = createTestClient(mockEngine)
         when (val result = apiClient.refreshMCPToolsForServer(serverId, currentTools)) {
             is Either.Right -> {
-                assertEquals(1, result.value.added)
-                assertEquals(1, result.value.updated)
-                assertEquals(1, result.value.deleted)
+                assertEquals(1, result.value.addedTools.size)
+                assertEquals(1, result.value.updatedTools.size)
+                assertEquals(1, result.value.deletedTools.size)
+                assertEquals(addedTool, result.value.addedTools.first())
+                assertEquals(updatedTool, result.value.updatedTools.first())
+                assertEquals(deletedTool, result.value.deletedTools.first())
             }
 
             is Either.Left -> fail("Expected success, but got error: ${result.value}")
@@ -160,7 +170,11 @@ class KtorLocalMCPToolApiClientTest {
     @Test
     fun `refreshMCPToolsForServer - success with no changes`() = runTest {
         val serverId = 123L
-        val response = RefreshMCPToolsResponse(added = 0, updated = 0, deleted = 0)
+        val response = RefreshMCPToolsResponse(
+            addedTools = emptyList(),
+            updatedTools = emptyList(),
+            deletedTools = emptyList()
+        )
 
         val mockEngine = MockEngine { req ->
             assertEquals(HttpMethod.Post, req.method)
@@ -174,9 +188,9 @@ class KtorLocalMCPToolApiClientTest {
         val apiClient = createTestClient(mockEngine)
         when (val result = apiClient.refreshMCPToolsForServer(serverId, emptyList())) {
             is Either.Right -> {
-                assertEquals(0, result.value.added)
-                assertEquals(0, result.value.updated)
-                assertEquals(0, result.value.deleted)
+                assertEquals(0, result.value.addedTools.size)
+                assertEquals(0, result.value.updatedTools.size)
+                assertEquals(0, result.value.deletedTools.size)
             }
 
             is Either.Left -> fail("Expected success, but got error: ${result.value}")

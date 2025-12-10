@@ -126,14 +126,35 @@ class DefaultLocalMCPToolRepository(
             localMCPToolApi.refreshMCPToolsForServer(serverId, currentTools).bind()
         }
 
-        // Invalidate cache for this server - will be reloaded on next access
+        // Update cache with the new state of tools after refresh
         updateCache { current ->
             val updated = current.toMutableMap()
-            updated.remove(serverId)
+            val existingTools = updated[serverId] ?: emptyList()
+
+            // Create a map of existing tools by ID for quick lookup
+            val existingToolsById = existingTools.associateBy { it.id }.toMutableMap()
+
+            // Remove deleted tools from the cache
+            refreshResponse.deletedTools.forEach { deletedTool ->
+                existingToolsById.remove(deletedTool.id)
+            }
+
+            // Update existing tools with updated versions
+            refreshResponse.updatedTools.forEach { updatedTool ->
+                existingToolsById[updatedTool.id] = updatedTool
+            }
+
+            // Add new tools to the cache
+            refreshResponse.addedTools.forEach { addedTool ->
+                existingToolsById[addedTool.id] = addedTool
+            }
+
+            // Store the updated list of tools for this server
+            updated[serverId] = existingToolsById.values.toList()
             updated
         }
 
-        logger.info("Refreshed MCP tools for server $serverId: +${refreshResponse.added} ~${refreshResponse.updated} -${refreshResponse.deleted}")
+        logger.info("Refreshed MCP tools for server $serverId: +${refreshResponse.addedTools.size} ~${refreshResponse.updatedTools.size} -${refreshResponse.deletedTools.size}")
         refreshResponse
     }
 

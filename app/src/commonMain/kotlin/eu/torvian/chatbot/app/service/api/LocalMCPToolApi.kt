@@ -55,7 +55,7 @@ interface LocalMCPToolApi {
      *
      * @param serverId The unique identifier of the MCP server
      * @param currentTools The current list of tools from the MCP server
-     * @return [Either.Right] containing [RefreshMCPToolsResponse] with counts of added/updated/deleted tools on success,
+     * @return [Either.Right] containing [RefreshMCPToolsResponse] with lists of added/updated/deleted tools on success,
      *         or [Either.Left] containing a [ApiResourceError] on failure.
      */
     suspend fun refreshMCPToolsForServer(
