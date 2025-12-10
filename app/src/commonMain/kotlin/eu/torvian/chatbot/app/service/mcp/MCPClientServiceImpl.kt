@@ -45,6 +45,9 @@ class MCPClientServiceImpl(
         // Client info for MCP SDK
         private const val CLIENT_NAME = "chatbot-mcp-client"
         private const val CLIENT_VERSION = "1.0.0"
+
+        // Connection timeout in seconds
+        private const val CONNECTION_TIMEOUT_SECONDS = 15
     }
 
     // Thread-safe StateFlow of active MCP clients
@@ -108,9 +111,20 @@ class MCPClientServiceImpl(
                 output = outputStream
             )
 
-            // Connect to the MCP server
-            withContext(ioDispatcher) {
-                sdkClient.connect(transport)
+            // Connect to the MCP server with timeout
+            try {
+                withContext(ioDispatcher) {
+                    withTimeout(CONNECTION_TIMEOUT_SECONDS * 1000L) {
+                        sdkClient.connect(transport)
+                    }
+                }
+            } catch (_: TimeoutCancellationException) {
+                logger.error("Connection to MCP server $serverId timed out after $CONNECTION_TIMEOUT_SECONDS seconds")
+                processManager.stopServer(serverId)
+                return StartAndConnectError.ConnectionTimeout(
+                    serverId = serverId,
+                    timeoutSeconds = CONNECTION_TIMEOUT_SECONDS
+                ).left()
             }
 
             // Store the client
