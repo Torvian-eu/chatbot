@@ -1,7 +1,9 @@
 package eu.torvian.chatbot.app.service.mcp
 
 import arrow.core.Either
+import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.models.LocalMCPServer
+import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
 import io.modelcontextprotocol.kotlin.sdk.CallToolResultBase
 import kotlinx.coroutines.flow.StateFlow
@@ -39,14 +41,32 @@ interface LocalMCPServerManager {
      * - LocalMCPServerRepository.servers (MCP server configurations)
      * - LocalMCPToolRepository.tools (MCP tool definitions organized by server ID)
      *
-     * The map is keyed by server ID and provides complete status information for each server,
+     * The collection provides complete status information for each server,
      * including configuration, tools, process status, connection status, and responsiveness.
      *
      * Automatically updates whenever any of the source states change.
      *
-     * @return StateFlow<Map<Long, LocalMCPServerOverview>> mapping server ID to server status
+     * The DataState reflects the loading state of the underlying server data:
+     * - Idle: No data loaded yet
+     * - Loading: Server data is being loaded
+     * - Success: Server overviews are available (list may be empty if no servers configured)
+     * - Error: Failed to load server data from repository
+     *
+     * @return StateFlow<DataState<RepositoryError, List<LocalMCPServerOverview>>> list of server overviews
      */
-    val serverOverviews: StateFlow<Map<Long, LocalMCPServerOverview>>
+    val serverOverviews: StateFlow<DataState<RepositoryError, List<LocalMCPServerOverview>>>
+
+    /**
+     * Loads all MCP servers and their tools for a specific user.
+     *
+     * This operation:
+     * 1. Calls LocalMCPServerRepository to load servers for the user
+     * 2. Calls LocalMCPToolRepository to load all MCP tools
+     *
+     * @param userId The ID of the user whose servers to load
+     * @return Either.Right(Unit) on success, or Either.Left(RepositoryError) on failure
+     */
+    suspend fun loadServers(userId: Long): Either<RepositoryError, Unit>
 
     /**
      * Tests connection to a new MCP server and returns the count of discovered tools.
@@ -172,6 +192,23 @@ interface LocalMCPServerManager {
     suspend fun stopServer(serverId: Long): Either<ManageStopServerError, Unit>
 
     /**
+     * Updates an existing MCP server configuration.
+     *
+     * This operation:
+     * 1. Updates the server configuration (via LocalMCPServerRepository)
+     * 2. If command, arguments, or environment variables changed:
+     *    a. Stops the server if it's running (via MCPClientService)
+     *    b. Starts and connects with new config (via MCPClientService)
+     *    c. Discovers tools (via MCPClientService)
+     *    d. Refreshes tools in repository (via LocalMCPToolRepository)
+     *    e. Stops the server if it wasn't running before (cleanup)
+     *
+     * @param server The updated MCP server configuration
+     * @return Either.Right with Unit on success, or Either.Left with UpdateServerError on failure
+     */
+    suspend fun updateServer(server: LocalMCPServer): Either<UpdateServerError, Unit>
+
+    /**
      * Deletes an MCP server and all its associated tools.
      *
      * This operation:
@@ -209,4 +246,3 @@ interface LocalMCPServerManager {
      */
     suspend fun close()
 }
-
