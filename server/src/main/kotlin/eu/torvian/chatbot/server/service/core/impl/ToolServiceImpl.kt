@@ -206,5 +206,10 @@ class ToolServiceImpl(
             }
         }
     }
+
+    override suspend fun getToolsForUser(userId: Long): List<ToolDefinition> =
+        transactionScope.transaction {
+            toolDefinitionDao.getToolsForUser(userId)
+        }
 }
 

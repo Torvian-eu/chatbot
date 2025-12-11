@@ -14,9 +14,13 @@ import eu.torvian.chatbot.common.models.tool.ToolDefinition
  */
 interface ToolApi {
     /**
-     * Retrieves a list of all available tool definitions.
+     * Retrieves a list of all available tool definitions for the current user.
      *
      * Corresponds to `GET /api/v1/tools`.
+     *
+     * Returns a combination of:
+     * - All global tools (non-MCP_LOCAL type)
+     * - User-specific MCP_LOCAL tools (where the MCP server is owned by the current user)
      *
      * @return [Either.Right] containing a list of [ToolDefinition] on success,
      *         or [Either.Left] containing a [ApiResourceError] on failure.

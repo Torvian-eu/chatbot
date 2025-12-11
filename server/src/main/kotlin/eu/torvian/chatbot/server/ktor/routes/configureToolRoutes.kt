@@ -43,10 +43,11 @@ fun Route.configureToolRoutes(
     authorizationService: AuthorizationService
 ) {
     authenticate(AuthSchemes.USER_JWT) {
-        // GET /api/v1/tools - List all tools
+        // GET /api/v1/tools - List all tools accessible to the current user
         get<ToolResource> {
-            // All authenticated users can view available tools
-            call.respond(toolService.getAllTools().map { it as ToolDefinition })
+            val userId = call.getUserId()
+            // Returns all global tools plus user-specific MCP tools
+            call.respond(toolService.getToolsForUser(userId))
         }
 
         // POST /api/v1/tools - Create a new tool (admin only)

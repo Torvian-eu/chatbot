@@ -20,20 +20,26 @@ import kotlinx.coroutines.flow.StateFlow
 interface ToolRepository {
 
     /**
-     * Reactive stream of all available tool definitions.
+     * Reactive stream of all available tool definitions for the current user.
      *
      * This StateFlow provides real-time updates whenever the tool data changes,
      * allowing ViewModels and other consumers to automatically react to data changes
      * without manual refresh operations.
      *
-     * @return StateFlow containing the current state of all tools wrapped in DataState
+     * Includes all global tools and user-specific MCP tools.
+     *
+     * @return StateFlow containing the current state of all user-accessible tools wrapped in DataState
      */
     val tools: StateFlow<DataState<RepositoryError, List<ToolDefinition>>>
 
     /**
-     * Loads all tool definitions from the backend.
+     * Loads all tool definitions accessible to the current user from the backend.
      *
-     * This operation fetches the latest tool data and updates the internal StateFlow.
+     * This operation fetches the latest tool data including:
+     * - All global tools (non-MCP_LOCAL type)
+     * - User-specific MCP tools (MCP servers owned by the current user)
+     *
+     * Updates the internal StateFlow with the fetched tools.
      * If a load operation is already in progress, this method returns immediately
      * without starting a duplicate operation.
      *

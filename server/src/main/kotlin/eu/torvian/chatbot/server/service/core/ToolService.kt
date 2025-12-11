@@ -109,5 +109,17 @@ interface ToolService {
         inputSchema: JsonObject,
         outputSchema: JsonObject?
     ): Either<ValidateToolError, Unit>
+
+    /**
+     * Retrieves all tools accessible to a specific user.
+     *
+     * Returns a combination of:
+     * - All global tools (non-MCP_LOCAL type)
+     * - User-specific MCP_LOCAL tools (where the MCP server is owned by the user)
+     *
+     * @param userId The ID of the user
+     * @return List of ToolDefinition (mix of MiscToolDefinition and LocalMCPToolDefinition)
+     */
+    suspend fun getToolsForUser(userId: Long): List<ToolDefinition>
 }
 
