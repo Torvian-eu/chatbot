@@ -23,11 +23,11 @@ import eu.torvian.chatbot.common.models.api.access.ModelSettingsDetails
 import eu.torvian.chatbot.common.models.llm.LLMModel
 
 /**
- * Master panel for the Settings Config tab.
+ * Master panel for the Model Settings Config tab.
  * Contains model selection dropdown and settings list.
  */
 @Composable
-fun SettingsListPanel(
+fun ModelSettingsListPanel(
     models: List<LLMModel>,
     selectedModel: LLMModel?,
     settingsList: List<ModelSettingsDetails>,
@@ -81,7 +81,7 @@ fun SettingsListPanel(
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(settingsList) { settingsDetails ->
-                        SettingsListItem(
+                        ModelSettingsListItem(
                             settingsDetails = settingsDetails,
                             isSelected = selectedSettings?.settings?.id == settingsDetails.settings.id,
                             onClick = { onSettingsSelected(settingsDetails) }
@@ -97,7 +97,7 @@ fun SettingsListPanel(
  * Individual item in the settings list.
  */
 @Composable
-private fun SettingsListItem(
+private fun ModelSettingsListItem(
     settingsDetails: ModelSettingsDetails,
     isSelected: Boolean,
     onClick: () -> Unit

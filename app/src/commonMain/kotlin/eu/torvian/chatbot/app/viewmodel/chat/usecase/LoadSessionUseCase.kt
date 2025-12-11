@@ -5,7 +5,7 @@ import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.error_loading_session
 import eu.torvian.chatbot.app.repository.ModelRepository
 import eu.torvian.chatbot.app.repository.SessionRepository
-import eu.torvian.chatbot.app.repository.SettingsRepository
+import eu.torvian.chatbot.app.repository.ModelSettingsRepository
 import eu.torvian.chatbot.app.repository.ToolRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
@@ -21,7 +21,7 @@ import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
  */
 class LoadSessionUseCase(
     private val sessionRepository: SessionRepository,
-    private val settingsRepository: SettingsRepository,
+    private val modelSettingsRepository: ModelSettingsRepository,
     private val modelRepository: ModelRepository,
     private val toolRepository: ToolRepository,
     private val state: ChatState,
@@ -52,7 +52,7 @@ class LoadSessionUseCase(
             { sessionRepository.loadSessionDetails(sessionId) },
             { sessionRepository.loadSessionToolCalls(sessionId) },
             { modelRepository.loadModels() },
-            { settingsRepository.loadAllSettings() },
+            { modelSettingsRepository.loadAllSettings() },
             { toolRepository.loadTools() },
             { toolRepository.loadEnabledToolsForSession(sessionId) },
         ) { sessionResult, toolCallsResult, modelsResult, settingsResult, toolsResult, enabledToolsResult ->

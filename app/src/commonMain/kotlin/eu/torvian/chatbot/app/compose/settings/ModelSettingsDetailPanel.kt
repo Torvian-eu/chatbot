@@ -24,7 +24,7 @@ import eu.torvian.chatbot.common.models.llm.ModelSettings
  * Shows details of the currently selected settings profile.
  */
 @Composable
-fun SettingsDetailPanel(
+fun ModelSettingsDetailPanel(
     settingsDetails: ModelSettingsDetails?,
     onEdit: (ModelSettings) -> Unit,
     onDelete: (ModelSettings) -> Unit,

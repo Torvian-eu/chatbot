@@ -4,7 +4,7 @@ import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.ModelRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.SessionRepository
-import eu.torvian.chatbot.app.repository.SettingsRepository
+import eu.torvian.chatbot.app.repository.ModelSettingsRepository
 import eu.torvian.chatbot.app.repository.ToolCallsMap
 import eu.torvian.chatbot.app.repository.ToolRepository
 import eu.torvian.chatbot.app.viewmodel.chat.util.ThreadBuilder
@@ -30,7 +30,7 @@ import kotlinx.coroutines.flow.*
 @OptIn(ExperimentalCoroutinesApi::class)
 class ChatStateImpl(
     private val sessionRepository: SessionRepository,
-    private val settingsRepository: SettingsRepository,
+    private val modelSettingsRepository: ModelSettingsRepository,
     private val modelRepository: ModelRepository,
     private val toolRepository: ToolRepository,
     private val threadBuilder: ThreadBuilder,
@@ -99,7 +99,7 @@ class ChatStateImpl(
 
     // All settings from repository, filtered for chat model settings only
     private val allSettings: StateFlow<DataState<RepositoryError, List<ChatModelSettings>>> =
-        settingsRepository.allSettings.map { dataState ->
+        modelSettingsRepository.allSettings.map { dataState ->
             when (dataState) {
                 is DataState.Success -> {
                     val filteredSettings = dataState.data.filterIsInstance<ChatModelSettings>()

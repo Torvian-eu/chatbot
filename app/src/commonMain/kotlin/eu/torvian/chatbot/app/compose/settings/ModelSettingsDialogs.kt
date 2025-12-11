@@ -3,21 +3,21 @@ package eu.torvian.chatbot.app.compose.settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import eu.torvian.chatbot.app.compose.settings.dialogs.ManageAccessDialog
-import eu.torvian.chatbot.app.domain.contracts.SettingsDialogState
+import eu.torvian.chatbot.app.domain.contracts.ModelSettingsDialogState
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 
 /**
- * Dialog router for the Settings Config tab.
+ * Dialog router for the Model Settings tab.
  * Displays the appropriate dialog based on the current dialog state.
  */
 @Composable
 fun SettingsDialogs(
-    dialogState: SettingsDialogState,
-    actions: SettingsConfigTabActions
+    dialogState: ModelSettingsDialogState,
+    actions: ModelSettingsConfigTabActions
 ) {
     when (dialogState) {
-        is SettingsDialogState.AddNewSettings -> {
-            SettingsFormDialog(
+        is ModelSettingsDialogState.AddNewSettings -> {
+            ModelSettingsFormDialog(
                 title = "Add New Settings Profile",
                 formState = dialogState.formState,
                 onFormUpdate = actions::onUpdateSettingsForm,
@@ -25,8 +25,8 @@ fun SettingsDialogs(
                 onCancel = actions::onCancelDialog
             )
         }
-        is SettingsDialogState.EditSettings -> {
-            SettingsFormDialog(
+        is ModelSettingsDialogState.EditSettings -> {
+            ModelSettingsFormDialog(
                 title = "Edit Settings Profile",
                 formState = dialogState.formState,
                 onFormUpdate = actions::onUpdateSettingsForm,
@@ -34,14 +34,14 @@ fun SettingsDialogs(
                 onCancel = actions::onCancelDialog
             )
         }
-        is SettingsDialogState.DeleteSettings -> {
-            DeleteSettingsDialog(
+        is ModelSettingsDialogState.DeleteSettings -> {
+            DeleteModelSettingsDialog(
                 settings = dialogState.settings,
                 onConfirm = { actions.onDeleteSettings(dialogState.settings.id) },
                 onDismiss = actions::onCancelDialog
             )
         }
-        is SettingsDialogState.ManageAccess -> {
+        is ModelSettingsDialogState.ManageAccess -> {
             ManageAccessDialog(
                 resourceName = dialogState.settingsDetails.settings.name,
                 accessDetails = dialogState.settingsDetails.accessDetails,
@@ -68,7 +68,7 @@ fun SettingsDialogs(
                 onDismiss = actions::onCancelDialog
             )
         }
-        is SettingsDialogState.None -> { /* No dialog */ }
+        is ModelSettingsDialogState.None -> { /* No dialog */ }
     }
 }
 
@@ -76,7 +76,7 @@ fun SettingsDialogs(
  * Confirmation dialog for deleting settings profiles.
  */
 @Composable
-private fun DeleteSettingsDialog(
+private fun DeleteModelSettingsDialog(
     settings: ModelSettings,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit

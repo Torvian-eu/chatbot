@@ -20,7 +20,7 @@ import kotlinx.coroutines.flow.StateFlow
  * The repository follows a clean architecture where it provides access to data without
  * managing the lifecycle of individual observations, leaving state management to consumers.
  */
-interface SettingsRepository {
+interface ModelSettingsRepository {
 
     /**
      * Reactive stream of all LLM settings profiles, including ownership and access details.
