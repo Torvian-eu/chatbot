@@ -13,6 +13,7 @@ import eu.torvian.chatbot.app.utils.misc.LruCache
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.models.api.tool.CreateToolRequest
 import eu.torvian.chatbot.common.models.api.tool.SetToolEnabledRequest
+import eu.torvian.chatbot.common.models.api.tool.SetToolsEnabledRequest
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -189,6 +190,45 @@ class DefaultToolRepository(
                             currentState.data + toolDefinition
                         } else {
                             currentState.data.filter { it.id != toolDefinition.id }
+                        }
+                        DataState.Success(updatedTools)
+                    }
+                    else -> currentState // Keep other states unchanged
+                }
+            }
+        }
+    }
+
+    override suspend fun setToolsEnabledForSession(
+        sessionId: Long,
+        toolDefinitions: List<ToolDefinition>,
+        enabled: Boolean
+    ): Either<RepositoryError, Unit> = either {
+        val request = SetToolsEnabledRequest(
+            toolIds = toolDefinitions.map { it.id },
+            enabled = enabled
+        )
+
+        withError({ apiResourceError ->
+            apiResourceError.toRepositoryError("Failed to set tools enabled for session")
+        }) {
+            toolApi.setToolsEnabledForSession(sessionId, request).bind()
+        }
+
+        // Update the enabled tools cache
+        _enabledToolsFlowsMutex.withLock {
+            _enabledToolsFlows[sessionId]?.update { currentState ->
+                when (currentState) {
+                    is DataState.Success -> {
+                        val updatedTools = if (enabled) {
+                            // Add all tools that are not already in the list
+                            val existingIds = currentState.data.map { it.id }.toSet()
+                            val newTools = toolDefinitions.filter { it.id !in existingIds }
+                            currentState.data + newTools
+                        } else {
+                            // Remove all tools from the list
+                            val toolIdsToRemove = toolDefinitions.map { it.id }.toSet()
+                            currentState.data.filter { it.id !in toolIdsToRemove }
                         }
                         DataState.Success(updatedTools)
                     }

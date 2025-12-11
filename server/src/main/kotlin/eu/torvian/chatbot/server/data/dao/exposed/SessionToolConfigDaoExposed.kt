@@ -10,12 +10,14 @@ import eu.torvian.chatbot.common.models.tool.MiscToolDefinition
 import eu.torvian.chatbot.server.data.dao.SessionToolConfigDao
 import eu.torvian.chatbot.server.data.dao.error.ClearToolConfigError
 import eu.torvian.chatbot.server.data.dao.error.SetToolEnabledError
+import eu.torvian.chatbot.server.data.dao.error.SetToolsEnabledError
 import eu.torvian.chatbot.server.data.tables.SessionToolConfigTable
 import eu.torvian.chatbot.server.data.tables.ToolDefinitionTable
 import eu.torvian.chatbot.server.data.tables.mappers.toMiscToolDefinition
 import org.jetbrains.exposed.exceptions.ExposedSQLException
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 
 /**
  * Exposed ORM implementation of [SessionToolConfigDao].
@@ -62,15 +64,65 @@ class SessionToolConfigDaoExposed(
         transactionScope.transaction {
             either {
                 catch({
-                    SessionToolConfigTable.upsert {
-                        it[SessionToolConfigTable.sessionId] = sessionId
-                        it[SessionToolConfigTable.toolDefinitionId] = toolDefinitionId
-                        it[isEnabled] = enabled
+                    if (enabled) {
+                        // Upsert to enable the tool
+                        SessionToolConfigTable.upsert {
+                            it[SessionToolConfigTable.sessionId] = sessionId
+                            it[SessionToolConfigTable.toolDefinitionId] = toolDefinitionId
+                            it[isEnabled] = true
+                        }
+                    } else {
+                        // Delete the entry to disable (saves space instead of storing isEnabled=false)
+                        SessionToolConfigTable.deleteWhere {
+                            (SessionToolConfigTable.sessionId eq sessionId) and
+                                    (SessionToolConfigTable.toolDefinitionId eq toolDefinitionId)
+                        }
                     }
                 }) { e: ExposedSQLException ->
                     ensure(!e.isForeignKeyViolation()) {
                         SetToolEnabledError.ForeignKeyViolation(
                             "Foreign key constraint violation: sessionId=$sessionId, toolDefinitionId=$toolDefinitionId"
+                        )
+                    }
+                    throw e
+                }
+            }
+        }
+
+    override suspend fun setToolsEnabledForSession(
+        sessionId: Long,
+        toolDefinitionIds: List<Long>,
+        enabled: Boolean
+    ): Either<SetToolsEnabledError, Unit> =
+        transactionScope.transaction {
+            either {
+                if (toolDefinitionIds.isEmpty()) {
+                    return@transaction Unit.right()
+                }
+
+                catch({
+                    if (enabled) {
+                        // Batch upsert all tools as enabled
+                        SessionToolConfigTable.batchUpsert(
+                            toolDefinitionIds,
+                            SessionToolConfigTable.sessionId,
+                            SessionToolConfigTable.toolDefinitionId
+                        ) { toolDefinitionId ->
+                            this[SessionToolConfigTable.sessionId] = sessionId
+                            this[SessionToolConfigTable.toolDefinitionId] = toolDefinitionId
+                            this[SessionToolConfigTable.isEnabled] = true
+                        }
+                    } else {
+                        // Delete all matching entries
+                        SessionToolConfigTable.deleteWhere {
+                            (SessionToolConfigTable.sessionId eq sessionId) and
+                                    (SessionToolConfigTable.toolDefinitionId inList toolDefinitionIds)
+                        }
+                    }
+                }) { e: ExposedSQLException ->
+                    ensure(!e.isForeignKeyViolation()) {
+                        SetToolsEnabledError.ForeignKeyViolation(
+                            "Foreign key constraint violation: sessionId=$sessionId, toolDefinitionIds=$toolDefinitionIds"
                         )
                     }
                     throw e

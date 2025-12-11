@@ -89,6 +89,21 @@ interface ToolService {
     ): Either<SetToolEnabledError, Unit>
 
     /**
+     * Batch enables or disables multiple tools for a session.
+     * This creates session-specific overrides of the tools' default enabled states.
+     * @param sessionId The ID of the session.
+     * @param toolIds The IDs of the tools.
+     * @param enabled Whether to enable or disable the tools for this session.
+     * @return Either a [SetToolsEnabledError] if the session or any tools don't exist,
+     *         or Unit if successful.
+     */
+    suspend fun setToolsEnabledForSession(
+        sessionId: Long,
+        toolIds: List<Long>,
+        enabled: Boolean
+    ): Either<SetToolsEnabledError, Unit>
+
+    /**
      * Validates a tool definition without persisting it.
      * @param tool The tool definition to validate.
      * @return Either a [ValidateToolError] if validation fails, or Unit if successful.

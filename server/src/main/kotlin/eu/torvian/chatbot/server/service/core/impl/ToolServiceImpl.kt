@@ -20,6 +20,7 @@ import kotlinx.serialization.json.JsonObject
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 import eu.torvian.chatbot.server.data.dao.error.SetToolEnabledError as DaoSetToolEnabledError
+import eu.torvian.chatbot.server.data.dao.error.SetToolsEnabledError as DaoSetToolsEnabledError
 
 /**
  * Implementation of the [ToolService] interface.
@@ -117,15 +118,15 @@ class ToolServiceImpl(
         return transactionScope.transaction {
             sessionToolConfigDao.getEnabledToolsForSession(sessionId)
                 // TODO: for better performance, modify sessionToolConfigDao.getEnabledToolsForSession to return polymorphic ToolDefinition
-            .map { toolDefinition ->
-                if (toolDefinition.type == ToolType.MCP_LOCAL) {
-                    localMCPToolDefinitionDao.getToolById(toolDefinition.id).getOrElse {
-                        throw IllegalStateException("Failed to retrieve local MCP tool definition")
+                .map { toolDefinition ->
+                    if (toolDefinition.type == ToolType.MCP_LOCAL) {
+                        localMCPToolDefinitionDao.getToolById(toolDefinition.id).getOrElse {
+                            throw IllegalStateException("Failed to retrieve local MCP tool definition")
+                        }
+                    } else {
+                        toolDefinition
                     }
-                } else {
-                    toolDefinition
                 }
-            }
         }
     }
 
@@ -157,6 +158,28 @@ class ToolServiceImpl(
             }
 
             logger.info("Tool $toolId ${if (enabled) "enabled" else "disabled"} for session $sessionId")
+        }
+    }
+
+    override suspend fun setToolsEnabledForSession(
+        sessionId: Long,
+        toolIds: List<Long>,
+        enabled: Boolean
+    ): Either<SetToolsEnabledError, Unit> = transactionScope.transaction {
+        either {
+            // Batch set tool enabled state for session
+            // Foreign key violations are handled by the DAO layer
+            withError({ daoError: DaoSetToolsEnabledError ->
+                when (daoError) {
+                    is DaoSetToolsEnabledError.ForeignKeyViolation -> {
+                        SetToolsEnabledError.InvalidReference(sessionId, toolIds)
+                    }
+                }
+            }) {
+                sessionToolConfigDao.setToolsEnabledForSession(sessionId, toolIds, enabled).bind()
+            }
+
+            logger.info("${toolIds.size} tools ${if (enabled) "enabled" else "disabled"} for session $sessionId")
         }
     }
 

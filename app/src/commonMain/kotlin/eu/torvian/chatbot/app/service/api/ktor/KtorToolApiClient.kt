@@ -8,6 +8,7 @@ import eu.torvian.chatbot.common.api.resources.SessionToolsResource
 import eu.torvian.chatbot.common.api.resources.ToolResource
 import eu.torvian.chatbot.common.models.api.tool.CreateToolRequest
 import eu.torvian.chatbot.common.models.api.tool.SetToolEnabledRequest
+import eu.torvian.chatbot.common.models.api.tool.SetToolsEnabledRequest
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -78,6 +79,19 @@ class KtorToolApiClient(client: HttpClient) : BaseApiResourceClient(client), Too
                     parent = SessionToolsResource(parent = SessionResource.ById(sessionId = sessionId)),
                     toolId = toolId
                 )
+            ) {
+                setBody(request)
+            }.body<Unit>()
+        }
+    }
+
+    override suspend fun setToolsEnabledForSession(
+        sessionId: Long,
+        request: SetToolsEnabledRequest
+    ): Either<ApiResourceError, Unit> {
+        return safeApiCall {
+            client.put(
+                SessionToolsResource(parent = SessionResource.ById(sessionId = sessionId))
             ) {
                 setBody(request)
             }.body<Unit>()

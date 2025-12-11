@@ -50,6 +50,14 @@ fun SetToolEnabledError.toApiError(): ApiError = when (this) {
 }
 
 /**
+ * Converts a [SetToolsEnabledError] to an [ApiError].
+ */
+fun SetToolsEnabledError.toApiError(): ApiError = when (this) {
+    is SetToolsEnabledError.InvalidReference ->
+        apiError(CommonApiErrorCodes.NOT_FOUND, "Session or one or more tools not found", "sessionId" to sessionId.toString(), "toolIds" to toolIds.joinToString(","))
+}
+
+/**
  * Converts a [ValidateToolError] to an [ApiError].
  */
 fun ValidateToolError.toApiError(): ApiError = when (this) {

@@ -121,5 +121,18 @@ interface ToolRepository {
      * @return Either.Right with Unit on successful update, or Either.Left with RepositoryError on failure
      */
     suspend fun setToolEnabledForSession(sessionId: Long, toolDefinition: ToolDefinition, enabled: Boolean): Either<RepositoryError, Unit>
+
+    /**
+     * Batch enables or disables multiple tools for a specific session.
+     *
+     * Upon successful update, the session's tool configuration is updated in the cache,
+     * triggering updates to all observers.
+     *
+     * @param sessionId The unique identifier of the session
+     * @param toolDefinitions The tool definitions to enable/disable
+     * @param enabled Whether to enable or disable the tools
+     * @return Either.Right with Unit on successful update, or Either.Left with RepositoryError on failure
+     */
+    suspend fun setToolsEnabledForSession(sessionId: Long, toolDefinitions: List<ToolDefinition>, enabled: Boolean): Either<RepositoryError, Unit>
 }
 

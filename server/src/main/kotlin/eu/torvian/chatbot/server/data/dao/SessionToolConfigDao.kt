@@ -4,6 +4,7 @@ import arrow.core.Either
 import eu.torvian.chatbot.common.models.tool.MiscToolDefinition
 import eu.torvian.chatbot.server.data.dao.error.ClearToolConfigError
 import eu.torvian.chatbot.server.data.dao.error.SetToolEnabledError
+import eu.torvian.chatbot.server.data.dao.error.SetToolsEnabledError
 
 /**
  * Data Access Object for SessionToolConfig entities.
@@ -46,6 +47,22 @@ interface SessionToolConfigDao {
         toolDefinitionId: Long,
         enabled: Boolean
     ): Either<SetToolEnabledError, Unit>
+
+    /**
+     * Batch enables or disables multiple tools for a specific session (upsert operation).
+     * Will INSERT if no rows exist, UPDATE if they do.
+     * More efficient than calling setToolEnabledForSession multiple times.
+     *
+     * @param sessionId The ID of the session
+     * @param toolDefinitionIds The IDs of the tool definitions
+     * @param enabled Whether the tools should be enabled for this session
+     * @return Either [SetToolsEnabledError] or Unit on success
+     */
+    suspend fun setToolsEnabledForSession(
+        sessionId: Long,
+        toolDefinitionIds: List<Long>,
+        enabled: Boolean
+    ): Either<SetToolsEnabledError, Unit>
 
     /**
      * Returns all session IDs that have this tool enabled.
