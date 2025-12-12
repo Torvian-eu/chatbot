@@ -25,11 +25,14 @@ fun Dialogs(dialogState: ChatAreaDialogState) {
             // Collect reactive StateFlows for live updates
             val enabledToolsState by dialogState.enabledToolsFlow.collectAsState()
             val availableToolsState by dialogState.availableToolsFlow.collectAsState()
+            val mcpServersState by dialogState.mcpServersFlow.collectAsState()
 
             ToolConfigDialog(
                 availableTools = availableToolsState.dataOrNull ?: emptyList(),
                 enabledTools = enabledToolsState.dataOrNull ?: emptyList(),
+                mcpServers = mcpServersState.dataOrNull ?: emptyList(),
                 onToggleTool = dialogState.onToggleTool,
+                onToggleTools = dialogState.onToggleTools,
                 onDismiss = dialogState.onDismiss
             )
         }

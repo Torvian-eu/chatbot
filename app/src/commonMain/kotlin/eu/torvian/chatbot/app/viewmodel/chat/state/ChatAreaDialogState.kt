@@ -37,13 +37,17 @@ sealed class ChatAreaDialogState {
      *
      * @property enabledToolsFlow Reactive flow of tools currently enabled for the session.
      * @property availableToolsFlow Reactive flow of all available tools.
+     * @property mcpServersFlow Reactive flow of MCP server configurations for grouping and enablement checks.
      * @property onToggleTool Action to toggle a tool on/off.
+     * @property onToggleTools Action to toggle multiple tools on/off at once.
      * @property onDismiss Action to close the dialog.
      */
     data class ToolConfig(
         val enabledToolsFlow: StateFlow<DataState<RepositoryError, List<ToolDefinition>>>,
         val availableToolsFlow: StateFlow<DataState<RepositoryError, List<ToolDefinition>>>,
+        val mcpServersFlow: StateFlow<DataState<RepositoryError, List<eu.torvian.chatbot.app.domain.models.LocalMCPServer>>>,
         val onToggleTool: (ToolDefinition, Boolean) -> Unit,
+        val onToggleTools: (List<ToolDefinition>, Boolean) -> Unit,
         val onDismiss: () -> Unit
     ) : ChatAreaDialogState()
 

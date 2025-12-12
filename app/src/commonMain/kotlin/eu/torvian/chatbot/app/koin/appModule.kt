@@ -213,6 +213,7 @@ fun appModule(appConfig: AppConfig): Module = module {
             get<ModelSettingsRepository>(),
             get<ModelRepository>(),
             get<ToolRepository>(),
+            get<LocalMCPServerRepository>(),
             chatState,
             get()
         )
@@ -269,6 +270,7 @@ fun appModule(appConfig: AppConfig): Module = module {
             selectSettingsUC = get { parametersOf(chatState) },
             updateInputUC = get { parametersOf(chatState) },
             toolRepository = get(),
+            mcpServerRepository = get(),
             errorNotifier = get(),
             eventBus = get(),
             normalScope = normalScope,
