@@ -14,22 +14,25 @@ import eu.torvian.chatbot.server.data.dao.error.LocalMCPServerError
  * Server-side storage schema:
  * - id: Long (PK, auto-generated)
  * - userId: Long (FK to UsersTable)
+ * - isEnabled: Boolean (synced from client, default true)
  *
  * The server provides unique IDs that clients use to link tool definitions to
  * MCP servers consistently across the client and server databases.
  */
 interface LocalMCPServerDao {
     /**
-     * Generates a new unique ID for a Local MCP Server and stores the ownership.
+     * Creates a new Local MCP Server entry and stores the ownership and enabled state.
      *
-     * This method creates a new entry in the LocalMCPServerTable with only the
-     * server-generated ID and userId. The client will store the full configuration
-     * locally using this ID.
+     * This method creates a new entry in the LocalMCPServerTable with the
+     * server-generated ID, userId, and isEnabled flag. The client drives creation
+     * and provides the initial isEnabled state. The client will store the full
+     * configuration locally using this ID.
      *
      * @param userId The ID of the user who owns this MCP server configuration
+     * @param isEnabled The initial enabled/disabled state (synced from client)
      * @return The generated server ID
      */
-    suspend fun generateId(userId: Long): Long
+    suspend fun createServer(userId: Long, isEnabled: Boolean): Long
 
     /**
      * Deletes a LocalMCPServer entry by ID.
@@ -76,5 +79,17 @@ interface LocalMCPServerDao {
         userId: Long,
         serverId: Long
     ): Either<LocalMCPServerError.Unauthorized, Unit>
+
+    /**
+     * Updates the enabled state of a LocalMCPServer.
+     *
+     * This is called when the client syncs the enabled state from the client-side
+     * LocalMCPServerLocalTable.isEnabled flag.
+     *
+     * @param serverId The ID of the server to update
+     * @param isEnabled The new enabled state
+     * @return Either [LocalMCPServerError.NotFound] if not found, or Unit on success
+     */
+    suspend fun setEnabled(serverId: Long, isEnabled: Boolean): Either<LocalMCPServerError.NotFound, Unit>
 }
 

@@ -6,14 +6,17 @@ import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.right
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
-import eu.torvian.chatbot.common.models.tool.MiscToolDefinition
+import eu.torvian.chatbot.common.models.tool.ToolDefinition
+import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.server.data.dao.SessionToolConfigDao
 import eu.torvian.chatbot.server.data.dao.error.ClearToolConfigError
 import eu.torvian.chatbot.server.data.dao.error.SetToolEnabledError
 import eu.torvian.chatbot.server.data.dao.error.SetToolsEnabledError
+import eu.torvian.chatbot.server.data.tables.LocalMCPServerTable
+import eu.torvian.chatbot.server.data.tables.LocalMCPToolDefinitionTable
 import eu.torvian.chatbot.server.data.tables.SessionToolConfigTable
 import eu.torvian.chatbot.server.data.tables.ToolDefinitionTable
-import eu.torvian.chatbot.server.data.tables.mappers.toMiscToolDefinition
+import eu.torvian.chatbot.server.data.tables.mappers.toToolDefinition
 import org.jetbrains.exposed.exceptions.ExposedSQLException
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -29,20 +32,29 @@ class SessionToolConfigDaoExposed(
     private val transactionScope: TransactionScope
 ) : SessionToolConfigDao {
 
-    override suspend fun getEnabledToolsForSession(sessionId: Long): List<MiscToolDefinition> =
+    override suspend fun getEnabledToolsForSession(sessionId: Long): List<ToolDefinition> =
         transactionScope.transaction {
             SessionToolConfigTable
                 .innerJoin(
                     ToolDefinitionTable,
                     { toolDefinitionId },
                     { ToolDefinitionTable.id }
+                ).leftJoin(
+                    LocalMCPToolDefinitionTable,
+                    { ToolDefinitionTable.id },
+                    { LocalMCPToolDefinitionTable.toolDefinitionId }
+                ).leftJoin(
+                    LocalMCPServerTable,
+                    { LocalMCPToolDefinitionTable.mcpServerId },
+                    { LocalMCPServerTable.id }
                 )
                 .selectAll().where {
                     (SessionToolConfigTable.sessionId eq sessionId) and
                             (SessionToolConfigTable.isEnabled eq true) and
-                            (ToolDefinitionTable.isEnabled eq true)
+                            (ToolDefinitionTable.isEnabled eq true) and
+                            ((LocalMCPServerTable.isEnabled eq true) or (ToolDefinitionTable.type neq ToolType.MCP_LOCAL))
                 }
-                .map { it.toMiscToolDefinition() }
+                .map { it.toToolDefinition() }
         }
 
     override suspend fun isToolEnabledForSession(sessionId: Long, toolDefinitionId: Long): Boolean =

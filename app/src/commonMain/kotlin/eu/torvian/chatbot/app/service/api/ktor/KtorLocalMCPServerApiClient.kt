@@ -4,11 +4,14 @@ import arrow.core.Either
 import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.LocalMCPServerApi
 import eu.torvian.chatbot.common.api.resources.LocalMCPServerResource
-import eu.torvian.chatbot.common.models.api.mcp.GenerateServerIdResponse
+import eu.torvian.chatbot.common.models.api.mcp.CreateServerRequest
+import eu.torvian.chatbot.common.models.api.mcp.CreateServerResponse
 import eu.torvian.chatbot.common.models.api.mcp.ServerIdsResponse
+import eu.torvian.chatbot.common.models.api.mcp.SetServerEnabledRequest
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.resources.*
+import io.ktor.client.request.*
 
 /**
  * Ktor HttpClient implementation of the [LocalMCPServerApi] interface.
@@ -21,9 +24,11 @@ import io.ktor.client.plugins.resources.*
  */
 class KtorLocalMCPServerApiClient(client: HttpClient) : BaseApiResourceClient(client), LocalMCPServerApi {
 
-    override suspend fun generateServerId(): Either<ApiResourceError, GenerateServerIdResponse> {
+    override suspend fun createServer(request: CreateServerRequest): Either<ApiResourceError, CreateServerResponse> {
         return safeApiCall {
-            client.post(LocalMCPServerResource.GenerateId()).body<GenerateServerIdResponse>()
+            client.post(LocalMCPServerResource.Create()) {
+                setBody(request)
+            }.body<CreateServerResponse>()
         }
     }
 
@@ -36,6 +41,16 @@ class KtorLocalMCPServerApiClient(client: HttpClient) : BaseApiResourceClient(cl
     override suspend fun deleteServerId(serverId: Long): Either<ApiResourceError, Unit> {
         return safeApiCall {
             client.delete(LocalMCPServerResource.ById(id = serverId)).body<Unit>()
+        }
+    }
+
+    override suspend fun setServerEnabled(serverId: Long, isEnabled: Boolean): Either<ApiResourceError, Unit> {
+        return safeApiCall {
+            client.put(LocalMCPServerResource.ById.SetEnabled(
+                parent = LocalMCPServerResource.ById(id = serverId)
+            )) {
+                setBody(SetServerEnabledRequest(isEnabled = isEnabled))
+            }.body<Unit>()
         }
     }
 }

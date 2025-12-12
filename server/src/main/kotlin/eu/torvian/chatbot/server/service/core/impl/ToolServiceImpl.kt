@@ -1,7 +1,6 @@
 package eu.torvian.chatbot.server.service.core.impl
 
 import arrow.core.Either
-import arrow.core.getOrElse
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.raise.withError
@@ -114,21 +113,11 @@ class ToolServiceImpl(
             }
         }
 
-    override suspend fun getEnabledToolsForSession(sessionId: Long): List<ToolDefinition> {
-        return transactionScope.transaction {
+    override suspend fun getEnabledToolsForSession(sessionId: Long): List<ToolDefinition> =
+        transactionScope.transaction {
             sessionToolConfigDao.getEnabledToolsForSession(sessionId)
-                // TODO: for better performance, modify sessionToolConfigDao.getEnabledToolsForSession to return polymorphic ToolDefinition
-                .map { toolDefinition ->
-                    if (toolDefinition.type == ToolType.MCP_LOCAL) {
-                        localMCPToolDefinitionDao.getToolById(toolDefinition.id).getOrElse {
-                            throw IllegalStateException("Failed to retrieve local MCP tool definition")
-                        }
-                    } else {
-                        toolDefinition
-                    }
-                }
         }
-    }
+
 
     override suspend fun setToolEnabledForSession(
         sessionId: Long,

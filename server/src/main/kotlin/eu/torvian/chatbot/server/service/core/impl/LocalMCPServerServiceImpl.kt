@@ -16,7 +16,7 @@ import org.apache.logging.log4j.Logger
 
 /**
  * Implementation of the [LocalMCPServerService] interface.
- * Manages Local MCP Server ID generation and ownership tracking.
+ * Manages Local MCP Server creation, ID generation, and ownership tracking.
  */
 class LocalMCPServerServiceImpl(
     private val localMCPServerDao: LocalMCPServerDao,
@@ -26,8 +26,8 @@ class LocalMCPServerServiceImpl(
 
     private val logger: Logger = LogManager.getLogger(LocalMCPServerServiceImpl::class.java)
 
-    override suspend fun generateServerId(userId: Long): Long =
-        localMCPServerDao.generateId(userId)
+    override suspend fun createServer(userId: Long, isEnabled: Boolean): Long =
+        localMCPServerDao.createServer(userId, isEnabled)
 
 
     override suspend fun getServerIdsByUserId(userId: Long): List<Long> =
@@ -65,6 +65,18 @@ class LocalMCPServerServiceImpl(
                 }) {
                     localMCPServerDao.validateOwnership(userId, serverId).bind()
                     logger.debug("Validated ownership of server $serverId for user $userId")
+                }
+            }
+        }
+
+    override suspend fun setServerEnabled(serverId: Long, isEnabled: Boolean): Either<DeleteServerError, Unit> =
+        transactionScope.transaction {
+            either {
+                withError({ daoError: LocalMCPServerError.NotFound ->
+                    DeleteServerError.ServerNotFound(daoError.id)
+                }) {
+                    localMCPServerDao.setEnabled(serverId, isEnabled).bind()
+                    logger.debug("Updated enabled state of server $serverId to $isEnabled")
                 }
             }
         }

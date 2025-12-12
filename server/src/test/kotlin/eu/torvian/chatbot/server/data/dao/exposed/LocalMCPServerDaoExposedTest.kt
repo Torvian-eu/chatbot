@@ -22,11 +22,12 @@ import kotlin.test.assertTrue
  * Tests for [LocalMCPServerDaoExposed].
  *
  * This test suite verifies the core functionality of the Exposed-based implementation of [LocalMCPServerDao]:
- * - Generating unique server IDs
+ * - Creating servers with enabled/disabled state
  * - Deleting servers by ID (success and NotFound cases)
  * - Getting server IDs by user ID
  * - Checking server existence
  * - Validating server ownership (authorized and unauthorized cases)
+ * - Updating server enabled state
  *
  * The tests rely on an in-memory SQLite database managed by [TestDataManager].
  */
@@ -69,9 +70,9 @@ class LocalMCPServerDaoExposedTest {
     }
 
     @Test
-    fun `generateId should create new entry and return ID`() = runTest {
+    fun `createServer should create new entry with enabled state and return ID`() = runTest {
         // Act
-        val serverId = dao.generateId(testUser1.id)
+        val serverId = dao.createServer(testUser1.id, isEnabled = true)
 
         // Assert
         assertTrue(serverId > 0, "Generated ID should be positive")
@@ -79,10 +80,10 @@ class LocalMCPServerDaoExposedTest {
     }
 
     @Test
-    fun `generateId should create multiple IDs for same user`() = runTest {
+    fun `createServer should create multiple IDs for same user`() = runTest {
         // Act
-        val serverId1 = dao.generateId(testUser1.id)
-        val serverId2 = dao.generateId(testUser1.id)
+        val serverId1 = dao.createServer(testUser1.id, isEnabled = true)
+        val serverId2 = dao.createServer(testUser1.id, isEnabled = false)
 
         // Assert
         assertTrue(serverId1 > 0, "First generated ID should be positive")
@@ -95,7 +96,7 @@ class LocalMCPServerDaoExposedTest {
     @Test
     fun `deleteById should delete existing server`() = runTest {
         // Arrange
-        val serverId = dao.generateId(testUser1.id)
+        val serverId = dao.createServer(testUser1.id, isEnabled = true)
 
         // Act
         val result = dao.deleteById(serverId)
@@ -121,8 +122,8 @@ class LocalMCPServerDaoExposedTest {
     @Test
     fun `getIdsByUserId should return all server IDs for user`() = runTest {
         // Arrange
-        val serverId1 = dao.generateId(testUser1.id)
-        val serverId2 = dao.generateId(testUser1.id)
+        val serverId1 = dao.createServer(testUser1.id, isEnabled = true)
+        val serverId2 = dao.createServer(testUser1.id, isEnabled = false)
 
         // Act
         val serverIds = dao.getIdsByUserId(testUser1.id)
@@ -136,8 +137,8 @@ class LocalMCPServerDaoExposedTest {
     @Test
     fun `getIdsByUserId should return only servers for specified user`() = runTest {
         // Arrange
-        val user1ServerId = dao.generateId(testUser1.id)
-        val user2ServerId = dao.generateId(testUser2.id)
+        val user1ServerId = dao.createServer(testUser1.id, isEnabled = true)
+        val user2ServerId = dao.createServer(testUser2.id, isEnabled = true)
 
         // Act
         val user1ServerIds = dao.getIdsByUserId(testUser1.id)
@@ -164,7 +165,7 @@ class LocalMCPServerDaoExposedTest {
     @Test
     fun `existsById should return true when server exists`() = runTest {
         // Arrange
-        val serverId = dao.generateId(testUser1.id)
+        val serverId = dao.createServer(testUser1.id, isEnabled = true)
 
         // Act & Assert
         assertTrue(dao.existsById(serverId))
@@ -179,7 +180,7 @@ class LocalMCPServerDaoExposedTest {
     @Test
     fun `validateOwnership should succeed when user owns server`() = runTest {
         // Arrange
-        val serverId = dao.generateId(testUser1.id)
+        val serverId = dao.createServer(testUser1.id, isEnabled = true)
 
         // Act
         val result = dao.validateOwnership(testUser1.id, serverId)
@@ -191,7 +192,7 @@ class LocalMCPServerDaoExposedTest {
     @Test
     fun `validateOwnership should return Unauthorized when user doesn't own server`() = runTest {
         // Arrange
-        val serverId = dao.generateId(testUser1.id)
+        val serverId = dao.createServer(testUser1.id, isEnabled = true)
 
         // Act
         val result = dao.validateOwnership(testUser2.id, serverId)
