@@ -429,6 +429,12 @@ class LocalMCPServerManagerImpl(
         } else {
             logger.info("Server configuration updated without requiring restart for MCP server ${server.id}")
         }
+
+        // Step 4: Invalidate enabled tools cache if enabled state changed
+        if (oldServer.isEnabled != server.isEnabled) {
+            logger.info("Server enabled state changed, invalidating enabled tools cache for all sessions")
+            toolRepository.invalidateEnabledToolsCache()
+        }
     }
 
     override suspend fun deleteServer(serverId: Long): Either<DeleteServerError, Unit> = either {
@@ -449,6 +455,9 @@ class LocalMCPServerManagerImpl(
             logger.error("Failed to delete MCP server configuration $serverId: ${error.message}")
             DeleteServerError.ServerDeletionFailed(serverId, error)
         }.bind()
+
+        // Step 3: Remove the tools from the tool repository cache
+        toolRepository.removeToolsFromCache(serverId)
 
         logger.info("Successfully deleted MCP server $serverId")
     }

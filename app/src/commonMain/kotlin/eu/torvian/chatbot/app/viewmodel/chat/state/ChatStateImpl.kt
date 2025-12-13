@@ -1,12 +1,8 @@
 package eu.torvian.chatbot.app.viewmodel.chat.state
 
 import eu.torvian.chatbot.app.domain.contracts.DataState
-import eu.torvian.chatbot.app.repository.ModelRepository
-import eu.torvian.chatbot.app.repository.RepositoryError
-import eu.torvian.chatbot.app.repository.SessionRepository
-import eu.torvian.chatbot.app.repository.ModelSettingsRepository
-import eu.torvian.chatbot.app.repository.ToolCallsMap
-import eu.torvian.chatbot.app.repository.ToolRepository
+import eu.torvian.chatbot.app.repository.*
+import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.util.ThreadBuilder
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
@@ -36,6 +32,10 @@ class ChatStateImpl(
     private val threadBuilder: ThreadBuilder,
     private val backgroundScope: CoroutineScope
 ) : ChatState {
+
+    companion object {
+        private val logger = kmpLogger<ChatStateImpl>()
+    }
 
     // --- Private MutableStateFlows for Direct User Input ---
 
@@ -172,6 +172,7 @@ class ChatStateImpl(
                     val enabledTools = dataState.data.filter { it.isEnabled }
                     DataState.Success(enabledTools)
                 }
+
                 is DataState.Error -> dataState
                 is DataState.Loading -> dataState
                 is DataState.Idle -> dataState
@@ -214,6 +215,17 @@ class ChatStateImpl(
                 started = SharingStarted.Eagerly,
                 initialValue = emptyList()
             )
+
+    init {
+        // Reload enabled tools when data state is Idle
+        enabledToolsForCurrentSession.filterIsInstance<DataState.Idle>()
+            .onEach {
+                activeSessionId.value?.let { sessionId ->
+                    toolRepository.loadEnabledToolsForSession(sessionId)
+                }
+            }
+            .launchIn(backgroundScope)
+    }
 
     // --- Public State Mutation Methods ---
 

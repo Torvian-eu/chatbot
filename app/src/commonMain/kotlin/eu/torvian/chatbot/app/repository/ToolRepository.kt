@@ -134,5 +134,34 @@ interface ToolRepository {
      * @return Either.Right with Unit on successful update, or Either.Left with RepositoryError on failure
      */
     suspend fun setToolsEnabledForSession(sessionId: Long, toolDefinitions: List<ToolDefinition>, enabled: Boolean): Either<RepositoryError, Unit>
+
+    /**
+     * Applies a transformation to the in-memory tools cache.
+     *
+     * @param update A function that takes the current list of tools and returns an updated list.
+     */
+    suspend fun updateToolCache(update: (List<ToolDefinition>) -> List<ToolDefinition>)
+
+    /**
+     * Applies a batch update to the enabled tools cache for a specific session.
+     *
+     * @param sessionId The unique identifier of the session
+     * @param tools The tools to update
+     * @param enabled Whether to enable or disable the tools
+     */
+    suspend fun updateEnabledToolsCache(sessionId: Long, tools: List<ToolDefinition>, enabled: Boolean)
+
+    /**
+     * Applies a batch update to the enabled tools cache for all sessions.
+     *
+     * @param tools The tools to update
+     * @param enabled Whether to enable or disable the tools
+     */
+    suspend fun updateEnabledToolsCache(tools: List<ToolDefinition>, enabled: Boolean)
+
+    /**
+     * Invalidates the enabled tools cache for all sessions.
+     */
+    suspend fun invalidateEnabledToolsCache()
 }
 

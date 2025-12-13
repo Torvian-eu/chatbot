@@ -84,14 +84,8 @@ class DefaultToolRepository(
         }
 
         // Add the new tool to the cache
-        _tools.update { currentState ->
-            when (currentState) {
-                is DataState.Success -> {
-                    val updatedTools = currentState.data + newTool
-                    DataState.Success(updatedTools)
-                }
-                else -> currentState // Keep other states unchanged
-            }
+        updateToolCache { currentList ->
+            currentList + newTool
         }
 
         newTool
@@ -105,14 +99,14 @@ class DefaultToolRepository(
         }
 
         // Update the tool in the cache
-        _tools.update { currentState ->
-            when (currentState) {
-                is DataState.Success -> {
-                    val updatedTools = currentState.data.map { if (it.id == tool.id) tool else it }
-                    DataState.Success(updatedTools)
-                }
-                else -> currentState // Keep other states unchanged
-            }
+        val oldTool = _tools.value.dataOrNull?.find { it.id == tool.id }
+        updateToolCache { currentList ->
+            currentList.map { if (it.id == tool.id) tool else it }
+        }
+
+        // If the tool's enabled state changed, invalidate all enabled tools caches
+        if (oldTool?.isEnabled != tool.isEnabled) {
+            invalidateEnabledToolsCache()
         }
     }
 
@@ -124,14 +118,14 @@ class DefaultToolRepository(
         }
 
         // Remove the tool from the cache
-        _tools.update { currentState ->
-            when (currentState) {
-                is DataState.Success -> {
-                    val updatedTools = currentState.data.filter { it.id != toolId }
-                    DataState.Success(updatedTools)
-                }
-                else -> currentState // Keep other states unchanged
-            }
+        val deletedTool = _tools.value.dataOrNull?.find { it.id == toolId }
+        updateToolCache { currentList ->
+            currentList.filter { it.id != toolId }
+        }
+
+        // Remove the tool from all enabled tools caches
+        deletedTool?.let { tool ->
+            updateEnabledToolsCache(tool, false)
         }
     }
 
@@ -182,21 +176,7 @@ class DefaultToolRepository(
         }
 
         // Update the enabled tools cache
-        _enabledToolsFlowsMutex.withLock {
-            _enabledToolsFlows[sessionId]?.update { currentState ->
-                when (currentState) {
-                    is DataState.Success -> {
-                        val updatedTools = if (enabled) {
-                            currentState.data + toolDefinition
-                        } else {
-                            currentState.data.filter { it.id != toolDefinition.id }
-                        }
-                        DataState.Success(updatedTools)
-                    }
-                    else -> currentState // Keep other states unchanged
-                }
-            }
-        }
+        updateEnabledToolsCache(sessionId, toolDefinition, enabled)
     }
 
     override suspend fun setToolsEnabledForSession(
@@ -216,6 +196,83 @@ class DefaultToolRepository(
         }
 
         // Update the enabled tools cache
+        updateEnabledToolsCache(sessionId, toolDefinitions, enabled)
+    }
+
+    /**
+     * Applies a transformation to the in-memory tools cache.
+     *
+     * @param update A function that takes the current list of tools and returns an updated list.
+     */
+    override suspend fun updateToolCache(update: (List<ToolDefinition>) -> List<ToolDefinition>) {
+        _tools.update { currentState ->
+            when (currentState) {
+                is DataState.Success -> {
+                    DataState.Success(update(currentState.data))
+                }
+
+                else -> {
+                    logger.warn("Skipping cache update because current state is not Success: $currentState")
+                    currentState
+                }
+            }
+        }
+    }
+
+    /**
+     * Applies a single tool enabled/disabled update to the in-memory cache.
+     *
+     * @param sessionId The ID of the session
+     * @param tool The tool definition to enable/disable
+     * @param enabled Whether to enable or disable the tool
+     */
+    private suspend fun updateEnabledToolsCache(sessionId: Long, tool: ToolDefinition, enabled: Boolean) {
+        _enabledToolsFlowsMutex.withLock {
+            _enabledToolsFlows[sessionId]?.update { currentState ->
+                when (currentState) {
+                    is DataState.Success -> {
+                        val updatedTools = if (enabled) {
+                            currentState.data + tool
+                        } else {
+                            currentState.data.filter { it.id != tool.id }
+                        }
+                        DataState.Success(updatedTools)
+                    }
+
+                    else -> {
+                        logger.warn("Skipping cache update because current state is not Success: $currentState")
+                        currentState
+                    }
+                }
+            } ?: run {
+                logger.warn("Tried to update enabled tools for session $sessionId but flow is not in the cache")
+            }
+        }
+    }
+
+    /**
+     * Applies a single tool enabled/disabled update to the in-memory cache for all sessions.
+     *
+     * @param tool The tool definition to enable/disable
+     * @param enabled Whether to enable or disable the tool
+     */
+    private suspend fun updateEnabledToolsCache(tool: ToolDefinition, enabled: Boolean) {
+        val sessionIds = _enabledToolsFlowsMutex.withLock {
+            _enabledToolsFlows.keys.toList()
+        }
+        sessionIds.forEach { sessionId ->
+            updateEnabledToolsCache(sessionId, tool, enabled)
+        }
+    }
+
+    /**
+     * Applies a batch of tool enabled/disabled updates to the in-memory cache.
+     *
+     * @param sessionId The ID of the session
+     * @param tools The list of tool definitions to enable/disable
+     * @param enabled Whether to enable or disable the tools
+     */
+    override suspend fun updateEnabledToolsCache(sessionId: Long, tools: List<ToolDefinition>, enabled: Boolean) {
         _enabledToolsFlowsMutex.withLock {
             _enabledToolsFlows[sessionId]?.update { currentState ->
                 when (currentState) {
@@ -223,17 +280,49 @@ class DefaultToolRepository(
                         val updatedTools = if (enabled) {
                             // Add all tools that are not already in the list
                             val existingIds = currentState.data.map { it.id }.toSet()
-                            val newTools = toolDefinitions.filter { it.id !in existingIds }
+                            val newTools = tools.filter { it.id !in existingIds }
                             currentState.data + newTools
                         } else {
                             // Remove all tools from the list
-                            val toolIdsToRemove = toolDefinitions.map { it.id }.toSet()
+                            val toolIdsToRemove = tools.map { it.id }.toSet()
                             currentState.data.filter { it.id !in toolIdsToRemove }
                         }
                         DataState.Success(updatedTools)
                     }
-                    else -> currentState // Keep other states unchanged
+
+                    else -> {
+                        logger.warn("Skipping cache update because current state is not Success: $currentState")
+                        currentState
+                    }
                 }
+            } ?: run {
+                logger.warn("Tried to update enabled tools for session $sessionId but flow is not in the cache")
+            }
+        }
+    }
+
+    /**
+     * Applies a batch of tool enabled/disabled updates to the in-memory cache for all sessions.
+     *
+     * @param tools The list of tool definitions to enable/disable
+     * @param enabled Whether to enable or disable the tools
+     */
+    override suspend fun updateEnabledToolsCache(tools: List<ToolDefinition>, enabled: Boolean) {
+        val sessionIds = _enabledToolsFlowsMutex.withLock {
+            _enabledToolsFlows.keys.toList()
+        }
+        sessionIds.forEach { sessionId ->
+            updateEnabledToolsCache(sessionId, tools, enabled)
+        }
+    }
+
+    /**
+     * Invalidates the enabled tools cache for all sessions.
+     */
+    override suspend fun invalidateEnabledToolsCache() {
+        _enabledToolsFlowsMutex.withLock {
+            _enabledToolsFlows.forEach { _, flow ->
+                flow.update { DataState.Idle }
             }
         }
     }

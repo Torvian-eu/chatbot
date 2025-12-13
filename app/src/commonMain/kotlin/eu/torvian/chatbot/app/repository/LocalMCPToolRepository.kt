@@ -4,7 +4,7 @@ import arrow.core.Either
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
-import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.Flow
 
 /**
  * Repository interface for managing Local MCP Tool definitions.
@@ -13,17 +13,18 @@ import kotlinx.coroutines.flow.StateFlow
  * It provides caching and state management for MCP tools organized by server ID.
  *
  * **Separation of Concerns**:
- * - LocalMCPToolRepository = MCP tools (this repository)
- * - ToolRepository = Non-MCP tools (separate, unchanged)
+ * - ToolRepository = All tools
+ * - LocalMCPToolRepository = Specific operations for MCP tools (uses ToolRepository internally)
+ *
  */
 interface LocalMCPToolRepository {
     /**
-     * StateFlow of all MCP tools, organized by server ID.
+     * Flow of all MCP tools, organized by server ID. Derived from ToolRepository.tools.
      *
      * Map structure: serverId → List of LocalMCPToolDefinition
      * Enables efficient lookup by server without filtering.
      */
-    val mcpTools: StateFlow<DataState<RepositoryError, Map<Long, List<LocalMCPToolDefinition>>>>
+    val mcpTools: Flow<DataState<RepositoryError, Map<Long, List<LocalMCPToolDefinition>>>>
 
     /**
      * Loads all MCP tools for the current user from the server.
@@ -88,5 +89,17 @@ interface LocalMCPToolRepository {
      *         or [Either.Left] with [RepositoryError] on failure
      */
     suspend fun deleteMCPToolsForServer(serverId: Long): Either<RepositoryError, Int>
+
+    /**
+     * Removes all tools for a specific MCP server from the cache.
+     *
+     * @param serverId The ID of the MCP server whose tools should be removed from the cache
+     */
+    suspend fun removeToolsFromCache(serverId: Long)
+
+    /**
+     * Invalidates the enabled tools cache for all sessions.
+     */
+    suspend fun invalidateEnabledToolsCache()
 }
 
