@@ -91,6 +91,14 @@ interface LocalMCPToolRepository {
     suspend fun deleteMCPToolsForServer(serverId: Long): Either<RepositoryError, Int>
 
     /**
+     * Updates an existing MCP tool.
+     *
+     * @param tool The updated LocalMCPToolDefinition
+     * @return [Either.Right] with Unit on success, or [Either.Left] with [RepositoryError] on failure
+     */
+    suspend fun updateMCPTool(tool: LocalMCPToolDefinition): Either<RepositoryError, Unit>
+
+    /**
      * Removes all tools for a specific MCP server from the cache.
      *
      * @param serverId The ID of the MCP server whose tools should be removed from the cache

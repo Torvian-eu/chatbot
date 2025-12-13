@@ -146,6 +146,26 @@ class DefaultLocalMCPToolRepository(
         count
     }
 
+    override suspend fun updateMCPTool(tool: LocalMCPToolDefinition): Either<RepositoryError, Unit> = either {
+        withError({ apiResourceError ->
+            logger.error("Failed to update MCP tool ${tool.id}: ${apiResourceError.message}")
+            apiResourceError.toRepositoryError("Failed to update MCP tool")
+        }) {
+            localMCPToolApi.updateMCPTool(tool).bind()
+        }
+
+        // Update the tool in the cache
+        val oldTool = toolRepository.tools.value.dataOrNull?.find { it.id == tool.id }
+        toolRepository.updateToolCache { currentList ->
+            currentList.map { if (it.id == tool.id) tool else it }
+        }
+
+        // If the tool's enabled state changed, invalidate all enabled tools caches
+        if (oldTool?.isEnabled != tool.isEnabled) {
+            toolRepository.invalidateEnabledToolsCache()
+        }
+    }
+
     override suspend fun removeToolsFromCache(serverId: Long) {
         val deletedTools = toolRepository.tools.value.dataOrNull?.filterIsInstance<LocalMCPToolDefinition>()
             ?.filter { it.serverId == serverId } ?: emptyList()
