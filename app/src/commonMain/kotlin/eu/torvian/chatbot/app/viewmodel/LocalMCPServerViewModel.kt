@@ -48,7 +48,12 @@ class LocalMCPServerViewModel(
      * Combines server configs with runtime status (running/stopped/connected, tool count, etc.)
      * Wrapped in DataState to expose loading/error states.
      */
-    val serverOverviews: StateFlow<DataState<RepositoryError, List<LocalMCPServerOverview>>> = serverManager.serverOverviews
+    val serverOverviews: StateFlow<DataState<RepositoryError, List<LocalMCPServerOverview>>> =
+        serverManager.serverOverviews.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(),
+            initialValue = DataState.Idle
+        )
 
     /**
      * The currently selected server in the master-detail UI.

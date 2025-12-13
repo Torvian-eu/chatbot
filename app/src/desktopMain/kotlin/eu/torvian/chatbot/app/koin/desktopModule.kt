@@ -85,8 +85,6 @@ fun desktopModule(appConfig: AppConfig, encryptionConfig: EncryptionConfig) = mo
             mcpClientService = get(),
             clock = get()
         )
-    }.onClose { manager ->
-        runBlocking { manager?.close() }
     }
 
     single<LocalMCPToolCallMediator> {

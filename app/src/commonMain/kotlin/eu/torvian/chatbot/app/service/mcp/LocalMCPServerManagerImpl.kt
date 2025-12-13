@@ -15,14 +15,8 @@ import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import io.modelcontextprotocol.kotlin.sdk.CallToolResultBase
 import io.modelcontextprotocol.kotlin.sdk.Tool
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -52,15 +46,14 @@ class LocalMCPServerManagerImpl(
     private val serverRepository: LocalMCPServerRepository,
     private val toolRepository: LocalMCPToolRepository,
     private val mcpClientService: MCPClientService,
-    private val clock: Clock = Clock.System,
-    private val serviceScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val clock: Clock = Clock.System
 ) : LocalMCPServerManager {
 
     companion object {
         private val logger = kmpLogger<LocalMCPServerManagerImpl>()
     }
 
-    override val serverOverviews: StateFlow<DataState<RepositoryError, List<LocalMCPServerOverview>>> = combine(
+    override val serverOverviews: Flow<DataState<RepositoryError, List<LocalMCPServerOverview>>> = combine(
         serverRepository.servers,
         mcpClientService.clients,
         toolRepository.mcpTools
@@ -84,7 +77,7 @@ class LocalMCPServerManagerImpl(
                     )
                 }
         }
-    }.stateIn(serviceScope, SharingStarted.WhileSubscribed(5000), DataState.Idle)
+    }
 
     override suspend fun loadServers(userId: Long): Either<RepositoryError, Unit> = either {
         logger.info("Loading MCP servers for user $userId")
@@ -535,9 +528,5 @@ class LocalMCPServerManagerImpl(
             mcpToolName = mcpTool.name,
             isEnabledByDefault = null
         )
-    }
-
-    override suspend fun close() {
-        serviceScope.cancel()
     }
 }

@@ -6,6 +6,7 @@ import eu.torvian.chatbot.app.domain.models.LocalMCPServer
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
 import io.modelcontextprotocol.kotlin.sdk.CallToolResultBase
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.json.JsonObject
 
@@ -54,7 +55,7 @@ interface LocalMCPServerManager {
      *
      * @return StateFlow<DataState<RepositoryError, List<LocalMCPServerOverview>>> list of server overviews
      */
-    val serverOverviews: StateFlow<DataState<RepositoryError, List<LocalMCPServerOverview>>>
+    val serverOverviews: Flow<DataState<RepositoryError, List<LocalMCPServerOverview>>>
 
     /**
      * Loads all MCP servers and their tools for a specific user.
@@ -239,10 +240,4 @@ interface LocalMCPServerManager {
         toolName: String,
         arguments: JsonObject
     ): Either<ManageCallToolError, CallToolResultBase?>
-
-
-    /**
-     * Cleans up resources when the manager is closed.
-     */
-    suspend fun close()
 }
