@@ -95,6 +95,20 @@ interface LocalMCPToolDefinitionService {
         serverId: Long,
         currentTools: List<LocalMCPToolDefinition>
     ): Either<RefreshMCPToolsError, RefreshResult>
+
+    /**
+     * Batch updates multiple MCP tools in a single atomic transaction.
+     * All tools must belong to the specified server.
+     *
+     * @param serverId The ID of the MCP server
+     * @param toolDefinitions List of updated tool definitions
+     * @return Either a [BatchUpdateMCPToolsError] if validation or update fails,
+     *         or a list of updated [LocalMCPToolDefinition] objects
+     */
+    suspend fun batchUpdateMCPTools(
+        serverId: Long,
+        toolDefinitions: List<LocalMCPToolDefinition>
+    ): Either<BatchUpdateMCPToolsError, List<LocalMCPToolDefinition>>
 }
 
 /**

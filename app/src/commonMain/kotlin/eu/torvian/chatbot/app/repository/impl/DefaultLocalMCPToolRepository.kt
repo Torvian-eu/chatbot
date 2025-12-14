@@ -166,6 +166,37 @@ class DefaultLocalMCPToolRepository(
         }
     }
 
+    override suspend fun batchUpdateMCPTools(
+        serverId: Long,
+        toolDefinitions: List<LocalMCPToolDefinition>
+    ): Either<RepositoryError, Unit> = either {
+        val updatedTools = withError({ apiResourceError ->
+            logger.error("Failed to batch update MCP tools for server $serverId: ${apiResourceError.message}")
+            apiResourceError.toRepositoryError("Failed to batch update MCP tools")
+        }) {
+            localMCPToolApi.batchUpdateMCPTools(serverId, toolDefinitions).bind()
+        }
+
+        // Check if any tool's enabled state changed and invalidate cache if needed
+        val oldTools = toolRepository.tools.value.dataOrNull
+        val updatedToolsById = updatedTools.associateBy { it.id }
+        val enabledStateChanged = oldTools?.any { tool ->
+            updatedToolsById[tool.id]?.isEnabled?.let { it != tool.isEnabled } ?: false
+        } ?: false
+        if (enabledStateChanged) {
+            toolRepository.invalidateEnabledToolsCache()
+        }
+
+        // Update tools cache
+        toolRepository.updateToolCache { currentList ->
+            currentList.map { tool ->
+                updatedToolsById[tool.id] ?: tool
+            }
+        }
+
+        logger.info("Batch updated ${updatedTools.size} MCP tools for server $serverId")
+    }
+
     override suspend fun removeToolsFromCache(serverId: Long) {
         val deletedTools = toolRepository.tools.value.dataOrNull?.filterIsInstance<LocalMCPToolDefinition>()
             ?.filter { it.serverId == serverId } ?: emptyList()

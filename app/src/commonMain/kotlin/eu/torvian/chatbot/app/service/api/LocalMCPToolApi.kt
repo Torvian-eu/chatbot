@@ -109,5 +109,23 @@ interface LocalMCPToolApi {
      *         or [Either.Left] containing a [ApiResourceError] on failure.
      */
     suspend fun deleteMCPToolsForServer(serverId: Long): Either<ApiResourceError, Int>
+
+    /**
+     * Batch updates multiple MCP tools in a single atomic operation.
+     *
+     * All tools must belong to the specified server. This is more efficient than
+     * updating tools individually when making bulk changes (e.g., enabling/disabling all tools).
+     *
+     * Corresponds to `PUT /api/v1/local-mcp-tools/batch`.
+     *
+     * @param serverId The unique identifier of the MCP server
+     * @param toolDefinitions List of tool definitions with updates to apply
+     * @return [Either.Right] containing the list of updated [LocalMCPToolDefinition] on success,
+     *         or [Either.Left] containing a [ApiResourceError] on failure.
+     */
+    suspend fun batchUpdateMCPTools(
+        serverId: Long,
+        toolDefinitions: List<LocalMCPToolDefinition>
+    ): Either<ApiResourceError, List<LocalMCPToolDefinition>>
 }
 

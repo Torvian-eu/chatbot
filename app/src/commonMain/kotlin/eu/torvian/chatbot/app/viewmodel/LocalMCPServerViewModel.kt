@@ -465,6 +465,7 @@ class LocalMCPServerViewModel(
     /**
      * Enables all tools for a specific server.
      * Executes asynchronously without blocking UI.
+     * Uses efficient batch update endpoint.
      */
     fun enableAllTools(serverId: Long) {
         viewModelScope.launch(uiDispatcher) {
@@ -474,20 +475,21 @@ class LocalMCPServerViewModel(
             val serverOverview = overviewsState.data.find { it.serverId == serverId }
             val tools = serverOverview?.tools ?: return@launch
 
-            tools.filter { !it.isEnabled }.forEach { tool ->
-                toolRepository.updateMCPTool(tool.copy(isEnabled = true)).onLeft { error ->
-                    errorNotifier.repositoryError(
-                        error = error,
-                        shortMessage = "Failed to enable tool: ${tool.name}"
-                    )
-                }
+            val toolsToEnable = tools.filter { !it.isEnabled }
+            if (toolsToEnable.isEmpty()) return@launch
+
+            val updatedTools = toolsToEnable.map { it.copy(isEnabled = true) }
+            toolRepository.batchUpdateMCPTools(serverId, updatedTools).onLeft { error ->
+                errorNotifier.repositoryError(
+                    error = error,
+                    shortMessage = "Failed to enable all tools"
+                )
             }
         }
     }
 
     /**
      * Disables all tools for a specific server.
-     * Executes asynchronously without blocking UI.
      */
     fun disableAllTools(serverId: Long) {
         viewModelScope.launch(uiDispatcher) {
@@ -497,13 +499,15 @@ class LocalMCPServerViewModel(
             val serverOverview = overviewsState.data.find { it.serverId == serverId }
             val tools = serverOverview?.tools ?: return@launch
 
-            tools.filter { it.isEnabled }.forEach { tool ->
-                toolRepository.updateMCPTool(tool.copy(isEnabled = false)).onLeft { error ->
-                    errorNotifier.repositoryError(
-                        error = error,
-                        shortMessage = "Failed to disable tool: ${tool.name}"
-                    )
-                }
+            val toolsToDisable = tools.filter { it.isEnabled }
+            if (toolsToDisable.isEmpty()) return@launch
+
+            val updatedTools = toolsToDisable.map { it.copy(isEnabled = false) }
+            toolRepository.batchUpdateMCPTools(serverId, updatedTools).onLeft { error ->
+                errorNotifier.repositoryError(
+                    error = error,
+                    shortMessage = "Failed to disable all tools"
+                )
             }
         }
     }

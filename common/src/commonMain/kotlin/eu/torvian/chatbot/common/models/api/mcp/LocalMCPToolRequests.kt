@@ -62,3 +62,25 @@ data class RefreshMCPToolsResponse(
     val deletedTools: List<LocalMCPToolDefinition>
 )
 
+/**
+ * Request to batch update multiple MCP tools for a specific server.
+ *
+ * @property serverId The ID of the MCP server
+ * @property toolDefinitions List of tool definitions with updates to apply
+ */
+@Serializable
+data class BatchUpdateMCPToolsRequest(
+    val serverId: Long,
+    val toolDefinitions: List<LocalMCPToolDefinition>
+)
+
+/**
+ * Response containing the batch updated MCP tools.
+ *
+ * @property tools List of updated tools
+ */
+@Serializable
+data class BatchUpdateMCPToolsResponse(
+    val tools: List<LocalMCPToolDefinition>
+)
+

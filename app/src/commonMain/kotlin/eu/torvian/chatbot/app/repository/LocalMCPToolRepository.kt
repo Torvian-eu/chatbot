@@ -99,6 +99,18 @@ interface LocalMCPToolRepository {
     suspend fun updateMCPTool(tool: LocalMCPToolDefinition): Either<RepositoryError, Unit>
 
     /**
+     * Batch updates multiple MCP tools.
+     *
+     * @param serverId The ID of the MCP server
+     * @param toolDefinitions List of updated tool definitions
+     * @return [Either.Right] with Unit on success, or [Either.Left] with [RepositoryError] on failure
+     */
+    suspend fun batchUpdateMCPTools(
+        serverId: Long,
+        toolDefinitions: List<LocalMCPToolDefinition>
+    ): Either<RepositoryError, Unit>
+
+    /**
      * Removes all tools for a specific MCP server from the cache.
      *
      * @param serverId The ID of the MCP server whose tools should be removed from the cache
@@ -110,4 +122,3 @@ interface LocalMCPToolRepository {
      */
     suspend fun invalidateEnabledToolsCache()
 }
-
