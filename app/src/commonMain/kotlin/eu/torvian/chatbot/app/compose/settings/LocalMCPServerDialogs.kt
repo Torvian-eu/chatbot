@@ -564,18 +564,20 @@ private fun LocalMCPToolEditDialog(
                     )
                 )
 
-                // Tool Name (read-only)
+                // Tool Name (editable)
                 OutlinedTextField(
-                    value = tool.name,
-                    onValueChange = {},
-                    label = { Text("Tool Name") },
-                    readOnly = true,
+                    value = formState.name,
+                    onValueChange = { newValue ->
+                        onUpdateForm { it.copy(name = newValue) }
+                    },
+                    label = { Text("Tool Name *") },
+                    singleLine = true,
+                    enabled = !isSaving,
                     modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                        disabledBorderColor = MaterialTheme.colorScheme.outline,
-                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    isError = !formState.isValid(),
+                    supportingText = {
+                        Text("The name for this tool in your chatbot")
+                    }
                 )
 
                 // Tool Description (read-only)
@@ -669,16 +671,20 @@ private fun LocalMCPToolEditDialog(
 
                 HorizontalDivider()
 
-                // MCP Tool Name (editable)
+                // MCP Tool Name (read-only - original name from MCP server)
                 OutlinedTextField(
-                    value = formState.mcpToolName,
-                    onValueChange = { newValue ->
-                        onUpdateForm { it.copy(mcpToolName = newValue) }
-                    },
-                    label = { Text("MCP Tool Name") },
+                    value = tool.mcpToolName,
+                    onValueChange = {},
+                    label = { Text("Original MCP Tool Name") },
                     modifier = Modifier.fillMaxWidth(),
+                    readOnly = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                        disabledBorderColor = MaterialTheme.colorScheme.outline,
+                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    ),
                     supportingText = {
-                        Text("Optional: Maps to a different tool name on the MCP server")
+                        Text("The original tool name from the MCP server")
                     }
                 )
 

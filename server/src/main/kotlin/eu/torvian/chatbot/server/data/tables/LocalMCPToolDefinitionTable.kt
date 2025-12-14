@@ -9,7 +9,7 @@ import org.jetbrains.exposed.sql.Table
  * This table tracks which LocalMCPServer provides which ToolDefinitions, enabling:
  * - Tool source tracking (which server provides which tools)
  * - Cascade deletion when MCP servers are removed
- * - Future feature: Tool name mapping (mcpToolName field)
+ * - Tool name mapping (mcpToolName field)
  *
  * When an MCP server is deleted, all associated tool definitions should also be deleted
  * (CASCADE on mcpServerId). When a tool definition is deleted independently, the linkage
@@ -17,8 +17,8 @@ import org.jetbrains.exposed.sql.Table
  *
  * @property toolDefinitionId Reference to the tool definition in ToolDefinitionTable
  * @property mcpServerId Reference to the MCP server in LocalMCPServerTable
- * @property mcpToolName FUTURE: Original tool name from MCP server for name mapping.
- *   If null, use ToolDefinition.name as-is. If set, maps LLM tool name to MCP tool name.
+ * @property mcpToolName Original tool name from MCP server for name mapping.
+ *   Maps LLM tool name to MCP tool name.
  * @property isEnabledByDefault Whether this tool is enabled by default for NEW chat sessions.
  *   (null = use server-level default, true = enable, false = disable)
  */
@@ -33,7 +33,7 @@ object LocalMCPToolDefinitionTable : Table("local_mcp_tool_definitions") {
         LocalMCPServerTable,
         onDelete = ReferenceOption.CASCADE
     )
-    val mcpToolName = varchar("mcp_tool_name", 255).nullable()
+    val mcpToolName = varchar("mcp_tool_name", 255)
     val isEnabledByDefault = bool("is_enabled_by_default").nullable()
 
     override val primaryKey = PrimaryKey(toolDefinitionId)

@@ -427,8 +427,8 @@ class LocalMCPServerViewModel(
             }
 
             val updatedTool = currentDialogState.tool.copy(
-                isEnabled = form.isEnabled,
-                mcpToolName = form.mcpToolName.takeIf { it.isNotBlank() }
+                name = form.name,
+                isEnabled = form.isEnabled
             )
 
             toolRepository.updateMCPTool(updatedTool).fold(
@@ -610,16 +610,16 @@ data class LocalMCPServerFormState(
  * Form state for editing MCP tools.
  */
 data class LocalMCPToolFormState(
-    val isEnabled: Boolean = true,
-    val mcpToolName: String = ""
+    val name: String = "",
+    val isEnabled: Boolean = true
 ) {
-    fun isValid(): Boolean = true // All fields are optional
+    fun isValid(): Boolean = name.isNotBlank()
 
     companion object {
         fun fromTool(tool: LocalMCPToolDefinition): LocalMCPToolFormState {
             return LocalMCPToolFormState(
-                isEnabled = tool.isEnabled,
-                mcpToolName = tool.mcpToolName ?: ""
+                name = tool.name,
+                isEnabled = tool.isEnabled
             )
         }
     }

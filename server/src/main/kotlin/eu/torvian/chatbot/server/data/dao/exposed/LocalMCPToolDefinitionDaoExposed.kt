@@ -40,7 +40,7 @@ class LocalMCPToolDefinitionDaoExposed(
     override suspend fun insertTool(
         toolDefinitionId: Long,
         mcpServerId: Long,
-        mcpToolName: String?,
+        mcpToolName: String,
         isEnabledByDefault: Boolean?
     ): Either<InsertToolError, Unit> =
         transactionScope.transaction {
@@ -109,7 +109,7 @@ class LocalMCPToolDefinitionDaoExposed(
 
     override suspend fun updateTool(
         toolDefinitionId: Long,
-        mcpToolName: String?,
+        mcpToolName: String,
         isEnabledByDefault: Boolean?
     ): Either<LocalMCPToolDefinitionError.NotFound, Unit> =
         transactionScope.transaction {

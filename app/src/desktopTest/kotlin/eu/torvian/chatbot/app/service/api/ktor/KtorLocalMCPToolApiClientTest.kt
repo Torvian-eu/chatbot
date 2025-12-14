@@ -44,7 +44,7 @@ class KtorLocalMCPToolApiClientTest {
         serverId: Long,
         name: String = "test_tool",
         description: String = "Test tool",
-        mcpToolName: String? = null
+        mcpToolName: String = "test_tool"
     ) = LocalMCPToolDefinition(
         id = id,
         name = name,

@@ -222,11 +222,11 @@ class LocalMCPToolDefinitionServiceImpl(
                 getMCPToolsByServerId(serverId).bind()
             }
 
-            val existingToolsByName = existingTools.associateBy { it.name }
-            val currentToolsByName = currentTools.associateBy { it.name }
+            val existingToolsByName = existingTools.associateBy { it.mcpToolName }
+            val currentToolsByName = currentTools.associateBy { it.mcpToolName }
 
             // Identify new tools (in current but not in existing)
-            val newTools = currentTools.filter { it.name !in existingToolsByName }
+            val newTools = currentTools.filter { it.mcpToolName !in existingToolsByName }
 
             // Create new tools, if any
             val createdTools = if (newTools.isEmpty()) {
@@ -250,7 +250,7 @@ class LocalMCPToolDefinitionServiceImpl(
 
             // Identify changed tools (in both, but with different schema/description)
             val changedTools = currentTools.filter { current ->
-                val existing = existingToolsByName[current.name]
+                val existing = existingToolsByName[current.mcpToolName]
                 existing != null && (
                         existing.description != current.description ||
                                 existing.inputSchema != current.inputSchema ||
@@ -268,7 +268,7 @@ class LocalMCPToolDefinitionServiceImpl(
                     toolService.validateToolDefinition(tool).bind()
                 }
                 // Update tool definition
-                val existing = existingToolsByName[tool.name]!!
+                val existing = existingToolsByName[tool.mcpToolName]!!
                 val updatedTool = existing.copy(
                     description = tool.description,
                     inputSchema = tool.inputSchema,
@@ -285,7 +285,7 @@ class LocalMCPToolDefinitionServiceImpl(
             }
 
             // Identify removed tools (in existing but not in current)
-            val removedTools = existingTools.filter { it.name !in currentToolsByName }
+            val removedTools = existingTools.filter { it.mcpToolName !in currentToolsByName }
 
             // Delete removed tools
             for (tool in removedTools) {
