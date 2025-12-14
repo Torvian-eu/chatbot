@@ -1,18 +1,22 @@
 package eu.torvian.chatbot.app.compose.settings
 
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.service.mcp.LocalMCPServerOverview
 import eu.torvian.chatbot.app.viewmodel.LocalMCPServerOperation
+import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 
@@ -29,6 +33,10 @@ fun LocalMCPServerDetailPanel(
     onStartServer: (LocalMCPServerOverview) -> Unit,
     onStopServer: (LocalMCPServerOverview) -> Unit,
     onToggleEnabled: (LocalMCPServerOverview) -> Unit,
+    onToggleToolEnabled: (LocalMCPToolDefinition) -> Unit,
+    onEditTool: (LocalMCPToolDefinition) -> Unit,
+    onEnableAllTools: (Long) -> Unit,
+    onDisableAllTools: (Long) -> Unit,
     operationInProgress: LocalMCPServerOperation?,
     modifier: Modifier = Modifier
 ) {
@@ -113,14 +121,15 @@ fun LocalMCPServerDetailPanel(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant
                     )
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
                         Text(
                             text = "Status",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
-
-                        Spacer(modifier = Modifier.height(8.dp))
 
                         DetailRow(
                             label = "Enabled",
@@ -260,14 +269,15 @@ fun LocalMCPServerDetailPanel(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant
                     )
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
                         Text(
                             text = "Configuration",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
-
-                        Spacer(modifier = Modifier.height(8.dp))
 
                         DetailRow(label = "Command", value = server.command)
 
@@ -328,11 +338,45 @@ fun LocalMCPServerDetailPanel(
                         val toolsList = serverOverview.tools
                         val toolCount = toolsList?.size ?: 0
 
-                        Text(
-                            text = "Tools ($toolCount)",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Tools ($toolCount)",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            // Enable/Disable All links
+                            if (!toolsList.isNullOrEmpty()) {
+                                val allEnabled = toolsList.all { it.isEnabled }
+                                val allDisabled = toolsList.none { it.isEnabled }
+
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    TextButton(
+                                        onClick = { onEnableAllTools(server.id) },
+                                        enabled = !allEnabled
+                                    ) {
+                                        Text(
+                                            text = "Enable All",
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                    }
+
+                                    TextButton(
+                                        onClick = { onDisableAllTools(server.id) },
+                                        enabled = !allDisabled
+                                    ) {
+                                        Text(
+                                            text = "Disable All",
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                    }
+                                }
+                            }
+                        }
 
                         Spacer(modifier = Modifier.height(8.dp))
 
@@ -348,34 +392,11 @@ fun LocalMCPServerDetailPanel(
                             )
                         } else {
                             toolsList.forEach { tool ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Build,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp),
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = tool.name,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                        if (tool.description.isNotBlank()) {
-                                            Text(
-                                                text = tool.description,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    }
-                                }
+                                ToolListItem(
+                                    tool = tool,
+                                    onToggleEnabled = onToggleToolEnabled,
+                                    onEdit = onEditTool
+                                )
                             }
                         }
                     }
@@ -385,3 +406,99 @@ fun LocalMCPServerDetailPanel(
     }
 }
 
+@Composable
+private fun ToolListItem(
+    tool: LocalMCPToolDefinition,
+    onToggleEnabled: (LocalMCPToolDefinition) -> Unit,
+    onEdit: (LocalMCPToolDefinition) -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val hovered by interactionSource.collectIsHoveredAsState()
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .hoverable(interactionSource),
+        color = if (hovered) {
+            MaterialTheme.colorScheme.surfaceContainerHighest
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant
+        },
+        shape = MaterialTheme.shapes.small
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp, horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            // Tool icon and info
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Build,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = if (tool.isEnabled) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = tool.name,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = if (tool.isEnabled) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                    if (tool.description.isNotBlank()) {
+                        Text(
+                            text = tool.description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            // Actions: Edit button (hover-visible) and Switch (always visible)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Edit button placeholder (reserves space)
+                Box(modifier = Modifier.size(32.dp)) {
+                    if (hovered) {
+                        IconButton(
+                            onClick = { onEdit(tool) },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Edit tool ${tool.name}",
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                // Enable/Disable switch (always visible)
+                Switch(
+                    checked = tool.isEnabled,
+                    onCheckedChange = { onToggleEnabled(tool) },
+                    modifier = Modifier.height(32.dp)
+                )
+            }
+        }
+    }
+}

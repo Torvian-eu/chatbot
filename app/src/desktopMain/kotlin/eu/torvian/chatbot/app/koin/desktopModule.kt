@@ -95,6 +95,7 @@ fun desktopModule(appConfig: AppConfig, encryptionConfig: EncryptionConfig) = mo
     viewModel {
         LocalMCPServerViewModel(
             serverManager = get(),
+            toolRepository = get(),
             errorNotifier = get()
         )
     }

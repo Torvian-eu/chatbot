@@ -66,6 +66,10 @@ fun LocalMCPServersTab(
                         onStartServer = { actions.onStartServer(it.serverId) },
                         onStopServer = { actions.onStopServer(it.serverId) },
                         onToggleEnabled = { actions.onToggleServerEnabled(it.serverConfig) },
+                        onToggleToolEnabled = { actions.onToggleToolEnabled(it) },
+                        onEditTool = { actions.onStartEditingTool(it) },
+                        onEnableAllTools = { actions.onEnableAllTools(it) },
+                        onDisableAllTools = { actions.onDisableAllTools(it) },
                         operationInProgress = state.operationInProgress,
                         modifier = Modifier
                             .weight(1f)
@@ -103,6 +107,8 @@ fun LocalMCPServersTab(
             onUpdateForm = actions::onUpdateServerForm,
             onSaveServer = actions::onSaveServer,
             onDeleteServer = actions::onDeleteServer,
+            onUpdateToolForm = actions::onUpdateToolForm,
+            onSaveTool = actions::onSaveTool,
             onDismiss = actions::onCancelDialog
         )
     }

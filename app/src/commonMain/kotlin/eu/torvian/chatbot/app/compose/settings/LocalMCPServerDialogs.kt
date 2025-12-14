@@ -8,13 +8,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.viewmodel.LocalMCPServerDialogState
 import eu.torvian.chatbot.app.viewmodel.LocalMCPServerFormState
+import eu.torvian.chatbot.app.viewmodel.LocalMCPToolFormState
+import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 
 /**
  * Handles all dialog states for MCP server management.
@@ -26,6 +28,8 @@ fun LocalMCPServerDialogs(
     onUpdateForm: (update: (LocalMCPServerFormState) -> LocalMCPServerFormState) -> Unit,
     onSaveServer: () -> Unit,
     onDeleteServer: (Long) -> Unit,
+    onUpdateToolForm: (update: (LocalMCPToolFormState) -> LocalMCPToolFormState) -> Unit,
+    onSaveTool: () -> Unit,
     onDismiss: () -> Unit
 ) {
     when (dialogState) {
@@ -96,6 +100,17 @@ fun LocalMCPServerDialogs(
                 }
             )
         }
+
+        is LocalMCPServerDialogState.EditTool -> {
+            LocalMCPToolEditDialog(
+                tool = dialogState.tool,
+                formState = dialogState.formState,
+                isSaving = dialogState.isSaving,
+                onUpdateForm = onUpdateToolForm,
+                onConfirm = onSaveTool,
+                onDismiss = onDismiss
+            )
+        }
     }
 }
 
@@ -126,12 +141,14 @@ fun LocalMCPServerConfigDialog(
                 OutlinedTextField(
                     value = formState.name,
                     onValueChange = { value ->
-                        onUpdateForm { it.copy(name = value) }
+                        onUpdateForm { it.copy(name = value, nameError = null) }
                     },
                     label = { Text("Name *") },
                     placeholder = { Text("My MCP Server") },
                     singleLine = true,
                     enabled = !isSaving,
+                    isError = formState.nameError != null,
+                    supportingText = formState.nameError?.let { { Text(it) } },
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -152,13 +169,16 @@ fun LocalMCPServerConfigDialog(
                 OutlinedTextField(
                     value = formState.command,
                     onValueChange = { value ->
-                        onUpdateForm { it.copy(command = value) }
+                        onUpdateForm { it.copy(command = value, commandError = null) }
                     },
                     label = { Text("Command *") },
                     placeholder = { Text("npx, uv, java, docker, etc.") },
                     singleLine = true,
                     enabled = !isSaving,
-                    supportingText = { Text("Executable command to launch the server") },
+                    isError = formState.commandError != null,
+                    supportingText = {
+                        Text(formState.commandError ?: "Executable command to launch the server")
+                    },
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -506,3 +526,210 @@ fun EnvironmentVariablesSection(
     }
 }
 
+/**
+ * Dialog for editing an MCP tool's properties.
+ */
+@Composable
+private fun LocalMCPToolEditDialog(
+    tool: LocalMCPToolDefinition,
+    formState: LocalMCPToolFormState,
+    isSaving: Boolean,
+    onUpdateForm: (update: (LocalMCPToolFormState) -> LocalMCPToolFormState) -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("Edit Tool: ${tool.name}")
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Tool ID (read-only)
+                OutlinedTextField(
+                    value = tool.id.toString(),
+                    onValueChange = {},
+                    label = { Text("ID") },
+                    readOnly = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                        disabledBorderColor = MaterialTheme.colorScheme.outline,
+                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                )
+
+                // Tool Name (read-only)
+                OutlinedTextField(
+                    value = tool.name,
+                    onValueChange = {},
+                    label = { Text("Tool Name") },
+                    readOnly = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                        disabledBorderColor = MaterialTheme.colorScheme.outline,
+                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                )
+
+                // Tool Description (read-only)
+                OutlinedTextField(
+                    value = tool.description,
+                    onValueChange = {},
+                    label = { Text("Description") },
+                    readOnly = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                        disabledBorderColor = MaterialTheme.colorScheme.outline,
+                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                )
+
+                // Input Schema (read-only)
+                OutlinedTextField(
+                    value = tool.inputSchema.toString(),
+                    onValueChange = {},
+                    label = { Text("Input Schema") },
+                    readOnly = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                        disabledBorderColor = MaterialTheme.colorScheme.outline,
+                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                )
+
+                // Output Schema (read-only)
+                if (tool.outputSchema != null) {
+                    OutlinedTextField(
+                        value = tool.outputSchema.toString(),
+                        onValueChange = {},
+                        label = { Text("Output Schema") },
+                        readOnly = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                            disabledBorderColor = MaterialTheme.colorScheme.outline,
+                            disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    )
+                }
+
+                // Server ID (read-only)
+                OutlinedTextField(
+                    value = tool.serverId.toString(),
+                    onValueChange = {},
+                    label = { Text("Server ID") },
+                    readOnly = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                        disabledBorderColor = MaterialTheme.colorScheme.outline,
+                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                )
+
+                // Created At (read-only)
+                OutlinedTextField(
+                    value = tool.createdAt.toString(),
+                    onValueChange = {},
+                    label = { Text("Created At") },
+                    readOnly = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                        disabledBorderColor = MaterialTheme.colorScheme.outline,
+                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                )
+
+                // Updated At (read-only)
+                OutlinedTextField(
+                    value = tool.updatedAt.toString(),
+                    onValueChange = {},
+                    label = { Text("Updated At") },
+                    readOnly = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                        disabledBorderColor = MaterialTheme.colorScheme.outline,
+                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                )
+
+                HorizontalDivider()
+
+                // MCP Tool Name (editable)
+                OutlinedTextField(
+                    value = formState.mcpToolName,
+                    onValueChange = { newValue ->
+                        onUpdateForm { it.copy(mcpToolName = newValue) }
+                    },
+                    label = { Text("MCP Tool Name") },
+                    modifier = Modifier.fillMaxWidth(),
+                    supportingText = {
+                        Text("Optional: Maps to a different tool name on the MCP server")
+                    }
+                )
+
+                // Enabled toggle
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Enabled",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Text(
+                            text = "Whether this tool is globally enabled",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = formState.isEnabled,
+                        onCheckedChange = { newValue ->
+                            onUpdateForm { it.copy(isEnabled = newValue) }
+                        }
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                enabled = !isSaving && formState.isValid()
+            ) {
+                if (isSaving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Text(if (isSaving) "Saving..." else "Save")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isSaving
+            ) {
+                Text("Cancel")
+            }
+        }
+    )
+}

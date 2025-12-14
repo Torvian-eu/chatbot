@@ -4,10 +4,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.models.LocalMCPServer
+import eu.torvian.chatbot.app.repository.LocalMCPToolRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.service.mcp.LocalMCPServerManager
 import eu.torvian.chatbot.app.service.mcp.LocalMCPServerOverview
 import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
+import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
@@ -23,14 +25,17 @@ import kotlinx.coroutines.launch
  * - Testing connections to MCP servers
  * - Starting/stopping MCP servers
  * - Discovering and refreshing tools from servers
+ * - Managing individual tool settings (enable/disable, edit)
  * - Communicating with the backend via [LocalMCPServerManager]
  *
  * @property serverManager Manager for orchestrating server operations (test, start, stop, etc.)
+ * @property toolRepository Repository for managing MCP tool definitions
  * @property errorNotifier Service for handling and notifying about errors
  * @property uiDispatcher Dispatcher for UI-related coroutines
  */
 class LocalMCPServerViewModel(
     private val serverManager: LocalMCPServerManager,
+    private val toolRepository: LocalMCPToolRepository,
     private val errorNotifier: ErrorNotifier,
     private val uiDispatcher: CoroutineDispatcher = Dispatchers.Main
 ) : ViewModel() {
@@ -163,10 +168,12 @@ class LocalMCPServerViewModel(
             when (currentDialogState) {
                 is LocalMCPServerDialogState.AddNewServer -> {
                     val form = currentDialogState.formState
-                    if (!form.isValid()) {
-                        errorNotifier.genericError(
-                            shortMessage = "Please fill in all required fields"
-                        )
+                    val validatedForm = form.validate()
+
+                    if (!validatedForm.isValid()) {
+                        _dialogState.update {
+                            (it as? LocalMCPServerDialogState.AddNewServer)?.copy(formState = validatedForm) ?: it
+                        }
                         return@launch
                     }
 
@@ -204,10 +211,12 @@ class LocalMCPServerViewModel(
 
                 is LocalMCPServerDialogState.EditServer -> {
                     val form = currentDialogState.formState
-                    if (!form.isValid()) {
-                        errorNotifier.genericError(
-                            shortMessage = "Please fill in all required fields"
-                        )
+                    val validatedForm = form.validate()
+
+                    if (!validatedForm.isValid()) {
+                        _dialogState.update {
+                            (it as? LocalMCPServerDialogState.EditServer)?.copy(formState = validatedForm) ?: it
+                        }
                         return@launch
                     }
 
@@ -373,6 +382,131 @@ class LocalMCPServerViewModel(
             }
         }
     }
+
+    /**
+     * Toggles the enabled state of a specific tool.
+     * Executes asynchronously without blocking UI.
+     */
+    fun toggleToolEnabled(tool: LocalMCPToolDefinition) {
+        viewModelScope.launch(uiDispatcher) {
+            val updatedTool = tool.copy(isEnabled = !tool.isEnabled)
+            toolRepository.updateMCPTool(updatedTool).onLeft { error ->
+                errorNotifier.repositoryError(
+                    error = error,
+                    shortMessage = "Failed to toggle tool"
+                )
+            }
+        }
+    }
+
+    /**
+     * Opens the dialog to edit a tool.
+     */
+    fun startEditingTool(tool: LocalMCPToolDefinition) {
+        _dialogState.value = LocalMCPServerDialogState.EditTool(
+            tool = tool,
+            formState = LocalMCPToolFormState.fromTool(tool)
+        )
+    }
+
+    /**
+     * Saves changes to a tool.
+     */
+    fun saveTool() {
+        val currentDialogState = _dialogState.value
+
+        if (currentDialogState !is LocalMCPServerDialogState.EditTool) {
+            return
+        }
+
+        val form = currentDialogState.formState
+
+        viewModelScope.launch(uiDispatcher) {
+            _dialogState.update {
+                (it as? LocalMCPServerDialogState.EditTool)?.copy(isSaving = true) ?: it
+            }
+
+            val updatedTool = currentDialogState.tool.copy(
+                isEnabled = form.isEnabled,
+                mcpToolName = form.mcpToolName.takeIf { it.isNotBlank() }
+            )
+
+            toolRepository.updateMCPTool(updatedTool).fold(
+                ifLeft = { error ->
+                    _dialogState.update {
+                        (it as? LocalMCPServerDialogState.EditTool)?.copy(isSaving = false) ?: it
+                    }
+                    errorNotifier.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to update tool"
+                    )
+                },
+                ifRight = {
+                    _dialogState.value = LocalMCPServerDialogState.None
+                }
+            )
+        }
+    }
+
+    /**
+     * Updates the tool form state for the current dialog.
+     */
+    fun updateToolForm(update: (LocalMCPToolFormState) -> LocalMCPToolFormState) {
+        _dialogState.update { dialogState ->
+            when (dialogState) {
+                is LocalMCPServerDialogState.EditTool -> dialogState.copy(
+                    formState = update(dialogState.formState)
+                )
+                else -> dialogState
+            }
+        }
+    }
+
+    /**
+     * Enables all tools for a specific server.
+     * Executes asynchronously without blocking UI.
+     */
+    fun enableAllTools(serverId: Long) {
+        viewModelScope.launch(uiDispatcher) {
+            val overviewsState = serverOverviews.value
+            if (overviewsState !is DataState.Success) return@launch
+
+            val serverOverview = overviewsState.data.find { it.serverId == serverId }
+            val tools = serverOverview?.tools ?: return@launch
+
+            tools.filter { !it.isEnabled }.forEach { tool ->
+                toolRepository.updateMCPTool(tool.copy(isEnabled = true)).onLeft { error ->
+                    errorNotifier.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to enable tool: ${tool.name}"
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Disables all tools for a specific server.
+     * Executes asynchronously without blocking UI.
+     */
+    fun disableAllTools(serverId: Long) {
+        viewModelScope.launch(uiDispatcher) {
+            val overviewsState = serverOverviews.value
+            if (overviewsState !is DataState.Success) return@launch
+
+            val serverOverview = overviewsState.data.find { it.serverId == serverId }
+            val tools = serverOverview?.tools ?: return@launch
+
+            tools.filter { it.isEnabled }.forEach { tool ->
+                toolRepository.updateMCPTool(tool.copy(isEnabled = false)).onLeft { error ->
+                    errorNotifier.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to disable tool: ${tool.name}"
+                    )
+                }
+            }
+        }
+    }
 }
 
 /**
@@ -395,6 +529,12 @@ sealed class LocalMCPServerDialogState {
     data class DeleteServer(
         val server: LocalMCPServer
     ) : LocalMCPServerDialogState()
+
+    data class EditTool(
+        val tool: LocalMCPToolDefinition,
+        val formState: LocalMCPToolFormState,
+        val isSaving: Boolean = false
+    ) : LocalMCPServerDialogState()
 }
 
 /**
@@ -411,10 +551,36 @@ data class LocalMCPServerFormState(
     val autoStartOnEnable: Boolean = false,
     val autoStartOnLaunch: Boolean = false,
     val autoStopAfterInactivitySeconds: Int? = null,
-    val toolsEnabledByDefault: Boolean = false
+    val toolsEnabledByDefault: Boolean = false,
+    val nameError: String? = null,
+    val commandError: String? = null
 ) {
+    /**
+     * Returns true if the form has no validation errors.
+     */
     fun isValid(): Boolean {
-        return name.isNotBlank() && command.isNotBlank()
+        return nameError == null && commandError == null && name.isNotBlank() && command.isNotBlank()
+    }
+
+    /**
+     * Validates the form and returns a new state with error messages if validation fails.
+     * Returns the same state if already valid.
+     */
+    fun validate(): LocalMCPServerFormState {
+        val newNameError = when {
+            name.isBlank() -> "Name is required"
+            else -> null
+        }
+        val newCommandError = when {
+            command.isBlank() -> "Command is required"
+            else -> null
+        }
+
+        return if (newNameError != null || newCommandError != null) {
+            copy(nameError = newNameError, commandError = newCommandError)
+        } else {
+            this
+        }
     }
 
     companion object {
@@ -431,6 +597,25 @@ data class LocalMCPServerFormState(
                 autoStartOnLaunch = server.autoStartOnLaunch,
                 autoStopAfterInactivitySeconds = server.autoStopAfterInactivitySeconds,
                 toolsEnabledByDefault = server.toolsEnabledByDefault
+            )
+        }
+    }
+}
+
+/**
+ * Form state for editing MCP tools.
+ */
+data class LocalMCPToolFormState(
+    val isEnabled: Boolean = true,
+    val mcpToolName: String = ""
+) {
+    fun isValid(): Boolean = true // All fields are optional
+
+    companion object {
+        fun fromTool(tool: LocalMCPToolDefinition): LocalMCPToolFormState {
+            return LocalMCPToolFormState(
+                isEnabled = tool.isEnabled,
+                mcpToolName = tool.mcpToolName ?: ""
             )
         }
     }
