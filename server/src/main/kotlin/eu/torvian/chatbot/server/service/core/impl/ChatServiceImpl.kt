@@ -7,6 +7,7 @@ import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import arrow.core.right
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.llm.*
@@ -25,16 +26,18 @@ import eu.torvian.chatbot.server.service.core.error.settings.GetSettingsByIdErro
 import eu.torvian.chatbot.server.service.llm.*
 import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutor
 import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutorEvent
-import eu.torvian.chatbot.common.models.tool.LocalMCPToolCallResult
 import eu.torvian.chatbot.server.service.security.CredentialManager
 import eu.torvian.chatbot.server.service.security.error.CredentialError
 import eu.torvian.chatbot.server.service.tool.ToolExecutorFactory
-import eu.torvian.chatbot.common.misc.transaction.TransactionScope
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
+import java.util.concurrent.CancellationException
 
 /**
  * Service for processing new chat messages and managing the conversation flow.
@@ -265,6 +268,7 @@ class ChatServiceImpl(
                                 completedToolCalls.add(event.toolCall)
                                 send(MessageEvent.ToolExecutionCompleted(event.toolCall).right())
                             }
+
                             is ToolExecutionEvent.LocalMCPToolCallReceived -> {
                                 send(MessageEvent.LocalMCPToolCallReceived(event.request).right())
                             }
@@ -417,6 +421,7 @@ class ChatServiceImpl(
                                         completedToolCalls.add(event.toolCall)
                                         send(MessageStreamEvent.ToolExecutionCompleted(event.toolCall).right())
                                     }
+
                                     is ToolExecutionEvent.LocalMCPToolCallReceived -> {
                                         send(MessageStreamEvent.LocalMCPToolCallReceived(event.request).right())
                                     }
@@ -453,6 +458,18 @@ class ChatServiceImpl(
                         send(ProcessNewMessageError.ExternalServiceError(llmError).left())
                         send(MessageStreamEvent.StreamCompleted.right())
                         continueLoop = false
+                    },
+                    onCancellation = { partialContent ->
+                        // Save partial content to database on cancellation
+                        if (partialContent.isNotEmpty()) {
+                            logger.info("Saving partial content for cancelled message ${assistantMessage.id}: ${partialContent.length} characters")
+                            updateAssistantMessageContent(
+                                messageId = assistantMessage.id,
+                                content = partialContent
+                            )
+                        } else {
+                            logger.info("No partial content to save for cancelled message ${assistantMessage.id}")
+                        }
                     }
                 )
             }
@@ -780,6 +797,7 @@ class ChatServiceImpl(
      * @param onToolCallChunk Callback for tool call argument deltas
      * @param onStreamComplete Callback for stream completion (includes final content and tool calls)
      * @param onError Callback for stream errors
+     * @param onCancellation Callback for stream cancellation (receives accumulated partial content)
      */
     private suspend fun handleLlmStreaming(
         context: List<RawChatMessage>,
@@ -791,7 +809,8 @@ class ChatServiceImpl(
         onContentDelta: suspend (deltaContent: String) -> Unit,
         onToolCallChunk: suspend (toolCallChunk: LLMStreamChunk.ToolCallChunk) -> Unit,
         onStreamComplete: suspend (finalContent: String, toolCallRequests: List<LLMCompletionResult.CompletionChoice.ToolCallRequest>, finishReason: String?) -> Unit,
-        onError: suspend (error: LLMCompletionError) -> Unit
+        onError: suspend (error: LLMCompletionError) -> Unit,
+        onCancellation: suspend (partialContent: String) -> Unit
     ) {
         val accumulatedContent = StringBuilder()
         var finishReason: String? = null
@@ -799,86 +818,100 @@ class ChatServiceImpl(
         // Map to accumulate tool calls by index (for OpenAI streaming)
         val toolCallsByIndex = mutableMapOf<Int, MutableToolCallAccumulator>()
 
-        llmApiClient.completeChatStreaming(context, model, provider, settings, apiKey, tools)
-            .collect { llmStreamChunkEither ->
-                llmStreamChunkEither.fold(
-                    ifLeft = { llmError ->
-                        logger.error("LLM API streaming error, provider ${provider.name}: $llmError")
-                        onError(llmError)
-                    },
-                    ifRight = { chunk ->
-                        when (chunk) {
-                            is LLMStreamChunk.ContentChunk -> {
-                                accumulatedContent.append(chunk.deltaContent)
-                                onContentDelta(chunk.deltaContent)
-                                if (chunk.finishReason != null) {
-                                    finishReason = chunk.finishReason
-                                }
-                            }
-
-                            is LLMStreamChunk.ToolCallChunk -> {
-                                // Accumulate tool call chunks by index
-                                val index = chunk.index ?: 0 // Default to 0 for Ollama
-                                val accumulator = toolCallsByIndex.getOrPut(index) {
-                                    MutableToolCallAccumulator(
-                                        id = chunk.id,
-                                        name = chunk.name ?: "",
-                                        arguments = StringBuilder()
-                                    )
+        try {
+            llmApiClient.completeChatStreaming(context, model, provider, settings, apiKey, tools)
+                .collect { llmStreamChunkEither ->
+                    llmStreamChunkEither.fold(
+                        ifLeft = { llmError ->
+                            logger.error("LLM API streaming error, provider ${provider.name}: $llmError")
+                            onError(llmError)
+                        },
+                        ifRight = { chunk ->
+                            when (chunk) {
+                                is LLMStreamChunk.ContentChunk -> {
+                                    accumulatedContent.append(chunk.deltaContent)
+                                    onContentDelta(chunk.deltaContent)
+                                    if (chunk.finishReason != null) {
+                                        finishReason = chunk.finishReason
+                                    }
                                 }
 
-                                // Update ID and name if provided (first chunk usually has them)
-                                if (chunk.id != null && accumulator.id == null) {
-                                    accumulator.id = chunk.id
-                                }
-                                if (!chunk.name.isNullOrEmpty() && accumulator.name.isEmpty()) {
-                                    accumulator.name = chunk.name
-                                }
-
-                                // Append arguments delta
-                                if (chunk.argumentsDelta != null) {
-                                    accumulator.arguments.append(chunk.argumentsDelta)
-                                }
-
-                                // Emit the chunk to UI
-                                onToolCallChunk(chunk)
-                            }
-
-                            is LLMStreamChunk.UsageChunk -> {
-                                // Handle usage stats if needed
-                                logger.debug("Usage stats: prompt=${chunk.promptTokens}, completion=${chunk.completionTokens}, total=${chunk.totalTokens}")
-                            }
-
-                            LLMStreamChunk.Done -> {
-                                // Build toolCallRequests first, as they are now passed to onStreamComplete
-                                val toolCallRequests = if (toolCallsByIndex.isNotEmpty()) {
-                                    toolCallsByIndex.values.map { accumulator ->
-                                        LLMCompletionResult.CompletionChoice.ToolCallRequest(
-                                            name = accumulator.name,
-                                            arguments = accumulator.arguments.toString().takeIf { it.isNotEmpty() },
-                                            toolCallId = accumulator.id
+                                is LLMStreamChunk.ToolCallChunk -> {
+                                    // Accumulate tool call chunks by index
+                                    val index = chunk.index ?: 0 // Default to 0 for Ollama
+                                    val accumulator = toolCallsByIndex.getOrPut(index) {
+                                        MutableToolCallAccumulator(
+                                            id = chunk.id,
+                                            name = chunk.name ?: "",
+                                            arguments = StringBuilder()
                                         )
                                     }
-                                } else {
-                                    emptyList()
+
+                                    // Update ID and name if provided (first chunk usually has them)
+                                    if (chunk.id != null && accumulator.id == null) {
+                                        accumulator.id = chunk.id
+                                    }
+                                    if (!chunk.name.isNullOrEmpty() && accumulator.name.isEmpty()) {
+                                        accumulator.name = chunk.name
+                                    }
+
+                                    // Append arguments delta
+                                    if (chunk.argumentsDelta != null) {
+                                        accumulator.arguments.append(chunk.argumentsDelta)
+                                    }
+
+                                    // Emit the chunk to UI
+                                    onToolCallChunk(chunk)
                                 }
 
-                                if (finishReason == null && toolCallRequests.isNotEmpty()) {
-                                    finishReason = "tool_calls"
+                                is LLMStreamChunk.UsageChunk -> {
+                                    // Handle usage stats if needed
+                                    logger.debug("Usage stats: prompt=${chunk.promptTokens}, completion=${chunk.completionTokens}, total=${chunk.totalTokens}")
                                 }
 
-                                // Call onStreamComplete with final content, tool calls, and finish reason
-                                onStreamComplete(accumulatedContent.toString(), toolCallRequests, finishReason)
-                            }
+                                LLMStreamChunk.Done -> {
+                                    // Build toolCallRequests first, as they are now passed to onStreamComplete
+                                    val toolCallRequests = if (toolCallsByIndex.isNotEmpty()) {
+                                        toolCallsByIndex.values.map { accumulator ->
+                                            LLMCompletionResult.CompletionChoice.ToolCallRequest(
+                                                name = accumulator.name,
+                                                arguments = accumulator.arguments.toString().takeIf { it.isNotEmpty() },
+                                                toolCallId = accumulator.id
+                                            )
+                                        }
+                                    } else {
+                                        emptyList()
+                                    }
 
-                            is LLMStreamChunk.Error -> {
-                                logger.error("LLM API returned streaming error chunk: ${chunk.llmError}")
-                                onError(chunk.llmError)
+                                    if (finishReason == null && toolCallRequests.isNotEmpty()) {
+                                        finishReason = "tool_calls"
+                                    }
+
+                                    // Call onStreamComplete with final content, tool calls, and finish reason
+                                    onStreamComplete(accumulatedContent.toString(), toolCallRequests, finishReason)
+                                }
+
+                                is LLMStreamChunk.Error -> {
+                                    logger.error("LLM API returned streaming error chunk: ${chunk.llmError}")
+                                    onError(chunk.llmError)
+                                }
                             }
                         }
-                    }
-                )
+                    )
+                }
+        } catch (e: CancellationException) {
+            // Stream was cancelled - invoke callback with accumulated partial content inside NonCancellable context
+            logger.info("LLM streaming cancelled, accumulated content length: ${accumulatedContent.length}")
+            try {
+                withContext(NonCancellable) {
+                    onCancellation(accumulatedContent.toString())
+                }
+            } catch (handlerError: Exception) {
+                logger.error("Failed to run onCancellation handler: ${handlerError.message}", handlerError)
             }
+            // Re-throw the cancellation exception to propagate it
+            throw e
+        }
     }
 
     /**
