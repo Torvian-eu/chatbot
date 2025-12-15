@@ -19,6 +19,7 @@ import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -69,6 +70,12 @@ class ChatViewModel(
 ) : ViewModel(normalScope) {
 
     private val logger = kmpLogger<ChatViewModel>()
+
+    /**
+     * Job tracking the currently active message sending operation.
+     * Null when no message is being sent.
+     */
+    private var sendMessageJob: Job? = null
 
     // --- Public State Properties (delegated to Reactive ChatState) ---
 
@@ -213,9 +220,22 @@ class ChatViewModel(
      * Sends the current message content to the active session.
      */
     fun sendMessage() {
-        normalScope.launch {
-            sendMessageUC.execute()
+        sendMessageJob = normalScope.launch {
+            try {
+                sendMessageUC.execute()
+            } finally {
+                sendMessageJob = null
+            }
         }
+    }
+
+    /**
+     * Cancels the currently active message sending operation.
+     */
+    fun cancelSendMessage() {
+        sendMessageJob?.cancel()
+        sendMessageJob = null
+        state.setIsSending(false)
     }
 
     /**

@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -24,8 +25,10 @@ import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.PlainTooltipBox // Import PlainTooltipBox
 import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.cancel_reply_button_description
+import eu.torvian.chatbot.app.generated.resources.cancel_send_message_button_description
 import eu.torvian.chatbot.app.generated.resources.replying_to_prefix
 import eu.torvian.chatbot.app.generated.resources.send_message_button_description
+import eu.torvian.chatbot.app.generated.resources.sending_message_tooltip
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import org.jetbrains.compose.resources.stringResource
 
@@ -41,6 +44,7 @@ import org.jetbrains.compose.resources.stringResource
  * @param inputContent The current text content of the input field.
  * @param onUpdateInput Callback for when the input content changes.
  * @param onSendMessage Callback for when the send button is clicked or Enter is pressed.
+ * @param onCancelSendMessage Callback for when the user cancels the message sending operation.
  * @param replyTargetMessage The message being replied to, if any.
  * @param onCancelReply Callback to cancel the reply.
  * @param isSendingMessage Indicates if a message is currently being sent.
@@ -53,6 +57,7 @@ fun InputArea(
     inputContent: String,
     onUpdateInput: (String) -> Unit,
     onSendMessage: () -> Unit,
+    onCancelSendMessage: () -> Unit,
     replyTargetMessage: ChatMessage?,
     onCancelReply: () -> Unit,
     isSendingMessage: Boolean,
@@ -131,18 +136,18 @@ fun InputArea(
                 }
             }
 
-            // Send Button or Loading Indicator
-            if (isSendingMessage) { // Loading indicator (E1.S3)
-                PlainTooltipBox(text = "Sending message...") {
+            // Send Button or Stop Button
+            if (isSendingMessage) { // Stop button to cancel sending (E1.S3)
+                PlainTooltipBox(text = stringResource(Res.string.sending_message_tooltip)) {
                     FilledIconButton(
-                        onClick = { }, // Can be used as stop action in future PRs
+                        onClick = onCancelSendMessage,
                         modifier = Modifier.size(48.dp),
                         enabled = true
                     ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            strokeWidth = 3.dp
+                        Icon(
+                            Icons.Default.Stop,
+                            contentDescription = stringResource(Res.string.cancel_send_message_button_description),
+                            tint = MaterialTheme.colorScheme.onPrimary
                         )
                     }
                 }

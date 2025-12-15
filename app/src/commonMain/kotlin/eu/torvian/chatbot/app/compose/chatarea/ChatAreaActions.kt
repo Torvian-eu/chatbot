@@ -20,6 +20,11 @@ interface ChatAreaActions {
     fun onSendMessage()
 
     /**
+     * Callback for when the user cancels the current message sending operation.
+     */
+    fun onCancelSendMessage()
+
+    /**
      * Callback for when the user starts replying to a specific message.
      * @param message The message the user is replying to.
      */

@@ -2,4 +2,6 @@
 <resources>
     <string name="app_name">Aplicación de chatbot</string>
     <string name="warning_model_or_settings_unavailable">No se puede enviar el mensaje: modelo o configuraciones no están disponibles</string>
+    <string name="cancel_send_message_button_description">Detener el envío del mensaje</string>
+    <string name="sending_message_tooltip">Enviando mensaje... (haz clic para cancelar)</string>
 </resources>

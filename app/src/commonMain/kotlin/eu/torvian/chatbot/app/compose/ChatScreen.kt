@@ -156,6 +156,7 @@ fun ChatScreen(
         object : ChatAreaActions {
             override fun onUpdateInput(newText: String) = chatViewModel.updateInput(newText)
             override fun onSendMessage() = chatViewModel.sendMessage()
+            override fun onCancelSendMessage() = chatViewModel.cancelSendMessage()
             override fun onStartReplyTo(message: ChatMessage) = chatViewModel.startReplyTo(message)
             override fun onCancelReply() = chatViewModel.cancelReply()
             override fun onStartEditing(message: ChatMessage) = chatViewModel.startEditing(message)

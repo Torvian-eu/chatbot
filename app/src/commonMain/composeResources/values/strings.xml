@@ -32,6 +32,8 @@
     <string name="replying_to_prefix">Replying to:</string>
     <string name="send_message_button_description">Send message</string>
     <string name="cancel_reply_button_description">Cancel reply</string>
+    <string name="cancel_send_message_button_description">Stop sending message</string>
+    <string name="sending_message_tooltip">Sending message... (click to cancel)</string>
 
     <!-- Success Messages -->
     <string name="operation_success">Operation completed successfully.</string>
