@@ -14,6 +14,7 @@ import eu.torvian.chatbot.app.repository.RepositoryError.OtherError
 import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.service.api.LocalMCPServerApi
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
+import eu.torvian.chatbot.common.models.api.mcp.CreateServerRequest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -76,20 +77,19 @@ class DefaultLocalMCPServerRepository(
         isEnabled: Boolean,
         autoStartOnEnable: Boolean,
         autoStartOnLaunch: Boolean,
-        autoStopAfterInactivitySeconds: Int?,
-        toolsEnabledByDefault: Boolean
+        autoStopAfterInactivitySeconds: Int?
     ): Either<RepositoryError, LocalMCPServer> = either {
-        // Step 1: Request ID from server API
-        val serverIdResponse = withError({ apiResourceError ->
-            apiResourceError.toRepositoryError("Failed to generate MCP server ID")
+        // Step 1: Request server creation from server API
+        val serverResponse = withError({ apiResourceError ->
+            apiResourceError.toRepositoryError("Failed to create MCP server")
         }) {
-            api.generateServerId().bind()
+            api.createServer(CreateServerRequest(isEnabled = isEnabled)).bind()
         }
 
         // Step 2: Create local server configuration with generated ID
         val server = LocalMCPServer(
-            id = serverIdResponse.id,
-            userId = serverIdResponse.userId,
+            id = serverResponse.id,
+            userId = serverResponse.userId,
             name = name,
             description = description,
             command = command,
@@ -100,7 +100,6 @@ class DefaultLocalMCPServerRepository(
             autoStartOnEnable = autoStartOnEnable,
             autoStartOnLaunch = autoStartOnLaunch,
             autoStopAfterInactivitySeconds = autoStopAfterInactivitySeconds,
-            toolsEnabledByDefault = toolsEnabledByDefault,
             createdAt = Clock.System.now(),
             updatedAt = Clock.System.now()
         )
@@ -115,7 +114,7 @@ class DefaultLocalMCPServerRepository(
     }
 
     override suspend fun updateServer(server: LocalMCPServer): Either<RepositoryError, Unit> = either {
-        // Update local database
+        // Step 1: Update local database
         withError({ daoError ->
             logger.error("Failed to update MCP server ${server.id}: $daoError")
             when (daoError) {
@@ -127,7 +126,17 @@ class DefaultLocalMCPServerRepository(
             localDao.update(server).bind()
         }
 
-        // Update cache
+        // Step 2: Sync isEnabled state with server API only if it changed
+        val cachedServer = getCachedServerById(server.id)
+        if (cachedServer?.isEnabled != server.isEnabled) {
+            withError({ apiResourceError ->
+                apiResourceError.toRepositoryError("Failed to sync server enabled state")
+            }) {
+                api.setServerEnabled(server.id, server.isEnabled).bind()
+            }
+        }
+
+        // Step 3: Update cache
         updateCache { list -> list.map { if (it.id == server.id) server else it } }
     }
 
@@ -176,5 +185,14 @@ class DefaultLocalMCPServerRepository(
             }
         }
     }
+
+    /**
+     * Helper to retrieve a single cached server by ID.
+     *
+     * @param serverId The ID of the server to retrieve
+     * @return The cached server or null if not found
+     */
+    private fun getCachedServerById(serverId: Long): LocalMCPServer? =
+        _servers.value.dataOrNull?.find { it.id == serverId }
 
 }

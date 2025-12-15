@@ -45,6 +45,9 @@ class MCPClientServiceImpl(
         // Client info for MCP SDK
         private const val CLIENT_NAME = "chatbot-mcp-client"
         private const val CLIENT_VERSION = "1.0.0"
+
+        // Connection timeout in seconds
+        private const val CONNECTION_TIMEOUT_SECONDS = 15
     }
 
     // Thread-safe StateFlow of active MCP clients
@@ -108,9 +111,20 @@ class MCPClientServiceImpl(
                 output = outputStream
             )
 
-            // Connect to the MCP server
-            withContext(ioDispatcher) {
-                sdkClient.connect(transport)
+            // Connect to the MCP server with timeout
+            try {
+                withContext(ioDispatcher) {
+                    withTimeout(CONNECTION_TIMEOUT_SECONDS * 1000L) {
+                        sdkClient.connect(transport)
+                    }
+                }
+            } catch (_: TimeoutCancellationException) {
+                logger.error("Connection to MCP server $serverId timed out after $CONNECTION_TIMEOUT_SECONDS seconds")
+                processManager.stopServer(serverId)
+                return StartAndConnectError.ConnectionTimeout(
+                    serverId = serverId,
+                    timeoutSeconds = CONNECTION_TIMEOUT_SECONDS
+                ).left()
             }
 
             // Store the client
@@ -142,14 +156,27 @@ class MCPClientServiceImpl(
 
     override suspend fun stopServer(
         serverId: Long
+    ): Either<MCPStopServerError, Unit> = stopServerInternal(serverId, fromTimer = false)
+
+    /**
+     * Internal implementation of stopServer with control over timer cancellation.
+     *
+     * @param serverId The ID of the server to stop
+     * @param fromTimer Whether this call originates from the auto-stop timer
+     */
+    private suspend fun stopServerInternal(
+        serverId: Long,
+        fromTimer: Boolean
     ): Either<MCPStopServerError, Unit> {
         logger.info("Stopping MCP server: $serverId")
 
         // Remove client from map (atomic operation)
         val mcpClient = clientsInternal.value[serverId]
         if (mcpClient != null) {
-            // Cancel any pending auto-stop timer
-            mcpClient.autoStopTimerJob?.cancel()
+            // Cancel any pending auto-stop timer ONLY if not called from the timer itself
+            if (!fromTimer) {
+                mcpClient.autoStopTimerJob?.cancel()
+            }
             _clients.update { it - serverId }
         }
 
@@ -390,7 +417,7 @@ class MCPClientServiceImpl(
                     "Auto-stopping MCP server $serverId (${config.name}) due to inactivity " +
                             "($effectiveAutoStopSeconds seconds threshold reached)"
                 )
-                stopServer(serverId).onLeft { error ->
+                stopServerInternal(serverId, fromTimer = true).onLeft { error ->
                     logger.error("Failed to auto-stop server $serverId: ${error.message}")
                 }
             } catch (e: Exception) {

@@ -9,6 +9,7 @@ import eu.torvian.chatbot.common.api.resources.SessionToolsResource
 import eu.torvian.chatbot.common.api.resources.ToolResource
 import eu.torvian.chatbot.common.models.api.tool.CreateToolRequest
 import eu.torvian.chatbot.common.models.api.tool.SetToolEnabledRequest
+import eu.torvian.chatbot.common.models.api.tool.SetToolsEnabledRequest
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
@@ -43,10 +44,11 @@ fun Route.configureToolRoutes(
     authorizationService: AuthorizationService
 ) {
     authenticate(AuthSchemes.USER_JWT) {
-        // GET /api/v1/tools - List all tools
+        // GET /api/v1/tools - List all tools accessible to the current user
         get<ToolResource> {
-            // All authenticated users can view available tools
-            call.respond(toolService.getAllTools().map { it as ToolDefinition })
+            val userId = call.getUserId()
+            // Returns all global tools plus user-specific MCP tools
+            call.respond(toolService.getToolsForUser(userId))
         }
 
         // POST /api/v1/tools - Create a new tool (admin only)
@@ -155,6 +157,23 @@ fun Route.configureToolRoutes(
 
                 withError({ e: SetToolEnabledError -> e.toApiError() }) {
                     toolService.setToolEnabledForSession(sessionId, toolId, request.enabled).bind()
+                }
+            }
+            call.respondEither(result)
+        }
+
+        // PUT /api/v1/sessions/{sessionId}/tools - Batch enable/disable multiple tools for session
+        put<SessionToolsResource> { resource ->
+            val userId = call.getUserId()
+            val sessionId = resource.parent.sessionId
+            val request = call.receive<SetToolsEnabledRequest>()
+
+            val result = either {
+                // Check that the user has write access to the session
+                requireSessionAccess(authorizationService, userId, sessionId, AccessMode.WRITE)
+
+                withError({ e: SetToolsEnabledError -> e.toApiError() }) {
+                    toolService.setToolsEnabledForSession(sessionId, request.toolIds, request.enabled).bind()
                 }
             }
             call.respondEither(result)

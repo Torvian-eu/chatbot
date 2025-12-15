@@ -12,6 +12,7 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insertAndGetId
 import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.update
 
 /**
  * Exposed implementation of the [LocalMCPServerDao].
@@ -24,10 +25,11 @@ class LocalMCPServerDaoExposed(
     private val transactionScope: TransactionScope
 ) : LocalMCPServerDao {
 
-    override suspend fun generateId(userId: Long): Long =
+    override suspend fun createServer(userId: Long, isEnabled: Boolean): Long =
         transactionScope.transaction {
             LocalMCPServerTable.insertAndGetId {
                 it[LocalMCPServerTable.userId] = userId
+                it[LocalMCPServerTable.isEnabled] = isEnabled
             }.value
         }
 
@@ -72,6 +74,18 @@ class LocalMCPServerDaoExposed(
                 ensure(ownerUserId?.value == userId) {
                     LocalMCPServerError.Unauthorized(userId, serverId)
                 }
+            }
+        }
+
+    override suspend fun setEnabled(serverId: Long, isEnabled: Boolean): Either<LocalMCPServerError.NotFound, Unit> =
+        transactionScope.transaction {
+            either {
+                val rowsUpdated = LocalMCPServerTable.update(
+                    where = { LocalMCPServerTable.id eq serverId }
+                ) {
+                    it[LocalMCPServerTable.isEnabled] = isEnabled
+                }
+                ensure(rowsUpdated == 1) { LocalMCPServerError.NotFound(serverId) }
             }
         }
 }

@@ -3,17 +3,18 @@ package eu.torvian.chatbot.app.database.dao
 import app.cash.sqldelight.async.coroutines.synchronous
 import app.cash.sqldelight.db.SqlDriver
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
+import arrow.core.right
 import eu.torvian.chatbot.app.database.LocalDatabase
 import eu.torvian.chatbot.app.database.LocalDatabaseProvider
 import eu.torvian.chatbot.app.database.dao.error.DeleteLocalMCPServerError
 import eu.torvian.chatbot.app.database.dao.error.GetLocalMCPServerError
 import eu.torvian.chatbot.app.database.dao.error.UpdateLocalMCPServerError
+import eu.torvian.chatbot.app.domain.models.LocalMCPServer
 import eu.torvian.chatbot.app.service.misc.EncryptedSecretService
 import eu.torvian.chatbot.app.service.misc.EncryptedSecretServiceImpl
 import eu.torvian.chatbot.app.testutils.misc.TestClock
 import eu.torvian.chatbot.app.utils.transaction.SqlDelightTransactionScope
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
-import eu.torvian.chatbot.app.domain.models.LocalMCPServer
 import eu.torvian.chatbot.common.security.EncryptedSecret
 import eu.torvian.chatbot.common.security.EncryptionService
 import io.mockk.coEvery
@@ -24,7 +25,6 @@ import kotlinx.datetime.Instant
 import java.util.*
 import kotlin.test.*
 import kotlin.time.Duration.Companion.seconds
-import arrow.core.right
 
 /**
  * Tests for LocalMCPServerLocalDaoImpl.
@@ -125,7 +125,6 @@ class LocalMCPServerLocalDaoTest {
         autoStartOnEnable: Boolean = false,
         autoStartOnLaunch: Boolean = false,
         autoStopAfterInactivitySeconds: Int? = null,
-        toolsEnabledByDefault: Boolean = false,
         createdAt: Instant = clock.now(),
         updatedAt: Instant = clock.now()
     ): LocalMCPServer = LocalMCPServer(
@@ -141,7 +140,6 @@ class LocalMCPServerLocalDaoTest {
         autoStartOnEnable = autoStartOnEnable,
         autoStartOnLaunch = autoStartOnLaunch,
         autoStopAfterInactivitySeconds = autoStopAfterInactivitySeconds,
-        toolsEnabledByDefault = toolsEnabledByDefault,
         createdAt = createdAt,
         updatedAt = updatedAt
     )
@@ -437,7 +435,7 @@ class LocalMCPServerLocalDaoTest {
             autoStartOnEnable = true,
             autoStartOnLaunch = true,
             autoStopAfterInactivitySeconds = 600,
-            toolsEnabledByDefault = true
+            // toolsEnabledByDefault removed
         )
 
         // Act
@@ -456,7 +454,6 @@ class LocalMCPServerLocalDaoTest {
         assertEquals(server.autoStartOnEnable, retrieved.autoStartOnEnable)
         assertEquals(server.autoStartOnLaunch, retrieved.autoStartOnLaunch)
         assertEquals(server.autoStopAfterInactivitySeconds, retrieved.autoStopAfterInactivitySeconds)
-        assertEquals(server.toolsEnabledByDefault, retrieved.toolsEnabledByDefault)
     }
 
     @Test

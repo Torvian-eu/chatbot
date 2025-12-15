@@ -11,15 +11,15 @@ import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
 import eu.torvian.chatbot.server.data.dao.error.ToolDefinitionError
+import eu.torvian.chatbot.server.data.tables.LocalMCPServerTable
+import eu.torvian.chatbot.server.data.tables.LocalMCPToolDefinitionTable
 import eu.torvian.chatbot.server.data.tables.ToolDefinitionTable
 import eu.torvian.chatbot.server.data.tables.mappers.toMiscToolDefinition
+import eu.torvian.chatbot.server.data.tables.mappers.toToolDefinition
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.JsonObject
+import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.deleteWhere
-import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.update
 
 /**
  * Exposed ORM implementation of [ToolDefinitionDao].
@@ -115,6 +115,27 @@ class ToolDefinitionDaoExposed(
                 val deletedCount = ToolDefinitionTable.deleteWhere { ToolDefinitionTable.id eq id }
                 ensure(deletedCount != 0) { ToolDefinitionError.NotFound(id) }
             }
+        }
+
+    override suspend fun getToolsForUser(userId: Long): List<ToolDefinition> =
+        transactionScope.transaction {
+            // LEFT JOIN LocalMCPToolDefinitionTable and LocalMCPServerTable to get all tools
+            // Returns global tools (non-MCP_LOCAL) and user-specific MCP tools in one query
+            val joinedQuery = ToolDefinitionTable
+                .leftJoin(
+                    LocalMCPToolDefinitionTable,
+                    { ToolDefinitionTable.id },
+                    { LocalMCPToolDefinitionTable.toolDefinitionId })
+                .leftJoin(LocalMCPServerTable, { LocalMCPToolDefinitionTable.mcpServerId }, { LocalMCPServerTable.id })
+
+            joinedQuery
+                .selectAll()
+                .where {
+                    // Include global tools OR user-specific MCP tools
+                    not(ToolDefinitionTable.type eq ToolType.MCP_LOCAL) or
+                            (LocalMCPServerTable.userId eq userId)
+                }
+                .map { it.toToolDefinition() }
         }
 }
 

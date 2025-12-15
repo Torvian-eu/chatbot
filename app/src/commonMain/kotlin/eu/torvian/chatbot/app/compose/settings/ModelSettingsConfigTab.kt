@@ -17,9 +17,9 @@ import eu.torvian.chatbot.app.repository.AuthState
  * Implements Epic 4 user stories: E4.S5-S6.
  */
 @Composable
-fun SettingsConfigTab(
-    state: SettingsConfigTabState,
-    actions: SettingsConfigTabActions,
+fun ModelSettingsConfigTab(
+    state: ModelSettingsConfigTabState,
+    actions: ModelSettingsConfigTabActions,
     authState: AuthState.Authenticated,
     modifier: Modifier = Modifier
 ) {
@@ -35,7 +35,7 @@ fun SettingsConfigTab(
             is DataState.Success -> {
                 Row(modifier = Modifier.fillMaxSize()) {
                     // Master Panel (Left)
-                    SettingsListPanel(
+                    ModelSettingsListPanel(
                         models = modelsState.data,
                         selectedModel = state.selectedModel,
                         settingsList = state.settingsListForSelectedModel ?: emptyList(),
@@ -47,7 +47,7 @@ fun SettingsConfigTab(
                         modifier = Modifier.weight(1f).fillMaxHeight()
                     )
                     // Detail Panel (Right)
-                    SettingsDetailPanel(
+                    ModelSettingsDetailPanel(
                         settingsDetails = state.selectedSettings,
                         onEdit = actions::onStartEditingSettings,
                         onDelete = actions::onStartDeletingSettings,

@@ -15,12 +15,14 @@ import eu.torvian.chatbot.app.service.mcp.MCPClientService
 import eu.torvian.chatbot.app.service.mcp.MCPClientServiceImpl
 import eu.torvian.chatbot.app.service.security.CertificateStorage
 import eu.torvian.chatbot.app.service.security.FileSystemCertificateStorage
+import eu.torvian.chatbot.app.viewmodel.LocalMCPServerViewModel
 import eu.torvian.chatbot.common.security.AESCryptoProvider
 import eu.torvian.chatbot.common.security.CryptoProvider
 import eu.torvian.chatbot.common.security.EncryptionConfig
 import eu.torvian.chatbot.common.security.EncryptionService
 import kotlinx.coroutines.runBlocking
 import kotlinx.io.files.Path
+import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 import org.koin.dsl.onClose
 
@@ -83,11 +85,18 @@ fun desktopModule(appConfig: AppConfig, encryptionConfig: EncryptionConfig) = mo
             mcpClientService = get(),
             clock = get()
         )
-    }.onClose { manager ->
-        runBlocking { manager?.close() }
     }
 
     single<LocalMCPToolCallMediator> {
         LocalMCPToolCallMediatorImpl(get(), get())
+    }
+
+    // ViewModels specific to desktop (require LocalMCPServerManager)
+    viewModel {
+        LocalMCPServerViewModel(
+            serverManager = get(),
+            toolRepository = get(),
+            errorNotifier = get()
+        )
     }
 }

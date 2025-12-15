@@ -3,9 +3,11 @@ package eu.torvian.chatbot.app.viewmodel.chat.usecase
 import arrow.fx.coroutines.parZip
 import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.error_loading_session
+import eu.torvian.chatbot.app.repository.AuthState
+import eu.torvian.chatbot.app.repository.LocalMCPServerRepository
 import eu.torvian.chatbot.app.repository.ModelRepository
 import eu.torvian.chatbot.app.repository.SessionRepository
-import eu.torvian.chatbot.app.repository.SettingsRepository
+import eu.torvian.chatbot.app.repository.ModelSettingsRepository
 import eu.torvian.chatbot.app.repository.ToolRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
@@ -21,14 +23,17 @@ import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
  */
 class LoadSessionUseCase(
     private val sessionRepository: SessionRepository,
-    private val settingsRepository: SettingsRepository,
+    private val modelSettingsRepository: ModelSettingsRepository,
     private val modelRepository: ModelRepository,
     private val toolRepository: ToolRepository,
+    private val mcpServerRepository: LocalMCPServerRepository,
     private val state: ChatState,
     private val errorNotifier: ErrorNotifier
 ) {
 
     private val logger = kmpLogger<LoadSessionUseCase>()
+    // Keep the last userId used for loading sessions so retry logic can reuse it
+    private var lastUserId: Long? = null
 
     /**
      * Loads a chat session and its messages by ID in the reactive architecture.
@@ -39,23 +44,27 @@ class LoadSessionUseCase(
      *
      * @param sessionId The ID of the session to load
      * @param forceReload If true, reloads the session even if it's already loaded successfully
+     * @param userId The ID of the user, required for loading MCP servers
      */
-    suspend fun execute(sessionId: Long, forceReload: Boolean = false) {
+    suspend fun execute(sessionId: Long, userId: Long, forceReload: Boolean = false) {
         // Prevent reloading if already loading or if the session is already loaded successfully
         val currentState = state.sessionDataState.value
         if (!forceReload && (currentState.isLoading || (currentState.dataOrNull?.id == sessionId))) return
 
         // Store the session ID for potential retry
         state.setRetryState(sessionId, null)
+        // Update last used userId
+        lastUserId = userId
 
         parZip(
             { sessionRepository.loadSessionDetails(sessionId) },
             { sessionRepository.loadSessionToolCalls(sessionId) },
             { modelRepository.loadModels() },
-            { settingsRepository.loadAllSettings() },
+            { modelSettingsRepository.loadAllSettings() },
             { toolRepository.loadTools() },
             { toolRepository.loadEnabledToolsForSession(sessionId) },
-        ) { sessionResult, toolCallsResult, modelsResult, settingsResult, toolsResult, enabledToolsResult ->
+            { mcpServerRepository.loadServers(userId) }
+        ) { sessionResult, toolCallsResult, modelsResult, settingsResult, toolsResult, enabledToolsResult, _ ->
             toolCallsResult.onLeft { error ->
                 errorNotifier.repositoryError(
                     error = error,
@@ -111,10 +120,10 @@ class LoadSessionUseCase(
      */
     suspend fun handleRetry(eventId: String): Boolean {
         val sessionId = state.lastAttemptedSessionId.value
-        return if (state.lastFailedLoadEventId.value == eventId && sessionId != null) {
+        return if (state.lastFailedLoadEventId.value == eventId && sessionId != null && lastUserId != null) {
             logger.info("Retrying loadSession due to Snackbar action!")
             state.clearRetryState()
-            execute(sessionId, forceReload = true)
+            execute(sessionId, lastUserId!!, forceReload = true)
             true
         } else {
             false

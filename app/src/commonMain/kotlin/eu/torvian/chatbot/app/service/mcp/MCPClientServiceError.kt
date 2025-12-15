@@ -69,6 +69,18 @@ sealed class StartAndConnectError : MCPClientError {
         override val message: String =
             "Failed to connect MCP SDK client to server (ID: $serverId): $reason"
     }
+
+    /**
+     * Connection attempt timed out.
+     */
+    data class ConnectionTimeout(
+        val serverId: Long,
+        val timeoutSeconds: Int
+    ) : StartAndConnectError() {
+        override val message: String =
+            "Connection to MCP server (ID: $serverId) timed out after $timeoutSeconds seconds"
+        override val cause: Throwable? = null
+    }
 }
 
 /**

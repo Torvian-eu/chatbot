@@ -11,17 +11,17 @@ import androidx.compose.ui.window.Dialog
 import eu.torvian.chatbot.app.compose.common.ConfigCheckbox
 import eu.torvian.chatbot.app.compose.common.ConfigTextField
 import eu.torvian.chatbot.app.domain.contracts.FormMode
-import eu.torvian.chatbot.app.domain.contracts.SettingsFormState
+import eu.torvian.chatbot.app.domain.contracts.ModelSettingsFormState
 
 /**
  * Dynamic form dialog for adding/editing settings profiles.
  * Adapts form content based on the settings type.
  */
 @Composable
-fun SettingsFormDialog(
+fun ModelSettingsFormDialog(
     title: String,
-    formState: SettingsFormState,
-    onFormUpdate: ((SettingsFormState) -> SettingsFormState) -> Unit,
+    formState: ModelSettingsFormState,
+    onFormUpdate: ((ModelSettingsFormState) -> ModelSettingsFormState) -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit
 ) {
@@ -49,8 +49,8 @@ fun SettingsFormDialog(
 
                     // Dynamic Form Content
                     when (formState) {
-                        is SettingsFormState.Chat -> ChatFormContent(formState, onFormUpdate)
-                        is SettingsFormState.Embedding -> EmbeddingFormContent(formState, onFormUpdate)
+                        is ModelSettingsFormState.Chat -> ChatFormContent(formState, onFormUpdate)
+                        is ModelSettingsFormState.Embedding -> EmbeddingFormContent(formState, onFormUpdate)
                     }
 
                     // Custom Params (Advanced)
@@ -83,17 +83,17 @@ fun SettingsFormDialog(
 }
 
 // Helper functions to update sealed class state
-private fun SettingsFormState.withUpdatedName(name: String): SettingsFormState {
+private fun ModelSettingsFormState.withUpdatedName(name: String): ModelSettingsFormState {
     return when(this) {
-        is SettingsFormState.Chat -> copy(name = name)
-        is SettingsFormState.Embedding -> copy(name = name)
+        is ModelSettingsFormState.Chat -> copy(name = name)
+        is ModelSettingsFormState.Embedding -> copy(name = name)
     }
 }
 
-private fun SettingsFormState.withUpdatedCustomParams(json: String): SettingsFormState {
+private fun ModelSettingsFormState.withUpdatedCustomParams(json: String): ModelSettingsFormState {
      return when(this) {
-        is SettingsFormState.Chat -> copy(customParamsJson = json)
-        is SettingsFormState.Embedding -> copy(customParamsJson = json)
+        is ModelSettingsFormState.Chat -> copy(customParamsJson = json)
+        is ModelSettingsFormState.Embedding -> copy(customParamsJson = json)
     }
 }
 
@@ -102,12 +102,12 @@ private fun SettingsFormState.withUpdatedCustomParams(json: String): SettingsFor
  */
 @Composable
 private fun ChatFormContent(
-    formState: SettingsFormState.Chat,
-    onFormUpdate: ((SettingsFormState) -> SettingsFormState) -> Unit
+    formState: ModelSettingsFormState.Chat,
+    onFormUpdate: ((ModelSettingsFormState) -> ModelSettingsFormState) -> Unit
 ) {
     ConfigTextField(
         value = formState.systemMessage,
-        onValueChange = { value -> onFormUpdate { (it as SettingsFormState.Chat).copy(systemMessage = value) } },
+        onValueChange = { value -> onFormUpdate { (it as ModelSettingsFormState.Chat).copy(systemMessage = value) } },
         label = "System Message",
         singleLine = false,
         modifier = Modifier.height(120.dp)
@@ -115,30 +115,30 @@ private fun ChatFormContent(
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         ConfigTextField(
             value = formState.temperature,
-            onValueChange = { value -> onFormUpdate { (it as SettingsFormState.Chat).copy(temperature = value) } },
+            onValueChange = { value -> onFormUpdate { (it as ModelSettingsFormState.Chat).copy(temperature = value) } },
             label = "Temperature",
             modifier = Modifier.weight(1f)
         )
         ConfigTextField(
             value = formState.maxTokens,
-            onValueChange = { value -> onFormUpdate { (it as SettingsFormState.Chat).copy(maxTokens = value) } },
+            onValueChange = { value -> onFormUpdate { (it as ModelSettingsFormState.Chat).copy(maxTokens = value) } },
             label = "Max Tokens",
             modifier = Modifier.weight(1f)
         )
     }
     ConfigTextField(
         value = formState.topP,
-        onValueChange = { value -> onFormUpdate { (it as SettingsFormState.Chat).copy(topP = value) } },
+        onValueChange = { value -> onFormUpdate { (it as ModelSettingsFormState.Chat).copy(topP = value) } },
         label = "Top P"
     )
     ConfigTextField(
         value = formState.stopSequences,
-        onValueChange = { value -> onFormUpdate { (it as SettingsFormState.Chat).copy(stopSequences = value) } },
+        onValueChange = { value -> onFormUpdate { (it as ModelSettingsFormState.Chat).copy(stopSequences = value) } },
         label = "Stop Sequences (comma-separated)"
     )
     ConfigCheckbox(
         checked = formState.stream,
-        onCheckedChange = { value -> onFormUpdate { (it as SettingsFormState.Chat).copy(stream = value) } },
+        onCheckedChange = { value -> onFormUpdate { (it as ModelSettingsFormState.Chat).copy(stream = value) } },
         label = "Enable Streaming"
     )
 }
@@ -148,17 +148,17 @@ private fun ChatFormContent(
  */
 @Composable
 private fun EmbeddingFormContent(
-    formState: SettingsFormState.Embedding,
-    onFormUpdate: ((SettingsFormState) -> SettingsFormState) -> Unit
+    formState: ModelSettingsFormState.Embedding,
+    onFormUpdate: ((ModelSettingsFormState) -> ModelSettingsFormState) -> Unit
 ) {
     ConfigTextField(
         value = formState.dimensions,
-        onValueChange = { value -> onFormUpdate { (it as SettingsFormState.Embedding).copy(dimensions = value) } },
+        onValueChange = { value -> onFormUpdate { (it as ModelSettingsFormState.Embedding).copy(dimensions = value) } },
         label = "Dimensions"
     )
     ConfigTextField(
         value = formState.encodingFormat,
-        onValueChange = { value -> onFormUpdate { (it as SettingsFormState.Embedding).copy(encodingFormat = value) } },
+        onValueChange = { value -> onFormUpdate { (it as ModelSettingsFormState.Embedding).copy(encodingFormat = value) } },
         label = "Encoding Format"
     )
 }

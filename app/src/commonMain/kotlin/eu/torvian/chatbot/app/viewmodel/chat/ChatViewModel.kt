@@ -3,6 +3,7 @@ package eu.torvian.chatbot.app.viewmodel.chat
 import androidx.lifecycle.ViewModel
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.events.SnackbarInteractionEvent
+import eu.torvian.chatbot.app.repository.LocalMCPServerRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.ToolCallsMap
 import eu.torvian.chatbot.app.repository.ToolRepository
@@ -42,6 +43,7 @@ import kotlinx.coroutines.launch
  * @param selectSettingsUC Use case for selecting settings
  * @param updateInputUC Use case for updating input content
  * @param toolRepository Repository for tool management operations
+ * @param mcpServerRepository Repository for MCP server configurations
  * @param errorNotifier Notifier for error handling
  * @param eventBus Event bus for cross-cutting concerns
  * @param normalScope Coroutine scope for UI operations
@@ -59,6 +61,7 @@ class ChatViewModel(
     private val selectSettingsUC: SelectSettingsUseCase,
     private val updateInputUC: UpdateInputUseCase,
     private val toolRepository: ToolRepository,
+    private val mcpServerRepository: LocalMCPServerRepository,
     private val errorNotifier: ErrorNotifier,
     private val eventBus: EventBus,
     private val normalScope: CoroutineScope,
@@ -186,9 +189,9 @@ class ChatViewModel(
     /**
      * Loads a chat session and its messages by ID.
      */
-    fun loadSession(sessionId: Long, forceReload: Boolean = false) {
+    fun loadSession(sessionId: Long, userId: Long, forceReload: Boolean = false) {
         normalScope.launch {
-            loadSessionUC.execute(sessionId, forceReload)
+            loadSessionUC.execute(sessionId, userId, forceReload)
         }
     }
 
@@ -341,6 +344,21 @@ class ChatViewModel(
         }
     }
 
+    /**
+     * Batch toggles multiple tools for the current session.
+     */
+    fun toggleToolsForSession(toolDefinitions: List<ToolDefinition>, enabled: Boolean) {
+        val sessionId = state.activeSessionId.value ?: return
+        normalScope.launch {
+            toolRepository.setToolsEnabledForSession(sessionId, toolDefinitions, enabled).mapLeft { error ->
+                errorNotifier.repositoryError(
+                    error = error,
+                    shortMessage = "Failed to toggle tools"
+                )
+            }
+        }
+    }
+
     // --- Dialog Management ---
 
     /**
@@ -351,8 +369,12 @@ class ChatViewModel(
             ChatAreaDialogState.ToolConfig(
                 enabledToolsFlow = state.enabledToolsForCurrentSession,
                 availableToolsFlow = state.availableTools,
+                mcpServersFlow = mcpServerRepository.servers,
                 onToggleTool = { toolDefinition, isEnabled ->
                     toggleToolForSession(toolDefinition, isEnabled)
+                },
+                onToggleTools = { toolDefinitions, isEnabled ->
+                    toggleToolsForSession(toolDefinitions, isEnabled)
                 },
                 onDismiss = {
                     state.setDialogState(ChatAreaDialogState.None)

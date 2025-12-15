@@ -329,10 +329,8 @@ class LocalMCPServerProcessManagerTest {
             autoStartOnEnable = false,
             autoStartOnLaunch = false,
             autoStopAfterInactivitySeconds = null,
-            toolsEnabledByDefault = false,
             createdAt = testClock.now(),
             updatedAt = testClock.now()
         )
     }
 }
-

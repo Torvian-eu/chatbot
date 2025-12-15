@@ -4,6 +4,8 @@ import arrow.core.Either
 import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.LocalMCPToolApi
 import eu.torvian.chatbot.common.api.resources.LocalMCPToolResource
+import eu.torvian.chatbot.common.models.api.mcp.BatchUpdateMCPToolsRequest
+import eu.torvian.chatbot.common.models.api.mcp.BatchUpdateMCPToolsResponse
 import eu.torvian.chatbot.common.models.api.mcp.CreateMCPToolsRequest
 import eu.torvian.chatbot.common.models.api.mcp.CreateMCPToolsResponse
 import eu.torvian.chatbot.common.models.api.mcp.DeleteMCPToolsResponse
@@ -81,6 +83,18 @@ class KtorLocalMCPToolApiClient(client: HttpClient) : BaseApiResourceClient(clie
     override suspend fun deleteMCPToolsForServer(serverId: Long): Either<ApiResourceError, Int> {
         return safeApiCall {
             client.delete(LocalMCPToolResource.ByServerId(serverId = serverId)).body<DeleteMCPToolsResponse>().count
+        }
+    }
+
+    override suspend fun batchUpdateMCPTools(
+        serverId: Long,
+        toolDefinitions: List<LocalMCPToolDefinition>
+    ): Either<ApiResourceError, List<LocalMCPToolDefinition>> {
+        val request = BatchUpdateMCPToolsRequest(serverId = serverId, toolDefinitions = toolDefinitions)
+        return safeApiCall {
+            client.put(LocalMCPToolResource.Batch()) {
+                setBody(request)
+            }.body<BatchUpdateMCPToolsResponse>().tools
         }
     }
 }

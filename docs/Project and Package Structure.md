@@ -101,7 +101,8 @@ common/src/commonMain/kotlin/eu/torvian/chatbot/common/
 │   │   │   └── LocalMCPToolRequests.kt   # DTOs for local MCP tool management
 │   │   └── tool/                 # Tool-specific API DTOs
 │   │       ├── CreateToolRequest.kt      # Request DTO for creating a new tool definition
-│   │       └── SetToolEnabledRequest.kt  # Request DTO for enabling/disabling a tool for a session
+│   │       ├── SetToolEnabledRequest.kt  # Request DTO for enabling/disabling a tool for a session
+│   │       └── SetToolsEnabledRequest.kt # Request DTO for batch enabling/disabling tools for a session
 │   ├── core/                     # Core domain models
 │   │   ├── ChatGroup.kt              # Chat group data model
 │   │   ├── ChatMessage.kt            # Chat message with threading support
@@ -397,7 +398,7 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   ├── MainApplicationFlow.kt # UI flow wrapper for Chat/Settings screens (authenticated)
 │   ├── ChatScreen.kt # Main chat interface (displays session list, chat messages, input area)
 │   ├── ChatScreenContent.kt # Stateless content composable for chat interface
-│   ├── SettingsScreen.kt # Settings configuration interface (providers, models, settings)
+│   ├── SettingsScreen.kt # Main settings interface (contains tabs for providers, models, model settings, and MCP servers)
 │   ├── UserMenu.kt   # User menu composable
 │   ├── admin/        # Admin UI components
 │   │   ├── AdminScreen.kt
@@ -440,17 +441,17 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 ├── domain/          # Domain models specific to the *application's presentation layer*
 │   ├── contracts/    # UI State and Action contracts (interfaces between UI and ViewModels)
 │   │   ├── DataState.kt  # Data state contract
+│   │   ├── DataStateExtensions.kt # Extension functions for DataState
 │   │   ├── FormMode.kt  # Form mode enum
 │   │   ├── GrantAccessFormState.kt # Form state for granting resource access
 │   │   ├── ModelConfigData.kt  # Model configuration data
 │   │   ├── ModelFormState.kt  # Model form state
+│   │   ├── ModelSettingsDialogState.kt  # Model settings dialog state
+│   │   ├── ModelSettingsFormState.kt  # Model settings form state
 │   │   ├── ModelsDialogState.kt  # Models dialog state
 │   │   ├── ProvidersDialogState.kt  # Providers dialog state
 │   │   ├── SessionListData.kt    # Session list data structure
-│   │   ├── SessionListDialogState.kt  # Session list dialog state
-│   │   ├── SettingsConfigData.kt  # Settings configuration data
-│   │   ├── SettingsDialogState.kt  # Settings dialog state
-│   │   └── SettingsFormState.kt  # Settings form state
+│   │   └── SessionListDialogState.kt  # Session list dialog state
 │   ├── events/        # Domain events (e.g., user actions, system responses)
 │   │   ├── ApiRequestError.kt # API request error event
 │   │   ├── AppError.kt  # Global error event
@@ -481,7 +482,7 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   ├── RepositoryError.kt  # Repository error hierarchy
 │   ├── RoleRepository.kt   # Interface for managing user roles
 │   ├── SessionRepository.kt  # Session repository
-│   ├── SettingsRepository.kt # Settings repository
+│   ├── ModelSettingsRepository.kt # Model settings repository
 │   ├── ToolRepository.kt   # Interface for managing tool definitions
 │   ├── UserRepository.kt   # Interface for managing user accounts and details
 │   ├── UserGroupRepository.kt # User group management repository
@@ -552,9 +553,9 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │       └── databaseDispatcher.kt # Expect/actual for DB dispatcher
 └── viewmodel/        # ViewModels for UI state management
     ├── ModelConfigViewModel.kt # Model Config ViewModel (manages LLM model state)
+    ├── ModelSettingsViewModel.kt # Model Settings ViewModel (manages model settings state)
     ├── ProviderConfigViewModel.kt # Provider Config ViewModel (manages LLM provider state)
     ├── SessionListViewModel.kt # Session List ViewModel (manages session list state)
-    ├── SettingsConfigViewModel.kt # Settings Config ViewModel (manages model settings state)
     ├── admin/          # Admin-specific ViewModels
     │   ├── UserGroupManagementState.kt # State for user group management UI
     │   ├── UserGroupManagementViewModel.kt # ViewModel for user group management

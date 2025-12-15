@@ -6,8 +6,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import eu.torvian.chatbot.app.domain.contracts.GrantAccessFormState
-import eu.torvian.chatbot.app.domain.contracts.SettingsFormState
-import eu.torvian.chatbot.app.viewmodel.SettingsConfigViewModel
+import eu.torvian.chatbot.app.domain.contracts.ModelSettingsFormState
+import eu.torvian.chatbot.app.viewmodel.ModelSettingsViewModel
 import eu.torvian.chatbot.common.models.api.access.ModelSettingsDetails
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.ModelSettings
@@ -19,9 +19,9 @@ import eu.torvian.chatbot.app.repository.AuthState
  * This follows the Route pattern for better modularity and testability.
  */
 @Composable
-fun SettingsConfigTabRoute(
+fun ModelSettingsConfigTabRoute(
     authState: AuthState.Authenticated,
-    viewModel: SettingsConfigViewModel = koinViewModel(),
+    viewModel: ModelSettingsViewModel = koinViewModel(),
     modifier: Modifier = Modifier
 ) {
     // Tab-local initial load
@@ -37,7 +37,7 @@ fun SettingsConfigTabRoute(
     val settingsDialogState by viewModel.dialogState.collectAsState()
 
     // Build presentational state
-    val state = SettingsConfigTabState(
+    val state = ModelSettingsConfigTabState(
         modelsUiState = modelsForSettings,
         settingsListForSelectedModel = settingsListForSelectedModel,
         selectedModel = selectedModelForSettings,
@@ -46,7 +46,7 @@ fun SettingsConfigTabRoute(
     )
 
     // Build actions forwarding to VM
-    val actions = object : SettingsConfigTabActions {
+    val actions = object : ModelSettingsConfigTabActions {
         override fun onLoadModelsAndSettings() = viewModel.loadModelsAndSettings()
         override fun onSelectModel(model: LLMModel?) = viewModel.selectModel(model)
         override fun onSelectSettings(settingsDetails: ModelSettingsDetails?) =
@@ -55,7 +55,7 @@ fun SettingsConfigTabRoute(
         override fun onStartAddingNewSettings() = viewModel.startAddingNewSettings()
         override fun onStartEditingSettings(settings: ModelSettings) = viewModel.startEditingSettings(settings)
         override fun onStartDeletingSettings(settings: ModelSettings) = viewModel.startDeletingSettings(settings)
-        override fun onUpdateSettingsForm(update: (SettingsFormState) -> SettingsFormState) =
+        override fun onUpdateSettingsForm(update: (ModelSettingsFormState) -> ModelSettingsFormState) =
             viewModel.updateSettingsForm(update)
 
         override fun onSaveSettings() = viewModel.saveSettings()
@@ -85,8 +85,8 @@ fun SettingsConfigTabRoute(
             viewModel.revokeSettingsAccess(settingsId, groupId, accessMode)
     }
 
-    // Call the presentational SettingsConfigTab
-    SettingsConfigTab(
+    // Call the presentational ModelSettingsConfigTab
+    ModelSettingsConfigTab(
         state = state,
         actions = actions,
         authState = authState,

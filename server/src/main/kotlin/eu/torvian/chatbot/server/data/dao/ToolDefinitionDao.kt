@@ -86,4 +86,19 @@ interface ToolDefinitionDao {
      * @return Either [ToolDefinitionError.NotFound] or Unit on success
      */
     suspend fun deleteToolDefinition(id: Long): Either<ToolDefinitionError.NotFound, Unit>
+
+    /**
+     * Retrieves all tools accessible to a specific user in a single SQL query.
+     *
+     * Returns a combination of:
+     * - All global tools (non-MCP_LOCAL type)
+     * - User-specific MCP_LOCAL tools (where the MCP server is owned by the user)
+     *
+     * Uses a LEFT JOIN with LocalMCPToolDefinitionTable and LocalMCPServerTable to fetch
+     * all tools in one database query for efficiency.
+     *
+     * @param userId The ID of the user
+     * @return List of ToolDefinition (mix of MiscToolDefinition and LocalMCPToolDefinition)
+     */
+    suspend fun getToolsForUser(userId: Long): List<ToolDefinition>
 }

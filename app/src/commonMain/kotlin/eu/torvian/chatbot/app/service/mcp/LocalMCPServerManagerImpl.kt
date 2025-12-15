@@ -5,6 +5,7 @@ import arrow.core.left
 import arrow.core.raise.either
 import arrow.core.right
 import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.app.domain.contracts.zipWith
 import eu.torvian.chatbot.app.domain.models.LocalMCPServer
 import eu.torvian.chatbot.app.repository.LocalMCPServerRepository
 import eu.torvian.chatbot.app.repository.LocalMCPToolRepository
@@ -14,17 +15,13 @@ import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import io.modelcontextprotocol.kotlin.sdk.CallToolResultBase
 import io.modelcontextprotocol.kotlin.sdk.Tool
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.datetime.Clock
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.encodeToJsonElement
 
 /**
  * Desktop/Android implementation of LocalMCPServerManager.
@@ -49,47 +46,50 @@ class LocalMCPServerManagerImpl(
     private val serverRepository: LocalMCPServerRepository,
     private val toolRepository: LocalMCPToolRepository,
     private val mcpClientService: MCPClientService,
-    private val clock: Clock = Clock.System,
-    private val serviceScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val clock: Clock = Clock.System
 ) : LocalMCPServerManager {
 
     companion object {
         private val logger = kmpLogger<LocalMCPServerManagerImpl>()
     }
 
-    override val serverOverviews: StateFlow<Map<Long, LocalMCPServerOverview>> = combine(
+    override val serverOverviews: Flow<DataState<RepositoryError, List<LocalMCPServerOverview>>> = combine(
         serverRepository.servers,
         mcpClientService.clients,
         toolRepository.mcpTools
     ) { serversState, clientsMap, toolsState ->
-        // Extract servers from DataState
-        val servers = when (serversState) {
-            is DataState.Success -> serversState.data
-            else -> emptyList()
-        }
+        // Zip server and tool states together
+        serversState.zipWith(toolsState) { servers, toolsByServerId ->
+            // Build overview list from servers, enriched with client and tool data
+            servers
+                .map { server ->
+                    val client = clientsMap[server.id]
+                    val tools = toolsByServerId[server.id]
 
-        // Extract tools from DataState
-        val toolsByServerId = when (toolsState) {
-            is DataState.Success -> toolsState.data
-            else -> emptyMap()
+                    LocalMCPServerOverview(
+                        serverConfig = server,
+                        tools = tools,
+                        isConnected = client != null,
+                        processStatus = client?.processStatus,
+                        connectedAt = client?.connectedAt,
+                        lastActivityAt = client?.lastActivityAt,
+                        isResponsive = client?.isResponsive
+                    )
+                }
         }
+    }
 
-        // Build status map from servers, enriched with client and tool data
-        servers.associate { server ->
-            val client = clientsMap[server.id]
-            val tools = toolsByServerId[server.id]
+    override suspend fun loadServers(userId: Long): Either<RepositoryError, Unit> = either {
+        logger.info("Loading MCP servers for user $userId")
 
-            server.id to LocalMCPServerOverview(
-                serverConfig = server,
-                tools = tools,
-                isConnected = client != null,
-                processStatus = client?.processStatus,
-                connectedAt = client?.connectedAt,
-                lastActivityAt = client?.lastActivityAt,
-                isResponsive = client?.isResponsive
-            )
-        }
-    }.stateIn(serviceScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+        // Load server configurations
+        serverRepository.loadServers(userId)
+
+        // Load tools
+        toolRepository.loadMCPTools().onLeft { repoErr ->
+            logger.error("Failed to load MCP tools for user $userId: ${repoErr.message}")
+        }.bind()
+    }
 
     override suspend fun testConnectionForNewServer(
         name: String,
@@ -150,8 +150,7 @@ class LocalMCPServerManagerImpl(
         isEnabled: Boolean,
         autoStartOnEnable: Boolean,
         autoStartOnLaunch: Boolean,
-        autoStopAfterInactivitySeconds: Int?,
-        toolsEnabledByDefault: Boolean
+        autoStopAfterInactivitySeconds: Int?
     ): Either<CreateServerError, LocalMCPServer> = either {
         logger.info("Creating new server: $name")
 
@@ -180,9 +179,6 @@ class LocalMCPServerManagerImpl(
                     logger.error("Failed to discover tools from MCP server $name: ${error.message}")
                     CreateServerError.DiscoveryFailed(config.id, error)
                 }
-                .map { tools ->
-                    tools.map { convertMCPToolToDefinition(it, config.id) }
-                }
                 .bind()
 
             // Step 4: Persist server config
@@ -196,8 +192,7 @@ class LocalMCPServerManagerImpl(
                 isEnabled = isEnabled,
                 autoStartOnEnable = autoStartOnEnable,
                 autoStartOnLaunch = autoStartOnLaunch,
-                autoStopAfterInactivitySeconds = autoStopAfterInactivitySeconds,
-                toolsEnabledByDefault = toolsEnabledByDefault
+                autoStopAfterInactivitySeconds = autoStopAfterInactivitySeconds
             )
                 .mapLeft { error ->
                     logger.error("Failed to create MCP server $name: ${error.message}")
@@ -206,7 +201,10 @@ class LocalMCPServerManagerImpl(
                 .bind()
 
             // Step 5: Persist tools
-            val createdTools = toolRepository.persistMCPTools(createdServer.id, tools)
+            val createdTools = toolRepository.persistMCPTools(
+                serverId = createdServer.id,
+                tools = tools.map { convertMCPToolToDefinition(it, createdServer.id) }
+            )
                 .mapLeft { error ->
                     logger.error("Failed to persist tools for MCP server $name: ${error.message}")
                     CreateServerError.ToolPersistenceFailed(createdServer.id, error)
@@ -298,7 +296,7 @@ class LocalMCPServerManagerImpl(
                     RefreshToolsError.RefreshPersistFailed(serverId, error)
                 }
                 .onRight { response ->
-                    logger.info("Successfully refreshed tools for MCP server $serverId: +${response.added} ~${response.updated} -${response.deleted}")
+                    logger.info("Successfully refreshed tools for MCP server $serverId: +${response.addedTools.size} ~${response.updatedTools.size} -${response.deletedTools.size}")
                 }
                 .bind()
         } finally {
@@ -339,6 +337,120 @@ class LocalMCPServerManagerImpl(
         }.bind()
 
         logger.info("Successfully stopped MCP server $serverId")
+    }
+
+    override suspend fun updateServer(server: LocalMCPServer): Either<UpdateServerError, Unit> = either {
+        logger.info("Updating MCP server: ${server.id}")
+
+        // Step 1: Get the old configuration to check if restart is needed
+        val oldServer = getServerConfig(server.id).mapLeft { error ->
+            logger.error("Failed to load current config for MCP server ${server.id}: ${error.message}")
+            UpdateServerError.ServerUpdateFailed(server.id, error)
+        }.bind()
+
+        // Step 2: Update the server configuration in repository
+        serverRepository.updateServer(server).mapLeft { error ->
+            logger.error("Failed to update MCP server configuration ${server.id}: ${error.message}")
+            UpdateServerError.ServerUpdateFailed(server.id, error)
+        }.bind()
+
+        // Step 3: Check if command, arguments, or environment variables changed
+        val needsRestart = oldServer.command != server.command ||
+                oldServer.arguments != server.arguments ||
+                oldServer.environmentVariables != server.environmentVariables ||
+                oldServer.workingDirectory != server.workingDirectory
+
+        if (needsRestart) {
+            logger.info("Server configuration changed, restarting MCP server ${server.id}")
+
+            // Track if server was running before update
+            val wasRunning = mcpClientService.isClientRegistered(server.id)
+
+            // Stop the server if it's running
+            if (wasRunning) {
+                logger.info("Stopping MCP server ${server.id} before restart")
+                mcpClientService.stopServer(server.id).mapLeft { error ->
+                    logger.error("Failed to stop MCP server ${server.id} before restart: ${error.message}")
+                    UpdateServerError.StopFailed(server.id, error)
+                }.bind()
+            }
+
+            try {
+                // Start and connect with new configuration
+                logger.info("Starting MCP server ${server.id} with new configuration")
+                mcpClientService.startAndConnect(server).mapLeft { error ->
+                    logger.error("Failed to connect to MCP server ${server.id} after restart: ${error.message}")
+                    UpdateServerError.ConnectionFailed(server.id, error)
+                }.bind()
+
+                // Discover tools with new configuration
+                logger.info("Discovering tools from MCP server ${server.id} after restart")
+                val currentToolDefinitions = mcpClientService.discoverTools(server.id)
+                    .mapLeft { error ->
+                        logger.error("Failed to discover tools from MCP server ${server.id} after restart: ${error.message}")
+                        UpdateServerError.DiscoveryFailed(server.id, error)
+                    }
+                    .map { mcpTools ->
+                        mcpTools.map { convertMCPToolToDefinition(it, server.id) }
+                    }
+                    .bind()
+
+                // Refresh tools in repository
+                logger.info("Refreshing tools for MCP server ${server.id} after restart")
+                toolRepository.refreshMCPTools(server.id, currentToolDefinitions)
+                    .mapLeft { error ->
+                        logger.error("Failed to persist tool changes for MCP server ${server.id} after restart: ${error.message}")
+                        UpdateServerError.ToolPersistenceFailed(server.id, error)
+                    }
+                    .onRight { response ->
+                        logger.info("Successfully refreshed tools for MCP server ${server.id}: +${response.addedTools.size} ~${response.updatedTools.size} -${response.deletedTools.size}")
+                    }
+                    .bind()
+
+                logger.info("Successfully restarted and refreshed tools for MCP server ${server.id}")
+            } finally {
+                // Stop the server if it wasn't running before update (cleanup)
+                if (!wasRunning) {
+                    logger.info("Stopping MCP server ${server.id} after configuration update (was not running before)")
+                    mcpClientService.stopServer(server.id).onLeft { error ->
+                        logger.warn("Failed to stop MCP server ${server.id} after configuration update: ${error.message}")
+                    }
+                }
+            }
+        } else {
+            logger.info("Server configuration updated without requiring restart for MCP server ${server.id}")
+        }
+
+        // Step 4: Invalidate enabled tools cache if enabled state changed
+        if (oldServer.isEnabled != server.isEnabled) {
+            logger.info("Server enabled state changed, invalidating enabled tools cache for all sessions")
+            toolRepository.invalidateEnabledToolsCache()
+        }
+    }
+
+    override suspend fun deleteServer(serverId: Long): Either<DeleteServerError, Unit> = either {
+        logger.info("Deleting MCP server: $serverId")
+
+        // Step 1: Stop the server if it's running
+        if (mcpClientService.isClientRegistered(serverId)) {
+            logger.info("Stopping MCP server $serverId before deletion")
+            mcpClientService.stopServer(serverId).mapLeft { error ->
+                logger.error("Failed to stop MCP server $serverId before deletion: ${error.message}")
+                DeleteServerError.StopFailed(serverId, error)
+            }.bind()
+        }
+
+        // Step 2: Delete the server configuration (server-side will cascade delete tools)
+        logger.info("Deleting server configuration for MCP server $serverId")
+        serverRepository.deleteServer(serverId).mapLeft { error ->
+            logger.error("Failed to delete MCP server configuration $serverId: ${error.message}")
+            DeleteServerError.ServerDeletionFailed(serverId, error)
+        }.bind()
+
+        // Step 3: Remove the tools from the tool repository cache
+        toolRepository.removeToolsFromCache(serverId)
+
+        logger.info("Successfully deleted MCP server $serverId")
     }
 
     override suspend fun callTool(
@@ -405,18 +517,13 @@ class LocalMCPServerManagerImpl(
             name = mcpTool.name,
             description = mcpTool.description ?: "",
             config = buildJsonObject { },
-            inputSchema = mcpTool.inputSchema.properties,
-            outputSchema = mcpTool.outputSchema?.properties,
+            inputSchema = Json.encodeToJsonElement(mcpTool.inputSchema) as JsonObject,
+            outputSchema = mcpTool.outputSchema?.let { Json.encodeToJsonElement(it) as JsonObject },
             isEnabled = true,
             createdAt = now,
             updatedAt = now,
             serverId = serverId,
-            mcpToolName = mcpTool.name,
-            isEnabledByDefault = null
+            mcpToolName = mcpTool.name
         )
-    }
-
-    override suspend fun close() {
-        serviceScope.cancel()
     }
 }

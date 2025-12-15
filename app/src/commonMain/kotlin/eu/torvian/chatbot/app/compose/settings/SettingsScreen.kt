@@ -17,7 +17,8 @@ import eu.torvian.chatbot.app.repository.AuthState
  * This screen provides a tabbed interface for managing:
  * - LLM Providers (E4.S8-S12, E5.S4) - Handled by ProvidersTabRoute
  * - LLM Models (E4.S1-S4) - Handled by ModelsTabRoute
- * - Model Settings Profiles (E4.S5-S6) - Handled by SettingsConfigTabRoute
+ * - Model Settings Profiles (E4.S5-S6) - Handled by ModelSettingsConfigTabRoute
+ * - Local MCP Servers (US6.4, US6.5) - Handled by LocalMCPServersTabRoute
  *
  * Each tab is now managed by its own Route component following the Route pattern
  * for better modularity, testability, and separation of concerns.
@@ -28,7 +29,7 @@ fun SettingsScreen(
 ) {
     // Tab state management
     var selectedTabIndex by remember { mutableIntStateOf(0) }
-    val tabTitles = listOf("Providers", "Models", "Settings")
+    val tabTitles = listOf("Providers", "Models", "Model Settings", "MCP Servers")
 
     Column(
         modifier = Modifier
@@ -65,7 +66,8 @@ fun SettingsScreen(
             when (selectedTabIndex) {
                 0 -> ProvidersTabRoute(authState = authState)
                 1 -> ModelsTabRoute(authState = authState)
-                2 -> SettingsConfigTabRoute(authState = authState)
+                2 -> ModelSettingsConfigTabRoute(authState = authState)
+                3 -> LocalMCPServersTabRoute(authState = authState)
             }
         }
     }

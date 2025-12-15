@@ -20,20 +20,26 @@ import kotlinx.coroutines.flow.StateFlow
 interface ToolRepository {
 
     /**
-     * Reactive stream of all available tool definitions.
+     * Reactive stream of all available tool definitions for the current user.
      *
      * This StateFlow provides real-time updates whenever the tool data changes,
      * allowing ViewModels and other consumers to automatically react to data changes
      * without manual refresh operations.
      *
-     * @return StateFlow containing the current state of all tools wrapped in DataState
+     * Includes all global tools and user-specific MCP tools.
+     *
+     * @return StateFlow containing the current state of all user-accessible tools wrapped in DataState
      */
     val tools: StateFlow<DataState<RepositoryError, List<ToolDefinition>>>
 
     /**
-     * Loads all tool definitions from the backend.
+     * Loads all tool definitions accessible to the current user from the backend.
      *
-     * This operation fetches the latest tool data and updates the internal StateFlow.
+     * This operation fetches the latest tool data including:
+     * - All global tools (non-MCP_LOCAL type)
+     * - User-specific MCP tools (MCP servers owned by the current user)
+     *
+     * Updates the internal StateFlow with the fetched tools.
      * If a load operation is already in progress, this method returns immediately
      * without starting a duplicate operation.
      *
@@ -115,5 +121,47 @@ interface ToolRepository {
      * @return Either.Right with Unit on successful update, or Either.Left with RepositoryError on failure
      */
     suspend fun setToolEnabledForSession(sessionId: Long, toolDefinition: ToolDefinition, enabled: Boolean): Either<RepositoryError, Unit>
+
+    /**
+     * Batch enables or disables multiple tools for a specific session.
+     *
+     * Upon successful update, the session's tool configuration is updated in the cache,
+     * triggering updates to all observers.
+     *
+     * @param sessionId The unique identifier of the session
+     * @param toolDefinitions The tool definitions to enable/disable
+     * @param enabled Whether to enable or disable the tools
+     * @return Either.Right with Unit on successful update, or Either.Left with RepositoryError on failure
+     */
+    suspend fun setToolsEnabledForSession(sessionId: Long, toolDefinitions: List<ToolDefinition>, enabled: Boolean): Either<RepositoryError, Unit>
+
+    /**
+     * Applies a transformation to the in-memory tools cache.
+     *
+     * @param update A function that takes the current list of tools and returns an updated list.
+     */
+    suspend fun updateToolCache(update: (List<ToolDefinition>) -> List<ToolDefinition>)
+
+    /**
+     * Applies a batch update to the enabled tools cache for a specific session.
+     *
+     * @param sessionId The unique identifier of the session
+     * @param tools The tools to update
+     * @param enabled Whether to enable or disable the tools
+     */
+    suspend fun updateEnabledToolsCache(sessionId: Long, tools: List<ToolDefinition>, enabled: Boolean)
+
+    /**
+     * Applies a batch update to the enabled tools cache for all sessions.
+     *
+     * @param tools The tools to update
+     * @param enabled Whether to enable or disable the tools
+     */
+    suspend fun updateEnabledToolsCache(tools: List<ToolDefinition>, enabled: Boolean)
+
+    /**
+     * Invalidates the enabled tools cache for all sessions.
+     */
+    suspend fun invalidateEnabledToolsCache()
 }
 

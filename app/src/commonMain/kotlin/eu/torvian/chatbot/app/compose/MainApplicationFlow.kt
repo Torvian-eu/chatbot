@@ -175,7 +175,7 @@ fun MainApplicationFlow(
             Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
                 NavHost(navController = navController, startDestination = Chat) {
                     composable<Chat> {
-                        ChatScreen(sessionListViewModel, chatViewModel)
+                        ChatScreen(sessionListViewModel, chatViewModel, authState)
                     }
                     composable<Settings> {
                         SettingsScreen(authState = authState)

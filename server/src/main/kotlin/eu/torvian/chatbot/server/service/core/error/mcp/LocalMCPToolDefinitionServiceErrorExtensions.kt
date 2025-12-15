@@ -83,3 +83,35 @@ fun RefreshMCPToolsError.toApiError(): ApiError = when (this) {
     )
 }
 
+fun BatchUpdateMCPToolsError.toApiError(): ApiError = when (this) {
+    is BatchUpdateMCPToolsError.ServerNotFound -> apiError(
+        apiCode = CommonApiErrorCodes.NOT_FOUND,
+        message = "MCP Server not found",
+        "serverId" to serverId.toString()
+    )
+
+    is BatchUpdateMCPToolsError.ToolsNotFound -> apiError(
+        apiCode = CommonApiErrorCodes.NOT_FOUND,
+        message = "One or more tools not found",
+        "toolIds" to toolIds.joinToString(",")
+    )
+
+    is BatchUpdateMCPToolsError.ToolsNotInServer -> apiError(
+        apiCode = CommonApiErrorCodes.INVALID_ARGUMENT,
+        message = "One or more tools do not belong to the specified server",
+        "toolIds" to toolIds.joinToString(",")
+    )
+
+    is BatchUpdateMCPToolsError.DuplicateName -> apiError(
+        apiCode = CommonApiErrorCodes.CONFLICT,
+        message = "A tool with the name '$name' already exists for this server",
+        "name" to name
+    )
+
+    is BatchUpdateMCPToolsError.ToolValidationError -> validationError.toApiError()
+    is BatchUpdateMCPToolsError.OtherError -> apiError(
+        apiCode = CommonApiErrorCodes.INTERNAL,
+        message = message
+    )
+}
+

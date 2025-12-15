@@ -12,7 +12,7 @@ import eu.torvian.chatbot.app.service.security.CertificateTrustService
 import eu.torvian.chatbot.app.viewmodel.ModelConfigViewModel
 import eu.torvian.chatbot.app.viewmodel.ProviderConfigViewModel
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
-import eu.torvian.chatbot.app.viewmodel.SettingsConfigViewModel
+import eu.torvian.chatbot.app.viewmodel.ModelSettingsViewModel
 import eu.torvian.chatbot.app.viewmodel.admin.UserGroupManagementViewModel
 import eu.torvian.chatbot.app.viewmodel.admin.UserManagementViewModel
 import eu.torvian.chatbot.app.viewmodel.auth.AuthViewModel
@@ -172,8 +172,8 @@ fun appModule(appConfig: AppConfig): Module = module {
     single<ProviderRepository> {
         DefaultProviderRepository(get())
     }
-    single<SettingsRepository> {
-        DefaultSettingsRepository(get())
+    single<ModelSettingsRepository> {
+        DefaultModelSettingsRepository(get())
     }
     single<SessionRepository> {
         DefaultSessionRepository(get(), get())
@@ -198,7 +198,7 @@ fun appModule(appConfig: AppConfig): Module = module {
     factory<ChatState> { (backgroundScope: CoroutineScope) ->
         ChatStateImpl(
             sessionRepository = get(),
-            settingsRepository = get(),
+            modelSettingsRepository = get(),
             modelRepository = get(),
             toolRepository = get(),
             threadBuilder = get(),
@@ -210,9 +210,10 @@ fun appModule(appConfig: AppConfig): Module = module {
     factory<LoadSessionUseCase> { (chatState: ChatState) ->
         LoadSessionUseCase(
             get<SessionRepository>(),
-            get<SettingsRepository>(),
+            get<ModelSettingsRepository>(),
             get<ModelRepository>(),
             get<ToolRepository>(),
+            get<LocalMCPServerRepository>(),
             chatState,
             get()
         )
@@ -269,6 +270,7 @@ fun appModule(appConfig: AppConfig): Module = module {
             selectSettingsUC = get { parametersOf(chatState) },
             updateInputUC = get { parametersOf(chatState) },
             toolRepository = get(),
+            mcpServerRepository = get(),
             errorNotifier = get(),
             eventBus = get(),
             normalScope = normalScope,
@@ -283,7 +285,7 @@ fun appModule(appConfig: AppConfig): Module = module {
     viewModel { SessionListViewModel(get<SessionRepository>(), get<GroupRepository>(), get<EventBus>(), get()) }
     viewModel { ProviderConfigViewModel(get<ProviderRepository>(), get<UserGroupRepository>(), get<ErrorNotifier>()) }
     viewModel { ModelConfigViewModel(get<ModelRepository>(), get<ProviderRepository>(), get<UserGroupRepository>(), get<ErrorNotifier>()) }
-    viewModel { SettingsConfigViewModel(get<SettingsRepository>(), get<ModelRepository>(), get<UserGroupRepository>(), get<ErrorNotifier>()) }
+    viewModel { ModelSettingsViewModel(get<ModelSettingsRepository>(), get<ModelRepository>(), get<UserGroupRepository>(), get<ErrorNotifier>()) }
     viewModel {
         val scopeProvider = get<CoroutineScopeProvider>()
         val normalScope = scopeProvider.createNormalScope()

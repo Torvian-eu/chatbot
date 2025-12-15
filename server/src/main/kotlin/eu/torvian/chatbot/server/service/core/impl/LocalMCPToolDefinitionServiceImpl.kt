@@ -94,8 +94,7 @@ class LocalMCPToolDefinitionServiceImpl(
                     localMCPToolDefinitionDao.insertTool(
                         toolDefinitionId = createdToolDefinition.id,
                         mcpServerId = serverId,
-                        mcpToolName = tool.mcpToolName,
-                        isEnabledByDefault = tool.isEnabledByDefault
+                        mcpToolName = tool.mcpToolName
                     ).bind()
                 }
 
@@ -175,8 +174,7 @@ class LocalMCPToolDefinitionServiceImpl(
             }) {
                 localMCPToolDefinitionDao.updateTool(
                     toolDefinitionId = tool.id,
-                    mcpToolName = tool.mcpToolName,
-                    isEnabledByDefault = tool.isEnabledByDefault
+                    mcpToolName = tool.mcpToolName
                 ).bind()
             }
 
@@ -222,31 +220,35 @@ class LocalMCPToolDefinitionServiceImpl(
                 getMCPToolsByServerId(serverId).bind()
             }
 
-            val existingToolsByName = existingTools.associateBy { it.name }
-            val currentToolsByName = currentTools.associateBy { it.name }
+            val existingToolsByName = existingTools.associateBy { it.mcpToolName }
+            val currentToolsByName = currentTools.associateBy { it.mcpToolName }
 
             // Identify new tools (in current but not in existing)
-            val newTools = currentTools.filter { it.name !in existingToolsByName }
+            val newTools = currentTools.filter { it.mcpToolName !in existingToolsByName }
 
-            // Create new tools
-            val createdTools = withError({ error: CreateMCPToolsError ->
-                when (error) {
-                    is CreateMCPToolsError.OtherError ->
-                        RefreshMCPToolsError.OtherError(error.message)
+            // Create new tools, if any
+            val createdTools = if (newTools.isEmpty()) {
+                emptyList()
+            } else {
+                withError({ error: CreateMCPToolsError ->
+                    when (error) {
+                        is CreateMCPToolsError.OtherError ->
+                            RefreshMCPToolsError.OtherError(error.message)
 
-                    is CreateMCPToolsError.DuplicateName ->
-                        RefreshMCPToolsError.DuplicateName(error.name)
+                        is CreateMCPToolsError.DuplicateName ->
+                            RefreshMCPToolsError.DuplicateName(error.name)
 
-                    is CreateMCPToolsError.ToolValidationError ->
-                        RefreshMCPToolsError.ToolValidationError(error.validationError)
+                        is CreateMCPToolsError.ToolValidationError ->
+                            RefreshMCPToolsError.ToolValidationError(error.validationError)
+                    }
+                }) {
+                    createMCPTools(serverId, newTools).bind()
                 }
-            }) {
-                createMCPTools(serverId, newTools).bind()
             }
 
             // Identify changed tools (in both, but with different schema/description)
             val changedTools = currentTools.filter { current ->
-                val existing = existingToolsByName[current.name]
+                val existing = existingToolsByName[current.mcpToolName]
                 existing != null && (
                         existing.description != current.description ||
                                 existing.inputSchema != current.inputSchema ||
@@ -254,7 +256,8 @@ class LocalMCPToolDefinitionServiceImpl(
                         )
             }
 
-            // Update changed tools
+            // Update changed tools and collect the updated tool definitions
+            val updatedTools = mutableListOf<LocalMCPToolDefinition>()
             for (tool in changedTools) {
                 // Validate tool definition
                 withError({ error: ValidateToolError ->
@@ -263,7 +266,7 @@ class LocalMCPToolDefinitionServiceImpl(
                     toolService.validateToolDefinition(tool).bind()
                 }
                 // Update tool definition
-                val existing = existingToolsByName[tool.name]!!
+                val existing = existingToolsByName[tool.mcpToolName]!!
                 val updatedTool = existing.copy(
                     description = tool.description,
                     inputSchema = tool.inputSchema,
@@ -276,10 +279,11 @@ class LocalMCPToolDefinitionServiceImpl(
                 }) {
                     toolDefinitionDao.updateToolDefinition(updatedTool).bind()
                 }
+                updatedTools.add(updatedTool)
             }
 
             // Identify removed tools (in existing but not in current)
-            val removedTools = existingTools.filter { it.name !in currentToolsByName }
+            val removedTools = existingTools.filter { it.mcpToolName !in currentToolsByName }
 
             // Delete removed tools
             for (tool in removedTools) {
@@ -291,13 +295,87 @@ class LocalMCPToolDefinitionServiceImpl(
             }
 
             RefreshResult(
-                added = createdTools.size,
-                updated = changedTools.size,
-                deleted = removedTools.size
+                addedTools = createdTools,
+                updatedTools = updatedTools,
+                deletedTools = removedTools
             ).also {
-                logger.info("Refreshed MCP tools for server $serverId: added=${it.added}, updated=${it.updated}, deleted=${it.deleted}")
+                logger.info("Refreshed MCP tools for server $serverId: added=${it.addedTools.size}, updated=${it.updatedTools.size}, deleted=${it.deletedTools.size}")
             }
         }
     }
-}
 
+    override suspend fun batchUpdateMCPTools(
+        serverId: Long,
+        toolDefinitions: List<LocalMCPToolDefinition>
+    ): Either<BatchUpdateMCPToolsError, List<LocalMCPToolDefinition>> = transactionScope.transaction {
+        either {
+            // Validate that at least one tool is provided
+            ensure(toolDefinitions.isNotEmpty()) {
+                BatchUpdateMCPToolsError.OtherError("At least one tool must be provided")
+            }
+
+            // Validate that all tools belong to the specified server
+            ensure(toolDefinitions.all { it.serverId == serverId }) {
+                val invalidToolIds = toolDefinitions.filter { it.serverId != serverId }.map { it.id }
+                BatchUpdateMCPToolsError.ToolsNotInServer(invalidToolIds)
+            }
+
+            // Validate that the server exists
+            ensure(localMCPServerDao.existsById(serverId)) {
+                BatchUpdateMCPToolsError.ServerNotFound(serverId)
+            }
+
+            // Get existing tools to validate they exist
+            val existingTools = localMCPToolDefinitionDao.getToolsByServerId(serverId)
+            val existingToolIds = existingTools.map { it.id }.toSet()
+            val missingToolIds = toolDefinitions.map { it.id }.filter { it !in existingToolIds }
+            ensure(missingToolIds.isEmpty()) {
+                BatchUpdateMCPToolsError.ToolsNotFound(missingToolIds)
+            }
+
+            // Check for duplicate names within the batch
+            val toolNames = toolDefinitions.map { it.name }
+            val duplicateNames = toolNames.groupingBy { it }.eachCount().filter { it.value > 1 }.keys
+            ensure(duplicateNames.isEmpty()) {
+                BatchUpdateMCPToolsError.DuplicateName(duplicateNames.first())
+            }
+
+            // Check for duplicate names with other tools in the server
+            val batchToolIds = toolDefinitions.map { it.id }.toSet()
+            val otherServerTools = existingTools.filter { it.id !in batchToolIds }
+            val otherServerToolNames = otherServerTools.map { it.name }.toSet()
+            val conflictingName = toolNames.firstOrNull { it in otherServerToolNames }
+            if (conflictingName != null) {
+                raise(BatchUpdateMCPToolsError.DuplicateName(conflictingName))
+            }
+
+            // Perform batch update
+            val updatedTools = mutableListOf<LocalMCPToolDefinition>()
+            for (toolDefinition in toolDefinitions) {
+                // Validate tool definition
+                val updatedTool = withError({ error: UpdateToolError ->
+                    when (error) {
+                        is UpdateToolError.ToolNotFound -> BatchUpdateMCPToolsError.ToolsNotFound(listOf(error.id))
+                        is UpdateToolError.ValidationError -> BatchUpdateMCPToolsError.ToolValidationError(error.error)
+                    }
+                }) {
+                    toolService.updateTool(toolDefinition).bind()
+                }
+                updatedTools.add(updatedTool as LocalMCPToolDefinition)
+
+                // Update linkage
+                withError({ daoError: LocalMCPToolDefinitionError.NotFound ->
+                    BatchUpdateMCPToolsError.ToolsNotFound(listOf(daoError.toolDefinitionId))
+                }) {
+                    localMCPToolDefinitionDao.updateTool(
+                        toolDefinitionId = toolDefinition.id,
+                        mcpToolName = toolDefinition.mcpToolName
+                    ).bind()
+                }
+            }
+
+            logger.info("Batch updated ${updatedTools.size} MCP tools for server $serverId")
+            updatedTools
+        }
+    }
+}

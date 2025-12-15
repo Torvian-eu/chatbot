@@ -7,6 +7,7 @@ import eu.torvian.chatbot.app.compose.sessionlist.SessionListActions
 import eu.torvian.chatbot.app.compose.sessionlist.SessionListState
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
 import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
+import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.common.models.core.ChatGroup
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
@@ -28,7 +29,8 @@ import org.koin.compose.viewmodel.koinViewModel
 @Composable
 fun ChatScreen(
     sessionListViewModel: SessionListViewModel = koinViewModel(),
-    chatViewModel: ChatViewModel = koinViewModel()
+    chatViewModel: ChatViewModel = koinViewModel(),
+    authState: AuthState
 ) {
     // --- Collect States for SessionListPanel ---
     val sessionListUiState by sessionListViewModel.listState.collectAsState()
@@ -64,10 +66,15 @@ fun ChatScreen(
     val toolCallsMap = toolCallsForCurrentSession.dataOrNull ?: emptyMap()
 
     // --- State-Driven Effect to Load Sessions ---
-    LaunchedEffect(selectedSession) {
+    LaunchedEffect(selectedSession, authState) {
         val newSessionId = selectedSession?.id
         if (newSessionId != null && newSessionId != activeSessionId) {
-            chatViewModel.loadSession(newSessionId)
+            if (authState is AuthState.Authenticated) {
+                chatViewModel.loadSession(newSessionId, authState.userId)
+            } else {
+                // Not authenticated - clear session to avoid loading user-specific data
+                chatViewModel.clearSession()
+            }
         } else if (newSessionId == null && activeSessionId != null) {
             chatViewModel.clearSession()
         }
@@ -165,7 +172,9 @@ fun ChatScreen(
                 chatViewModel.showToolCallDetails(toolCall)
             override fun onRetryLoadingSession() {
                 selectedSession?.id?.let { sessionId ->
-                    chatViewModel.loadSession(sessionId, forceReload = true)
+                    if (authState is AuthState.Authenticated) {
+                        chatViewModel.loadSession(sessionId, authState.userId, forceReload = true)
+                    }
                 }
             }
         }

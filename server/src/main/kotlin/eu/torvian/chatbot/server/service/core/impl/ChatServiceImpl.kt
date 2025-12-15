@@ -494,7 +494,6 @@ class ChatServiceImpl(
                     localMcpExecutor.executeTool(
                         toolDefinition = toolDef,
                         toolCallId = pendingToolCall.id,
-                        toolName = pendingToolCall.toolName,
                         inputJson = pendingToolCall.input,
                         responseFlow = mcpResponseFlow
                     ).collect { event ->

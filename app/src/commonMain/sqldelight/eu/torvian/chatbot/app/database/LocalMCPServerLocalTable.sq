@@ -52,11 +52,6 @@ CREATE TABLE LocalMCPServerLocalTable (
     -- NULL = use default (300s), 0 = never stop
     autoStopAfterInactivitySeconds INTEGER AS Int,
 
-    -- Default enablement for tools in NEW chat sessions
-    -- NULL = false (tools disabled by default)
-    -- TRUE = tools enabled by default for new sessions
-    toolsEnabledByDefault INTEGER AS Boolean,
-
     -- Timestamps
     createdAt INTEGER NOT NULL,
     updatedAt INTEGER NOT NULL,
@@ -90,10 +85,9 @@ INSERT INTO LocalMCPServerLocalTable (
     autoStartOnEnable,
     autoStartOnLaunch,
     autoStopAfterInactivitySeconds,
-    toolsEnabledByDefault,
     createdAt,
     updatedAt
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- Get all servers for a user
 getAllByUserId:
@@ -130,7 +124,6 @@ SET name = ?,
     autoStartOnEnable = ?,
     autoStartOnLaunch = ?,
     autoStopAfterInactivitySeconds = ?,
-    toolsEnabledByDefault = ?,
     updatedAt = ?
 WHERE id = ?;
 
@@ -149,4 +142,3 @@ WHERE name = ? AND userId = ? AND id != ?;
 countByUserId:
 SELECT COUNT(*) FROM LocalMCPServerLocalTable
 WHERE userId = ?;
-

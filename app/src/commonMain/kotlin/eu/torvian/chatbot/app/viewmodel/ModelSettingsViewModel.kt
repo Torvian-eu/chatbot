@@ -8,7 +8,7 @@ import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.error_unsupported_model_type
 import eu.torvian.chatbot.app.repository.ModelRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
-import eu.torvian.chatbot.app.repository.SettingsRepository
+import eu.torvian.chatbot.app.repository.ModelSettingsRepository
 import eu.torvian.chatbot.app.repository.UserGroupRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
@@ -36,10 +36,10 @@ import kotlinx.coroutines.launch
  * - Managing the state for editing existing settings profiles (E4.S6).
  * - Deleting settings profiles (E4.S5).
  * - Managing settings access control (public/private, grant/revoke access).
- * - Communicating with the backend via [SettingsRepository] and [ModelRepository].
+ * - Communicating with the backend via [ModelSettingsRepository] and [ModelRepository].
  *
  * @constructor
- * @param settingsRepository The repository for Settings-related operations.
+ * @param modelSettingsRepository The repository for Settings-related operations.
  * @param modelRepository The repository for Model-related operations (needed for model selection).
  * @param userGroupRepository The repository for user group-related operations.
  * @param errorNotifier The service for handling and notifying about errors.
@@ -51,8 +51,8 @@ import kotlinx.coroutines.launch
  * @property selectedSettings The currently selected settings profile in the master-detail UI, or null if no settings selected.
  * @property dialogState The current dialog state for the settings tab.
  */
-class SettingsConfigViewModel(
-    private val settingsRepository: SettingsRepository,
+class ModelSettingsViewModel(
+    private val modelSettingsRepository: ModelSettingsRepository,
     private val modelRepository: ModelRepository,
     private val userGroupRepository: UserGroupRepository,
     private val errorNotifier: ErrorNotifier,
@@ -60,7 +60,7 @@ class SettingsConfigViewModel(
 ) : ViewModel() {
 
     companion object {
-        private val logger = kmpLogger<SettingsConfigViewModel>()
+        private val logger = kmpLogger<ModelSettingsViewModel>()
     }
 
     // --- Private State Properties ---
@@ -74,7 +74,7 @@ class SettingsConfigViewModel(
      * The ID of the settings profile the user has explicitly selected.
      */
     private val userSelectedSettingsId = MutableStateFlow<Long?>(null)
-    private val _dialogState = MutableStateFlow<SettingsDialogState>(SettingsDialogState.None)
+    private val _dialogState = MutableStateFlow<ModelSettingsDialogState>(ModelSettingsDialogState.None)
 
     // --- Public State Properties ---
 
@@ -86,7 +86,7 @@ class SettingsConfigViewModel(
     /**
      * The state of the list of all configured settings profiles for the selected model.
      */
-    val settingsListForSelectedModel: StateFlow<List<ModelSettingsDetails>?> = settingsRepository.allSettingsDetails
+    val settingsListForSelectedModel: StateFlow<List<ModelSettingsDetails>?> = modelSettingsRepository.allSettingsDetails
         .map { it.dataOrNull }
         .onEach { allSettingsList ->
             val supportedSettingsList = allSettingsList?.filter {
@@ -129,7 +129,7 @@ class SettingsConfigViewModel(
      * The current dialog state for the settings tab.
      * Manages which dialog (if any) should be displayed and contains dialog-specific form state.
      */
-    val dialogState: StateFlow<SettingsDialogState> = _dialogState.asStateFlow()
+    val dialogState: StateFlow<ModelSettingsDialogState> = _dialogState.asStateFlow()
 
     // --- Initialization ---
 
@@ -153,7 +153,7 @@ class SettingsConfigViewModel(
         viewModelScope.launch(uiDispatcher) {
             parZip(
                 { modelRepository.loadModels() },
-                { settingsRepository.loadAllSettingsDetails() }
+                { modelSettingsRepository.loadAllSettingsDetails() }
             ) { modelsResult, settingsResult ->
                 modelsResult.mapLeft { error ->
                     errorNotifier.repositoryError(
@@ -199,7 +199,7 @@ class SettingsConfigViewModel(
             }
             return
         }
-        _dialogState.value = SettingsDialogState.AddNewSettings(
+        _dialogState.value = ModelSettingsDialogState.AddNewSettings(
             formState = createEmptyNewSettingsForm(selectedModel.type, selectedModel.id),
         )
     }
@@ -212,7 +212,7 @@ class SettingsConfigViewModel(
             logger.warn("Cannot edit: Settings with ID ${settings.id} is of unsupported type ${settings::class.simpleName}.")
             return
         }
-        _dialogState.value = SettingsDialogState.EditSettings(
+        _dialogState.value = ModelSettingsDialogState.EditSettings(
             settings = settings,
             formState = settings.toEditFormState()
         )
@@ -222,20 +222,20 @@ class SettingsConfigViewModel(
      * Initiates the deletion process for a settings profile by showing the confirmation dialog.
      */
     fun startDeletingSettings(settings: ModelSettings) {
-        _dialogState.value = SettingsDialogState.DeleteSettings(settings)
+        _dialogState.value = ModelSettingsDialogState.DeleteSettings(settings)
     }
 
     /**
      * Updates any field in the current settings form.
      */
-    fun updateSettingsForm(update: (SettingsFormState) -> SettingsFormState) {
+    fun updateSettingsForm(update: (ModelSettingsFormState) -> ModelSettingsFormState) {
         _dialogState.update { dialogState ->
             when (dialogState) {
-                is SettingsDialogState.AddNewSettings -> dialogState.copy(
+                is ModelSettingsDialogState.AddNewSettings -> dialogState.copy(
                     formState = update(dialogState.formState)
                 )
 
-                is SettingsDialogState.EditSettings -> dialogState.copy(
+                is ModelSettingsDialogState.EditSettings -> dialogState.copy(
                     formState = update(dialogState.formState)
                 )
 
@@ -249,8 +249,8 @@ class SettingsConfigViewModel(
      */
     fun saveSettings() {
         when (val dialogState = _dialogState.value) {
-            is SettingsDialogState.AddNewSettings -> saveNewSettings(dialogState)
-            is SettingsDialogState.EditSettings -> saveEditedSettings(dialogState)
+            is ModelSettingsDialogState.AddNewSettings -> saveNewSettings(dialogState)
+            is ModelSettingsDialogState.EditSettings -> saveEditedSettings(dialogState)
             else -> return
         }
     }
@@ -260,7 +260,7 @@ class SettingsConfigViewModel(
      */
     fun deleteSettings(settingsId: Long) {
         viewModelScope.launch(uiDispatcher) {
-            settingsRepository.deleteSettings(settingsId)
+            modelSettingsRepository.deleteSettings(settingsId)
                 .fold(
                     ifLeft = { error ->
                         errorNotifier.repositoryError(
@@ -279,7 +279,7 @@ class SettingsConfigViewModel(
      * Cancels any dialog operation (adding new or editing existing settings).
      */
     fun cancelDialog() {
-        _dialogState.value = SettingsDialogState.None
+        _dialogState.value = ModelSettingsDialogState.None
     }
 
     /**
@@ -287,7 +287,7 @@ class SettingsConfigViewModel(
      */
     fun makeSettingsPublic(settingsDetails: ModelSettingsDetails) {
         viewModelScope.launch(uiDispatcher) {
-            settingsRepository.makeSettingsPublic(settingsDetails.settings.id)
+            modelSettingsRepository.makeSettingsPublic(settingsDetails.settings.id)
                 .mapLeft { error ->
                     errorNotifier.repositoryError(
                         error = error,
@@ -302,7 +302,7 @@ class SettingsConfigViewModel(
      */
     fun makeSettingsPrivate(settingsDetails: ModelSettingsDetails) {
         viewModelScope.launch(uiDispatcher) {
-            settingsRepository.makeSettingsPrivate(settingsDetails.settings.id)
+            modelSettingsRepository.makeSettingsPrivate(settingsDetails.settings.id)
                 .mapLeft { error ->
                     errorNotifier.repositoryError(
                         error = error,
@@ -331,7 +331,7 @@ class SettingsConfigViewModel(
                     // Define available access modes for settings
                     val availableAccessModes = listOf(AccessMode.READ.key, AccessMode.WRITE.key, AccessMode.MANAGE.key)
 
-                    _dialogState.value = SettingsDialogState.ManageAccess(
+                    _dialogState.value = ModelSettingsDialogState.ManageAccess(
                         settingsDetails = settingsDetails,
                         availableGroups = groups,
                         grantAccessForm = GrantAccessFormState(
@@ -349,7 +349,7 @@ class SettingsConfigViewModel(
      */
     fun openGrantAccessDialog() {
         _dialogState.update { state ->
-            if (state is SettingsDialogState.ManageAccess) {
+            if (state is ModelSettingsDialogState.ManageAccess) {
                 state.copy(showGrantDialog = true)
             } else state
         }
@@ -360,7 +360,7 @@ class SettingsConfigViewModel(
      */
     fun closeGrantAccessDialog() {
         _dialogState.update { state ->
-            if (state is SettingsDialogState.ManageAccess) {
+            if (state is ModelSettingsDialogState.ManageAccess) {
                 state.copy(
                     showGrantDialog = false,
                     grantAccessForm = GrantAccessFormState() // Reset form
@@ -374,7 +374,7 @@ class SettingsConfigViewModel(
      */
     fun updateGrantAccessForm(update: (GrantAccessFormState) -> GrantAccessFormState) {
         _dialogState.update { state ->
-            if (state is SettingsDialogState.ManageAccess) {
+            if (state is ModelSettingsDialogState.ManageAccess) {
                 state.copy(grantAccessForm = update(state.grantAccessForm))
             } else state
         }
@@ -385,7 +385,7 @@ class SettingsConfigViewModel(
      */
     fun grantSettingsAccess(settingsId: Long, groupId: Long, accessMode: String) {
         viewModelScope.launch(uiDispatcher) {
-            settingsRepository.grantSettingsAccess(
+            modelSettingsRepository.grantSettingsAccess(
                 settingsId,
                 GrantAccessRequest(groupId = groupId, accessMode = accessMode)
             ).fold(
@@ -398,7 +398,7 @@ class SettingsConfigViewModel(
                 ifRight = { settingsDetails ->
                     // Refresh dialog state to reflect new access details
                     _dialogState.update { state ->
-                        if (state is SettingsDialogState.ManageAccess) {
+                        if (state is ModelSettingsDialogState.ManageAccess) {
                             state.copy(settingsDetails = settingsDetails)
                         } else state
                     }
@@ -413,7 +413,7 @@ class SettingsConfigViewModel(
      */
     fun revokeSettingsAccess(settingsId: Long, groupId: Long, accessMode: String) {
         viewModelScope.launch(uiDispatcher) {
-            settingsRepository.revokeSettingsAccess(
+            modelSettingsRepository.revokeSettingsAccess(
                 settingsId,
                 RevokeAccessRequest(groupId = groupId, accessMode = accessMode)
             ).fold(
@@ -426,7 +426,7 @@ class SettingsConfigViewModel(
                 ifRight = { settingsDetails ->
                     // Refresh dialog state to reflect new access details
                     _dialogState.update { state ->
-                        if (state is SettingsDialogState.ManageAccess) {
+                        if (state is ModelSettingsDialogState.ManageAccess) {
                             state.copy(settingsDetails = settingsDetails)
                         } else state
                     }
@@ -437,7 +437,7 @@ class SettingsConfigViewModel(
 
     // --- Private Helper Functions ---
 
-    private fun saveNewSettings(dialogState: SettingsDialogState.AddNewSettings) {
+    private fun saveNewSettings(dialogState: ModelSettingsDialogState.AddNewSettings) {
         val form = dialogState.formState
         val validationError = form.validate()
         if (validationError != null) {
@@ -447,7 +447,7 @@ class SettingsConfigViewModel(
         val modelId = form.modelId ?: return
         val newSettings = form.toModelSettings(0L, modelId)
         viewModelScope.launch(uiDispatcher) {
-            settingsRepository.addModelSettings(newSettings)
+            modelSettingsRepository.addModelSettings(newSettings)
                 .fold(
                     ifLeft = { error ->
                         errorNotifier.repositoryError(
@@ -464,7 +464,7 @@ class SettingsConfigViewModel(
         }
     }
 
-    private fun saveEditedSettings(dialogState: SettingsDialogState.EditSettings) {
+    private fun saveEditedSettings(dialogState: ModelSettingsDialogState.EditSettings) {
         val form = dialogState.formState
         val validationError = form.validate()
         if (validationError != null) {
@@ -477,7 +477,7 @@ class SettingsConfigViewModel(
             val originalSettings = dialogState.settings
             val updatedSettings = form.toModelSettings(originalSettings.id, modelId)
 
-            settingsRepository.updateSettings(updatedSettings)
+            modelSettingsRepository.updateSettings(updatedSettings)
                 .fold(
                     ifLeft = { error ->
                         errorNotifier.repositoryError(
@@ -496,11 +496,11 @@ class SettingsConfigViewModel(
     private fun updateSettingsFormError(errorMessage: String?) {
         _dialogState.update { dialogState ->
             when (dialogState) {
-                is SettingsDialogState.AddNewSettings -> dialogState.copy(
+                is ModelSettingsDialogState.AddNewSettings -> dialogState.copy(
                     formState = dialogState.formState.withError(errorMessage)
                 )
 
-                is SettingsDialogState.EditSettings -> dialogState.copy(
+                is ModelSettingsDialogState.EditSettings -> dialogState.copy(
                     formState = dialogState.formState.withError(errorMessage)
                 )
 

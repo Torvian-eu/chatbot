@@ -1,12 +1,8 @@
 package eu.torvian.chatbot.app.viewmodel.chat.state
 
 import eu.torvian.chatbot.app.domain.contracts.DataState
-import eu.torvian.chatbot.app.repository.ModelRepository
-import eu.torvian.chatbot.app.repository.RepositoryError
-import eu.torvian.chatbot.app.repository.SessionRepository
-import eu.torvian.chatbot.app.repository.SettingsRepository
-import eu.torvian.chatbot.app.repository.ToolCallsMap
-import eu.torvian.chatbot.app.repository.ToolRepository
+import eu.torvian.chatbot.app.repository.*
+import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.util.ThreadBuilder
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
@@ -30,12 +26,16 @@ import kotlinx.coroutines.flow.*
 @OptIn(ExperimentalCoroutinesApi::class)
 class ChatStateImpl(
     private val sessionRepository: SessionRepository,
-    private val settingsRepository: SettingsRepository,
+    private val modelSettingsRepository: ModelSettingsRepository,
     private val modelRepository: ModelRepository,
     private val toolRepository: ToolRepository,
     private val threadBuilder: ThreadBuilder,
     private val backgroundScope: CoroutineScope
 ) : ChatState {
+
+    companion object {
+        private val logger = kmpLogger<ChatStateImpl>()
+    }
 
     // --- Private MutableStateFlows for Direct User Input ---
 
@@ -99,7 +99,7 @@ class ChatStateImpl(
 
     // All settings from repository, filtered for chat model settings only
     private val allSettings: StateFlow<DataState<RepositoryError, List<ChatModelSettings>>> =
-        settingsRepository.allSettings.map { dataState ->
+        modelSettingsRepository.allSettings.map { dataState ->
             when (dataState) {
                 is DataState.Success -> {
                     val filteredSettings = dataState.data.filterIsInstance<ChatModelSettings>()
@@ -172,6 +172,7 @@ class ChatStateImpl(
                     val enabledTools = dataState.data.filter { it.isEnabled }
                     DataState.Success(enabledTools)
                 }
+
                 is DataState.Error -> dataState
                 is DataState.Loading -> dataState
                 is DataState.Idle -> dataState
@@ -214,6 +215,17 @@ class ChatStateImpl(
                 started = SharingStarted.Eagerly,
                 initialValue = emptyList()
             )
+
+    init {
+        // Reload enabled tools when data state is Idle
+        enabledToolsForCurrentSession.filterIsInstance<DataState.Idle>()
+            .onEach {
+                activeSessionId.value?.let { sessionId ->
+                    toolRepository.loadEnabledToolsForSession(sessionId)
+                }
+            }
+            .launchIn(backgroundScope)
+    }
 
     // --- Public State Mutation Methods ---
 

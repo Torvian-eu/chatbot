@@ -50,19 +50,27 @@ fun SetToolEnabledError.toApiError(): ApiError = when (this) {
 }
 
 /**
+ * Converts a [SetToolsEnabledError] to an [ApiError].
+ */
+fun SetToolsEnabledError.toApiError(): ApiError = when (this) {
+    is SetToolsEnabledError.InvalidReference ->
+        apiError(CommonApiErrorCodes.NOT_FOUND, "Session or one or more tools not found", "sessionId" to sessionId.toString(), "toolIds" to toolIds.joinToString(","))
+}
+
+/**
  * Converts a [ValidateToolError] to an [ApiError].
  */
 fun ValidateToolError.toApiError(): ApiError = when (this) {
     is ValidateToolError.InvalidName ->
-        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid tool name: $message", "name" to message)
+        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid tool name: $message", "name" to name)
 
     is ValidateToolError.InvalidDescription ->
-        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid tool description: $message", "description" to message)
+        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid tool description: $message", "description" to description)
 
     is ValidateToolError.InvalidInputSchema ->
-        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid input schema: $message", "inputSchema" to message)
+        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid input schema: $message", "inputSchema" to schema.toString())
 
     is ValidateToolError.InvalidOutputSchema ->
-        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid output schema: $message", "outputSchema" to message)
+        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid output schema: $message", "outputSchema" to schema.toString())
 }
 

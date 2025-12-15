@@ -46,7 +46,7 @@ class LocalMCPToolCallMediatorImpl(
                     LocalMCPToolCallResult(
                         toolCallId = request.toolCallId,
                         isError = true,
-                        errorMessage = "Failed to execute tool call"
+                        errorMessage = error.message
                     )
                 },
                 ifRight = { result ->

@@ -40,8 +40,7 @@ class LocalMCPToolDefinitionDaoExposed(
     override suspend fun insertTool(
         toolDefinitionId: Long,
         mcpServerId: Long,
-        mcpToolName: String?,
-        isEnabledByDefault: Boolean?
+        mcpToolName: String
     ): Either<InsertToolError, Unit> =
         transactionScope.transaction {
             either {
@@ -50,7 +49,6 @@ class LocalMCPToolDefinitionDaoExposed(
                         it[LocalMCPToolDefinitionTable.toolDefinitionId] = toolDefinitionId
                         it[LocalMCPToolDefinitionTable.mcpServerId] = mcpServerId
                         it[LocalMCPToolDefinitionTable.mcpToolName] = mcpToolName
-                        it[LocalMCPToolDefinitionTable.isEnabledByDefault] = isEnabledByDefault
                     }
                 }) { e: ExposedSQLException ->
                     logger.error("Failed to create local MCP tool for tool $toolDefinitionId and server $mcpServerId: ${e.message}")
@@ -109,15 +107,13 @@ class LocalMCPToolDefinitionDaoExposed(
 
     override suspend fun updateTool(
         toolDefinitionId: Long,
-        mcpToolName: String?,
-        isEnabledByDefault: Boolean?
+        mcpToolName: String
     ): Either<LocalMCPToolDefinitionError.NotFound, Unit> =
         transactionScope.transaction {
             val updatedCount = LocalMCPToolDefinitionTable.update(
                 where = { LocalMCPToolDefinitionTable.toolDefinitionId eq toolDefinitionId }
             ) {
                 it[LocalMCPToolDefinitionTable.mcpToolName] = mcpToolName
-                it[LocalMCPToolDefinitionTable.isEnabledByDefault] = isEnabledByDefault
             }
             if (updatedCount > 0) {
                 Unit.right()
@@ -136,4 +132,3 @@ class LocalMCPToolDefinitionDaoExposed(
             }
         }
 }
-

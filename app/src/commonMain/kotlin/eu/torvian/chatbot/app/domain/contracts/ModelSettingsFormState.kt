@@ -11,7 +11,7 @@ import kotlinx.serialization.json.JsonObject
  * Sealed class representing the state of form inputs for different types of ModelSettings.
  * Uses FormMode to distinguish between creating new settings and editing existing ones.
  */
-sealed class SettingsFormState {
+sealed class ModelSettingsFormState {
     abstract val mode: FormMode
     abstract val name: String
     abstract val modelId: Long?
@@ -31,7 +31,7 @@ sealed class SettingsFormState {
         val stream: Boolean = true,
         override val customParamsJson: String = "",
         override val errorMessage: String? = null
-    ) : SettingsFormState() {
+    ) : ModelSettingsFormState() {
         override val modelType: LLMModelType = LLMModelType.CHAT
     }
 
@@ -43,7 +43,7 @@ sealed class SettingsFormState {
         val encodingFormat: String = "",
         override val customParamsJson: String = "",
         override val errorMessage: String? = null
-    ) : SettingsFormState() {
+    ) : ModelSettingsFormState() {
         override val modelType: LLMModelType = LLMModelType.EMBEDDING
     }
 }
@@ -51,9 +51,9 @@ sealed class SettingsFormState {
 /**
  * Creates a form state from an existing ModelSettings instance for editing.
  */
-fun ModelSettings.toEditFormState(): SettingsFormState {
+fun ModelSettings.toEditFormState(): ModelSettingsFormState {
     return when (this) {
-        is ChatModelSettings -> SettingsFormState.Chat(
+        is ChatModelSettings -> ModelSettingsFormState.Chat(
             mode = FormMode.EDIT,
             name = this.name,
             modelId = this.modelId,
@@ -66,7 +66,7 @@ fun ModelSettings.toEditFormState(): SettingsFormState {
             customParamsJson = this.customParams?.let { Json.encodeToString(JsonObject.serializer(), it) } ?: ""
         )
 
-        is EmbeddingModelSettings -> SettingsFormState.Embedding(
+        is EmbeddingModelSettings -> ModelSettingsFormState.Embedding(
             mode = FormMode.EDIT,
             name = this.name,
             modelId = this.modelId,
@@ -82,7 +82,7 @@ fun ModelSettings.toEditFormState(): SettingsFormState {
 /**
  * Creates a ModelSettings instance from a form state.
  */
-fun SettingsFormState.toModelSettings(
+fun ModelSettingsFormState.toModelSettings(
     id: Long,
     modelId: Long
 ): ModelSettings {
@@ -91,7 +91,7 @@ fun SettingsFormState.toModelSettings(
     }
 
     return when (this) {
-        is SettingsFormState.Chat -> {
+        is ModelSettingsFormState.Chat -> {
             val stopSequencesList = this.stopSequences.split(',')
                 .map { it.trim() }
                 .filter { it.isNotBlank() }
@@ -111,7 +111,7 @@ fun SettingsFormState.toModelSettings(
             )
         }
 
-        is SettingsFormState.Embedding -> {
+        is ModelSettingsFormState.Embedding -> {
             EmbeddingModelSettings(
                 id = id,
                 modelId = modelId,
@@ -127,7 +127,7 @@ fun SettingsFormState.toModelSettings(
 /**
  * Validates a form state and returns validation errors if any.
  */
-fun SettingsFormState.validate(): String? {
+fun ModelSettingsFormState.validate(): String? {
     if (this.name.isBlank()) {
         return "Settings profile name cannot be empty."
     }
@@ -143,7 +143,7 @@ fun SettingsFormState.validate(): String? {
     }
 
     when (this) {
-        is SettingsFormState.Chat -> {
+        is ModelSettingsFormState.Chat -> {
             if (this.temperature.isNotBlank() && this.temperature.toFloatOrNull() == null) {
                 return "Temperature must be a number."
             }
@@ -155,7 +155,7 @@ fun SettingsFormState.validate(): String? {
             }
         }
 
-        is SettingsFormState.Embedding -> {
+        is ModelSettingsFormState.Embedding -> {
             if (this.dimensions.isNotBlank() && this.dimensions.toIntOrNull() == null) {
                 return "Dimensions must be an integer."
             }
@@ -168,20 +168,20 @@ fun SettingsFormState.validate(): String? {
 /**
  * Updates a form state with an error message, preserving all other data.
  */
-fun SettingsFormState.withError(errorMessage: String?): SettingsFormState {
+fun ModelSettingsFormState.withError(errorMessage: String?): ModelSettingsFormState {
     return when (this) {
-        is SettingsFormState.Chat -> this.copy(errorMessage = errorMessage)
-        is SettingsFormState.Embedding -> this.copy(errorMessage = errorMessage)
+        is ModelSettingsFormState.Chat -> this.copy(errorMessage = errorMessage)
+        is ModelSettingsFormState.Embedding -> this.copy(errorMessage = errorMessage)
     }
 }
 
 /**
  * Creates an empty form state for a new settings profile of the specified type.
  */
-fun createEmptyNewSettingsForm(modelType: LLMModelType, modelId: Long): SettingsFormState {
+fun createEmptyNewSettingsForm(modelType: LLMModelType, modelId: Long): ModelSettingsFormState {
     return when (modelType) {
-        LLMModelType.CHAT -> SettingsFormState.Chat(mode = FormMode.NEW, modelId = modelId)
-        LLMModelType.EMBEDDING -> SettingsFormState.Embedding(mode = FormMode.NEW, modelId = modelId)
+        LLMModelType.CHAT -> ModelSettingsFormState.Chat(mode = FormMode.NEW, modelId = modelId)
+        LLMModelType.EMBEDDING -> ModelSettingsFormState.Embedding(mode = FormMode.NEW, modelId = modelId)
         else -> throw IllegalArgumentException("Unsupported model type for settings form: $modelType")
     }
 }

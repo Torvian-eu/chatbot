@@ -26,7 +26,6 @@ class LocalMCPExecutor(
      *
      * @param toolDefinition The definition of the tool to execute, including configuration.
      * @param toolCallId Unique identifier for the tool call
-     * @param toolName Name of the tool to execute
      * @param inputJson JSON input for the tool (may be null or invalid JSON)
      * @param responseFlow Flow of tool execution results from the client
      * @return Flow of execution events
@@ -34,7 +33,6 @@ class LocalMCPExecutor(
     fun executeTool(
         toolDefinition: LocalMCPToolDefinition,
         toolCallId: Long,
-        toolName: String,
         inputJson: String?,
         responseFlow: Flow<LocalMCPToolCallResult>
     ): Flow<LocalMCPExecutorEvent> = channelFlow {
@@ -44,7 +42,7 @@ class LocalMCPExecutor(
                 request = LocalMCPToolCallRequest(
                     toolCallId = toolCallId,
                     serverId = toolDefinition.serverId,
-                    toolName = toolName,
+                    toolName = toolDefinition.mcpToolName,
                     inputJson = inputJson
                 )
             )

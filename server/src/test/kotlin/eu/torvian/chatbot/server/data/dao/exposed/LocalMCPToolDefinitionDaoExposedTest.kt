@@ -19,7 +19,6 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -94,15 +93,14 @@ class LocalMCPToolDefinitionDaoExposedTest {
     fun `createLocalMCPTool - successfully creates local MCP tool with linkage`() = runTest {
         // Given
         val userId = 1L
-        val serverId = localMCPServerDao.generateId(userId)
+        val serverId = localMCPServerDao.createServer(userId, isEnabled = true)
         val toolDef = createTestTool("test_tool")
 
         // When
         val result = localMCPToolDefinitionDao.insertTool(
             toolDefinitionId = toolDef.id,
             mcpServerId = serverId,
-            mcpToolName = null,
-            isEnabledByDefault = null
+            mcpToolName = "test_tool"
         )
 
         // Then
@@ -117,7 +115,7 @@ class LocalMCPToolDefinitionDaoExposedTest {
     fun `createLocalMCPTool - successfully creates local MCP tool with mcpToolName`() = runTest {
         // Given
         val userId = 1L
-        val serverId = localMCPServerDao.generateId(userId)
+        val serverId = localMCPServerDao.createServer(userId, isEnabled = true)
         val toolDef = createTestTool("test_tool")
         val mcpToolName = "original_mcp_name"
 
@@ -125,8 +123,7 @@ class LocalMCPToolDefinitionDaoExposedTest {
         val result = localMCPToolDefinitionDao.insertTool(
             toolDefinitionId = toolDef.id,
             mcpServerId = serverId,
-            mcpToolName = mcpToolName,
-            isEnabledByDefault = null
+            mcpToolName = mcpToolName
         )
 
         // Then
@@ -137,81 +134,15 @@ class LocalMCPToolDefinitionDaoExposedTest {
     }
 
     @Test
-    fun `createLocalMCPTool - successfully creates local MCP tool with isEnabledByDefault true`() = runTest {
-        // Given
-        val userId = 1L
-        val serverId = localMCPServerDao.generateId(userId)
-        val toolDef = createTestTool("test_tool")
-
-        // When
-        val result = localMCPToolDefinitionDao.insertTool(
-            toolDefinitionId = toolDef.id,
-            mcpServerId = serverId,
-            mcpToolName = null,
-            isEnabledByDefault = true
-        )
-
-        // Then
-        assertTrue(result.isRight())
-        val tool = localMCPToolDefinitionDao.getToolById(toolDef.id).getOrNull()
-        assertNotNull(tool)
-        assertEquals(true, tool.isEnabledByDefault)
-    }
-
-    @Test
-    fun `createLocalMCPTool - successfully creates local MCP tool with isEnabledByDefault false`() = runTest {
-        // Given
-        val userId = 1L
-        val serverId = localMCPServerDao.generateId(userId)
-        val toolDef = createTestTool("test_tool")
-
-        // When
-        val result = localMCPToolDefinitionDao.insertTool(
-            toolDefinitionId = toolDef.id,
-            mcpServerId = serverId,
-            mcpToolName = null,
-            isEnabledByDefault = false
-        )
-
-        // Then
-        assertTrue(result.isRight())
-        val tool = localMCPToolDefinitionDao.getToolById(toolDef.id).getOrNull()
-        assertNotNull(tool)
-        assertEquals(false, tool.isEnabledByDefault)
-    }
-
-    @Test
-    fun `createLocalMCPTool - isEnabledByDefault defaults to null when not specified`() = runTest {
-        // Given
-        val userId = 1L
-        val serverId = localMCPServerDao.generateId(userId)
-        val toolDef = createTestTool("test_tool")
-
-        // When
-        val result = localMCPToolDefinitionDao.insertTool(
-            toolDefinitionId = toolDef.id,
-            mcpServerId = serverId,
-            mcpToolName = null,
-            isEnabledByDefault = null
-        )
-
-        // Then
-        assertTrue(result.isRight())
-        val tool = localMCPToolDefinitionDao.getToolById(toolDef.id).getOrNull()
-        assertNotNull(tool)
-        assertNull(tool.isEnabledByDefault)
-    }
-
-    @Test
     fun `getLocalMCPToolsByServerId - returns all tools for a server`() = runTest {
         // Given
         val userId = 1L
-        val serverId = localMCPServerDao.generateId(userId)
+        val serverId = localMCPServerDao.createServer(userId, isEnabled = true)
         val tool1 = createTestTool("tool1")
         val tool2 = createTestTool("tool2")
 
-        localMCPToolDefinitionDao.insertTool(tool1.id, serverId)
-        localMCPToolDefinitionDao.insertTool(tool2.id, serverId)
+        localMCPToolDefinitionDao.insertTool(tool1.id, serverId, "tool1")
+        localMCPToolDefinitionDao.insertTool(tool2.id, serverId, "tool2")
 
         // When
         val tools = localMCPToolDefinitionDao.getToolsByServerId(serverId)
@@ -226,14 +157,13 @@ class LocalMCPToolDefinitionDaoExposedTest {
     fun `getLocalMCPToolById - returns correct tool`() = runTest {
         // Given
         val userId = 1L
-        val serverId = localMCPServerDao.generateId(userId)
+        val serverId = localMCPServerDao.createServer(userId, isEnabled = true)
         val toolDef = createTestTool("test_tool")
         val mcpToolName = "original_name"
         localMCPToolDefinitionDao.insertTool(
             toolDefinitionId = toolDef.id,
             mcpServerId = serverId,
-            mcpToolName = mcpToolName,
-            isEnabledByDefault = true
+            mcpToolName = mcpToolName
         )
 
         // When
@@ -246,18 +176,17 @@ class LocalMCPToolDefinitionDaoExposedTest {
         assertEquals(toolDef.id, tool.id)
         assertEquals(serverId, tool.serverId)
         assertEquals(mcpToolName, tool.mcpToolName)
-        assertEquals(true, tool.isEnabledByDefault)
     }
 
     @Test
     fun `deleteLocalMCPToolsByServerId - removes all tools for server`() = runTest {
         // Given
         val userId = 1L
-        val serverId = localMCPServerDao.generateId(userId)
+        val serverId = localMCPServerDao.createServer(userId, isEnabled = true)
         val tool1 = createTestTool("tool1")
         val tool2 = createTestTool("tool2")
-        localMCPToolDefinitionDao.insertTool(tool1.id, serverId)
-        localMCPToolDefinitionDao.insertTool(tool2.id, serverId)
+        localMCPToolDefinitionDao.insertTool(tool1.id, serverId, "tool1")
+        localMCPToolDefinitionDao.insertTool(tool2.id, serverId, "tool2")
 
         // When
         val deletedCount = localMCPToolDefinitionDao.deleteToolsByServerId(serverId)
@@ -272,9 +201,9 @@ class LocalMCPToolDefinitionDaoExposedTest {
     fun `cascade delete - deleting server removes local MCP tools`() = runTest {
         // Given
         val userId = 1L
-        val serverId = localMCPServerDao.generateId(userId)
+        val serverId = localMCPServerDao.createServer(userId, isEnabled = true)
         val tool = createTestTool("test_tool")
-        localMCPToolDefinitionDao.insertTool(tool.id, serverId)
+        localMCPToolDefinitionDao.insertTool(tool.id, serverId, "test_tool")
 
         // When
         localMCPServerDao.deleteById(serverId)
@@ -288,9 +217,9 @@ class LocalMCPToolDefinitionDaoExposedTest {
     fun `cascade delete - deleting tool removes local MCP tools`() = runTest {
         // Given
         val userId = 1L
-        val serverId = localMCPServerDao.generateId(userId)
+        val serverId = localMCPServerDao.createServer(userId, isEnabled = true)
         val tool = createTestTool("test_tool")
-        localMCPToolDefinitionDao.insertTool(tool.id, serverId)
+        localMCPToolDefinitionDao.insertTool(tool.id, serverId, "test_tool")
 
         // When
         toolDefinitionDao.deleteToolDefinition(tool.id)
@@ -304,7 +233,7 @@ class LocalMCPToolDefinitionDaoExposedTest {
     fun `getLocalMCPToolsByServerId - returns empty list when server has no tools`() = runTest {
         // Given
         val userId = 1L
-        val serverId = localMCPServerDao.generateId(userId)
+        val serverId = localMCPServerDao.createServer(userId, isEnabled = true)
 
         // When
         val tools = localMCPToolDefinitionDao.getToolsByServerId(serverId)
@@ -329,7 +258,7 @@ class LocalMCPToolDefinitionDaoExposedTest {
     fun `deleteLocalMCPToolsByServerId - returns zero when server has no tools`() = runTest {
         // Given
         val userId = 1L
-        val serverId = localMCPServerDao.generateId(userId)
+        val serverId = localMCPServerDao.createServer(userId, isEnabled = true)
 
         // When
         val deletedCount = localMCPToolDefinitionDao.deleteToolsByServerId(serverId)
@@ -342,12 +271,12 @@ class LocalMCPToolDefinitionDaoExposedTest {
     fun `createLocalMCPTool - returns DuplicateLinkage error when tool already linked`() = runTest {
         // Given
         val userId = 1L
-        val serverId = localMCPServerDao.generateId(userId)
+        val serverId = localMCPServerDao.createServer(userId, isEnabled = true)
         val tool = createTestTool("test_tool")
-        localMCPToolDefinitionDao.insertTool(tool.id, serverId)
+        localMCPToolDefinitionDao.insertTool(tool.id, serverId, "test_tool")
 
         // When
-        val result = localMCPToolDefinitionDao.insertTool(tool.id, serverId)
+        val result = localMCPToolDefinitionDao.insertTool(tool.id, serverId, "test_tool")
 
         // Then
         assertTrue(result.isLeft())
@@ -357,11 +286,11 @@ class LocalMCPToolDefinitionDaoExposedTest {
     fun `createLocalMCPTool - returns ReferencedEntityNotFound when tool does not exist`() = runTest {
         // Given
         val userId = 1L
-        val serverId = localMCPServerDao.generateId(userId)
+        val serverId = localMCPServerDao.createServer(userId, isEnabled = true)
         val nonExistentToolId = 99999L
 
         // When
-        val result = localMCPToolDefinitionDao.insertTool(nonExistentToolId, serverId)
+        val result = localMCPToolDefinitionDao.insertTool(nonExistentToolId, serverId, "nonexistent_tool")
 
         // Then
         assertTrue(result.isLeft())
@@ -374,7 +303,7 @@ class LocalMCPToolDefinitionDaoExposedTest {
         val nonExistentServerId = 99999L
 
         // When
-        val result = localMCPToolDefinitionDao.insertTool(tool.id, nonExistentServerId)
+        val result = localMCPToolDefinitionDao.insertTool(tool.id, nonExistentServerId, "test_tool")
 
         // Then
         assertTrue(result.isLeft())
@@ -384,20 +313,18 @@ class LocalMCPToolDefinitionDaoExposedTest {
     fun `updateLocalMCPToolFields - successfully updates MCP-specific fields`() = runTest {
         // Given
         val userId = 1L
-        val serverId = localMCPServerDao.generateId(userId)
+        val serverId = localMCPServerDao.createServer(userId, isEnabled = true)
         val tool = createTestTool("test_tool")
         localMCPToolDefinitionDao.insertTool(
             toolDefinitionId = tool.id,
             mcpServerId = serverId,
-            mcpToolName = "old_name",
-            isEnabledByDefault = false
+            mcpToolName = "old_name"
         )
 
         // When
         val result = localMCPToolDefinitionDao.updateTool(
             toolDefinitionId = tool.id,
-            mcpToolName = "new_name",
-            isEnabledByDefault = true
+            mcpToolName = "new_name"
         )
 
         // Then
@@ -405,7 +332,6 @@ class LocalMCPToolDefinitionDaoExposedTest {
         val updated = localMCPToolDefinitionDao.getToolById(tool.id).getOrNull()
         assertNotNull(updated)
         assertEquals("new_name", updated.mcpToolName)
-        assertEquals(true, updated.isEnabledByDefault)
     }
 
     @Test
@@ -416,12 +342,10 @@ class LocalMCPToolDefinitionDaoExposedTest {
         // When
         val result = localMCPToolDefinitionDao.updateTool(
             toolDefinitionId = tool.id,
-            mcpToolName = "new_name",
-            isEnabledByDefault = true
+            mcpToolName = "new_name"
         )
 
         // Then
         assertTrue(result.isLeft())
     }
 }
-

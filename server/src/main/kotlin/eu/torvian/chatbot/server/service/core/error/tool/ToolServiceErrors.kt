@@ -1,5 +1,7 @@
 package eu.torvian.chatbot.server.service.core.error.tool
 
+import kotlinx.serialization.json.JsonObject
+
 /**
  * Base interface for all tool-related service errors.
  */
@@ -61,29 +63,41 @@ sealed interface SetToolEnabledError : ToolServiceError {
     data class ToolNotFound(val id: Long) : SetToolEnabledError
 }
 
+/**
+ * Errors that can occur when batch setting tool enablement for a session.
+ */
+sealed interface SetToolsEnabledError : ToolServiceError {
+    /**
+     * Foreign key constraint violation - either the session or one or more tools don't exist.
+     * @property sessionId The ID of the session that was part of the batch request.
+     * @property toolIds The IDs of the tools that were part of the batch request.
+     */
+    data class InvalidReference(val sessionId: Long, val toolIds: List<Long>) : SetToolsEnabledError
+}
+
 sealed interface ValidateToolError : ToolServiceError {
     /**
      * The tool name is invalid (empty, blank, or too long).
      * @property message Description of the validation error.
      */
-    data class InvalidName(val message: String) : ValidateToolError
+    data class InvalidName(val message: String, val name: String) : ValidateToolError
 
     /**
      * The tool description is invalid (empty or too long).
      * @property message Description of the validation error.
      */
-    data class InvalidDescription(val message: String) : ValidateToolError
+    data class InvalidDescription(val message: String, val description: String) : ValidateToolError
 
     /**
      * The input schema JSON is invalid or not a valid JSON Schema.
      * @property message Description of the validation error.
      */
-    data class InvalidInputSchema(val message: String) : ValidateToolError
+    data class InvalidInputSchema(val message: String, val schema: JsonObject) : ValidateToolError
 
     /**
      * The output schema JSON is invalid or not a valid JSON Schema.
      * @property message Description of the validation error.
      */
-    data class InvalidOutputSchema(val message: String) : ValidateToolError
+    data class InvalidOutputSchema(val message: String, val schema: JsonObject) : ValidateToolError
 }
 

@@ -64,7 +64,8 @@ val databaseModule = module {
     }
     single<LocalMCPToolRepository> {
         DefaultLocalMCPToolRepository(
-            localMCPToolApi = get()
+            localMCPToolApi = get(),
+            toolRepository = get()
         )
     }
 

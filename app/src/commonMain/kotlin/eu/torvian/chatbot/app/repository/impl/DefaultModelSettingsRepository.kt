@@ -6,7 +6,7 @@ import arrow.core.raise.withError
 import arrow.core.right
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
-import eu.torvian.chatbot.app.repository.SettingsRepository
+import eu.torvian.chatbot.app.repository.ModelSettingsRepository
 import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.service.api.SettingsApi
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
@@ -17,7 +17,7 @@ import eu.torvian.chatbot.common.models.llm.ModelSettings
 import kotlinx.coroutines.flow.*
 
 /**
- * Default implementation of [SettingsRepository] that follows the Single Source of Truth principle.
+ * Default implementation of [ModelSettingsRepository] that follows the Single Source of Truth principle.
  *
  * This repository maintains a single StateFlow of all settings and provides derived cold Flows
  * for individual settings. It delegates state management responsibility to consumers (ViewModels),
@@ -25,12 +25,12 @@ import kotlinx.coroutines.flow.*
  *
  * @property settingsApi The API client for settings-related operations
  */
-class DefaultSettingsRepository(
+class DefaultModelSettingsRepository(
     private val settingsApi: SettingsApi
-) : SettingsRepository {
+) : ModelSettingsRepository {
 
     companion object {
-        private val logger = kmpLogger<DefaultSettingsRepository>()
+        private val logger = kmpLogger<DefaultModelSettingsRepository>()
     }
 
     private val _allSettingsDetails = MutableStateFlow<DataState<RepositoryError, List<ModelSettingsDetails>>>(DataState.Idle)

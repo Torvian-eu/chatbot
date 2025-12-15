@@ -22,15 +22,12 @@ interface LocalMCPToolDefinitionDao {
      * @param toolDefinitionId The ID of the tool definition
      * @param mcpServerId The ID of the MCP server that provides this tool
      * @param mcpToolName Optional original tool name from MCP server (for future name mapping)
-     * @param isEnabledByDefault Whether this tool is enabled by default for NEW chat sessions
-     *   (null = use server-level default, true = enable, false = disable)
      * @return Either [InsertToolError] or Unit on success
      */
     suspend fun insertTool(
         toolDefinitionId: Long,
         mcpServerId: Long,
-        mcpToolName: String? = null,
-        isEnabledByDefault: Boolean? = null
+        mcpToolName: String
     ): Either<InsertToolError, Unit>
 
     /**
@@ -75,15 +72,12 @@ interface LocalMCPToolDefinitionDao {
      * the core tool definition fields.
      *
      * @param toolDefinitionId The ID of the tool definition
-     * @param mcpToolName Optional original tool name from MCP server (for future name mapping)
-     * @param isEnabledByDefault Whether this tool is enabled by default for NEW chat sessions
-     *   (null = use server-level default, true = enable, false = disable)
+     * @param mcpToolName Original tool name from MCP server (for name mapping)
      * @return Either [LocalMCPToolDefinitionError.NotFound] or Unit on success
      */
     suspend fun updateTool(
         toolDefinitionId: Long,
-        mcpToolName: String?,
-        isEnabledByDefault: Boolean?
+        mcpToolName: String
     ): Either<LocalMCPToolDefinitionError.NotFound, Unit>
 
     /**
@@ -97,4 +91,3 @@ interface LocalMCPToolDefinitionDao {
      */
     suspend fun deleteToolsByServerId(mcpServerId: Long): Int
 }
-

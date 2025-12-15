@@ -72,6 +72,30 @@ fun Route.configureLocalMCPToolRoutes(
             call.respondEither(result, HttpStatusCode.Created)
         }
 
+        // PUT /api/v1/local-mcp-tools/batch - Batch update MCP tools
+        put<LocalMCPToolResource.Batch> {
+            val userId = call.getUserId()
+            val request = call.receive<BatchUpdateMCPToolsRequest>()
+            val serverId = request.serverId
+
+            val result = either {
+                // Validate that the user owns the server
+                withError({ e: ValidateOwnershipError -> e.toApiError() }) {
+                    localMCPServerService.validateOwnership(userId, serverId).bind()
+                }
+
+                // Batch update the tools
+                withError({ e: BatchUpdateMCPToolsError -> e.toApiError() }) {
+                    val updatedTools = localMCPToolDefinitionService.batchUpdateMCPTools(
+                        serverId = serverId,
+                        toolDefinitions = request.toolDefinitions
+                    ).bind()
+                    BatchUpdateMCPToolsResponse(tools = updatedTools)
+                }
+            }
+            call.respondEither(result)
+        }
+
         // POST /api/v1/local-mcp-tools/refresh - Refresh MCP tools (differential update)
         post<LocalMCPToolResource.Refresh> {
             val userId = call.getUserId()
@@ -91,9 +115,9 @@ fun Route.configureLocalMCPToolRoutes(
                         currentTools = request.currentTools
                     ).bind()
                     RefreshMCPToolsResponse(
-                        added = refreshResult.added,
-                        updated = refreshResult.updated,
-                        deleted = refreshResult.deleted
+                        addedTools = refreshResult.addedTools,
+                        updatedTools = refreshResult.updatedTools,
+                        deletedTools = refreshResult.deletedTools
                     )
                 }
             }

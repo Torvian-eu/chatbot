@@ -95,6 +95,21 @@ class LruCache<K, V>(private val maxSize: Int) {
     val size: Int get() = map.size
 
     /**
+     * Returns the set of keys in the cache.
+     */
+    val keys: Set<K> get() = map.keys
+
+    /**
+     * Returns the collection of values in the cache.
+     */
+    val values: Collection<V> get() = map.values.map { it.value }
+
+    /**
+     * Returns the set of entries in the cache.
+     */
+    val entries: Set<Pair<K, V>> get() = map.entries.map { it.key to it.value.value }.toSet()
+
+    /**
      * Returns true if the cache is empty.
      */
     fun isEmpty(): Boolean = map.isEmpty()
@@ -103,6 +118,15 @@ class LruCache<K, V>(private val maxSize: Int) {
      * Returns true if the cache contains the specified key.
      */
     fun containsKey(key: K): Boolean = map.containsKey(key)
+
+    /**
+     * Iterates over all entries in the cache.
+     */
+    fun forEach(action: (K, V) -> Unit) {
+        map.forEach { (key, node) ->
+            action(key, node.value)
+        }
+    }
 
     /**
      * Returns the value for the given key. If the key is not found in the cache,

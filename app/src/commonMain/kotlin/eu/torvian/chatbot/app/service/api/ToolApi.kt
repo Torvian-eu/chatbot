@@ -3,6 +3,7 @@ package eu.torvian.chatbot.app.service.api
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.api.tool.CreateToolRequest
 import eu.torvian.chatbot.common.models.api.tool.SetToolEnabledRequest
+import eu.torvian.chatbot.common.models.api.tool.SetToolsEnabledRequest
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 
 /**
@@ -14,9 +15,13 @@ import eu.torvian.chatbot.common.models.tool.ToolDefinition
  */
 interface ToolApi {
     /**
-     * Retrieves a list of all available tool definitions.
+     * Retrieves a list of all available tool definitions for the current user.
      *
      * Corresponds to `GET /api/v1/tools`.
+     *
+     * Returns a combination of:
+     * - All global tools (non-MCP_LOCAL type)
+     * - User-specific MCP_LOCAL tools (where the MCP server is owned by the current user)
      *
      * @return [Either.Right] containing a list of [ToolDefinition] on success,
      *         or [Either.Left] containing a [ApiResourceError] on failure.
@@ -96,6 +101,21 @@ interface ToolApi {
         sessionId: Long,
         toolId: Long,
         request: SetToolEnabledRequest
+    ): Either<ApiResourceError, Unit>
+
+    /**
+     * Batch enables or disables multiple tools for a specific session.
+     *
+     * Corresponds to `PUT /api/v1/sessions/{sessionId}/tools`.
+     *
+     * @param sessionId The ID of the session.
+     * @param request The request body containing the tool IDs and enabled flag.
+     * @return [Either.Right] with [Unit] on successful update,
+     *         or [Either.Left] containing a [ApiResourceError] on failure.
+     */
+    suspend fun setToolsEnabledForSession(
+        sessionId: Long,
+        request: SetToolsEnabledRequest
     ): Either<ApiResourceError, Unit>
 }
 

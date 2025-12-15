@@ -72,7 +72,6 @@ interface LocalMCPServerRepository {
      * @param autoStartOnEnable Whether the server should be started when a tool is enabled for a session
      * @param autoStartOnLaunch Whether the server should be started when the application launches
      * @param autoStopAfterInactivitySeconds The number of seconds after which the server should be stopped if no tool calls are made
-     * @param toolsEnabledByDefault Whether tools from this server are enabled by default for NEW chat sessions
      * @return Either.Right with the created LocalMCPServer on success, or Either.Left with RepositoryError on failure
      */
     suspend fun createServer(
@@ -86,7 +85,6 @@ interface LocalMCPServerRepository {
         autoStartOnEnable: Boolean,
         autoStartOnLaunch: Boolean,
         autoStopAfterInactivitySeconds: Int?,
-        toolsEnabledByDefault: Boolean
     ): Either<RepositoryError, LocalMCPServer>
 
     /**

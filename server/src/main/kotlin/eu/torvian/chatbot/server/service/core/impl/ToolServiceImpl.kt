@@ -1,7 +1,6 @@
 package eu.torvian.chatbot.server.service.core.impl
 
 import arrow.core.Either
-import arrow.core.getOrElse
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.raise.withError
@@ -20,6 +19,7 @@ import kotlinx.serialization.json.JsonObject
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 import eu.torvian.chatbot.server.data.dao.error.SetToolEnabledError as DaoSetToolEnabledError
+import eu.torvian.chatbot.server.data.dao.error.SetToolsEnabledError as DaoSetToolsEnabledError
 
 /**
  * Implementation of the [ToolService] interface.
@@ -113,21 +113,11 @@ class ToolServiceImpl(
             }
         }
 
-    override suspend fun getEnabledToolsForSession(sessionId: Long): List<ToolDefinition> {
-        return transactionScope.transaction {
+    override suspend fun getEnabledToolsForSession(sessionId: Long): List<ToolDefinition> =
+        transactionScope.transaction {
             sessionToolConfigDao.getEnabledToolsForSession(sessionId)
-                // TODO: for better performance, modify sessionToolConfigDao.getEnabledToolsForSession to return polymorphic ToolDefinition
-            .map { toolDefinition ->
-                if (toolDefinition.type == ToolType.MCP_LOCAL) {
-                    localMCPToolDefinitionDao.getToolById(toolDefinition.id).getOrElse {
-                        throw IllegalStateException("Failed to retrieve local MCP tool definition")
-                    }
-                } else {
-                    toolDefinition
-                }
-            }
         }
-    }
+
 
     override suspend fun setToolEnabledForSession(
         sessionId: Long,
@@ -160,6 +150,28 @@ class ToolServiceImpl(
         }
     }
 
+    override suspend fun setToolsEnabledForSession(
+        sessionId: Long,
+        toolIds: List<Long>,
+        enabled: Boolean
+    ): Either<SetToolsEnabledError, Unit> = transactionScope.transaction {
+        either {
+            // Batch set tool enabled state for session
+            // Foreign key violations are handled by the DAO layer
+            withError({ daoError: DaoSetToolsEnabledError ->
+                when (daoError) {
+                    is DaoSetToolsEnabledError.ForeignKeyViolation -> {
+                        SetToolsEnabledError.InvalidReference(sessionId, toolIds)
+                    }
+                }
+            }) {
+                sessionToolConfigDao.setToolsEnabledForSession(sessionId, toolIds, enabled).bind()
+            }
+
+            logger.info("${toolIds.size} tools ${if (enabled) "enabled" else "disabled"} for session $sessionId")
+        }
+    }
+
     override suspend fun validateToolDefinition(tool: ToolDefinition): Either<ValidateToolError, Unit> = either {
         validateToolDefinition(
             tool.name,
@@ -177,21 +189,22 @@ class ToolServiceImpl(
     ): Either<ValidateToolError, Unit> = either {
         // Validate name
         ensure(name.isNotBlank()) {
-            ValidateToolError.InvalidName("Tool name cannot be blank.")
+            ValidateToolError.InvalidName("Tool name cannot be blank.", name)
         }
         ensure(name.length <= 255) {
-            ValidateToolError.InvalidName("Tool name cannot exceed 255 characters.")
+            ValidateToolError.InvalidName("Tool name cannot exceed 255 characters.", name)
         }
 
         // Validate description
         ensure(description.isNotBlank()) {
-            ValidateToolError.InvalidDescription("Tool description cannot be blank.")
+            ValidateToolError.InvalidDescription("Tool description cannot be blank.", description)
         }
 
         // Validate input schema
         ensure(inputSchema.containsKey("type") || inputSchema.containsKey("properties")) {
             ValidateToolError.InvalidInputSchema(
-                "Input schema must be a valid JSON Schema with 'type' or 'properties'."
+                message = "Input schema must be a valid JSON Schema with 'type' or 'properties'.",
+                schema = inputSchema
             )
         }
 
@@ -199,10 +212,16 @@ class ToolServiceImpl(
         if (outputSchema != null) {
             ensure(outputSchema.containsKey("type") || outputSchema.containsKey("properties")) {
                 ValidateToolError.InvalidOutputSchema(
-                    "Output schema must be a valid JSON Schema with 'type' or 'properties'."
+                    message = "Output schema must be a valid JSON Schema with 'type' or 'properties'.",
+                    schema = outputSchema
                 )
             }
         }
     }
+
+    override suspend fun getToolsForUser(userId: Long): List<ToolDefinition> =
+        transactionScope.transaction {
+            toolDefinitionDao.getToolsForUser(userId)
+        }
 }
 

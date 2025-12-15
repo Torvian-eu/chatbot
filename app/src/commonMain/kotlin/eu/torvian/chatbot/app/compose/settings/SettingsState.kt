@@ -28,10 +28,10 @@ data class ModelsTabState(
 /**
  * State contract for the Settings Config tab.
  */
-data class SettingsConfigTabState(
+data class ModelSettingsConfigTabState(
     val modelsUiState: DataState<RepositoryError, List<LLMModel>>,
     val settingsListForSelectedModel: List<ModelSettingsDetails>?,
     val selectedModel: LLMModel?,
     val selectedSettings: ModelSettingsDetails?,
-    val dialogState: SettingsDialogState
+    val dialogState: ModelSettingsDialogState
 )

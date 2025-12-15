@@ -117,3 +117,45 @@ sealed interface RefreshMCPToolsError : LocalMCPToolDefinitionServiceError {
     data class OtherError(val message: String) : RefreshMCPToolsError
 }
 
+/**
+ * Errors that can occur when batch updating MCP tools.
+ */
+sealed interface BatchUpdateMCPToolsError : LocalMCPToolDefinitionServiceError {
+    /**
+     * The specified server was not found.
+     * @property serverId The ID of the server that was not found.
+     */
+    data class ServerNotFound(val serverId: Long) : BatchUpdateMCPToolsError
+
+    /**
+     * One or more tools in the batch were not found.
+     * @property toolIds The IDs of the tools that were not found.
+     */
+    data class ToolsNotFound(val toolIds: List<Long>) : BatchUpdateMCPToolsError
+
+    /**
+     * One or more tools do not belong to the specified server.
+     * @property toolIds The IDs of the tools that belong to different servers.
+     */
+    data class ToolsNotInServer(val toolIds: List<Long>) : BatchUpdateMCPToolsError
+
+    /**
+     * A tool with the same name already exists within the server's tools.
+     * @property name The name that conflicts.
+     */
+    data class DuplicateName(val name: String) : BatchUpdateMCPToolsError
+
+    /**
+     * A tool failed validation.
+     * @property validationError The validation error.
+     */
+    data class ToolValidationError(val validationError: ValidateToolError) : BatchUpdateMCPToolsError
+
+    /**
+     * Represents an unspecified error that occurred during the batch update.
+     *
+     * @property message A description of the error.
+     */
+    data class OtherError(val message: String) : BatchUpdateMCPToolsError
+}
+

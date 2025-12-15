@@ -9,6 +9,7 @@ import org.jetbrains.exposed.sql.ReferenceOption
  * This table stores only the essential information needed for server-side operations:
  * - Unique ID generation
  * - User ownership tracking
+ * - Global enable/disable flag (synced from client)
  * - Tool linkage support
  *
  * Full MCP server configurations (command, arguments, environment variables, etc.) are
@@ -17,8 +18,11 @@ import org.jetbrains.exposed.sql.ReferenceOption
  *
  * @property userId Reference to the user who owns this MCP server configuration. Cascade
  * deletion ensures cleanup when the user is deleted.
+ * @property isEnabled Global enable/disable flag. If false, ALL tools from this server
+ * are unavailable. Kept in sync with the client-side isEnabled flag.
  */
 object LocalMCPServerTable : LongIdTable("local_mcp_servers") {
     val userId = reference("user_id", UsersTable, onDelete = ReferenceOption.CASCADE)
+    val isEnabled = bool("is_enabled").default(true)
 }
 

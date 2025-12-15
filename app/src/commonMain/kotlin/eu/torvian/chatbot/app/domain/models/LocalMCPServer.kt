@@ -28,7 +28,6 @@ import kotlinx.serialization.Serializable
  * @property autoStartOnEnable Auto-start the server when a tool is enabled for a session
  * @property autoStartOnLaunch Auto-start the server when the application launches
  * @property autoStopAfterInactivitySeconds Auto-stop after inactivity (null = use default 300s, 0 = never stop)
- * @property toolsEnabledByDefault Whether tools from this server are enabled by default for NEW chat sessions
  * @property createdAt Timestamp when the configuration was created
  * @property updatedAt Timestamp when the configuration was last updated
  */
@@ -46,7 +45,6 @@ data class LocalMCPServer(
     val autoStartOnEnable: Boolean = false,
     val autoStartOnLaunch: Boolean = false,
     val autoStopAfterInactivitySeconds: Int? = null,
-    val toolsEnabledByDefault: Boolean = false,
     val createdAt: Instant = Clock.System.now(),
     val updatedAt: Instant = Clock.System.now()
 ) {
