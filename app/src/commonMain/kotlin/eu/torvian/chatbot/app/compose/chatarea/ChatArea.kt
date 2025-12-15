@@ -183,6 +183,7 @@ private fun SuccessStateDisplay(
             inputContent = inputContent,
             onUpdateInput = actions::onUpdateInput,
             onSendMessage = actions::onSendMessage,
+            onCancelSendMessage = actions::onCancelSendMessage,
             replyTargetMessage = replyTargetMessage,
             onCancelReply = actions::onCancelReply,
             isSendingMessage = isSendingMessage,
