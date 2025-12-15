@@ -10,8 +10,6 @@ import kotlinx.serialization.json.JsonObject
  *
  * @property serverId Unique identifier for the MCP server that provides this tool
  * @property mcpToolName Original tool name from the MCP server (for name mapping)
- * @property isEnabledByDefault Whether this tool is enabled by default for NEW chat sessions
- *   (null = use server-level default, true = enable, false = disable)
  */
 @Serializable
 data class LocalMCPToolDefinition(
@@ -26,7 +24,6 @@ data class LocalMCPToolDefinition(
     override val updatedAt: Instant,
     val serverId: Long,
     val mcpToolName: String,
-    val isEnabledByDefault: Boolean? = null,
 ) : ToolDefinition() {
     @SerialName("tool_type") // 'type' is a reserved property used by serialization
     override val type: ToolType = ToolType.MCP_LOCAL

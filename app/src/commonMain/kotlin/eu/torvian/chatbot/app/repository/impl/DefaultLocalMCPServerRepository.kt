@@ -77,8 +77,7 @@ class DefaultLocalMCPServerRepository(
         isEnabled: Boolean,
         autoStartOnEnable: Boolean,
         autoStartOnLaunch: Boolean,
-        autoStopAfterInactivitySeconds: Int?,
-        toolsEnabledByDefault: Boolean
+        autoStopAfterInactivitySeconds: Int?
     ): Either<RepositoryError, LocalMCPServer> = either {
         // Step 1: Request server creation from server API
         val serverResponse = withError({ apiResourceError ->
@@ -101,7 +100,6 @@ class DefaultLocalMCPServerRepository(
             autoStartOnEnable = autoStartOnEnable,
             autoStartOnLaunch = autoStartOnLaunch,
             autoStopAfterInactivitySeconds = autoStopAfterInactivitySeconds,
-            toolsEnabledByDefault = toolsEnabledByDefault,
             createdAt = Clock.System.now(),
             updatedAt = Clock.System.now()
         )

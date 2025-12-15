@@ -46,8 +46,7 @@ fun ResultRow.toToolDefinition(): ToolDefinition {
             createdAt = createdAt,
             updatedAt = updatedAt,
             serverId = this[LocalMCPToolDefinitionTable.mcpServerId].value,
-            mcpToolName = this[LocalMCPToolDefinitionTable.mcpToolName],
-            isEnabledByDefault = this[LocalMCPToolDefinitionTable.isEnabledByDefault]
+            mcpToolName = this[LocalMCPToolDefinitionTable.mcpToolName]
         )
     } else {
         MiscToolDefinition(

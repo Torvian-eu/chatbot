@@ -150,8 +150,7 @@ class LocalMCPServerManagerImpl(
         isEnabled: Boolean,
         autoStartOnEnable: Boolean,
         autoStartOnLaunch: Boolean,
-        autoStopAfterInactivitySeconds: Int?,
-        toolsEnabledByDefault: Boolean
+        autoStopAfterInactivitySeconds: Int?
     ): Either<CreateServerError, LocalMCPServer> = either {
         logger.info("Creating new server: $name")
 
@@ -193,8 +192,7 @@ class LocalMCPServerManagerImpl(
                 isEnabled = isEnabled,
                 autoStartOnEnable = autoStartOnEnable,
                 autoStartOnLaunch = autoStartOnLaunch,
-                autoStopAfterInactivitySeconds = autoStopAfterInactivitySeconds,
-                toolsEnabledByDefault = toolsEnabledByDefault
+                autoStopAfterInactivitySeconds = autoStopAfterInactivitySeconds
             )
                 .mapLeft { error ->
                     logger.error("Failed to create MCP server $name: ${error.message}")
@@ -525,8 +523,7 @@ class LocalMCPServerManagerImpl(
             createdAt = now,
             updatedAt = now,
             serverId = serverId,
-            mcpToolName = mcpTool.name,
-            isEnabledByDefault = null
+            mcpToolName = mcpTool.name
         )
     }
 }

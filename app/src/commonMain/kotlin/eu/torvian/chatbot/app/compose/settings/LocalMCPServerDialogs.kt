@@ -281,28 +281,6 @@ fun LocalMCPServerConfigDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Tools enabled by default")
-                        Text(
-                            text = "Enable tools from this server by default in new sessions",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = formState.toolsEnabledByDefault,
-                        onCheckedChange = { value ->
-                            onUpdateForm { it.copy(toolsEnabledByDefault = value) }
-                        },
-                        enabled = !isSaving
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
                     Text("Server enabled")
                     Switch(
                         checked = formState.isEnabled,

@@ -59,8 +59,7 @@ class KtorLocalMCPToolApiClientTest {
         createdAt = now,
         updatedAt = now,
         serverId = serverId,
-        mcpToolName = mcpToolName,
-        isEnabledByDefault = null
+        mcpToolName = mcpToolName
     )
 
     // --- Tests for createMCPToolsForServer ---

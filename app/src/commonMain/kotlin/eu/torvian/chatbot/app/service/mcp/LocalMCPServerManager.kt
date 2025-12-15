@@ -119,7 +119,6 @@ interface LocalMCPServerManager {
      * @param autoStartOnEnable Whether the server should be started when a tool is enabled for a session
      * @param autoStartOnLaunch Whether the server should be started when the application launches
      * @param autoStopAfterInactivitySeconds The number of seconds after which the server should be stopped if no tool calls are made
-     * @param toolsEnabledByDefault Whether tools from this server are enabled by default for NEW chat sessions
      * @return Either.Right with created server on success, or Either.Left with CreateServerError on failure
      */
     suspend fun createServer(
@@ -132,8 +131,7 @@ interface LocalMCPServerManager {
         isEnabled: Boolean = true,
         autoStartOnEnable: Boolean = false,
         autoStartOnLaunch: Boolean = false,
-        autoStopAfterInactivitySeconds: Int? = null,
-        toolsEnabledByDefault: Boolean = false
+        autoStopAfterInactivitySeconds: Int? = null
     ): Either<CreateServerError, LocalMCPServer>
 
     /**

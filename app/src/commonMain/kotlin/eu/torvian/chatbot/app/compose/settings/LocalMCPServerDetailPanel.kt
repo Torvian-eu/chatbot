@@ -317,11 +317,6 @@ fun LocalMCPServerDetailPanel(
                                 else -> "${server.autoStopAfterInactivitySeconds}s"
                             }
                         )
-
-                        DetailRow(
-                            label = "Tools Enabled by Default",
-                            value = if (server.toolsEnabledByDefault) "Yes" else "No"
-                        )
                     }
                 }
 

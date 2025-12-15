@@ -94,8 +94,7 @@ class LocalMCPToolDefinitionServiceImpl(
                     localMCPToolDefinitionDao.insertTool(
                         toolDefinitionId = createdToolDefinition.id,
                         mcpServerId = serverId,
-                        mcpToolName = tool.mcpToolName,
-                        isEnabledByDefault = tool.isEnabledByDefault
+                        mcpToolName = tool.mcpToolName
                     ).bind()
                 }
 
@@ -175,8 +174,7 @@ class LocalMCPToolDefinitionServiceImpl(
             }) {
                 localMCPToolDefinitionDao.updateTool(
                     toolDefinitionId = tool.id,
-                    mcpToolName = tool.mcpToolName,
-                    isEnabledByDefault = tool.isEnabledByDefault
+                    mcpToolName = tool.mcpToolName
                 ).bind()
             }
 
@@ -371,8 +369,7 @@ class LocalMCPToolDefinitionServiceImpl(
                 }) {
                     localMCPToolDefinitionDao.updateTool(
                         toolDefinitionId = toolDefinition.id,
-                        mcpToolName = toolDefinition.mcpToolName,
-                        isEnabledByDefault = toolDefinition.isEnabledByDefault
+                        mcpToolName = toolDefinition.mcpToolName
                     ).bind()
                 }
             }

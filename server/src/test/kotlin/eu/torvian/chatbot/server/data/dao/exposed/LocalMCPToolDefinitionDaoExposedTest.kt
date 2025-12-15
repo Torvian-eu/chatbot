@@ -19,7 +19,6 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -101,8 +100,7 @@ class LocalMCPToolDefinitionDaoExposedTest {
         val result = localMCPToolDefinitionDao.insertTool(
             toolDefinitionId = toolDef.id,
             mcpServerId = serverId,
-            mcpToolName = "test_tool",
-            isEnabledByDefault = null
+            mcpToolName = "test_tool"
         )
 
         // Then
@@ -125,8 +123,7 @@ class LocalMCPToolDefinitionDaoExposedTest {
         val result = localMCPToolDefinitionDao.insertTool(
             toolDefinitionId = toolDef.id,
             mcpServerId = serverId,
-            mcpToolName = mcpToolName,
-            isEnabledByDefault = null
+            mcpToolName = mcpToolName
         )
 
         // Then
@@ -134,72 +131,6 @@ class LocalMCPToolDefinitionDaoExposedTest {
         val tool = localMCPToolDefinitionDao.getToolById(toolDef.id).getOrNull()
         assertNotNull(tool)
         assertEquals(mcpToolName, tool.mcpToolName)
-    }
-
-    @Test
-    fun `createLocalMCPTool - successfully creates local MCP tool with isEnabledByDefault true`() = runTest {
-        // Given
-        val userId = 1L
-        val serverId = localMCPServerDao.createServer(userId, isEnabled = true)
-        val toolDef = createTestTool("test_tool")
-
-        // When
-        val result = localMCPToolDefinitionDao.insertTool(
-            toolDefinitionId = toolDef.id,
-            mcpServerId = serverId,
-            mcpToolName = "test_tool",
-            isEnabledByDefault = true
-        )
-
-        // Then
-        assertTrue(result.isRight())
-        val tool = localMCPToolDefinitionDao.getToolById(toolDef.id).getOrNull()
-        assertNotNull(tool)
-        assertEquals(true, tool.isEnabledByDefault)
-    }
-
-    @Test
-    fun `createLocalMCPTool - successfully creates local MCP tool with isEnabledByDefault false`() = runTest {
-        // Given
-        val userId = 1L
-        val serverId = localMCPServerDao.createServer(userId, isEnabled = true)
-        val toolDef = createTestTool("test_tool")
-
-        // When
-        val result = localMCPToolDefinitionDao.insertTool(
-            toolDefinitionId = toolDef.id,
-            mcpServerId = serverId,
-            mcpToolName = "test_tool",
-            isEnabledByDefault = false
-        )
-
-        // Then
-        assertTrue(result.isRight())
-        val tool = localMCPToolDefinitionDao.getToolById(toolDef.id).getOrNull()
-        assertNotNull(tool)
-        assertEquals(false, tool.isEnabledByDefault)
-    }
-
-    @Test
-    fun `createLocalMCPTool - isEnabledByDefault defaults to null when not specified`() = runTest {
-        // Given
-        val userId = 1L
-        val serverId = localMCPServerDao.createServer(userId, isEnabled = true)
-        val toolDef = createTestTool("test_tool")
-
-        // When
-        val result = localMCPToolDefinitionDao.insertTool(
-            toolDefinitionId = toolDef.id,
-            mcpServerId = serverId,
-            mcpToolName = "test_tool",
-            isEnabledByDefault = null
-        )
-
-        // Then
-        assertTrue(result.isRight())
-        val tool = localMCPToolDefinitionDao.getToolById(toolDef.id).getOrNull()
-        assertNotNull(tool)
-        assertNull(tool.isEnabledByDefault)
     }
 
     @Test
@@ -232,8 +163,7 @@ class LocalMCPToolDefinitionDaoExposedTest {
         localMCPToolDefinitionDao.insertTool(
             toolDefinitionId = toolDef.id,
             mcpServerId = serverId,
-            mcpToolName = mcpToolName,
-            isEnabledByDefault = true
+            mcpToolName = mcpToolName
         )
 
         // When
@@ -246,7 +176,6 @@ class LocalMCPToolDefinitionDaoExposedTest {
         assertEquals(toolDef.id, tool.id)
         assertEquals(serverId, tool.serverId)
         assertEquals(mcpToolName, tool.mcpToolName)
-        assertEquals(true, tool.isEnabledByDefault)
     }
 
     @Test
@@ -389,15 +318,13 @@ class LocalMCPToolDefinitionDaoExposedTest {
         localMCPToolDefinitionDao.insertTool(
             toolDefinitionId = tool.id,
             mcpServerId = serverId,
-            mcpToolName = "old_name",
-            isEnabledByDefault = false
+            mcpToolName = "old_name"
         )
 
         // When
         val result = localMCPToolDefinitionDao.updateTool(
             toolDefinitionId = tool.id,
-            mcpToolName = "new_name",
-            isEnabledByDefault = true
+            mcpToolName = "new_name"
         )
 
         // Then
@@ -405,7 +332,6 @@ class LocalMCPToolDefinitionDaoExposedTest {
         val updated = localMCPToolDefinitionDao.getToolById(tool.id).getOrNull()
         assertNotNull(updated)
         assertEquals("new_name", updated.mcpToolName)
-        assertEquals(true, updated.isEnabledByDefault)
     }
 
     @Test
@@ -416,8 +342,7 @@ class LocalMCPToolDefinitionDaoExposedTest {
         // When
         val result = localMCPToolDefinitionDao.updateTool(
             toolDefinitionId = tool.id,
-            mcpToolName = "new_name",
-            isEnabledByDefault = true
+            mcpToolName = "new_name"
         )
 
         // Then

@@ -191,8 +191,7 @@ class LocalMCPServerViewModel(
                         isEnabled = form.isEnabled,
                         autoStartOnEnable = form.autoStartOnEnable,
                         autoStartOnLaunch = form.autoStartOnLaunch,
-                        autoStopAfterInactivitySeconds = form.autoStopAfterInactivitySeconds,
-                        toolsEnabledByDefault = form.toolsEnabledByDefault
+                        autoStopAfterInactivitySeconds = form.autoStopAfterInactivitySeconds
                     ).fold(
                         ifLeft = { error ->
                             _dialogState.update {
@@ -234,8 +233,7 @@ class LocalMCPServerViewModel(
                         isEnabled = form.isEnabled,
                         autoStartOnEnable = form.autoStartOnEnable,
                         autoStartOnLaunch = form.autoStartOnLaunch,
-                        autoStopAfterInactivitySeconds = form.autoStopAfterInactivitySeconds,
-                        toolsEnabledByDefault = form.toolsEnabledByDefault
+                        autoStopAfterInactivitySeconds = form.autoStopAfterInactivitySeconds
                     )
 
                     serverManager.updateServer(updatedServer).fold(
@@ -555,7 +553,6 @@ data class LocalMCPServerFormState(
     val autoStartOnEnable: Boolean = false,
     val autoStartOnLaunch: Boolean = false,
     val autoStopAfterInactivitySeconds: Int? = null,
-    val toolsEnabledByDefault: Boolean = false,
     val nameError: String? = null,
     val commandError: String? = null
 ) {
@@ -599,8 +596,7 @@ data class LocalMCPServerFormState(
                 isEnabled = server.isEnabled,
                 autoStartOnEnable = server.autoStartOnEnable,
                 autoStartOnLaunch = server.autoStartOnLaunch,
-                autoStopAfterInactivitySeconds = server.autoStopAfterInactivitySeconds,
-                toolsEnabledByDefault = server.toolsEnabledByDefault
+                autoStopAfterInactivitySeconds = server.autoStopAfterInactivitySeconds
             )
         }
     }

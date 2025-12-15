@@ -29,7 +29,6 @@ fun ResultRow.toLocalMCPToolDefinition() = LocalMCPToolDefinition(
     createdAt = Instant.fromEpochMilliseconds(this[ToolDefinitionTable.createdAt]),
     updatedAt = Instant.fromEpochMilliseconds(this[ToolDefinitionTable.updatedAt]),
     serverId = this[LocalMCPToolDefinitionTable.mcpServerId].value,
-    mcpToolName = this[LocalMCPToolDefinitionTable.mcpToolName],
-    isEnabledByDefault = this[LocalMCPToolDefinitionTable.isEnabledByDefault]
+    mcpToolName = this[LocalMCPToolDefinitionTable.mcpToolName]
 )
 
