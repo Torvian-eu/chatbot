@@ -5,6 +5,7 @@ import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.server.service.core.error.message.ProcessNewMessageError
 import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageError
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolCallResult
+import eu.torvian.chatbot.common.models.tool.ToolCallApprovalResponse
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -51,6 +52,7 @@ interface ChatService {
      * @param content The user's message content.
      * @param parentMessageId Optional ID of the message being replied to.
      * @param mcpResponseFlow A flow of tool execution results from the client for local MCP tools.
+     * @param approvalResponseFlow A flow of tool call approval decisions from the client.
      * @return A Flow of Either<ProcessNewMessageError, MessageEvent>.
      *         The flow emits MessageEvent objects as processing progresses,
      *         or ProcessNewMessageError if an error occurs.
@@ -60,7 +62,8 @@ interface ChatService {
         llmConfig: LLMConfig,
         content: String,
         parentMessageId: Long? = null,
-        mcpResponseFlow: Flow<LocalMCPToolCallResult>
+        mcpResponseFlow: Flow<LocalMCPToolCallResult>,
+        approvalResponseFlow: Flow<ToolCallApprovalResponse>
     ): Flow<Either<ProcessNewMessageError, MessageEvent>>
 
     /**
@@ -103,6 +106,7 @@ interface ChatService {
      * @param parentMessageId Optional ID of the message being replied to. If provided, the new user
      *                        message will be threaded as a child of this message.
      * @param mcpResponseFlow A flow of tool execution results from the client for local MCP tools.
+     * @param approvalResponseFlow A flow of tool call approval decisions from the client.
      * @return A Flow of Either<ProcessNewMessageError, MessageStreamEvent>.
      *
      * @see MessageStreamEvent for detailed event type documentation
@@ -113,6 +117,7 @@ interface ChatService {
         llmConfig: LLMConfig,
         content: String,
         parentMessageId: Long? = null,
-        mcpResponseFlow: Flow<LocalMCPToolCallResult>
+        mcpResponseFlow: Flow<LocalMCPToolCallResult>,
+        approvalResponseFlow: Flow<ToolCallApprovalResponse>
     ): Flow<Either<ProcessNewMessageError, MessageStreamEvent>>
 }
