@@ -40,7 +40,9 @@ fun Dialogs(dialogState: ChatAreaDialogState) {
         is ChatAreaDialogState.ToolCallDetails -> {
             ToolCallDetailsDialog(
                 toolCall = dialogState.toolCall,
-                onDismiss = dialogState.onDismiss
+                onDismiss = dialogState.onDismiss,
+                onApprove = dialogState.onApprove,
+                onDeny = dialogState.onDeny
             )
         }
 
