@@ -17,6 +17,8 @@ import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.ModelSettings
+import eu.torvian.chatbot.common.models.tool.ToolCall
+import eu.torvian.chatbot.common.models.tool.ToolCallStatus
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -405,16 +407,54 @@ class ChatViewModel(
 
     /**
      * Shows the tool call details dialog.
+     * If the tool call is awaiting approval, approval actions will be available.
      */
-    fun showToolCallDetails(toolCall: eu.torvian.chatbot.common.models.tool.ToolCall) {
+    fun showToolCallDetails(toolCall: ToolCall) {
+        val isAwaitingApproval = toolCall.status == ToolCallStatus.AWAITING_APPROVAL
+
         state.setDialogState(
             ChatAreaDialogState.ToolCallDetails(
                 toolCall = toolCall,
                 onDismiss = {
                     state.setDialogState(ChatAreaDialogState.None)
-                }
+                },
+                onApprove = if (isAwaitingApproval) {
+                    { approveToolCall(toolCall) }
+                } else null,
+                onDeny = if (isAwaitingApproval) {
+                    { reason -> denyToolCall(toolCall, reason) }
+                } else null
             )
         )
+    }
+
+    /**
+     * Approves a tool call and updates its status to EXECUTING.
+     */
+    private fun approveToolCall(toolCall: ToolCall) {
+        backgroundScope.launch {
+            logger.debug("Approving tool call: ${toolCall.id}")
+
+            // Emit approval response to server
+            sendMessageUC.approveToolCall(toolCall.id)
+
+            // The server will update the tool call to EXECUTING and send ToolExecutionCompleted event
+            // Repository will be updated by server response
+        }
+    }
+
+    /**
+     * Denies a tool call and updates its status to USER_DENIED.
+     */
+    private fun denyToolCall(toolCall: ToolCall, reason: String?) {
+        backgroundScope.launch {
+            logger.debug("Denying tool call: ${toolCall.id}, reason: $reason")
+
+            // Emit denial response to server
+            sendMessageUC.denyToolCall(toolCall.id, reason)
+
+            // The server will update the tool call to USER_DENIED and send ToolExecutionCompleted event
+        }
     }
 
     /**
