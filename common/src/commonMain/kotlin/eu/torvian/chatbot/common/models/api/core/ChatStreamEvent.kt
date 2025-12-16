@@ -108,6 +108,19 @@ sealed interface ChatStreamEvent {
     }
 
     /**
+     * Sent when a tool call requires user approval before execution.
+     * The client should show an approval dialog and send back the user's decision.
+     *
+     * @property toolCall The tool call awaiting approval (with AWAITING_APPROVAL status).
+     */
+    @Serializable
+    data class ToolCallApprovalRequested(
+        val toolCall: ToolCall
+    ) : ChatStreamEvent {
+        override val eventType: String = "tool_call_approval_requested"
+    }
+
+    /**
      * Sent when a single tool execution completes.
      * The tool call has been updated in the database with results.
      *

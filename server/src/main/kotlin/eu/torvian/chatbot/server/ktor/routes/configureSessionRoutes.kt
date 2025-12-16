@@ -27,6 +27,8 @@ import io.ktor.websocket.*
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.shareIn
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.serialization.json.Json
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
@@ -212,12 +214,21 @@ fun Route.configureSessionRoutes(
                     close(CloseReason(CloseReason.Codes.NORMAL, "Validation failed"))
                     return@webSocket
                 }
-                // Step 3: Create a flow for incoming MCP tool results
-                val mcpResponseFlow = incoming.receiveAsFlow()
+                // Step 3: Create shared flow for incoming client events
+                val clientEventFlow = incoming.receiveAsFlow()
                     .filterIsInstance<Frame.Text>()
                     .map { frame -> json.decodeFromString<ChatClientEvent>(frame.readText()) }
+                    .shareIn(this, SharingStarted.Eagerly)
+
+                // Step 3a: Create flow for MCP tool results
+                val mcpResponseFlow = clientEventFlow
                     .filterIsInstance<ChatClientEvent.LocalMCPToolResult>()
                     .map { event -> event.result }
+
+                // Step 3b: Create flow for tool call approval responses
+                val approvalResponseFlow = clientEventFlow
+                    .filterIsInstance<ChatClientEvent.ToolCallApproval>()
+                    .map { event -> event.response }
 
                 // Step 4: Start processing and stream events back to the client
                 val eventFlow = if (request.isStreaming) {
@@ -226,7 +237,8 @@ fun Route.configureSessionRoutes(
                         llmConfig,
                         request.content,
                         request.parentMessageId,
-                        mcpResponseFlow
+                        mcpResponseFlow,
+                        approvalResponseFlow
                     )
                 } else {
                     chatService.processNewMessage(
@@ -234,7 +246,8 @@ fun Route.configureSessionRoutes(
                         llmConfig,
                         request.content,
                         request.parentMessageId,
-                        mcpResponseFlow
+                        mcpResponseFlow,
+                        approvalResponseFlow
                     )
                 }
 
