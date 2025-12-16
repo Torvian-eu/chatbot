@@ -414,6 +414,12 @@ class DefaultSessionRepository(
                 logger.debug("Local MCP tool call received: ${event.request.toolName}")
             }
 
+            is ChatEvent.ToolCallApprovalRequested -> {
+                logger.debug("Tool call approval requested: ${event.toolCall.toolName}")
+                // Update cache with tool call in AWAITING_APPROVAL status so UI can display it
+                updateToolCallInCache(sessionId, event.toolCall)
+            }
+
             is ChatEvent.ToolExecutionCompleted -> {
                 logger.debug("Tool execution completed: ${event.toolCall.toolName} - ${event.toolCall.status}")
                 updateToolCallInCache(sessionId, event.toolCall)
@@ -521,6 +527,12 @@ class DefaultSessionRepository(
 
             is ChatStreamEvent.LocalMCPToolCallReceived -> {
                 logger.debug("Local MCP tool call received: ${event.request.toolName}")
+            }
+
+            is ChatStreamEvent.ToolCallApprovalRequested -> {
+                logger.debug("Tool call approval requested: ${event.toolCall.toolName}")
+                // Update cache with tool call in AWAITING_APPROVAL status so UI can display it
+                updateToolCallInCache(sessionId, event.toolCall)
             }
 
             is ChatStreamEvent.ToolExecutionCompleted -> {
