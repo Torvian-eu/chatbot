@@ -66,6 +66,7 @@ class ToolCallDaoExposed(
         output: String?,
         status: ToolCallStatus,
         errorMessage: String?,
+        denialReason: String?,
         executedAt: Instant,
         durationMs: Long?
     ): Either<InsertToolCallError, ToolCall> =
@@ -81,6 +82,7 @@ class ToolCallDaoExposed(
                         it[ToolCallTable.outputJson] = output
                         it[ToolCallTable.status] = status
                         it[ToolCallTable.errorMessage] = errorMessage
+                        it[ToolCallTable.denialReason] = denialReason
                         it[ToolCallTable.executedAt] = executedAt.toEpochMilliseconds()
                         it[ToolCallTable.durationMs] = durationMs
                     }
@@ -111,6 +113,7 @@ class ToolCallDaoExposed(
                     it[outputJson] = toolCall.output
                     it[status] = toolCall.status
                     it[errorMessage] = toolCall.errorMessage
+                    it[denialReason] = toolCall.denialReason
                     it[executedAt] = toolCall.executedAt.toEpochMilliseconds()
                     it[durationMs] = toolCall.durationMs
                 }

@@ -55,6 +55,7 @@ interface ToolCallDao {
      * @param output JSON string containing the results (null if pending)
      * @param status Current execution status
      * @param errorMessage Error details if execution failed
+     * @param denialReason Reason provided by user when denying execution (only for USER_DENIED status)
      * @param executedAt Timestamp when the tool was executed
      * @param durationMs Execution time in milliseconds (null if pending)
      * @return Either [InsertToolCallError] or the newly created [ToolCall]
@@ -68,6 +69,7 @@ interface ToolCallDao {
         output: String?,
         status: ToolCallStatus,
         errorMessage: String?,
+        denialReason: String?,
         executedAt: Instant,
         durationMs: Long?
     ): Either<InsertToolCallError, ToolCall>

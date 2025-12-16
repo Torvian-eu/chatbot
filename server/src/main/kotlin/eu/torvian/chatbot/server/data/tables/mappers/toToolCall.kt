@@ -22,6 +22,7 @@ fun ResultRow.toToolCall() = ToolCall(
     output = this[ToolCallTable.outputJson],
     status = this[ToolCallTable.status],
     errorMessage = this[ToolCallTable.errorMessage],
+    denialReason = this[ToolCallTable.denialReason],
     executedAt = Instant.fromEpochMilliseconds(this[ToolCallTable.executedAt]),
     durationMs = this[ToolCallTable.durationMs]
 )
