@@ -127,6 +127,18 @@ sealed class MessageStreamEvent {
     ) : MessageStreamEvent()
 
     /**
+     * Emitted when a tool call requires user approval before execution.
+     *
+     * The client should show an approval dialog to the user and send back a
+     * `ToolCallApprovalResponse` via the appropriate channel (e.g., WebSocket).
+     *
+     * @property toolCall The tool call awaiting approval (with AWAITING_APPROVAL status).
+     */
+    data class ToolCallApprovalRequested(
+        val toolCall: ToolCall
+    ) : MessageStreamEvent()
+
+    /**
      * Emitted when a single tool execution completes.
      *
      * The tool call has been updated in the database with:

@@ -47,6 +47,10 @@ fun MessageStreamEvent.toChatStreamEvent(): ChatStreamEvent {
             request = request
         )
 
+        is MessageStreamEvent.ToolCallApprovalRequested -> ChatStreamEvent.ToolCallApprovalRequested(
+            toolCall = toolCall
+        )
+
         is MessageStreamEvent.StreamCompleted -> ChatStreamEvent.StreamCompleted
     }
 }

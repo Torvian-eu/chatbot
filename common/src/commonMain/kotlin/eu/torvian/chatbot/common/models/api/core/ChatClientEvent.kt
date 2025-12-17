@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.common.models.api.core
 
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolCallResult
+import eu.torvian.chatbot.common.models.tool.ToolCallApprovalResponse
 import kotlinx.serialization.Serializable
 
 /**
@@ -26,5 +27,16 @@ sealed interface ChatClientEvent {
     @Serializable
     data class LocalMCPToolResult(
         val result: LocalMCPToolCallResult
+    ) : ChatClientEvent
+
+    /**
+     * An event sent by the client to provide the user's approval decision
+     * for a tool call that was requested by the server.
+     *
+     * @property response The user's approval decision (approved/denied with optional reason).
+     */
+    @Serializable
+    data class ToolCallApproval(
+        val response: ToolCallApprovalResponse
     ) : ChatClientEvent
 }

@@ -121,7 +121,8 @@ class ToolCallDaoExposedTest {
         toolDefinitionId: Long? = testToolDefinition.id,
         toolName: String = testToolDefinition.name,
         toolCallId: String? = "call_123",
-        status: ToolCallStatus = ToolCallStatus.SUCCESS
+        status: ToolCallStatus = ToolCallStatus.SUCCESS,
+        denialReason: String? = null
     ): ToolCall {
         val input = """{"query":"Kotlin programming"}"""
         val output = """{"results":"Found 10 results"}"""
@@ -135,6 +136,7 @@ class ToolCallDaoExposedTest {
             output = if (status == ToolCallStatus.SUCCESS) output else null,
             status = status,
             errorMessage = if (status == ToolCallStatus.ERROR) "Test error" else null,
+            denialReason = denialReason,
             executedAt = Clock.System.now(),
             durationMs = if (status == ToolCallStatus.SUCCESS) 150L else null
         ).getOrElse { throw IllegalStateException("Failed to create test tool call: $it") }
@@ -158,6 +160,7 @@ class ToolCallDaoExposedTest {
             output = output,
             status = ToolCallStatus.SUCCESS,
             errorMessage = null,
+            denialReason = null,
             executedAt = now,
             durationMs = 200L
         )
@@ -285,6 +288,7 @@ class ToolCallDaoExposedTest {
             output = null,
             status = ToolCallStatus.PENDING,
             errorMessage = null,
+            denialReason = null,
             executedAt = Clock.System.now(),
             durationMs = null
         )
@@ -314,6 +318,7 @@ class ToolCallDaoExposedTest {
             output = null,
             status = ToolCallStatus.PENDING,
             errorMessage = null,
+            denialReason = null,
             executedAt = Clock.System.now(),
             durationMs = null
         )
@@ -342,6 +347,7 @@ class ToolCallDaoExposedTest {
             output = null,
             status = ToolCallStatus.PENDING,
             errorMessage = null,
+            denialReason = null,
             executedAt = Clock.System.now(),
             durationMs = null
         ).getOrElse { throw IllegalStateException("Failed to create tool call") }
@@ -408,6 +414,7 @@ class ToolCallDaoExposedTest {
             output = null,
             status = ToolCallStatus.ERROR,
             errorMessage = "Initial error",
+            denialReason = null,
             executedAt = Clock.System.now(),
             durationMs = null
         ).getOrElse { throw IllegalStateException("Failed to create tool call") }

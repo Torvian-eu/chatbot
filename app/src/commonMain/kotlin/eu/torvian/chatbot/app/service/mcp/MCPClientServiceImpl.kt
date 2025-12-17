@@ -54,9 +54,9 @@ class MCPClientServiceImpl(
     private val _clients = MutableStateFlow<Map<Long, MCPClientInternal>>(emptyMap())
     private val clientsInternal: StateFlow<Map<Long, MCPClientInternal>> = _clients.asStateFlow()
 
-    override val clients: StateFlow<Map<Long, MCPClient>> = clientsInternal.map { internalClients ->
-        internalClients.mapValues { (_, internal) -> toPublicClient(internal) }
-    }.stateIn(serviceScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+    override val clients: Flow<Map<Long, MCPClient>> = clientsInternal.map { internalClients ->
+        internalClients.mapValues { (_, internal) -> internal.toPublic() }
+    }
 
     override suspend fun startAndConnect(
         config: LocalMCPServer
@@ -222,7 +222,7 @@ class MCPClientServiceImpl(
     override suspend fun disconnectAll(): Int {
         logger.info("Disconnecting all MCP clients")
 
-        val serverIds = clients.value.keys.toList()
+        val serverIds = clientsInternal.value.keys.toList()
         var disconnectedCount = 0
 
         for (serverId in serverIds) {
@@ -310,7 +310,7 @@ class MCPClientServiceImpl(
     }
 
     override fun isClientRegistered(serverId: Long): Boolean {
-        return clients.value.containsKey(serverId)
+        return clientsInternal.value.containsKey(serverId)
     }
 
     override suspend fun pingClient(serverId: Long): Boolean {
@@ -333,11 +333,11 @@ class MCPClientServiceImpl(
     }
 
     override fun getClient(serverId: Long): MCPClient? {
-        return clients.value[serverId]
+        return clientsInternal.value[serverId]?.toPublic()
     }
 
     override fun listClients(): List<MCPClient> {
-        return clients.value.values.toList()
+        return clientsInternal.value.values.map { it.toPublic() }
     }
 
     override suspend fun close() {
@@ -345,19 +345,7 @@ class MCPClientServiceImpl(
         serviceScope.cancel()
     }
 
-    /**
-     * Converts internal MCPClientInternal to public MCPClient representation.
-     *
-     * @param internal The internal MCPClientInternal object
-     * @return Public MCPClient representation
-     */
-    private fun toPublicClient(internal: MCPClientInternal): MCPClient = MCPClient(
-        serverConfig = internal.serverConfig,
-        processStatus = internal.processStatus,
-        connectedAt = internal.connectedAt,
-        lastActivityAt = internal.lastActivityAt,
-        isResponsive = internal.lastPing
-    )
+    // --- Internal helpers ---
 
     /**
      * Builds a unique, sanitized client name per server.
@@ -468,4 +456,15 @@ private data class MCPClientInternal(
     var lastActivityAt: Instant,
     val lastPing: Boolean,
     var autoStopTimerJob: Job? = null
-)
+) {
+    /**
+     * Converts the internal client representation to the public one.
+     */
+    fun toPublic(): MCPClient = MCPClient(
+        serverConfig = serverConfig,
+        processStatus = processStatus,
+        connectedAt = connectedAt,
+        lastActivityAt = lastActivityAt,
+        isResponsive = lastPing
+    )
+}

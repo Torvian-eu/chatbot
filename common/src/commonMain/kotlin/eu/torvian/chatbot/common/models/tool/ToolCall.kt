@@ -26,6 +26,8 @@ import kotlinx.serialization.Serializable
  *                  Null if the tool call is pending or if execution hasn't completed.
  * @property status Current execution status
  * @property errorMessage Error details if execution failed
+ * @property denialReason Reason provided by user when denying tool call execution.
+ *                        Only populated when status is USER_DENIED.
  * @property executedAt Timestamp when the tool was executed
  * @property durationMs Execution time in milliseconds (null if pending)
  */
@@ -40,6 +42,7 @@ data class ToolCall(
     val output: String? = null,
     val status: ToolCallStatus,
     val errorMessage: String? = null,
+    val denialReason: String? = null,
     val executedAt: Instant,
     val durationMs: Long? = null
 )

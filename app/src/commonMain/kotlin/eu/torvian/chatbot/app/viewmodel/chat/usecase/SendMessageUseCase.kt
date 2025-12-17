@@ -13,6 +13,7 @@ import eu.torvian.chatbot.common.models.api.core.ChatEvent
 import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
 import eu.torvian.chatbot.common.models.api.core.ProcessNewMessageRequest
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolCallRequest
+import eu.torvian.chatbot.common.models.tool.ToolCallApprovalResponse
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -30,6 +31,45 @@ class SendMessageUseCase(
 ) {
 
     private val logger = kmpLogger<SendMessageUseCase>()
+
+    /**
+     * Flow for sending tool call approval responses during message processing.
+     * This is used by both streaming and non-streaming message flows.
+     */
+    private val approvalResponseFlow = MutableSharedFlow<ToolCallApprovalResponse>()
+
+    /**
+     * Approves a tool call and allows it to execute.
+     *
+     * @param toolCallId The ID of the tool call to approve
+     */
+    suspend fun approveToolCall(toolCallId: Long) {
+        logger.debug("Approving tool call: $toolCallId")
+        approvalResponseFlow.emit(
+            ToolCallApprovalResponse(
+                toolCallId = toolCallId,
+                approved = true,
+                denialReason = null
+            )
+        )
+    }
+
+    /**
+     * Denies a tool call and prevents it from executing.
+     *
+     * @param toolCallId The ID of the tool call to deny
+     * @param reason Optional reason for denying the tool call
+     */
+    suspend fun denyToolCall(toolCallId: Long, reason: String?) {
+        logger.debug("Denying tool call: $toolCallId, reason: $reason")
+        approvalResponseFlow.emit(
+            ToolCallApprovalResponse(
+                toolCallId = toolCallId,
+                approved = false,
+                denialReason = reason
+            )
+        )
+    }
 
     /**
      * Sends the current message content to the active session.
@@ -96,9 +136,11 @@ class SendMessageUseCase(
         // Create the main client-to-server event flow by merging:
         //    a. The initial message request.
         //    b. The flow of tool results from the mediator, wrapped in the correct event type.
+        //    c. The flow of approval responses, wrapped in the correct event type.
         val clientEvents = merge(
             flowOf(ChatClientEvent.ProcessNewMessage(request)),
-            mcpResultFlow.map { ChatClientEvent.LocalMCPToolResult(it) }
+            mcpResultFlow.map { ChatClientEvent.LocalMCPToolResult(it) },
+            approvalResponseFlow.map { ChatClientEvent.ToolCallApproval(it) }
         )
 
         // Call the repository with the combined event flow and collect server responses.
@@ -125,6 +167,12 @@ class SendMessageUseCase(
                             // This triggers the mediator to execute the tool.
                             logger.debug("Received local MCP tool call request: ${chatUpdate.request.toolName}")
                             mcpRequestFlow.emit(chatUpdate.request)
+                        }
+
+                        is ChatStreamEvent.ToolCallApprovalRequested -> {
+                            // Tool call approval request received - repository will update cache with AWAITING_APPROVAL status
+                            // User can click the badge to approve/deny via ToolCallDetailsDialog
+                            logger.debug("Tool call approval requested: ${chatUpdate.toolCall.toolName}")
                         }
 
                         is ChatStreamEvent.ErrorOccurred -> {
@@ -161,9 +209,11 @@ class SendMessageUseCase(
         // Create the main client-to-server event flow by merging:
         //  - The initial message request.
         //  - The flow of tool results from the mediator, wrapped in the correct event type.
+        //  - The flow of approval responses, wrapped in the correct event type.
         val clientEvents = merge(
             flowOf(ChatClientEvent.ProcessNewMessage(request)),
-            mcpResultFlow.map { ChatClientEvent.LocalMCPToolResult(it) }
+            mcpResultFlow.map { ChatClientEvent.LocalMCPToolResult(it) },
+            approvalResponseFlow.map { ChatClientEvent.ToolCallApproval(it) }
         )
 
         // Call the repository with the combined event flow and collect server responses.
@@ -190,6 +240,12 @@ class SendMessageUseCase(
                             // This triggers the mediator to execute the tool.
                             logger.debug("Received local MCP tool call request: ${event.request.toolName}")
                             mcpRequestFlow.emit(event.request)
+                        }
+
+                        is ChatEvent.ToolCallApprovalRequested -> {
+                            // Tool call approval request received - repository will update cache with AWAITING_APPROVAL status
+                            // User can click the badge to approve/deny via ToolCallDetailsDialog
+                            logger.debug("Tool call approval requested: ${event.toolCall.toolName}")
                         }
 
                         is ChatEvent.ErrorOccurred -> {

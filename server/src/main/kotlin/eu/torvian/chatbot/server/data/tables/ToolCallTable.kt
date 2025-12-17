@@ -41,6 +41,7 @@ object ToolCallTable : LongIdTable("tool_calls") {
     val outputJson = text("output_json").nullable()
     val status = enumerationByName<ToolCallStatus>("status", 50)
     val errorMessage = text("error_message").nullable()
+    val denialReason = text("denial_reason").nullable()
     val executedAt = long("executed_at")
     val durationMs = long("duration_ms").nullable()
 

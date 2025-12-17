@@ -361,7 +361,7 @@ class ChatServiceImplTest {
 
         // Act
         val events = mutableListOf<Either<ProcessNewMessageError, MessageEvent>>()
-        chatService.processNewMessage(testSession, testLlmConfig, content, null, emptyFlow())
+        chatService.processNewMessage(testSession, testLlmConfig, content, null, emptyFlow(), emptyFlow())
             .collect { event -> events.add(event) }
 
         // Assert
@@ -437,7 +437,7 @@ class ChatServiceImplTest {
 
         // Act
         val events = mutableListOf<Either<ProcessNewMessageError, MessageEvent>>()
-        chatService.processNewMessage(testSession, testLlmConfig, content, parentMessageId, emptyFlow())
+        chatService.processNewMessage(testSession, testLlmConfig, content, parentMessageId, emptyFlow(), emptyFlow())
             .collect { event -> events.add(event) }
 
         // Assert
@@ -484,7 +484,7 @@ class ChatServiceImplTest {
 
         // Act
         val events = mutableListOf<Either<ProcessNewMessageError, MessageEvent>>()
-        chatService.processNewMessage(testSession, testLlmConfig, content, null, emptyFlow())
+        chatService.processNewMessage(testSession, testLlmConfig, content, null, emptyFlow(), emptyFlow())
             .collect { event -> events.add(event) }
 
         // Assert

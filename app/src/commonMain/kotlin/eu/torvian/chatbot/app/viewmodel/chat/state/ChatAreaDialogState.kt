@@ -3,6 +3,7 @@ package eu.torvian.chatbot.app.viewmodel.chat.state
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.common.models.core.ChatMessage
+import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import kotlinx.coroutines.flow.StateFlow
 
@@ -53,12 +54,17 @@ sealed class ChatAreaDialogState {
 
     /**
      * State for the Tool Call Details dialog.
+     * When the tool call is awaiting approval, approval callbacks will be provided.
      *
      * @property toolCall The tool call to display.
      * @property onDismiss Action to close the dialog.
+     * @property onApprove Optional action to approve the tool call (shown when status is AWAITING_APPROVAL).
+     * @property onDeny Optional action to deny the tool call with optional reason (shown when status is AWAITING_APPROVAL).
      */
     data class ToolCallDetails(
-        val toolCall: eu.torvian.chatbot.common.models.tool.ToolCall,
-        val onDismiss: () -> Unit
+        val toolCall: ToolCall,
+        val onDismiss: () -> Unit,
+        val onApprove: (() -> Unit)? = null,
+        val onDeny: ((String?) -> Unit)? = null
     ) : ChatAreaDialogState()
 }

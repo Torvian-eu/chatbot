@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.app.compose.chatarea
 
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -8,13 +9,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.HourglassEmpty
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
@@ -34,6 +38,16 @@ fun ToolCallBadge(
             MaterialTheme.colorScheme.tertiary
         )
 
+        ToolCallStatus.AWAITING_APPROVAL -> Pair(
+            Icons.Default.Warning,
+            MaterialTheme.colorScheme.secondary
+        )
+
+        ToolCallStatus.EXECUTING -> Pair(
+            Icons.Default.HourglassEmpty,
+            MaterialTheme.colorScheme.primary
+        )
+
         ToolCallStatus.SUCCESS -> Pair(
             Icons.Default.Check,
             MaterialTheme.colorScheme.primary
@@ -43,7 +57,24 @@ fun ToolCallBadge(
             Icons.Default.Error,
             MaterialTheme.colorScheme.error
         )
+
+        ToolCallStatus.USER_DENIED -> Pair(
+            Icons.Default.Error,
+            MaterialTheme.colorScheme.tertiary
+        )
     }
+
+    // Animate icon opacity for AWAITING_APPROVAL status
+    val infiniteTransition = rememberInfiniteTransition(label = "iconPulse")
+    val iconAlpha by infiniteTransition.animateFloat(
+        initialValue = if (toolCall.status == ToolCallStatus.AWAITING_APPROVAL) 0.3f else 1f,
+        targetValue = if (toolCall.status == ToolCallStatus.AWAITING_APPROVAL) 1f else 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1500, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "iconAlpha"
+    )
 
     Surface(
         modifier = modifier.clickable(onClick = onClick),
@@ -60,7 +91,9 @@ fun ToolCallBadge(
                 imageVector = icon,
                 contentDescription = null,
                 tint = color,
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier
+                    .size(16.dp)
+                    .alpha(iconAlpha)
             )
 
             Text(
