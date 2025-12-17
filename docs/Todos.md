@@ -8,3 +8,4 @@
 - Errors from Ktor's authentication middleware (on the server) should be mapped to proper API errors. (ApiError class)
 - Improve LLM API error display to the user.
 - Remove LocalMCPServerLocalTable. Store it on the server instead. Environment variables remain to be encrypted and stored locally on the client side.
+- Only show tool options in chat area if the selected model supports tool calling.
