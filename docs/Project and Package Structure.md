@@ -102,7 +102,8 @@ common/src/commonMain/kotlin/eu/torvian/chatbot/common/
 │   │   └── tool/                 # Tool-specific API DTOs
 │   │       ├── CreateToolRequest.kt      # Request DTO for creating a new tool definition
 │   │       ├── SetToolEnabledRequest.kt  # Request DTO for enabling/disabling a tool for a session
-│   │       └── SetToolsEnabledRequest.kt # Request DTO for batch enabling/disabling tools for a session
+│   │       ├── SetToolsEnabledRequest.kt # Request DTO for batch enabling/disabling tools for a session
+│   │       └── ToolCallApprovalResponse.kt # Response DTO for tool call approval requests
 │   ├── core/                     # Core domain models
 │   │   ├── ChatGroup.kt              # Chat group data model
 │   │   ├── ChatMessage.kt            # Chat message with threading support
