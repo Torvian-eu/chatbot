@@ -101,3 +101,39 @@ sealed interface ValidateToolError : ToolServiceError {
     data class InvalidOutputSchema(val message: String, val schema: JsonObject) : ValidateToolError
 }
 
+/**
+ * Errors that can occur when setting a tool approval preference.
+ */
+sealed interface SetToolApprovalPreferenceError : ToolServiceError {
+    /**
+     * Indicates that the preference could not be set because a related entity (user or tool)
+     * does not exist.
+     *
+     * @property message Descriptive error message
+     */
+    data class InvalidRelatedEntity(val message: String) : SetToolApprovalPreferenceError
+}
+
+/**
+ * Errors that can occur when retrieving a tool approval preference.
+ */
+sealed interface GetToolApprovalPreferenceError : ToolServiceError {
+    /**
+     * The approval preference was not found.
+     * @property userId The user ID.
+     * @property toolDefinitionId The tool definition ID.
+     */
+    data class PreferenceNotFound(val userId: Long, val toolDefinitionId: Long) : GetToolApprovalPreferenceError
+}
+
+/**
+ * Errors that can occur when deleting a tool approval preference.
+ */
+sealed interface DeleteToolApprovalPreferenceError : ToolServiceError {
+    /**
+     * The approval preference was not found.
+     * @property userId The user ID.
+     * @property toolDefinitionId The tool definition ID.
+     */
+    data class PreferenceNotFound(val userId: Long, val toolDefinitionId: Long) : DeleteToolApprovalPreferenceError
+}

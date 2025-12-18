@@ -4,6 +4,7 @@ import arrow.core.Either
 import eu.torvian.chatbot.common.models.tool.MiscToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolType
+import eu.torvian.chatbot.common.models.tool.UserToolApprovalPreference
 import eu.torvian.chatbot.server.service.core.error.tool.*
 import kotlinx.serialization.json.JsonObject
 
@@ -136,5 +137,55 @@ interface ToolService {
      * @return List of ToolDefinition (mix of MiscToolDefinition and LocalMCPToolDefinition)
      */
     suspend fun getToolsForUser(userId: Long): List<ToolDefinition>
+
+    /**
+     * Sets or updates an auto-approval preference for a specific tool and user.
+     *
+     * @param userId The ID of the user
+     * @param toolDefinitionId The ID of the tool definition
+     * @param autoApprove Whether to auto-approve (true) or auto-deny (false)
+     * @param conditions Optional JSON string for conditional logic (reserved for future use)
+     * @param denialReason Optional reason text for auto-denials (reserved for future use)
+     * @return Either [SetToolApprovalPreferenceError] or the created/updated preference
+     */
+    suspend fun setToolApprovalPreference(
+        userId: Long,
+        toolDefinitionId: Long,
+        autoApprove: Boolean,
+        conditions: String? = null,
+        denialReason: String? = null
+    ): Either<SetToolApprovalPreferenceError, UserToolApprovalPreference>
+
+    /**
+     * Retrieves the approval preference for a specific tool and user.
+     *
+     * @param userId The ID of the user
+     * @param toolDefinitionId The ID of the tool definition
+     * @return Either [GetToolApprovalPreferenceError.PreferenceNotFound] or the preference
+     */
+    suspend fun getToolApprovalPreference(
+        userId: Long,
+        toolDefinitionId: Long
+    ): Either<GetToolApprovalPreferenceError, UserToolApprovalPreference>
+
+    /**
+     * Retrieves all approval preferences for a specific user.
+     *
+     * @param userId The ID of the user
+     * @return List of all preferences for the user (empty list if none)
+     */
+    suspend fun getAllApprovalPreferencesForUser(userId: Long): List<UserToolApprovalPreference>
+
+    /**
+     * Deletes an approval preference for a specific tool and user.
+     *
+     * @param userId The ID of the user
+     * @param toolDefinitionId The ID of the tool definition
+     * @return Either [DeleteToolApprovalPreferenceError.PreferenceNotFound] or Unit
+     */
+    suspend fun deleteToolApprovalPreference(
+        userId: Long,
+        toolDefinitionId: Long
+    ): Either<DeleteToolApprovalPreferenceError, Unit>
 }
 
