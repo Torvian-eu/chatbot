@@ -62,3 +62,12 @@ fun apiError(
     message: String,
     vararg details: Pair<String, String>
 ): ApiError = ApiError(statusCode, code, message, if (details.isNotEmpty()) details.toMap() else null)
+
+
+// --- Convenience extensions on ApiError ---
+
+/**
+ * Returns true if this error's status code and machine-readable code equals the provided [ApiErrorCode].
+ */
+fun ApiError.matches(apiErrorCode: ApiErrorCode): Boolean =
+    this.statusCode == apiErrorCode.statusCode && this.code == apiErrorCode.code

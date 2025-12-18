@@ -1,6 +1,9 @@
 package eu.torvian.chatbot.app.service.api
 
 import eu.torvian.chatbot.common.api.ApiError
+import eu.torvian.chatbot.common.api.ApiErrorCode
+import eu.torvian.chatbot.common.api.CommonApiErrorCodes
+import eu.torvian.chatbot.common.api.matches
 
 /**
  * Defines a hierarchy of errors that can occur during direct interaction with an external API resource.
@@ -124,3 +127,18 @@ sealed class ApiResourceError {
  * @return An [ApiResourceError.ServerError] instance.
  */
 fun ApiError.toApiResourceError(): ApiResourceError.ServerError = ApiResourceError.ServerError(this)
+
+
+// --- Convenience extensions on ApiResourceError ---
+
+/**
+ * Returns true when this [ApiResourceError] wraps a server-provided [ApiError]
+ * that matches the given [apiErrorCode].
+ */
+fun ApiResourceError.matches(apiErrorCode: ApiErrorCode): Boolean =
+    this is ApiResourceError.ServerError && this.apiError.matches(apiErrorCode)
+
+/**
+ * Convenience check for a NOT_FOUND server error.
+ */
+fun ApiResourceError.isNotFound(): Boolean = matches(CommonApiErrorCodes.NOT_FOUND)
