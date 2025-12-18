@@ -10,6 +10,7 @@ import eu.torvian.chatbot.common.api.resources.ToolResource
 import eu.torvian.chatbot.common.models.api.tool.CreateToolRequest
 import eu.torvian.chatbot.common.models.api.tool.SetToolEnabledRequest
 import eu.torvian.chatbot.common.models.api.tool.SetToolsEnabledRequest
+import eu.torvian.chatbot.common.models.api.tool.SetToolApprovalPreferenceRequest
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
@@ -174,6 +175,57 @@ fun Route.configureToolRoutes(
 
                 withError({ e: SetToolsEnabledError -> e.toApiError() }) {
                     toolService.setToolsEnabledForSession(sessionId, request.toolIds, request.enabled).bind()
+                }
+            }
+            call.respondEither(result)
+        }
+
+        // GET /api/v1/tools/approval-preferences - Get all approval preferences for current user
+        get<ToolResource.ApprovalPreferences> {
+            val userId = call.getUserId()
+            call.respond(toolService.getAllApprovalPreferencesForUser(userId))
+        }
+
+        // PUT /api/v1/tools/approval-preferences - Set approval preference for a tool
+        put<ToolResource.ApprovalPreferences> {
+            val userId = call.getUserId()
+            val request = call.receive<SetToolApprovalPreferenceRequest>()
+
+            val result = either {
+                withError({ e: SetToolApprovalPreferenceError -> e.toApiError() }) {
+                    toolService.setToolApprovalPreference(
+                        userId = userId,
+                        toolDefinitionId = request.toolDefinitionId,
+                        autoApprove = request.autoApprove,
+                        conditions = request.conditions,
+                        denialReason = request.denialReason
+                    ).bind()
+                }
+            }
+            call.respondEither(result)
+        }
+
+        // GET /api/v1/tools/approval-preferences/{toolId} - Get approval preference for a specific tool
+        get<ToolResource.ApprovalPreferences.ByToolId> { resource ->
+            val userId = call.getUserId()
+            val toolId = resource.toolId
+
+            val result = either {
+                withError({ e: GetToolApprovalPreferenceError -> e.toApiError() }) {
+                    toolService.getToolApprovalPreference(userId, toolId).bind()
+                }
+            }
+            call.respondEither(result)
+        }
+
+        // DELETE /api/v1/tools/approval-preferences/{toolId} - Delete approval preference
+        delete<ToolResource.ApprovalPreferences.ByToolId> { resource ->
+            val userId = call.getUserId()
+            val toolId = resource.toolId
+
+            val result = either {
+                withError({ e: DeleteToolApprovalPreferenceError -> e.toApiError() }) {
+                    toolService.deleteToolApprovalPreference(userId, toolId).bind()
                 }
             }
             call.respondEither(result)

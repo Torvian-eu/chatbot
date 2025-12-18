@@ -15,6 +15,18 @@ class ToolResource(val parent: Api = Api()) {
      */
     @Resource("{toolId}")
     class ById(val parent: ToolResource = ToolResource(), val toolId: Long)
+
+    /**
+     * Resource for user tool approval preferences: /api/v1/tools/approval-preferences
+     */
+    @Resource("approval-preferences")
+    class ApprovalPreferences(val parent: ToolResource = ToolResource()) {
+        /**
+         * Resource for a specific approval preference by tool ID: /api/v1/tools/approval-preferences/{toolId}
+         */
+        @Resource("{toolId}")
+        class ByToolId(val parent: ApprovalPreferences = ApprovalPreferences(), val toolId: Long)
+    }
 }
 
 /**
