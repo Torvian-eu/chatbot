@@ -53,6 +53,7 @@ class ExposedDataManager(
             SessionToolConfigTable,
             LocalMCPServerTable,
             LocalMCPToolDefinitionTable,
+            UserToolApprovalPreferencesTable,
 
             // Ownership tables (must come after the resources they reference)
             ChatSessionOwnersTable,

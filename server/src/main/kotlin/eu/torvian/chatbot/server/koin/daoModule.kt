@@ -1,34 +1,8 @@
 package eu.torvian.chatbot.server.koin
 
-import eu.torvian.chatbot.server.data.dao.*
-import eu.torvian.chatbot.server.data.dao.exposed.ApiSecretDaoExposed
-import eu.torvian.chatbot.server.data.dao.exposed.GroupDaoExposed
-import eu.torvian.chatbot.server.data.dao.exposed.GroupOwnershipDaoExposed
-import eu.torvian.chatbot.server.data.dao.exposed.LLMProviderDaoExposed
-import eu.torvian.chatbot.server.data.dao.exposed.MessageDaoExposed
-import eu.torvian.chatbot.server.data.dao.exposed.ModelDaoExposed
-import eu.torvian.chatbot.server.data.dao.exposed.SessionDaoExposed
-import eu.torvian.chatbot.server.data.dao.exposed.SessionOwnershipDaoExposed
-import eu.torvian.chatbot.server.data.dao.exposed.SettingsDaoExposed
-import eu.torvian.chatbot.server.data.dao.exposed.UserDaoExposed
-import eu.torvian.chatbot.server.data.dao.exposed.UserGroupDaoExposed
-import eu.torvian.chatbot.server.data.dao.exposed.UserSessionDaoExposed
-import eu.torvian.chatbot.server.data.dao.exposed.RoleDaoExposed
-import eu.torvian.chatbot.server.data.dao.exposed.PermissionDaoExposed
-import eu.torvian.chatbot.server.data.dao.exposed.UserRoleAssignmentDaoExposed
-import eu.torvian.chatbot.server.data.dao.exposed.RolePermissionDaoExposed
-import eu.torvian.chatbot.server.data.dao.exposed.ProviderOwnershipDaoExposed
-import eu.torvian.chatbot.server.data.dao.exposed.ProviderAccessDaoExposed
-import eu.torvian.chatbot.server.data.dao.exposed.ModelOwnershipDaoExposed
-import eu.torvian.chatbot.server.data.dao.exposed.ModelAccessDaoExposed
-import eu.torvian.chatbot.server.data.dao.exposed.SettingsOwnershipDaoExposed
-import eu.torvian.chatbot.server.data.dao.exposed.SettingsAccessDaoExposed
-import eu.torvian.chatbot.server.data.dao.exposed.ToolDefinitionDaoExposed
-import eu.torvian.chatbot.server.data.dao.exposed.ToolCallDaoExposed
-import eu.torvian.chatbot.server.data.dao.exposed.SessionToolConfigDaoExposed
-import eu.torvian.chatbot.server.data.dao.exposed.LocalMCPServerDaoExposed
-import eu.torvian.chatbot.server.data.dao.exposed.LocalMCPToolDefinitionDaoExposed
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
+import eu.torvian.chatbot.server.data.dao.*
+import eu.torvian.chatbot.server.data.dao.exposed.*
 import org.koin.dsl.module
 
 /**
@@ -75,6 +49,7 @@ fun daoModule() = module {
     single<ToolDefinitionDao> { ToolDefinitionDaoExposed(get()) }
     single<ToolCallDao> { ToolCallDaoExposed(get()) }
     single<SessionToolConfigDao> { SessionToolConfigDaoExposed(get()) }
+    single<UserToolApprovalPreferenceDao> { UserToolApprovalPreferenceDaoExposed(get()) }
 
     // MCP server DAOs
     single<LocalMCPServerDao> { LocalMCPServerDaoExposed(get()) }
