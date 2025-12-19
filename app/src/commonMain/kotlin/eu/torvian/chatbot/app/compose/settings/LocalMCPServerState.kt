@@ -9,6 +9,7 @@ import eu.torvian.chatbot.app.viewmodel.LocalMCPServerFormState
 import eu.torvian.chatbot.app.viewmodel.LocalMCPServerOperation
 import eu.torvian.chatbot.app.viewmodel.LocalMCPToolFormState
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
+import eu.torvian.chatbot.common.models.tool.UserToolApprovalPreference
 
 /**
  * UI state for the MCP Servers tab.
@@ -16,6 +17,7 @@ import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 data class LocalMCPServersTabState(
     val serverOverviews: DataState<RepositoryError, List<LocalMCPServerOverview>>,
     val selectedServerOverview: LocalMCPServerOverview?,
+    val selectedServerToolApprovalPreferences: DataState<RepositoryError, List<UserToolApprovalPreference>>,
     val dialogState: LocalMCPServerDialogState,
     val operationInProgress: LocalMCPServerOperation?
 )
@@ -44,4 +46,5 @@ interface LocalMCPServersTabActions {
     fun onDisableAllTools(serverId: Long)
     fun onUpdateToolForm(update: (LocalMCPToolFormState) -> LocalMCPToolFormState)
     fun onSaveTool()
+    fun onDeleteToolApprovalPreference(toolDefinitionId: Long)
 }

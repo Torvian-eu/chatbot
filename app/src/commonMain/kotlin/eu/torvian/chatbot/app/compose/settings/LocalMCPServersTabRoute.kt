@@ -28,6 +28,7 @@ fun LocalMCPServersTabRoute(
     // Collect tab state
     val serverOverviews by viewModel.serverOverviews.collectAsState()
     val selectedServerOverview by viewModel.selectedServerOverview.collectAsState()
+    val selectedServerToolApprovalPreferences by viewModel.selectedServerToolApprovalPreferences.collectAsState()
     val dialogState by viewModel.dialogState.collectAsState()
     val operationInProgress by viewModel.operationInProgress.collectAsState()
 
@@ -35,6 +36,7 @@ fun LocalMCPServersTabRoute(
     val state = LocalMCPServersTabState(
         serverOverviews = serverOverviews,
         selectedServerOverview = selectedServerOverview,
+        selectedServerToolApprovalPreferences = selectedServerToolApprovalPreferences,
         dialogState = dialogState,
         operationInProgress = operationInProgress
     )
@@ -68,6 +70,8 @@ fun LocalMCPServersTabRoute(
         override fun onUpdateToolForm(update: (LocalMCPToolFormState) -> LocalMCPToolFormState) =
             viewModel.updateToolForm(update)
         override fun onSaveTool() = viewModel.saveTool()
+        override fun onDeleteToolApprovalPreference(toolDefinitionId: Long) =
+            viewModel.deleteToolApprovalPreference(toolDefinitionId)
     }
 
     // Call the presentational LocalMCPServersTab
