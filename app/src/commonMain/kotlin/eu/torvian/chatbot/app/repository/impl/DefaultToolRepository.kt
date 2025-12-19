@@ -59,19 +59,21 @@ class DefaultToolRepository(
     override val toolApprovalPreferences: StateFlow<DataState<RepositoryError, List<UserToolApprovalPreference>>> =
         _toolApprovalPreferences.asStateFlow()
 
-    override suspend fun loadTools(): Either<RepositoryError, Unit> = either {
+    override suspend fun loadTools(): Either<RepositoryError, Unit> {
         // Prevent duplicate loading operations
         if (_tools.value.isLoading) return Unit.right()
 
         _tools.update { DataState.Loading }
 
-        withError({ apiResourceError ->
-            apiResourceError.toRepositoryError("Failed to load tools")
-        }) {
-            toolApi.getAllTools().bind()
-        }.also { toolList ->
-            _tools.update { DataState.Success(toolList) }
-        }
+        return toolApi.getAllTools()
+            .mapLeft { apiResourceError ->
+                val repositoryError = apiResourceError.toRepositoryError("Failed to load tools")
+                _tools.update { DataState.Error(repositoryError) }
+                repositoryError
+            }
+            .map { toolList ->
+                _tools.update { DataState.Success(toolList) }
+            }
     }
 
     override suspend fun getToolById(toolId: Long): Either<RepositoryError, ToolDefinition> = either {
@@ -140,27 +142,28 @@ class DefaultToolRepository(
         }
     }
 
-    override suspend fun loadEnabledToolsForSession(sessionId: Long): Either<RepositoryError, List<ToolDefinition>> =
-        either {
-            val enabledToolsFlow = _enabledToolsFlowsMutex.withLock {
-                _enabledToolsFlows.getOrPut(sessionId) {
-                    MutableStateFlow(DataState.Idle)
-                }
-            }
-
-            // Check if already loading
-            if (enabledToolsFlow.value.isLoading) return emptyList<ToolDefinition>().right()
-
-            enabledToolsFlow.update { DataState.Loading }
-
-            withError({ apiResourceError ->
-                apiResourceError.toRepositoryError("Failed to load enabled tools for session")
-            }) {
-                toolApi.getEnabledToolsForSession(sessionId).bind()
-            }.also { toolList ->
-                enabledToolsFlow.update { DataState.Success(toolList) }
+    override suspend fun loadEnabledToolsForSession(sessionId: Long): Either<RepositoryError, List<ToolDefinition>> {
+        val enabledToolsFlow = _enabledToolsFlowsMutex.withLock {
+            _enabledToolsFlows.getOrPut(sessionId) {
+                MutableStateFlow(DataState.Idle)
             }
         }
+
+        // Check if already loading
+        if (enabledToolsFlow.value.isLoading) return emptyList<ToolDefinition>().right()
+
+        enabledToolsFlow.update { DataState.Loading }
+
+        return toolApi.getEnabledToolsForSession(sessionId)
+            .mapLeft { apiResourceError ->
+                val repositoryError = apiResourceError.toRepositoryError("Failed to load enabled tools for session")
+                enabledToolsFlow.update { DataState.Error(repositoryError) }
+                repositoryError
+            }
+            .onRight { toolList ->
+                enabledToolsFlow.update { DataState.Success(toolList) }
+            }
+    }
 
     override suspend fun getEnabledToolsForSessionFlow(
         sessionId: Long

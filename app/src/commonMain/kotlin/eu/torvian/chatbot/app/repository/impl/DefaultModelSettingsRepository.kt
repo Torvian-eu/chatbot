@@ -5,8 +5,8 @@ import arrow.core.raise.either
 import arrow.core.raise.withError
 import arrow.core.right
 import eu.torvian.chatbot.app.domain.contracts.DataState
-import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.ModelSettingsRepository
+import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.service.api.SettingsApi
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
@@ -33,8 +33,10 @@ class DefaultModelSettingsRepository(
         private val logger = kmpLogger<DefaultModelSettingsRepository>()
     }
 
-    private val _allSettingsDetails = MutableStateFlow<DataState<RepositoryError, List<ModelSettingsDetails>>>(DataState.Idle)
-    override val allSettingsDetails: StateFlow<DataState<RepositoryError, List<ModelSettingsDetails>>> = _allSettingsDetails.asStateFlow()
+    private val _allSettingsDetails =
+        MutableStateFlow<DataState<RepositoryError, List<ModelSettingsDetails>>>(DataState.Idle)
+    override val allSettingsDetails: StateFlow<DataState<RepositoryError, List<ModelSettingsDetails>>> =
+        _allSettingsDetails.asStateFlow()
 
     private val _allSettings = MutableStateFlow<DataState<RepositoryError, List<ModelSettings>>>(DataState.Idle)
     override val allSettings: StateFlow<DataState<RepositoryError, List<ModelSettings>>> = _allSettings.asStateFlow()
@@ -75,19 +77,21 @@ class DefaultModelSettingsRepository(
         }
     }
 
-    override suspend fun loadAllSettings(): Either<RepositoryError, Unit> = either {
+    override suspend fun loadAllSettings(): Either<RepositoryError, Unit> {
         // Prevent duplicate loading operations
         if (_allSettings.value.isLoading) return Unit.right()
 
         _allSettings.update { DataState.Loading }
 
-        withError({ apiResourceError ->
-            apiResourceError.toRepositoryError("Failed to load all settings")
-        }) {
-            settingsApi.getAllSettings().bind()
-        }.also { settingsList ->
-            _allSettings.update { DataState.Success(settingsList) }
-        }
+        return settingsApi.getAllSettings()
+            .mapLeft { apiResourceError ->
+                val repositoryError = apiResourceError.toRepositoryError("Failed to load all settings")
+                _allSettings.update { DataState.Error(repositoryError) }
+                repositoryError
+            }
+            .map { settingsList ->
+                _allSettings.update { DataState.Success(settingsList) }
+            }
     }
 
     override suspend fun loadSettingsDetails(settingsId: Long): Either<RepositoryError, ModelSettingsDetails> = either {
