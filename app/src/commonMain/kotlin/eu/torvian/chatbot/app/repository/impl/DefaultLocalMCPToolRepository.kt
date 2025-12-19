@@ -127,6 +127,11 @@ class DefaultLocalMCPToolRepository(
         // Disable deleted tools for all sessions in cache
         toolRepository.updateEnabledToolsCache(refreshResponse.deletedTools, false)
 
+        // Remove approval preferences for deleted tools
+        toolRepository.updateToolApprovalPreferencesCache { currentList ->
+            currentList.filter { preference -> preference.toolDefinitionId !in refreshResponse.deletedTools.map { it.id } }
+        }
+
         logger.info("Refreshed MCP tools for server $serverId: +${refreshResponse.addedTools.size} ~${refreshResponse.updatedTools.size} -${refreshResponse.deletedTools.size}")
         refreshResponse
     }
@@ -200,11 +205,18 @@ class DefaultLocalMCPToolRepository(
     override suspend fun removeToolsFromCache(serverId: Long) {
         val deletedTools = toolRepository.tools.value.dataOrNull?.filterIsInstance<LocalMCPToolDefinition>()
             ?.filter { it.serverId == serverId } ?: emptyList()
+        val deletedToolsMap = deletedTools.associateBy { it.id }
+        // Remove tools from cache
         toolRepository.updateToolCache { currentList ->
-            currentList.filter { it !in deletedTools }
+            currentList.filter { it.id !in deletedToolsMap }
         }
         // Disable deleted tools for all sessions in cache
         toolRepository.updateEnabledToolsCache(deletedTools, false)
+
+        // Remove approval preferences for deleted tools
+        toolRepository.updateToolApprovalPreferencesCache { currentList ->
+            currentList.filter { it.toolDefinitionId !in deletedToolsMap }
+        }
     }
 
     override suspend fun invalidateEnabledToolsCache() {

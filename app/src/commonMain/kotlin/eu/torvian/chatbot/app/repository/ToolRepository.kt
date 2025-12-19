@@ -4,6 +4,7 @@ import arrow.core.Either
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.common.models.api.tool.CreateToolRequest
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
+import eu.torvian.chatbot.common.models.tool.UserToolApprovalPreference
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -31,6 +32,17 @@ interface ToolRepository {
      * @return StateFlow containing the current state of all user-accessible tools wrapped in DataState
      */
     val tools: StateFlow<DataState<RepositoryError, List<ToolDefinition>>>
+
+    /**
+     * Reactive stream of the current user's tool approval preferences.
+     *
+     * This StateFlow provides real-time updates whenever the preferences change,
+     * allowing ViewModels and other consumers to automatically react to data changes
+     * without manual refresh operations.
+     *
+     * @return StateFlow containing the current state of user tool approval preferences wrapped in DataState
+     */
+    val toolApprovalPreferences: StateFlow<DataState<RepositoryError, List<UserToolApprovalPreference>>>
 
     /**
      * Loads all tool definitions accessible to the current user from the backend.
@@ -136,6 +148,41 @@ interface ToolRepository {
     suspend fun setToolsEnabledForSession(sessionId: Long, toolDefinitions: List<ToolDefinition>, enabled: Boolean): Either<RepositoryError, Unit>
 
     /**
+     * Loads the current user's tool approval preferences from the backend.
+     *
+     * This operation fetches the latest tool approval preferences and updates the internal StateFlow.
+     * If a load operation is already in progress, this method returns immediately
+     * without starting a duplicate operation.
+     *
+     * @return Either.Right with Unit on successful load, or Either.Left with RepositoryError on failure
+     */
+    suspend fun loadUserToolApprovalPreferences(): Either<RepositoryError, Unit>
+
+    /**
+     * Sets or updates an auto-approval preference for a specific tool and user.
+     *
+     * @param toolDefinitionId The ID of the tool definition
+     * @param autoApprove Whether to auto-approve (true) or auto-deny (false) tool calls
+     * @param conditions Optional JSON string for conditional approval logic (reserved for future use)
+     * @param denialReason Optional reason text for auto-denials (reserved for future use)
+     * @return Either.Right with Unit on successful update, or Either.Left with RepositoryError on failure
+     */
+    suspend fun setToolApprovalPreference(
+        toolDefinitionId: Long,
+        autoApprove: Boolean,
+        conditions: String? = null,
+        denialReason: String? = null
+    ): Either<RepositoryError, Unit>
+
+    /**
+     * Deletes an approval preference for a specific tool and user.
+     *
+     * @param toolDefinitionId The ID of the tool definition
+     * @return Either.Right with Unit on successful deletion, or Either.Left with RepositoryError on failure
+     */
+    suspend fun deleteToolApprovalPreference(toolDefinitionId: Long): Either<RepositoryError, Unit>
+
+    /**
      * Applies a transformation to the in-memory tools cache.
      *
      * @param update A function that takes the current list of tools and returns an updated list.
@@ -163,5 +210,14 @@ interface ToolRepository {
      * Invalidates the enabled tools cache for all sessions.
      */
     suspend fun invalidateEnabledToolsCache()
+
+    /**
+     * Applies a transformation to the in-memory tool approval preferences cache.
+     *
+     * @param update A function that takes the current list of tool approval preferences and returns an updated list.
+     */
+    suspend fun updateToolApprovalPreferencesCache(
+        update: (List<UserToolApprovalPreference>) -> List<UserToolApprovalPreference>
+    )
 }
 
