@@ -91,14 +91,12 @@ class DefaultGroupRepository(
 
     override suspend fun deleteGroup(groupId: Long): Either<RepositoryError, Unit> {
         return groupApi.deleteGroup(groupId)
-            .map {
-                // Remove the group from the internal list
-                updateGroupsState { currentGroups ->
-                    currentGroups.filter { it.id != groupId }
-                }
-            }
             .mapLeft { apiResourceError ->
                 apiResourceError.toRepositoryError("Failed to delete group")
+            }
+            .onRight {
+                // invalidate cache to trigger reload
+                _groups.update { DataState.Idle }
             }
     }
 
