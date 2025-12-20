@@ -4,8 +4,8 @@ import arrow.core.Either
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.server.service.core.error.message.ProcessNewMessageError
 import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageError
-import eu.torvian.chatbot.common.models.tool.LocalMCPToolCallResult
-import eu.torvian.chatbot.common.models.tool.ToolCallApprovalResponse
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallResult
+import eu.torvian.chatbot.common.models.api.tool.ToolCallApprovalResponse
 import kotlinx.coroutines.flow.Flow
 
 /**

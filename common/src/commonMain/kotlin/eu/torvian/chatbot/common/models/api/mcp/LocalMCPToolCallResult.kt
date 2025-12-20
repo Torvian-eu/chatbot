@@ -1,4 +1,4 @@
-package eu.torvian.chatbot.common.models.tool
+package eu.torvian.chatbot.common.models.api.mcp
 
 import kotlinx.serialization.Serializable
 

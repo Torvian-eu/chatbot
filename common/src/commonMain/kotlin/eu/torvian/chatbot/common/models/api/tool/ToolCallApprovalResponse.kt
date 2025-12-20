@@ -1,4 +1,4 @@
-package eu.torvian.chatbot.common.models.tool
+package eu.torvian.chatbot.common.models.api.tool
 
 import kotlinx.serialization.Serializable
 
@@ -15,4 +15,3 @@ data class ToolCallApprovalResponse(
     val approved: Boolean,
     val denialReason: String? = null
 )
-

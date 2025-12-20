@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.server.service.core
 
 import eu.torvian.chatbot.common.models.core.ChatMessage
-import eu.torvian.chatbot.common.models.tool.LocalMCPToolCallRequest
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallRequest
 import eu.torvian.chatbot.common.models.tool.ToolCall
 
 /**
