@@ -98,9 +98,12 @@ common/src/commonMain/kotlin/eu/torvian/chatbot/common/
 │   │   │   └── UpdateProviderCredentialRequest.kt # Request DTO for updating provider credentials
 │   │   ├── mcp/                  # MCP-specific API DTOs
 │   │   │   ├── LocalMCPServerDtos.kt     # DTOs for local MCP server management
+│   │   │   ├── LocalMCPToolCallRequest.kt # Request for LLM-initiated local MCP tool calls
+│   │   │   ├── LocalMCPToolCallResult.kt  # Result of local MCP tool executions
 │   │   │   └── LocalMCPToolRequests.kt   # DTOs for local MCP tool management
 │   │   └── tool/                 # Tool-specific API DTOs
 │   │       ├── CreateToolRequest.kt      # Request DTO for creating a new tool definition
+│   │       ├── SetToolApprovalPreferenceRequest.kt # Request DTO for setting user tool approval preferences
 │   │       ├── SetToolEnabledRequest.kt  # Request DTO for enabling/disabling a tool for a session
 │   │       ├── SetToolsEnabledRequest.kt # Request DTO for batch enabling/disabling tools for a session
 │   │       └── ToolCallApprovalResponse.kt # Response DTO for tool call approval requests
@@ -118,14 +121,13 @@ common/src/commonMain/kotlin/eu/torvian/chatbot/common/
 │   │   ├── LLMProviderType.kt        # Enum for LLM provider types
 │   │   └── ModelSettings.kt          # Model settings and parameters
 │   ├── tool/                     # Tool-related domain models
-│   │   ├── LocalMCPToolCallRequest.kt # Request for LLM-initiated local MCP tool calls
-│   │   ├── LocalMCPToolCallResult.kt  # Result of local MCP tool executions
 │   │   ├── LocalMCPToolDefinition.kt # Data model for tools integrated from local MCP servers
 │   │   ├── MiscToolDefinition.kt     # Data model for general-purpose tools
 │   │   ├── ToolCall.kt               # Data model for a tool call
 │   │   ├── ToolCallStatus.kt         # Enum for tool call status
 │   │   ├── ToolDefinition.kt         # Sealed class for a tool definition hierarchy
-│   │   └── ToolType.kt               # Enum for tool types
+│   │   ├── ToolType.kt               # Enum for tool types
+│   │   └── UserToolApprovalPreference.kt # Data model for user tool approval preferences
 │   └── user/                     # User-related domain models
 │       ├── Permission.kt             # Permission data model
 │       ├── Role.kt                   # Role data model
@@ -206,6 +208,7 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   │   ├── UserGroupDao.kt       # User group management interface
 │   │   ├── UserRoleAssignmentDao.kt # User-role assignments
 │   │   ├── UserSessionDao.kt     # User session management interface
+│   │   ├── UserToolApprovalPreferenceDao.kt # Interface for managing user tool approval preferences
 │   │   ├── error/                # DAO-specific error types
 │   │   └── exposed/              # Exposed ORM implementations
 │   ├── entities/                 # Database entity mappings
@@ -254,6 +257,7 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │       ├── configureRoleRoutes.kt    # Ktor routes for role management
 │       ├── configureSessionRoutes.kt
 │       ├── configureSettingsRoutes.kt
+│       ├── configureToolApprovalPreferenceRoutes.kt # Ktor routes for user tool approval preferences
 │       ├── configureToolRoutes.kt    # Ktor routes for tool management
 │       ├── configureUserGroupRoutes.kt # Ktor routes for user group management
 │       └── configureUserRoutes.kt    # Ktor routes for user management
@@ -286,6 +290,7 @@ server/src/main/kotlin/eu/torvian/chatbot/server/
 │   │   ├── ToolService.kt        # Service for managing tool definitions and session configurations
 │   │   ├── UserGroupService.kt   # User group management service interface
 │   │   ├── UserService.kt        # User account management service interface
+│   │   ├── UserToolApprovalPreferenceService.kt # Service for managing user tool approval preferences
 │   │   ├── error/                # Service-specific error types
 │   │   └── impl/                 # Core service implementations
 │   ├── llm/                      # LLM interaction services
