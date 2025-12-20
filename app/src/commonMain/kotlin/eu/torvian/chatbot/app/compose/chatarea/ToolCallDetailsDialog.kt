@@ -2,6 +2,7 @@ package eu.torvian.chatbot.app.compose.chatarea
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -233,13 +234,15 @@ private fun ToolCallDataSection(
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 shape = MaterialTheme.shapes.small
             ) {
-                Text(
-                    text = formattedData,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontFamily = FontFamily.Monospace
-                    ),
-                    modifier = Modifier.padding(8.dp)
-                )
+                SelectionContainer {
+                    Text(
+                        text = formattedData,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontFamily = FontFamily.Monospace
+                        ),
+                        modifier = Modifier.padding(8.dp)
+                    )
+                }
             }
         }
     }
@@ -259,12 +262,14 @@ private fun ToolCallErrorSection(errorMessage: String) {
             color = MaterialTheme.colorScheme.errorContainer,
             shape = MaterialTheme.shapes.small
         ) {
-            Text(
-                text = errorMessage,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onErrorContainer,
-                modifier = Modifier.padding(8.dp)
-            )
+            SelectionContainer {
+                Text(
+                    text = errorMessage,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    modifier = Modifier.padding(8.dp)
+                )
+            }
         }
     }
 }

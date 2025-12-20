@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -69,11 +70,13 @@ fun MessageContent(
         )
     } else {
         // Message is not being edited, just display the text
-        Text(
-            text = message.content,
-            style = MaterialTheme.typography.bodyLarge,
-            color = contentColor
-        )
+        SelectionContainer {
+            Text(
+                text = message.content,
+                style = MaterialTheme.typography.bodyLarge,
+                color = contentColor
+            )
+        }
     }
 }
 
