@@ -174,7 +174,7 @@ fun ChatScreen(
             override fun onRetryLoadingSession() {
                 selectedSession?.id?.let { sessionId ->
                     if (authState is AuthState.Authenticated) {
-                        chatViewModel.loadSession(sessionId, authState.userId, forceReload = true)
+                        chatViewModel.loadSession(sessionId, authState.userId)
                     }
                 }
             }

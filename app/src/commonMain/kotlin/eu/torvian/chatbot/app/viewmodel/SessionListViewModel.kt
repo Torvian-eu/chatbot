@@ -169,6 +169,12 @@ class SessionListViewModel(
                 }
             }
             .launchIn(viewModelScope)
+
+        // Reload sessions and groups when state is idle
+        listState
+            .filterIsInstance<DataState.Idle>()
+            .onEach { loadSessionsAndGroups() }
+            .launchIn(viewModelScope)
     }
 
     // --- Public Action Functions (Called by UI Components) ---

@@ -233,6 +233,7 @@ fun Route.configureSessionRoutes(
                 // Step 4: Start processing and stream events back to the client
                 val eventFlow = if (request.isStreaming) {
                     chatService.processNewMessageStreaming(
+                        userId,
                         session,
                         llmConfig,
                         request.content,
@@ -242,6 +243,7 @@ fun Route.configureSessionRoutes(
                     )
                 } else {
                     chatService.processNewMessage(
+                        userId,
                         session,
                         llmConfig,
                         request.content,

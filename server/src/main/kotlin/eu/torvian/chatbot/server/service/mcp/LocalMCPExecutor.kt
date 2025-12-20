@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.server.service.mcp
 
-import eu.torvian.chatbot.common.models.tool.LocalMCPToolCallRequest
-import eu.torvian.chatbot.common.models.tool.LocalMCPToolCallResult
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallRequest
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallResult
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.Flow

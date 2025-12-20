@@ -74,3 +74,30 @@ fun ValidateToolError.toApiError(): ApiError = when (this) {
         apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid output schema: $message", "outputSchema" to schema.toString())
 }
 
+/**
+ * Converts a [SetToolApprovalPreferenceError] to an [ApiError].
+ */
+fun SetToolApprovalPreferenceError.toApiError(): ApiError = when (this) {
+    is SetToolApprovalPreferenceError.InvalidRelatedEntity ->
+        apiError(CommonApiErrorCodes.NOT_FOUND, this.message)
+}
+
+/**
+ * Converts a [GetToolApprovalPreferenceError] to an [ApiError].
+ */
+fun GetToolApprovalPreferenceError.toApiError(): ApiError = when (this) {
+    is GetToolApprovalPreferenceError.PreferenceNotFound ->
+        apiError(CommonApiErrorCodes.NOT_FOUND, "Tool approval preference not found",
+            "userId" to userId.toString(),
+            "toolDefinitionId" to toolDefinitionId.toString())
+}
+
+/**
+ * Converts a [DeleteToolApprovalPreferenceError] to an [ApiError].
+ */
+fun DeleteToolApprovalPreferenceError.toApiError(): ApiError = when (this) {
+    is DeleteToolApprovalPreferenceError.PreferenceNotFound ->
+        apiError(CommonApiErrorCodes.NOT_FOUND, "Tool approval preference not found",
+            "userId" to userId.toString(),
+            "toolDefinitionId" to toolDefinitionId.toString())
+}

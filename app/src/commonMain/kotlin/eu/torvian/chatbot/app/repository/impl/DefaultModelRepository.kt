@@ -64,34 +64,36 @@ class DefaultModelRepository(
         }
     }
 
-    override suspend fun loadModelsDetails(): Either<RepositoryError, Unit> = either {
+    override suspend fun loadModelsDetails(): Either<RepositoryError, Unit> {
         // Prevent duplicate loading operations
         if (_modelsDetails.value.isLoading) return Unit.right()
 
         _modelsDetails.update { DataState.Loading }
 
-        withError({ apiResourceError ->
-            apiResourceError.toRepositoryError("Failed to load all models (with details)")
-        }) {
-            modelApi.getAllModelDetails().bind()
-        }.also { detailsList ->
-            _modelsDetails.update { DataState.Success(detailsList) }
-        }
+        return modelApi.getAllModelDetails()
+            .mapLeft { apiResourceError ->
+                val repositoryError = apiResourceError.toRepositoryError("Failed to load all models (with details)")
+                _modelsDetails.update { DataState.Error(repositoryError) }
+                repositoryError
+            }.map { detailsList ->
+                _modelsDetails.update { DataState.Success(detailsList) }
+            }
     }
 
-    override suspend fun loadModels(): Either<RepositoryError, Unit> = either {
+    override suspend fun loadModels(): Either<RepositoryError, Unit> {
         // Prevent duplicate loading operations
         if (_models.value.isLoading) return Unit.right()
 
         _models.update { DataState.Loading }
 
-        withError({ apiResourceError ->
-            apiResourceError.toRepositoryError("Failed to load all models")
-        }) {
-            modelApi.getAllModels().bind()
-        }.also { modelList ->
-            _models.update { DataState.Success(modelList) }
-        }
+        return modelApi.getAllModels()
+            .mapLeft { apiResourceError ->
+                val repositoryError = apiResourceError.toRepositoryError("Failed to load all models")
+                _models.update { DataState.Error(repositoryError) }
+                repositoryError
+            }.map { modelList ->
+                _models.update { DataState.Success(modelList) }
+            }
     }
 
     override suspend fun loadModelDetails(modelId: Long): Either<RepositoryError, LLMModelDetails> = either {

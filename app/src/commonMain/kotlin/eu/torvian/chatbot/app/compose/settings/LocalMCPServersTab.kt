@@ -59,6 +59,7 @@ fun LocalMCPServersTab(
                     // Detail: Server Details/Actions
                     LocalMCPServerDetailPanel(
                         serverOverview = state.selectedServerOverview,
+                        toolApprovalPreferences = state.selectedServerToolApprovalPreferences,
                         onEditServer = { actions.onStartEditingServer(it.serverConfig) },
                         onDeleteServer = { actions.onStartDeletingServer(it.serverConfig) },
                         onTestConnection = { actions.onTestConnection(it.serverId) },
@@ -70,6 +71,7 @@ fun LocalMCPServersTab(
                         onEditTool = { actions.onStartEditingTool(it) },
                         onEnableAllTools = { actions.onEnableAllTools(it) },
                         onDisableAllTools = { actions.onDisableAllTools(it) },
+                        onDeleteToolApprovalPreference = { actions.onDeleteToolApprovalPreference(it) },
                         operationInProgress = state.operationInProgress,
                         modifier = Modifier
                             .weight(1f)

@@ -9,6 +9,7 @@ import eu.torvian.chatbot.common.models.llm.*
 import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
 import eu.torvian.chatbot.server.data.dao.ToolCallDao
+import eu.torvian.chatbot.server.data.dao.UserToolApprovalPreferenceDao
 import eu.torvian.chatbot.server.data.dao.error.MessageError
 import eu.torvian.chatbot.server.data.dao.error.SessionError
 import eu.torvian.chatbot.server.service.core.*
@@ -57,6 +58,7 @@ class ChatServiceImplTest {
     private lateinit var toolExecutorFactory: ToolExecutorFactory
     private lateinit var transactionScope: TransactionScope
     private lateinit var localMcpExecutor: LocalMCPExecutor
+    private lateinit var userToolApprovalPreferenceDao: UserToolApprovalPreferenceDao
 
     // Class under test
     private lateinit var chatService: ChatServiceImpl
@@ -169,11 +171,13 @@ class ChatServiceImplTest {
         toolExecutorFactory = mockk()
         transactionScope = mockk()
         localMcpExecutor = mockk()
+        userToolApprovalPreferenceDao = mockk()
 
         // Create the service instance with mocked dependencies
         chatService = ChatServiceImpl(
             messageDao, sessionDao, llmApiClient, toolCallDao, toolExecutorFactory, toolService, llmModelService,
-            modelSettingsService, llmProviderService, credentialManager, transactionScope, localMcpExecutor
+            modelSettingsService, llmProviderService, credentialManager, transactionScope, localMcpExecutor,
+            userToolApprovalPreferenceDao
         )
         
         // Mock the transaction scope to execute blocks directly
@@ -189,7 +193,8 @@ class ChatServiceImplTest {
         clearMocks(
             messageDao, sessionDao, llmModelService, modelSettingsService,
             llmProviderService, llmApiClient, credentialManager, toolService,
-            toolCallDao, toolExecutorFactory, transactionScope, localMcpExecutor
+            toolCallDao, toolExecutorFactory, transactionScope, localMcpExecutor,
+            userToolApprovalPreferenceDao
         )
     }
     
@@ -361,7 +366,7 @@ class ChatServiceImplTest {
 
         // Act
         val events = mutableListOf<Either<ProcessNewMessageError, MessageEvent>>()
-        chatService.processNewMessage(testSession, testLlmConfig, content, null, emptyFlow(), emptyFlow())
+        chatService.processNewMessage(1L, testSession, testLlmConfig, content, null, emptyFlow(), emptyFlow())
             .collect { event -> events.add(event) }
 
         // Assert
@@ -437,7 +442,7 @@ class ChatServiceImplTest {
 
         // Act
         val events = mutableListOf<Either<ProcessNewMessageError, MessageEvent>>()
-        chatService.processNewMessage(testSession, testLlmConfig, content, parentMessageId, emptyFlow(), emptyFlow())
+        chatService.processNewMessage(1L, testSession, testLlmConfig, content, parentMessageId, emptyFlow(), emptyFlow())
             .collect { event -> events.add(event) }
 
         // Assert
@@ -484,7 +489,7 @@ class ChatServiceImplTest {
 
         // Act
         val events = mutableListOf<Either<ProcessNewMessageError, MessageEvent>>()
-        chatService.processNewMessage(testSession, testLlmConfig, content, null, emptyFlow(), emptyFlow())
+        chatService.processNewMessage(1L, testSession, testLlmConfig, content, null, emptyFlow(), emptyFlow())
             .collect { event -> events.add(event) }
 
         // Assert

@@ -105,11 +105,14 @@ abstract class BaseApiResourceClient(protected val client: HttpClient) {
         return try {
             val apiError = response.body<ApiError>()
             apiError.toApiResourceError().left()
+        } catch (e: NoTransformationFoundException){
+            logger.warn("NoTransformationFoundException reading error body for status ${response.status.value}", e)
+            ApiResourceError.UnknownError("Failed to process server error response: body is not of expected type", e).left()
         } catch (e: ContentConvertException) {
-            logger.warn("ContentConvertException reading error body for status ${response.status.value}: ${e.message}")
+            logger.warn("ContentConvertException reading error body for status ${response.status.value}", e)
             ApiResourceError.SerializationError("Failed to parse server error response: ${e.message}", e).left()
         } catch (e: Exception) {
-            logger.warn("Unexpected exception reading error body for status ${response.status.value}: ${e.message}")
+            logger.warn("Unexpected exception reading error body for status ${response.status.value}", e)
             ApiResourceError.UnknownError("Failed to process server error response: ${e.message}", e).left()
         }
     }

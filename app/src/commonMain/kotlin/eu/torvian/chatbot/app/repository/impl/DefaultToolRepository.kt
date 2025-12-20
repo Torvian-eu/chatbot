@@ -15,6 +15,7 @@ import eu.torvian.chatbot.common.models.api.tool.CreateToolRequest
 import eu.torvian.chatbot.common.models.api.tool.SetToolEnabledRequest
 import eu.torvian.chatbot.common.models.api.tool.SetToolsEnabledRequest
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
+import eu.torvian.chatbot.common.models.tool.UserToolApprovalPreference
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -53,19 +54,26 @@ class DefaultToolRepository(
     private val _enabledToolsFlows =
         LruCache<Long, MutableStateFlow<DataState<RepositoryError, List<ToolDefinition>>>>(SESSION_TOOLS_CACHE_SIZE)
 
-    override suspend fun loadTools(): Either<RepositoryError, Unit> = either {
+    private val _toolApprovalPreferences =
+        MutableStateFlow<DataState<RepositoryError, List<UserToolApprovalPreference>>>(DataState.Idle)
+    override val toolApprovalPreferences: StateFlow<DataState<RepositoryError, List<UserToolApprovalPreference>>> =
+        _toolApprovalPreferences.asStateFlow()
+
+    override suspend fun loadTools(): Either<RepositoryError, Unit> {
         // Prevent duplicate loading operations
         if (_tools.value.isLoading) return Unit.right()
 
         _tools.update { DataState.Loading }
 
-        withError({ apiResourceError ->
-            apiResourceError.toRepositoryError("Failed to load tools")
-        }) {
-            toolApi.getAllTools().bind()
-        }.also { toolList ->
-            _tools.update { DataState.Success(toolList) }
-        }
+        return toolApi.getAllTools()
+            .mapLeft { apiResourceError ->
+                val repositoryError = apiResourceError.toRepositoryError("Failed to load tools")
+                _tools.update { DataState.Error(repositoryError) }
+                repositoryError
+            }
+            .map { toolList ->
+                _tools.update { DataState.Success(toolList) }
+            }
     }
 
     override suspend fun getToolById(toolId: Long): Either<RepositoryError, ToolDefinition> = either {
@@ -127,29 +135,35 @@ class DefaultToolRepository(
         deletedTool?.let { tool ->
             updateEnabledToolsCache(tool, false)
         }
+
+        // Update the tool approval preferences cache
+        updateToolApprovalPreferencesCache { currentList ->
+            currentList.filter { it.toolDefinitionId != toolId }
+        }
     }
 
-    override suspend fun loadEnabledToolsForSession(sessionId: Long): Either<RepositoryError, List<ToolDefinition>> =
-        either {
-            val enabledToolsFlow = _enabledToolsFlowsMutex.withLock {
-                _enabledToolsFlows.getOrPut(sessionId) {
-                    MutableStateFlow(DataState.Idle)
-                }
-            }
-
-            // Check if already loading
-            if (enabledToolsFlow.value.isLoading) return emptyList<ToolDefinition>().right()
-
-            enabledToolsFlow.update { DataState.Loading }
-
-            withError({ apiResourceError ->
-                apiResourceError.toRepositoryError("Failed to load enabled tools for session")
-            }) {
-                toolApi.getEnabledToolsForSession(sessionId).bind()
-            }.also { toolList ->
-                enabledToolsFlow.update { DataState.Success(toolList) }
+    override suspend fun loadEnabledToolsForSession(sessionId: Long): Either<RepositoryError, List<ToolDefinition>> {
+        val enabledToolsFlow = _enabledToolsFlowsMutex.withLock {
+            _enabledToolsFlows.getOrPut(sessionId) {
+                MutableStateFlow(DataState.Idle)
             }
         }
+
+        // Check if already loading
+        if (enabledToolsFlow.value.isLoading) return emptyList<ToolDefinition>().right()
+
+        enabledToolsFlow.update { DataState.Loading }
+
+        return toolApi.getEnabledToolsForSession(sessionId)
+            .mapLeft { apiResourceError ->
+                val repositoryError = apiResourceError.toRepositoryError("Failed to load enabled tools for session")
+                enabledToolsFlow.update { DataState.Error(repositoryError) }
+                repositoryError
+            }
+            .onRight { toolList ->
+                enabledToolsFlow.update { DataState.Success(toolList) }
+            }
+    }
 
     override suspend fun getEnabledToolsForSessionFlow(
         sessionId: Long
@@ -199,11 +213,53 @@ class DefaultToolRepository(
         updateEnabledToolsCache(sessionId, toolDefinitions, enabled)
     }
 
-    /**
-     * Applies a transformation to the in-memory tools cache.
-     *
-     * @param update A function that takes the current list of tools and returns an updated list.
-     */
+    override suspend fun loadUserToolApprovalPreferences(): Either<RepositoryError, Unit> = either {
+        // Prevent duplicate loading operations
+        if (_toolApprovalPreferences.value.isLoading) return Unit.right()
+
+        _toolApprovalPreferences.update { DataState.Loading }
+
+        withError({ apiResourceError ->
+            apiResourceError.toRepositoryError("Failed to load user tool approval preferences")
+        }) {
+            toolApi.getAllToolApprovalPreferences().bind()
+        }.also { preferences ->
+            _toolApprovalPreferences.update { DataState.Success(preferences) }
+        }
+    }
+
+    override suspend fun setToolApprovalPreference(
+        toolDefinitionId: Long,
+        autoApprove: Boolean,
+        conditions: String?,
+        denialReason: String?
+    ): Either<RepositoryError, Unit> = either {
+        val userToolApprovalPreference = withError({ apiResourceError ->
+            apiResourceError.toRepositoryError("Failed to set tool approval preference")
+        }) {
+            toolApi.setToolApprovalPreference(
+                toolDefinitionId = toolDefinitionId,
+                autoApprove = autoApprove,
+                conditions = conditions,
+                denialReason = denialReason
+            ).bind()
+        }
+        updateToolApprovalPreferencesCache { currentList ->
+            currentList.filter { it.toolDefinitionId != toolDefinitionId } + userToolApprovalPreference
+        }
+    }
+
+    override suspend fun deleteToolApprovalPreference(toolDefinitionId: Long): Either<RepositoryError, Unit> = either {
+        withError({ apiResourceError ->
+            apiResourceError.toRepositoryError("Failed to delete tool approval preference")
+        }) {
+            toolApi.deleteToolApprovalPreference(toolDefinitionId).bind()
+        }
+        updateToolApprovalPreferencesCache { currentList ->
+            currentList.filter { it.toolDefinitionId != toolDefinitionId }
+        }
+    }
+
     override suspend fun updateToolCache(update: (List<ToolDefinition>) -> List<ToolDefinition>) {
         _tools.update { currentState ->
             when (currentState) {
@@ -265,13 +321,6 @@ class DefaultToolRepository(
         }
     }
 
-    /**
-     * Applies a batch of tool enabled/disabled updates to the in-memory cache.
-     *
-     * @param sessionId The ID of the session
-     * @param tools The list of tool definitions to enable/disable
-     * @param enabled Whether to enable or disable the tools
-     */
     override suspend fun updateEnabledToolsCache(sessionId: Long, tools: List<ToolDefinition>, enabled: Boolean) {
         _enabledToolsFlowsMutex.withLock {
             _enabledToolsFlows[sessionId]?.update { currentState ->
@@ -301,12 +350,6 @@ class DefaultToolRepository(
         }
     }
 
-    /**
-     * Applies a batch of tool enabled/disabled updates to the in-memory cache for all sessions.
-     *
-     * @param tools The list of tool definitions to enable/disable
-     * @param enabled Whether to enable or disable the tools
-     */
     override suspend fun updateEnabledToolsCache(tools: List<ToolDefinition>, enabled: Boolean) {
         val sessionIds = _enabledToolsFlowsMutex.withLock {
             _enabledToolsFlows.keys.toList()
@@ -316,15 +359,27 @@ class DefaultToolRepository(
         }
     }
 
-    /**
-     * Invalidates the enabled tools cache for all sessions.
-     */
     override suspend fun invalidateEnabledToolsCache() {
         _enabledToolsFlowsMutex.withLock {
             _enabledToolsFlows.forEach { _, flow ->
                 flow.update { DataState.Idle }
             }
         }
+    }
+
+    override suspend fun updateToolApprovalPreferencesCache(
+        update: (List<UserToolApprovalPreference>) -> List<UserToolApprovalPreference>
+    ) {
+        _toolApprovalPreferences.update { currentState ->
+            when (currentState) {
+                is DataState.Success -> DataState.Success(update(currentState.data))
+                else -> {
+                    logger.warn("Skipping cache update because current state is not Success: $currentState")
+                    currentState
+                }
+            }
+        }
+
     }
 }
 

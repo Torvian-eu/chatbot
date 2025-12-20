@@ -50,34 +50,38 @@ class DefaultProviderRepository(
     private val _providers = MutableStateFlow<DataState<RepositoryError, List<LLMProvider>>>(DataState.Idle)
     override val providers: StateFlow<DataState<RepositoryError, List<LLMProvider>>> = _providers.asStateFlow()
 
-    override suspend fun loadProvidersDetails(): Either<RepositoryError, Unit> = either {
+    override suspend fun loadProvidersDetails(): Either<RepositoryError, Unit> {
         // Prevent duplicate loading operations
         if (_providersDetails.value.isLoading) return Unit.right()
 
         _providersDetails.update { DataState.Loading }
 
-        withError({ apiResourceError ->
-            apiResourceError.toRepositoryError("Failed to load all provider details")
-        }) {
-            providerApi.getAllProviderDetails().bind()
-        }.also { detailsList ->
-            _providersDetails.update { DataState.Success(detailsList) }
-        }
+        return providerApi.getAllProviderDetails()
+            .mapLeft { apiResourceError ->
+                val repositoryError = apiResourceError.toRepositoryError("Failed to load all provider details")
+                _providersDetails.update { DataState.Error(repositoryError) }
+                repositoryError
+            }
+            .map { detailsList ->
+                _providersDetails.update { DataState.Success(detailsList) }
+            }
     }
 
-    override suspend fun loadProviders(): Either<RepositoryError, Unit> = either {
+    override suspend fun loadProviders(): Either<RepositoryError, Unit> {
         // Prevent duplicate loading operations
         if (_providers.value.isLoading) return Unit.right()
 
         _providers.update { DataState.Loading }
 
-        withError({ apiResourceError ->
-            apiResourceError.toRepositoryError("Failed to load all providers")
-        }) {
-            providerApi.getAllProviders().bind()
-        }.also { providerList ->
-            _providers.update { DataState.Success(providerList) }
-        }
+        return providerApi.getAllProviders()
+            .mapLeft { apiResourceError ->
+                val repositoryError = apiResourceError.toRepositoryError("Failed to load all providers")
+                _providers.update { DataState.Error(repositoryError) }
+                repositoryError
+            }
+            .map { providerList ->
+                _providers.update { DataState.Success(providerList) }
+            }
     }
 
     override suspend fun loadProviderDetails(providerId: Long): Either<RepositoryError, LLMProviderDetails> = either {

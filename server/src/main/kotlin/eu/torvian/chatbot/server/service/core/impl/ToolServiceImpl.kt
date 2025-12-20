@@ -8,10 +8,14 @@ import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.tool.MiscToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolType
+import eu.torvian.chatbot.common.models.tool.UserToolApprovalPreference
 import eu.torvian.chatbot.server.data.dao.LocalMCPToolDefinitionDao
 import eu.torvian.chatbot.server.data.dao.SessionToolConfigDao
 import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
+import eu.torvian.chatbot.server.data.dao.UserToolApprovalPreferenceDao
 import eu.torvian.chatbot.server.data.dao.error.ToolDefinitionError
+import eu.torvian.chatbot.server.data.dao.error.UserToolApprovalPreferenceError
+import eu.torvian.chatbot.server.data.dao.error.SetPreferenceError
 import eu.torvian.chatbot.server.service.core.ToolService
 import eu.torvian.chatbot.server.service.core.error.tool.*
 import kotlinx.datetime.Clock
@@ -29,6 +33,7 @@ class ToolServiceImpl(
     private val toolDefinitionDao: ToolDefinitionDao,
     private val sessionToolConfigDao: SessionToolConfigDao,
     private val localMCPToolDefinitionDao: LocalMCPToolDefinitionDao,
+    private val userToolApprovalPreferenceDao: UserToolApprovalPreferenceDao,
     private val transactionScope: TransactionScope,
 ) : ToolService {
 
@@ -223,5 +228,63 @@ class ToolServiceImpl(
         transactionScope.transaction {
             toolDefinitionDao.getToolsForUser(userId)
         }
-}
 
+    override suspend fun setToolApprovalPreference(
+        userId: Long,
+        toolDefinitionId: Long,
+        autoApprove: Boolean,
+        conditions: String?,
+        denialReason: String?
+    ): Either<SetToolApprovalPreferenceError, UserToolApprovalPreference> =
+        transactionScope.transaction {
+            either {
+                withError({ error: SetPreferenceError ->
+                    when (error) {
+                        is SetPreferenceError.ForeignKeyViolation ->
+                            SetToolApprovalPreferenceError.InvalidRelatedEntity(error.message)
+                    }
+                }) {
+                    userToolApprovalPreferenceDao.setPreference(
+                        userId,
+                        toolDefinitionId,
+                        autoApprove,
+                        conditions,
+                        denialReason
+                    ).bind()
+                }
+            }
+        }
+
+    override suspend fun getToolApprovalPreference(
+        userId: Long,
+        toolDefinitionId: Long
+    ): Either<GetToolApprovalPreferenceError, UserToolApprovalPreference> =
+        transactionScope.transaction {
+            either {
+                withError({ error: UserToolApprovalPreferenceError.NotFound ->
+                    GetToolApprovalPreferenceError.PreferenceNotFound(error.userId, error.toolDefinitionId)
+                }) {
+                    userToolApprovalPreferenceDao.getPreference(userId, toolDefinitionId).bind()
+                }
+            }
+        }
+
+    override suspend fun getAllApprovalPreferencesForUser(userId: Long): List<UserToolApprovalPreference> =
+        transactionScope.transaction {
+            userToolApprovalPreferenceDao.getAllPreferencesForUser(userId)
+        }
+
+    override suspend fun deleteToolApprovalPreference(
+        userId: Long,
+        toolDefinitionId: Long
+    ): Either<DeleteToolApprovalPreferenceError, Unit> =
+        transactionScope.transaction {
+            either {
+                withError({ error: UserToolApprovalPreferenceError.NotFound ->
+                    DeleteToolApprovalPreferenceError.PreferenceNotFound(error.userId, error.toolDefinitionId)
+                }) {
+                    userToolApprovalPreferenceDao.deletePreference(userId, toolDefinitionId).bind()
+                }
+            }
+        }
+}

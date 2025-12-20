@@ -7,9 +7,11 @@ import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.api.resources.SessionToolsResource
 import eu.torvian.chatbot.common.api.resources.ToolResource
 import eu.torvian.chatbot.common.models.api.tool.CreateToolRequest
+import eu.torvian.chatbot.common.models.api.tool.SetToolApprovalPreferenceRequest
 import eu.torvian.chatbot.common.models.api.tool.SetToolEnabledRequest
 import eu.torvian.chatbot.common.models.api.tool.SetToolsEnabledRequest
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
+import eu.torvian.chatbot.common.models.tool.UserToolApprovalPreference
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.resources.*
@@ -95,6 +97,50 @@ class KtorToolApiClient(client: HttpClient) : BaseApiResourceClient(client), Too
             ) {
                 setBody(request)
             }.body<Unit>()
+        }
+    }
+
+    override suspend fun getAllToolApprovalPreferences(): Either<ApiResourceError, List<UserToolApprovalPreference>> {
+        return safeApiCall {
+            client.get(ToolResource.ApprovalPreferences()).body<List<UserToolApprovalPreference>>()
+        }
+    }
+
+    override suspend fun getToolApprovalPreference(toolId: Long): Either<ApiResourceError, UserToolApprovalPreference> {
+        return safeApiCall {
+            client.get(
+                ToolResource.ApprovalPreferences.ByToolId(toolId = toolId)
+            ).body<UserToolApprovalPreference>()
+        }
+    }
+
+    override suspend fun setToolApprovalPreference(
+        toolDefinitionId: Long,
+        autoApprove: Boolean,
+        conditions: String?,
+        denialReason: String?
+    ): Either<ApiResourceError, UserToolApprovalPreference> {
+        return safeApiCall {
+            client.put(
+                ToolResource.ApprovalPreferences()
+            ) {
+                setBody(
+                    SetToolApprovalPreferenceRequest(
+                        toolDefinitionId = toolDefinitionId,
+                        autoApprove = autoApprove,
+                        conditions = conditions,
+                        denialReason = denialReason
+                    )
+                )
+            }.body<UserToolApprovalPreference>()
+        }
+    }
+
+    override suspend fun deleteToolApprovalPreference(toolId: Long): Either<ApiResourceError, Unit> {
+        return safeApiCall {
+            client.delete(
+                ToolResource.ApprovalPreferences.ByToolId(toolId = toolId)
+            ).body<Unit>()
         }
     }
 }

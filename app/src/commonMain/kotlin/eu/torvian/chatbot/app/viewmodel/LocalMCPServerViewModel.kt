@@ -6,10 +6,12 @@ import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.models.LocalMCPServer
 import eu.torvian.chatbot.app.repository.LocalMCPToolRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.app.repository.ToolRepository
 import eu.torvian.chatbot.app.service.mcp.LocalMCPServerManager
 import eu.torvian.chatbot.app.service.mcp.LocalMCPServerOverview
 import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
+import eu.torvian.chatbot.common.models.tool.UserToolApprovalPreference
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
@@ -25,17 +27,19 @@ import kotlinx.coroutines.launch
  * - Testing connections to MCP servers
  * - Starting/stopping MCP servers
  * - Discovering and refreshing tools from servers
- * - Managing individual tool settings (enable/disable, edit)
+ * - Managing individual tool settings (enable/disable, edit, approval preferences)
  * - Communicating with the backend via [LocalMCPServerManager]
  *
  * @property serverManager Manager for orchestrating server operations (test, start, stop, etc.)
- * @property toolRepository Repository for managing MCP tool definitions
+ * @property mcpToolRepository Repository for managing MCP tool definitions
+ * @property toolRepository Repository for managing tool approval preferences and general tool operations
  * @property errorNotifier Service for handling and notifying about errors
  * @property uiDispatcher Dispatcher for UI-related coroutines
  */
 class LocalMCPServerViewModel(
     private val serverManager: LocalMCPServerManager,
-    private val toolRepository: LocalMCPToolRepository,
+    private val mcpToolRepository: LocalMCPToolRepository,
+    private val toolRepository: ToolRepository,
     private val errorNotifier: ErrorNotifier,
     private val uiDispatcher: CoroutineDispatcher = Dispatchers.Main
 ) : ViewModel() {
@@ -74,6 +78,30 @@ class LocalMCPServerViewModel(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), null)
 
     /**
+     * Tool approval preferences for tools belonging to the currently selected server.
+     * This is used to display a list of active preferences in the server detail panel.
+     */
+    val selectedServerToolApprovalPreferences: StateFlow<DataState<RepositoryError, List<UserToolApprovalPreference>>> =
+        combine(
+            selectedServerOverview,
+            toolRepository.toolApprovalPreferences
+        ) { serverOverview, preferencesState ->
+            when (preferencesState) {
+                is DataState.Success -> {
+                    if (serverOverview == null) {
+                        DataState.Success(emptyList())
+                    } else {
+                        val serverToolIds = serverOverview.tools?.map { it.id }?.toSet() ?: emptySet()
+                        val filteredPreferences = preferencesState.data.filter { it.toolDefinitionId in serverToolIds }
+                        DataState.Success(filteredPreferences)
+                    }
+                }
+
+                else -> preferencesState
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), DataState.Idle)
+
+    /**
      * The current dialog state for the MCP servers tab.
      */
     val dialogState: StateFlow<LocalMCPServerDialogState> = _dialogState.asStateFlow()
@@ -96,6 +124,15 @@ class LocalMCPServerViewModel(
                     errorNotifier.repositoryError(
                         error = repoError,
                         shortMessage = "Failed to load MCP tools"
+                    )
+                }
+
+            // Also load tool approval preferences
+            toolRepository.loadUserToolApprovalPreferences()
+                .onLeft { repoError ->
+                    errorNotifier.repositoryError(
+                        error = repoError,
+                        shortMessage = "Failed to load tool approval preferences"
                     )
                 }
         }
@@ -388,7 +425,7 @@ class LocalMCPServerViewModel(
     fun toggleToolEnabled(tool: LocalMCPToolDefinition) {
         viewModelScope.launch(uiDispatcher) {
             val updatedTool = tool.copy(isEnabled = !tool.isEnabled)
-            toolRepository.updateMCPTool(updatedTool).onLeft { error ->
+            mcpToolRepository.updateMCPTool(updatedTool).onLeft { error ->
                 errorNotifier.repositoryError(
                     error = error,
                     shortMessage = "Failed to toggle tool"
@@ -399,16 +436,30 @@ class LocalMCPServerViewModel(
 
     /**
      * Opens the dialog to edit a tool.
+     * Loads the approval preference asynchronously in the background.
+     * If preference loading fails, the dialog is not opened and an error is shown.
      */
     fun startEditingTool(tool: LocalMCPToolDefinition) {
-        _dialogState.value = LocalMCPServerDialogState.EditTool(
-            tool = tool,
-            formState = LocalMCPToolFormState.fromTool(tool)
-        )
+        viewModelScope.launch(uiDispatcher) {
+            val approvalPreference =
+                toolRepository.toolApprovalPreferences.value.dataOrNull?.find { it.toolDefinitionId == tool.id }
+            _dialogState.value = LocalMCPServerDialogState.EditTool(
+                tool = tool,
+                approvalPreference = approvalPreference,
+                formState = LocalMCPToolFormState(
+                    name = tool.name,
+                    isEnabled = tool.isEnabled,
+                    approvalPreferenceActive = approvalPreference != null,
+                    autoApprove = approvalPreference?.autoApprove ?: true,
+                    conditions = approvalPreference?.conditions,
+                    denialReason = approvalPreference?.denialReason
+                ),
+            )
+        }
     }
 
     /**
-     * Saves changes to a tool.
+     * Saves changes to a tool and its approval preference.
      */
     fun saveTool() {
         val currentDialogState = _dialogState.value
@@ -418,19 +469,21 @@ class LocalMCPServerViewModel(
         }
 
         val form = currentDialogState.formState
+        val toolId = currentDialogState.tool.id
 
         viewModelScope.launch(uiDispatcher) {
             _dialogState.update {
                 (it as? LocalMCPServerDialogState.EditTool)?.copy(isSaving = true) ?: it
             }
 
+            // Step 1: Update the tool settings
             val updatedTool = currentDialogState.tool.copy(
                 name = form.name,
                 isEnabled = form.isEnabled
             )
 
-            toolRepository.updateMCPTool(updatedTool).fold(
-                ifLeft = { error ->
+            mcpToolRepository.updateMCPTool(updatedTool)
+                .onLeft { error ->
                     _dialogState.update {
                         (it as? LocalMCPServerDialogState.EditTool)?.copy(isSaving = false) ?: it
                     }
@@ -438,11 +491,43 @@ class LocalMCPServerViewModel(
                         error = error,
                         shortMessage = "Failed to update tool"
                     )
-                },
-                ifRight = {
-                    _dialogState.value = LocalMCPServerDialogState.None
+                    return@launch
                 }
-            )
+
+            // Step 2: Update the approval preference
+            if (form.hasApprovalPreferenceChanged(currentDialogState.approvalPreference)) {
+                if (form.approvalPreferenceActive) {
+                    toolRepository.setToolApprovalPreference(
+                        toolDefinitionId = toolId,
+                        autoApprove = form.autoApprove,
+                        conditions = form.conditions,
+                        denialReason = form.denialReason
+                    ).onLeft { error ->
+                        _dialogState.update {
+                            (it as? LocalMCPServerDialogState.EditTool)?.copy(isSaving = false) ?: it
+                        }
+                        errorNotifier.repositoryError(
+                            error = error,
+                            shortMessage = "Failed to save approval preference"
+                        )
+                        return@launch
+                    }
+                } else {
+                    toolRepository.deleteToolApprovalPreference(toolId)
+                        .onLeft { error ->
+                            _dialogState.update {
+                                (it as? LocalMCPServerDialogState.EditTool)?.copy(isSaving = false) ?: it
+                            }
+                            errorNotifier.repositoryError(
+                                error = error,
+                                shortMessage = "Failed to delete approval preference"
+                            )
+                            return@launch
+                        }
+                }
+                // All operations completed successfully
+                _dialogState.value = LocalMCPServerDialogState.None
+            }
         }
     }
 
@@ -455,6 +540,7 @@ class LocalMCPServerViewModel(
                 is LocalMCPServerDialogState.EditTool -> dialogState.copy(
                     formState = update(dialogState.formState)
                 )
+
                 else -> dialogState
             }
         }
@@ -477,7 +563,7 @@ class LocalMCPServerViewModel(
             if (toolsToEnable.isEmpty()) return@launch
 
             val updatedTools = toolsToEnable.map { it.copy(isEnabled = true) }
-            toolRepository.batchUpdateMCPTools(serverId, updatedTools).onLeft { error ->
+            mcpToolRepository.batchUpdateMCPTools(serverId, updatedTools).onLeft { error ->
                 errorNotifier.repositoryError(
                     error = error,
                     shortMessage = "Failed to enable all tools"
@@ -501,12 +587,28 @@ class LocalMCPServerViewModel(
             if (toolsToDisable.isEmpty()) return@launch
 
             val updatedTools = toolsToDisable.map { it.copy(isEnabled = false) }
-            toolRepository.batchUpdateMCPTools(serverId, updatedTools).onLeft { error ->
+            mcpToolRepository.batchUpdateMCPTools(serverId, updatedTools).onLeft { error ->
                 errorNotifier.repositoryError(
                     error = error,
                     shortMessage = "Failed to disable all tools"
                 )
             }
+        }
+    }
+
+    /**
+     * Deletes an approval preference for a specific tool.
+     * Used from the server detail panel overview.
+     */
+    fun deleteToolApprovalPreference(toolDefinitionId: Long) {
+        viewModelScope.launch(uiDispatcher) {
+            toolRepository.deleteToolApprovalPreference(toolDefinitionId)
+                .onLeft { error ->
+                    errorNotifier.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to delete approval preference"
+                    )
+                }
         }
     }
 }
@@ -534,6 +636,7 @@ sealed class LocalMCPServerDialogState {
 
     data class EditTool(
         val tool: LocalMCPToolDefinition,
+        val approvalPreference: UserToolApprovalPreference?,
         val formState: LocalMCPToolFormState,
         val isSaving: Boolean = false
     ) : LocalMCPServerDialogState()
@@ -607,16 +710,22 @@ data class LocalMCPServerFormState(
  */
 data class LocalMCPToolFormState(
     val name: String = "",
-    val isEnabled: Boolean = true
+    val isEnabled: Boolean = true,
+    val approvalPreferenceActive: Boolean = false,
+    val autoApprove: Boolean = true,
+    val conditions: String? = null,
+    val denialReason: String? = null
 ) {
     fun isValid(): Boolean = name.isNotBlank()
 
-    companion object {
-        fun fromTool(tool: LocalMCPToolDefinition): LocalMCPToolFormState {
-            return LocalMCPToolFormState(
-                name = tool.name,
-                isEnabled = tool.isEnabled
-            )
+    fun hasApprovalPreferenceChanged(currentPreference: UserToolApprovalPreference?): Boolean {
+        if (approvalPreferenceActive != (currentPreference != null)) return true
+        return if (approvalPreferenceActive && currentPreference != null) {
+            autoApprove != (currentPreference.autoApprove) ||
+                    conditions != currentPreference.conditions ||
+                    denialReason != currentPreference.denialReason
+        } else {
+            false
         }
     }
 }

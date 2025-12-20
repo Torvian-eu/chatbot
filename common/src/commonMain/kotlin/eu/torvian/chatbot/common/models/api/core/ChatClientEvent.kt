@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.common.models.api.core
 
-import eu.torvian.chatbot.common.models.tool.LocalMCPToolCallResult
-import eu.torvian.chatbot.common.models.tool.ToolCallApprovalResponse
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallResult
+import eu.torvian.chatbot.common.models.api.tool.ToolCallApprovalResponse
 import kotlinx.serialization.Serializable
 
 /**

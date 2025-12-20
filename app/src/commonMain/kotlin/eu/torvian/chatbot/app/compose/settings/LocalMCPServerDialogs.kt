@@ -6,6 +6,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -687,8 +688,116 @@ private fun LocalMCPToolEditDialog(
                         checked = formState.isEnabled,
                         onCheckedChange = { newValue ->
                             onUpdateForm { it.copy(isEnabled = newValue) }
-                        }
+                        },
+                        enabled = !isSaving
                     )
+                }
+
+                HorizontalDivider()
+
+                // Approval Preference section
+                if (formState.approvalPreferenceActive) {
+                    // Active state - show full configuration
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // Header with remove button
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Approval Preference",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            IconButton(
+                                onClick = {
+                                    onUpdateForm { it.copy(approvalPreferenceActive = false) }
+                                },
+                                enabled = !isSaving
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Remove approval preference"
+                                )
+                            }
+                        }
+
+                        // Auto-approve toggle
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Auto-Approve",
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                                Text(
+                                    text = "Automatically approve calls to this tool",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = formState.autoApprove,
+                                onCheckedChange = { newValue ->
+                                    onUpdateForm { it.copy(autoApprove = newValue) }
+                                },
+                                enabled = !isSaving
+                            )
+                        }
+
+                        // Conditions (optional)
+                        OutlinedTextField(
+                            value = formState.conditions ?: "",
+                            onValueChange = { newValue ->
+                                onUpdateForm { it.copy(conditions = newValue.ifBlank { null }) }
+                            },
+                            label = { Text("Conditions (optional)") },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !isSaving,
+                            minLines = 2,
+                            supportingText = {
+                                Text("Specify conditions for approval (e.g., 'only when file size < 1MB')")
+                            }
+                        )
+
+                        // Denial Reason (optional)
+                        OutlinedTextField(
+                            value = formState.denialReason ?: "",
+                            onValueChange = { newValue ->
+                                onUpdateForm { it.copy(denialReason = newValue.ifBlank { null }) }
+                            },
+                            label = { Text("Denial Reason (optional)") },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !isSaving,
+                            minLines = 2,
+                            supportingText = {
+                                Text("Reason to show when denying this tool call")
+                            }
+                        )
+                    }
+                } else {
+                    // Inactive state - show button to activate
+                    OutlinedButton(
+                        onClick = {
+                            onUpdateForm { it.copy(approvalPreferenceActive = true) }
+                        },
+                        enabled = !isSaving,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Add Approval Preference")
+                    }
                 }
             }
         },

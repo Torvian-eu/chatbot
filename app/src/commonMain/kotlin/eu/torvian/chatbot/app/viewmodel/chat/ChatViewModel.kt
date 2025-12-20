@@ -198,9 +198,9 @@ class ChatViewModel(
     /**
      * Loads a chat session and its messages by ID.
      */
-    fun loadSession(sessionId: Long, userId: Long, forceReload: Boolean = false) {
+    fun loadSession(sessionId: Long, userId: Long) {
         normalScope.launch {
-            loadSessionUC.execute(sessionId, userId, forceReload)
+            loadSessionUC.execute(sessionId, userId)
         }
     }
 

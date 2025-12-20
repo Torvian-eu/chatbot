@@ -12,8 +12,8 @@ import eu.torvian.chatbot.common.models.api.core.ChatClientEvent
 import eu.torvian.chatbot.common.models.api.core.ChatEvent
 import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
 import eu.torvian.chatbot.common.models.api.core.ProcessNewMessageRequest
-import eu.torvian.chatbot.common.models.tool.LocalMCPToolCallRequest
-import eu.torvian.chatbot.common.models.tool.ToolCallApprovalResponse
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallRequest
+import eu.torvian.chatbot.common.models.api.tool.ToolCallApprovalResponse
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map

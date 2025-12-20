@@ -29,8 +29,8 @@ fun serviceModule() = module {
     single<ModelSettingsService> { ModelSettingsServiceImpl(get(), get(), get(), get(), get(), get(), get()) }
     single<LLMProviderService> { LLMProviderServiceImpl(get(), get(), get(), get(), get(), get(), get(), get()) }
     single<MessageService> { MessageServiceImpl(get(), get(), get()) }
-    single<ChatService> { ChatServiceImpl(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
-    single<ToolService> { ToolServiceImpl(get(), get(), get(), get()) }
+    single<ChatService> { ChatServiceImpl(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
+    single<ToolService> { ToolServiceImpl(get(), get(), get(), get(), get()) }
     single<ToolCallService> { ToolCallServiceImpl(get(), get()) }
     single<LocalMCPServerService> { LocalMCPServerServiceImpl(get(), get(), get()) }
     single<LocalMCPToolDefinitionService> { LocalMCPToolDefinitionServiceImpl(get(), get(), get(), get(), get()) }

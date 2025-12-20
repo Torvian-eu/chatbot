@@ -2,7 +2,7 @@ package eu.torvian.chatbot.common.models.api.core
 
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.models.core.ChatMessage
-import eu.torvian.chatbot.common.models.tool.LocalMCPToolCallRequest
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallRequest
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import kotlinx.serialization.Serializable
 

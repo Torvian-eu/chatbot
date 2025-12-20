@@ -1,8 +1,8 @@
 package eu.torvian.chatbot.app.service.mcp
 
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
-import eu.torvian.chatbot.common.models.tool.LocalMCPToolCallRequest
-import eu.torvian.chatbot.common.models.tool.LocalMCPToolCallResult
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallRequest
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallResult
 import io.modelcontextprotocol.kotlin.sdk.TextContent
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map

@@ -4,8 +4,8 @@ import arrow.core.Either
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.server.service.core.error.message.ProcessNewMessageError
 import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageError
-import eu.torvian.chatbot.common.models.tool.LocalMCPToolCallResult
-import eu.torvian.chatbot.common.models.tool.ToolCallApprovalResponse
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallResult
+import eu.torvian.chatbot.common.models.api.tool.ToolCallApprovalResponse
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -47,6 +47,7 @@ interface ChatService {
      * 3. AssistantMessageSaved - Final response from LLM
      * 4. StreamCompleted - End of processing
      *
+     * @param userId The ID of the user making the request (used for auto-approval preferences).
      * @param session The session the message belongs to.
      * @param llmConfig The LLM configuration to use for the request.
      * @param content The user's message content.
@@ -58,6 +59,7 @@ interface ChatService {
      *         or ProcessNewMessageError if an error occurs.
      */
     fun processNewMessage(
+        userId: Long,
         session: ChatSession,
         llmConfig: LLMConfig,
         content: String,
@@ -100,6 +102,7 @@ interface ChatService {
      * - Multiple assistant messages may be created during tool calling loops
      * - All operations emit events for real-time UI updates via SSE
      *
+     * @param userId The ID of the user making the request (used for auto-approval preferences).
      * @param session The session the message belongs to.
      * @param llmConfig The LLM configuration to use for the request (model, provider, settings, tools).
      * @param content The user's message content.
@@ -113,6 +116,7 @@ interface ChatService {
      * @see ProcessNewMessageError for possible error types
      */
     fun processNewMessageStreaming(
+        userId: Long,
         session: ChatSession,
         llmConfig: LLMConfig,
         content: String,

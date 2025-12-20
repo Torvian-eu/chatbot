@@ -3,12 +3,7 @@ package eu.torvian.chatbot.app.viewmodel.chat.usecase
 import arrow.fx.coroutines.parZip
 import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.error_loading_session
-import eu.torvian.chatbot.app.repository.AuthState
-import eu.torvian.chatbot.app.repository.LocalMCPServerRepository
-import eu.torvian.chatbot.app.repository.ModelRepository
-import eu.torvian.chatbot.app.repository.SessionRepository
-import eu.torvian.chatbot.app.repository.ModelSettingsRepository
-import eu.torvian.chatbot.app.repository.ToolRepository
+import eu.torvian.chatbot.app.repository.*
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
@@ -32,6 +27,7 @@ class LoadSessionUseCase(
 ) {
 
     private val logger = kmpLogger<LoadSessionUseCase>()
+
     // Keep the last userId used for loading sessions so retry logic can reuse it
     private var lastUserId: Long? = null
 
@@ -43,14 +39,9 @@ class LoadSessionUseCase(
      * reactive flows.
      *
      * @param sessionId The ID of the session to load
-     * @param forceReload If true, reloads the session even if it's already loaded successfully
      * @param userId The ID of the user, required for loading MCP servers
      */
-    suspend fun execute(sessionId: Long, userId: Long, forceReload: Boolean = false) {
-        // Prevent reloading if already loading or if the session is already loaded successfully
-        val currentState = state.sessionDataState.value
-        if (!forceReload && (currentState.isLoading || (currentState.dataOrNull?.id == sessionId))) return
-
+    suspend fun execute(sessionId: Long, userId: Long) {
         // Store the session ID for potential retry
         state.setRetryState(sessionId, null)
         // Update last used userId
@@ -65,36 +56,8 @@ class LoadSessionUseCase(
             { toolRepository.loadEnabledToolsForSession(sessionId) },
             { mcpServerRepository.loadServers(userId) }
         ) { sessionResult, toolCallsResult, modelsResult, settingsResult, toolsResult, enabledToolsResult, _ ->
-            toolCallsResult.onLeft { error ->
-                errorNotifier.repositoryError(
-                    error = error,
-                    shortMessage = "Failed to load tool calls for session"
-                )
-            }
-            modelsResult.onLeft { error ->
-                errorNotifier.repositoryError(
-                    error = error,
-                    shortMessage = "Failed to load models"
-                )
-            }
-            settingsResult.onLeft { error ->
-                errorNotifier.repositoryError(
-                    error = error,
-                    shortMessage = "Failed to load model settings"
-                )
-            }
-            toolsResult.onLeft { error ->
-                errorNotifier.repositoryError(
-                    error = error,
-                    shortMessage = "Failed to load tools"
-                )
-            }
-            enabledToolsResult.onLeft { error ->
-                errorNotifier.repositoryError(
-                    error = error,
-                    shortMessage = "Failed to load enabled tools for session"
-                )
-            }
+            state.resetState()
+            state.setActiveSessionId(sessionId)
             sessionResult
                 .onLeft { error ->
                     val eventId = errorNotifier.repositoryError(
@@ -103,12 +66,47 @@ class LoadSessionUseCase(
                         isRetryable = true
                     )
                     state.setRetryState(sessionId, eventId)
+                    return@parZip
                 }
                 .onRight {
                     logger.info("Successfully loaded session $sessionId. Dependencies are loading in background.")
-                    state.resetState()
-                    state.setActiveSessionId(sessionId)
                 }
+
+            modelsResult.onLeft { error ->
+                errorNotifier.repositoryError(
+                    error = error,
+                    shortMessage = "Failed to load models"
+                )
+                return@parZip
+            }
+            settingsResult.onLeft { error ->
+                errorNotifier.repositoryError(
+                    error = error,
+                    shortMessage = "Failed to load model settings"
+                )
+                return@parZip
+            }
+            toolCallsResult.onLeft { error ->
+                errorNotifier.repositoryError(
+                    error = error,
+                    shortMessage = "Failed to load tool calls for session"
+                )
+                return@parZip
+            }
+            toolsResult.onLeft { error ->
+                errorNotifier.repositoryError(
+                    error = error,
+                    shortMessage = "Failed to load tools"
+                )
+                return@parZip
+            }
+            enabledToolsResult.onLeft { error ->
+                errorNotifier.repositoryError(
+                    error = error,
+                    shortMessage = "Failed to load enabled tools for session"
+                )
+                return@parZip
+            }
         }
     }
 
@@ -123,7 +121,7 @@ class LoadSessionUseCase(
         return if (state.lastFailedLoadEventId.value == eventId && sessionId != null && lastUserId != null) {
             logger.info("Retrying loadSession due to Snackbar action!")
             state.clearRetryState()
-            execute(sessionId, lastUserId!!, forceReload = true)
+            execute(sessionId, lastUserId!!)
             true
         } else {
             false
