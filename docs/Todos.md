@@ -9,3 +9,4 @@
 - Improve LLM API error display to the user.
 - Remove LocalMCPServerLocalTable. Store it on the server instead. Environment variables remain to be encrypted and stored locally on the client side.
 - Only show tool options in chat area if the selected model supports tool calling.
+- Limit the displayed length of snackbar messages. Add "more" link to expand.
