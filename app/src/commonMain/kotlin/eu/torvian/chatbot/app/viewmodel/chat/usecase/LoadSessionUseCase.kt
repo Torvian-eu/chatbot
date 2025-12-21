@@ -42,11 +42,17 @@ class LoadSessionUseCase(
      * @param userId The ID of the user, required for loading MCP servers
      */
     suspend fun execute(sessionId: Long, userId: Long) {
+        logger.info("Loading session $sessionId")
+
+        // Reset state before loading a new session
+        state.resetState()
+        state.setActiveSessionId(sessionId)
         // Store the session ID for potential retry
         state.setRetryState(sessionId, null)
         // Update last used userId
         lastUserId = userId
 
+        // Load all dependencies in parallel
         parZip(
             { sessionRepository.loadSessionDetails(sessionId) },
             { sessionRepository.loadSessionToolCalls(sessionId) },
@@ -56,8 +62,6 @@ class LoadSessionUseCase(
             { toolRepository.loadEnabledToolsForSession(sessionId) },
             { mcpServerRepository.loadServers(userId) }
         ) { sessionResult, toolCallsResult, modelsResult, settingsResult, toolsResult, enabledToolsResult, _ ->
-            state.resetState()
-            state.setActiveSessionId(sessionId)
             sessionResult
                 .onLeft { error ->
                     val eventId = errorNotifier.repositoryError(
