@@ -53,6 +53,10 @@ Users will be forced to change their password on first login.
 ### (done) Only allow connections to the server over HTTPS.
 For security, the server should only be accessible over HTTPS, and not HTTP. This applies to connections over the internet, as well as local network connections.
 
+### Make session list panel collapsible
+Add an icon button to expand/collapse panel in the top app bar, on the left side.
+In the future we could add a vertical sidebar with icons on the left side of the screen. Clicking the session list icon would expand the panel, clicking it again would collapse it. This would only make sense when we have multiple panels to switch between. Currently we only have the session list panel, so a top app bar button is the best option.
+
 ---
 
 ## Intermediate features
