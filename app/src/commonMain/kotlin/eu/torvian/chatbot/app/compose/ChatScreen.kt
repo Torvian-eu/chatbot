@@ -3,11 +3,13 @@ package eu.torvian.chatbot.app.compose
 import androidx.compose.runtime.*
 import eu.torvian.chatbot.app.compose.chatarea.ChatAreaActions
 import eu.torvian.chatbot.app.compose.chatarea.ChatAreaState
+import eu.torvian.chatbot.app.compose.chatarea.ChatTopBarContent
 import eu.torvian.chatbot.app.compose.sessionlist.SessionListActions
 import eu.torvian.chatbot.app.compose.sessionlist.SessionListState
+import eu.torvian.chatbot.app.compose.topbar.TopBarContentProvider
+import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
 import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
-import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.common.models.core.ChatGroup
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
@@ -64,6 +66,24 @@ fun ChatScreen(
 
     // Derive tool calls map
     val toolCallsMap = toolCallsForCurrentSession.dataOrNull ?: emptyMap()
+
+    // Set top bar content when this screen is active using the new provider
+    TopBarContentProvider(
+        content = {
+            ChatTopBarContent(
+                currentModel = currentModel,
+                currentSettings = currentSettings,
+                availableModels = availableModels,
+                availableSettings = availableSettings,
+                onSelectModel = { chatViewModel.selectModel(it) },
+                onSelectSettings = { chatViewModel.selectSettings(it) },
+                onRetryLoadModels = { /* TODO: wire up retry */ },
+                onRetryLoadSettings = { /* TODO: wire up retry */ },
+                onShowToolConfig = { chatViewModel.showToolConfigDialog() },
+                enabledToolsCount = enabledToolsCount
+            )
+        }
+    )
 
     // --- State-Driven Effect to Load Sessions ---
     LaunchedEffect(selectedSession, authState) {
@@ -171,6 +191,7 @@ fun ChatScreen(
             override fun onShowToolConfig() = chatViewModel.showToolConfigDialog()
             override fun onShowToolCallDetails(toolCall: ToolCall) =
                 chatViewModel.showToolCallDetails(toolCall)
+
             override fun onRetryLoadingSession() {
                 selectedSession?.id?.let { sessionId ->
                     if (authState is AuthState.Authenticated) {

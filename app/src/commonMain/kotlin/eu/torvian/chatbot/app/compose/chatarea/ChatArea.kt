@@ -12,12 +12,10 @@ import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ErrorStateDisplay
 import eu.torvian.chatbot.app.compose.common.LoadingOverlay
 import eu.torvian.chatbot.app.domain.contracts.DataState
-import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.llm.LLMModel
-import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.tool.ToolCall
 
 /**
@@ -54,12 +52,7 @@ fun ChatArea(
                 editingMessage = state.editingMessage,
                 editingContent = state.editingContent,
                 dialogState = state.dialogState,
-                currentModel = state.currentModel,
-                currentSettings = state.currentSettings,
-                availableModels = state.availableModels,
-                availableSettingsForCurrentModel = state.availableSettingsForCurrentModel,
                 modelsById = state.modelsById,
-                enabledToolsCount = state.enabledToolsCount,
                 toolCallsMap = state.toolCallsMap
             )
         }
@@ -112,12 +105,7 @@ private fun IdleStateDisplay(modifier: Modifier = Modifier) {
  * @param editingMessage The message currently being edited (E3.S1, E3.S2).
  * @param editingContent The content of the message currently being edited (E3.S1, E3.S2).
  * @param dialogState The current dialog state from the ViewModel.
- * @param currentModel The currently selected LLM model.
- * @param currentSettings The currently selected settings profile.
- * @param availableModels The state of all available LLM models.
- * @param availableSettingsForCurrentModel The state of settings available for the current model.
  * @param modelsById Map of model IDs to LLMModel objects for quick lookups.
- * @param enabledToolsCount The number of tools currently enabled for the session.
  * @param toolCallsMap Tool calls for the current session, organized by message ID.
  */
 @Composable
@@ -131,12 +119,7 @@ private fun SuccessStateDisplay(
     editingMessage: ChatMessage?,
     editingContent: String?,
     dialogState: ChatAreaDialogState,
-    currentModel: LLMModel?,
-    currentSettings: ModelSettings?,
-    availableModels: DataState<RepositoryError, List<LLMModel>>,
-    availableSettingsForCurrentModel: DataState<RepositoryError, List<ModelSettings>>,
     modelsById: Map<Long, LLMModel>,
-    enabledToolsCount: Int,
     toolCallsMap: Map<Long, List<ToolCall>>
 ) {
     // Prepare message actions to pass down
@@ -154,17 +137,6 @@ private fun SuccessStateDisplay(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        ModelSettingsSelector(
-            currentModel = currentModel,
-            currentSettings = currentSettings,
-            availableModels = availableModels,
-            availableSettings = availableSettingsForCurrentModel,
-            onSelectModel = { modelId -> actions.onSelectModel(modelId) },
-            onSelectSettings = { settingsId -> actions.onSelectSettings(settingsId) },
-            onRetryLoadModels = { /* TODO: Wire up to ViewModel action */ },
-            onRetryLoadSettings = { /* TODO: Wire up to ViewModel action */ },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
-        )
 
         MessageList(
             chatSession = chatSession,
@@ -187,8 +159,6 @@ private fun SuccessStateDisplay(
             replyTargetMessage = replyTargetMessage,
             onCancelReply = actions::onCancelReply,
             isSendingMessage = isSendingMessage,
-            onShowToolConfig = actions::onShowToolConfig,
-            enabledToolsCount = enabledToolsCount,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 8.dp) // Small padding between messages and input
