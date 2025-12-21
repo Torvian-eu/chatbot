@@ -431,7 +431,8 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   ├── settings/    # Settings components
 │   │   ├── SettingsScreen.kt
 │   │   └── ... other settings components ...
-│   └── snackbar/    # Snackbar components
+│   ├── snackbar/    # Snackbar components
+│   └── topbar/    # Top bar components for dynamic content
 ├── database/        # Local database management (SQLDelight)
 │   ├── dao/         # Data Access Objects for local DB
 │   │   ├── EncryptedSecretLocalDao.kt # Interface for local secret DAO
