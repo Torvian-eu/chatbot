@@ -2,11 +2,13 @@ package eu.torvian.chatbot.app.compose.chatarea
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuOpen
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.LoadingOverlay
 import eu.torvian.chatbot.app.compose.common.PlainTooltipBox
@@ -32,53 +34,86 @@ fun RowScope.ChatTopBarContent(
     onRetryLoadModels: () -> Unit,
     onRetryLoadSettings: () -> Unit,
     onShowToolConfig: () -> Unit,
-    enabledToolsCount: Int
+    enabledToolsCount: Int,
+    isSessionListCollapsed: Boolean,
+    onToggleSessionList: () -> Unit
 ) {
-    // Compact model selector (icon + dropdown)
-    PlainTooltipBox(text = "Select Model") {
-        CompactModelSelector(
-            currentModel = currentModel,
-            availableModels = availableModels,
-            onSelectModel = onSelectModel,
-            onRetryLoadModels = onRetryLoadModels
-        )
-    }
-
-    Spacer(Modifier.width(8.dp))
-
-    // Compact settings selector (icon + dropdown)
-    PlainTooltipBox(text = "Select Model Settings") {
-        CompactSettingsSelector(
-            currentSettings = currentSettings,
-            availableSettings = availableSettings,
-            onSelectSettings = onSelectSettings,
-            onRetryLoadSettings = onRetryLoadSettings
-        )
-    }
-
-    Spacer(Modifier.width(8.dp))
-
-    // Tool configuration button with badge
-    PlainTooltipBox(text = "Configure Tools") {
-        BadgedBox(
-            badge = {
-                if (enabledToolsCount > 0) {
-                    Badge {
-                        Text(enabledToolsCount.toString())
-                    }
-                }
-            }
+    // Left-aligned actions
+    Row(
+        modifier = Modifier.weight(0.3f),
+        horizontalArrangement = Arrangement.Start
+    ) {
+        // Session list panel toggle button
+        PlainTooltipBox(
+            text = if (isSessionListCollapsed) "Show session list" else "Hide session list"
         ) {
             IconButton(
-                onClick = onShowToolConfig,
-                modifier = Modifier.size(48.dp)
+                onClick = onToggleSessionList,
+                modifier = Modifier
+                    .size(48.dp)
+                    .then(if (isSessionListCollapsed) Modifier.rotate(180f) else Modifier)
             ) {
                 Icon(
-                    imageVector = Icons.Default.Build,
-                    contentDescription = "Configure Tools"
+                    imageVector = Icons.AutoMirrored.Filled.MenuOpen,
+                    contentDescription = if (isSessionListCollapsed) "Show session list" else "Hide session list"
                 )
             }
         }
+    }
+
+    // Right-aligned actions
+    Row(
+        modifier = Modifier.weight(1f),
+        horizontalArrangement = Arrangement.End
+    ) {
+        // Compact model selector (icon + dropdown)
+        PlainTooltipBox(text = "Select Model") {
+            CompactModelSelector(
+                currentModel = currentModel,
+                availableModels = availableModels,
+                onSelectModel = onSelectModel,
+                onRetryLoadModels = onRetryLoadModels
+            )
+        }
+
+        Spacer(Modifier.width(8.dp))
+
+        // Compact settings selector (icon + dropdown)
+        PlainTooltipBox(text = "Select Model Settings") {
+            CompactSettingsSelector(
+                currentSettings = currentSettings,
+                availableSettings = availableSettings,
+                onSelectSettings = onSelectSettings,
+                onRetryLoadSettings = onRetryLoadSettings
+            )
+        }
+
+        Spacer(Modifier.width(8.dp))
+
+        // Tool configuration button with badge
+        PlainTooltipBox(text = "Configure Tools") {
+            BadgedBox(
+                badge = {
+                    if (enabledToolsCount > 0) {
+                        Badge {
+                            Text(enabledToolsCount.toString())
+                        }
+                    }
+                }
+            ) {
+                IconButton(
+                    onClick = onShowToolConfig,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Build,
+                        contentDescription = "Configure Tools"
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.width(8.dp))
     }
 }
 

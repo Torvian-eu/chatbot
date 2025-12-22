@@ -9,7 +9,6 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -90,35 +89,37 @@ fun MainApplicationFlow(
         MaterialTheme(colorScheme = lightColorScheme()) {
             Scaffold(
                 topBar = {
-                    CenterAlignedTopAppBar(
-                        title = {},
-                        actions = {
-                            // Render screen-specific content first
-                            topBarContent?.invoke(this)
+                    TopAppBar(
+                        title = {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                // Render screen-specific content first
+                                topBarContent?.invoke(this)
 
-                            Spacer(Modifier.width(8.dp))
-
-                            // Always show UserMenu at the end
-                            PlainTooltipBox(text = "User menu") {
-                                UserMenu(
-                                    username = authState.username,
-                                    availableAccounts = availableAccounts,
-                                    accountSwitchInProgress = accountSwitchInProgress,
-                                    onSwitchAccount = { authViewModel.openAccountSwitcher() },
-                                    onAddAccount = { authViewModel.openAddAccount() },
-                                    onLogout = {
-                                        scope.launch { authViewModel.logout() }
-                                    },
-                                    onLogin = {
-                                        navController.navigate(Login) {
-                                            popUpTo(navController.graph.findStartDestination().id) {
-                                                saveState = true
+                                // Always show UserMenu at the end
+                                PlainTooltipBox(text = "User menu") {
+                                    UserMenu(
+                                        username = authState.username,
+                                        availableAccounts = availableAccounts,
+                                        accountSwitchInProgress = accountSwitchInProgress,
+                                        onSwitchAccount = { authViewModel.openAccountSwitcher() },
+                                        onAddAccount = { authViewModel.openAddAccount() },
+                                        onLogout = {
+                                            scope.launch { authViewModel.logout() }
+                                        },
+                                        onLogin = {
+                                            navController.navigate(Login) {
+                                                popUpTo(navController.graph.findStartDestination().id) {
+                                                    saveState = true
+                                                }
+                                                launchSingleTop = true
+                                                restoreState = true
                                             }
-                                            launchSingleTop = true
-                                            restoreState = true
                                         }
-                                    }
-                                )
+                                    )
+                                }
                             }
                         },
                         modifier = Modifier.fillMaxWidth()

@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.app.compose
 
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import eu.torvian.chatbot.app.compose.chatarea.ChatAreaActions
 import eu.torvian.chatbot.app.compose.chatarea.ChatAreaState
 import eu.torvian.chatbot.app.compose.chatarea.ChatTopBarContent
@@ -67,6 +68,9 @@ fun ChatScreen(
     // Derive tool calls map
     val toolCallsMap = toolCallsForCurrentSession.dataOrNull ?: emptyMap()
 
+    // --- Local UI State for Session List Panel Collapse ---
+    var isSessionListCollapsed by rememberSaveable { mutableStateOf(false) }
+
     // Set top bar content when this screen is active using the new provider
     TopBarContentProvider(
         content = {
@@ -80,7 +84,9 @@ fun ChatScreen(
                 onRetryLoadModels = { /* TODO: wire up retry */ },
                 onRetryLoadSettings = { /* TODO: wire up retry */ },
                 onShowToolConfig = { chatViewModel.showToolConfigDialog() },
-                enabledToolsCount = enabledToolsCount
+                enabledToolsCount = enabledToolsCount,
+                isSessionListCollapsed = isSessionListCollapsed,
+                onToggleSessionList = { isSessionListCollapsed = !isSessionListCollapsed }
             )
         }
     )
@@ -207,6 +213,7 @@ fun ChatScreen(
         sessionListState = sessionListPanelUiState,
         sessionListActions = sessionListPanelActions,
         chatAreaState = chatAreaState,
-        chatAreaActions = chatAreaActions
+        chatAreaActions = chatAreaActions,
+        isSessionListCollapsed = isSessionListCollapsed
     )
 }

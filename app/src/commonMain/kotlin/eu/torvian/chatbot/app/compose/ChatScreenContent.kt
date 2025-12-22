@@ -1,5 +1,8 @@
 package eu.torvian.chatbot.app.compose
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -25,27 +28,35 @@ import eu.torvian.chatbot.app.compose.sessionlist.SessionListState
  * @param sessionListActions The actions contract for the session list panel.
  * @param chatAreaState The current UI state contract for the chat area.
  * @param chatAreaActions The actions contract for the chat area.
+ * @param isSessionListCollapsed Whether the session list panel is collapsed.
  */
 @Composable
 fun ChatScreenContent(
     sessionListState: SessionListState,
     sessionListActions: SessionListActions,
     chatAreaState: ChatAreaState,
-    chatAreaActions: ChatAreaActions
+    chatAreaActions: ChatAreaActions,
+    isSessionListCollapsed: Boolean
 ) {
     Row(modifier = Modifier.fillMaxSize()) {
-        Box(
-            modifier = Modifier
-                .weight(0.25f) // Fixed weight for Session List Panel
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(16.dp),
+        AnimatedVisibility(
+            modifier = Modifier.weight(0.25f), // Fixed weight for Session List Panel
+            visible = !isSessionListCollapsed,
+            enter = slideInHorizontally(),
+            exit = slideOutHorizontally()
         ) {
-            // PR 19: Session List Panel
-            SessionListPanel(
-                state = sessionListState,
-                actions = sessionListActions
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(16.dp),
+            ) {
+                // PR 19: Session List Panel
+                SessionListPanel(
+                    state = sessionListState,
+                    actions = sessionListActions
+                )
+            }
         }
         Box(
             modifier = Modifier
