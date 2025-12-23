@@ -358,6 +358,17 @@ class DefaultSessionRepository(
             }
     }
 
+    override suspend fun deleteMessageRecursively(messageId: Long, sessionId: Long): Either<RepositoryError, Unit> {
+        return chatApi.deleteMessageRecursively(messageId)
+            .mapLeft { apiResourceError ->
+                apiResourceError.toRepositoryError("Failed to delete thread")
+            }
+            .onRight {
+                // Reload the session details to reflect the changes
+                loadSessionDetails(sessionId)
+            }
+    }
+
     /**
      * Applies a non-streaming ChatEvent to update the cached session.
      * Handles events from the non-streaming message processing endpoint.
