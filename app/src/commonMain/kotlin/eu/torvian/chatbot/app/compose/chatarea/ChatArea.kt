@@ -129,6 +129,7 @@ private fun SuccessStateDisplay(
             onEditMessage = actions::onStartEditing,
             onReplyMessage = actions::onStartReplyTo,
             onDeleteMessage = actions::onRequestDeleteMessage,
+            onDeleteThread = actions::onRequestDeleteThread,
             // Keep onCopyMessage as null until PR 25 - Copy to Clipboard implementation
             onCopyMessage = null,
             // TODO: Wire up regenerate action when available

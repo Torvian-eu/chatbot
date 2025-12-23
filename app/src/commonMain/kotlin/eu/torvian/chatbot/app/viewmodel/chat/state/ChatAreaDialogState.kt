@@ -34,6 +34,21 @@ sealed class ChatAreaDialogState {
     ) : ChatAreaDialogState()
 
     /**
+     * State for the "Delete Thread" (recursive deletion) confirmation dialog.
+     * Shows a stronger warning than single message deletion since this action
+     * deletes the message and all its replies.
+     *
+     * @property message The message targeted for deletion along with all replies.
+     * @property onDeleteConfirm Pre-bound action to execute when the user confirms deletion.
+     * @property onDismiss Pre-bound action to execute when the dialog is dismissed.
+     */
+    data class DeleteMessageRecursively(
+        val message: ChatMessage,
+        val onDeleteConfirm: () -> Unit,
+        val onDismiss: () -> Unit
+    ) : ChatAreaDialogState()
+
+    /**
      * State for the Tool Configuration dialog.
      *
      * @property enabledToolsFlow Reactive flow of tools currently enabled for the session.

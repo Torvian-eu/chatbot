@@ -294,6 +294,15 @@ class ChatViewModel(
     }
 
     /**
+     * Deletes a specific message and all its replies recursively.
+     */
+    private fun deleteMessageRecursively(messageId: Long) {
+        normalScope.launch {
+            deleteMessageUC.execute(messageId, recursive = true)
+        }
+    }
+
+    /**
      * Switches the currently displayed chat branch to the one that includes the given message ID.
      */
     fun switchBranchToMessage(targetMessageId: Long) {
@@ -467,6 +476,23 @@ class ChatViewModel(
                 message = message,
                 onDeleteConfirm = {
                     deleteMessage(message.id)
+                },
+                onDismiss = {
+                    cancelDialog()
+                }
+            ))
+    }
+
+    /**
+     * Shows the delete thread (recursive) confirmation dialog with pre-bound actions.
+     * This is called when the user signals an intent to delete a message and all its replies.
+     */
+    fun requestDeleteMessageRecursively(message: ChatMessage) {
+        state.setDialogState(
+            ChatAreaDialogState.DeleteMessageRecursively(
+                message = message,
+                onDeleteConfirm = {
+                    deleteMessageRecursively(message.id)
                 },
                 onDismiss = {
                     cancelDialog()

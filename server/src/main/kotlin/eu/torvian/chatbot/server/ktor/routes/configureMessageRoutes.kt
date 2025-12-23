@@ -5,6 +5,7 @@ import arrow.core.raise.either
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.api.ApiError
+import eu.torvian.chatbot.common.api.resources.DeleteMode
 import eu.torvian.chatbot.common.api.resources.MessageResource
 import eu.torvian.chatbot.common.models.api.core.UpdateMessageRequest
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
@@ -48,20 +49,20 @@ fun Route.configureMessageRoutes(
             call.respondEither(result)
         }
 
-        // DELETE /api/v1/messages/{messageId} - Delete message by ID
-        // Optional query parameter mode=single to perform non-recursive single delete(default), and mode=recursive to delete children.
+        // DELETE /api/v1/messages/{messageId}?mode=SINGLE|RECURSIVE - Delete message by ID
+        // Query parameter mode defaults to SINGLE (non-recursive single delete).
+        // Use mode=RECURSIVE to delete the message and all its children.
         delete<MessageResource.ById> { resource ->
             val userId = call.getUserId()
             val messageId = resource.messageId
-            val mode = call.request.queryParameters["mode"]
+            val mode = resource.mode
 
             val result = either {
                 requireMessageAccess(messageService, authorizationService, userId, messageId, AccessMode.WRITE)
                 withError({ error: DeleteMessageError -> error.toApiError() }) {
-                    if (mode == "recursive") {
-                        messageService.deleteMessageRecursively(messageId).bind()
-                    } else {
-                        messageService.deleteMessage(messageId).bind()
+                    when (mode) {
+                        DeleteMode.RECURSIVE -> messageService.deleteMessageRecursively(messageId).bind()
+                        DeleteMode.SINGLE -> messageService.deleteMessage(messageId).bind()
                     }
                 }
             }

@@ -10,13 +10,15 @@ import eu.torvian.chatbot.common.models.core.ChatMessage
  * @param onCopyMessage Callback for when the user wants to copy message content.
  * @param onRegenerateMessage Callback for when the user wants to regenerate an assistant message.
  * @param onReplyMessage Callback for when the user wants to reply to a specific message.
- * @param onDeleteMessage Callback for when the user wants to delete a specific message.
+ * @param onDeleteMessage Callback for when the user wants to delete a specific message (single).
+ * @param onDeleteThread Callback for when the user wants to delete a message and all its replies (recursive).
  */
 data class MessageActions(
     val onSwitchBranchToMessage: (Long) -> Unit,
-    val onEditMessage: ((ChatMessage) -> Unit)? = null,
+    val onEditMessage: (ChatMessage) -> Unit,
     val onCopyMessage: ((ChatMessage) -> Unit)? = null,
     val onRegenerateMessage: ((ChatMessage) -> Unit)? = null,
-    val onReplyMessage: ((ChatMessage) -> Unit)? = null,
-    val onDeleteMessage: ((ChatMessage) -> Unit)? = null
+    val onReplyMessage: (ChatMessage) -> Unit,
+    val onDeleteMessage: (ChatMessage) -> Unit,
+    val onDeleteThread: (ChatMessage) -> Unit
 )

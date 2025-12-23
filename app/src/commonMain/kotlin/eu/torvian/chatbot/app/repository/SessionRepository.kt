@@ -257,4 +257,16 @@ interface SessionRepository {
      * @return Either.Right with Unit on successful deletion, or Either.Left with RepositoryError on failure
      */
     suspend fun deleteMessage(messageId: Long, sessionId: Long): Either<RepositoryError, Unit>
+
+    /**
+     * Deletes a message and all its descendants recursively from the server.
+     *
+     * Upon successful deletion, the message and all its replies are automatically removed
+     * from the cached ChatSession, triggering updates to all observers.
+     *
+     * @param messageId The ID of the message to delete along with all replies
+     * @param sessionId The ID of the session containing the message
+     * @return Either.Right with Unit on successful deletion, or Either.Left with RepositoryError on failure
+     */
+    suspend fun deleteMessageRecursively(messageId: Long, sessionId: Long): Either<RepositoryError, Unit>
 }

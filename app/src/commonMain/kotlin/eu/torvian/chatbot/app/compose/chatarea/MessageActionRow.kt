@@ -7,14 +7,12 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -41,6 +39,9 @@ fun MessageActionRow(
     hovered: Boolean,
     modifier: Modifier = Modifier
 ) {
+    // Track if the "More" menu is expanded to keep controls visible
+    var moreMenuExpanded by remember { mutableStateOf(false) }
+
     // Calculate branch navigation data within MessageActionRow
     val branchNavData = remember(message, allMessagesMap, allRootMessageIds) {
         getBranchNavigationData(
@@ -55,9 +56,14 @@ fun MessageActionRow(
         horizontalArrangement = Arrangement.SpaceBetween, // Pushes start actions to left, end actions to right
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // General actions aligned to the start - only visible on hover
-        if (hovered) {
-            GeneralMessageControls(message = message, messageActions = messageActions)
+        // General actions aligned to the start - visible on hover or when menu is open
+        if (hovered || moreMenuExpanded) {
+            GeneralMessageControls(
+                message = message,
+                messageActions = messageActions,
+                moreMenuExpanded = moreMenuExpanded,
+                onMoreMenuExpandedChange = { moreMenuExpanded = it }
+            )
         } else {
             Spacer(Modifier.width(0.dp)) // Placeholder to maintain layout structure
         }
@@ -77,12 +83,16 @@ fun MessageActionRow(
  *
  * @param message The [ChatMessage] for which controls are displayed.
  * @param messageActions All available actions for the message.
+ * @param moreMenuExpanded Whether the "More" menu is currently expanded.
+ * @param onMoreMenuExpandedChange Callback to update the expanded state of the "More" menu.
  * @param modifier Modifier to be applied to the component.
  */
 @Composable
 private fun GeneralMessageControls(
     message: ChatMessage,
     messageActions: MessageActions,
+    moreMenuExpanded: Boolean,
+    onMoreMenuExpandedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier.Companion
 ) {
     Row(
@@ -106,6 +116,14 @@ private fun GeneralMessageControls(
 
         // Delete Button
         DeleteButton(message = message, onDeleteMessage = messageActions.onDeleteMessage)
+
+        // More Actions Menu (Delete Thread, etc.)
+        MoreActionsMenu(
+            message = message,
+            messageActions = messageActions,
+            expanded = moreMenuExpanded,
+            onExpandedChange = onMoreMenuExpandedChange
+        )
     }
 }
 
@@ -113,22 +131,20 @@ private fun GeneralMessageControls(
  * Displays the Edit message button.
  *
  * @param message The message to be edited.
- * @param onEditMessage Callback for the edit action, can be null if not implemented.
+ * @param onEditMessage Callback for the edit action.
  */
 @Composable
-private fun EditButton(message: ChatMessage, onEditMessage: ((ChatMessage) -> Unit)?) {
-    if (onEditMessage != null) {
-        PlainTooltipBox(text = "Edit message") {
-            IconButton(
-                onClick = { onEditMessage(message) },
-                modifier = Modifier.size(24.dp)
-            ) {
-                Icon(
-                    Icons.Default.Edit,
-                    contentDescription = "Edit message",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+private fun EditButton(message: ChatMessage, onEditMessage: (ChatMessage) -> Unit) {
+    PlainTooltipBox(text = "Edit message") {
+        IconButton(
+            onClick = { onEditMessage(message) },
+            modifier = Modifier.size(24.dp)
+        ) {
+            Icon(
+                Icons.Default.Edit,
+                contentDescription = "Edit message",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -185,22 +201,20 @@ private fun RegenerateButton(message: ChatMessage, onRegenerateMessage: ((ChatMe
  * Displays the Reply message button.
  *
  * @param message The message to which a reply is being composed.
- * @param onReplyMessage Callback for the reply action, can be null if not implemented.
+ * @param onReplyMessage Callback for the reply action.
  */
 @Composable
-private fun ReplyButton(message: ChatMessage, onReplyMessage: ((ChatMessage) -> Unit)?) {
-    if (onReplyMessage != null) {
-        PlainTooltipBox(text = "Reply to message") {
-            IconButton(
-                onClick = { onReplyMessage(message) },
-                modifier = Modifier.size(24.dp)
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Filled.Reply,
-                    contentDescription = "Reply to message",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+private fun ReplyButton(message: ChatMessage, onReplyMessage: (ChatMessage) -> Unit) {
+    PlainTooltipBox(text = "Reply to message") {
+        IconButton(
+            onClick = { onReplyMessage(message) },
+            modifier = Modifier.size(24.dp)
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.Reply,
+                contentDescription = "Reply to message",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -209,26 +223,98 @@ private fun ReplyButton(message: ChatMessage, onReplyMessage: ((ChatMessage) -> 
  * Displays the Delete message button.
  *
  * @param message The message to be deleted.
- * @param onDeleteMessage Callback for the delete action, can be null if not implemented.
+ * @param onDeleteMessage Callback for the delete action.
  */
 @Composable
-private fun DeleteButton(message: ChatMessage, onDeleteMessage: ((ChatMessage) -> Unit)?) {
-    if (onDeleteMessage != null) {
-        PlainTooltipBox(text = "Delete message") {
-            IconButton(
-                onClick = { onDeleteMessage(message) },
-                modifier = Modifier.size(24.dp)
-            ) {
-                // Using a standard trash icon for deletion
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = "Delete message",
-                    tint = MaterialTheme.colorScheme.error
-                )
-            }
+private fun DeleteButton(message: ChatMessage, onDeleteMessage: (ChatMessage) -> Unit) {
+    PlainTooltipBox(text = "Delete message") {
+        IconButton(
+            onClick = { onDeleteMessage(message) },
+            modifier = Modifier.size(24.dp)
+        ) {
+            // Using a standard trash icon for deletion
+            Icon(
+                Icons.Default.Delete,
+                contentDescription = "Delete message",
+                tint = MaterialTheme.colorScheme.error
+            )
         }
     }
 }
+
+/**
+ * Displays the "More" actions menu with additional, less commonly used actions.
+ * This menu is designed for extensibility - new actions can be added here without
+ * cluttering the main action row.
+ *
+ * @param message The message for which actions are displayed.
+ * @param messageActions All available actions for the message.
+ * @param expanded Whether the menu is currently expanded.
+ * @param onExpandedChange Callback to update the expanded state.
+ */
+@Composable
+private fun MoreActionsMenu(
+    message: ChatMessage,
+    messageActions: MessageActions,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit
+) {
+    Box {
+        PlainTooltipBox(text = "More actions") {
+            IconButton(
+                onClick = { onExpandedChange(true) },
+                modifier = Modifier.size(24.dp)
+            ) {
+                Icon(
+                    Icons.Default.MoreVert,
+                    contentDescription = "More actions",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { onExpandedChange(false) }
+        ) {
+            // Delete Thread action
+            DeleteThreadMenuItem(
+                message = message,
+                onDeleteThread = messageActions.onDeleteThread,
+                onDismissMenu = { onExpandedChange(false) }
+            )
+
+            // Future: Add more menu items here as needed
+            // e.g., "Pin message", "Bookmark", "Share", etc.
+        }
+    }
+}
+
+/**
+ * Menu item for Delete Thread action.
+ */
+@Composable
+private fun DeleteThreadMenuItem(
+    message: ChatMessage,
+    onDeleteThread: (ChatMessage) -> Unit,
+    onDismissMenu: () -> Unit
+) {
+    DropdownMenuItem(
+        text = { Text("Delete Thread") },
+        onClick = {
+            onDismissMenu()
+            onDeleteThread(message)
+        },
+        leadingIcon = {
+            Icon(
+                Icons.Default.DeleteSweep,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.error
+            )
+        }
+    )
+}
+
 
 /**
  * Displays the branch navigation controls (previous, next, and count).
