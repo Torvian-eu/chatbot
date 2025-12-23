@@ -2,13 +2,19 @@
 
 ## Basic features
 
-### Allow message streaming process to stop gracefully
-  - Add Boolean field to AssistantMessage to indicate if the message is complete.
+### (done, partially) Allow message streaming process to stop gracefully
+  - (not done yet) Add Boolean field to AssistantMessage to indicate if the message is complete.
   - Add error message String field to AssistantMessage (which can be shown in the UI, together with the partial content).
   - Store partial message content in AssistantMessage table, in case the stream was interrupted. (either due to an error, or because the user stopped the streaming)
   - In the UI, the "send" button should transform into a "stop" button while the message is streaming. 
+ 
+### Allow user to pause an agentic response, in order to provide user feedback.
+  - Add a "Pause" button to the input area, which is shown while a message is streaming and when tools are involved.
+  - Pausing should stop the (web socket) streaming process, only after the current assistant message is fully processed. This means that the message loop (used for tool calling) will be interrupted prematurely.
+  - This feature is particularly useful for agentic LLM usage, where the user might want to interrupt an undesirable response and provide feedback.
+  - When paused, the user can provide feedback to the assistant. This feedback is sent to the assistant as a new message, which becomes the next message in the conversation. Note: this behavior is no different from sending a new message, so there is no special "paused" state that needs to be tracked.
 
-### Allow recursive deletion of messages. (in addition to single message deletion)
+### (done) Allow recursive deletion of messages. (in addition to single message deletion)
   - The server module is already capable of this, but the ktor route needs to be examined. In `configureMessageRoutes.kt` we have a route `delete<MessageResource.ById>`, where we use a query parameter "mode=single" to perform a non-recursive delete and "mode=recursive" to perform a recursive delete. However, we use the Ktor Resources plugin, and we should examine if a query parameter can be configured for the route declaritively instead, so that it can be validated at compile time.
   - Add a "Delete Thread" button to the message actions menu. (see MessageActionRow.kt)
     (or hide it under a "More" actions button, to show a popup menu with extra actions, less commonly used)
@@ -16,7 +22,7 @@
 ### Insert message above/below
 Add an "Insert Above" and "Insert Below" button to the more actions menu. (See MessageActionRow.kt)
 
-### Make message content selectable
+### (done) Make message content selectable
 
 ### Make messages collapsible (useful for long messages)
 
@@ -38,7 +44,7 @@ This action triggers a reply to the edited message from the assistant/LLM. It al
 A "Regenerate" button is already available in the message actions menu, but it needs to be wired to an action in the view model. (see MessageActionRow.kt)
 This action should trigger a new response from the assistant/LLM, based on the current message context. It must also create a new branch in the conversation. (See MessageActionRow.kt)
 
-### Allow certain features to be disabled on a per-user basis
+### Allow certain features to be disabled on a per-user basis (*Requires user preference feature)
 The user should be able to configure this in their profile.
 
 ### Allow user to see LLM metadata for assistant responses
@@ -53,9 +59,12 @@ Users will be forced to change their password on first login.
 ### (done) Only allow connections to the server over HTTPS.
 For security, the server should only be accessible over HTTPS, and not HTTP. This applies to connections over the internet, as well as local network connections.
 
-### Make session list panel collapsible
+### (done) Make session list panel collapsible
 Add an icon button to expand/collapse panel in the top app bar, on the left side.
 In the future we could add a vertical sidebar with icons on the left side of the screen. Clicking the session list icon would expand the panel, clicking it again would collapse it. This would only make sense when we have multiple panels to switch between. Currently we only have the session list panel, so a top app bar button is the best option.
+
+### Allow user to specify chat group when adding a new session
+Currently, the user can only add a new session to the "Ungrouped" group. In the future, we should allow the user to specify a group when adding a new session.
 
 ---
 
