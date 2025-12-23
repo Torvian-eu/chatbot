@@ -25,6 +25,8 @@ import eu.torvian.chatbot.common.models.llm.ModelSettings
  */
 @Composable
 fun RowScope.ChatTopBarContent(
+    userMenu: @Composable () -> Unit,
+    navItems: List<@Composable () -> Unit>,
     currentModel: LLMModel?,
     currentSettings: ModelSettings?,
     availableModels: DataState<RepositoryError, List<LLMModel>>,
@@ -40,7 +42,6 @@ fun RowScope.ChatTopBarContent(
 ) {
     // Left-aligned actions
     Row(
-        modifier = Modifier.weight(0.3f),
         horizontalArrangement = Arrangement.Start
     ) {
         // Session list panel toggle button
@@ -59,12 +60,18 @@ fun RowScope.ChatTopBarContent(
                 )
             }
         }
+
+        // Navigation items
+        navItems.forEach {
+            Spacer(Modifier.width(8.dp))
+            it()
+        }
     }
 
-    // Right-aligned actions
+    // Center-aligned actions
     Row(
         modifier = Modifier.weight(1f),
-        horizontalArrangement = Arrangement.End
+        horizontalArrangement = Arrangement.Center
     ) {
         // Compact model selector (icon + dropdown)
         PlainTooltipBox(text = "Select Model") {
@@ -112,8 +119,14 @@ fun RowScope.ChatTopBarContent(
                 }
             }
         }
+    }
 
+    // User menu
+    Row(
+        horizontalArrangement = Arrangement.End
+    ) {
         Spacer(Modifier.width(8.dp))
+        userMenu()
     }
 }
 

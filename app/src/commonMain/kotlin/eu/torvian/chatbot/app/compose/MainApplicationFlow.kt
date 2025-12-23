@@ -9,7 +9,11 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -24,13 +28,16 @@ import eu.torvian.chatbot.app.compose.settings.SettingsScreen
 import eu.torvian.chatbot.app.compose.snackbar.SharedSnackbar
 import eu.torvian.chatbot.app.compose.snackbar.SnackbarVisualsWithError
 import eu.torvian.chatbot.app.compose.topbar.LocalTopBarContent
+import eu.torvian.chatbot.app.compose.topbar.TopBarContent
 import eu.torvian.chatbot.app.compose.topbar.TopBarContentController
 import eu.torvian.chatbot.app.domain.navigation.*
 import eu.torvian.chatbot.app.repository.AuthState
+import eu.torvian.chatbot.app.service.auth.AccountData
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
 import eu.torvian.chatbot.app.viewmodel.auth.AuthViewModel
 import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
 import eu.torvian.chatbot.common.api.CommonPermissions
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -45,196 +52,43 @@ fun MainApplicationFlow(
     authViewModel: AuthViewModel
 ) {
     val navController = rememberNavController()
-    val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStackEntry?.destination?.route
     val sessionListViewModel: SessionListViewModel = koinViewModel()
     val chatViewModel: ChatViewModel = koinViewModel()
     val scope = rememberCoroutineScope()
 
-    // Top bar content state
-    var topBarContent by remember { mutableStateOf<(@Composable RowScope.() -> Unit)?>(null) }
+    var topBarContent by remember { mutableStateOf<TopBarContent?>(null) }
+    val topBarController = rememberTopBarController { topBarContent = it }
 
-    // Controller implementation
-    val topBarController = remember {
-        object : TopBarContentController {
-            override fun setContent(content: @Composable RowScope.() -> Unit) {
-                topBarContent = content
-            }
-
-            override fun clearContent() {
-                topBarContent = null
-            }
-        }
-    }
-
-    // Collect account switching state
     val availableAccounts by authViewModel.availableAccounts.collectAsState()
     val accountSwitchInProgress by authViewModel.accountSwitchInProgress.collectAsState()
     val dialogState by authViewModel.dialogState.collectAsState()
 
-    // Load initial data for authenticated user (improved data loading)
     LaunchedEffect(authState.userId) {
         sessionListViewModel.loadSessionsAndGroups()
-        navController.navigate(Chat) {
-            popUpTo(navController.graph.findStartDestination().id) {
-                saveState = true
-            }
-            launchSingleTop = true
-            restoreState = true
-        }
+        navController.navigateToTop(Chat)
     }
 
-    // Provide the controller to all child composables
     CompositionLocalProvider(LocalTopBarContent provides topBarController) {
-        MaterialTheme(colorScheme = lightColorScheme()) {
-            Scaffold(
-                topBar = {
-                    TopAppBar(
-                        title = {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End
-                            ) {
-                                // Render screen-specific content first
-                                topBarContent?.invoke(this)
+        MainScaffold(
+            topBarContent = topBarContent,
+            snackbarHostState = snackbarHostState,
+            authState = authState,
+            availableAccounts = availableAccounts,
+            accountSwitchInProgress = accountSwitchInProgress,
+            authViewModel = authViewModel,
+            navController = navController,
+            scope = scope
+        ) { paddingValues ->
+            MainNavHost(
+                navController = navController,
+                paddingValues = paddingValues,
+                sessionListViewModel = sessionListViewModel,
+                chatViewModel = chatViewModel,
+                authState = authState,
+                authViewModel = authViewModel
+            )
+        }
 
-                                // Always show UserMenu at the end
-                                PlainTooltipBox(text = "User menu") {
-                                    UserMenu(
-                                        username = authState.username,
-                                        availableAccounts = availableAccounts,
-                                        accountSwitchInProgress = accountSwitchInProgress,
-                                        onSwitchAccount = { authViewModel.openAccountSwitcher() },
-                                        onAddAccount = { authViewModel.openAddAccount() },
-                                        onLogout = {
-                                            scope.launch { authViewModel.logout() }
-                                        },
-                                        onLogin = {
-                                            navController.navigate(Login) {
-                                                popUpTo(navController.graph.findStartDestination().id) {
-                                                    saveState = true
-                                                }
-                                                launchSingleTop = true
-                                                restoreState = true
-                                            }
-                                        }
-                                    )
-                                }
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.primaryContainer)
-                    )
-                },
-                bottomBar = {
-                    NavigationBar(
-                        modifier = Modifier.fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.primaryContainer)
-                    ) {
-                        NavigationBarItem(
-                            icon = { Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "Chat") },
-                            label = { Text("Chat") },
-                            selected = currentRoute == Chat.route,
-                            onClick = {
-                                navController.navigate(Chat) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            }
-                        )
-                        NavigationBarItem(
-                            icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
-                            label = { Text("Settings") },
-                            selected = currentRoute == Settings.route,
-                            onClick = {
-                                navController.navigate(Settings) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            }
-                        )
-
-                        // Admin navigation item with permission check
-                        RequiresAnyPermission(
-                            authState = authState,
-                            permissions = listOf(
-                                CommonPermissions.MANAGE_USERS,
-                                CommonPermissions.MANAGE_ROLES
-                            )
-                        ) {
-                            NavigationBarItem(
-                                icon = { Icon(Icons.Default.AdminPanelSettings, contentDescription = "Admin") },
-                                label = { Text("Admin") },
-                                selected = currentRoute == Admin.route,
-                                onClick = {
-                                    navController.navigate(Admin) {
-                                        popUpTo(navController.graph.findStartDestination().id) {
-                                            saveState = true
-                                        }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
-                                }
-                            )
-                        }
-                    }
-                },
-                snackbarHost = {
-                    SnackbarHost(hostState = snackbarHostState) { data ->
-                        val visualsWithError = data.visuals as? SnackbarVisualsWithError
-                        SharedSnackbar(data, visualsWithError)
-                    }
-                }
-            ) { paddingValues ->
-                Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
-                    NavHost(navController = navController, startDestination = Chat) {
-                        composable<Chat> {
-                            ChatScreen(sessionListViewModel, chatViewModel, authState)
-                        }
-                        composable<Settings> {
-                            SettingsScreen(authState = authState)
-                        }
-                        composable<Admin> {
-                            AdminScreen(authState = authState)
-                        }
-                        composable<Login> {
-                            LoginScreen(
-                                onNavigateToRegister = {
-                                    navController.navigate(Register) {
-                                        // Don't add to back stack to prevent back navigation to login
-                                        popUpTo(Login) { inclusive = true }
-                                    }
-                                },
-                                authViewModel = authViewModel
-                            )
-                        }
-                        composable<Register> {
-                            RegisterScreen(
-                                onNavigateToLogin = {
-                                    navController.navigate(Login) {
-                                        popUpTo(Register) { inclusive = true }
-                                    }
-                                },
-                                onRegistrationSuccess = {
-                                    navController.navigate(Login) {
-                                        popUpTo(Register) { inclusive = true }
-                                    }
-                                },
-                                authViewModel = authViewModel
-                            )
-                        }
-                    }
-                }
-            } // End Scaffold
-        } // End MaterialTheme
-
-        // Render authentication dialogs
         AuthDialogs(
             dialogState = dialogState,
             availableAccounts = availableAccounts,
@@ -242,5 +96,312 @@ fun MainApplicationFlow(
             accountSwitchInProgress = accountSwitchInProgress,
             authViewModel = authViewModel
         )
-    } // End CompositionLocalProvider
+    }
+}
+
+/**
+ * Creates and remembers a TopBarContentController instance.
+ */
+@Composable
+private fun rememberTopBarController(
+    onContentChange: (TopBarContent?) -> Unit
+): TopBarContentController = remember {
+    object : TopBarContentController {
+        override fun setContent(content: TopBarContent) {
+            onContentChange(content)
+        }
+
+        override fun clearContent() {
+            onContentChange(null)
+        }
+    }
+}
+
+/**
+ * Helper extension to navigate to a destination as a top-level route.
+ */
+private fun NavController.navigateToTop(route: Any) {
+    navigate(route) {
+        popUpTo(graph.findStartDestination().id) {
+            saveState = true
+        }
+        launchSingleTop = true
+        restoreState = true
+    }
+}
+
+/**
+ * Main scaffold with top bar and content.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MainScaffold(
+    topBarContent: TopBarContent?,
+    snackbarHostState: SnackbarHostState,
+    authState: AuthState.Authenticated,
+    availableAccounts: List<AccountData>,
+    accountSwitchInProgress: Boolean,
+    authViewModel: AuthViewModel,
+    navController: NavController,
+    scope: CoroutineScope,
+    content: @Composable (PaddingValues) -> Unit
+) {
+    MaterialTheme(colorScheme = lightColorScheme()) {
+        Scaffold(
+            topBar = {
+                MainTopAppBar(
+                    topBarContent = topBarContent,
+                    authState = authState,
+                    availableAccounts = availableAccounts,
+                    accountSwitchInProgress = accountSwitchInProgress,
+                    authViewModel = authViewModel,
+                    navController = navController,
+                    scope = scope
+                )
+            },
+            snackbarHost = {
+                SnackbarHost(hostState = snackbarHostState) { data ->
+                    val visualsWithError = data.visuals as? SnackbarVisualsWithError
+                    SharedSnackbar(data, visualsWithError)
+                }
+            },
+            content = content
+        )
+    }
+}
+
+/**
+ * Top app bar with navigation items and user menu.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MainTopAppBar(
+    topBarContent: TopBarContent?,
+    authState: AuthState.Authenticated,
+    availableAccounts: List<AccountData>,
+    accountSwitchInProgress: Boolean,
+    authViewModel: AuthViewModel,
+    navController: NavController,
+    scope: CoroutineScope
+) {
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+
+    TopAppBar(
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                val userMenu = @Composable {
+                    UserMenuButton(
+                        authState = authState,
+                        availableAccounts = availableAccounts,
+                        accountSwitchInProgress = accountSwitchInProgress,
+                        authViewModel = authViewModel,
+                        navController = navController,
+                        scope = scope
+                    )
+                }
+
+                val navItems = buildNavItems(authState, navController, currentRoute)
+
+                TopBarContentLayout(
+                    topBarContent = topBarContent,
+                    userMenu = userMenu,
+                    navItems = navItems
+                )
+            }
+        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.primaryContainer)
+    )
+}
+
+/**
+ * User menu button with tooltip.
+ */
+@Composable
+private fun UserMenuButton(
+    authState: AuthState.Authenticated,
+    availableAccounts: List<AccountData>,
+    accountSwitchInProgress: Boolean,
+    authViewModel: AuthViewModel,
+    navController: NavController,
+    scope: CoroutineScope
+) {
+    PlainTooltipBox(text = "User menu") {
+        UserMenu(
+            username = authState.username,
+            availableAccounts = availableAccounts,
+            accountSwitchInProgress = accountSwitchInProgress,
+            onSwitchAccount = { authViewModel.openAccountSwitcher() },
+            onAddAccount = { authViewModel.openAddAccount() },
+            onLogout = { scope.launch { authViewModel.logout() } },
+            onLogin = { navController.navigateToTop(Login) }
+        )
+    }
+}
+
+/**
+ * Builds the list of navigation item composables.
+ * Excludes the currently active route from the list.
+ */
+@Composable
+private fun buildNavItems(
+    authState: AuthState.Authenticated,
+    navController: NavController,
+    currentRoute: String?
+): List<@Composable () -> Unit> = buildList {
+    if (currentRoute != Chat.route) {
+        add {
+            NavIconButton(
+                tooltip = "Chat",
+                icon = Icons.AutoMirrored.Filled.Chat,
+                onClick = { navController.navigateToTop(Chat) }
+            )
+        }
+    }
+
+    if (currentRoute != Settings.route) {
+        add {
+            NavIconButton(
+                tooltip = "Settings",
+                icon = Icons.Default.Settings,
+                onClick = { navController.navigateToTop(Settings) }
+            )
+        }
+    }
+
+    if (currentRoute != Admin.route) {
+        add {
+            RequiresAnyPermission(
+                authState = authState,
+                permissions = listOf(CommonPermissions.MANAGE_USERS, CommonPermissions.MANAGE_ROLES)
+            ) {
+                NavIconButton(
+                    tooltip = "Admin",
+                    icon = Icons.Default.AdminPanelSettings,
+                    onClick = { navController.navigateToTop(Admin) }
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Navigation icon button with tooltip.
+ */
+@Composable
+private fun NavIconButton(
+    tooltip: String,
+    icon: ImageVector,
+    onClick: () -> Unit
+) {
+    PlainTooltipBox(text = tooltip) {
+        IconButton(onClick = onClick) {
+            Icon(
+                imageVector = icon,
+                contentDescription = tooltip
+            )
+        }
+    }
+}
+
+/**
+ * Renders the top bar content layout, using custom content if provided,
+ * otherwise falling back to default layout.
+ */
+@Composable
+private fun RowScope.TopBarContentLayout(
+    topBarContent: TopBarContent?,
+    userMenu: @Composable () -> Unit,
+    navItems: List<@Composable () -> Unit>
+) {
+    if (topBarContent != null) {
+        topBarContent(userMenu, navItems)
+    } else {
+        DefaultTopBarLayout(userMenu, navItems)
+    }
+}
+
+/**
+ * Default top bar layout with nav items on the left and user menu on the right.
+ */
+@Composable
+private fun RowScope.DefaultTopBarLayout(
+    userMenu: @Composable () -> Unit,
+    navItems: List<@Composable () -> Unit>
+) {
+    Row(
+        modifier = Modifier.weight(1f),
+        horizontalArrangement = Arrangement.Start
+    ) {
+        navItems.forEach { item ->
+            item()
+            Spacer(modifier = Modifier.width(8.dp))
+        }
+    }
+    Row(
+        modifier = Modifier.weight(1f),
+        horizontalArrangement = Arrangement.End
+    ) {
+        userMenu()
+    }
+}
+
+/**
+ * Navigation host with all app routes.
+ */
+@Composable
+private fun MainNavHost(
+    navController: NavHostController,
+    paddingValues: PaddingValues,
+    sessionListViewModel: SessionListViewModel,
+    chatViewModel: ChatViewModel,
+    authState: AuthState.Authenticated,
+    authViewModel: AuthViewModel
+) {
+    Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+        NavHost(
+            navController = navController,
+            startDestination = Chat
+        ) {
+            composable<Chat> {
+                ChatScreen(sessionListViewModel, chatViewModel, authState)
+            }
+            composable<Settings> {
+                SettingsScreen(authState = authState)
+            }
+            composable<Admin> {
+                AdminScreen(authState = authState)
+            }
+            composable<Login> {
+                LoginScreen(
+                    onNavigateToRegister = {
+                        navController.navigate(Register) {
+                            popUpTo(Login) { inclusive = true }
+                        }
+                    },
+                    authViewModel = authViewModel
+                )
+            }
+            composable<Register> {
+                RegisterScreen(
+                    onNavigateToLogin = {
+                        navController.navigate(Login) {
+                            popUpTo(Register) { inclusive = true }
+                        }
+                    },
+                    onRegistrationSuccess = {
+                        navController.navigate(Login) {
+                            popUpTo(Register) { inclusive = true }
+                        }
+                    },
+                    authViewModel = authViewModel
+                )
+            }
+        }
+    }
 }

@@ -73,8 +73,10 @@ fun ChatScreen(
 
     // Set top bar content when this screen is active using the new provider
     TopBarContentProvider(
-        content = {
+        content = { userMenu, navItems ->
             ChatTopBarContent(
+                userMenu = userMenu,
+                navItems = navItems,
                 currentModel = currentModel,
                 currentSettings = currentSettings,
                 availableModels = availableModels,

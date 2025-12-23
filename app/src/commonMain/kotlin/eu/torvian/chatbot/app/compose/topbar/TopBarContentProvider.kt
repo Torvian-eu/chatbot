@@ -15,7 +15,7 @@ import androidx.compose.runtime.LaunchedEffect
  */
 @Composable
 fun TopBarContentProvider(
-    content: @Composable (RowScope.() -> Unit)?
+    content: TopBarContent?
 ) {
     val topBarController = LocalTopBarContent.current
 
