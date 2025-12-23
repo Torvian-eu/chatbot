@@ -65,6 +65,13 @@ interface ChatAreaActions {
     fun onRequestDeleteMessage(message: ChatMessage)
 
     /**
+     * Callback for when the user requests to show the delete thread dialog.
+     * This signals the intent to delete a message and all its replies recursively.
+     * @param message The message to be deleted along with all its replies.
+     */
+    fun onRequestDeleteThread(message: ChatMessage)
+
+    /**
      * Callback to dismiss any active dialog.
      */
     fun onCancelDialog()

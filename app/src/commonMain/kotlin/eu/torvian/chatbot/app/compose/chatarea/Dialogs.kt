@@ -21,6 +21,13 @@ fun Dialogs(dialogState: ChatAreaDialogState) {
             )
         }
 
+        is ChatAreaDialogState.DeleteMessageRecursively -> {
+            DeleteMessageRecursivelyDialog(
+                onDeleteConfirm = dialogState.onDeleteConfirm,
+                onDismiss = dialogState.onDismiss
+            )
+        }
+
         is ChatAreaDialogState.ToolConfig -> {
             // Collect reactive StateFlows for live updates
             val enabledToolsState by dialogState.enabledToolsFlow.collectAsState()
@@ -76,3 +83,36 @@ private fun DeleteMessageDialog(
         }
     )
 }
+
+/**
+ * Dialog for confirming recursive message deletion (delete thread).
+ * Shows a stronger warning since this deletes the message and all replies.
+ */
+@Composable
+private fun DeleteMessageRecursivelyDialog(
+    onDeleteConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Delete Thread?") },
+        text = {
+            Text(
+                "This will permanently delete this message and all replies in this thread. " +
+                        "This action cannot be undone."
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = onDeleteConfirm,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+            ) { Text("Delete Thread") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
