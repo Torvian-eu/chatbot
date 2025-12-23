@@ -20,24 +20,32 @@ class DeleteMessageUseCase(
      * Deletes a specific message from the session.
      *
      * @param messageId The ID of the message to delete
+     * @param recursive If true, deletes the message and all its descendants (thread).
+     *                  If false, deletes only the message, promoting children to parent.
      */
-    suspend fun execute(messageId: Long) {
+    suspend fun execute(messageId: Long, recursive: Boolean = false) {
         val sessionId = state.activeSessionId.value ?: return
-        logger.info("Deleting message $messageId")
+        val action = if (recursive) "thread" else "message"
+        logger.info("Deleting $action $messageId")
 
-        sessionRepository.deleteMessage(messageId, sessionId)
-            .fold(
-                ifLeft = { repositoryError ->
-                    logger.error("Delete message repository error: ${repositoryError.message}")
-                    errorNotifier.repositoryError(
-                        error = repositoryError,
-                        shortMessage = "Failed to delete message"
-                    )
-                },
-                ifRight = {
-                    logger.info("Successfully deleted message $messageId")
-                    state.cancelDialog()
-                }
-            )
+        val result = if (recursive) {
+            sessionRepository.deleteMessageRecursively(messageId, sessionId)
+        } else {
+            sessionRepository.deleteMessage(messageId, sessionId)
+        }
+
+        result.fold(
+            ifLeft = { repositoryError ->
+                logger.error("Delete $action repository error: ${repositoryError.message}")
+                errorNotifier.repositoryError(
+                    error = repositoryError,
+                    shortMessage = "Failed to delete $action"
+                )
+            },
+            ifRight = {
+                logger.info("Successfully deleted $action $messageId")
+                state.cancelDialog()
+            }
+        )
     }
 }
