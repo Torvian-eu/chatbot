@@ -348,13 +348,12 @@ class DefaultSessionRepository(
 
     override suspend fun deleteMessage(messageId: Long, sessionId: Long): Either<RepositoryError, Unit> {
         return chatApi.deleteMessage(messageId)
-            .map {
-                // Reload the session details to reflect the changes
-                loadSessionDetails(sessionId)
-                Unit
-            }
             .mapLeft { apiResourceError ->
                 apiResourceError.toRepositoryError("Failed to delete message")
+            }
+            .onRight {
+                // Reload the session details to reflect the changes
+                loadSessionDetails(sessionId)
             }
     }
 
