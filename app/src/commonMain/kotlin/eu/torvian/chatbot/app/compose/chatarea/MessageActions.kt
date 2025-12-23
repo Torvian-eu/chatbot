@@ -15,10 +15,10 @@ import eu.torvian.chatbot.common.models.core.ChatMessage
  */
 data class MessageActions(
     val onSwitchBranchToMessage: (Long) -> Unit,
-    val onEditMessage: ((ChatMessage) -> Unit)? = null,
+    val onEditMessage: (ChatMessage) -> Unit,
     val onCopyMessage: ((ChatMessage) -> Unit)? = null,
     val onRegenerateMessage: ((ChatMessage) -> Unit)? = null,
-    val onReplyMessage: ((ChatMessage) -> Unit)? = null,
-    val onDeleteMessage: ((ChatMessage) -> Unit)? = null,
-    val onDeleteThread: ((ChatMessage) -> Unit)? = null
+    val onReplyMessage: (ChatMessage) -> Unit,
+    val onDeleteMessage: (ChatMessage) -> Unit,
+    val onDeleteThread: (ChatMessage) -> Unit
 )

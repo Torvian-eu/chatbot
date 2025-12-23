@@ -131,22 +131,20 @@ private fun GeneralMessageControls(
  * Displays the Edit message button.
  *
  * @param message The message to be edited.
- * @param onEditMessage Callback for the edit action, can be null if not implemented.
+ * @param onEditMessage Callback for the edit action.
  */
 @Composable
-private fun EditButton(message: ChatMessage, onEditMessage: ((ChatMessage) -> Unit)?) {
-    if (onEditMessage != null) {
-        PlainTooltipBox(text = "Edit message") {
-            IconButton(
-                onClick = { onEditMessage(message) },
-                modifier = Modifier.size(24.dp)
-            ) {
-                Icon(
-                    Icons.Default.Edit,
-                    contentDescription = "Edit message",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+private fun EditButton(message: ChatMessage, onEditMessage: (ChatMessage) -> Unit) {
+    PlainTooltipBox(text = "Edit message") {
+        IconButton(
+            onClick = { onEditMessage(message) },
+            modifier = Modifier.size(24.dp)
+        ) {
+            Icon(
+                Icons.Default.Edit,
+                contentDescription = "Edit message",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -203,22 +201,20 @@ private fun RegenerateButton(message: ChatMessage, onRegenerateMessage: ((ChatMe
  * Displays the Reply message button.
  *
  * @param message The message to which a reply is being composed.
- * @param onReplyMessage Callback for the reply action, can be null if not implemented.
+ * @param onReplyMessage Callback for the reply action.
  */
 @Composable
-private fun ReplyButton(message: ChatMessage, onReplyMessage: ((ChatMessage) -> Unit)?) {
-    if (onReplyMessage != null) {
-        PlainTooltipBox(text = "Reply to message") {
-            IconButton(
-                onClick = { onReplyMessage(message) },
-                modifier = Modifier.size(24.dp)
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Filled.Reply,
-                    contentDescription = "Reply to message",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+private fun ReplyButton(message: ChatMessage, onReplyMessage: (ChatMessage) -> Unit) {
+    PlainTooltipBox(text = "Reply to message") {
+        IconButton(
+            onClick = { onReplyMessage(message) },
+            modifier = Modifier.size(24.dp)
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.Reply,
+                contentDescription = "Reply to message",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -227,23 +223,21 @@ private fun ReplyButton(message: ChatMessage, onReplyMessage: ((ChatMessage) -> 
  * Displays the Delete message button.
  *
  * @param message The message to be deleted.
- * @param onDeleteMessage Callback for the delete action, can be null if not implemented.
+ * @param onDeleteMessage Callback for the delete action.
  */
 @Composable
-private fun DeleteButton(message: ChatMessage, onDeleteMessage: ((ChatMessage) -> Unit)?) {
-    if (onDeleteMessage != null) {
-        PlainTooltipBox(text = "Delete message") {
-            IconButton(
-                onClick = { onDeleteMessage(message) },
-                modifier = Modifier.size(24.dp)
-            ) {
-                // Using a standard trash icon for deletion
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = "Delete message",
-                    tint = MaterialTheme.colorScheme.error
-                )
-            }
+private fun DeleteButton(message: ChatMessage, onDeleteMessage: (ChatMessage) -> Unit) {
+    PlainTooltipBox(text = "Delete message") {
+        IconButton(
+            onClick = { onDeleteMessage(message) },
+            modifier = Modifier.size(24.dp)
+        ) {
+            // Using a standard trash icon for deletion
+            Icon(
+                Icons.Default.Delete,
+                contentDescription = "Delete message",
+                tint = MaterialTheme.colorScheme.error
+            )
         }
     }
 }
@@ -265,13 +259,6 @@ private fun MoreActionsMenu(
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit
 ) {
-    // Capture the action to avoid redundant null checks
-    val onDeleteThread = messageActions.onDeleteThread
-
-    // Only show if there are any more actions available
-    val hasMoreActions = onDeleteThread != null
-    if (!hasMoreActions) return
-
     Box {
         PlainTooltipBox(text = "More actions") {
             IconButton(
@@ -293,7 +280,7 @@ private fun MoreActionsMenu(
             // Delete Thread action
             DeleteThreadMenuItem(
                 message = message,
-                onDeleteThread = onDeleteThread,
+                onDeleteThread = messageActions.onDeleteThread,
                 onDismissMenu = { onExpandedChange(false) }
             )
 
