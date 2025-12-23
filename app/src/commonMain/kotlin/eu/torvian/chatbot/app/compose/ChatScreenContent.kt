@@ -49,7 +49,7 @@ fun ChatScreenContent(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.surface)
-                    .padding(16.dp),
+                    .padding(8.dp)
             ) {
                 // PR 19: Session List Panel
                 SessionListPanel(
@@ -63,7 +63,7 @@ fun ChatScreenContent(
                 .weight(0.75f) // Fixed weight for Chat Area
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
-                .padding(16.dp)
+                .padding(8.dp)
         ) {
             // PR 20: Implement Chat Area UI (Message Display)
             ChatArea(
