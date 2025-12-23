@@ -7,6 +7,7 @@ import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.ChatApi
 import eu.torvian.chatbot.app.utils.misc.ioDispatcher
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
+import eu.torvian.chatbot.common.api.resources.DeleteMode
 import eu.torvian.chatbot.common.api.resources.MessageResource
 import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.api.resources.href
@@ -141,6 +142,15 @@ class KtorChatApiClient(
                 // Ktor's body<Unit>() can be used, or simply letting the request complete
                 // indicates success for Unit return type in safeApiCall.
                 .body<Unit>() // Explicitly expect Unit body on success
+        }
+    }
+
+    override suspend fun deleteMessageRecursively(messageId: Long): Either<ApiResourceError, Unit> {
+        // Use safeApiCall to wrap the Ktor request
+        return safeApiCall {
+            // Use Ktor resources to build the URL: /api/v1/messages/{messageId}?mode=RECURSIVE
+            client.delete(MessageResource.ById(MessageResource(), messageId, DeleteMode.RECURSIVE))
+                .body<Unit>()
         }
     }
 }

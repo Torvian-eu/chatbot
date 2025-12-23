@@ -70,4 +70,15 @@ interface ChatApi {
      *         or [Either.Left] containing an [ApiResourceError] on failure.
      */
     suspend fun deleteMessage(messageId: Long): Either<ApiResourceError, Unit>
+
+    /**
+     * Deletes a specific message and all its descendants recursively.
+     *
+     * Corresponds to `DELETE /api/v1/messages/{messageId}?mode=RECURSIVE`.
+     *
+     * @param messageId The ID of the message to delete along with all replies.
+     * @return [Either.Right] with [Unit] on successful deletion (typically HTTP 204 No Content),
+     *         or [Either.Left] containing an [ApiResourceError] on failure.
+     */
+    suspend fun deleteMessageRecursively(messageId: Long): Either<ApiResourceError, Unit>
 }
