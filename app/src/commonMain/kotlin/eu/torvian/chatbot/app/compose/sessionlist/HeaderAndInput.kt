@@ -29,35 +29,47 @@ fun SessionListHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 12.dp),
+            .padding(top = 6.dp, bottom = 12.dp, start = 6.dp, end = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         OverflowTooltipText(
             text = "Chat Sessions",
             modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurface
         )
         Spacer(Modifier.width(8.dp))
         Row {
             // New Session Button
-            PlainTooltipBox(text = "Create new session") {
+            PlainTooltipBox(
+                text = "Create new session"
+            ) {
                 FilledIconButton(
                     onClick = onNewSessionClick,
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(24.dp)
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = "New session")
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "New session",
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
             }
             Spacer(Modifier.width(8.dp))
             // New Group Button
-            PlainTooltipBox(text = "Create new group") {
+            PlainTooltipBox(
+                text = "Create new group"
+            ) {
                 FilledIconButton(
                     onClick = onNewGroupClick,
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(24.dp)
                 ) {
-                    Icon(Icons.Default.CreateNewFolder, contentDescription = "New group")
+                    Icon(
+                        imageVector = Icons.Default.CreateNewFolder,
+                        contentDescription = "New group",
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
             }
         }
@@ -86,7 +98,7 @@ fun NewGroupInputSection(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 4.dp),
+                .padding(vertical = 8.dp, horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             OutlinedTextField(
@@ -103,12 +115,25 @@ fun NewGroupInputSection(
             Spacer(Modifier.width(8.dp))
             IconButton(
                 onClick = onCreateGroup,
-                enabled = isValid
+                enabled = isValid,
+                modifier = Modifier.size(24.dp)
             ) {
-                Icon(Icons.Default.Check, contentDescription = "Create Group")
+                Icon(
+                    Icons.Default.Check,
+                    contentDescription = "Create Group",
+                    modifier = Modifier.size(18.dp)
+                )
             }
-            IconButton(onClick = onCancelCreation) {
-                Icon(Icons.Default.Close, contentDescription = "Cancel")
+            Spacer(Modifier.width(4.dp))
+            IconButton(
+                onClick = onCancelCreation,
+                modifier = Modifier.size(24.dp)
+            ) {
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = "Cancel",
+                    modifier = Modifier.size(18.dp)
+                )
             }
         }
     }
