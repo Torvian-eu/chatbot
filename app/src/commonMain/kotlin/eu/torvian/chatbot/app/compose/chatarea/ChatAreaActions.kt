@@ -116,5 +116,9 @@ interface ChatAreaActions {
      */
     fun onShowToolCallDetails(toolCall: ToolCall)
 
-    // Will include copy actions (E2.S7, E3.S5) in future PRs
+    /**
+     * Callback for when the user wants to copy a message content to the clipboard.
+     * @param message The message whose content should be copied.
+     */
+    fun onCopyMessage(message: ChatMessage)
 }

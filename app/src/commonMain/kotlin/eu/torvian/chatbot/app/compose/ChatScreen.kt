@@ -201,6 +201,8 @@ fun ChatScreen(
             override fun onShowToolConfig() = chatViewModel.showToolConfigDialog()
             override fun onShowToolCallDetails(toolCall: ToolCall) =
                 chatViewModel.showToolCallDetails(toolCall)
+            override fun onCopyMessage(message: ChatMessage) =
+                chatViewModel.copyMessageToClipboard(message)
 
             override fun onRetryLoadingSession() {
                 selectedSession?.id?.let { sessionId ->
