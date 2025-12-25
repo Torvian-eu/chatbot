@@ -13,6 +13,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -44,6 +45,29 @@ fun MessageList(
 
     // State to track if we should be auto-scrolling
     var followTail by remember { mutableStateOf(true) }
+
+    // Threshold for considering a message "long" (collapsible)
+    val collapseThreshold = 500
+
+    // State to track which messages are collapsed
+    var collapsedMessageIds by rememberSaveable { mutableStateOf<Set<Long>>(emptySet()) }
+
+    // Initialize collapsed state when session changes - collapse long messages on load
+    LaunchedEffect(chatSession.id) {
+        collapsedMessageIds = chatSession.messages
+            .filter { it.content.length > collapseThreshold }
+            .map { it.id }
+            .toSet()
+    }
+
+    // Toggle collapse state for a message
+    val onToggleCollapse: (Long) -> Unit = { messageId ->
+        collapsedMessageIds = if (messageId in collapsedMessageIds) {
+            collapsedMessageIds - messageId
+        } else {
+            collapsedMessageIds + messageId
+        }
+    }
 
     // Calculate the distance from the bottom
     val distanceFromBottom by remember {
@@ -131,7 +155,10 @@ fun MessageList(
                         actions = actions, // Pass actions for editing state access
                         modelsById = modelsById, // Pass map for graceful degradation
                         toolCallsForMessage = toolCallsMap[message.id] ?: emptyList(),
-                        onShowToolCallDetails = onShowToolCallDetails
+                        onShowToolCallDetails = onShowToolCallDetails,
+                        isCollapsed = message.id in collapsedMessageIds,
+                        isCollapsible = message.content.length > collapseThreshold,
+                        onToggleCollapse = { onToggleCollapse(message.id) }
                     )
                 }
             }

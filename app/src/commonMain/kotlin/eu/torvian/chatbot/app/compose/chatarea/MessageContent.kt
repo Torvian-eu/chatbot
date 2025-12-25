@@ -1,6 +1,11 @@
 package eu.torvian.chatbot.app.compose.chatarea
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -12,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.common.models.core.ChatMessage
 
@@ -23,6 +29,8 @@ import eu.torvian.chatbot.common.models.core.ChatMessage
  * @param editingContent The current editing content if this message is being edited.
  * @param actions The actions contract, providing the edit message actions.
  * @param contentColor The color to be used for the content, respecting the current theme.
+ * @param isCollapsed Whether this message content is collapsed (showing truncated preview).
+ * @param onToggleCollapse Callback to toggle the collapse state.
  */
 @Composable
 fun MessageContent(
@@ -30,8 +38,13 @@ fun MessageContent(
     isBeingEdited: Boolean,
     editingContent: String?,
     actions: ChatAreaActions,
-    contentColor: Color
+    contentColor: Color,
+    isCollapsed: Boolean = false,
+    onToggleCollapse: () -> Unit = {}
 ) {
+    // Preview length for truncated content
+    val previewLength = 200
+
     if (isBeingEdited) {
         // Message is in editing state
         var localEditingContent by remember(editingContent) {
@@ -69,13 +82,40 @@ fun MessageContent(
             modifier = Modifier.padding(top = 8.dp) // Padding between text field and actions
         )
     } else {
-        // Message is not being edited, just display the text
-        SelectionContainer {
-            Text(
-                text = message.content,
-                style = MaterialTheme.typography.bodyLarge,
-                color = contentColor
-            )
+        // Message is not being edited
+        Column {
+            // Collapsed preview (truncated text, clickable to expand)
+            AnimatedVisibility(
+                visible = isCollapsed,
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
+                SelectionContainer {
+                    Text(
+                        text = message.content.take(previewLength) + "...",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = contentColor,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.clickable { onToggleCollapse() }
+                    )
+                }
+            }
+
+            // Full content (expanded view)
+            AnimatedVisibility(
+                visible = !isCollapsed,
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
+                SelectionContainer {
+                    Text(
+                        text = message.content,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = contentColor
+                    )
+                }
+            }
         }
     }
 }

@@ -6,15 +6,22 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import eu.torvian.chatbot.app.compose.common.PlainTooltipBox
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.tool.ToolCall
@@ -34,6 +41,9 @@ import eu.torvian.chatbot.common.models.tool.ToolCall
  * @param modelsById Map of model IDs to LLMModel objects for displaying model names with graceful degradation.
  * @param toolCallsForMessage List of tool calls associated with this message.
  * @param onShowToolCallDetails Callback to show tool call details.
+ * @param isCollapsed Whether this message is currently collapsed.
+ * @param isCollapsible Whether this message can be collapsed (content length > threshold).
+ * @param onToggleCollapse Callback to toggle the collapse state of this message.
  */
 @Composable
 fun MessageItem(
@@ -46,7 +56,10 @@ fun MessageItem(
     actions: ChatAreaActions,
     modelsById: Map<Long, LLMModel> = emptyMap(),
     toolCallsForMessage: List<ToolCall> = emptyList(),
-    onShowToolCallDetails: (ToolCall) -> Unit = {}
+    onShowToolCallDetails: (ToolCall) -> Unit = {},
+    isCollapsed: Boolean = false,
+    isCollapsible: Boolean = false,
+    onToggleCollapse: () -> Unit = {}
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val hovered by interactionSource.collectIsHoveredAsState()
@@ -80,11 +93,34 @@ fun MessageItem(
                 } ?: "AI" // No model ID available
             }
         }
-        Text(
-            text = "$displayName:",
-            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-            color = contentColor.copy(alpha = 0.8f)
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "$displayName:",
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                color = contentColor.copy(alpha = 0.8f)
+            )
+            // Collapse/Expand button - only show for collapsible messages
+            if (isCollapsible) {
+                PlainTooltipBox(
+                    text = if (isCollapsed) "Expand message" else "Collapse message",
+                    showDelay = 500L
+                ) {
+                    IconButton(
+                        onClick = onToggleCollapse,
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isCollapsed) Icons.Default.ExpandMore else Icons.Default.ExpandLess,
+                            contentDescription = if (isCollapsed) "Expand message" else "Collapse message",
+                            tint = contentColor.copy(alpha = 0.6f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+        }
         Spacer(Modifier.height(4.dp))
 
         // Message Content - conditionally show editing UI or display content
@@ -93,7 +129,9 @@ fun MessageItem(
             isBeingEdited = editingMessage?.id == message.id,
             editingContent = if (editingMessage?.id == message.id) editingContent else null,
             actions = actions,
-            contentColor = contentColor
+            contentColor = contentColor,
+            isCollapsed = isCollapsed,
+            onToggleCollapse = onToggleCollapse
         )
 
         // Tool Call Badges (for assistant messages)
