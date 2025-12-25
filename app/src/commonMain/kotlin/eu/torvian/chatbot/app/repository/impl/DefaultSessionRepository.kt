@@ -15,6 +15,7 @@ import eu.torvian.chatbot.common.models.api.core.*
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
+import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
@@ -364,6 +365,31 @@ class DefaultSessionRepository(
             }
             .onRight {
                 // Reload the session details to reflect the changes
+                loadSessionDetails(sessionId)
+            }
+    }
+
+    override suspend fun insertMessage(
+        sessionId: Long,
+        targetMessageId: Long,
+        position: MessageInsertPosition,
+        role: ChatMessage.Role,
+        content: String,
+        modelId: Long?,
+        settingsId: Long?
+    ): Either<RepositoryError, ChatMessage> {
+        return chatApi.insertMessage(
+            sessionId = sessionId,
+            targetMessageId = targetMessageId,
+            position = position,
+            role = role,
+            content = content,
+            modelId = modelId,
+            settingsId = settingsId
+        )
+            .mapLeft { it.toRepositoryError("Failed to insert message") }
+            .onRight {
+                // Reload session to reflect structural changes
                 loadSessionDetails(sessionId)
             }
     }
