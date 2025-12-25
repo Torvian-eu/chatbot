@@ -193,6 +193,7 @@ fun ChatScreen(
             override fun onCancelEditing() = chatViewModel.cancelEditing()
             override fun onRequestDeleteMessage(message: ChatMessage) = chatViewModel.requestDeleteMessage(message)
             override fun onRequestDeleteThread(message: ChatMessage) = chatViewModel.requestDeleteMessageRecursively(message)
+            override fun onRequestInsertMessage(message: ChatMessage) = chatViewModel.onRequestInsertMessage(message)
             override fun onCancelDialog() = chatViewModel.cancelDialog()
             override fun onSwitchBranchToMessage(messageId: Long) = chatViewModel.switchBranchToMessage(messageId)
             override fun onSelectModel(modelId: Long?) = chatViewModel.selectModel(modelId)

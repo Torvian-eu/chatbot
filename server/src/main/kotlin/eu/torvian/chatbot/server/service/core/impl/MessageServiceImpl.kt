@@ -3,6 +3,8 @@ package eu.torvian.chatbot.server.service.core.impl
 import arrow.core.Either
 import arrow.core.raise.either
 import arrow.core.raise.withError
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
+import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.server.data.dao.MessageDao
@@ -10,12 +12,10 @@ import eu.torvian.chatbot.server.data.dao.SessionDao
 import eu.torvian.chatbot.server.data.dao.error.MessageError
 import eu.torvian.chatbot.server.data.dao.error.SessionError
 import eu.torvian.chatbot.server.service.core.MessageService
-import eu.torvian.chatbot.server.service.core.error.message.DeleteMessageError
-import eu.torvian.chatbot.server.service.core.error.message.GetMessageError
-import eu.torvian.chatbot.server.service.core.error.message.UpdateMessageContentError
-import eu.torvian.chatbot.common.misc.transaction.TransactionScope
+import eu.torvian.chatbot.server.service.core.error.message.*
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
+import eu.torvian.chatbot.server.data.dao.error.InsertMessageError as DaoInsertMessageError
 
 /**
  * Implementation of the [MessageService] interface.
@@ -147,6 +147,45 @@ class MessageServiceImpl(
                         sessionDao.updateSessionLeafMessageId(sessionId, leafUpdateResult.newLeafId).bind()
                     }
                 }
+            }
+        }
+
+    override suspend fun insertMessage(
+        sessionId: Long,
+        targetMessageId: Long?,
+        position: MessageInsertPosition,
+        role: ChatMessage.Role,
+        content: String,
+        modelId: Long?,
+        settingsId: Long?
+    ): Either<InsertMessageError, ChatMessage> =
+        transactionScope.transaction {
+            either {
+                // Insert the new message
+                val newMessage = withError({ daoError: DaoInsertMessageError ->
+                    daoError.toServiceError()
+                }) {
+                     messageDao.insertMessage(
+                        sessionId = sessionId,
+                        targetMessageId = targetMessageId,
+                        position = position,
+                        role = role,
+                        content = content,
+                        modelId = modelId,
+                        settingsId = settingsId
+                    ).bind()
+                }
+
+                // If the new message is a leaf (has no children), update the session's current leaf to it.
+                if (newMessage.childrenMessageIds.isEmpty()) {
+                    withError({ sessionError: SessionError ->
+                        sessionError.toServiceError()
+                    }) {
+                        sessionDao.updateSessionLeafMessageId(sessionId, newMessage.id).bind()
+                    }
+                }
+
+                newMessage
             }
         }
 

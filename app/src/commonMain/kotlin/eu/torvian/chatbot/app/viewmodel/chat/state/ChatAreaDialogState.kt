@@ -2,6 +2,7 @@ package eu.torvian.chatbot.app.viewmodel.chat.state
 
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
@@ -45,6 +46,20 @@ sealed class ChatAreaDialogState {
     data class DeleteMessageRecursively(
         val message: ChatMessage,
         val onDeleteConfirm: () -> Unit,
+        val onDismiss: () -> Unit
+    ) : ChatAreaDialogState()
+
+    /**
+     * State for the "Insert Message" dialog.
+     *
+     * @property targetMessage The message relative to which the new message will be inserted.
+     * @property onConfirm Pre-bound action to execute when the user confirms insertion.
+     *                     Takes position, role, and content as arguments.
+     * @property onDismiss Pre-bound action to execute when the dialog is dismissed.
+     */
+    data class InsertMessage(
+        val targetMessage: ChatMessage,
+        val onConfirm: (MessageInsertPosition, ChatMessage.Role, String) -> Unit,
         val onDismiss: () -> Unit
     ) : ChatAreaDialogState()
 

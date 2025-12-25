@@ -3,8 +3,8 @@ package eu.torvian.chatbot.server.data.dao.exposed
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.core.ChatMessage
+import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.server.data.dao.MessageDao
-import eu.torvian.chatbot.server.data.dao.error.MessageError
 import eu.torvian.chatbot.server.data.dao.error.InsertMessageError
 import eu.torvian.chatbot.server.testutils.data.Table
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
@@ -23,8 +23,7 @@ import kotlin.test.*
  * This test suite verifies the core functionality of the Exposed-based implementation of [MessageDao]:
  * - Getting messages by session ID
  * - Getting a message by ID
- * - Inserting user messages
- * - Inserting assistant messages
+ * - Inserting messages (multi-purpose insertMessage)
  * - Updating message content
  * - Deleting messages (including recursive deletion of children)
  * - Managing parent-child relationships between messages
@@ -188,12 +187,11 @@ class MessageDaoExposedTest {
         assertTrue(result.isLeft(), "Expected Left result for non-existent message")
         val error = result.leftOrNull()
         assertNotNull(error, "Expected non-null error")
-        assertTrue(error is MessageError.MessageNotFound, "Expected MessageNotFound error")
-        assertEquals(999, (error as MessageError.MessageNotFound).id, "Expected error with correct ID")
+        assertEquals(999, error.id, "Expected error with correct ID")
     }
 
     @Test
-    fun `insertUserMessage should insert a new user message`() = runTest {
+    fun `insertMessage should insert a new USER root message when targetMessageId is null`() = runTest {
         // Setup session
         testDataManager.setup(
             TestDataSet(
@@ -205,15 +203,17 @@ class MessageDaoExposedTest {
             )
         )
 
-        // Insert a new user message
         val content = "This is a test message"
-        val result = messageDao.insertUserMessage(
+        val result = messageDao.insertMessage(
             sessionId = testSession1.id,
+            targetMessageId = null,
+            position = MessageInsertPosition.APPEND,
+            role = ChatMessage.Role.USER,
             content = content,
-            parentMessageId = null
+            modelId = null,
+            settingsId = null
         )
 
-        // Verify
         assertTrue(result.isRight(), "Expected Right result for successful insertion")
         val message = result.getOrNull()
         assertNotNull(message, "Expected non-null message")
@@ -222,6 +222,7 @@ class MessageDaoExposedTest {
         assertNull(message.parentMessageId, "Expected null parentMessageId")
         assertTrue(message.childrenMessageIds.isEmpty(), "Expected empty childrenMessageIds")
         assertEquals(ChatMessage.Role.USER, message.role, "Expected USER role")
+        assertTrue(message is ChatMessage.UserMessage, "Expected UserMessage type")
 
         // Verify message was actually inserted in the database
         val retrievedMessage = testDataManager.getChatMessage(message.id)
@@ -230,7 +231,7 @@ class MessageDaoExposedTest {
     }
 
     @Test
-    fun `insertUserMessage should handle parent-child relationship`() = runTest {
+    fun `insertMessage APPEND should add a new child to target and keep existing children`() = runTest {
         // Setup session with a parent message (ensure parent has no pre-populated children)
         val parentWithoutChildren = testUserMessage1.copy(childrenMessageIds = emptyList())
         testDataManager.setup(
@@ -244,78 +245,31 @@ class MessageDaoExposedTest {
             )
         )
 
-        // Insert a child message
         val content = "This is a reply to the first message"
-        val result = messageDao.insertUserMessage(
+        val result = messageDao.insertMessage(
             sessionId = testSession1.id,
+            targetMessageId = testUserMessage1.id,
+            position = MessageInsertPosition.APPEND,
+            role = ChatMessage.Role.USER,
             content = content,
-            parentMessageId = testUserMessage1.id
+            modelId = null,
+            settingsId = null
         )
 
-        // Verify
         assertTrue(result.isRight(), "Expected Right result for successful insertion")
         val message = result.getOrNull()
         assertNotNull(message, "Expected non-null message")
         assertEquals(testUserMessage1.id, message.parentMessageId, "Expected correct parentMessageId")
+        assertTrue(message.childrenMessageIds.isEmpty(), "Expected empty childrenMessageIds")
 
         // Verify parent-child relationship was established
         val parentMessage = testDataManager.getChatMessage(testUserMessage1.id)
         assertNotNull(parentMessage, "Expected to find the parent message")
-        assertTrue(
-            parentMessage.childrenMessageIds.contains(message.id),
-            "Expected child ID in parent's childrenMessageIds"
-        )
+        assertEquals(listOf(message.id), parentMessage.childrenMessageIds, "Expected the new child appended")
     }
 
     @Test
-    fun `insertUserMessage should return SessionNotFound for non-existent session`() = runTest {
-        // Try to insert message with non-existent session
-        val result = messageDao.insertUserMessage(
-            sessionId = 999,
-            content = "This session doesn't exist",
-            parentMessageId = null
-        )
-
-        // Verify
-        assertTrue(result.isLeft(), "Expected Left result for non-existent session")
-        val error = result.leftOrNull()
-        assertNotNull(error, "Expected non-null error")
-        assertTrue(error is InsertMessageError.SessionNotFound, "Expected SessionNotFound error")
-        assertEquals(999, (error as InsertMessageError.SessionNotFound).sessionId, "Expected error with correct session ID")
-    }
-
-    @Test
-    fun `insertUserMessage should return ParentNotInSession for parent in different session`() = runTest {
-        // Setup two sessions with messages
-        testDataManager.setup(
-            TestDataSet(
-                chatGroups = listOf(testGroup1, testGroup2),
-                llmModels = listOf(testModel1, testModel2),
-                llmProviders = listOf(testProvider1, testProvider2),
-                modelSettings = listOf(testSettings1, testSettings2),
-                chatSessions = listOf(testSession1, testSession2),
-                chatMessages = listOf(testUserMessage1, testUserMessage2) // testUserMessage1 is in session1, testUserMessage2 is in session2
-            )
-        )
-
-        // Try to insert message in session1 with parent from session2
-        val result = messageDao.insertUserMessage(
-            sessionId = testSession1.id,
-            content = "This parent is in a different session",
-            parentMessageId = testUserMessage2.id // This message belongs to testSession2
-        )
-
-        // Verify
-        assertTrue(result.isLeft(), "Expected Left result for parent in different session")
-        val error = result.leftOrNull()
-        assertNotNull(error, "Expected non-null error")
-        assertTrue(error is InsertMessageError.ParentNotInSession, "Expected ParentNotInSession error")
-        assertEquals(testUserMessage2.id, error.parentId, "Expected correct parent ID in error")
-        assertEquals(testSession1.id, error.sessionId, "Expected correct session ID in error")
-    }
-
-    @Test
-    fun `insertAssistantMessage should insert a new assistant message`() = runTest {
+    fun `insertMessage should insert an ASSISTANT message and persist assistant metadata`() = runTest {
         // Setup session and parent message (ensure parent has no pre-populated children)
         val parentWithoutChildren = testUserMessage1.copy(childrenMessageIds = emptyList())
         testDataManager.setup(
@@ -329,41 +283,44 @@ class MessageDaoExposedTest {
             )
         )
 
-        // Insert a new assistant message
         val content = "This is an assistant response"
-        val result = messageDao.insertAssistantMessage(
+        val result = messageDao.insertMessage(
             sessionId = testSession1.id,
+            targetMessageId = testUserMessage1.id,
+            position = MessageInsertPosition.APPEND,
+            role = ChatMessage.Role.ASSISTANT,
             content = content,
-            parentMessageId = testUserMessage1.id,
             modelId = testModel1.id,
             settingsId = testSettings1.id
         )
 
-        // Verify
         assertTrue(result.isRight(), "Expected Right result for successful insertion")
         val message = result.getOrNull()
         assertNotNull(message, "Expected non-null message")
-        assertEquals(content, message.content, "Expected matching content")
-        assertEquals(testSession1.id, message.sessionId, "Expected matching sessionId")
-        assertEquals(testUserMessage1.id, message.parentMessageId, "Expected matching parentMessageId")
-        assertTrue(message.childrenMessageIds.isEmpty(), "Expected empty childrenMessageIds")
-        assertEquals(ChatMessage.Role.ASSISTANT, message.role, "Expected ASSISTANT role")
-        assertEquals(testModel1.id, message.modelId, "Expected matching modelId")
-        assertEquals(testSettings1.id, message.settingsId, "Expected matching settingsId")
-
+        assertTrue(message is ChatMessage.AssistantMessage, "Expected AssistantMessage type")
+        val assistant = message as ChatMessage.AssistantMessage
+        assertEquals(content, assistant.content, "Expected matching content")
+        assertEquals(testSession1.id, assistant.sessionId, "Expected matching sessionId")
+        assertEquals(testUserMessage1.id, assistant.parentMessageId, "Expected matching parentMessageId")
+        assertTrue(assistant.childrenMessageIds.isEmpty(), "Expected empty childrenMessageIds")
+        assertEquals(ChatMessage.Role.ASSISTANT, assistant.role, "Expected ASSISTANT role")
+        assertEquals(testModel1.id, assistant.modelId, "Expected matching modelId")
+        assertEquals(testSettings1.id, assistant.settingsId, "Expected matching settingsId")
 
         // Verify parent-child relationship was established
         val parentMessage = testDataManager.getChatMessage(testUserMessage1.id)
         assertNotNull(parentMessage, "Expected to find the parent message")
-        assertTrue(
-            parentMessage.childrenMessageIds.contains(message.id),
-            "Expected child ID in parent's childrenMessageIds"
-        )
+        assertEquals(listOf(assistant.id), parentMessage.childrenMessageIds, "Expected the new child appended")
     }
 
     @Test
-    fun `insertAssistantMessage should return ParentNotInSession for parent in different session`() = runTest {
-        // Setup two sessions with messages
+    fun `insertMessage ABOVE should insert between target and its parent and rewire links`() = runTest {
+        // Arrange: grandparent -> target
+        val grandParentId = testUserMessage2.id
+        val targetId = testUserMessage1.id
+        val grandParent = testUserMessage2.copy(parentMessageId = null, childrenMessageIds = listOf(targetId))
+        val target = testUserMessage1.copy(parentMessageId = grandParentId, childrenMessageIds = emptyList())
+
         testDataManager.setup(
             TestDataSet(
                 chatGroups = listOf(testGroup1, testGroup2),
@@ -371,45 +328,143 @@ class MessageDaoExposedTest {
                 llmProviders = listOf(testProvider1, testProvider2),
                 modelSettings = listOf(testSettings1, testSettings2),
                 chatSessions = listOf(testSession1, testSession2),
-                chatMessages = listOf(testUserMessage1, testUserMessage2) // testUserMessage1 is in session1, testUserMessage2 is in session2
+                chatMessages = listOf(grandParent, target)
             )
         )
 
-        // Try to insert assistant message in session1 with parent from session2
-        val result = messageDao.insertAssistantMessage(
+        val result = messageDao.insertMessage(
             sessionId = testSession1.id,
-            content = "This parent is in a different session",
-            parentMessageId = testUserMessage2.id, // This message belongs to testSession2
-            modelId = testModel1.id,
-            settingsId = testSettings1.id
+            targetMessageId = targetId,
+            position = MessageInsertPosition.ABOVE,
+            role = ChatMessage.Role.USER,
+            content = "Inserted above",
+            modelId = null,
+            settingsId = null
         )
 
-        // Verify
-        assertTrue(result.isLeft(), "Expected Left result for parent in different session")
-        val error = result.leftOrNull()
-        assertNotNull(error, "Expected non-null error")
-        assertTrue(error is InsertMessageError.ParentNotInSession, "Expected ParentNotInSession error")
-        assertEquals(testUserMessage2.id, error.parentId, "Expected correct parent ID in error")
-        assertEquals(testSession1.id, error.sessionId, "Expected correct session ID in error")
+        assertTrue(result.isRight())
+        val inserted = result.getOrNull()
+        assertNotNull(inserted)
+
+        // New message should be child of grandparent, and parent of target
+        assertEquals(grandParentId, inserted.parentMessageId)
+        assertEquals(listOf(targetId), inserted.childrenMessageIds)
+
+        val reloadedTarget = testDataManager.getChatMessage(targetId)
+        assertNotNull(reloadedTarget)
+        assertEquals(inserted.id, reloadedTarget.parentMessageId)
+
+        val reloadedGrandParent = testDataManager.getChatMessage(grandParentId)
+        assertNotNull(reloadedGrandParent)
+        assertEquals(listOf(inserted.id), reloadedGrandParent.childrenMessageIds)
     }
 
     @Test
-    fun `insertAssistantMessage should return SessionNotFound for non-existent session`() = runTest {
-        // Try to insert assistant message with non-existent session
-        val result = messageDao.insertAssistantMessage(
-            sessionId = 999,
-            content = "This session doesn't exist",
-            parentMessageId = null,
-            modelId = testModel1.id,
-            settingsId = testSettings1.id
+    fun `insertMessage BELOW should insert between target and its children and rewire links`() = runTest {
+        // Arrange: target -> [child1]
+        val targetId = testUserMessage1.id
+        val childId = testAssistantMessage1.id
+
+        val target = testUserMessage1.copy(parentMessageId = null, childrenMessageIds = listOf(childId))
+        val child = testAssistantMessage1.copy(parentMessageId = targetId, childrenMessageIds = emptyList())
+
+        testDataManager.setup(
+            TestDataSet(
+                chatGroups = listOf(testGroup1),
+                llmModels = listOf(testModel1),
+                llmProviders = listOf(testProvider1),
+                modelSettings = listOf(testSettings1),
+                chatSessions = listOf(testSession1),
+                chatMessages = listOf(target, child)
+            )
         )
 
-        // Verify
-        assertTrue(result.isLeft(), "Expected Left result for non-existent session")
+        val result = messageDao.insertMessage(
+            sessionId = testSession1.id,
+            targetMessageId = targetId,
+            position = MessageInsertPosition.BELOW,
+            role = ChatMessage.Role.USER,
+            content = "Inserted below",
+            modelId = null,
+            settingsId = null
+        )
+
+        assertTrue(result.isRight())
+        val inserted = result.getOrNull()
+        assertNotNull(inserted)
+
+        // New message should become only child of target, and parent of the old child
+        assertEquals(targetId, inserted.parentMessageId)
+        assertEquals(listOf(childId), inserted.childrenMessageIds)
+
+        val reloadedTarget = testDataManager.getChatMessage(targetId)
+        assertNotNull(reloadedTarget)
+        assertEquals(listOf(inserted.id), reloadedTarget.childrenMessageIds)
+
+        val reloadedChild = testDataManager.getChatMessage(childId)
+        assertNotNull(reloadedChild)
+        assertEquals(inserted.id, reloadedChild.parentMessageId)
+    }
+
+    @Test
+    fun `insertMessage should return ParentNotFound when targetMessageId does not exist`() = runTest {
+        // Setup session exists
+        testDataManager.setup(
+            TestDataSet(
+                chatGroups = listOf(testGroup1),
+                llmModels = listOf(testModel1),
+                llmProviders = listOf(testProvider1),
+                modelSettings = listOf(testSettings1),
+                chatSessions = listOf(testSession1)
+            )
+        )
+
+        val result = messageDao.insertMessage(
+            sessionId = testSession1.id,
+            targetMessageId = 999,
+            position = MessageInsertPosition.APPEND,
+            role = ChatMessage.Role.USER,
+            content = "Should fail",
+            modelId = null,
+            settingsId = null
+        )
+
+        assertTrue(result.isLeft())
         val error = result.leftOrNull()
-        assertNotNull(error, "Expected non-null error")
-        assertTrue(error is InsertMessageError.SessionNotFound, "Expected SessionNotFound error")
-        assertEquals(999, (error as InsertMessageError.SessionNotFound).sessionId, "Expected error with correct session ID")
+        assertNotNull(error)
+        assertTrue(error is InsertMessageError.ParentNotFound)
+        assertEquals(999, (error as InsertMessageError.ParentNotFound).parentId)
+    }
+
+    @Test
+    fun `insertMessage should return ParentNotInSession when target is in different session`() = runTest {
+        testDataManager.setup(
+            TestDataSet(
+                chatGroups = listOf(testGroup1, testGroup2),
+                llmModels = listOf(testModel1, testModel2),
+                llmProviders = listOf(testProvider1, testProvider2),
+                modelSettings = listOf(testSettings1, testSettings2),
+                chatSessions = listOf(testSession1, testSession2),
+                chatMessages = listOf(testUserMessage1, testUserMessage2)
+            )
+        )
+
+        val result = messageDao.insertMessage(
+            sessionId = testSession1.id,
+            targetMessageId = testUserMessage2.id,
+            position = MessageInsertPosition.APPEND,
+            role = ChatMessage.Role.USER,
+            content = "This parent is in a different session",
+            modelId = null,
+            settingsId = null
+        )
+
+        assertTrue(result.isLeft())
+        val error = result.leftOrNull()
+        assertNotNull(error)
+        assertTrue(error is InsertMessageError.ParentNotInSession)
+        assertEquals(testUserMessage2.id, (error as InsertMessageError.ParentNotInSession).parentId)
+        assertEquals(testSession1.id, error.sessionId)
     }
 
     @Test
@@ -451,8 +506,7 @@ class MessageDaoExposedTest {
         assertTrue(result.isLeft(), "Expected Left result for non-existent message")
         val error = result.leftOrNull()
         assertNotNull(error, "Expected non-null error")
-        assertTrue(error is MessageError.MessageNotFound, "Expected MessageNotFound error")
-        assertEquals(999, (error as MessageError.MessageNotFound).id, "Expected error with correct ID")
+        assertEquals(999, error.id, "Expected error with correct ID")
     }
 
     @Test

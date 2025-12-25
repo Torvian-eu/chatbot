@@ -72,6 +72,12 @@ interface ChatAreaActions {
     fun onRequestDeleteThread(message: ChatMessage)
 
     /**
+     * Callback for when the user requests to show the insert message dialog.
+     * @param message The message relative to which the new message will be inserted.
+     */
+    fun onRequestInsertMessage(message: ChatMessage)
+
+    /**
      * Callback to dismiss any active dialog.
      */
     fun onCancelDialog()

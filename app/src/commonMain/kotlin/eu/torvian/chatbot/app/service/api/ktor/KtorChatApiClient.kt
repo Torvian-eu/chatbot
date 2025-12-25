@@ -14,6 +14,8 @@ import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.models.api.core.ChatClientEvent
 import eu.torvian.chatbot.common.models.api.core.ChatEvent
 import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
+import eu.torvian.chatbot.common.models.api.core.InsertMessageRequest
+import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.api.core.UpdateMessageRequest
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import io.ktor.client.*
@@ -151,6 +153,32 @@ class KtorChatApiClient(
             // Use Ktor resources to build the URL: /api/v1/messages/{messageId}?mode=RECURSIVE
             client.delete(MessageResource.ById(MessageResource(), messageId, DeleteMode.RECURSIVE))
                 .body<Unit>()
+        }
+    }
+
+    override suspend fun insertMessage(
+        sessionId: Long,
+        targetMessageId: Long,
+        position: MessageInsertPosition,
+        role: ChatMessage.Role,
+        content: String,
+        modelId: Long?,
+        settingsId: Long?
+    ): Either<ApiResourceError, ChatMessage> {
+        val request = InsertMessageRequest(
+            sessionId = sessionId,
+            targetMessageId = targetMessageId,
+            position = position,
+            role = role,
+            content = content,
+            modelId = modelId,
+            settingsId = settingsId
+        )
+
+        return safeApiCall {
+            client.post(MessageResource.Insert()) {
+                setBody(request)
+            }.body<ChatMessage>()
         }
     }
 }

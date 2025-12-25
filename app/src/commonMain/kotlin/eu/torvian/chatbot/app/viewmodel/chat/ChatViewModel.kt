@@ -13,6 +13,7 @@ import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.usecase.*
 import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
+import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.llm.LLMModel
@@ -41,6 +42,7 @@ import kotlinx.coroutines.launch
  * @param replyUC Use case for reply functionality
  * @param editMessageUC Use case for editing messages
  * @param deleteMessageUC Use case for deleting messages
+ * @param insertMessageUC Use case for inserting messages
  * @param switchBranchUC Use case for switching branches
  * @param selectModelUC Use case for selecting models
  * @param selectSettingsUC Use case for selecting settings
@@ -59,6 +61,7 @@ class ChatViewModel(
     private val replyUC: ReplyUseCase,
     private val editMessageUC: EditMessageUseCase,
     private val deleteMessageUC: DeleteMessageUseCase,
+    private val insertMessageUC: InsertMessageUseCase,
     private val switchBranchUC: SwitchBranchUseCase,
     private val selectModelUC: SelectModelUseCase,
     private val selectSettingsUC: SelectSettingsUseCase,
@@ -514,5 +517,37 @@ class ChatViewModel(
         super.onCleared()
         backgroundScope.cancel()
         normalScope.cancel()
+    }
+
+    /**
+     * Handles the request to insert a message (show dialog with pre-bound actions).
+     */
+    fun onRequestInsertMessage(message: ChatMessage) {
+        state.setDialogState(ChatAreaDialogState.InsertMessage(
+            targetMessage = message,
+            onConfirm = { position, role, content ->
+                confirmInsertMessage(message.id, position, role, content)
+            },
+            onDismiss = { cancelDialog() }
+        ))
+    }
+
+    /**
+     * Confirms the insertion of a new message at a specific position.
+     */
+    private fun confirmInsertMessage(
+        targetMessageId: Long,
+        position: MessageInsertPosition,
+        role: ChatMessage.Role,
+        content: String
+    ) {
+        cancelDialog()
+        insertMessageUC.execute(
+            scope = normalScope,
+            targetMessageId = targetMessageId,
+            position = position,
+            role = role,
+            content = content
+        )
     }
 }

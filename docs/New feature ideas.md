@@ -19,8 +19,10 @@
   - Add a "Delete Thread" button to the message actions menu. (see MessageActionRow.kt)
     (or hide it under a "More" actions button, to show a popup menu with extra actions, less commonly used)
 
-### Insert message above/below
-Add an "Insert Above" and "Insert Below" button to the more actions menu. (See MessageActionRow.kt)
+### (done) Insert message above/below
+- Add an "Insert" button to the more actions menu. (See MessageActionRow.kt)
+- This should insert a user or assistant message above/below the target message.
+- After clicking the "Insert" button, a dialog should be shown with the following options: above/below (default: below), user/assistant (default: user), message content (optional, may be empty)
 
 ### (done) Make message content selectable
 

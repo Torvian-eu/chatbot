@@ -1,9 +1,11 @@
 package eu.torvian.chatbot.server.service.core
 
 import arrow.core.Either
+import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.server.service.core.error.message.DeleteMessageError
 import eu.torvian.chatbot.server.service.core.error.message.GetMessageError
+import eu.torvian.chatbot.server.service.core.error.message.InsertMessageError
 import eu.torvian.chatbot.server.service.core.error.message.UpdateMessageContentError
 
 /**
@@ -59,4 +61,27 @@ interface MessageService {
      *         or Unit if successful.
      */
     suspend fun deleteMessage(id: Long): Either<DeleteMessageError, Unit>
+
+    /**
+     * Inserts a new message.
+     *
+     * @param sessionId The ID of the session.
+     * @param targetMessageId The ID of the message to insert relative to. Null if inserting a root message.
+     * @param position The position relative to the target (ABOVE, BELOW, or APPEND).
+     *                 If targetMessageId is null, position is ignored (treated as root insert).
+     * @param role The role of the new message.
+     * @param content The content of the new message.
+     * @param modelId Optional model ID (for assistant messages).
+     * @param settingsId Optional settings ID (for assistant messages).
+     * @return Either an [InsertMessageError] or the newly created [ChatMessage].
+     */
+    suspend fun insertMessage(
+        sessionId: Long,
+        targetMessageId: Long?,
+        position: MessageInsertPosition,
+        role: ChatMessage.Role,
+        content: String,
+        modelId: Long?,
+        settingsId: Long?
+    ): Either<InsertMessageError, ChatMessage>
 }

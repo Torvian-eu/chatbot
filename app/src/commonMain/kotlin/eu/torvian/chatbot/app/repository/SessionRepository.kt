@@ -3,8 +3,10 @@ package eu.torvian.chatbot.app.repository
 import arrow.core.Either
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.common.models.api.core.*
+import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
+import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
@@ -269,4 +271,26 @@ interface SessionRepository {
      * @return Either.Right with Unit on successful deletion, or Either.Left with RepositoryError on failure
      */
     suspend fun deleteMessageRecursively(messageId: Long, sessionId: Long): Either<RepositoryError, Unit>
+
+    /**
+     * Inserts a new message relative to a target message.
+     *
+     * @param sessionId The ID of the session.
+     * @param targetMessageId The ID of the target message to insert the new message after.
+     * @param position The position to insert the message at (e.g., BEFORE, AFTER).
+     * @param role The role of the message sender (e.g., USER, ASSISTANT).
+     * @param content The content of the new message.
+     * @param modelId Optional ID of the model to use for the message.
+     * @param settingsId Optional ID of the settings profile to use.
+     * @return Either an error or the newly created message.
+     */
+    suspend fun insertMessage(
+        sessionId: Long,
+        targetMessageId: Long,
+        position: MessageInsertPosition,
+        role: ChatMessage.Role,
+        content: String,
+        modelId: Long? = null,
+        settingsId: Long? = null
+    ): Either<RepositoryError, ChatMessage>
 }
