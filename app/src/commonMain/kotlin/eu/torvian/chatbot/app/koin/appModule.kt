@@ -255,6 +255,10 @@ fun appModule(appConfig: AppConfig): Module = module {
         InsertMessageUseCase(chatState, get(), get())
     }
 
+    factory<CopyToClipboardUseCase> { (chatState: ChatState) ->
+        CopyToClipboardUseCase(chatState, get(), get())
+    }
+
     // Provide ViewModels, injecting the required dependencies
     viewModel {
         val scopeProvider = get<CoroutineScopeProvider>()
@@ -274,9 +278,9 @@ fun appModule(appConfig: AppConfig): Module = module {
             selectModelUC = get { parametersOf(chatState) },
             selectSettingsUC = get { parametersOf(chatState) },
             updateInputUC = get { parametersOf(chatState) },
+            copyToClipboardUC = get { parametersOf(chatState) },
             toolRepository = get(),
             mcpServerRepository = get(),
-            clipboardService = get(),
             notificationService = get(),
             eventBus = get(),
             normalScope = normalScope,

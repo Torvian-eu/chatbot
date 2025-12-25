@@ -7,7 +7,6 @@ import eu.torvian.chatbot.app.repository.LocalMCPServerRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.ToolCallsMap
 import eu.torvian.chatbot.app.repository.ToolRepository
-import eu.torvian.chatbot.app.service.clipboard.ClipboardService
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
@@ -48,9 +47,9 @@ import kotlinx.coroutines.launch
  * @param selectModelUC Use case for selecting models
  * @param selectSettingsUC Use case for selecting settings
  * @param updateInputUC Use case for updating input content
+ * @param copyToClipboardUC Use case for copying content to clipboard
  * @param toolRepository Repository for tool management operations
  * @param mcpServerRepository Repository for MCP server configurations
- * @param clipboardService Service for clipboard operations
  * @param notificationService Service for notifications and error handling
  * @param eventBus Event bus for cross-cutting concerns
  * @param normalScope Coroutine scope for UI operations
@@ -68,9 +67,9 @@ class ChatViewModel(
     private val selectModelUC: SelectModelUseCase,
     private val selectSettingsUC: SelectSettingsUseCase,
     private val updateInputUC: UpdateInputUseCase,
+    private val copyToClipboardUC: CopyToClipboardUseCase,
     private val toolRepository: ToolRepository,
     private val mcpServerRepository: LocalMCPServerRepository,
-    private val clipboardService: ClipboardService,
     private val notificationService: NotificationService,
     private val eventBus: EventBus,
     private val normalScope: CoroutineScope,
@@ -297,13 +296,17 @@ class ChatViewModel(
      */
     fun copyMessageToClipboard(message: ChatMessage) {
         normalScope.launch {
-            try {
-                clipboardService.copyToClipboard(message.content)
-                notificationService.genericSuccess("Message copied to clipboard")
-            } catch (e: Exception) {
-                logger.error("Failed to copy message to clipboard", e)
-                notificationService.genericError("Failed to copy to clipboard")
-            }
+            copyToClipboardUC.copyMessage(message)
+        }
+    }
+
+    /**
+     * Copies the entire currently displayed message thread to the system clipboard.
+     * Messages are formatted with role labels and separated by double newlines.
+     */
+    fun copyThreadToClipboard() {
+        normalScope.launch {
+            copyToClipboardUC.copyThread()
         }
     }
 
