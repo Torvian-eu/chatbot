@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuOpen
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -38,7 +40,8 @@ fun RowScope.ChatTopBarContent(
     onShowToolConfig: () -> Unit,
     enabledToolsCount: Int,
     isSessionListCollapsed: Boolean,
-    onToggleSessionList: () -> Unit
+    onToggleSessionList: () -> Unit,
+    onCopyThread: () -> Unit
 ) {
     // Left-aligned actions
     Row(
@@ -119,6 +122,11 @@ fun RowScope.ChatTopBarContent(
                 }
             }
         }
+
+        Spacer(Modifier.width(8.dp))
+
+        // More actions menu
+        MoreActionsMenu(onCopyThread = onCopyThread)
     }
 
     // User menu
@@ -234,6 +242,49 @@ private fun CompactSettingsSelector(
 
         is DataState.Idle -> {
             // Show nothing or placeholder
+        }
+    }
+}
+
+/**
+ * More actions menu for the chat top bar.
+ * Currently includes Copy Thread action.
+ */
+@Composable
+private fun MoreActionsMenu(
+    onCopyThread: () -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    PlainTooltipBox(text = "More actions") {
+        Box {
+            IconButton(
+                onClick = { expanded = true },
+                modifier = Modifier.size(48.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.MoreVert,
+                    contentDescription = "More actions"
+                )
+            }
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Copy Thread") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = null
+                        )
+                    },
+                    onClick = {
+                        onCopyThread()
+                        expanded = false
+                    }
+                )
+            }
         }
     }
 }

@@ -121,4 +121,9 @@ interface ChatAreaActions {
      * @param message The message whose content should be copied.
      */
     fun onCopyMessage(message: ChatMessage)
+
+    /**
+     * Callback for when the user wants to copy the entire message thread to the clipboard.
+     */
+    fun onCopyThread()
 }
