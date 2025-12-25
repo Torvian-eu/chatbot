@@ -3,6 +3,8 @@ package eu.torvian.chatbot.app.koin
 import eu.torvian.chatbot.app.main.AppConfig
 import eu.torvian.chatbot.app.service.auth.FileSystemTokenStorage
 import eu.torvian.chatbot.app.service.auth.TokenStorage
+import eu.torvian.chatbot.app.service.clipboard.ClipboardService
+import eu.torvian.chatbot.app.service.clipboard.ClipboardServiceWasmJs
 import eu.torvian.chatbot.app.service.mcp.LocalMCPToolCallMediator
 import eu.torvian.chatbot.app.service.mcp.LocalMCPToolCallMediatorDummy
 import eu.torvian.chatbot.app.service.security.BrowserCertificateStorage
@@ -38,6 +40,10 @@ fun wasmJsModule(appConfig: AppConfig, encryptionConfig: EncryptionConfig) = mod
 
     single<CertificateStorage> {
         BrowserCertificateStorage()
+    }
+
+    single<ClipboardService> {
+        ClipboardServiceWasmJs()
     }
 
     single<LocalMCPToolCallMediator> {

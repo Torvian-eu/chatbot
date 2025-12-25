@@ -5,6 +5,8 @@ import eu.torvian.chatbot.app.database.DriverFactoryDesktop
 import eu.torvian.chatbot.app.main.AppConfig
 import eu.torvian.chatbot.app.service.auth.FileSystemTokenStorage
 import eu.torvian.chatbot.app.service.auth.TokenStorage
+import eu.torvian.chatbot.app.service.clipboard.ClipboardService
+import eu.torvian.chatbot.app.service.clipboard.ClipboardServiceDesktop
 import eu.torvian.chatbot.app.service.mcp.LocalMCPServerProcessManager
 import eu.torvian.chatbot.app.service.mcp.LocalMCPServerProcessManagerDesktop
 import eu.torvian.chatbot.app.service.mcp.LocalMCPServerManager
@@ -57,6 +59,10 @@ fun desktopModule(appConfig: AppConfig, encryptionConfig: EncryptionConfig) = mo
         )
     }
 
+    single<ClipboardService> {
+        ClipboardServiceDesktop()
+    }
+
     single<DriverFactory> {
         val databasePath = Path(appConfig.baseUserDataStoragePath, "local.db").toString()
         DriverFactoryDesktop(databasePath = databasePath)
@@ -97,7 +103,7 @@ fun desktopModule(appConfig: AppConfig, encryptionConfig: EncryptionConfig) = mo
             serverManager = get(),
             mcpToolRepository = get(),
             toolRepository = get(),
-            errorNotifier = get()
+            notificationService = get()
         )
     }
 }
