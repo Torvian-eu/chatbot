@@ -20,5 +20,6 @@ data class MessageActions(
     val onRegenerateMessage: ((ChatMessage) -> Unit)? = null,
     val onReplyMessage: (ChatMessage) -> Unit,
     val onDeleteMessage: (ChatMessage) -> Unit,
-    val onDeleteThread: (ChatMessage) -> Unit
+    val onDeleteThread: (ChatMessage) -> Unit,
+    val onRequestInsertMessage: (ChatMessage) -> Unit
 )

@@ -5,6 +5,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBackIos
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.automirrored.filled.Reply
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
@@ -277,6 +278,13 @@ private fun MoreActionsMenu(
             expanded = expanded,
             onDismissRequest = { onExpandedChange(false) }
         ) {
+            // Insert Message action
+            InsertMessageMenuItem(
+                message = message,
+                onRequestInsertMessage = messageActions.onRequestInsertMessage,
+                onDismissMenu = { onExpandedChange(false) }
+            )
+
             // Delete Thread action
             DeleteThreadMenuItem(
                 message = message,
@@ -288,6 +296,31 @@ private fun MoreActionsMenu(
             // e.g., "Pin message", "Bookmark", "Share", etc.
         }
     }
+}
+
+/**
+ * Menu item for Insert Message action.
+ */
+@Composable
+private fun InsertMessageMenuItem(
+    message: ChatMessage,
+    onRequestInsertMessage: (ChatMessage) -> Unit,
+    onDismissMenu: () -> Unit
+) {
+    DropdownMenuItem(
+        text = { Text("Insert Message") },
+        onClick = {
+            onDismissMenu()
+            onRequestInsertMessage(message)
+        },
+        leadingIcon = {
+            Icon(
+                Icons.Default.Add,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    )
 }
 
 /**

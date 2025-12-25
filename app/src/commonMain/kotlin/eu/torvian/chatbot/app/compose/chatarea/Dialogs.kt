@@ -1,10 +1,14 @@
 package eu.torvian.chatbot.app.compose.chatarea
 
+import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
+import eu.torvian.chatbot.common.models.core.MessageInsertPosition
+import eu.torvian.chatbot.common.models.core.ChatMessage
 
 /**
  * Manages displaying dialogs for the Chat Area based on the ViewModel's state.
@@ -53,9 +57,89 @@ fun Dialogs(dialogState: ChatAreaDialogState) {
             )
         }
 
-        ChatAreaDialogState.None -> { /* No dialog to show */
+        is ChatAreaDialogState.InsertMessage -> {
+            InsertMessageDialog(
+                onConfirm = dialogState.onConfirm,
+                onDismiss = dialogState.onDismiss
+            )
+        }
+
+        ChatAreaDialogState.None -> {
+            // No dialog
         }
     }
+}
+
+@Composable
+fun InsertMessageDialog(
+    onConfirm: (MessageInsertPosition, ChatMessage.Role, String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var position by remember { mutableStateOf(MessageInsertPosition.BELOW) }
+    var role by remember { mutableStateOf(ChatMessage.Role.USER) }
+    var content by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Insert Message") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Position:")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(
+                        selected = position == MessageInsertPosition.ABOVE,
+                        onClick = { position = MessageInsertPosition.ABOVE }
+                    )
+                    Text("Above")
+                    Spacer(Modifier.width(16.dp))
+                    RadioButton(
+                        selected = position == MessageInsertPosition.BELOW,
+                        onClick = { position = MessageInsertPosition.BELOW }
+                    )
+                    Text("Below")
+                    Spacer(Modifier.width(16.dp))
+                    RadioButton(
+                        selected = position == MessageInsertPosition.APPEND,
+                        onClick = { position = MessageInsertPosition.APPEND }
+                    )
+                    Text("Append")
+                }
+
+                Text("Role:")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(
+                        selected = role == ChatMessage.Role.USER,
+                        onClick = { role = ChatMessage.Role.USER }
+                    )
+                    Text("User")
+                    Spacer(Modifier.width(16.dp))
+                    RadioButton(
+                        selected = role == ChatMessage.Role.ASSISTANT,
+                        onClick = { role = ChatMessage.Role.ASSISTANT }
+                    )
+                    Text("Assistant")
+                }
+
+                OutlinedTextField(
+                    value = content,
+                    onValueChange = { content = it },
+                    label = { Text("Content (Optional)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(position, role, content) }) {
+                Text("Insert")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 /**
@@ -115,4 +199,3 @@ private fun DeleteMessageRecursivelyDialog(
         }
     )
 }
-
