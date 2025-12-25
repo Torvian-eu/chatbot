@@ -26,10 +26,9 @@
 
 ### (done) Make message content selectable
 
-### Make messages collapsible (useful for long messages)
+### (done) Make messages collapsible (useful for long messages)
 
-### Make message content copyable to clipboard
-A "Copy" button is already available in the message actions menu, but it needs to be wired to an action function. (see MessageActionRow.kt)
+### (done) Make message content copyable to clipboard
 
 ### Make currently displayed message thread copyable to clipboard
 
