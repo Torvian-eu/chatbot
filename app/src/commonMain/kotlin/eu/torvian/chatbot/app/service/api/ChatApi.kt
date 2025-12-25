@@ -5,6 +5,7 @@ import eu.torvian.chatbot.common.models.api.core.ChatClientEvent
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.api.core.ChatEvent
 import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
+import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.api.core.UpdateMessageRequest
 import kotlinx.coroutines.flow.Flow
 
@@ -81,4 +82,28 @@ interface ChatApi {
      *         or [Either.Left] containing an [ApiResourceError] on failure.
      */
     suspend fun deleteMessageRecursively(messageId: Long): Either<ApiResourceError, Unit>
+
+    /**
+     * Inserts a new message relative to a target message.
+     *
+     * Corresponds to `POST /api/v1/messages/insert`.
+     *
+     * @param sessionId The ID of the session.
+     * @param targetMessageId The ID of the message to insert relative to.
+     * @param position The position relative to the target (ABOVE, BELOW, or APPEND).
+     * @param role The role of the new message (user or assistant).
+     * @param content The content of the new message.
+     * @param modelId Optional model ID (for assistant messages).
+     * @param settingsId Optional settings ID (for assistant messages).
+     * @return Either an error or the newly created message.
+     */
+    suspend fun insertMessage(
+        sessionId: Long,
+        targetMessageId: Long,
+        position: MessageInsertPosition,
+        role: ChatMessage.Role,
+        content: String,
+        modelId: Long? = null,
+        settingsId: Long? = null
+    ): Either<ApiResourceError, ChatMessage>
 }
