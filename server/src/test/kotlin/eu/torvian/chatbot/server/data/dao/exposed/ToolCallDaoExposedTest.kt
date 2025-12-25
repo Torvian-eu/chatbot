@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.data.dao.exposed
 import arrow.core.getOrElse
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
+import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
@@ -76,19 +77,25 @@ class ToolCallDaoExposedTest {
         ).getOrElse { throw IllegalStateException("Failed to create test session") }.id
 
         // Create test assistant message (required for tool calls)
-        val userMessage = messageDao.insertUserMessage(
+        val userMessage = messageDao.insertMessage(
             sessionId = testSessionId,
+            targetMessageId = null,
+            position = MessageInsertPosition.APPEND,
+            role = ChatMessage.Role.USER,
             content = "Search for information",
-            parentMessageId = null
-        ).getOrElse { throw IllegalStateException("Failed to create user message") }
-
-        testMessage = messageDao.insertAssistantMessage(
-            sessionId = testSessionId,
-            content = "Searching...",
-            parentMessageId = userMessage.id,
             modelId = null,
             settingsId = null
-        ).getOrElse { throw IllegalStateException("Failed to create assistant message") }
+        ).getOrElse { throw IllegalStateException("Failed to create user message") }
+
+        testMessage = messageDao.insertMessage(
+            sessionId = testSessionId,
+            targetMessageId = userMessage.id,
+            position = MessageInsertPosition.APPEND,
+            role = ChatMessage.Role.ASSISTANT,
+            content = "Searching...",
+            modelId = null,
+            settingsId = null
+        ).getOrElse { throw IllegalStateException("Failed to create assistant message") } as ChatMessage.AssistantMessage
 
         // Create test tool definition
         val config = buildJsonObject {
@@ -198,13 +205,15 @@ class ToolCallDaoExposedTest {
         createTestToolCall(messageId = testMessage.id, toolCallId = "call_1", toolName = "tool_one")
 
         // Create another message and tool call in the same session
-        val message2 = messageDao.insertAssistantMessage(
+        val message2 = messageDao.insertMessage(
             sessionId = testSessionId,
+            targetMessageId = testMessage.id,
+            position = MessageInsertPosition.APPEND,
+            role = ChatMessage.Role.ASSISTANT,
             content = "Another search",
-            parentMessageId = testMessage.id,
             modelId = null,
             settingsId = null
-        ).getOrElse { throw IllegalStateException("Failed to create second message") }
+        ).getOrElse { throw IllegalStateException("Failed to create second message") } as ChatMessage.AssistantMessage
 
         createTestToolCall(messageId = message2.id, toolCallId = "call_2", toolName = "tool_two")
 

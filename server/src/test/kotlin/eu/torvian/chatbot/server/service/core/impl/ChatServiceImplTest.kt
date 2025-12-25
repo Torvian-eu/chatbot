@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.service.core.impl
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
+import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.llm.*
@@ -338,7 +339,17 @@ class ChatServiceImplTest {
         val llmResponseContent = "I'm doing well, thank you!"
 
         // Mock all the dependencies for successful flow
-        coEvery { messageDao.insertUserMessage(testSession.id, content, null) } returns userMessage.right()
+        coEvery {
+            messageDao.insertMessage(
+                testSession.id,
+                null,
+                any(),
+                ChatMessage.Role.USER,
+                content,
+                null,
+                null
+            )
+        } returns userMessage.right()
         coEvery { messageDao.getMessageById(userMessage.id) } returns userMessage.right()
         coEvery { sessionDao.updateSessionLeafMessageId(testSession.id, userMessage.id) } returns Unit.right()
         coEvery { toolCallDao.getToolCallsBySessionId(testSession.id) } returns emptyList()
@@ -353,10 +364,12 @@ class ChatServiceImplTest {
             )
         } returns mockLlmResponse.right()
         coEvery {
-            messageDao.insertAssistantMessage(
+            messageDao.insertMessage(
                 testSession.id,
-                llmResponseContent,
                 userMessage.id,
+                any(),
+                ChatMessage.Role.ASSISTANT,
+                llmResponseContent,
                 testModel.id,
                 testSettings.id
             )
@@ -390,13 +403,25 @@ class ChatServiceImplTest {
         assertTrue(thirdEvent is MessageEvent.StreamCompleted, "Third event should be StreamCompleted")
 
         // Verify interactions
-        coVerify(exactly = 1) { messageDao.insertUserMessage(testSession.id, content, null) }
+        coVerify(exactly = 1) {
+            messageDao.insertMessage(
+                testSession.id,
+                null,
+                MessageInsertPosition.APPEND,
+                ChatMessage.Role.USER,
+                content,
+                null,
+                null
+            )
+        }
         coVerify(exactly = 1) { llmApiClient.completeChat(any(), any(), any(), any(), any(), any()) }
         coVerify(exactly = 1) {
-            messageDao.insertAssistantMessage(
+            messageDao.insertMessage(
                 testSession.id,
-                llmResponseContent,
                 userMessage.id,
+                MessageInsertPosition.APPEND,
+                ChatMessage.Role.ASSISTANT,
+                llmResponseContent,
                 testModel.id,
                 testSettings.id
             )
@@ -414,7 +439,17 @@ class ChatServiceImplTest {
 
         // Mock all the dependencies for successful flow with parent message
         coEvery { messageDao.getMessageById(parentMessageId) } returns parentMessage.right()
-        coEvery { messageDao.insertUserMessage(testSession.id, content, parentMessageId) } returns userMessage.right()
+        coEvery {
+            messageDao.insertMessage(
+                testSession.id,
+                parentMessageId,
+                any(),
+                ChatMessage.Role.USER,
+                content,
+                null,
+                null
+            )
+        } returns userMessage.right()
         coEvery { messageDao.getMessageById(userMessage.id) } returns userMessage.right()
         coEvery { sessionDao.updateSessionLeafMessageId(testSession.id, userMessage.id) } returns Unit.right()
         coEvery { toolCallDao.getToolCallsBySessionId(testSession.id) } returns emptyList()
@@ -429,10 +464,12 @@ class ChatServiceImplTest {
             )
         } returns mockLlmResponse.right()
         coEvery {
-            messageDao.insertAssistantMessage(
+            messageDao.insertMessage(
                 testSession.id,
-                mockLlmResponse.choices[0].content!!,
                 userMessage.id,
+                any(),
+                ChatMessage.Role.ASSISTANT,
+                mockLlmResponse.choices[0].content!!,
                 testModel.id,
                 testSettings.id
             )
@@ -461,7 +498,17 @@ class ChatServiceImplTest {
             "Assistant message should be child of user message")
 
         // Verify interactions
-        coVerify(exactly = 1) { messageDao.insertUserMessage(testSession.id, content, parentMessageId) }
+        coVerify(exactly = 1) {
+            messageDao.insertMessage(
+                testSession.id,
+                parentMessageId,
+                MessageInsertPosition.APPEND,
+                ChatMessage.Role.USER,
+                content,
+                null,
+                null
+            )
+        }
         coVerify(exactly = 1) { llmApiClient.completeChat(any(), any(), any(), any(), any(), any()) }
     }
 
@@ -472,7 +519,17 @@ class ChatServiceImplTest {
         val userMessage = testMessage1
         val llmError = LLMCompletionError.NetworkError("API Error", null)
 
-        coEvery { messageDao.insertUserMessage(testSession.id, content, null) } returns userMessage.right()
+        coEvery {
+            messageDao.insertMessage(
+                testSession.id,
+                null,
+                any(),
+                ChatMessage.Role.USER,
+                content,
+                null,
+                null
+            )
+        } returns userMessage.right()
         coEvery { messageDao.getMessageById(userMessage.id) } returns userMessage.right()
         coEvery { sessionDao.updateSessionLeafMessageId(testSession.id, userMessage.id) } returns Unit.right()
         coEvery { toolCallDao.getToolCallsBySessionId(testSession.id) } returns emptyList()
