@@ -251,6 +251,10 @@ fun appModule(appConfig: AppConfig): Module = module {
         DeleteMessageUseCase(get<SessionRepository>(), chatState, get())
     }
 
+    factory { (chatState: ChatState) ->
+        InsertMessageUseCase(chatState, get(), get())
+    }
+
     // Provide ViewModels, injecting the required dependencies
     viewModel {
         val scopeProvider = get<CoroutineScopeProvider>()
@@ -265,6 +269,7 @@ fun appModule(appConfig: AppConfig): Module = module {
             replyUC = get { parametersOf(chatState) },
             editMessageUC = get { parametersOf(chatState) },
             deleteMessageUC = get { parametersOf(chatState) },
+            insertMessageUC = get { parametersOf(chatState) },
             switchBranchUC = get { parametersOf(chatState) },
             selectModelUC = get { parametersOf(chatState) },
             selectSettingsUC = get { parametersOf(chatState) },
