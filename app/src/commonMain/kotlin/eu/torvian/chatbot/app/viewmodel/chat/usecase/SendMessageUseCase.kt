@@ -7,7 +7,7 @@ import eu.torvian.chatbot.app.repository.SessionRepository
 import eu.torvian.chatbot.app.service.mcp.LocalMCPToolCallMediator
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
-import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
+import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.models.api.core.ChatClientEvent
 import eu.torvian.chatbot.common.models.api.core.ChatEvent
 import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
@@ -27,7 +27,7 @@ class SendMessageUseCase(
     private val sessionRepository: SessionRepository,
     private val localMcpToolCallMediator: LocalMCPToolCallMediator,
     private val state: ChatState,
-    private val errorNotifier: ErrorNotifier
+    private val notificationService: NotificationService
 ) {
 
     private val logger = kmpLogger<SendMessageUseCase>()
@@ -86,7 +86,7 @@ class SendMessageUseCase(
         val currentSettings = state.currentSettings.value
 
         if (currentModel == null || currentSettings == null) {
-            errorNotifier.genericWarning(
+            notificationService.genericWarning(
                 shortMessageRes = Res.string.warning_model_or_settings_unavailable,
                 detailedMessage = "Model: ${currentModel?.name ?: "not available"}, Settings: ${if (currentSettings != null) "available" else "not available"}"
             )
@@ -148,7 +148,7 @@ class SendMessageUseCase(
             eitherUpdate.fold(
                 ifLeft = { repositoryError ->
                     logger.error("Streaming message repository error: ${repositoryError.message}")
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = repositoryError,
                         shortMessageRes = Res.string.error_sending_message_short
                     )
@@ -176,7 +176,7 @@ class SendMessageUseCase(
                         }
 
                         is ChatStreamEvent.ErrorOccurred -> {
-                            errorNotifier.apiError(
+                            notificationService.apiError(
                                 error = chatUpdate.error,
                                 shortMessageRes = Res.string.error_sending_message_short
                             )
@@ -221,7 +221,7 @@ class SendMessageUseCase(
             eitherEvent.fold(
                 ifLeft = { repositoryError ->
                     logger.error("Non-streaming message repository error: ${repositoryError.message}")
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = repositoryError,
                         shortMessageRes = Res.string.error_sending_message_short
                     )
@@ -249,7 +249,7 @@ class SendMessageUseCase(
                         }
 
                         is ChatEvent.ErrorOccurred -> {
-                            errorNotifier.apiError(
+                            notificationService.apiError(
                                 error = event.error,
                                 shortMessageRes = Res.string.error_sending_message_short
                             )

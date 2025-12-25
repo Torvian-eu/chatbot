@@ -11,7 +11,7 @@ import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.ModelSettingsRepository
 import eu.torvian.chatbot.app.repository.UserGroupRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
-import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
+import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
 import eu.torvian.chatbot.common.models.api.access.ModelSettingsDetails
@@ -42,7 +42,7 @@ import kotlinx.coroutines.launch
  * @param modelSettingsRepository The repository for Settings-related operations.
  * @param modelRepository The repository for Model-related operations (needed for model selection).
  * @param userGroupRepository The repository for user group-related operations.
- * @param errorNotifier The service for handling and notifying about errors.
+ * @param notificationService Service for notifications and error handling.
  * @param uiDispatcher The dispatcher to use for UI-related coroutines. Defaults to Main.
  *
  * @property modelsState The state of the list of all configured LLM models.
@@ -55,7 +55,7 @@ class ModelSettingsViewModel(
     private val modelSettingsRepository: ModelSettingsRepository,
     private val modelRepository: ModelRepository,
     private val userGroupRepository: UserGroupRepository,
-    private val errorNotifier: ErrorNotifier,
+    private val notificationService: NotificationService,
     private val uiDispatcher: CoroutineDispatcher = Dispatchers.Main
 ) : ViewModel() {
 
@@ -156,13 +156,13 @@ class ModelSettingsViewModel(
                 { modelSettingsRepository.loadAllSettingsDetails() }
             ) { modelsResult, settingsResult ->
                 modelsResult.mapLeft { error ->
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to load models"
                     )
                 }
                 settingsResult.mapLeft { error ->
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to load settings"
                     )
@@ -192,7 +192,7 @@ class ModelSettingsViewModel(
         val selectedModel = selectedModel.value ?: return
         if (selectedModel.type !in getSupportedSettingsTypes()) {
             viewModelScope.launch {
-                errorNotifier.genericWarning(
+                notificationService.genericWarning(
                     shortMessageRes = Res.string.error_unsupported_model_type,
                     detailedMessage = "Cannot add new settings: Model type ${selectedModel.type} is not supported."
                 )
@@ -263,7 +263,7 @@ class ModelSettingsViewModel(
             modelSettingsRepository.deleteSettings(settingsId)
                 .fold(
                     ifLeft = { error ->
-                        errorNotifier.repositoryError(
+                        notificationService.repositoryError(
                             error = error,
                             shortMessage = "Failed to delete settings"
                         )
@@ -289,7 +289,7 @@ class ModelSettingsViewModel(
         viewModelScope.launch(uiDispatcher) {
             modelSettingsRepository.makeSettingsPublic(settingsDetails.settings.id)
                 .mapLeft { error ->
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to make settings public"
                     )
@@ -304,7 +304,7 @@ class ModelSettingsViewModel(
         viewModelScope.launch(uiDispatcher) {
             modelSettingsRepository.makeSettingsPrivate(settingsDetails.settings.id)
                 .mapLeft { error ->
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to make settings private"
                     )
@@ -319,7 +319,7 @@ class ModelSettingsViewModel(
         viewModelScope.launch(uiDispatcher) {
             userGroupRepository.loadGroups().fold(
                 ifLeft = { error ->
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to load user groups"
                     )
@@ -390,7 +390,7 @@ class ModelSettingsViewModel(
                 GrantAccessRequest(groupId = groupId, accessMode = accessMode)
             ).fold(
                 ifLeft = { error ->
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to grant access"
                     )
@@ -418,7 +418,7 @@ class ModelSettingsViewModel(
                 RevokeAccessRequest(groupId = groupId, accessMode = accessMode)
             ).fold(
                 ifLeft = { error ->
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to revoke access"
                     )
@@ -450,7 +450,7 @@ class ModelSettingsViewModel(
             modelSettingsRepository.addModelSettings(newSettings)
                 .fold(
                     ifLeft = { error ->
-                        errorNotifier.repositoryError(
+                        notificationService.repositoryError(
                             error = error,
                             shortMessage = "Failed to add settings"
                         )
@@ -480,7 +480,7 @@ class ModelSettingsViewModel(
             modelSettingsRepository.updateSettings(updatedSettings)
                 .fold(
                     ifLeft = { error ->
-                        errorNotifier.repositoryError(
+                        notificationService.repositoryError(
                             error = error,
                             shortMessage = "Failed to update settings"
                         )

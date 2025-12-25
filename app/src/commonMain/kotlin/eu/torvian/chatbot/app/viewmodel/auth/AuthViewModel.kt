@@ -7,7 +7,7 @@ import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.service.auth.AccountData
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
-import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
+import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.models.api.auth.LoginRequest
 import eu.torvian.chatbot.common.models.api.auth.RegisterRequest
 import kotlinx.coroutines.CoroutineScope
@@ -29,12 +29,12 @@ import kotlinx.coroutines.launch
  * - Multi-account management (listing, switching, removing accounts)
  *
  * @param authRepository Repository for authentication operations
- * @param errorNotifier Service for handling and notifying about errors
+ * @param notificationService Service for handling and notifying about errors
  * @param normalScope Coroutine scope for normal operations
  */
 class AuthViewModel(
     private val authRepository: AuthRepository,
-    private val errorNotifier: ErrorNotifier,
+    private val notificationService: NotificationService,
     private val normalScope: CoroutineScope
 ) : ViewModel(normalScope) {
 
@@ -224,7 +224,7 @@ class AuthViewModel(
     fun logout() {
         viewModelScope.launch {
             authRepository.logout().onLeft { error ->
-                errorNotifier.repositoryError(
+                notificationService.repositoryError(
                     error = error,
                     shortMessage = "Logout failed"
                 )
@@ -322,7 +322,7 @@ class AuthViewModel(
 
             authRepository.switchAccount(userId)
                 .onLeft { error ->
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to switch account"
                     )
@@ -349,7 +349,7 @@ class AuthViewModel(
         viewModelScope.launch {
             authRepository.removeAccount(userId)
                 .onLeft { error ->
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to remove account"
                     )

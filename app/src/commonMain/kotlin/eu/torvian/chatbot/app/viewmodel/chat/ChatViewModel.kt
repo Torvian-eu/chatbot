@@ -7,12 +7,13 @@ import eu.torvian.chatbot.app.repository.LocalMCPServerRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.ToolCallsMap
 import eu.torvian.chatbot.app.repository.ToolRepository
+import eu.torvian.chatbot.app.service.clipboard.ClipboardService
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.usecase.*
-import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
+import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
@@ -49,7 +50,8 @@ import kotlinx.coroutines.launch
  * @param updateInputUC Use case for updating input content
  * @param toolRepository Repository for tool management operations
  * @param mcpServerRepository Repository for MCP server configurations
- * @param errorNotifier Notifier for error handling
+ * @param clipboardService Service for clipboard operations
+ * @param notificationService Service for notifications and error handling
  * @param eventBus Event bus for cross-cutting concerns
  * @param normalScope Coroutine scope for UI operations
  * @param backgroundScope Coroutine scope for background operations (should only differ from normalScope in tests)
@@ -68,7 +70,8 @@ class ChatViewModel(
     private val updateInputUC: UpdateInputUseCase,
     private val toolRepository: ToolRepository,
     private val mcpServerRepository: LocalMCPServerRepository,
-    private val errorNotifier: ErrorNotifier,
+    private val clipboardService: ClipboardService,
+    private val notificationService: NotificationService,
     private val eventBus: EventBus,
     private val normalScope: CoroutineScope,
     private val backgroundScope: CoroutineScope
@@ -288,6 +291,23 @@ class ChatViewModel(
     }
 
     /**
+     * Copies the content of a message to the system clipboard.
+     *
+     * @param message The message whose content should be copied.
+     */
+    fun copyMessageToClipboard(message: ChatMessage) {
+        normalScope.launch {
+            try {
+                clipboardService.copyToClipboard(message.content)
+                notificationService.genericSuccess("Message copied to clipboard")
+            } catch (e: Exception) {
+                logger.error("Failed to copy message to clipboard", e)
+                notificationService.genericError("Failed to copy to clipboard")
+            }
+        }
+    }
+
+    /**
      * Deletes a specific message.
      */
     private fun deleteMessage(messageId: Long) {
@@ -340,7 +360,7 @@ class ChatViewModel(
     fun loadTools() {
         normalScope.launch {
             toolRepository.loadTools().mapLeft { error ->
-                errorNotifier.repositoryError(
+                notificationService.repositoryError(
                     error = error,
                     shortMessage = "Failed to load tools"
                 )
@@ -355,7 +375,7 @@ class ChatViewModel(
         val sessionId = state.activeSessionId.value ?: return
         normalScope.launch {
             toolRepository.loadEnabledToolsForSession(sessionId).mapLeft { error ->
-                errorNotifier.repositoryError(
+                notificationService.repositoryError(
                     error = error,
                     shortMessage = "Failed to load session tools"
                 )
@@ -370,7 +390,7 @@ class ChatViewModel(
         val sessionId = state.activeSessionId.value ?: return
         normalScope.launch {
             toolRepository.setToolEnabledForSession(sessionId, toolDefinition, enabled).mapLeft { error ->
-                errorNotifier.repositoryError(
+                notificationService.repositoryError(
                     error = error,
                     shortMessage = "Failed to toggle tool"
                 )
@@ -385,7 +405,7 @@ class ChatViewModel(
         val sessionId = state.activeSessionId.value ?: return
         normalScope.launch {
             toolRepository.setToolsEnabledForSession(sessionId, toolDefinitions, enabled).mapLeft { error ->
-                errorNotifier.repositoryError(
+                notificationService.repositoryError(
                     error = error,
                     shortMessage = "Failed to toggle tools"
                 )

@@ -3,7 +3,7 @@ package eu.torvian.chatbot.app.viewmodel.chat.usecase
 import eu.torvian.chatbot.app.repository.SessionRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
-import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
+import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.api.core.UpdateMessageRequest
 
@@ -14,7 +14,7 @@ import eu.torvian.chatbot.common.models.api.core.UpdateMessageRequest
 class EditMessageUseCase(
     private val sessionRepository: SessionRepository,
     private val state: ChatState,
-    private val errorNotifier: ErrorNotifier
+    private val notificationService: NotificationService
 ) {
 
     private val logger = kmpLogger<EditMessageUseCase>()
@@ -62,7 +62,7 @@ class EditMessageUseCase(
             .fold(
                 ifLeft = { repositoryError ->
                     logger.error("Edit message repository error: ${repositoryError.message}")
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = repositoryError,
                         shortMessage = "Failed to save message edit"
                     )

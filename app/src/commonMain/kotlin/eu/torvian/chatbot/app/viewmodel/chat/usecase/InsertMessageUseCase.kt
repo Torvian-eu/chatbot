@@ -2,7 +2,7 @@ package eu.torvian.chatbot.app.viewmodel.chat.usecase
 
 import eu.torvian.chatbot.app.repository.SessionRepository
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
-import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
+import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import kotlinx.coroutines.CoroutineScope
@@ -14,7 +14,7 @@ import kotlinx.coroutines.launch
 class InsertMessageUseCase(
     private val state: ChatState,
     private val sessionRepository: SessionRepository,
-    private val errorNotifier: ErrorNotifier
+    private val notificationService: NotificationService
 ) {
     fun execute(
         scope: CoroutineScope,
@@ -38,7 +38,7 @@ class InsertMessageUseCase(
                 settingsId = if (role == ChatMessage.Role.ASSISTANT) settingsId else null
             )
                 .onLeft { error ->
-                    errorNotifier.repositoryError(error, "Failed to insert message")
+                    notificationService.repositoryError(error, "Failed to insert message")
                 }
             // Success is handled by repository updating the session flow
         }

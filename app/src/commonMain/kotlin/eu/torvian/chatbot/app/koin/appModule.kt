@@ -24,7 +24,7 @@ import eu.torvian.chatbot.app.viewmodel.chat.util.DefaultThreadBuilder
 import eu.torvian.chatbot.app.viewmodel.chat.util.ThreadBuilder
 import eu.torvian.chatbot.app.viewmodel.common.CoroutineScopeProvider
 import eu.torvian.chatbot.app.viewmodel.common.DefaultCoroutineScopeProvider
-import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
+import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import io.ktor.client.*
 import io.ktor.client.plugins.logging.*
 import kotlinx.coroutines.CoroutineScope
@@ -113,8 +113,8 @@ fun appModule(appConfig: AppConfig): Module = module {
         Clock.System
     }
 
-    single<ErrorNotifier> {
-        ErrorNotifier(get())
+    single<NotificationService> {
+        NotificationService(get())
     }
 
     // Provide CoroutineScope factory for better testability
@@ -276,7 +276,8 @@ fun appModule(appConfig: AppConfig): Module = module {
             updateInputUC = get { parametersOf(chatState) },
             toolRepository = get(),
             mcpServerRepository = get(),
-            errorNotifier = get(),
+            clipboardService = get(),
+            notificationService = get(),
             eventBus = get(),
             normalScope = normalScope,
             backgroundScope = backgroundScope
@@ -285,16 +286,16 @@ fun appModule(appConfig: AppConfig): Module = module {
     viewModel {
         val scopeProvider = get<CoroutineScopeProvider>()
         val normalScope = scopeProvider.createNormalScope()
-        AuthViewModel(get<AuthRepository>(), get<ErrorNotifier>(), normalScope)
+        AuthViewModel(get<AuthRepository>(), get<NotificationService>(), normalScope)
     }
     viewModel { SessionListViewModel(get<SessionRepository>(), get<GroupRepository>(), get<EventBus>(), get()) }
-    viewModel { ProviderConfigViewModel(get<ProviderRepository>(), get<UserGroupRepository>(), get<ErrorNotifier>()) }
-    viewModel { ModelConfigViewModel(get<ModelRepository>(), get<ProviderRepository>(), get<UserGroupRepository>(), get<ErrorNotifier>()) }
-    viewModel { ModelSettingsViewModel(get<ModelSettingsRepository>(), get<ModelRepository>(), get<UserGroupRepository>(), get<ErrorNotifier>()) }
+    viewModel { ProviderConfigViewModel(get<ProviderRepository>(), get<UserGroupRepository>(), get<NotificationService>()) }
+    viewModel { ModelConfigViewModel(get<ModelRepository>(), get<ProviderRepository>(), get<UserGroupRepository>(), get<NotificationService>()) }
+    viewModel { ModelSettingsViewModel(get<ModelSettingsRepository>(), get<ModelRepository>(), get<UserGroupRepository>(), get<NotificationService>()) }
     viewModel {
         val scopeProvider = get<CoroutineScopeProvider>()
         val normalScope = scopeProvider.createNormalScope()
-        UserManagementViewModel(get<UserRepository>(), get<RoleRepository>(), get<ErrorNotifier>(), normalScope)
+        UserManagementViewModel(get<UserRepository>(), get<RoleRepository>(), get<NotificationService>(), normalScope)
     }
-    viewModel { UserGroupManagementViewModel(get<UserGroupRepository>(), get<UserRepository>(), get<ErrorNotifier>()) }
+    viewModel { UserGroupManagementViewModel(get<UserGroupRepository>(), get<UserRepository>(), get<NotificationService>()) }
 }

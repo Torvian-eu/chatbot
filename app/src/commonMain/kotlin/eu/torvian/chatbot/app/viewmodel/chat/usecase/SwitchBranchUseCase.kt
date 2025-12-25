@@ -6,7 +6,7 @@ import eu.torvian.chatbot.app.repository.SessionRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.util.ThreadBuilder
-import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
+import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.models.api.core.UpdateSessionLeafMessageRequest
 
 /**
@@ -17,7 +17,7 @@ class SwitchBranchUseCase(
     private val sessionRepository: SessionRepository,
     private val threadBuilder: ThreadBuilder,
     private val state: ChatState,
-    private val errorNotifier: ErrorNotifier
+    private val notificationService: NotificationService
 ) {
 
     private val logger = kmpLogger<SwitchBranchUseCase>()
@@ -55,7 +55,7 @@ class SwitchBranchUseCase(
         ).fold(
             ifLeft = { repositoryError ->
                 logger.error("Switch branch repository error: ${repositoryError.message}")
-                errorNotifier.repositoryError(
+                notificationService.repositoryError(
                     error = repositoryError,
                     shortMessageRes = Res.string.error_switching_branch
                 )

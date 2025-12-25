@@ -6,7 +6,7 @@ import eu.torvian.chatbot.app.generated.resources.error_loading_session
 import eu.torvian.chatbot.app.repository.*
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
-import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
+import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 
 /**
  * Use case for loading chat sessions in the reactive architecture.
@@ -23,7 +23,7 @@ class LoadSessionUseCase(
     private val toolRepository: ToolRepository,
     private val mcpServerRepository: LocalMCPServerRepository,
     private val state: ChatState,
-    private val errorNotifier: ErrorNotifier
+    private val notificationService: NotificationService
 ) {
 
     private val logger = kmpLogger<LoadSessionUseCase>()
@@ -64,7 +64,7 @@ class LoadSessionUseCase(
         ) { sessionResult, toolCallsResult, modelsResult, settingsResult, toolsResult, enabledToolsResult, _ ->
             sessionResult
                 .onLeft { error ->
-                    val eventId = errorNotifier.repositoryError(
+                    val eventId = notificationService.repositoryError(
                         error = error,
                         shortMessageRes = Res.string.error_loading_session,
                         isRetryable = true
@@ -77,35 +77,35 @@ class LoadSessionUseCase(
                 }
 
             modelsResult.onLeft { error ->
-                errorNotifier.repositoryError(
+                notificationService.repositoryError(
                     error = error,
                     shortMessage = "Failed to load models"
                 )
                 return@parZip
             }
             settingsResult.onLeft { error ->
-                errorNotifier.repositoryError(
+                notificationService.repositoryError(
                     error = error,
                     shortMessage = "Failed to load model settings"
                 )
                 return@parZip
             }
             toolCallsResult.onLeft { error ->
-                errorNotifier.repositoryError(
+                notificationService.repositoryError(
                     error = error,
                     shortMessage = "Failed to load tool calls for session"
                 )
                 return@parZip
             }
             toolsResult.onLeft { error ->
-                errorNotifier.repositoryError(
+                notificationService.repositoryError(
                     error = error,
                     shortMessage = "Failed to load tools"
                 )
                 return@parZip
             }
             enabledToolsResult.onLeft { error ->
-                errorNotifier.repositoryError(
+                notificationService.repositoryError(
                     error = error,
                     shortMessage = "Failed to load enabled tools for session"
                 )

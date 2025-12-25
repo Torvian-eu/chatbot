@@ -5,7 +5,7 @@ import eu.torvian.chatbot.app.generated.resources.error_updating_session_model
 import eu.torvian.chatbot.app.repository.SessionRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
-import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
+import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.models.api.core.UpdateSessionModelRequest
 
 /**
@@ -18,7 +18,7 @@ import eu.torvian.chatbot.common.models.api.core.UpdateSessionModelRequest
 class SelectModelUseCase(
     private val sessionRepository: SessionRepository,
     private val state: ChatState,
-    private val errorNotifier: ErrorNotifier
+    private val notificationService: NotificationService
 ) {
 
     private val logger = kmpLogger<SelectModelUseCase>()
@@ -43,7 +43,7 @@ class SelectModelUseCase(
         ).fold(
             ifLeft = { repositoryError ->
                 logger.error("Failed to update session model: $repositoryError")
-                errorNotifier.repositoryError(
+                notificationService.repositoryError(
                     error = repositoryError,
                     shortMessageRes = Res.string.error_updating_session_model
                 )
