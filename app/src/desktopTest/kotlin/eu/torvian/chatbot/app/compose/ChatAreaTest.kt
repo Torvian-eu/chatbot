@@ -524,8 +524,18 @@ class ChatAreaTest {
                 )
             }
 
-            // Assert - Long content should be displayed (check for part of it)
-            onNodeWithText(longContent, substring = true).assertIsDisplayed()
+            // Assert - Long content should be initially collapsed (truncated)
+            // MessageContent truncates at 200 chars and adds "..."
+            val expectedTruncatedContent = longContent.take(200) + "..."
+            val messageNode = onNodeWithText(expectedTruncatedContent)
+            messageNode.assertIsDisplayed()
+
+            // Act - Click to expand
+            messageNode.performClick()
+
+            // Assert - Full content should be displayed after expansion
+            onNodeWithText(longContent).assertIsDisplayed()
+
             onNodeWithText("Short response").assertIsDisplayed()
         }
     }
