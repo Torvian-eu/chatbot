@@ -7,12 +7,14 @@ import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.resources.DeleteMode
 import eu.torvian.chatbot.common.api.resources.MessageResource
+import eu.torvian.chatbot.common.models.api.core.InsertMessageRequest
 import eu.torvian.chatbot.common.models.api.core.UpdateMessageRequest
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.service.core.MessageService
 import eu.torvian.chatbot.server.service.core.error.message.DeleteMessageError
 import eu.torvian.chatbot.server.service.core.error.message.GetMessageError
+import eu.torvian.chatbot.server.service.core.error.message.InsertMessageError
 import eu.torvian.chatbot.server.service.core.error.message.UpdateMessageContentError
 import eu.torvian.chatbot.server.service.core.error.message.toApiError
 import eu.torvian.chatbot.server.service.security.AuthorizationService
@@ -67,6 +69,32 @@ fun Route.configureMessageRoutes(
                 }
             }
             call.respondEither(result, HttpStatusCode.NoContent)
+        }
+
+        // POST /api/v1/messages/insert - Insert a new message
+        post<MessageResource.Insert> {
+            val userId = call.getUserId()
+            val request = call.receive<InsertMessageRequest>()
+
+            val result = either {
+                // Check access to the session
+                withError({ rae: ResourceAuthorizationError -> rae.toApiError() }) {
+                    authorizationService.requireAccess(userId, ResourceType.SESSION, request.sessionId, AccessMode.WRITE).bind()
+                }
+
+                withError({ error: InsertMessageError -> error.toApiError() }) {
+                    messageService.insertMessage(
+                        sessionId = request.sessionId,
+                        targetMessageId = request.targetMessageId,
+                        position = request.position,
+                        role = request.role,
+                        content = request.content,
+                        modelId = request.modelId,
+                        settingsId = request.settingsId
+                    ).bind()
+                }
+            }
+            call.respondEither(result, HttpStatusCode.Created)
         }
     } // End authenticate block
 }

@@ -30,6 +30,12 @@ class MessageResource(val parent: Api = Api()) { // References the base Api reso
         @Resource("content")
         class Content(val parent: ById)
     }
+
+    /**
+     * Resource for inserting a new message: /api/v1/messages/insert
+     */
+    @Resource("insert")
+    class Insert(val parent: MessageResource = MessageResource())
 }
 
 /**
