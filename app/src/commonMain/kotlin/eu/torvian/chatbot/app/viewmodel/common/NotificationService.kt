@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.app.viewmodel.common
 
 import eu.torvian.chatbot.app.domain.events.GenericAppError
+import eu.torvian.chatbot.app.domain.events.GenericAppSuccess
 import eu.torvian.chatbot.app.domain.events.GenericAppWarning
 import eu.torvian.chatbot.app.domain.events.apiRequestError
 import eu.torvian.chatbot.app.domain.events.repositoryAppError
@@ -12,14 +13,14 @@ import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.getString
 
 /**
- * Service responsible for standardizing error handling and notification.
- * Encapsulates the logic for creating and emitting error events via the EventBus.
+ * Service responsible for standardizing notification handling.
+ * Encapsulates the logic for creating and emitting error, warning, and success events via the EventBus.
  */
-class ErrorNotifier(
+class NotificationService(
     private val eventBus: EventBus
 ) {
     companion object {
-        private val logger = kmpLogger<ErrorNotifier>()
+        private val logger = kmpLogger<NotificationService>()
     }
 
     /**
@@ -183,5 +184,21 @@ class ErrorNotifier(
     ): String {
         val shortMessage = getString(shortMessageRes)
         return genericWarning(shortMessage, detailedMessage)
+    }
+
+    /**
+     * Handles a generic application success by creating a standardized success event and emitting it.
+     * Used for user feedback on successful operations.
+     *
+     * @param shortMessage The short, user-friendly success message (can be internationalized)
+     * @return The event ID of the emitted success event
+     */
+    suspend fun genericSuccess(
+        shortMessage: String
+    ): String {
+        logger.info("Generic success: $shortMessage")
+        val successEvent = GenericAppSuccess(shortMessage)
+        eventBus.emitEvent(successEvent)
+        return successEvent.eventId
     }
 }

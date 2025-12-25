@@ -3,7 +3,7 @@ package eu.torvian.chatbot.app.viewmodel.chat.usecase
 import eu.torvian.chatbot.app.repository.SessionRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
-import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
+import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 
 /**
  * Use case for deleting a chat message.
@@ -11,7 +11,7 @@ import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
 class DeleteMessageUseCase(
     private val sessionRepository: SessionRepository,
     private val state: ChatState,
-    private val errorNotifier: ErrorNotifier
+    private val notificationService: NotificationService
 ) {
 
     private val logger = kmpLogger<DeleteMessageUseCase>()
@@ -37,7 +37,7 @@ class DeleteMessageUseCase(
         result.fold(
             ifLeft = { repositoryError ->
                 logger.error("Delete $action repository error: ${repositoryError.message}")
-                errorNotifier.repositoryError(
+                notificationService.repositoryError(
                     error = repositoryError,
                     shortMessage = "Failed to delete $action"
                 )

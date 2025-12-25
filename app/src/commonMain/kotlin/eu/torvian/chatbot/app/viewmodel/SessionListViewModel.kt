@@ -15,7 +15,7 @@ import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.SessionRepository
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
-import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
+import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.models.api.core.CreateGroupRequest
 import eu.torvian.chatbot.common.models.api.core.CreateSessionRequest
 import eu.torvian.chatbot.common.models.api.core.RenameGroupRequest
@@ -44,7 +44,7 @@ import kotlinx.coroutines.launch
  * @param sessionRepository The repository for session-related operations.
  * @param groupRepository The repository for group-related operations.
  * @param eventBus The event bus for emitting global events.
- * @param errorNotifier The error notifier for handling repository errors.
+ * @param notificationService The error notifier for handling repository errors.
  * @param uiDispatcher The dispatcher to use for UI-related coroutines. Defaults to Main.
  *
  * @property listState The state of the chat session list and groups.
@@ -59,7 +59,7 @@ class SessionListViewModel(
     private val sessionRepository: SessionRepository,
     private val groupRepository: GroupRepository,
     private val eventBus: EventBus,
-    private val errorNotifier: ErrorNotifier,
+    private val notificationService: NotificationService,
     private val uiDispatcher: CoroutineDispatcher = Dispatchers.Main,
 ) : ViewModel() {
 
@@ -196,7 +196,7 @@ class SessionListViewModel(
                     else -> null
                 }
                 if (error != null) {
-                    val eventId = errorNotifier.repositoryError(
+                    val eventId = notificationService.repositoryError(
                         error = error,
                         shortMessageRes = Res.string.error_loading_sessions_groups,
                         isRetryable = true
@@ -258,7 +258,7 @@ class SessionListViewModel(
             groupRepository.createGroup(CreateGroupRequest(name))
                 .fold(
                     ifLeft = { repositoryError ->
-                        errorNotifier.repositoryError(
+                        notificationService.repositoryError(
                             error = repositoryError,
                             shortMessage = "Failed to create new group"
                         )
@@ -310,7 +310,7 @@ class SessionListViewModel(
             groupRepository.renameGroup(groupToRename.id, RenameGroupRequest(newName))
                 .fold(
                     ifLeft = { repositoryError ->
-                        errorNotifier.repositoryError(
+                        notificationService.repositoryError(
                             error = repositoryError,
                             shortMessage = "Failed to rename group"
                         )
@@ -421,7 +421,7 @@ class SessionListViewModel(
             sessionRepository.createSession(CreateSessionRequest(name = sanitizedName))
                 .fold(
                     ifLeft = { repositoryError ->
-                        errorNotifier.repositoryError(
+                        notificationService.repositoryError(
                             error = repositoryError,
                             shortMessage = "Failed to create new session"
                         )
@@ -450,7 +450,7 @@ class SessionListViewModel(
         viewModelScope.launch(uiDispatcher) {
             sessionRepository.updateSessionName(session.id, UpdateSessionNameRequest(trimmedName)).fold(
                 ifLeft = { repositoryError ->
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = repositoryError,
                         shortMessage = "Failed to rename session"
                     )
@@ -471,7 +471,7 @@ class SessionListViewModel(
         viewModelScope.launch(uiDispatcher) {
             sessionRepository.deleteSession(sessionId).fold(
                 ifLeft = { repositoryError ->
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = repositoryError,
                         shortMessage = "Failed to delete session"
                     )
@@ -493,7 +493,7 @@ class SessionListViewModel(
         viewModelScope.launch(uiDispatcher) {
             sessionRepository.updateSessionGroup(sessionId, UpdateSessionGroupRequest(groupId)).fold(
                 ifLeft = { repositoryError ->
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = repositoryError,
                         shortMessage = "Failed to assign session to group"
                     )
@@ -514,7 +514,7 @@ class SessionListViewModel(
         viewModelScope.launch(uiDispatcher) {
             groupRepository.deleteGroup(groupId).fold(
                 ifLeft = { repositoryError ->
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = repositoryError,
                         shortMessage = "Failed to delete group"
                         )

@@ -7,7 +7,7 @@ import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.RoleRepository
 import eu.torvian.chatbot.app.repository.UserRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
-import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
+import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.models.user.Role
 import eu.torvian.chatbot.common.models.user.UserWithDetails
 import eu.torvian.chatbot.common.models.api.admin.ChangePasswordRequest
@@ -22,7 +22,7 @@ import kotlinx.coroutines.flow.*
 class UserManagementViewModel(
     private val userRepository: UserRepository,
     private val roleRepository: RoleRepository,
-    private val errorNotifier: ErrorNotifier,
+    private val notificationService: NotificationService,
     private val normalScope: CoroutineScope
 ) : ViewModel(normalScope) {
 
@@ -61,7 +61,7 @@ class UserManagementViewModel(
         viewModelScope.launch {
             userRepository.loadUsers().fold(
                 ifLeft = { error ->
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to load users"
                     )
@@ -198,7 +198,7 @@ class UserManagementViewModel(
             userRepository.deleteUser(currentDialog.user.id).fold(
                 ifLeft = { error ->
                     logger.warn("Failed to delete user: ${error.message}")
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to delete user"
                     )
@@ -236,7 +236,7 @@ class UserManagementViewModel(
                 }
                 is DataState.Error -> {
                     logger.warn("Failed to load available roles: ${currentAvailableRoles.error.message}")
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = currentAvailableRoles.error,
                         shortMessage = "Failed to load available roles"
                     )
@@ -269,7 +269,7 @@ class UserManagementViewModel(
             userRepository.assignRoleToUser(currentDialog.user.id, role).fold(
                 ifLeft = { error ->
                     logger.warn("Failed to assign role: ${error.message}")
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to assign role"
                     )
@@ -319,7 +319,7 @@ class UserManagementViewModel(
             userRepository.revokeRoleFromUser(currentDialog.user.id, role).fold(
                 ifLeft = { error ->
                     logger.warn("Failed to revoke role: ${error.message}")
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to revoke role"
                     )
@@ -469,7 +469,7 @@ class UserManagementViewModel(
             userRepository.updateUserStatus(userId, newStatus).fold(
                 ifLeft = { error ->
                     logger.warn("Failed to change user status for ID $userId to $newStatus: ${error.message}")
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to change user status"
                     )
@@ -525,7 +525,7 @@ class UserManagementViewModel(
             userRepository.updatePasswordChangeRequired(userId, requiresPasswordChange).fold(
                 ifLeft = { error ->
                     logger.warn("Failed to update password change required flag for ID $userId to $requiresPasswordChange: ${error.message}")
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to update password change required flag"
                     )

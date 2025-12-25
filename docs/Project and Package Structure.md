@@ -467,6 +467,7 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   │   ├── AppSuccess.kt # Global success event
 │   │   ├── AppWarning.kt # Global warning event
 │   │   ├── GenericAppError.kt # Generic application error event
+│   │   ├── GenericAppSuccess.kt # Generic application success event
 │   │   ├── GenericAppWarning.kt # Generic application warning event
 │   │   ├── RepositoryAppError.kt # Repository error event
 │   │   └── SnackbarInteractionEvent.kt # Snackbar interaction event
@@ -527,6 +528,8 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   │   ├── FileSystemTokenStorage.kt # File system-based token storage implementation
 │   │   ├── TokenStorage.kt  # Token storage interface
 │   │   └── TokenStorageError.kt # Token storage error hierarchy
+│   ├── clipboard/    # Clipboard services
+│   │   └── ClipboardService.kt # Interface for clipboard operations
 │   ├── mcp/          # MCP-specific client-side services
 │   │   ├── LocalMCPServerManager.kt # Interface for orchestrating local MCP server workflows
 │   │   ├── LocalMCPServerManagerError.kt # Error hierarchy for local MCP server manager operations
@@ -586,7 +589,7 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
     │       └── ThreadBuilder.kt  # Thread builder utility
     └── common/  # Common ViewModel utilities
         ├── CoroutineScopeProvider.kt  # Coroutine scope provider
-        └── ErrorNotifier.kt  # Error notifier utility
+        └── NotificationService.kt # Notification service
      
 app/src/commonMain/composeResources/  # Compose resources (strings, etc.)
 ├── values/  # Default resources
@@ -613,10 +616,15 @@ app/src/desktopMain/kotlin/eu/torvian/chatbot/app/  # Desktop-specific implement
 │   ├── DriverFactoryDesktop.kt # Desktop implementation for SQLDelight driver
 │   └── dao/
 │       └── ExceptionCheckerDesktop.kt # Desktop implementation for FK exception check
+├── koin/
+│   └── desktopModule.kt # Desktop-specific Koin module
 ├── main/         # Main entry point
 │   └── AppMain.kt    # Application entry point, setup (UI launch, DI)
-├── service/mcp/  # Desktop-specific MCP services
-│   └── LocalMCPServerProcessManagerDesktop.kt # Desktop implementation for local MCP server process manager
+├── service/
+│   ├── clipboard/
+│   │   └── ClipboardServiceDesktop.kt # Desktop implementation for clipboard service
+│   └── mcp/  # Desktop-specific MCP services
+│       └── LocalMCPServerProcessManagerDesktop.kt # Desktop implementation for local MCP server process manager
 └── utils/        
     ├── misc/       # Miscellaneous utilities
     │   └── createKmpLogger.desktop.kt # Desktop-specific KMP logger

@@ -9,7 +9,7 @@ import eu.torvian.chatbot.app.domain.contracts.ProvidersDialogState
 import eu.torvian.chatbot.app.repository.ProviderRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.UserGroupRepository
-import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
+import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
 import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
@@ -44,7 +44,7 @@ import kotlinx.coroutines.launch
  * @constructor
  * @param providerRepository The repository for provider-related operations.
  * @param userGroupRepository The repository for user group-related operations.
- * @param errorNotifier The service for handling and notifying about errors.
+ * @param notificationService Service for notifications and error handling.
  * @param uiDispatcher The dispatcher to use for UI-related coroutines. Defaults to Main.
  *
  * @property providersState The state of the list of all configured LLM providers (E4.S9).
@@ -54,7 +54,7 @@ import kotlinx.coroutines.launch
 class ProviderConfigViewModel(
     private val providerRepository: ProviderRepository,
     private val userGroupRepository: UserGroupRepository,
-    private val errorNotifier: ErrorNotifier,
+    private val notificationService: NotificationService,
     private val uiDispatcher: CoroutineDispatcher = Dispatchers.Main
 ) : ViewModel() {
 
@@ -99,7 +99,7 @@ class ProviderConfigViewModel(
         viewModelScope.launch(uiDispatcher) {
             providerRepository.loadProvidersDetails()
                 .mapLeft { error ->
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to load providers"
                     )
@@ -203,7 +203,7 @@ class ProviderConfigViewModel(
                                 )
                             } else state
                         }
-                        errorNotifier.repositoryError(
+                        notificationService.repositoryError(
                             error = error,
                             shortMessage = "Failed to update provider credential"
                         )
@@ -235,7 +235,7 @@ class ProviderConfigViewModel(
             providerRepository.deleteProvider(providerId)
                 .fold(
                     ifLeft = { error ->
-                        errorNotifier.repositoryError(
+                        notificationService.repositoryError(
                             error = error,
                             shortMessage = "Failed to delete provider"
                         )
@@ -261,7 +261,7 @@ class ProviderConfigViewModel(
         viewModelScope.launch(uiDispatcher) {
             providerRepository.makeProviderPublic(providerDetails.provider.id)
                 .mapLeft { error ->
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to make provider public"
                     )
@@ -276,7 +276,7 @@ class ProviderConfigViewModel(
         viewModelScope.launch(uiDispatcher) {
             providerRepository.makeProviderPrivate(providerDetails.provider.id)
                 .mapLeft { error ->
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to make provider private"
                     )
@@ -291,7 +291,7 @@ class ProviderConfigViewModel(
         viewModelScope.launch(uiDispatcher) {
             userGroupRepository.loadGroups().fold(
                 ifLeft = { error ->
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to load user groups"
                     )
@@ -362,7 +362,7 @@ class ProviderConfigViewModel(
                 GrantAccessRequest(groupId = groupId, accessMode = accessMode)
             ).fold(
                 ifLeft = { error ->
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to grant access"
                     )
@@ -392,7 +392,7 @@ class ProviderConfigViewModel(
                 RevokeAccessRequest(groupId = groupId, accessMode = accessMode)
             ).fold(
                 ifLeft = { error ->
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to revoke access"
                     )
@@ -436,7 +436,7 @@ class ProviderConfigViewModel(
                 .fold(
                     ifLeft = { error ->
                         updateProviderForm { it.withError("Error adding provider: ${error.message}") }
-                        errorNotifier.repositoryError(
+                        notificationService.repositoryError(
                             error = error,
                             shortMessage = "Failed to add provider"
                         )
@@ -473,7 +473,7 @@ class ProviderConfigViewModel(
                 .fold(
                     ifLeft = { error ->
                         updateProviderForm { it.withError("Error updating provider: ${error.message}") }
-                        errorNotifier.repositoryError(
+                        notificationService.repositoryError(
                             error = error,
                             shortMessage = "Failed to update provider"
                         )

@@ -88,6 +88,7 @@ fun ChatAreaPreview() {
             override fun onRetryLoadingSession() {}
             override fun onShowToolConfig() {}
             override fun onShowToolCallDetails(toolCall: ToolCall) {}
+            override fun onCopyMessage(message: ChatMessage) {}
         }
     )
 }

@@ -9,7 +9,7 @@ import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.ToolRepository
 import eu.torvian.chatbot.app.service.mcp.LocalMCPServerManager
 import eu.torvian.chatbot.app.service.mcp.LocalMCPServerOverview
-import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
+import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import eu.torvian.chatbot.common.models.tool.UserToolApprovalPreference
 import kotlinx.coroutines.CoroutineDispatcher
@@ -33,14 +33,14 @@ import kotlinx.coroutines.launch
  * @property serverManager Manager for orchestrating server operations (test, start, stop, etc.)
  * @property mcpToolRepository Repository for managing MCP tool definitions
  * @property toolRepository Repository for managing tool approval preferences and general tool operations
- * @property errorNotifier Service for handling and notifying about errors
+ * @property notificationService Service for handling and notifying about notifications
  * @property uiDispatcher Dispatcher for UI-related coroutines
  */
 class LocalMCPServerViewModel(
     private val serverManager: LocalMCPServerManager,
     private val mcpToolRepository: LocalMCPToolRepository,
     private val toolRepository: ToolRepository,
-    private val errorNotifier: ErrorNotifier,
+    private val notificationService: NotificationService,
     private val uiDispatcher: CoroutineDispatcher = Dispatchers.Main
 ) : ViewModel() {
 
@@ -121,7 +121,7 @@ class LocalMCPServerViewModel(
             serverManager.loadServers(userId)
                 .onLeft { repoError ->
                     // Notify user about repository failure when loading MCP tools
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = repoError,
                         shortMessage = "Failed to load MCP tools"
                     )
@@ -130,7 +130,7 @@ class LocalMCPServerViewModel(
             // Also load tool approval preferences
             toolRepository.loadUserToolApprovalPreferences()
                 .onLeft { repoError ->
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = repoError,
                         shortMessage = "Failed to load tool approval preferences"
                     )
@@ -234,7 +234,7 @@ class LocalMCPServerViewModel(
                             _dialogState.update {
                                 (it as? LocalMCPServerDialogState.AddNewServer)?.copy(isSaving = false) ?: it
                             }
-                            errorNotifier.genericError(
+                            notificationService.genericError(
                                 shortMessage = "Could not create MCP server: $error"
                             )
                         },
@@ -278,7 +278,7 @@ class LocalMCPServerViewModel(
                             _dialogState.update {
                                 (it as? LocalMCPServerDialogState.EditServer)?.copy(isSaving = false) ?: it
                             }
-                            errorNotifier.genericError(
+                            notificationService.genericError(
                                 shortMessage = "Failed to update server: ${error.message}"
                             )
                         },
@@ -302,7 +302,7 @@ class LocalMCPServerViewModel(
         viewModelScope.launch(uiDispatcher) {
             serverManager.deleteServer(serverId).fold(
                 ifLeft = { error ->
-                    errorNotifier.genericError(
+                    notificationService.genericError(
                         shortMessage = "Failed to delete server: ${error.message}"
                     )
                 },
@@ -326,7 +326,7 @@ class LocalMCPServerViewModel(
             serverManager.testConnection(serverId).fold(
                 ifLeft = { error ->
                     _operationInProgress.value = null
-                    errorNotifier.genericError(
+                    notificationService.genericError(
                         shortMessage = "Could not connect to server: $error"
                     )
                 },
@@ -348,7 +348,7 @@ class LocalMCPServerViewModel(
             serverManager.refreshTools(serverId).fold(
                 ifLeft = { error ->
                     _operationInProgress.value = null
-                    errorNotifier.genericError(
+                    notificationService.genericError(
                         shortMessage = "Could not refresh tools: $error"
                     )
                 },
@@ -370,7 +370,7 @@ class LocalMCPServerViewModel(
             serverManager.startServer(serverId).fold(
                 ifLeft = { error ->
                     _operationInProgress.value = null
-                    errorNotifier.genericError(
+                    notificationService.genericError(
                         shortMessage = "Could not start server: $error"
                     )
                 },
@@ -392,7 +392,7 @@ class LocalMCPServerViewModel(
             serverManager.stopServer(serverId).fold(
                 ifLeft = { error ->
                     _operationInProgress.value = null
-                    errorNotifier.genericError(
+                    notificationService.genericError(
                         shortMessage = "Could not stop server: $error"
                     )
                 },
@@ -411,7 +411,7 @@ class LocalMCPServerViewModel(
         viewModelScope.launch(uiDispatcher) {
             val updatedServer = server.copy(isEnabled = !server.isEnabled)
             serverManager.updateServer(updatedServer).onLeft { error ->
-                errorNotifier.genericError(
+                notificationService.genericError(
                     shortMessage = "Failed to update server: ${error.message}"
                 )
             }
@@ -426,7 +426,7 @@ class LocalMCPServerViewModel(
         viewModelScope.launch(uiDispatcher) {
             val updatedTool = tool.copy(isEnabled = !tool.isEnabled)
             mcpToolRepository.updateMCPTool(updatedTool).onLeft { error ->
-                errorNotifier.repositoryError(
+                notificationService.repositoryError(
                     error = error,
                     shortMessage = "Failed to toggle tool"
                 )
@@ -487,7 +487,7 @@ class LocalMCPServerViewModel(
                     _dialogState.update {
                         (it as? LocalMCPServerDialogState.EditTool)?.copy(isSaving = false) ?: it
                     }
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to update tool"
                     )
@@ -506,7 +506,7 @@ class LocalMCPServerViewModel(
                         _dialogState.update {
                             (it as? LocalMCPServerDialogState.EditTool)?.copy(isSaving = false) ?: it
                         }
-                        errorNotifier.repositoryError(
+                        notificationService.repositoryError(
                             error = error,
                             shortMessage = "Failed to save approval preference"
                         )
@@ -518,7 +518,7 @@ class LocalMCPServerViewModel(
                             _dialogState.update {
                                 (it as? LocalMCPServerDialogState.EditTool)?.copy(isSaving = false) ?: it
                             }
-                            errorNotifier.repositoryError(
+                            notificationService.repositoryError(
                                 error = error,
                                 shortMessage = "Failed to delete approval preference"
                             )
@@ -564,7 +564,7 @@ class LocalMCPServerViewModel(
 
             val updatedTools = toolsToEnable.map { it.copy(isEnabled = true) }
             mcpToolRepository.batchUpdateMCPTools(serverId, updatedTools).onLeft { error ->
-                errorNotifier.repositoryError(
+                notificationService.repositoryError(
                     error = error,
                     shortMessage = "Failed to enable all tools"
                 )
@@ -588,7 +588,7 @@ class LocalMCPServerViewModel(
 
             val updatedTools = toolsToDisable.map { it.copy(isEnabled = false) }
             mcpToolRepository.batchUpdateMCPTools(serverId, updatedTools).onLeft { error ->
-                errorNotifier.repositoryError(
+                notificationService.repositoryError(
                     error = error,
                     shortMessage = "Failed to disable all tools"
                 )
@@ -604,7 +604,7 @@ class LocalMCPServerViewModel(
         viewModelScope.launch(uiDispatcher) {
             toolRepository.deleteToolApprovalPreference(toolDefinitionId)
                 .onLeft { error ->
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to delete approval preference"
                     )

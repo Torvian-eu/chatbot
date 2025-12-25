@@ -10,7 +10,7 @@ import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.UserGroupRepository
 import eu.torvian.chatbot.app.repository.UserRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
-import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
+import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.models.api.admin.AddUserToGroupRequest
 import eu.torvian.chatbot.common.models.api.admin.CreateUserGroupRequest
 import eu.torvian.chatbot.common.models.api.admin.UpdateUserGroupRequest
@@ -28,12 +28,12 @@ import kotlinx.coroutines.launch
  *
  * @property userGroupRepository Repository for user group operations
  * @property userRepository Repository for user operations (needed for member management)
- * @property errorNotifier Service for displaying error notifications
+ * @property notificationService Service for displaying notifications
  */
 class UserGroupManagementViewModel(
     private val userGroupRepository: UserGroupRepository,
     private val userRepository: UserRepository,
-    private val errorNotifier: ErrorNotifier
+    private val notificationService: NotificationService
 ) : ViewModel() {
 
     companion object {
@@ -63,7 +63,7 @@ class UserGroupManagementViewModel(
         viewModelScope.launch {
             userGroupRepository.loadGroups().fold(
                 ifLeft = { error ->
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to load user groups"
                     )
@@ -284,7 +284,7 @@ class UserGroupManagementViewModel(
             userGroupRepository.deleteGroup(currentDialog.group.id).fold(
                 ifLeft = { error ->
                     logger.warn("Failed to delete group: ${error.message}")
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to delete group"
                     )
@@ -339,7 +339,7 @@ class UserGroupManagementViewModel(
             // Fetch members and users
             val members = userGroupRepository.getGroupMembers(group.id).getOrElse {
                 logger.warn("Failed to load group members: ${it.message}")
-                errorNotifier.repositoryError(
+                notificationService.repositoryError(
                     error = it,
                     shortMessage = "Failed to load group members"
                 )
@@ -358,7 +358,7 @@ class UserGroupManagementViewModel(
                 }
             }.getOrElse {
                 logger.warn("Failed to load users: ${it.message}")
-                errorNotifier.repositoryError(
+                notificationService.repositoryError(
                     error = it,
                     shortMessage = "Failed to load users"
                 )
@@ -400,7 +400,7 @@ class UserGroupManagementViewModel(
             userGroupRepository.addUserToGroup(currentDialog.group.id, request).fold(
                 ifLeft = { error ->
                     logger.warn("Failed to add user to group: ${error.message}")
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to add user to group"
                     )
@@ -439,7 +439,7 @@ class UserGroupManagementViewModel(
             userGroupRepository.removeUserFromGroup(currentDialog.group.id, user.id).fold(
                 ifLeft = { error ->
                     logger.warn("Failed to remove user from group: ${error.message}")
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to remove user from group"
                     )

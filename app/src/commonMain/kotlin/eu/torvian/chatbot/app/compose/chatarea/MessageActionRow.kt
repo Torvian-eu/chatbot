@@ -5,13 +5,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBackIos
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.automirrored.filled.Reply
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DeleteSweep
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -99,10 +93,16 @@ private fun GeneralMessageControls(
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp) // Spacing between action icons
+        horizontalArrangement = Arrangement.spacedBy(6.dp) // Spacing between action icons
     ) {
         // Edit Button
         EditButton(message = message, onEditMessage = messageActions.onEditMessage)
+
+        // Reply Button
+        ReplyButton(message = message, onReplyMessage = messageActions.onReplyMessage)
+
+        // Delete Button
+        DeleteButton(message = message, onDeleteMessage = messageActions.onDeleteMessage)
 
         // Copy Button
         CopyButton(message = message, onCopyMessage = messageActions.onCopyMessage)
@@ -112,13 +112,7 @@ private fun GeneralMessageControls(
             RegenerateButton(message = message, onRegenerateMessage = messageActions.onRegenerateMessage)
         }
 
-        // Reply Button
-        ReplyButton(message = message, onReplyMessage = messageActions.onReplyMessage)
-
-        // Delete Button
-        DeleteButton(message = message, onDeleteMessage = messageActions.onDeleteMessage)
-
-        // More Actions Menu (Delete Thread, etc.)
+        // More Actions Menu (Insert Message, Delete Thread, etc.)
         MoreActionsMenu(
             message = message,
             messageActions = messageActions,
@@ -154,22 +148,21 @@ private fun EditButton(message: ChatMessage, onEditMessage: (ChatMessage) -> Uni
  * Displays the Copy message content button.
  *
  * @param message The message whose content is to be copied.
- * @param onCopyMessage Callback for the copy action, can be null if not implemented.
+ * @param onCopyMessage Callback for the copy action.
  */
 @Composable
-private fun CopyButton(message: ChatMessage, onCopyMessage: ((ChatMessage) -> Unit)?) {
-    if (onCopyMessage != null) {
-        PlainTooltipBox(text = "Copy message content") {
-            IconButton(
-                onClick = { onCopyMessage(message) },
-                modifier = Modifier.size(24.dp)
-            ) {
-                Icon(
-                    Icons.Default.ContentCopy,
-                    contentDescription = "Copy message content",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+private fun CopyButton(message: ChatMessage, onCopyMessage: ((ChatMessage) -> Unit)) {
+    PlainTooltipBox(text = "Copy message content") {
+        IconButton(
+            onClick = { onCopyMessage(message) },
+            modifier = Modifier.size(24.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.ContentCopy,
+                contentDescription = "Copy message content",
+                modifier = Modifier.size(20.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

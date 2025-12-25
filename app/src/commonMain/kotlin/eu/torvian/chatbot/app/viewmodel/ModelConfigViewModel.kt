@@ -8,7 +8,7 @@ import eu.torvian.chatbot.app.repository.ModelRepository
 import eu.torvian.chatbot.app.repository.ProviderRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.UserGroupRepository
-import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
+import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
 import eu.torvian.chatbot.common.models.api.access.LLMModelDetails
@@ -36,7 +36,7 @@ import kotlinx.coroutines.launch
  * @param modelRepository The repository for LLM Model-related operations.
  * @param providerRepository The repository for LLM Provider-related operations.
  * @param userGroupRepository The repository for user group-related operations.
- * @param errorNotifier The service for handling and notifying about errors.
+ * @param notificationService Service for notifications and error handling.
  * @param uiDispatcher The dispatcher to use for UI-related coroutines. Defaults to Main.
  *
  * @property modelConfigState The unified state containing both models and providers data.
@@ -47,7 +47,7 @@ class ModelConfigViewModel(
     private val modelRepository: ModelRepository,
     private val providerRepository: ProviderRepository,
     private val userGroupRepository: UserGroupRepository,
-    private val errorNotifier: ErrorNotifier,
+    private val notificationService: NotificationService,
     private val uiDispatcher: CoroutineDispatcher = Dispatchers.Main
 ) : ViewModel() {
 
@@ -123,13 +123,13 @@ class ModelConfigViewModel(
                 { providerRepository.loadProviders() }
             ) { modelsResult, providersResult ->
                 modelsResult.mapLeft { error ->
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to load models"
                     )
                 }
                 providersResult.mapLeft { error ->
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to load providers for model selection"
                     )
@@ -225,7 +225,7 @@ class ModelConfigViewModel(
             modelRepository.deleteModel(modelId)
                 .fold(
                     ifLeft = { error ->
-                        errorNotifier.repositoryError(
+                        notificationService.repositoryError(
                             error = error,
                             shortMessage = "Failed to delete model"
                         )
@@ -270,7 +270,7 @@ class ModelConfigViewModel(
             modelRepository.addModel(request)
                 .fold(
                     ifLeft = { error ->
-                        errorNotifier.repositoryError(
+                        notificationService.repositoryError(
                             error = error,
                             shortMessage = "Failed to add model"
                         )
@@ -309,7 +309,7 @@ class ModelConfigViewModel(
             modelRepository.updateModel(updatedModel)
                 .fold(
                     ifLeft = { error ->
-                        errorNotifier.repositoryError(
+                        notificationService.repositoryError(
                             error = error,
                             shortMessage = "Failed to update model"
                         )
@@ -329,7 +329,7 @@ class ModelConfigViewModel(
         viewModelScope.launch(uiDispatcher) {
             modelRepository.makeModelPublic(modelDetails.model.id)
                 .mapLeft { error ->
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to make model public"
                     )
@@ -344,7 +344,7 @@ class ModelConfigViewModel(
         viewModelScope.launch(uiDispatcher) {
             modelRepository.makeModelPrivate(modelDetails.model.id)
                 .mapLeft { error ->
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to make model private"
                     )
@@ -359,7 +359,7 @@ class ModelConfigViewModel(
         viewModelScope.launch(uiDispatcher) {
             userGroupRepository.loadGroups().fold(
                 ifLeft = { error ->
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to load user groups"
                     )
@@ -434,7 +434,7 @@ class ModelConfigViewModel(
                 GrantAccessRequest(groupId = groupId, accessMode = accessMode)
             ).fold(
                 ifLeft = { error ->
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to grant access"
                     )
@@ -464,7 +464,7 @@ class ModelConfigViewModel(
                 RevokeAccessRequest(groupId = groupId, accessMode = accessMode)
             ).fold(
                 ifLeft = { error ->
-                    errorNotifier.repositoryError(
+                    notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to revoke access"
                     )

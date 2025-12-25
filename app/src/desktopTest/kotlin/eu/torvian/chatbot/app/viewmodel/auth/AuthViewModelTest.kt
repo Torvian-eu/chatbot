@@ -7,7 +7,7 @@ import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.auth.AccountData
-import eu.torvian.chatbot.app.viewmodel.common.ErrorNotifier
+import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.models.api.auth.LoginRequest
 import eu.torvian.chatbot.common.models.api.auth.RegisterRequest
@@ -38,7 +38,7 @@ import kotlin.test.*
 class AuthViewModelTest {
 
     private lateinit var mockAuthRepository: AuthRepository
-    private lateinit var mockErrorNotifier: ErrorNotifier
+    private lateinit var mockNotificationService: NotificationService
     private val testDispatcher = StandardTestDispatcher()
     private val normalScope = CoroutineScope(testDispatcher + SupervisorJob())
     private lateinit var authViewModel: AuthViewModel
@@ -51,11 +51,11 @@ class AuthViewModelTest {
             every { availableAccounts } returns availableAccountsFlow
             coEvery { checkInitialAuthState() } returns Unit
         }
-        mockErrorNotifier = mockk(relaxed = true)
+        mockNotificationService = mockk(relaxed = true)
 
         authViewModel = AuthViewModel(
             authRepository = mockAuthRepository,
-            errorNotifier = mockErrorNotifier,
+            notificationService = mockNotificationService,
             normalScope = normalScope
         )
     }
@@ -331,7 +331,7 @@ class AuthViewModelTest {
         advanceUntilIdle()
 
         // Assert
-        coVerify { mockErrorNotifier.repositoryError(error, "Logout failed") }
+        coVerify { mockNotificationService.repositoryError(error, "Logout failed") }
     }
 
     // --- Form State Management Tests ---
@@ -523,7 +523,7 @@ class AuthViewModelTest {
         // Assert
         assertFalse(authViewModel.accountSwitchInProgress.value)
         coVerify {
-            mockErrorNotifier.repositoryError(
+            mockNotificationService.repositoryError(
                 shortMessage = "Failed to switch account",
                 error = error
             )
@@ -557,7 +557,7 @@ class AuthViewModelTest {
 
         // Assert
         coVerify {
-            mockErrorNotifier.repositoryError(
+            mockNotificationService.repositoryError(
                 shortMessage = "Failed to remove account",
                 error = error
             )
