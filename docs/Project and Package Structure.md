@@ -111,7 +111,8 @@ common/src/commonMain/kotlin/eu/torvian/chatbot/common/
 │   │   ├── ChatGroup.kt              # Chat group data model
 │   │   ├── ChatMessage.kt            # Chat message with threading support
 │   │   ├── ChatSession.kt            # Chat session data model
-│   │   └── ChatSessionSummary.kt     # Session summary for lists
+│   │   ├── ChatSessionSummary.kt     # Session summary for lists
+│   │   └── MessageInsertPosition.kt  # Enum for defining message insertion points (above, below, append)
 │   ├── llm/                      # LLM-related domain models
 │   │   ├── LLMModel.kt               # LLM model configuration
 │   │   ├── LLMModel_exensions.kt     # Extension functions for LLMModel
