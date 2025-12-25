@@ -2,17 +2,11 @@ package eu.torvian.chatbot.app.viewmodel.chat
 
 import androidx.lifecycle.ViewModel
 import eu.torvian.chatbot.app.domain.contracts.DataState
-import eu.torvian.chatbot.app.domain.events.SnackbarInteractionEvent
-import eu.torvian.chatbot.app.repository.LocalMCPServerRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.ToolCallsMap
-import eu.torvian.chatbot.app.repository.ToolRepository
-import eu.torvian.chatbot.app.service.misc.EventBus
-import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.usecase.*
-import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
@@ -48,10 +42,7 @@ import kotlinx.coroutines.launch
  * @param selectSettingsUC Use case for selecting settings
  * @param updateInputUC Use case for updating input content
  * @param copyToClipboardUC Use case for copying content to clipboard
- * @param toolRepository Repository for tool management operations
- * @param mcpServerRepository Repository for MCP server configurations
- * @param notificationService Service for notifications and error handling
- * @param eventBus Event bus for cross-cutting concerns
+ * @param toggleToolsUC Use case for toggling tools for sessions
  * @param normalScope Coroutine scope for UI operations
  * @param backgroundScope Coroutine scope for background operations (should only differ from normalScope in tests)
  */
@@ -68,15 +59,10 @@ class ChatViewModel(
     private val selectSettingsUC: SelectSettingsUseCase,
     private val updateInputUC: UpdateInputUseCase,
     private val copyToClipboardUC: CopyToClipboardUseCase,
-    private val toolRepository: ToolRepository,
-    private val mcpServerRepository: LocalMCPServerRepository,
-    private val notificationService: NotificationService,
-    private val eventBus: EventBus,
+    private val toggleToolsUC: ToggleToolsUseCase,
     private val normalScope: CoroutineScope,
     private val backgroundScope: CoroutineScope
 ) : ViewModel(normalScope) {
-
-    private val logger = kmpLogger<ChatViewModel>()
 
     /**
      * Job tracking the currently active message sending operation.
@@ -108,11 +94,6 @@ class ChatViewModel(
         state.availableSettingsForCurrentModel
 
     /**
-     * The list of all available tool definitions.
-     */
-    val availableTools: StateFlow<DataState<RepositoryError, List<ToolDefinition>>> = state.availableTools
-
-    /**
      * The list of tools enabled for the current session.
      */
     val enabledToolsForCurrentSession: StateFlow<DataState<RepositoryError, List<ToolDefinition>>> =
@@ -128,16 +109,6 @@ class ChatViewModel(
      * A map of model IDs to LLMModel objects for quick lookups.
      */
     val modelsById: StateFlow<Map<Long, LLMModel>> = state.modelsById
-
-    /**
-     * A map of settings IDs to ModelSettings objects for quick lookups.
-     */
-    val settingsById: StateFlow<Map<Long, ModelSettings>> = state.settingsById
-
-    /**
-     * The currently active ChatSession object, or null if not loaded.
-     */
-    val currentSession: StateFlow<ChatSession?> = state.currentSession
 
     /**
      * The fully resolved LLMModel object for the current session, or null.
@@ -183,20 +154,6 @@ class ChatViewModel(
      * The current dialog state for the chat area (e.g., delete confirmation).
      */
     val dialogState: StateFlow<ChatAreaDialogState> = state.dialogState
-
-    init {
-        // Handle retry functionality via EventBus using background scope
-        backgroundScope.launch {
-            eventBus.events.collect { event ->
-                if (event is SnackbarInteractionEvent && event.isActionPerformed) {
-                    val handled = loadSessionUC.handleRetry(event.originalAppEventId)
-                    if (handled) {
-                        logger.info("Handled retry for event ${event.originalAppEventId}")
-                    }
-                }
-            }
-        }
-    }
 
     // --- Public Action Functions (Delegated to Use Cases) ---
 
@@ -358,46 +315,11 @@ class ChatViewModel(
     // --- Tool Management ---
 
     /**
-     * Loads all available tools.
-     */
-    fun loadTools() {
-        normalScope.launch {
-            toolRepository.loadTools().mapLeft { error ->
-                notificationService.repositoryError(
-                    error = error,
-                    shortMessage = "Failed to load tools"
-                )
-            }
-        }
-    }
-
-    /**
-     * Loads tools enabled for the current session.
-     */
-    fun loadToolsForSession() {
-        val sessionId = state.activeSessionId.value ?: return
-        normalScope.launch {
-            toolRepository.loadEnabledToolsForSession(sessionId).mapLeft { error ->
-                notificationService.repositoryError(
-                    error = error,
-                    shortMessage = "Failed to load session tools"
-                )
-            }
-        }
-    }
-
-    /**
      * Toggles a tool for the current session.
      */
     fun toggleToolForSession(toolDefinition: ToolDefinition, enabled: Boolean) {
-        val sessionId = state.activeSessionId.value ?: return
         normalScope.launch {
-            toolRepository.setToolEnabledForSession(sessionId, toolDefinition, enabled).mapLeft { error ->
-                notificationService.repositoryError(
-                    error = error,
-                    shortMessage = "Failed to toggle tool"
-                )
-            }
+            toggleToolsUC.toggleTool(toolDefinition, enabled)
         }
     }
 
@@ -405,14 +327,26 @@ class ChatViewModel(
      * Batch toggles multiple tools for the current session.
      */
     fun toggleToolsForSession(toolDefinitions: List<ToolDefinition>, enabled: Boolean) {
-        val sessionId = state.activeSessionId.value ?: return
         normalScope.launch {
-            toolRepository.setToolsEnabledForSession(sessionId, toolDefinitions, enabled).mapLeft { error ->
-                notificationService.repositoryError(
-                    error = error,
-                    shortMessage = "Failed to toggle tools"
-                )
-            }
+            toggleToolsUC.toggleTools(toolDefinitions, enabled)
+        }
+    }
+
+    /**
+     * Approves a tool call and updates its status to EXECUTING.
+     */
+    private fun approveToolCall(toolCall: ToolCall) {
+        backgroundScope.launch {
+            sendMessageUC.approveToolCall(toolCall.id)
+        }
+    }
+
+    /**
+     * Denies a tool call and updates its status to USER_DENIED.
+     */
+    private fun denyToolCall(toolCall: ToolCall, reason: String?) {
+        backgroundScope.launch {
+            sendMessageUC.denyToolCall(toolCall.id, reason)
         }
     }
 
@@ -426,7 +360,7 @@ class ChatViewModel(
             ChatAreaDialogState.ToolConfig(
                 enabledToolsFlow = state.enabledToolsForCurrentSession,
                 availableToolsFlow = state.availableTools,
-                mcpServersFlow = mcpServerRepository.servers,
+                mcpServersFlow = state.mcpServers,
                 onToggleTool = { toolDefinition, isEnabled ->
                     toggleToolForSession(toolDefinition, isEnabled)
                 },
@@ -461,35 +395,6 @@ class ChatViewModel(
                 } else null
             )
         )
-    }
-
-    /**
-     * Approves a tool call and updates its status to EXECUTING.
-     */
-    private fun approveToolCall(toolCall: ToolCall) {
-        backgroundScope.launch {
-            logger.debug("Approving tool call: ${toolCall.id}")
-
-            // Emit approval response to server
-            sendMessageUC.approveToolCall(toolCall.id)
-
-            // The server will update the tool call to EXECUTING and send ToolExecutionCompleted event
-            // Repository will be updated by server response
-        }
-    }
-
-    /**
-     * Denies a tool call and updates its status to USER_DENIED.
-     */
-    private fun denyToolCall(toolCall: ToolCall, reason: String?) {
-        backgroundScope.launch {
-            logger.debug("Denying tool call: ${toolCall.id}, reason: $reason")
-
-            // Emit denial response to server
-            sendMessageUC.denyToolCall(toolCall.id, reason)
-
-            // The server will update the tool call to USER_DENIED and send ToolExecutionCompleted event
-        }
     }
 
     /**

@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.app.viewmodel.chat.state
 
 import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.app.domain.models.LocalMCPServer
 import eu.torvian.chatbot.app.repository.*
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.util.ThreadBuilder
@@ -29,6 +30,7 @@ class ChatStateImpl(
     private val modelSettingsRepository: ModelSettingsRepository,
     private val modelRepository: ModelRepository,
     private val toolRepository: ToolRepository,
+    private val mcpServerRepository: LocalMCPServerRepository,
     private val threadBuilder: ThreadBuilder,
     private val backgroundScope: CoroutineScope
 ) : ChatState {
@@ -204,6 +206,10 @@ class ChatStateImpl(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = DataState.Success(emptyMap())
         )
+
+    // MCP servers - directly exposed from repository
+    override val mcpServers: StateFlow<DataState<RepositoryError, List<LocalMCPServer>>> =
+        mcpServerRepository.servers
 
     // Derived displayedMessages from sessionDataState
     override val displayedMessages: StateFlow<List<ChatMessage>> =

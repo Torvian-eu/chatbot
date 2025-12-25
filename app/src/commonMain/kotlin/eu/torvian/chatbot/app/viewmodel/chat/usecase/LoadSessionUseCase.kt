@@ -1,12 +1,16 @@
 package eu.torvian.chatbot.app.viewmodel.chat.usecase
 
 import arrow.fx.coroutines.parZip
+import eu.torvian.chatbot.app.domain.events.SnackbarInteractionEvent
 import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.error_loading_session
 import eu.torvian.chatbot.app.repository.*
+import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 
 /**
  * Use case for loading chat sessions in the reactive architecture.
@@ -15,6 +19,7 @@ import eu.torvian.chatbot.app.viewmodel.common.NotificationService
  * 1. Sets the activeSessionId to trigger reactive state updates
  * 2. Triggers repository load operations
  * 3. Lets the reactive system handle all state updates automatically
+ * 4. Handles retry logic via EventBus subscription
  */
 class LoadSessionUseCase(
     private val sessionRepository: SessionRepository,
@@ -23,13 +28,26 @@ class LoadSessionUseCase(
     private val toolRepository: ToolRepository,
     private val mcpServerRepository: LocalMCPServerRepository,
     private val state: ChatState,
-    private val notificationService: NotificationService
+    private val notificationService: NotificationService,
+    private val eventBus: EventBus,
+    private val backgroundScope: CoroutineScope
 ) {
 
     private val logger = kmpLogger<LoadSessionUseCase>()
 
     // Keep the last userId used for loading sessions so retry logic can reuse it
     private var lastUserId: Long? = null
+
+    init {
+        // Handle retry functionality via EventBus
+        backgroundScope.launch {
+            eventBus.events.collect { event ->
+                if (event is SnackbarInteractionEvent && event.isActionPerformed) {
+                    handleRetry(event.originalAppEventId)
+                }
+            }
+        }
+    }
 
     /**
      * Loads a chat session and its messages by ID in the reactive architecture.
@@ -118,17 +136,15 @@ class LoadSessionUseCase(
      * Handles retry requests by checking if the event ID matches and retrying if so.
      *
      * @param eventId The event ID from the retry interaction
-     * @return true if retry was performed, false otherwise
      */
-    suspend fun handleRetry(eventId: String): Boolean {
+    private suspend fun handleRetry(eventId: String) {
         val sessionId = state.lastAttemptedSessionId.value
-        return if (state.lastFailedLoadEventId.value == eventId && sessionId != null && lastUserId != null) {
-            logger.info("Retrying loadSession due to Snackbar action!")
+        val lastEventId = state.lastFailedLoadEventId.value
+
+        if (lastEventId == eventId && sessionId != null && lastUserId != null) {
+            logger.info("Retrying loadSession for session $sessionId due to Snackbar action!")
             state.clearRetryState()
             execute(sessionId, lastUserId!!)
-            true
-        } else {
-            false
         }
     }
 }
