@@ -8,6 +8,7 @@ import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import arrow.core.right
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
+import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallRequest
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallResult
 import eu.torvian.chatbot.common.models.api.tool.ToolCallApprovalResponse
@@ -809,12 +810,20 @@ class ChatServiceImpl(
         parentMessageId: Long?
     ): Pair<ChatMessage.UserMessage, ChatMessage?> = transactionScope.transaction {
         // 1. Insert user message (DAO will handle child linking atomically when parent is provided)
-        val userMessage = messageDao.insertUserMessage(sessionId, content, parentMessageId).getOrElse { daoError ->
+        val userMessage = messageDao.insertMessage(
+            sessionId = sessionId,
+            targetMessageId = parentMessageId,
+            position = MessageInsertPosition.APPEND,
+            role = ChatMessage.Role.USER,
+            content = content,
+            modelId = null,
+            settingsId = null
+        ).getOrElse { daoError ->
             throw IllegalStateException(
                 "Failed to insert user message. " +
                         "Session id: $sessionId. Parent message id: $parentMessageId. Error: $daoError"
             )
-        }
+        } as ChatMessage.UserMessage
 
         // 2. Update session's leaf message ID
         sessionDao.updateSessionLeafMessageId(sessionId, userMessage.id).getOrElse { updateError ->
@@ -850,14 +859,20 @@ class ChatServiceImpl(
     ): Pair<ChatMessage.AssistantMessage, ChatMessage> =
         transactionScope.transaction {
             // 1. Insert assistant message (DAO will handle child linking atomically)
-            val assistantMsg = messageDao.insertAssistantMessage(
-                sessionId, content, parentMessageId, model.id, settings.id
+            val assistantMsg = messageDao.insertMessage(
+                sessionId = sessionId,
+                targetMessageId = parentMessageId,
+                position = MessageInsertPosition.APPEND,
+                role = ChatMessage.Role.ASSISTANT,
+                content = content,
+                modelId = model.id,
+                settingsId = settings.id
             ).getOrElse { daoError ->
                 throw IllegalStateException(
                     "Failed to insert assistant message. " +
                             "Session id: $sessionId. Parent message id: $parentMessageId. Error: $daoError"
                 )
-            }
+            } as ChatMessage.AssistantMessage
 
             // 2. Update session's leaf message ID
             sessionDao.updateSessionLeafMessageId(sessionId, assistantMsg.id).getOrElse { updateError ->
