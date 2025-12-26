@@ -20,6 +20,7 @@ import kotlinx.coroutines.launch
  * 2. Triggers repository load operations
  * 3. Lets the reactive system handle all state updates automatically
  * 4. Handles retry logic via EventBus subscription
+ * 5. Manages retry state internally (not in ChatState)
  */
 class LoadSessionUseCase(
     private val sessionRepository: SessionRepository,
@@ -35,7 +36,9 @@ class LoadSessionUseCase(
 
     private val logger = kmpLogger<LoadSessionUseCase>()
 
-    // Keep the last userId used for loading sessions so retry logic can reuse it
+    // Internal retry state
+    private var lastAttemptedSessionId: Long? = null
+    private var lastFailedLoadEventId: String? = null
     private var lastUserId: Long? = null
 
     init {
@@ -56,18 +59,20 @@ class LoadSessionUseCase(
      * The reactive system automatically handles state updates through ChatStateImpl's
      * reactive flows.
      *
+     * Note: State should be reset via clearSession() before calling this method.
+     *
      * @param sessionId The ID of the session to load
      * @param userId The ID of the user, required for loading MCP servers
      */
     suspend fun execute(sessionId: Long, userId: Long) {
         logger.info("Loading session $sessionId")
 
-        // Reset state before loading a new session
-        state.resetState()
+        // Set the active session ID to trigger reactive state updates
         state.setActiveSessionId(sessionId)
-        // Store the session ID for potential retry
-        state.setRetryState(sessionId, null)
-        // Update last used userId
+
+        // Store retry state internally
+        lastAttemptedSessionId = sessionId
+        lastFailedLoadEventId = null
         lastUserId = userId
 
         // Load all dependencies in parallel
@@ -87,7 +92,7 @@ class LoadSessionUseCase(
                         shortMessageRes = Res.string.error_loading_session,
                         isRetryable = true
                     )
-                    state.setRetryState(sessionId, eventId)
+                    lastFailedLoadEventId = eventId
                     return@parZip
                 }
                 .onRight {
@@ -138,13 +143,21 @@ class LoadSessionUseCase(
      * @param eventId The event ID from the retry interaction
      */
     private suspend fun handleRetry(eventId: String) {
-        val sessionId = state.lastAttemptedSessionId.value
-        val lastEventId = state.lastFailedLoadEventId.value
-
-        if (lastEventId == eventId && sessionId != null && lastUserId != null) {
-            logger.info("Retrying loadSession for session $sessionId due to Snackbar action!")
-            state.clearRetryState()
-            execute(sessionId, lastUserId!!)
+        if (lastFailedLoadEventId == eventId && lastAttemptedSessionId != null && lastUserId != null) {
+            logger.info("Retrying loadSession for session $lastAttemptedSessionId due to Snackbar action!")
+            // Clear the failed event ID before retrying
+            lastFailedLoadEventId = null
+            execute(lastAttemptedSessionId!!, lastUserId!!)
         }
+    }
+
+    /**
+     * Resets the internal state of the use case.
+     * Should be called when switching sessions or clearing the chat.
+     */
+    fun resetState() {
+        lastAttemptedSessionId = null
+        lastFailedLoadEventId = null
+        lastUserId = null
     }
 }

@@ -48,8 +48,6 @@ class ChatStateImpl(
     private val _editingContent = MutableStateFlow("")
     private val _isSendingMessage = MutableStateFlow(false)
     private val _dialogState = MutableStateFlow<ChatAreaDialogState>(ChatAreaDialogState.None)
-    private val _lastAttemptedSessionId = MutableStateFlow<Long?>(null)
-    private val _lastFailedLoadEventId = MutableStateFlow<String?>(null)
 
     // --- Public Read-Only StateFlows ---
 
@@ -60,8 +58,6 @@ class ChatStateImpl(
     override val editingContent: StateFlow<String> = _editingContent.asStateFlow()
     override val isSendingMessage: StateFlow<Boolean> = _isSendingMessage.asStateFlow()
     override val dialogState: StateFlow<ChatAreaDialogState> = _dialogState.asStateFlow()
-    override val lastAttemptedSessionId: StateFlow<Long?> = _lastAttemptedSessionId.asStateFlow()
-    override val lastFailedLoadEventId: StateFlow<String?> = _lastFailedLoadEventId.asStateFlow()
 
     // --- Reactive State Derivation ---
 
@@ -267,16 +263,6 @@ class ChatStateImpl(
         _dialogState.value = ChatAreaDialogState.None
     }
 
-    override fun setRetryState(sessionId: Long?, eventId: String?) {
-        _lastAttemptedSessionId.value = sessionId
-        _lastFailedLoadEventId.value = eventId
-    }
-
-    override fun clearRetryState() {
-        _lastAttemptedSessionId.value = null
-        _lastFailedLoadEventId.value = null
-    }
-
     override fun resetState() {
         _activeSessionId.value = null
         _inputContent.value = ""
@@ -285,6 +271,5 @@ class ChatStateImpl(
         _editingContent.value = ""
         _isSendingMessage.value = false
         _dialogState.value = ChatAreaDialogState.None
-        clearRetryState()
     }
 }

@@ -159,18 +159,23 @@ class ChatViewModel(
 
     /**
      * Loads a chat session and its messages by ID.
+     * Resets all state before loading the new session.
      */
     fun loadSession(sessionId: Long, userId: Long) {
         normalScope.launch {
+            // Clear all state (shared and use case internal state) before loading
+            clearSession()
             loadSessionUC.execute(sessionId, userId)
         }
     }
 
     /**
-     * Clears the current session state.
+     * Clears the currently loaded session and resets all state.
      */
     fun clearSession() {
         state.resetState()
+        // Reset use case internal state
+        loadSessionUC.resetState()
     }
 
     /**

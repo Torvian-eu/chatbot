@@ -138,17 +138,6 @@ interface ChatState {
      */
     val dialogState: StateFlow<ChatAreaDialogState>
 
-    /**
-     * The ID of the session that was last attempted to be loaded.
-     * Used for retry functionality.
-     */
-    val lastAttemptedSessionId: StateFlow<Long?>
-
-    /**
-     * The event ID of the last failed load operation.
-     * Used for retry functionality.
-     */
-    val lastFailedLoadEventId: StateFlow<String?>
 
     // --- State Mutation Methods ---
 
@@ -191,16 +180,6 @@ interface ChatState {
      * Cancels/closes any dialog by setting state to None.
      */
     fun cancelDialog()
-
-    /**
-     * Sets retry state for failed operations.
-     */
-    fun setRetryState(sessionId: Long?, eventId: String?)
-
-    /**
-     * Clears retry state.
-     */
-    fun clearRetryState()
 
     /**
      * Resets the entire chat state to its initial state.
