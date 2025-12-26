@@ -38,12 +38,13 @@
 
 ### Make messages searchable
 
-### Add Send button to message edit area (in addition to Save/Cancel)
-This action triggers a reply to the edited message from the assistant/LLM. It also creates a new branch in the conversation. (See composable MessageContent.kt)
+### Add Save as Copy button to message edit area (in addition to Save/Cancel)
+This action saves the edited message as a new message, and creates a new branch in the conversation (also for leaf messages).
 
-### Add option to regenerate assistant messages
-A "Regenerate" button is already available in the message actions menu, but it needs to be wired to an action in the view model. (see MessageActionRow.kt)
-This action should trigger a new response from the assistant/LLM, based on the current message context. It must also create a new branch in the conversation. (See MessageActionRow.kt)
+### Add option to continue conversation from (any) message
+- Add a "Branch & Continue" button to the message actions menu. (see MessageActionRow.kt)
+- This action creates a new branch in the conversation, with the selected message as the parent.
+- This feature is more versatile than "Regenerate" because it can be used on any message, not just assistant messages.
 
 ### Allow certain features to be disabled on a per-user basis (*Requires user preference feature)
 The user should be able to configure this in their profile.
