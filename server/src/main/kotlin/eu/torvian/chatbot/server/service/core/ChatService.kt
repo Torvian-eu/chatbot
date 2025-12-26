@@ -16,12 +16,14 @@ interface ChatService {
      * Validates a new message request and prepares the configuration.
      *
      * @param sessionId The ID of the session
-     * @param parentMessageId Optional parent message ID
+     * @param content The message content (null for Branch & Continue mode)
+     * @param parentMessageId Optional parent message ID. Must be non-null when [content] is null.
      * @param isStreaming Whether the message is being processed in streaming mode
      * @return Either a validation error or a pair of (ChatSession, LLMConfig)
      */
     suspend fun validateProcessNewMessageRequest(
         sessionId: Long,
+        content: String?,
         parentMessageId: Long?,
         isStreaming: Boolean
     ): Either<ValidateNewMessageError, Pair<ChatSession, LLMConfig>>
@@ -50,8 +52,9 @@ interface ChatService {
      * @param userId The ID of the user making the request (used for auto-approval preferences).
      * @param session The session the message belongs to.
      * @param llmConfig The LLM configuration to use for the request.
-     * @param content The user's message content.
-     * @param parentMessageId Optional ID of the message being replied to.
+     * @param content The user's message content. When null, no new user message is created and the
+     *                assistant continues from the [parentMessageId] message (Branch & Continue mode).
+     * @param parentMessageId Optional ID of the message being replied to. Must be non-null when [content] is null.
      * @param mcpResponseFlow A flow of tool execution results from the client for local MCP tools.
      * @param approvalResponseFlow A flow of tool call approval decisions from the client.
      * @return A Flow of Either<ProcessNewMessageError, MessageEvent>.
@@ -62,7 +65,7 @@ interface ChatService {
         userId: Long,
         session: ChatSession,
         llmConfig: LLMConfig,
-        content: String,
+        content: String?,
         parentMessageId: Long? = null,
         mcpResponseFlow: Flow<LocalMCPToolCallResult>,
         approvalResponseFlow: Flow<ToolCallApprovalResponse>
@@ -105,9 +108,11 @@ interface ChatService {
      * @param userId The ID of the user making the request (used for auto-approval preferences).
      * @param session The session the message belongs to.
      * @param llmConfig The LLM configuration to use for the request (model, provider, settings, tools).
-     * @param content The user's message content.
+     * @param content The user's message content. When null, no new user message is created and the
+     *                assistant continues from the [parentMessageId] message (Branch & Continue mode).
      * @param parentMessageId Optional ID of the message being replied to. If provided, the new user
-     *                        message will be threaded as a child of this message.
+     *                        message will be threaded as a child of this message. Must be non-null
+     *                        when [content] is null.
      * @param mcpResponseFlow A flow of tool execution results from the client for local MCP tools.
      * @param approvalResponseFlow A flow of tool call approval decisions from the client.
      * @return A Flow of Either<ProcessNewMessageError, MessageStreamEvent>.
@@ -119,7 +124,7 @@ interface ChatService {
         userId: Long,
         session: ChatSession,
         llmConfig: LLMConfig,
-        content: String,
+        content: String?,
         parentMessageId: Long? = null,
         mcpResponseFlow: Flow<LocalMCPToolCallResult>,
         approvalResponseFlow: Flow<ToolCallApprovalResponse>

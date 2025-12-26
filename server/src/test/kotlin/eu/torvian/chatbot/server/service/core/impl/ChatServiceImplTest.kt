@@ -202,6 +202,26 @@ class ChatServiceImplTest {
     // --- validateProcessNewMessageRequest Tests ---
 
     @Test
+    fun `validateProcessNewMessageRequest should return ModelConfigurationError when content is null and parentMessageId is null`() = runTest {
+        // Arrange
+        val sessionId = 1L
+
+        // Act - Branch & Continue mode requires parentMessageId when content is null
+        val result = chatService.validateProcessNewMessageRequest(sessionId, null, null, false)
+
+        // Assert
+        assertTrue(result.isLeft(), "Should return Left when content is null and parentMessageId is null")
+        val error = result.leftOrNull()
+        assertNotNull(error, "Error should not be null")
+        assertTrue(error is ValidateNewMessageError.ModelConfigurationError, "Should be ModelConfigurationError")
+        assertTrue(
+            (error as ValidateNewMessageError.ModelConfigurationError).message.contains("Branch & Continue"),
+            "Error message should mention Branch & Continue mode"
+        )
+        coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+    }
+
+    @Test
     fun `validateProcessNewMessageRequest should return SessionNotFound when session does not exist`() = runTest {
         // Arrange
         val sessionId = 999L
@@ -209,7 +229,7 @@ class ChatServiceImplTest {
         coEvery { sessionDao.getSessionById(sessionId) } returns daoError.left()
 
         // Act
-        val result = chatService.validateProcessNewMessageRequest(sessionId, null, false)
+        val result = chatService.validateProcessNewMessageRequest(sessionId, "test content", null, false)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for non-existent session")
@@ -229,7 +249,7 @@ class ChatServiceImplTest {
         coEvery { sessionDao.getSessionById(sessionId) } returns sessionWithoutModel.right()
 
         // Act
-        val result = chatService.validateProcessNewMessageRequest(sessionId, null, false)
+        val result = chatService.validateProcessNewMessageRequest(sessionId, "test content", null, false)
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left when no model is selected")
@@ -254,7 +274,7 @@ class ChatServiceImplTest {
             coEvery { llmModelService.getModelById(sessionWithoutSettings.currentModelId!!) } returns testModel.right()
 
             // Act
-            val result = chatService.validateProcessNewMessageRequest(sessionId, null, false)
+            val result = chatService.validateProcessNewMessageRequest(sessionId, "test content", null, false)
 
             // Assert
             assertTrue(result.isLeft(), "Should return Left when no settings are selected")
@@ -281,7 +301,7 @@ class ChatServiceImplTest {
             coEvery { messageDao.getMessageById(parentMessageId) } returns daoError.left()
 
             // Act
-            val result = chatService.validateProcessNewMessageRequest(sessionId, parentMessageId, false)
+            val result = chatService.validateProcessNewMessageRequest(sessionId, "test content", parentMessageId, false)
 
             // Assert
             assertTrue(result.isLeft(), "Should return Left for parent not found")
@@ -309,7 +329,7 @@ class ChatServiceImplTest {
         coEvery { toolService.getEnabledToolsForSession(sessionId) } returns emptyList()
 
         // Act
-        val result = chatService.validateProcessNewMessageRequest(sessionId, null, true)
+        val result = chatService.validateProcessNewMessageRequest(sessionId, "test content", null, true)
 
         // Assert
         assertTrue(result.isRight(), "Should return Right for successful validation")
