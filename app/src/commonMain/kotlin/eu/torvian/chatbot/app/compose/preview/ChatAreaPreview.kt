@@ -92,6 +92,7 @@ fun ChatAreaPreview() {
             override fun onCopyMessage(message: ChatMessage) {}
             override fun onCopyThread() {}
             override fun onBranchAndContinue(message: ChatMessage) {}
+            override fun onRegenerateMessage(message: ChatMessage) {}
         }
     )
 }

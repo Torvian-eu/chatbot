@@ -169,13 +169,15 @@ private fun CopyButton(message: ChatMessage, onCopyMessage: ((ChatMessage) -> Un
 
 /**
  * Displays the Regenerate message button for assistant messages.
+ * The button is hidden if the message has no parent (root message edge case).
  *
  * @param message The assistant message to be regenerated.
- * @param onRegenerateMessage Callback for the regenerate action, can be null if not implemented.
+ * @param onRegenerateMessage Callback for the regenerate action.
  */
 @Composable
-private fun RegenerateButton(message: ChatMessage, onRegenerateMessage: ((ChatMessage) -> Unit)?) {
-    if (onRegenerateMessage != null) {
+private fun RegenerateButton(message: ChatMessage, onRegenerateMessage: (ChatMessage) -> Unit) {
+    // Only show if message has a parent (not root)
+    if (message.parentMessageId != null) {
         PlainTooltipBox(text = "Regenerate response") {
             IconButton(
                 onClick = { onRegenerateMessage(message) },
