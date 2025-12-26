@@ -249,6 +249,15 @@ class ChatViewModel(
     }
 
     /**
+     * Saves the edited message content as a new copy (sibling).
+     */
+    fun saveEditingAsCopy() {
+        normalScope.launch {
+            editMessageUC.saveAsCopy()
+        }
+    }
+
+    /**
      * Cancels the message editing state.
      */
     fun cancelEditing() {

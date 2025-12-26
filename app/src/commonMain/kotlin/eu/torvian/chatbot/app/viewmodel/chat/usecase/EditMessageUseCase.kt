@@ -4,8 +4,9 @@ import eu.torvian.chatbot.app.repository.SessionRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
-import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.api.core.UpdateMessageRequest
+import eu.torvian.chatbot.common.models.core.ChatMessage
+import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 
 /**
  * Use case for editing chat messages.
@@ -45,12 +46,7 @@ class EditMessageUseCase(
      */
     suspend fun save() {
         val messageToEdit = state.editingMessage.value ?: return
-        val newContent = state.editingContent.value.trim()
-
-        if (newContent.isBlank()) {
-            logger.warn("Validation Error: Message content cannot be empty.")
-            return
-        }
+        val newContent = state.editingContent.value
 
         logger.info("Saving edited message ${messageToEdit.id}")
 
@@ -73,6 +69,40 @@ class EditMessageUseCase(
                     cancel()
                 }
             )
+    }
+
+    /**
+     * Saves the edited message content as a new copy (sibling).
+     * Creates a new branch in the conversation.
+     */
+    suspend fun saveAsCopy() {
+        val messageToEdit = state.editingMessage.value ?: return
+        val newContent = state.editingContent.value
+
+        val parentId = messageToEdit.parentMessageId
+        val session = state.currentSession.value ?: return
+        val modelId = session.currentModelId
+        val settingsId = session.currentSettingsId
+
+        logger.info("Saving edited message ${messageToEdit.id} as copy (sibling)")
+
+        sessionRepository.insertMessage(
+            sessionId = session.id,
+            targetMessageId = parentId,
+            position = MessageInsertPosition.APPEND,
+            role = messageToEdit.role,
+            content = newContent,
+            modelId = if (messageToEdit.role == ChatMessage.Role.ASSISTANT) modelId else null,
+            settingsId = if (messageToEdit.role == ChatMessage.Role.ASSISTANT) settingsId else null
+        ).fold(
+            ifLeft = { error ->
+                notificationService.repositoryError(error, "Failed to save copy")
+            },
+            ifRight = {
+                logger.info("Successfully saved copy")
+                cancel()
+            }
+        )
     }
 
     /**
