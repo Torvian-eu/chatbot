@@ -212,6 +212,19 @@ class ChatViewModel(
     }
 
     /**
+     * Regenerates an assistant message by continuing from its parent message.
+     * This is functionally equivalent to "Branch & Continue" from the message's parent.
+     * If the message has no parent (root message), this operation does nothing.
+     *
+     * @param message The assistant message to regenerate.
+     */
+    fun regenerateMessage(message: ChatMessage) {
+        val parentMessageId = message.parentMessageId ?: return // No parent, can't regenerate
+        val parentMessage = displayedMessages.value.find { it.id == parentMessageId } ?: return
+        sendMessage(continueFromMessage = parentMessage)
+    }
+
+    /**
      * Sets the state to indicate the user is replying to a specific message.
      */
     fun startReplyTo(message: ChatMessage) {
