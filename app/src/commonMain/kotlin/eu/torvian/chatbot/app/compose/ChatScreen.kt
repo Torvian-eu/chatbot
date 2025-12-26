@@ -191,6 +191,7 @@ fun ChatScreen(
             override fun onStartEditing(message: ChatMessage) = chatViewModel.startEditing(message)
             override fun onUpdateEditingContent(newText: String) = chatViewModel.updateEditingContent(newText)
             override fun onSaveEditing() = chatViewModel.saveEditing()
+            override fun onSaveEditingAsCopy() = chatViewModel.saveEditingAsCopy()
             override fun onCancelEditing() = chatViewModel.cancelEditing()
             override fun onRequestDeleteMessage(message: ChatMessage) = chatViewModel.requestDeleteMessage(message)
             override fun onRequestDeleteThread(message: ChatMessage) = chatViewModel.requestDeleteMessageRecursively(message)

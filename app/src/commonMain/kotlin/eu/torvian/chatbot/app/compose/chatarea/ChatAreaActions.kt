@@ -53,6 +53,12 @@ interface ChatAreaActions {
     fun onSaveEditing()
 
     /**
+     * Callback for when the user saves the edited message content as a new copy.
+     * This creates a new sibling message with the edited content.
+     */
+    fun onSaveEditingAsCopy()
+
+    /**
      * Callback for when the user cancels the editing of a message.
      */
     fun onCancelEditing()
