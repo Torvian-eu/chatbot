@@ -8,14 +8,17 @@ import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import arrow.core.right
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
-import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallRequest
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallResult
 import eu.torvian.chatbot.common.models.api.tool.ToolCallApprovalResponse
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
+import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.llm.*
-import eu.torvian.chatbot.common.models.tool.*
+import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
+import eu.torvian.chatbot.common.models.tool.ToolCall
+import eu.torvian.chatbot.common.models.tool.ToolCallStatus
+import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
 import eu.torvian.chatbot.server.data.dao.ToolCallDao
@@ -295,7 +298,13 @@ class ChatServiceImpl(
                 // Execute tools and update database (emits events as tools complete)
                 // Only execute the valid, pending tool calls
                 val completedToolCalls = mutableListOf<ToolCall>()
-                executeAndUpdateToolCalls(userId, pendingToolCalls, llmConfig.tools, mcpResponseFlow, approvalResponseFlow)
+                executeAndUpdateToolCalls(
+                    userId,
+                    pendingToolCalls,
+                    llmConfig.tools,
+                    mcpResponseFlow,
+                    approvalResponseFlow
+                )
                     .collect { event ->
                         when (event) {
                             is ToolExecutionEvent.ToolCallCompleted -> {
@@ -817,7 +826,13 @@ class ChatServiceImpl(
 
                     // Only add results for completed/errored/denied tools
                     messageToolCalls
-                        .filter { it.status != ToolCallStatus.PENDING }
+                        .filter {
+                            it.status in setOf(
+                                ToolCallStatus.SUCCESS,
+                                ToolCallStatus.ERROR,
+                                ToolCallStatus.USER_DENIED
+                            )
+                        }
                         .forEach { toolCall ->
                             rawContext.add(
                                 RawChatMessage.Tool(
