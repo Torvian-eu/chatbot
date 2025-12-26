@@ -52,6 +52,8 @@ class SendMessageUseCase(
                 denialReason = null
             )
         )
+        // The server will update the tool call to EXECUTING and send ToolExecutionCompleted event
+        // Repository will be updated by server response
     }
 
     /**
@@ -69,6 +71,8 @@ class SendMessageUseCase(
                 denialReason = reason
             )
         )
+        // The server will update the tool call to USER_DENIED and send ToolExecutionCompleted event
+        // Repository will be updated by server response
     }
 
     /**

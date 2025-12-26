@@ -88,7 +88,8 @@ fun ChatScreen(
                 onShowToolConfig = { chatViewModel.showToolConfigDialog() },
                 enabledToolsCount = enabledToolsCount,
                 isSessionListCollapsed = isSessionListCollapsed,
-                onToggleSessionList = { isSessionListCollapsed = !isSessionListCollapsed }
+                onToggleSessionList = { isSessionListCollapsed = !isSessionListCollapsed },
+                onCopyThread = { chatViewModel.copyThreadToClipboard() }
             )
         }
     )
@@ -203,6 +204,8 @@ fun ChatScreen(
                 chatViewModel.showToolCallDetails(toolCall)
             override fun onCopyMessage(message: ChatMessage) =
                 chatViewModel.copyMessageToClipboard(message)
+            override fun onCopyThread() =
+                chatViewModel.copyThreadToClipboard()
 
             override fun onRetryLoadingSession() {
                 selectedSession?.id?.let { sessionId ->

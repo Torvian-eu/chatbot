@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.app.viewmodel.chat.state
 
 import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.app.domain.models.LocalMCPServer
 import eu.torvian.chatbot.app.repository.*
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.util.ThreadBuilder
@@ -29,6 +30,7 @@ class ChatStateImpl(
     private val modelSettingsRepository: ModelSettingsRepository,
     private val modelRepository: ModelRepository,
     private val toolRepository: ToolRepository,
+    private val mcpServerRepository: LocalMCPServerRepository,
     private val threadBuilder: ThreadBuilder,
     private val backgroundScope: CoroutineScope
 ) : ChatState {
@@ -46,8 +48,6 @@ class ChatStateImpl(
     private val _editingContent = MutableStateFlow("")
     private val _isSendingMessage = MutableStateFlow(false)
     private val _dialogState = MutableStateFlow<ChatAreaDialogState>(ChatAreaDialogState.None)
-    private val _lastAttemptedSessionId = MutableStateFlow<Long?>(null)
-    private val _lastFailedLoadEventId = MutableStateFlow<String?>(null)
 
     // --- Public Read-Only StateFlows ---
 
@@ -58,8 +58,6 @@ class ChatStateImpl(
     override val editingContent: StateFlow<String> = _editingContent.asStateFlow()
     override val isSendingMessage: StateFlow<Boolean> = _isSendingMessage.asStateFlow()
     override val dialogState: StateFlow<ChatAreaDialogState> = _dialogState.asStateFlow()
-    override val lastAttemptedSessionId: StateFlow<Long?> = _lastAttemptedSessionId.asStateFlow()
-    override val lastFailedLoadEventId: StateFlow<String?> = _lastFailedLoadEventId.asStateFlow()
 
     // --- Reactive State Derivation ---
 
@@ -205,6 +203,10 @@ class ChatStateImpl(
             initialValue = DataState.Success(emptyMap())
         )
 
+    // MCP servers - directly exposed from repository
+    override val mcpServers: StateFlow<DataState<RepositoryError, List<LocalMCPServer>>> =
+        mcpServerRepository.servers
+
     // Derived displayedMessages from sessionDataState
     override val displayedMessages: StateFlow<List<ChatMessage>> =
         sessionDataState.filterIsInstance<DataState.Success<ChatSession>>()
@@ -261,16 +263,6 @@ class ChatStateImpl(
         _dialogState.value = ChatAreaDialogState.None
     }
 
-    override fun setRetryState(sessionId: Long?, eventId: String?) {
-        _lastAttemptedSessionId.value = sessionId
-        _lastFailedLoadEventId.value = eventId
-    }
-
-    override fun clearRetryState() {
-        _lastAttemptedSessionId.value = null
-        _lastFailedLoadEventId.value = null
-    }
-
     override fun resetState() {
         _activeSessionId.value = null
         _inputContent.value = ""
@@ -279,6 +271,5 @@ class ChatStateImpl(
         _editingContent.value = ""
         _isSendingMessage.value = false
         _dialogState.value = ChatAreaDialogState.None
-        clearRetryState()
     }
 }

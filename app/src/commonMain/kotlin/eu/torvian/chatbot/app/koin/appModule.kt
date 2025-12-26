@@ -201,13 +201,14 @@ fun appModule(appConfig: AppConfig): Module = module {
             modelSettingsRepository = get(),
             modelRepository = get(),
             toolRepository = get(),
+            mcpServerRepository = get(),
             threadBuilder = get(),
             backgroundScope = backgroundScope
         )
     }
 
     // Provide use cases with updated dependencies (now using repositories)
-    factory<LoadSessionUseCase> { (chatState: ChatState) ->
+    factory<LoadSessionUseCase> { (chatState: ChatState, backgroundScope: CoroutineScope) ->
         LoadSessionUseCase(
             get<SessionRepository>(),
             get<ModelSettingsRepository>(),
@@ -215,7 +216,9 @@ fun appModule(appConfig: AppConfig): Module = module {
             get<ToolRepository>(),
             get<LocalMCPServerRepository>(),
             chatState,
-            get()
+            get(),
+            get(),
+            backgroundScope
         )
     }
 
@@ -255,6 +258,14 @@ fun appModule(appConfig: AppConfig): Module = module {
         InsertMessageUseCase(chatState, get(), get())
     }
 
+    factory<CopyToClipboardUseCase> { (chatState: ChatState) ->
+        CopyToClipboardUseCase(chatState, get(), get())
+    }
+
+    factory<ToggleToolsUseCase> { (chatState: ChatState) ->
+        ToggleToolsUseCase(chatState, get(), get())
+    }
+
     // Provide ViewModels, injecting the required dependencies
     viewModel {
         val scopeProvider = get<CoroutineScopeProvider>()
@@ -264,7 +275,7 @@ fun appModule(appConfig: AppConfig): Module = module {
 
         ChatViewModel(
             state = chatState,
-            loadSessionUC = get { parametersOf(chatState) },
+            loadSessionUC = get { parametersOf(chatState, backgroundScope) },
             sendMessageUC = get { parametersOf(chatState) },
             replyUC = get { parametersOf(chatState) },
             editMessageUC = get { parametersOf(chatState) },
@@ -274,11 +285,8 @@ fun appModule(appConfig: AppConfig): Module = module {
             selectModelUC = get { parametersOf(chatState) },
             selectSettingsUC = get { parametersOf(chatState) },
             updateInputUC = get { parametersOf(chatState) },
-            toolRepository = get(),
-            mcpServerRepository = get(),
-            clipboardService = get(),
-            notificationService = get(),
-            eventBus = get(),
+            copyToClipboardUC = get { parametersOf(chatState) },
+            toggleToolsUC = get { parametersOf(chatState) },
             normalScope = normalScope,
             backgroundScope = backgroundScope
         )

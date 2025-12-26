@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.app.viewmodel.chat.state
 
 import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.app.domain.models.LocalMCPServer
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.ToolCallsMap
 import eu.torvian.chatbot.common.models.core.ChatMessage
@@ -60,6 +61,12 @@ interface ChatState {
      * Returns empty map if no session is active or no tool calls exist.
      */
     val toolCallsForCurrentSession: StateFlow<DataState<RepositoryError, ToolCallsMap>>
+
+    /**
+     * MCP server configurations for the current user.
+     * Used for displaying server information in tool configuration dialogs.
+     */
+    val mcpServers: StateFlow<DataState<RepositoryError, List<LocalMCPServer>>>
 
     // --- Derived Lookup Maps (for performance & graceful degradation) ---
     /**
@@ -131,17 +138,6 @@ interface ChatState {
      */
     val dialogState: StateFlow<ChatAreaDialogState>
 
-    /**
-     * The ID of the session that was last attempted to be loaded.
-     * Used for retry functionality.
-     */
-    val lastAttemptedSessionId: StateFlow<Long?>
-
-    /**
-     * The event ID of the last failed load operation.
-     * Used for retry functionality.
-     */
-    val lastFailedLoadEventId: StateFlow<String?>
 
     // --- State Mutation Methods ---
 
@@ -184,16 +180,6 @@ interface ChatState {
      * Cancels/closes any dialog by setting state to None.
      */
     fun cancelDialog()
-
-    /**
-     * Sets retry state for failed operations.
-     */
-    fun setRetryState(sessionId: Long?, eventId: String?)
-
-    /**
-     * Clears retry state.
-     */
-    fun clearRetryState()
 
     /**
      * Resets the entire chat state to its initial state.
