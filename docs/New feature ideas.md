@@ -30,7 +30,7 @@
 
 ### (done) Make message content copyable to clipboard
 
-### Make currently displayed message thread copyable to clipboard
+### (done) Make currently displayed message thread copyable to clipboard
 
 ### Make chat session copyable to file/clipboard as JSON (for importing into other apps)
 
