@@ -10,7 +10,7 @@
  
 ### Allow user to pause an agentic response, in order to provide user feedback.
   - Add a "Pause" button to the input area, which is shown while a message is streaming and when tools are involved.
-  - Pausing should stop the (web socket) streaming process, only after the current assistant message is fully processed. This means that the message loop (used for tool calling) will be interrupted prematurely.
+  - Pausing should stop the (web socket) streaming process, but only after the current assistant message is fully processed. This means that the message loop (used for tool calling) will be interrupted prematurely.
   - This feature is particularly useful for agentic LLM usage, where the user might want to interrupt an undesirable response and provide feedback.
   - When paused, the user can provide feedback to the assistant. This feedback is sent to the assistant as a new message, which becomes the next message in the conversation. Note: this behavior is no different from sending a new message, so there is no special "paused" state that needs to be tracked.
 
@@ -38,15 +38,20 @@
 
 ### Make messages searchable
 
-### Add Save as Copy button to message edit area (in addition to Save/Cancel)
+### (done) Add Save as Copy button to message edit area (in addition to Save/Cancel)
 This action saves the edited message as a new message, and creates a new branch in the conversation (also for leaf messages).
 
-### Add option to continue conversation from (any) message
+### (done) Add option to continue conversation from (any) message
 - Add a "Branch & Continue" button to the message actions menu. (see MessageActionRow.kt)
 - This action creates a new branch in the conversation, with the selected message as the parent.
 - This feature is more versatile than "Regenerate" because it can be used on any message, not just assistant messages.
 
-### Allow certain features to be disabled on a per-user basis (*Requires user preference feature)
+### Add Regenerate button for assistant messages
+- This is functionally equivalent to "Branch & Continue" from the target's parent message, but it is more intuitive for assistant messages.
+- The regenerate button is already present in the code, but is currently deactivated in the UI. (see MessageActionRow.kt)
+- In case the assistant message is the root of the conversation (very unlikely), the regenerate button should not be shown. (simpler alternative: do null operation in viewmodel instead, or do both)
+
+### Allow certain features to be enabled/disabled on a per-user basis (*Requires user preference feature)
 The user should be able to configure this in their profile.
 
 ### Allow user to see LLM metadata for assistant responses
@@ -67,6 +72,12 @@ In the future we could add a vertical sidebar with icons on the left side of the
 
 ### Allow user to specify chat group when adding a new session
 Currently, the user can only add a new session to the "Ungrouped" group. In the future, we should allow the user to specify a group when adding a new session.
+
+### Allow user to clone a chat session
+- Add a "Clone" button to the session actions menu. (see SessionItemActionsDropdown.kt)
+- Cloning a session should create a new session with the same name, but a new ID.
+- The new session should have the same messages and tool calls, but with new IDs.
+- The new session should have the same owner, current leaf message, configured tools, LLM model, settings, etc.
 
 ---
 
@@ -115,6 +126,9 @@ A level 2 query for "John" could return:
 
 ### AI Everywhere
 Alow LLM agent to control the app itself. For instance: modifying a chat session, Summarizing it, or creating a new session.
+
+### AI assistant for prompting
+Assistant gives suggestions for follow-up questions, based on the conversation history. (and possibly other things)
 
 ---
 
