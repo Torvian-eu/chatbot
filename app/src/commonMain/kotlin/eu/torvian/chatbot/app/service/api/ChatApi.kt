@@ -89,8 +89,8 @@ interface ChatApi {
      * Corresponds to `POST /api/v1/messages/insert`.
      *
      * @param sessionId The ID of the session.
-     * @param targetMessageId The ID of the message to insert relative to.
-     * @param position The position relative to the target (ABOVE, BELOW, or APPEND).
+     * @param targetMessageId The ID of the message to insert relative to. If null, inserts a new root message.
+     * @param position The position relative to the target (ABOVE, BELOW, or APPEND). Ignored if targetMessageId is null.
      * @param role The role of the new message (user or assistant).
      * @param content The content of the new message.
      * @param modelId Optional model ID (for assistant messages).
@@ -99,7 +99,7 @@ interface ChatApi {
      */
     suspend fun insertMessage(
         sessionId: Long,
-        targetMessageId: Long,
+        targetMessageId: Long?,
         position: MessageInsertPosition,
         role: ChatMessage.Role,
         content: String,

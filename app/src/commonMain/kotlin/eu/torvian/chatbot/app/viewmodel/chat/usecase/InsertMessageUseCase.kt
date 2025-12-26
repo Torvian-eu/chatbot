@@ -10,15 +10,25 @@ import kotlinx.coroutines.launch
 
 /**
  * Use case for inserting a new message into the chat.
+ * Supports both inserting relative to an existing message and creating new root messages.
  */
 class InsertMessageUseCase(
     private val state: ChatState,
     private val sessionRepository: SessionRepository,
     private val notificationService: NotificationService
 ) {
+    /**
+     * Executes the insert message operation.
+     *
+     * @param scope Coroutine scope to launch the operation
+     * @param targetMessageId The ID of the target message to insert relative to. If null, inserts a new root message (position is ignored).
+     * @param position The position relative to the target (ABOVE, BELOW, or APPEND). Ignored if targetMessageId is null.
+     * @param role The role of the new message (USER or ASSISTANT)
+     * @param content The content of the new message
+     */
     fun execute(
         scope: CoroutineScope,
-        targetMessageId: Long,
+        targetMessageId: Long?,
         position: MessageInsertPosition,
         role: ChatMessage.Role,
         content: String
