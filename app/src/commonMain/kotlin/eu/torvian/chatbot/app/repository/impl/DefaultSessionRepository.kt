@@ -371,7 +371,7 @@ class DefaultSessionRepository(
 
     override suspend fun insertMessage(
         sessionId: Long,
-        targetMessageId: Long,
+        targetMessageId: Long?,
         position: MessageInsertPosition,
         role: ChatMessage.Role,
         content: String,

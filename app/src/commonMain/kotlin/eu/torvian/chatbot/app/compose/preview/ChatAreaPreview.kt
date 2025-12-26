@@ -77,6 +77,7 @@ fun ChatAreaPreview() {
             override fun onStartEditing(message: ChatMessage) {}
             override fun onUpdateEditingContent(newText: String) {}
             override fun onSaveEditing() {}
+            override fun onSaveEditingAsCopy() {}
             override fun onCancelEditing() {}
             override fun onRequestDeleteMessage(message: ChatMessage) {}
             override fun onRequestDeleteThread(message: ChatMessage) {}

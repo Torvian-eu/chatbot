@@ -76,6 +76,9 @@ fun MessageContent(
             onSave = {
                 actions.onSaveEditing()
             },
+            onSaveAsCopy = {
+                actions.onSaveEditingAsCopy()
+            },
             onCancel = {
                 actions.onCancelEditing()
             },
@@ -124,12 +127,14 @@ fun MessageContent(
  * Composable for displaying the actions available for an edited message.
  *
  * @param onSave Callback for the save action.
+ * @param onSaveAsCopy Callback for the save as copy action.
  * @param onCancel Callback for the cancel action.
  * @param modifier Modifier to be applied to the component.
  */
 @Composable
 private fun MessageEditActions(
     onSave: () -> Unit,
+    onSaveAsCopy: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier.Companion
 ) {
@@ -144,6 +149,14 @@ private fun MessageEditActions(
             modifier = Modifier.padding(end = 8.dp) // Spacing between buttons
         ) {
             Text("Save", color = MaterialTheme.colorScheme.primary)
+        }
+
+        // Save as Copy Button
+        TextButton(
+            onClick = onSaveAsCopy,
+            modifier = Modifier.padding(end = 8.dp) // Spacing between buttons
+        ) {
+            Text("Save as Copy", color = MaterialTheme.colorScheme.primary)
         }
 
         // Cancel Button

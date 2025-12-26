@@ -273,11 +273,11 @@ interface SessionRepository {
     suspend fun deleteMessageRecursively(messageId: Long, sessionId: Long): Either<RepositoryError, Unit>
 
     /**
-     * Inserts a new message relative to a target message.
+     * Inserts a new message relative to a target message, or as a new root message.
      *
      * @param sessionId The ID of the session.
-     * @param targetMessageId The ID of the target message to insert the new message after.
-     * @param position The position to insert the message at (e.g., BEFORE, AFTER).
+     * @param targetMessageId The ID of the target message to insert relative to. If null, inserts a new root message (position is ignored).
+     * @param position The position to insert the message relative to the target (ABOVE, BELOW, or APPEND). Ignored if targetMessageId is null.
      * @param role The role of the message sender (e.g., USER, ASSISTANT).
      * @param content The content of the new message.
      * @param modelId Optional ID of the model to use for the message.
@@ -286,7 +286,7 @@ interface SessionRepository {
      */
     suspend fun insertMessage(
         sessionId: Long,
-        targetMessageId: Long,
+        targetMessageId: Long?,
         position: MessageInsertPosition,
         role: ChatMessage.Role,
         content: String,
