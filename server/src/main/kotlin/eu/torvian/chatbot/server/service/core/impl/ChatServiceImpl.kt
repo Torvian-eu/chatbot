@@ -8,14 +8,17 @@ import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import arrow.core.right
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
-import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallRequest
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallResult
 import eu.torvian.chatbot.common.models.api.tool.ToolCallApprovalResponse
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
+import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.llm.*
-import eu.torvian.chatbot.common.models.tool.*
+import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
+import eu.torvian.chatbot.common.models.tool.ToolCall
+import eu.torvian.chatbot.common.models.tool.ToolCallStatus
+import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
 import eu.torvian.chatbot.server.data.dao.ToolCallDao
@@ -82,10 +85,18 @@ class ChatServiceImpl(
 
     override suspend fun validateProcessNewMessageRequest(
         sessionId: Long,
+        content: String?,
         parentMessageId: Long?,
         isStreaming: Boolean
     ): Either<ValidateNewMessageError, Pair<ChatSession, LLMConfig>> = transactionScope.transaction {
         either {
+            // 0. Validate content and parentMessageId relationship (Branch & Continue mode)
+            ensure(content != null || parentMessageId != null) {
+                ValidateNewMessageError.ModelConfigurationError(
+                    "Branch & Continue mode requires parentMessageId when content is null"
+                )
+            }
+
             // 1. Validate session
             val session = withError({ daoError: SessionError.SessionNotFound ->
                 ValidateNewMessageError.SessionNotFound(daoError.id)
@@ -175,23 +186,35 @@ class ChatServiceImpl(
         userId: Long,
         session: ChatSession,
         llmConfig: LLMConfig,
-        content: String,
+        content: String?,
         parentMessageId: Long?,
         mcpResponseFlow: Flow<LocalMCPToolCallResult>,
         approvalResponseFlow: Flow<ToolCallApprovalResponse>
     ): Flow<Either<ProcessNewMessageError, MessageEvent>> = channelFlow {
         try {
-            // 1. Save user message
-            val userMessage = saveUserMessage(session.id, content, parentMessageId)
-                .let { (userMessage, updatedParentMessage) ->
-                    send(MessageEvent.UserMessageSaved(userMessage, updatedParentMessage).right())
-                    userMessage
+            // 1. Save user message (only if content is provided)
+            // Track the last message ID for parent reference and build updated message list
+            var lastMessageId: Long
+            val updatedSessionMessages = if (content != null) {
+                val userMessage = saveUserMessage(session.id, content, parentMessageId)
+                    .let { (userMessage, updatedParentMessage) ->
+                        send(MessageEvent.UserMessageSaved(userMessage, updatedParentMessage).right())
+                        userMessage
+                    }
+                lastMessageId = userMessage.id
+                // Append newly created user message to session.messages so buildContext can find it
+                session.messages + userMessage
+            } else {
+                // Branch & Continue mode: no new user message, start from parentMessageId
+                if (parentMessageId == null) {
+                    throw IllegalStateException("parentMessageId is null in Branch & Continue mode")
                 }
-            // Track the last message ID for parent reference
-            var lastMessageId = userMessage.id
+                lastMessageId = parentMessageId
+                session.messages
+            }
 
             // 2. Build context
-            var currentContext: List<RawChatMessage> = buildContext(userMessage, session.messages, session.id)
+            var currentContext: List<RawChatMessage> = buildContext(lastMessageId, updatedSessionMessages, session.id)
 
             // 3. Tool calling loop
             var iterationCount = 0
@@ -275,7 +298,13 @@ class ChatServiceImpl(
                 // Execute tools and update database (emits events as tools complete)
                 // Only execute the valid, pending tool calls
                 val completedToolCalls = mutableListOf<ToolCall>()
-                executeAndUpdateToolCalls(userId, pendingToolCalls, llmConfig.tools, mcpResponseFlow, approvalResponseFlow)
+                executeAndUpdateToolCalls(
+                    userId,
+                    pendingToolCalls,
+                    llmConfig.tools,
+                    mcpResponseFlow,
+                    approvalResponseFlow
+                )
                     .collect { event ->
                         when (event) {
                             is ToolExecutionEvent.ToolCallCompleted -> {
@@ -329,22 +358,35 @@ class ChatServiceImpl(
         userId: Long,
         session: ChatSession,
         llmConfig: LLMConfig,
-        content: String,
+        content: String?,
         parentMessageId: Long?,
         mcpResponseFlow: Flow<LocalMCPToolCallResult>,
         approvalResponseFlow: Flow<ToolCallApprovalResponse>
     ): Flow<Either<ProcessNewMessageError, MessageStreamEvent>> = channelFlow {
         try {
-            // Step 1: Save user message
-            val userMessage = saveUserMessage(session.id, content, parentMessageId)
-                .let { (userMessage, updatedParentMessage) ->
-                    send(MessageStreamEvent.UserMessageSaved(userMessage, updatedParentMessage).right())
-                    userMessage
+            // Step 1: Save user message (only if content is provided)
+            // Track the last message ID for parent reference and build updated message list
+            var lastMessageId: Long
+            val updatedSessionMessages = if (content != null) {
+                val userMessage = saveUserMessage(session.id, content, parentMessageId)
+                    .let { (userMessage, updatedParentMessage) ->
+                        send(MessageStreamEvent.UserMessageSaved(userMessage, updatedParentMessage).right())
+                        userMessage
+                    }
+                lastMessageId = userMessage.id
+                // Append newly created user message to session.messages so buildContext can find it
+                session.messages + userMessage
+            } else {
+                // Branch & Continue mode: no new user message, start from parentMessageId
+                if (parentMessageId == null) {
+                    throw IllegalStateException("parentMessageId is null in Branch & Continue mode")
                 }
+                lastMessageId = parentMessageId
+                session.messages
+            }
 
             // Step 2: Build context
-            var currentContext: List<RawChatMessage> = buildContext(userMessage, session.messages, session.id)
-            var lastMessageId = userMessage.id // Track the last message ID for parent reference
+            var currentContext: List<RawChatMessage> = buildContext(lastMessageId, updatedSessionMessages, session.id)
             var continueLoop = true
             var iterationCount = 0
 
@@ -709,7 +751,7 @@ class ChatServiceImpl(
      * Builds the conversation context for an LLM request.
      *
      * This method constructs a list of [RawChatMessage] objects representing the conversation
-     * thread from root to the current user message. It includes:
+     * thread from root to the starting message. It includes:
      * - User messages
      * - Assistant messages (with linked tool calls)
      * - Tool result messages (reconstructed from ToolCall records)
@@ -718,13 +760,13 @@ class ChatServiceImpl(
      * links from current to root), not all messages in the session. This supports branching
      * conversations where users can create alternative response paths.
      *
-     * @param userMessage The current user message (the one being processed)
+     * @param startingMessageId The ID of the message to start building context from (inclusive)
      * @param sessionMessages All messages in the session (for efficient lookup)
      * @param sessionId The session ID (for fetching tool calls)
-     * @return List of [RawChatMessage] objects in chronological order (root to current)
+     * @return List of [RawChatMessage] objects in chronological order (root to starting message)
      */
     private suspend fun buildContext(
-        userMessage: ChatMessage.UserMessage,
+        startingMessageId: Long,
         sessionMessages: List<ChatMessage>,
         sessionId: Long
     ): List<RawChatMessage> {
@@ -734,9 +776,9 @@ class ChatServiceImpl(
         // Build message map for efficient lookup
         val messageMap = sessionMessages.associateBy { it.id }
 
-        // Traverse up the tree from the current user message to build the thread
+        // Traverse up the tree from the starting message to build the thread
         val threadMessages = mutableListOf<ChatMessage>()
-        var currentMessage: ChatMessage? = userMessage
+        var currentMessage: ChatMessage? = messageMap[startingMessageId]
         val visitedIds = mutableSetOf<Long>()
 
         while (currentMessage != null && !visitedIds.contains(currentMessage.id)) {
@@ -784,7 +826,13 @@ class ChatServiceImpl(
 
                     // Only add results for completed/errored/denied tools
                     messageToolCalls
-                        .filter { it.status != ToolCallStatus.PENDING }
+                        .filter {
+                            it.status in setOf(
+                                ToolCallStatus.SUCCESS,
+                                ToolCallStatus.ERROR,
+                                ToolCallStatus.USER_DENIED
+                            )
+                        }
                         .forEach { toolCall ->
                             rawContext.add(
                                 RawChatMessage.Tool(

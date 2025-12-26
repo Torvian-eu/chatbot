@@ -14,6 +14,7 @@ import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
 import eu.torvian.chatbot.common.models.api.core.ProcessNewMessageRequest
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallRequest
 import eu.torvian.chatbot.common.models.api.tool.ToolCallApprovalResponse
+import eu.torvian.chatbot.common.models.core.ChatMessage
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -76,14 +77,14 @@ class SendMessageUseCase(
     }
 
     /**
-     * Sends the current message content to the active session.
-     * Determines the parent based on reply target or current branch leaf ID.
-     * Branches on streaming settings to use appropriate processing method.
+     * Sends the current message content to the active session, or continues from a specific message.
+     *
+     * @param continueFromMessage When provided, uses Branch & Continue mode: sends null content
+     *                            with this message's ID as parentMessageId to continue the conversation
+     *                            from that point. When null, sends the current input content normally.
      */
-    suspend fun execute() {
+    suspend fun execute(continueFromMessage: ChatMessage? = null) {
         val currentSession = state.currentSession.value ?: return
-        val content = state.inputContent.value.trim()
-        if (content.isBlank()) return // Cannot send empty message
 
         // Check if model or model settings are available
         val currentModel = state.currentModel.value
@@ -97,9 +98,20 @@ class SendMessageUseCase(
             return
         }
 
-        val parentId = state.replyTargetMessage.value?.id ?: currentSession.currentLeafMessageId
+        // Determine content and parent based on mode
+        val (content, parentId) = if (continueFromMessage != null) {
+            // Branch & Continue mode: null content, use specified message as parent
+            logger.info("Branch & Continue from message ${continueFromMessage.id} in session ${currentSession.id}")
+            null to continueFromMessage.id
+        } else {
+            // Regular mode: use input content and determine parent from reply target or current leaf
+            val inputContent = state.inputContent.value.trim()
+            if (inputContent.isBlank()) return // Cannot send empty message
 
-        logger.info("Sending message to session ${currentSession.id}, parent: $parentId")
+            val parent = state.replyTargetMessage.value?.id ?: currentSession.currentLeafMessageId
+            logger.info("Sending message to session ${currentSession.id}, parent: $parent")
+            inputContent to parent
+        }
 
         state.setIsSending(true) // Set sending state to true
 

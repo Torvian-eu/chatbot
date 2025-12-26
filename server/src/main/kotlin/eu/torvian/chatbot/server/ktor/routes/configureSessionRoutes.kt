@@ -201,6 +201,7 @@ fun Route.configureSessionRoutes(
                     withError({ validateError: ValidateNewMessageError -> validateError.toApiError() }) {
                         chatService.validateProcessNewMessageRequest(
                             sessionId,
+                            request.content,
                             request.parentMessageId,
                             request.isStreaming
                         ).bind()

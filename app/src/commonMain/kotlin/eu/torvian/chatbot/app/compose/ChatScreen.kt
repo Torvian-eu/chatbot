@@ -206,6 +206,8 @@ fun ChatScreen(
                 chatViewModel.copyMessageToClipboard(message)
             override fun onCopyThread() =
                 chatViewModel.copyThreadToClipboard()
+            override fun onBranchAndContinue(message: ChatMessage) =
+                chatViewModel.sendMessage(continueFromMessage = message)
 
             override fun onRetryLoadingSession() {
                 selectedSession?.id?.let { sessionId ->

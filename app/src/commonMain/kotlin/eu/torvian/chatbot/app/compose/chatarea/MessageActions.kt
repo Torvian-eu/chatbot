@@ -12,6 +12,7 @@ import eu.torvian.chatbot.common.models.core.ChatMessage
  * @param onReplyMessage Callback for when the user wants to reply to a specific message.
  * @param onDeleteMessage Callback for when the user wants to delete a specific message (single).
  * @param onDeleteThread Callback for when the user wants to delete a message and all its replies (recursive).
+ * @param onBranchAndContinue Callback for when the user wants to branch from a message and continue the conversation.
  */
 data class MessageActions(
     val onSwitchBranchToMessage: (Long) -> Unit,
@@ -21,5 +22,6 @@ data class MessageActions(
     val onReplyMessage: (ChatMessage) -> Unit,
     val onDeleteMessage: (ChatMessage) -> Unit,
     val onDeleteThread: (ChatMessage) -> Unit,
-    val onRequestInsertMessage: (ChatMessage) -> Unit
+    val onRequestInsertMessage: (ChatMessage) -> Unit,
+    val onBranchAndContinue: (ChatMessage) -> Unit
 )

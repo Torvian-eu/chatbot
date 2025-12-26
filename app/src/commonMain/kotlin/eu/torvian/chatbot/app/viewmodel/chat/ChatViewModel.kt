@@ -186,12 +186,16 @@ class ChatViewModel(
     }
 
     /**
-     * Sends the current message content to the active session.
+     * Sends the current message content to the active session, or continues from a specific message.
+     *
+     * @param continueFromMessage When provided, uses Branch & Continue mode: sends null content
+     *                            with this message's ID as parentMessageId to continue the conversation
+     *                            from that point. When null, sends the current input content normally.
      */
-    fun sendMessage() {
+    fun sendMessage(continueFromMessage: ChatMessage? = null) {
         sendMessageJob = normalScope.launch {
             try {
-                sendMessageUC.execute()
+                sendMessageUC.execute(continueFromMessage = continueFromMessage)
             } finally {
                 sendMessageJob = null
             }
