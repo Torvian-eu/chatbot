@@ -126,4 +126,12 @@ interface ChatAreaActions {
      * Callback for when the user wants to copy the entire message thread to the clipboard.
      */
     fun onCopyThread()
+
+    /**
+     * Callback for when the user wants to branch and continue the conversation from a specific message.
+     * This creates a new assistant response as a sibling of the message's children (or as the first
+     * child if the message is a leaf). The LLM context will be the thread from root to the specified message.
+     * @param message The message to continue from.
+     */
+    fun onBranchAndContinue(message: ChatMessage)
 }

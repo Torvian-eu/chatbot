@@ -285,6 +285,13 @@ private fun MoreActionsMenu(
                 onDismissMenu = { onExpandedChange(false) }
             )
 
+            // Branch & Continue action
+            BranchAndContinueMenuItem(
+                message = message,
+                onBranchAndContinue = messageActions.onBranchAndContinue,
+                onDismissMenu = { onExpandedChange(false) }
+            )
+
             // Future: Add more menu items here as needed
             // e.g., "Pin message", "Bookmark", "Share", etc.
         }
@@ -336,6 +343,33 @@ private fun DeleteThreadMenuItem(
                 Icons.Default.DeleteSweep,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.error
+            )
+        }
+    )
+}
+
+/**
+ * Menu item for Branch & Continue action.
+ * This allows the user to continue the conversation from any message,
+ * creating a new branch (sibling) if the message is not a leaf.
+ */
+@Composable
+private fun BranchAndContinueMenuItem(
+    message: ChatMessage,
+    onBranchAndContinue: (ChatMessage) -> Unit,
+    onDismissMenu: () -> Unit
+) {
+    DropdownMenuItem(
+        text = { Text("Branch & Continue") },
+        onClick = {
+            onDismissMenu()
+            onBranchAndContinue(message)
+        },
+        leadingIcon = {
+            Icon(
+                Icons.Default.PlayArrow,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     )

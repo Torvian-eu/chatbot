@@ -90,6 +90,7 @@ fun ChatAreaPreview() {
             override fun onShowToolCallDetails(toolCall: ToolCall) {}
             override fun onCopyMessage(message: ChatMessage) {}
             override fun onCopyThread() {}
+            override fun onBranchAndContinue(message: ChatMessage) {}
         }
     )
 }
