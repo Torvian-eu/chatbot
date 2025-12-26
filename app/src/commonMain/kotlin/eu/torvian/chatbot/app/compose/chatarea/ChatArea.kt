@@ -133,8 +133,7 @@ private fun SuccessStateDisplay(
             onRequestInsertMessage = actions::onRequestInsertMessage,
             onCopyMessage = actions::onCopyMessage,
             onBranchAndContinue = actions::onBranchAndContinue,
-            // TODO: Wire up regenerate action when available
-            onRegenerateMessage = null
+            onRegenerateMessage = actions::onRegenerateMessage
         )
     }
 

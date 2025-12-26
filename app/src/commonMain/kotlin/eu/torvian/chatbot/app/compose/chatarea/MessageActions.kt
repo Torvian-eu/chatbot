@@ -18,7 +18,7 @@ data class MessageActions(
     val onSwitchBranchToMessage: (Long) -> Unit,
     val onEditMessage: (ChatMessage) -> Unit,
     val onCopyMessage: ((ChatMessage) -> Unit),
-    val onRegenerateMessage: ((ChatMessage) -> Unit)? = null,
+    val onRegenerateMessage: ((ChatMessage) -> Unit),
     val onReplyMessage: (ChatMessage) -> Unit,
     val onDeleteMessage: (ChatMessage) -> Unit,
     val onDeleteThread: (ChatMessage) -> Unit,

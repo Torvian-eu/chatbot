@@ -140,4 +140,11 @@ interface ChatAreaActions {
      * @param message The message to continue from.
      */
     fun onBranchAndContinue(message: ChatMessage)
+
+    /**
+     * Callback for when the user wants to regenerate an assistant message.
+     * This is functionally equivalent to "Branch & Continue" from the message's parent.
+     * @param message The assistant message to regenerate.
+     */
+    fun onRegenerateMessage(message: ChatMessage)
 }
