@@ -19,12 +19,13 @@ interface SessionService {
 
     /**
      * Creates a new chat session owned by the specified user.
+     *
      * @param userId The ID of the user who will own the session.
-     * @param name Optional name for the session. If null or blank, a default name may be generated.
+     * @param name Required non-blank session name.
      * @return Either a [CreateSessionError] if the request is invalid or creation fails,
      *         or the newly created [ChatSession].
      */
-    suspend fun createSession(userId: Long, name: String?): Either<CreateSessionError, ChatSession>
+    suspend fun createSession(userId: Long, name: String): Either<CreateSessionError, ChatSession>
 
     /**
      * Retrieves full details for a specific chat session, including all messages.

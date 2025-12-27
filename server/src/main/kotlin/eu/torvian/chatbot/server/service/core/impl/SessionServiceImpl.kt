@@ -37,17 +37,17 @@ class SessionServiceImpl(
         }
     }
 
-    override suspend fun createSession(userId: Long, name: String?): Either<CreateSessionError, ChatSession> =
+    override suspend fun createSession(userId: Long, name: String): Either<CreateSessionError, ChatSession> =
         transactionScope.transaction {
             either {
-                ensure(!(name != null && name.isBlank())) {
+                ensure(name.isNotBlank()) {
                     CreateSessionError.InvalidName("Session name cannot be blank.")
                 }
 
                 val session = withError({ daoError: SessionError.ForeignKeyViolation ->
                     CreateSessionError.InvalidRelatedEntity(daoError.message)
                 }) {
-                    sessionDao.insertSession(name ?: "New Chat").bind()
+                    sessionDao.insertSession(name).bind()
                 }
 
                 // Set ownership for the newly created session
