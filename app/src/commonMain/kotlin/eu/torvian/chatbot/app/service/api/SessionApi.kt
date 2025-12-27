@@ -137,6 +137,18 @@ interface SessionApi {
     suspend fun updateSessionGroup(sessionId: Long, request: UpdateSessionGroupRequest): Either<ApiResourceError, Unit>
 
     /**
+     * Clones an existing chat session with all its messages, tool calls, and configuration.
+     *
+     * Corresponds to `POST /api/v1/sessions/{sessionId}/clone`.
+     *
+     * @param sessionId The ID of the session to clone.
+     * @param name The name for the cloned session.
+     * @return [Either.Right] containing the newly created [ChatSession] object on success,
+     *         or [Either.Left] containing an [ApiResourceError] on failure.
+     */
+    suspend fun cloneSession(sessionId: Long, name: String): Either<ApiResourceError, ChatSession>
+
+    /**
      * Retrieves all tool calls for a specific chat session.
      * Useful for building context about tool execution history and for audit trails.
      *

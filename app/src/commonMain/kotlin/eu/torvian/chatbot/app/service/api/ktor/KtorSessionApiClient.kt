@@ -5,6 +5,7 @@ import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.SessionApi
 import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.models.api.core.CreateSessionRequest
+import eu.torvian.chatbot.common.models.api.core.CloneSessionRequest
 import eu.torvian.chatbot.common.models.api.core.UpdateSessionGroupRequest
 import eu.torvian.chatbot.common.models.api.core.UpdateSessionLeafMessageRequest
 import eu.torvian.chatbot.common.models.api.core.UpdateSessionModelRequest
@@ -126,6 +127,19 @@ class KtorSessionApiClient(client: HttpClient) : BaseApiResourceClient(client), 
             client.put(SessionResource.ById.Group(SessionResource.ById(sessionId = sessionId))) {
                 setBody(request)
             }.body<Unit>() // Expect Unit body (HTTP 200/204)
+        }
+    }
+
+    override suspend fun cloneSession(
+        sessionId: Long,
+        name: String
+    ): Either<ApiResourceError, ChatSession> {
+        // Use safeApiCall to wrap the Ktor request
+        return safeApiCall {
+            // Use Ktor resources: /api/v1/sessions/{sessionId}/clone
+            client.post(SessionResource.ById.Clone(SessionResource.ById(sessionId = sessionId))) {
+                setBody(CloneSessionRequest(name = name))
+            }.body<ChatSession>() // Expect a ChatSession on success (HTTP 201)
         }
     }
 
