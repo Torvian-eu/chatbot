@@ -149,6 +149,9 @@ fun ChatScreen(
             override fun onShowDeleteSessionDialog(sessionId: Long) =
                 sessionListViewModel.showDeleteSessionDialog(sessionId)
 
+            override fun onShowCloneSessionDialog(session: ChatSessionSummary) =
+                sessionListViewModel.showCloneSessionDialog(session)
+
             override fun onShowAssignGroupDialog(session: ChatSessionSummary) =
                 sessionListViewModel.showAssignGroupDialog(session)
 

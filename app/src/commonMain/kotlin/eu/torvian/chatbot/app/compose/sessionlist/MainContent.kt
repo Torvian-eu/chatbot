@@ -98,6 +98,7 @@ fun MainContent(
                             onClick = onSessionSelected,
                             onRename = dialogRequestActions.onRenameSessionRequested,
                             onDelete = dialogRequestActions.onDeleteSessionRequested,
+                            onClone = dialogRequestActions.onCloneSessionRequested,
                             onAssignToGroup = dialogRequestActions.onAssignToGroupRequested
                         )
                     }

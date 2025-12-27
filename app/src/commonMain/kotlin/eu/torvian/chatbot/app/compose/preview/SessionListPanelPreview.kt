@@ -48,6 +48,7 @@ fun SessionListPanelPreview() {
         override fun onShowNewSessionDialog() {}
         override fun onShowRenameSessionDialog(session: ChatSessionSummary) {}
         override fun onShowDeleteSessionDialog(sessionId: Long) {}
+        override fun onShowCloneSessionDialog(session: ChatSessionSummary) {}
         override fun onShowAssignGroupDialog(session: ChatSessionSummary) {}
         override fun onShowDeleteGroupDialog(groupId: Long) {}
     }

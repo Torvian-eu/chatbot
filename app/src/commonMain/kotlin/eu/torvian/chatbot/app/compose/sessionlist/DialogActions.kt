@@ -8,6 +8,7 @@ import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 data class DialogActions(
     val onRenameSessionRequested: (ChatSessionSummary) -> Unit,
     val onDeleteSessionRequested: (Long) -> Unit,
+    val onCloneSessionRequested: (ChatSessionSummary) -> Unit,
     val onAssignToGroupRequested: (ChatSessionSummary) -> Unit,
     val onDeleteGroupRequested: (Long) -> Unit
 )
