@@ -5,17 +5,14 @@ import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
-import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.repository.UserRepository
+import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.service.api.UserApi
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.models.user.Role
 import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.common.models.user.UserWithDetails
-import eu.torvian.chatbot.common.models.api.admin.AssignRoleRequest
-import eu.torvian.chatbot.common.models.api.admin.ChangePasswordRequest
-import eu.torvian.chatbot.common.models.api.admin.UpdateUserRequest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -83,9 +80,9 @@ class DefaultUserRepository(
         )
     }
 
-    override suspend fun updateUser(userId: Long, request: UpdateUserRequest): Either<RepositoryError, User> {
+    override suspend fun updateUser(userId: Long, username: String, email: String?): Either<RepositoryError, User> {
         logger.info("Updating user ID: $userId")
-        return userApi.updateUser(userId, request).fold(
+        return userApi.updateUser(userId, username, email).fold(
             ifLeft = { apiResourceError ->
                 val repositoryError = apiResourceError.toRepositoryError("Failed to update user ID: $userId")
                 logger.warn("Failed to update user ID: $userId: ${repositoryError.message}")
@@ -137,7 +134,8 @@ class DefaultUserRepository(
         logger.info("Updating password change required flag for user ID: $userId to $requiresPasswordChange")
         return userApi.updatePasswordChangeRequired(userId, requiresPasswordChange).fold(
             ifLeft = { apiResourceError ->
-                val repositoryError = apiResourceError.toRepositoryError("Failed to update password change required for user ID: $userId")
+                val repositoryError =
+                    apiResourceError.toRepositoryError("Failed to update password change required for user ID: $userId")
                 logger.warn("Failed to update password change required for user ID: $userId: ${repositoryError.message}")
                 repositoryError.left()
             },
@@ -188,9 +186,10 @@ class DefaultUserRepository(
 
     override suspend fun assignRoleToUser(userId: Long, role: Role): Either<RepositoryError, Unit> {
         logger.info("Assigning role '${role.name}' to user ID: $userId")
-        return userApi.assignRoleToUser(userId, AssignRoleRequest(role.id)).fold(
+        return userApi.assignRoleToUser(userId, role.id).fold(
             ifLeft = { apiResourceError ->
-                val repositoryError = apiResourceError.toRepositoryError("Failed to assign role '${role.name}' to user ID: $userId")
+                val repositoryError =
+                    apiResourceError.toRepositoryError("Failed to assign role '${role.name}' to user ID: $userId")
                 logger.warn("Failed to assign role '${role.name}' to user ID: $userId: ${repositoryError.message}")
                 repositoryError.left()
             },
@@ -212,7 +211,8 @@ class DefaultUserRepository(
         logger.info("Revoking role '${role.name}' from user ID: $userId")
         return userApi.revokeRoleFromUser(userId, role.id).fold(
             ifLeft = { apiResourceError ->
-                val repositoryError = apiResourceError.toRepositoryError("Failed to revoke role '${role.name}' from user ID: $userId")
+                val repositoryError =
+                    apiResourceError.toRepositoryError("Failed to revoke role '${role.name}' from user ID: $userId")
                 logger.warn("Failed to revoke role '${role.name}' from user ID: $userId: ${repositoryError.message}")
                 repositoryError.left()
             },
@@ -230,11 +230,12 @@ class DefaultUserRepository(
         )
     }
 
-    override suspend fun changeUserPassword(userId: Long, request: ChangePasswordRequest): Either<RepositoryError, Unit> {
+    override suspend fun changeUserPassword(userId: Long, newPassword: String): Either<RepositoryError, Unit> {
         logger.info("Changing password for user ID: $userId")
-        return userApi.changeUserPassword(userId, request).fold(
+        return userApi.changeUserPassword(userId, newPassword).fold(
             ifLeft = { apiResourceError ->
-                val repositoryError = apiResourceError.toRepositoryError("Failed to change password for user ID: $userId")
+                val repositoryError =
+                    apiResourceError.toRepositoryError("Failed to change password for user ID: $userId")
                 logger.warn("Failed to change password for user ID: $userId: ${repositoryError.message}")
                 repositoryError.left()
             },

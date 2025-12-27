@@ -5,23 +5,19 @@ import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.ProviderApi
 import eu.torvian.chatbot.common.api.resources.ProviderResource
 import eu.torvian.chatbot.common.api.resources.ProviderResource.ById
-import eu.torvian.chatbot.common.api.resources.ProviderResource.ById.Credential
-import eu.torvian.chatbot.common.api.resources.ProviderResource.ById.Models
+import eu.torvian.chatbot.common.api.resources.ProviderResource.ById.*
+import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
+import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
+import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
 import eu.torvian.chatbot.common.models.api.llm.AddProviderRequest
+import eu.torvian.chatbot.common.models.api.llm.UpdateProviderCredentialRequest
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
-import eu.torvian.chatbot.common.models.api.llm.UpdateProviderCredentialRequest
+import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.resources.*
 import io.ktor.client.request.*
-import eu.torvian.chatbot.common.api.resources.ProviderResource.ById.Details
-import eu.torvian.chatbot.common.api.resources.ProviderResource.ById.Access
-import eu.torvian.chatbot.common.api.resources.ProviderResource.ById.MakePublic
-import eu.torvian.chatbot.common.api.resources.ProviderResource.ById.MakePrivate
-import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
-import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
-import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
 
 /**
  * Ktor HttpClient implementation of the [ProviderApi] interface.
@@ -40,10 +36,24 @@ class KtorProviderApiClient(client: HttpClient) : BaseApiResourceClient(client),
         }
     }
 
-    override suspend fun addProvider(request: AddProviderRequest): Either<ApiResourceError, LLMProvider> {
+    override suspend fun addProvider(
+        name: String,
+        description: String,
+        baseUrl: String,
+        type: LLMProviderType,
+        credential: String?
+    ): Either<ApiResourceError, LLMProvider> {
         return safeApiCall {
             client.post(ProviderResource()) {
-                setBody(request)
+                setBody(
+                    AddProviderRequest(
+                        name = name,
+                        description = description,
+                        baseUrl = baseUrl,
+                        type = type,
+                        credential = credential
+                    )
+                )
             }.body<LLMProvider>()
         }
     }
@@ -73,11 +83,11 @@ class KtorProviderApiClient(client: HttpClient) : BaseApiResourceClient(client),
 
     override suspend fun updateProviderCredential(
         providerId: Long,
-        request: UpdateProviderCredentialRequest
+        credential: String?
     ): Either<ApiResourceError, Unit> {
         return safeApiCall {
             client.put(Credential(ById(providerId = providerId))) {
-                setBody(request)
+                setBody(UpdateProviderCredentialRequest(credential = credential))
             }.body<Unit>()
         }
     }
@@ -114,22 +124,24 @@ class KtorProviderApiClient(client: HttpClient) : BaseApiResourceClient(client),
 
     override suspend fun grantProviderAccess(
         providerId: Long,
-        request: GrantAccessRequest
+        groupId: Long,
+        accessMode: String
     ): Either<ApiResourceError, Unit> {
         return safeApiCall {
             client.post(Access(ById(providerId = providerId))) {
-                setBody(request)
+                setBody(GrantAccessRequest(groupId = groupId, accessMode = accessMode))
             }.body<Unit>()
         }
     }
 
     override suspend fun revokeProviderAccess(
         providerId: Long,
-        request: RevokeAccessRequest
+        groupId: Long,
+        accessMode: String
     ): Either<ApiResourceError, Unit> {
         return safeApiCall {
             client.delete(Access(ById(providerId = providerId))) {
-                setBody(request)
+                setBody(RevokeAccessRequest(groupId = groupId, accessMode = accessMode))
             }.body<Unit>()
         }
     }

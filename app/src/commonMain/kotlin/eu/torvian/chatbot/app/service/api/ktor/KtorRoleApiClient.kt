@@ -4,9 +4,9 @@ import arrow.core.Either
 import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.RoleApi
 import eu.torvian.chatbot.common.api.resources.RoleResource
-import eu.torvian.chatbot.common.models.user.Role
 import eu.torvian.chatbot.common.models.api.admin.CreateRoleRequest
 import eu.torvian.chatbot.common.models.api.admin.UpdateRoleRequest
+import eu.torvian.chatbot.common.models.user.Role
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.resources.*
@@ -33,17 +33,17 @@ class KtorRoleApiClient(
             client.get(RoleResource.ById(roleId = id)).body<Role>()
         }
 
-    override suspend fun createRole(request: CreateRoleRequest): Either<ApiResourceError, Role> =
+    override suspend fun createRole(name: String, description: String?): Either<ApiResourceError, Role> =
         safeApiCall {
             client.post(RoleResource()) {
-                setBody(request)
+                setBody(CreateRoleRequest(name = name, description = description))
             }.body<Role>()
         }
 
-    override suspend fun updateRole(id: Long, request: UpdateRoleRequest): Either<ApiResourceError, Role> =
+    override suspend fun updateRole(id: Long, name: String, description: String?): Either<ApiResourceError, Role> =
         safeApiCall {
             client.put(RoleResource.ById(roleId = id)) {
-                setBody(request)
+                setBody(UpdateRoleRequest(name = name, description = description))
             }.body<Role>()
         }
 

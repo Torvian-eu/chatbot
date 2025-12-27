@@ -3,8 +3,6 @@ package eu.torvian.chatbot.app.repository
 import arrow.core.Either
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.common.models.core.ChatGroup
-import eu.torvian.chatbot.common.models.api.core.CreateGroupRequest
-import eu.torvian.chatbot.common.models.api.core.RenameGroupRequest
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -19,10 +17,10 @@ import kotlinx.coroutines.flow.StateFlow
  * all observers when changes occur, ensuring data consistency across the application.
  */
 interface GroupRepository {
-    
+
     /**
      * Reactive stream of all chat session groups.
-     * 
+     *
      * This StateFlow provides real-time updates whenever the group data changes,
      * allowing ViewModels and other consumers to automatically react to data changes
      * without manual refresh operations.
@@ -48,10 +46,10 @@ interface GroupRepository {
      * Upon successful creation, the new group is automatically added to the internal
      * StateFlow, triggering updates to all observers.
      *
-     * @param request The group creation request containing the name for the new group
+     * @param name The name for the new group
      * @return Either.Right with the created ChatGroup on success, or Either.Left with RepositoryError on failure
      */
-    suspend fun createGroup(request: CreateGroupRequest): Either<RepositoryError, ChatGroup>
+    suspend fun createGroup(name: String): Either<RepositoryError, ChatGroup>
 
     /**
      * Renames an existing chat session group.
@@ -60,10 +58,10 @@ interface GroupRepository {
      * internal StateFlow, triggering updates to all observers.
      *
      * @param groupId The unique identifier of the group to rename
-     * @param request The rename request containing the new name
+     * @param name The new name for the group
      * @return Either.Right with Unit on successful update, or Either.Left with RepositoryError on failure
      */
-    suspend fun renameGroup(groupId: Long, request: RenameGroupRequest): Either<RepositoryError, Unit>
+    suspend fun renameGroup(groupId: Long, name: String): Either<RepositoryError, Unit>
 
     /**
      * Deletes a chat session group.

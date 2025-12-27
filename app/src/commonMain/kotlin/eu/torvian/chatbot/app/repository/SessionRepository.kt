@@ -2,7 +2,9 @@ package eu.torvian.chatbot.app.repository
 
 import arrow.core.Either
 import eu.torvian.chatbot.app.domain.contracts.DataState
-import eu.torvian.chatbot.common.models.api.core.*
+import eu.torvian.chatbot.common.models.api.core.ChatClientEvent
+import eu.torvian.chatbot.common.models.api.core.ChatEvent
+import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
@@ -86,10 +88,10 @@ interface SessionRepository {
      * Upon successful creation, the new session is automatically added to the internal
      * StateFlow, triggering updates to all observers.
      *
-     * @param request The session creation request containing optional name and other details
+     * @param name Optional name for the new session
      * @return Either.Right with the created ChatSession on success, or Either.Left with RepositoryError on failure
      */
-    suspend fun createSession(request: CreateSessionRequest): Either<RepositoryError, ChatSession>
+    suspend fun createSession(name: String? = null): Either<RepositoryError, ChatSession>
 
     /**
      * Loads the full details of a specific chat session, including all its messages.
@@ -133,10 +135,10 @@ interface SessionRepository {
      * internal StateFlow, triggering updates to all observers.
      *
      * @param sessionId The unique identifier of the session to rename
-     * @param request The update request containing the new name
+     * @param name The new name for the session
      * @return Either.Right with Unit on successful update, or Either.Left with RepositoryError on failure
      */
-    suspend fun updateSessionName(sessionId: Long, request: UpdateSessionNameRequest): Either<RepositoryError, Unit>
+    suspend fun updateSessionName(sessionId: Long, name: String): Either<RepositoryError, Unit>
 
     /**
      * Updates the currently selected LLM model for a specific chat session.
@@ -145,10 +147,10 @@ interface SessionRepository {
      * will emit the updated session, triggering updates to all its observers.
      *
      * @param sessionId The unique identifier of the session
-     * @param request The update request containing the new optional model ID
+     * @param modelId The new optional model ID for the session
      * @return Either.Right with Unit on successful update, or Either.Left with RepositoryError on failure
      */
-    suspend fun updateSessionModel(sessionId: Long, request: UpdateSessionModelRequest): Either<RepositoryError, Unit>
+    suspend fun updateSessionModel(sessionId: Long, modelId: Long?): Either<RepositoryError, Unit>
 
     /**
      * Updates the currently selected settings profile for a specific chat session.
@@ -157,12 +159,12 @@ interface SessionRepository {
      * will emit the updated session, triggering updates to all its observers.
      *
      * @param sessionId The unique identifier of the session
-     * @param request The update request containing the new optional settings ID
+     * @param settingsId The new optional settings ID for the session
      * @return Either.Right with Unit on successful update, or Either.Left with RepositoryError on failure
      */
     suspend fun updateSessionSettings(
         sessionId: Long,
-        request: UpdateSessionSettingsRequest
+        settingsId: Long?
     ): Either<RepositoryError, Unit>
 
     /**
@@ -172,12 +174,12 @@ interface SessionRepository {
      * will emit the updated session, triggering updates to all its observers.
      *
      * @param sessionId The unique identifier of the session
-     * @param request The update request containing the new optional leaf message ID
+     * @param leafMessageId The new optional leaf message ID for the session
      * @return Either.Right with Unit on successful update, or Either.Left with RepositoryError on failure
      */
     suspend fun updateSessionLeafMessage(
         sessionId: Long,
-        request: UpdateSessionLeafMessageRequest
+        leafMessageId: Long?
     ): Either<RepositoryError, Unit>
 
     /**
@@ -187,10 +189,22 @@ interface SessionRepository {
      * internal StateFlow, triggering updates to all observers.
      *
      * @param sessionId The unique identifier of the session to assign
-     * @param request The update request containing the new optional group ID
+     * @param groupId The new optional group ID for the session
      * @return Either.Right with Unit on successful update, or Either.Left with RepositoryError on failure
      */
-    suspend fun updateSessionGroup(sessionId: Long, request: UpdateSessionGroupRequest): Either<RepositoryError, Unit>
+    suspend fun updateSessionGroup(sessionId: Long, groupId: Long?): Either<RepositoryError, Unit>
+
+    /**
+     * Clones an existing chat session with all its messages, tool calls, and configuration.
+     *
+     * Upon successful creation, the new session is automatically added to the internal
+     * StateFlow, triggering updates to all observers.
+     *
+     * @param sessionId The unique identifier of the session to clone
+     * @param name The name for the cloned session
+     * @return Either.Right with the cloned ChatSession on success, or Either.Left with RepositoryError on failure
+     */
+    suspend fun cloneSession(sessionId: Long, name: String): Either<RepositoryError, ChatSession>
 
     // --- Chat Message Operations ---
 
@@ -238,13 +252,13 @@ interface SessionRepository {
      *
      * @param messageId The ID of the message to update
      * @param sessionId The ID of the session containing the message
-     * @param request The update request containing the new content
+     * @param content The new content for the message
      * @return Either.Right with Unit on successful update, or Either.Left with RepositoryError on failure
      */
     suspend fun updateMessageContent(
         messageId: Long,
         sessionId: Long,
-        request: UpdateMessageRequest
+        content: String
     ): Either<RepositoryError, Unit>
 
     /**

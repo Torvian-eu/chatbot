@@ -2,8 +2,6 @@ package eu.torvian.chatbot.app.service.api
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.user.Role
-import eu.torvian.chatbot.common.models.api.admin.CreateRoleRequest
-import eu.torvian.chatbot.common.models.api.admin.UpdateRoleRequest
 
 /**
  * API client interface for role management operations.
@@ -31,19 +29,21 @@ interface RoleApi {
     /**
      * Creates a new role with the specified details.
      *
-     * @param request The role creation request containing name and description
+     * @param name The name of the role
+     * @param description Optional description of the role
      * @return Either [ApiResourceError] if request fails, or the newly created [Role]
      */
-    suspend fun createRole(request: CreateRoleRequest): Either<ApiResourceError, Role>
+    suspend fun createRole(name: String, description: String? = null): Either<ApiResourceError, Role>
 
     /**
      * Updates an existing role with new details.
      *
      * @param id The unique identifier of the role to update
-     * @param request The role update request containing new name and description
+     * @param name The new name for the role
+     * @param description The new description for the role
      * @return Either [ApiResourceError] if request fails, or the updated [Role]
      */
-    suspend fun updateRole(id: Long, request: UpdateRoleRequest): Either<ApiResourceError, Role>
+    suspend fun updateRole(id: Long, name: String, description: String? = null): Either<ApiResourceError, Role>
 
     /**
      * Deletes a role by its unique ID.

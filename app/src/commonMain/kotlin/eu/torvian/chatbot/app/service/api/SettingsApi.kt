@@ -1,10 +1,8 @@
 package eu.torvian.chatbot.app.service.api
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.llm.ModelSettings
-import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
-import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
 import eu.torvian.chatbot.common.models.api.access.ModelSettingsDetails
+import eu.torvian.chatbot.common.models.llm.ModelSettings
 
 /**
  * Frontend API interface for interacting with Model Settings Profile-related endpoints.
@@ -126,12 +124,14 @@ interface SettingsApi {
      * Corresponds to `POST /api/v1/settings/{settingsId}/access`.
      *
      * @param settingsId The ID of the settings profile
-     * @param request The grant access request containing groupId and accessMode
+     * @param groupId The ID of the user group to grant access to
+     * @param accessMode The access mode to grant (READ, WRITE, ADMIN)
      * @return Either.Right with [Unit] on success, or Either.Left with [ApiResourceError] on failure
      */
     suspend fun grantSettingsAccess(
         settingsId: Long,
-        request: GrantAccessRequest
+        groupId: Long,
+        accessMode: String
     ): Either<ApiResourceError, Unit>
 
     /**
@@ -140,11 +140,13 @@ interface SettingsApi {
      * Corresponds to `DELETE /api/v1/settings/{settingsId}/access`.
      *
      * @param settingsId The ID of the settings profile
-     * @param request The revoke access request containing groupId and accessMode
+     * @param groupId The ID of the user group to revoke access from
+     * @param accessMode The access mode to revoke (READ, WRITE, ADMIN)
      * @return Either.Right with [Unit] on success, or Either.Left with [ApiResourceError] on failure
      */
     suspend fun revokeSettingsAccess(
         settingsId: Long,
-        request: RevokeAccessRequest
+        groupId: Long,
+        accessMode: String
     ): Either<ApiResourceError, Unit>
 }

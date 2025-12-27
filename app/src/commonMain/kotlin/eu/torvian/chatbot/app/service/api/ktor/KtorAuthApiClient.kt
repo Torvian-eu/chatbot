@@ -4,15 +4,15 @@ import arrow.core.Either
 import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.AuthApi
 import eu.torvian.chatbot.common.api.resources.AuthResource
-import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.api.auth.LoginRequest
 import eu.torvian.chatbot.common.models.api.auth.LoginResponse
 import eu.torvian.chatbot.common.models.api.auth.RefreshTokenRequest
 import eu.torvian.chatbot.common.models.api.auth.RegisterRequest
+import eu.torvian.chatbot.common.models.user.User
 import io.ktor.client.*
 import io.ktor.client.call.*
-import io.ktor.client.plugins.auth.authProvider
-import io.ktor.client.plugins.auth.providers.BearerAuthProvider
+import io.ktor.client.plugins.auth.*
+import io.ktor.client.plugins.auth.providers.*
 import io.ktor.client.plugins.resources.*
 import io.ktor.client.request.*
 
@@ -32,28 +32,28 @@ class KtorAuthApiClient(
     private val authenticatedClient: HttpClient
 ) : BaseApiResourceClient(unauthenticatedClient), AuthApi {
 
-    override suspend fun refreshToken(request: RefreshTokenRequest): Either<ApiResourceError, LoginResponse> {
+    override suspend fun refreshToken(refreshToken: String): Either<ApiResourceError, LoginResponse> {
         return safeApiCall {
             authenticatedClient.authProvider<BearerAuthProvider>()?.clearToken()
             unauthenticatedClient.post(AuthResource.Refresh()) {
-                setBody(request)
+                setBody(RefreshTokenRequest(refreshToken = refreshToken))
             }.body<LoginResponse>()
         }
     }
 
-    override suspend fun login(request: LoginRequest): Either<ApiResourceError, LoginResponse> {
+    override suspend fun login(username: String, password: String): Either<ApiResourceError, LoginResponse> {
         return safeApiCall {
             authenticatedClient.authProvider<BearerAuthProvider>()?.clearToken()
             unauthenticatedClient.post(AuthResource.Login()) {
-                setBody(request)
+                setBody(LoginRequest(username = username, password = password))
             }.body<LoginResponse>()
         }
     }
 
-    override suspend fun register(request: RegisterRequest): Either<ApiResourceError, User> {
+    override suspend fun register(username: String, password: String, email: String?): Either<ApiResourceError, User> {
         return safeApiCall {
             unauthenticatedClient.post(AuthResource.Register()) {
-                setBody(request)
+                setBody(RegisterRequest(username = username, password = password, email = email))
             }.body<User>()
         }
     }

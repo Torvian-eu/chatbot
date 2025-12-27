@@ -7,7 +7,6 @@ import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.util.ThreadBuilder
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionLeafMessageRequest
 
 /**
  * Use case for switching the currently displayed chat branch.
@@ -48,10 +47,9 @@ class SwitchBranchUseCase(
         if (currentSession.currentLeafMessageId == finalLeafId) return // Already on this exact branch
 
         logger.info("Switching branch to message $targetMessageId (leaf: $finalLeafId) for session ${currentSession.id}")
-
         sessionRepository.updateSessionLeafMessage(
             sessionId = currentSession.id,
-            request = UpdateSessionLeafMessageRequest(leafMessageId = finalLeafId)
+            leafMessageId = finalLeafId
         ).fold(
             ifLeft = { repositoryError ->
                 logger.error("Switch branch repository error: ${repositoryError.message}")

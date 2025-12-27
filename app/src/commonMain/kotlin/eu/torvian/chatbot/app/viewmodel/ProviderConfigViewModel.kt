@@ -11,22 +11,11 @@ import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.UserGroupRepository
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.api.AccessMode
-import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
 import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
-import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
-import eu.torvian.chatbot.common.models.api.llm.AddProviderRequest
 import eu.torvian.chatbot.common.models.llm.LLMProvider
-import eu.torvian.chatbot.common.models.api.llm.UpdateProviderCredentialRequest
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 /**
@@ -69,7 +58,8 @@ class ProviderConfigViewModel(
      * The state of the list of all configured LLM providers (E4.S9).
      * Includes loading, success with data, or error states.
      */
-    val providersState: StateFlow<DataState<RepositoryError, List<LLMProviderDetails>>> = providerRepository.providersDetails
+    val providersState: StateFlow<DataState<RepositoryError, List<LLMProviderDetails>>> =
+        providerRepository.providersDetails
 
     /**
      * The currently selected provider in the master-detail UI.
@@ -192,7 +182,7 @@ class ProviderConfigViewModel(
             // Set loading state
             _dialogState.value = dialogState.copy(isUpdatingCredential = true)
 
-            providerRepository.updateProviderCredential(provider.id, UpdateProviderCredentialRequest(credential))
+            providerRepository.updateProviderCredential(provider.id, credential)
                 .fold(
                     ifLeft = { error ->
                         _dialogState.update { state ->
@@ -359,7 +349,8 @@ class ProviderConfigViewModel(
         viewModelScope.launch(uiDispatcher) {
             providerRepository.grantProviderAccess(
                 providerId,
-                GrantAccessRequest(groupId = groupId, accessMode = accessMode)
+                groupId,
+                accessMode
             ).fold(
                 ifLeft = { error ->
                     notificationService.repositoryError(
@@ -389,7 +380,8 @@ class ProviderConfigViewModel(
         viewModelScope.launch(uiDispatcher) {
             providerRepository.revokeProviderAccess(
                 providerId,
-                RevokeAccessRequest(groupId = groupId, accessMode = accessMode)
+                groupId,
+                accessMode
             ).fold(
                 ifLeft = { error ->
                     notificationService.repositoryError(
@@ -425,14 +417,14 @@ class ProviderConfigViewModel(
         }
 
         viewModelScope.launch(uiDispatcher) {
-            val request = AddProviderRequest(
+            val credential = form.credential.takeIf { it.isNotBlank() } // Only send if not blank
+            providerRepository.addProvider(
                 name = form.name.trim(),
                 description = form.description.trim(),
                 baseUrl = form.baseUrl.trim(),
                 type = form.type,
-                credential = form.credential.takeIf { it.isNotBlank() } // Only send if not blank
+                credential = credential
             )
-            providerRepository.addProvider(request)
                 .fold(
                     ifLeft = { error ->
                         updateProviderForm { it.withError("Error adding provider: ${error.message}") }

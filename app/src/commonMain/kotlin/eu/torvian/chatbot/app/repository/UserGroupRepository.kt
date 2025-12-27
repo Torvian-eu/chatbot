@@ -4,9 +4,6 @@ import arrow.core.Either
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.user.UserGroup
-import eu.torvian.chatbot.common.models.api.admin.AddUserToGroupRequest
-import eu.torvian.chatbot.common.models.api.admin.CreateUserGroupRequest
-import eu.torvian.chatbot.common.models.api.admin.UpdateUserGroupRequest
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -59,10 +56,11 @@ interface UserGroupRepository {
      * Upon successful creation, the new group is automatically added to the internal
      * StateFlow, triggering updates to all observers.
      *
-     * @param request The group creation request containing name and description
+     * @param name The name of the new group
+     * @param description Optional description of the group
      * @return Either.Right with the created UserGroup on success, or Either.Left with RepositoryError on failure
      */
-    suspend fun createGroup(request: CreateUserGroupRequest): Either<RepositoryError, UserGroup>
+    suspend fun createGroup(name: String, description: String? = null): Either<RepositoryError, UserGroup>
 
     /**
      * Updates an existing user group with new details.
@@ -71,10 +69,11 @@ interface UserGroupRepository {
      * internal StateFlow, triggering updates to all observers.
      *
      * @param groupId The unique identifier of the group to update
-     * @param request The group update request containing new name and description
+     * @param name The new name for the group
+     * @param description The new description for the group
      * @return Either.Right with Unit on success, or Either.Left with RepositoryError on failure
      */
-    suspend fun updateGroup(groupId: Long, request: UpdateUserGroupRequest): Either<RepositoryError, Unit>
+    suspend fun updateGroup(groupId: Long, name: String, description: String? = null): Either<RepositoryError, Unit>
 
     /**
      * Deletes a user group by its unique ID.
@@ -106,10 +105,10 @@ interface UserGroupRepository {
      * call getGroupMembers to refresh the member list.
      *
      * @param groupId The unique identifier of the group
-     * @param request The request containing the user ID to add
+     * @param userId The unique identifier of the user to add
      * @return Either.Right with Unit on success, or Either.Left with RepositoryError on failure
      */
-    suspend fun addUserToGroup(groupId: Long, request: AddUserToGroupRequest): Either<RepositoryError, Unit>
+    suspend fun addUserToGroup(groupId: Long, userId: Long): Either<RepositoryError, Unit>
 
     /**
      * Removes a user from a group.

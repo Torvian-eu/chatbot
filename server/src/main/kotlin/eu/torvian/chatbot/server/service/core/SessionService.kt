@@ -126,4 +126,13 @@ interface SessionService {
      * @return Either a [DeleteSessionError] if the session doesn't exist or access is denied, or Unit if successful.
      */
     suspend fun deleteSession(id: Long): Either<DeleteSessionError, Unit>
+
+    /**
+     * Clones an existing chat session with all its messages, tool calls, and configuration.
+     * @param id The ID of the session to clone.
+     * @param name The name for the cloned session.
+     * @return Either a [CloneSessionError] if the session doesn't exist, name is invalid, or access is denied,
+     *         or the newly created [ChatSession] with all cloned data.
+     */
+    suspend fun cloneSession(id: Long, name: String): Either<CloneSessionError, ChatSession>
 }

@@ -10,13 +10,10 @@ import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.service.api.ProviderApi
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
-import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
 import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
-import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
-import eu.torvian.chatbot.common.models.api.llm.AddProviderRequest
-import eu.torvian.chatbot.common.models.api.llm.UpdateProviderCredentialRequest
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
+import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -100,25 +97,38 @@ class DefaultProviderRepository(
         }
     }
 
-    override suspend fun addProvider(request: AddProviderRequest): Either<RepositoryError, LLMProviderDetails> =
+    override suspend fun addProvider(
+        name: String,
+        description: String,
+        baseUrl: String,
+        type: LLMProviderType,
+        credential: String?
+    ): Either<RepositoryError, LLMProviderDetails> =
         either {
             val newProvider = withError({ apiResourceError ->
                 apiResourceError.toRepositoryError("Failed to add provider")
             }) {
-                providerApi.addProvider(request).bind()
+                providerApi.addProvider(
+                    name = name,
+                    description = description,
+                    baseUrl = baseUrl,
+                    type = type,
+                    credential = credential
+                ).bind()
             }
             loadProviderDetails(newProvider.id).bind()
         }
 
-    override suspend fun updateProvider(provider: LLMProvider): Either<RepositoryError, Unit> = either {
-        withError({ apiResourceError ->
-            apiResourceError.toRepositoryError("Failed to update provider")
-        }) {
-            providerApi.updateProvider(provider).bind()
+    override suspend fun updateProvider(provider: LLMProvider): Either<RepositoryError, Unit> =
+        either {
+            withError({ apiResourceError ->
+                apiResourceError.toRepositoryError("Failed to update provider")
+            }) {
+                providerApi.updateProvider(provider).bind()
+            }
+            // After update, fetch updated details to refresh cache
+            loadProviderDetails(provider.id).bind()
         }
-        // After update, fetch updated details to refresh cache
-        loadProviderDetails(provider.id).bind()
-    }
 
     override suspend fun deleteProvider(providerId: Long): Either<RepositoryError, Unit> = either {
         withError({ apiResourceError ->
@@ -131,12 +141,12 @@ class DefaultProviderRepository(
 
     override suspend fun updateProviderCredential(
         providerId: Long,
-        request: UpdateProviderCredentialRequest
+        credential: String?
     ): Either<RepositoryError, Unit> = either {
         withError({ apiResourceError ->
             apiResourceError.toRepositoryError("Failed to update provider credential")
         }) {
-            providerApi.updateProviderCredential(providerId, request).bind()
+            providerApi.updateProviderCredential(providerId, credential).bind()
         }
         // Note: Credential updates don't affect the provider metadata in the StateFlow
         // The provider list remains unchanged as credentials are stored separately
@@ -170,24 +180,26 @@ class DefaultProviderRepository(
 
     override suspend fun grantProviderAccess(
         providerId: Long,
-        request: GrantAccessRequest
+        groupId: Long,
+        accessMode: String
     ): Either<RepositoryError, LLMProviderDetails> = either {
         withError({ apiResourceError ->
             apiResourceError.toRepositoryError("Failed to grant provider access")
         }) {
-            providerApi.grantProviderAccess(providerId, request).bind()
+            providerApi.grantProviderAccess(providerId, groupId, accessMode).bind()
         }
         loadProviderDetails(providerId).bind()
     }
 
     override suspend fun revokeProviderAccess(
         providerId: Long,
-        request: RevokeAccessRequest
+        groupId: Long,
+        accessMode: String
     ): Either<RepositoryError, LLMProviderDetails> = either {
         withError({ apiResourceError ->
             apiResourceError.toRepositoryError("Failed to revoke provider access")
         }) {
-            providerApi.revokeProviderAccess(providerId, request).bind()
+            providerApi.revokeProviderAccess(providerId, groupId, accessMode).bind()
         }
         loadProviderDetails(providerId).bind()
     }

@@ -47,6 +47,16 @@ fun Dialogs(
             )
         }
 
+        is SessionListDialogState.CloneSession -> {
+            CloneSessionDialog(
+                defaultName = dialogState.defaultName,
+                nameInput = dialogState.nameInput,
+                onNameInputChange = dialogState.onNameInputChange,
+                onCloneConfirm = dialogState.onCloneConfirm,
+                onDismiss = dialogState.onDismiss
+            )
+        }
+
         is SessionListDialogState.AssignGroup -> {
             AssignSessionToGroupDialog(
                 session = allSessions.find { it.id == dialogState.sessionId },
@@ -162,6 +172,53 @@ private fun DeleteSessionDialog(
                 onClick = onDeleteConfirm,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
             ) { Text("Delete") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+/**
+ * Dialog for cloning a session with a custom name.
+ */
+@Composable
+private fun CloneSessionDialog(
+    defaultName: String,
+    nameInput: String,
+    onNameInputChange: (String) -> Unit,
+    onCloneConfirm: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val isValid = nameInput.trim().isNotBlank()
+    val hasInput = nameInput.isNotBlank()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Clone Session") },
+        text = {
+            Column {
+                Text("Enter a name for the cloned session:")
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = nameInput,
+                    onValueChange = onNameInputChange,
+                    label = { Text("Session Name") },
+                    singleLine = true,
+                    isError = hasInput && !isValid,
+                    supportingText = if (hasInput && !isValid) {
+                        { Text("Session name cannot be empty") }
+                    } else null,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onCloneConfirm(nameInput) },
+                enabled = isValid
+            ) { Text("Clone") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {

@@ -7,18 +7,15 @@ import eu.torvian.chatbot.common.api.resources.ModelResource
 import eu.torvian.chatbot.common.api.resources.ModelResource.ById.Settings
 import eu.torvian.chatbot.common.api.resources.SettingsResource
 import eu.torvian.chatbot.common.api.resources.SettingsResource.ById
+import eu.torvian.chatbot.common.api.resources.SettingsResource.ById.*
+import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
+import eu.torvian.chatbot.common.models.api.access.ModelSettingsDetails
+import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.resources.*
 import io.ktor.client.request.*
-import eu.torvian.chatbot.common.api.resources.SettingsResource.ById.Details
-import eu.torvian.chatbot.common.api.resources.SettingsResource.ById.Access
-import eu.torvian.chatbot.common.api.resources.SettingsResource.ById.MakePublic
-import eu.torvian.chatbot.common.api.resources.SettingsResource.ById.MakePrivate
-import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
-import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
-import eu.torvian.chatbot.common.models.api.access.ModelSettingsDetails
 
 /**
  * Ktor HttpClient implementation of the [SettingsApi] interface.
@@ -100,23 +97,23 @@ class KtorSettingsApiClient(client: HttpClient) : BaseApiResourceClient(client),
 
     override suspend fun grantSettingsAccess(
         settingsId: Long,
-        request: GrantAccessRequest
-    ): Either<ApiResourceError, Unit> {
-        return safeApiCall {
+        groupId: Long,
+        accessMode: String
+    ): Either<ApiResourceError, Unit> =
+        safeApiCall {
             client.post(Access(ById(settingsId = settingsId))) {
-                setBody(request)
+                setBody(GrantAccessRequest(groupId, accessMode))
             }.body<Unit>()
         }
-    }
 
     override suspend fun revokeSettingsAccess(
         settingsId: Long,
-        request: RevokeAccessRequest
-    ): Either<ApiResourceError, Unit> {
-        return safeApiCall {
+        groupId: Long,
+        accessMode: String
+    ): Either<ApiResourceError, Unit> =
+        safeApiCall {
             client.delete(Access(ById(settingsId = settingsId))) {
-                setBody(request)
+                setBody(RevokeAccessRequest(groupId, accessMode))
             }.body<Unit>()
         }
-    }
 }

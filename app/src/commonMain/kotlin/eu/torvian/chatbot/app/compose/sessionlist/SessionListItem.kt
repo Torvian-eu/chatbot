@@ -7,6 +7,7 @@ import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FolderOpen
@@ -34,6 +35,7 @@ fun SessionListItem(
     onClick: (Long) -> Unit,
     onRename: (ChatSessionSummary) -> Unit,
     onDelete: (Long) -> Unit,
+    onClone: (ChatSessionSummary) -> Unit,
     onAssignToGroup: (ChatSessionSummary) -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
@@ -92,6 +94,7 @@ fun SessionListItem(
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false },
                         onRename = onRename,
+                        onClone = onClone,
                         onAssignToGroup = onAssignToGroup,
                         onDelete = onDelete
                     )
@@ -110,6 +113,7 @@ private fun SessionItemActionsDropdown(
     expanded: Boolean,
     onDismissRequest: () -> Unit,
     onRename: (ChatSessionSummary) -> Unit,
+    onClone: (ChatSessionSummary) -> Unit,
     onAssignToGroup: (ChatSessionSummary) -> Unit,
     onDelete: (Long) -> Unit
 ) {
@@ -124,6 +128,14 @@ private fun SessionItemActionsDropdown(
                 onDismissRequest()
             },
             leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
+        )
+        DropdownMenuItem(
+            text = { Text("Clone") },
+            onClick = {
+                onClone(session)
+                onDismissRequest()
+            },
+            leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null) }
         )
         DropdownMenuItem(
             text = { Text("Assign to Group") },

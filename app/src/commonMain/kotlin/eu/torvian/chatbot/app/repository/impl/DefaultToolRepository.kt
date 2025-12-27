@@ -11,10 +11,8 @@ import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.service.api.ToolApi
 import eu.torvian.chatbot.app.utils.misc.LruCache
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
-import eu.torvian.chatbot.common.models.api.tool.CreateToolRequest
-import eu.torvian.chatbot.common.models.api.tool.SetToolEnabledRequest
-import eu.torvian.chatbot.common.models.api.tool.SetToolsEnabledRequest
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
+import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.common.models.tool.UserToolApprovalPreference
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,6 +20,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Default implementation of [ToolRepository] that manages tool definitions and session-specific configurations.
@@ -84,11 +83,19 @@ class DefaultToolRepository(
         }
     }
 
-    override suspend fun createTool(request: CreateToolRequest): Either<RepositoryError, ToolDefinition> = either {
+    override suspend fun createTool(
+        name: String,
+        description: String,
+        type: ToolType,
+        config: JsonObject,
+        inputSchema: JsonObject,
+        outputSchema: JsonObject?,
+        isEnabled: Boolean
+    ): Either<RepositoryError, ToolDefinition> = either {
         val newTool = withError({ apiResourceError ->
             apiResourceError.toRepositoryError("Failed to create tool")
         }) {
-            toolApi.createTool(request).bind()
+            toolApi.createTool(name, description, type, config, inputSchema, outputSchema, isEnabled).bind()
         }
 
         // Add the new tool to the cache
@@ -181,12 +188,10 @@ class DefaultToolRepository(
         toolDefinition: ToolDefinition,
         enabled: Boolean
     ): Either<RepositoryError, Unit> = either {
-        val request = SetToolEnabledRequest(enabled = enabled)
-
         withError({ apiResourceError ->
             apiResourceError.toRepositoryError("Failed to set tool enabled for session")
         }) {
-            toolApi.setToolEnabledForSession(sessionId, toolDefinition.id, request).bind()
+            toolApi.setToolEnabledForSession(sessionId, toolDefinition.id, enabled).bind()
         }
 
         // Update the enabled tools cache
@@ -198,15 +203,10 @@ class DefaultToolRepository(
         toolDefinitions: List<ToolDefinition>,
         enabled: Boolean
     ): Either<RepositoryError, Unit> = either {
-        val request = SetToolsEnabledRequest(
-            toolIds = toolDefinitions.map { it.id },
-            enabled = enabled
-        )
-
         withError({ apiResourceError ->
             apiResourceError.toRepositoryError("Failed to set tools enabled for session")
         }) {
-            toolApi.setToolsEnabledForSession(sessionId, request).bind()
+            toolApi.setToolsEnabledForSession(sessionId, toolDefinitions.map { it.id }, enabled).bind()
         }
 
         // Update the enabled tools cache

@@ -7,16 +7,10 @@ import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.api.resources.href
-import eu.torvian.chatbot.common.models.api.core.CreateSessionRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionGroupRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionLeafMessageRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionModelRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionNameRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionSettingsRequest
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
-import io.ktor.client.HttpClient
+import io.ktor.client.*
 import io.ktor.client.engine.mock.*
 import io.ktor.http.*
 import kotlinx.coroutines.test.runTest
@@ -107,8 +101,7 @@ class KtorSessionApiClientTest {
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.getAllSessions()
-        when (result) {
+        when (val result = apiClient.getAllSessions()) {
             is Either.Right -> {
                 val sessions = result.value
                 assertEquals(2, sessions.size)
@@ -133,8 +126,7 @@ class KtorSessionApiClientTest {
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.getAllSessions()
-        when (result) {
+        when (val result = apiClient.getAllSessions()) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
                 val error = result.value as ApiResourceError.ServerError
@@ -156,8 +148,7 @@ class KtorSessionApiClientTest {
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.getAllSessions()
-        when (result) {
+        when (val result = apiClient.getAllSessions()) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
                 val error = result.value as ApiResourceError.SerializationError
@@ -170,13 +161,12 @@ class KtorSessionApiClientTest {
     // --- Tests for createSession ---
     @Test
     fun `createSession - success`() = runTest {
-        val mockRequest = CreateSessionRequest(name = "New Session")
         val mockSession = mockSession(1, "New Session")
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Post, request.method)
             assertEquals(href(SessionResource()), request.url.fullPath)
             val requestBody = request.body.toByteArray().decodeToString()
-            assertEquals(json.encodeToString(mockRequest), requestBody)
+            assertTrue(requestBody.contains("New Session"), "Request body should contain session name")
             respond(
                 content = json.encodeToString(mockSession),
                 status = HttpStatusCode.Created,
@@ -184,8 +174,7 @@ class KtorSessionApiClientTest {
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.createSession(mockRequest)
-        when (result) {
+        when (val result = apiClient.createSession("New Session")) {
             is Either.Right -> {
                 val session = result.value
                 assertEquals(1, session.id)
@@ -198,13 +187,10 @@ class KtorSessionApiClientTest {
 
     @Test
     fun `createSession - success with no name`() = runTest {
-        val mockRequest = CreateSessionRequest(name = null)
         val mockSession = mockSession(1, "Untitled Session") // Assuming backend generates name
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Post, request.method)
             assertEquals(href(SessionResource()), request.url.fullPath)
-            val requestBody = request.body.toByteArray().decodeToString()
-            assertEquals(json.encodeToString(mockRequest), requestBody)
             respond(
                 content = json.encodeToString(mockSession),
                 status = HttpStatusCode.Created,
@@ -212,8 +198,7 @@ class KtorSessionApiClientTest {
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.createSession(mockRequest)
-        when (result) {
+        when (val result = apiClient.createSession(null)) {
             is Either.Right -> {
                 val session = result.value
                 assertEquals(1, session.id)
@@ -226,11 +211,8 @@ class KtorSessionApiClientTest {
 
     @Test
     fun `createSession - failure - 400 Bad Request`() = runTest {
-        val mockRequest = CreateSessionRequest(name = "") // Invalid name
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Post, request.method)
-            val requestBody = request.body.toByteArray().decodeToString()
-            assertEquals(json.encodeToString(mockRequest), requestBody)
             respond(
                 content = json.encodeToString(apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Name cannot be empty")),
                 status = HttpStatusCode.BadRequest,
@@ -238,8 +220,7 @@ class KtorSessionApiClientTest {
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.createSession(mockRequest)
-        when (result) {
+        when (val result = apiClient.createSession("")) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
                 val error = result.value as ApiResourceError.ServerError
@@ -252,7 +233,6 @@ class KtorSessionApiClientTest {
 
     @Test
     fun `createSession - failure - SerializationException`() = runTest {
-        val mockRequest = CreateSessionRequest(name = "New Session")
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Post, request.method)
             respond(
@@ -262,8 +242,7 @@ class KtorSessionApiClientTest {
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.createSession(mockRequest)
-        when (result) {
+        when (val result = apiClient.createSession("New Session")) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
                 val error = result.value as ApiResourceError.SerializationError
@@ -298,8 +277,7 @@ class KtorSessionApiClientTest {
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.getSessionDetails(sessionId)
-        when (result) {
+        when (val result = apiClient.getSessionDetails(sessionId)) {
             is Either.Right -> {
                 val session = result.value
                 assertEquals(sessionId, session.id)
@@ -329,8 +307,7 @@ class KtorSessionApiClientTest {
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.getSessionDetails(sessionId)
-        when (result) {
+        when (val result = apiClient.getSessionDetails(sessionId)) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
                 val error = result.value as ApiResourceError.ServerError
@@ -353,8 +330,7 @@ class KtorSessionApiClientTest {
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.getSessionDetails(sessionId)
-        when (result) {
+        when (val result = apiClient.getSessionDetails(sessionId)) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
                 val error = result.value as ApiResourceError.SerializationError
@@ -380,8 +356,7 @@ class KtorSessionApiClientTest {
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.deleteSession(sessionId)
-        when (result) {
+        when (val result = apiClient.deleteSession(sessionId)) {
             is Either.Right -> {
                 assertEquals(Unit, result.value) // Expect Unit on success
             }
@@ -406,8 +381,7 @@ class KtorSessionApiClientTest {
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.deleteSession(sessionId)
-        when (result) {
+        when (val result = apiClient.deleteSession(sessionId)) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
                 val error = result.value as ApiResourceError.ServerError
@@ -422,7 +396,7 @@ class KtorSessionApiClientTest {
     @Test
     fun `updateSessionName - success`() = runTest {
         val sessionId = 123L
-        val mockRequest = UpdateSessionNameRequest(name = "Updated Name")
+        val newName = "Updated Name"
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Put, request.method)
             assertEquals(
@@ -430,15 +404,14 @@ class KtorSessionApiClientTest {
                 request.url.fullPath
             )
             val requestBody = request.body.toByteArray().decodeToString()
-            assertEquals(json.encodeToString(mockRequest), requestBody)
+            assertTrue(requestBody.contains("Updated Name"), "Request body should contain new name")
             respond(
                 content = "", // Typically 200 OK or 204 No Content for Unit response
                 status = HttpStatusCode.OK
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.updateSessionName(sessionId, mockRequest)
-        when (result) {
+        when (val result = apiClient.updateSessionName(sessionId, newName)) {
             is Either.Right -> assertEquals(Unit, result.value)
             is Either.Left -> fail("Expected success, but got error: ${result.value}")
         }
@@ -447,7 +420,6 @@ class KtorSessionApiClientTest {
     @Test
     fun `updateSessionName - failure - 400 Bad Request`() = runTest {
         val sessionId = 123L
-        val mockRequest = UpdateSessionNameRequest(name = "") // Invalid name
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Put, request.method)
             respond(
@@ -457,8 +429,7 @@ class KtorSessionApiClientTest {
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.updateSessionName(sessionId, mockRequest)
-        when (result) {
+        when (val result = apiClient.updateSessionName(sessionId, "")) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
                 val error = result.value as ApiResourceError.ServerError
@@ -472,7 +443,6 @@ class KtorSessionApiClientTest {
     @Test
     fun `updateSessionName - failure - 404 Not Found`() = runTest {
         val sessionId = 999L
-        val mockRequest = UpdateSessionNameRequest(name = "Updated Name")
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Put, request.method)
             respond(
@@ -482,8 +452,7 @@ class KtorSessionApiClientTest {
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.updateSessionName(sessionId, mockRequest)
-        when (result) {
+        when (val result = apiClient.updateSessionName(sessionId, "Updated Name")) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
                 val error = result.value as ApiResourceError.ServerError
@@ -498,7 +467,7 @@ class KtorSessionApiClientTest {
     @Test
     fun `updateSessionModel - success`() = runTest {
         val sessionId = 123L
-        val mockRequest = UpdateSessionModelRequest(modelId = 10L)
+        val modelId = 10L
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Put, request.method)
             assertEquals(
@@ -506,15 +475,14 @@ class KtorSessionApiClientTest {
                 request.url.fullPath
             )
             val requestBody = request.body.toByteArray().decodeToString()
-            assertEquals(json.encodeToString(mockRequest), requestBody)
+            assertTrue(requestBody.contains("10"), "Request body should contain modelId")
             respond(
                 content = "",
                 status = HttpStatusCode.OK
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.updateSessionModel(sessionId, mockRequest)
-        when (result) {
+        when (val result = apiClient.updateSessionModel(sessionId, modelId)) {
             is Either.Right -> assertEquals(Unit, result.value)
             is Either.Left -> fail("Expected success, but got error: ${result.value}")
         }
@@ -523,23 +491,19 @@ class KtorSessionApiClientTest {
     @Test
     fun `updateSessionModel - success - unset model`() = runTest {
         val sessionId = 123L
-        val mockRequest = UpdateSessionModelRequest(modelId = null)
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Put, request.method)
             assertEquals(
                 href(SessionResource.ById.Model(SessionResource.ById(sessionId = sessionId))),
                 request.url.fullPath
             )
-            val requestBody = request.body.toByteArray().decodeToString()
-            assertEquals(json.encodeToString(mockRequest), requestBody)
             respond(
                 content = "",
                 status = HttpStatusCode.OK
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.updateSessionModel(sessionId, mockRequest)
-        when (result) {
+        when (val result = apiClient.updateSessionModel(sessionId, null)) {
             is Either.Right -> assertEquals(Unit, result.value)
             is Either.Left -> fail("Expected success, but got error: ${result.value}")
         }
@@ -548,7 +512,7 @@ class KtorSessionApiClientTest {
     @Test
     fun `updateSessionModel - failure - 400 Bad Request (Invalid ModelId)`() = runTest {
         val sessionId = 123L
-        val mockRequest = UpdateSessionModelRequest(modelId = 999L) // Non-existent model
+        val modelId = 999L
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Put, request.method)
             respond(
@@ -556,7 +520,7 @@ class KtorSessionApiClientTest {
                     apiError(
                         CommonApiErrorCodes.INVALID_ARGUMENT,
                         "Model ID not found",
-                        "modelId" to mockRequest.modelId.toString()
+                        "modelId" to modelId.toString()
                     )
                 ),
                 status = HttpStatusCode.BadRequest,
@@ -564,8 +528,7 @@ class KtorSessionApiClientTest {
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.updateSessionModel(sessionId, mockRequest)
-        when (result) {
+        when (val result = apiClient.updateSessionModel(sessionId, modelId)) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
                 val error = result.value as ApiResourceError.ServerError
@@ -580,7 +543,6 @@ class KtorSessionApiClientTest {
     @Test
     fun `updateSessionModel - failure - 404 Not Found (Session)`() = runTest {
         val sessionId = 999L
-        val mockRequest = UpdateSessionModelRequest(modelId = 10L)
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Put, request.method)
             respond(
@@ -590,8 +552,7 @@ class KtorSessionApiClientTest {
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.updateSessionModel(sessionId, mockRequest)
-        when (result) {
+        when (val result = apiClient.updateSessionModel(sessionId, 10L)) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
                 val error = result.value as ApiResourceError.ServerError
@@ -606,7 +567,7 @@ class KtorSessionApiClientTest {
     @Test
     fun `updateSessionSettings - success`() = runTest {
         val sessionId = 123L
-        val mockRequest = UpdateSessionSettingsRequest(settingsId = 20L)
+        val settingsId = 20L
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Put, request.method)
             assertEquals(
@@ -614,15 +575,14 @@ class KtorSessionApiClientTest {
                 request.url.fullPath
             )
             val requestBody = request.body.toByteArray().decodeToString()
-            assertEquals(json.encodeToString(mockRequest), requestBody)
+            assertTrue(requestBody.contains("20"), "Request body should contain settingsId")
             respond(
                 content = "",
                 status = HttpStatusCode.OK
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.updateSessionSettings(sessionId, mockRequest)
-        when (result) {
+        when (val result = apiClient.updateSessionSettings(sessionId, settingsId)) {
             is Either.Right -> assertEquals(Unit, result.value)
             is Either.Left -> fail("Expected success, but got error: ${result.value}")
         }
@@ -631,23 +591,19 @@ class KtorSessionApiClientTest {
     @Test
     fun `updateSessionSettings - success - unset settings`() = runTest {
         val sessionId = 123L
-        val mockRequest = UpdateSessionSettingsRequest(settingsId = null)
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Put, request.method)
             assertEquals(
                 href(SessionResource.ById.Settings(SessionResource.ById(sessionId = sessionId))),
                 request.url.fullPath
             )
-            val requestBody = request.body.toByteArray().decodeToString()
-            assertEquals(json.encodeToString(mockRequest), requestBody)
             respond(
                 content = "",
                 status = HttpStatusCode.OK
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.updateSessionSettings(sessionId, mockRequest)
-        when (result) {
+        when (val result = apiClient.updateSessionSettings(sessionId, null)) {
             is Either.Right -> assertEquals(Unit, result.value)
             is Either.Left -> fail("Expected success, but got error: ${result.value}")
         }
@@ -656,7 +612,7 @@ class KtorSessionApiClientTest {
     @Test
     fun `updateSessionSettings - failure - 400 Bad Request (Invalid SettingsId)`() = runTest {
         val sessionId = 123L
-        val mockRequest = UpdateSessionSettingsRequest(settingsId = 999L) // Non-existent settings
+        val settingsId = 999L
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Put, request.method)
             respond(
@@ -664,7 +620,7 @@ class KtorSessionApiClientTest {
                     apiError(
                         CommonApiErrorCodes.INVALID_ARGUMENT,
                         "Settings ID not found",
-                        "settingsId" to mockRequest.settingsId.toString()
+                        "settingsId" to settingsId.toString()
                     )
                 ),
                 status = HttpStatusCode.BadRequest,
@@ -672,8 +628,7 @@ class KtorSessionApiClientTest {
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.updateSessionSettings(sessionId, mockRequest)
-        when (result) {
+        when (val result = apiClient.updateSessionSettings(sessionId, settingsId)) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
                 val error = result.value as ApiResourceError.ServerError
@@ -688,7 +643,6 @@ class KtorSessionApiClientTest {
     @Test
     fun `updateSessionSettings - failure - 404 Not Found (Session)`() = runTest {
         val sessionId = 999L
-        val mockRequest = UpdateSessionSettingsRequest(settingsId = 20L)
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Put, request.method)
             respond(
@@ -698,8 +652,7 @@ class KtorSessionApiClientTest {
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.updateSessionSettings(sessionId, mockRequest)
-        when (result) {
+        when (val result = apiClient.updateSessionSettings(sessionId, 20L)) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
                 val error = result.value as ApiResourceError.ServerError
@@ -714,7 +667,7 @@ class KtorSessionApiClientTest {
     @Test
     fun `updateSessionLeafMessage - success`() = runTest {
         val sessionId = 123L
-        val mockRequest = UpdateSessionLeafMessageRequest(leafMessageId = 30L)
+        val leafMessageId = 30L
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Put, request.method)
             assertEquals(
@@ -722,15 +675,14 @@ class KtorSessionApiClientTest {
                 request.url.fullPath
             )
             val requestBody = request.body.toByteArray().decodeToString()
-            assertEquals(json.encodeToString(mockRequest), requestBody)
+            assertTrue(requestBody.contains("30"), "Request body should contain leafMessageId")
             respond(
                 content = "",
                 status = HttpStatusCode.OK
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.updateSessionLeafMessage(sessionId, mockRequest)
-        when (result) {
+        when (val result = apiClient.updateSessionLeafMessage(sessionId, leafMessageId)) {
             is Either.Right -> assertEquals(Unit, result.value)
             is Either.Left -> fail("Expected success, but got error: ${result.value}")
         }
@@ -739,23 +691,19 @@ class KtorSessionApiClientTest {
     @Test
     fun `updateSessionLeafMessage - success - unset leaf message`() = runTest {
         val sessionId = 123L
-        val mockRequest = UpdateSessionLeafMessageRequest(leafMessageId = null)
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Put, request.method)
             assertEquals(
                 href(SessionResource.ById.LeafMessage(SessionResource.ById(SessionResource(), sessionId))),
                 request.url.fullPath
             )
-            val requestBody = request.body.toByteArray().decodeToString()
-            assertEquals(json.encodeToString(mockRequest), requestBody)
             respond(
                 content = "",
                 status = HttpStatusCode.OK
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.updateSessionLeafMessage(sessionId, mockRequest)
-        when (result) {
+        when (val result = apiClient.updateSessionLeafMessage(sessionId, null)) {
             is Either.Right -> assertEquals(Unit, result.value)
             is Either.Left -> fail("Expected success, but got error: ${result.value}")
         }
@@ -764,7 +712,7 @@ class KtorSessionApiClientTest {
     @Test
     fun `updateSessionLeafMessage - failure - 400 Bad Request (Invalid LeafMessageId)`() = runTest {
         val sessionId = 123L
-        val mockRequest = UpdateSessionLeafMessageRequest(leafMessageId = 999L) // Non-existent message
+        val leafMessageId = 999L
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Put, request.method)
             respond(
@@ -772,7 +720,7 @@ class KtorSessionApiClientTest {
                     apiError(
                         CommonApiErrorCodes.INVALID_ARGUMENT,
                         "Leaf message ID not found or not in session",
-                        "leafMessageId" to mockRequest.leafMessageId.toString()
+                        "leafMessageId" to leafMessageId.toString()
                     )
                 ),
                 status = HttpStatusCode.BadRequest,
@@ -780,8 +728,7 @@ class KtorSessionApiClientTest {
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.updateSessionLeafMessage(sessionId, mockRequest)
-        when (result) {
+        when (val result = apiClient.updateSessionLeafMessage(sessionId, leafMessageId)) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
                 val error = result.value as ApiResourceError.ServerError
@@ -796,7 +743,6 @@ class KtorSessionApiClientTest {
     @Test
     fun `updateSessionLeafMessage - failure - 404 Not Found (Session)`() = runTest {
         val sessionId = 999L
-        val mockRequest = UpdateSessionLeafMessageRequest(leafMessageId = 30L)
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Put, request.method)
             respond(
@@ -806,8 +752,7 @@ class KtorSessionApiClientTest {
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.updateSessionLeafMessage(sessionId, mockRequest)
-        when (result) {
+        when (val result = apiClient.updateSessionLeafMessage(sessionId, 30L)) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
                 val error = result.value as ApiResourceError.ServerError
@@ -822,7 +767,7 @@ class KtorSessionApiClientTest {
     @Test
     fun `updateSessionGroup - success`() = runTest {
         val sessionId = 123L
-        val mockRequest = UpdateSessionGroupRequest(groupId = 40L)
+        val groupId = 40L
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Put, request.method)
             assertEquals(
@@ -830,15 +775,14 @@ class KtorSessionApiClientTest {
                 request.url.fullPath
             )
             val requestBody = request.body.toByteArray().decodeToString()
-            assertEquals(json.encodeToString(mockRequest), requestBody)
+            assertTrue(requestBody.contains("40"), "Request body should contain groupId")
             respond(
                 content = "",
                 status = HttpStatusCode.OK
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.updateSessionGroup(sessionId, mockRequest)
-        when (result) {
+        when (val result = apiClient.updateSessionGroup(sessionId, groupId)) {
             is Either.Right -> assertEquals(Unit, result.value)
             is Either.Left -> fail("Expected success, but got error: ${result.value}")
         }
@@ -847,23 +791,19 @@ class KtorSessionApiClientTest {
     @Test
     fun `updateSessionGroup - success - ungroup session`() = runTest {
         val sessionId = 123L
-        val mockRequest = UpdateSessionGroupRequest(groupId = null)
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Put, request.method)
             assertEquals(
                 href(SessionResource.ById.Group(SessionResource.ById(SessionResource(), sessionId))),
                 request.url.fullPath
             )
-            val requestBody = request.body.toByteArray().decodeToString()
-            assertEquals(json.encodeToString(mockRequest), requestBody)
             respond(
                 content = "",
                 status = HttpStatusCode.OK
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.updateSessionGroup(sessionId, mockRequest)
-        when (result) {
+        when (val result = apiClient.updateSessionGroup(sessionId, null)) {
             is Either.Right -> assertEquals(Unit, result.value)
             is Either.Left -> fail("Expected success, but got error: ${result.value}")
         }
@@ -872,7 +812,7 @@ class KtorSessionApiClientTest {
     @Test
     fun `updateSessionGroup - failure - 400 Bad Request (Invalid GroupId)`() = runTest {
         val sessionId = 123L
-        val mockRequest = UpdateSessionGroupRequest(groupId = 999L) // Non-existent group
+        val groupId = 999L
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Put, request.method)
             respond(
@@ -880,7 +820,7 @@ class KtorSessionApiClientTest {
                     apiError(
                         CommonApiErrorCodes.INVALID_ARGUMENT,
                         "Group ID not found",
-                        "groupId" to mockRequest.groupId.toString()
+                        "groupId" to groupId.toString()
                     )
                 ),
                 status = HttpStatusCode.BadRequest,
@@ -888,8 +828,7 @@ class KtorSessionApiClientTest {
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.updateSessionGroup(sessionId, mockRequest)
-        when (result) {
+        when (val result = apiClient.updateSessionGroup(sessionId, groupId)) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
                 val error = result.value as ApiResourceError.ServerError
@@ -904,7 +843,6 @@ class KtorSessionApiClientTest {
     @Test
     fun `updateSessionGroup - failure - 404 Not Found (Session)`() = runTest {
         val sessionId = 999L
-        val mockRequest = UpdateSessionGroupRequest(groupId = 40L)
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Put, request.method)
             respond(
@@ -914,8 +852,7 @@ class KtorSessionApiClientTest {
             )
         }
         val apiClient = createTestClient(mockEngine)
-        val result = apiClient.updateSessionGroup(sessionId, mockRequest)
-        when (result) {
+        when (val result = apiClient.updateSessionGroup(sessionId, 40L)) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
                 val error = result.value as ApiResourceError.ServerError

@@ -2,9 +2,7 @@ package eu.torvian.chatbot.app.repository
 
 import arrow.core.Either
 import eu.torvian.chatbot.app.domain.contracts.DataState
-import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
 import eu.torvian.chatbot.common.models.api.access.ModelSettingsDetails
-import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
@@ -146,12 +144,14 @@ interface ModelSettingsRepository {
      * Upon successful operation, the internal StateFlow of settings details is updated.
      *
      * @param settingsId The ID of the settings profile.
-     * @param request The grant access request containing groupId and accessMode.
-     * @return Either.Right with [ModelSettingsDetails] on success, or Either.Left with [RepositoryError](psi_element://eu.torvian.chatbot.app.repository.RepositoryError) on failure.
+     * @param groupId The ID of the user group to grant access to.
+     * @param accessMode The access mode to grant (READ, WRITE, ADMIN).
+     * @return Either.Right with [ModelSettingsDetails] on success, or Either.Left with [RepositoryError] on failure.
      */
     suspend fun grantSettingsAccess(
         settingsId: Long,
-        request: GrantAccessRequest
+        groupId: Long,
+        accessMode: String
     ): Either<RepositoryError, ModelSettingsDetails>
 
     /**
@@ -160,11 +160,13 @@ interface ModelSettingsRepository {
      * Upon successful operation, the internal StateFlow of settings details is updated.
      *
      * @param settingsId The ID of the settings profile.
-     * @param request The revoke access request containing groupId and accessMode.
-     * @return Either.Right with [ModelSettingsDetails] on success, or Either.Left with [RepositoryError](psi_element://eu.torvian.chatbot.app.repository.RepositoryError) on failure.
+     * @param groupId The ID of the user group to revoke access from.
+     * @param accessMode The access mode to revoke (READ, WRITE, ADMIN).
+     * @return Either.Right with [ModelSettingsDetails] on success, or Either.Left with [RepositoryError] on failure.
      */
     suspend fun revokeSettingsAccess(
         settingsId: Long,
-        request: RevokeAccessRequest
+        groupId: Long,
+        accessMode: String
     ): Either<RepositoryError, ModelSettingsDetails>
 }

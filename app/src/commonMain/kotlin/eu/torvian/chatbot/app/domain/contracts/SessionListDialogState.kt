@@ -34,6 +34,15 @@ sealed class SessionListDialogState {
         val onDismiss: () -> Unit
     ) : SessionListDialogState()
     
+    data class CloneSession(
+        val sessionId: Long,
+        val defaultName: String,
+        val nameInput: String,
+        val onNameInputChange: (String) -> Unit,
+        val onCloneConfirm: (String) -> Unit,
+        val onDismiss: () -> Unit
+    ) : SessionListDialogState()
+
     data class AssignGroup(
         val sessionId: Long,
         val groupId: Long?,

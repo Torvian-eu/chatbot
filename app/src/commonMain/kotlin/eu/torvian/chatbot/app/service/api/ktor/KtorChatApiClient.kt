@@ -11,13 +11,9 @@ import eu.torvian.chatbot.common.api.resources.DeleteMode
 import eu.torvian.chatbot.common.api.resources.MessageResource
 import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.api.resources.href
-import eu.torvian.chatbot.common.models.api.core.ChatClientEvent
-import eu.torvian.chatbot.common.models.api.core.ChatEvent
-import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
-import eu.torvian.chatbot.common.models.api.core.InsertMessageRequest
-import eu.torvian.chatbot.common.models.core.MessageInsertPosition
-import eu.torvian.chatbot.common.models.api.core.UpdateMessageRequest
+import eu.torvian.chatbot.common.models.api.core.*
 import eu.torvian.chatbot.common.models.core.ChatMessage
+import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.resources.*
@@ -123,14 +119,14 @@ class KtorChatApiClient(
 
     override suspend fun updateMessageContent(
         messageId: Long,
-        request: UpdateMessageRequest
+        content: String
     ): Either<ApiResourceError, ChatMessage> {
         // Use safeApiCall to wrap the Ktor request
         return safeApiCall {
             // Use Ktor resources to build the URL: /api/v1/messages/{messageId}/content
             client.put(MessageResource.ById.Content(MessageResource.ById(MessageResource(), messageId))) {
                 // Set the request body with the UpdateMessageRequest DTO
-                setBody(request)
+                setBody(UpdateMessageRequest(content = content))
             }.body<ChatMessage>() // Expect a ChatMessage in the response body on success (HTTP 200)
         }
     }

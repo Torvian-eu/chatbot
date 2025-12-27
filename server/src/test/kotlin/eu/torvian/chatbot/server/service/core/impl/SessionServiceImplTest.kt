@@ -11,6 +11,9 @@ import eu.torvian.chatbot.server.data.dao.ModelDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
 import eu.torvian.chatbot.server.data.dao.SessionOwnershipDao
 import eu.torvian.chatbot.server.data.dao.SettingsDao
+import eu.torvian.chatbot.server.data.dao.MessageDao
+import eu.torvian.chatbot.server.data.dao.ToolCallDao
+import eu.torvian.chatbot.server.data.dao.SessionToolConfigDao
 import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
 import eu.torvian.chatbot.server.data.dao.error.SessionError
 import eu.torvian.chatbot.server.service.core.error.session.*
@@ -43,6 +46,9 @@ class SessionServiceImplTest {
     private lateinit var sessionOwnershipDao: SessionOwnershipDao
     private lateinit var settingsDao: SettingsDao
     private lateinit var modelDao: ModelDao
+    private lateinit var messageDao: MessageDao
+    private lateinit var toolCallDao: ToolCallDao
+    private lateinit var sessionToolConfigDao: SessionToolConfigDao
     private lateinit var transactionScope: TransactionScope
 
     // Class under test
@@ -86,10 +92,13 @@ class SessionServiceImplTest {
         sessionOwnershipDao = mockk()
         settingsDao = mockk()
         modelDao = mockk()
+        messageDao = mockk()
+        toolCallDao = mockk()
+        sessionToolConfigDao = mockk()
         transactionScope = mockk()
 
         // Create the service instance with mocked dependencies
-        sessionService = SessionServiceImpl(sessionDao, sessionOwnershipDao, settingsDao, modelDao, transactionScope)
+        sessionService = SessionServiceImpl(sessionDao, sessionOwnershipDao, settingsDao, modelDao, messageDao, toolCallDao, sessionToolConfigDao, transactionScope)
 
         // Mock the transaction scope to execute blocks directly
         coEvery { transactionScope.transaction(any<suspend () -> Any>()) } coAnswers {

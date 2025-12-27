@@ -35,17 +35,17 @@ class KtorUserGroupApiClient(
             client.get(UserGroupResource.ById(groupId = groupId)).body<UserGroup>()
         }
 
-    override suspend fun createGroup(request: CreateUserGroupRequest): Either<ApiResourceError, UserGroup> =
+    override suspend fun createGroup(name: String, description: String?): Either<ApiResourceError, UserGroup> =
         safeApiCall {
             client.post(UserGroupResource()) {
-                setBody(request)
+                setBody(CreateUserGroupRequest(name, description))
             }.body<UserGroup>()
         }
 
-    override suspend fun updateGroup(groupId: Long, request: UpdateUserGroupRequest): Either<ApiResourceError, Unit> =
+    override suspend fun updateGroup(groupId: Long, name: String, description: String?): Either<ApiResourceError, Unit> =
         safeApiCall {
             client.put(UserGroupResource.ById(groupId = groupId)) {
-                setBody(request)
+                setBody(UpdateUserGroupRequest(name, description))
             }
         }
 
@@ -63,14 +63,14 @@ class KtorUserGroupApiClient(
             ).body<List<User>>()
         }
 
-    override suspend fun addUserToGroup(groupId: Long, request: AddUserToGroupRequest): Either<ApiResourceError, Unit> =
+    override suspend fun addUserToGroup(groupId: Long, userId: Long): Either<ApiResourceError, Unit> =
         safeApiCall {
             client.post(
                 UserGroupResource.ById.Members(
                     parent = UserGroupResource.ById(groupId = groupId)
                 )
             ) {
-                setBody(request)
+                setBody(AddUserToGroupRequest(userId))
             }
         }
 

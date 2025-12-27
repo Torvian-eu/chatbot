@@ -14,7 +14,6 @@ import eu.torvian.chatbot.app.repository.RepositoryError.OtherError
 import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.service.api.LocalMCPServerApi
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
-import eu.torvian.chatbot.common.models.api.mcp.CreateServerRequest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -83,7 +82,7 @@ class DefaultLocalMCPServerRepository(
         val serverResponse = withError({ apiResourceError ->
             apiResourceError.toRepositoryError("Failed to create MCP server")
         }) {
-            api.createServer(CreateServerRequest(isEnabled = isEnabled)).bind()
+            api.createServer(isEnabled).bind()
         }
 
         // Step 2: Create local server configuration with generated ID

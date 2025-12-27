@@ -5,6 +5,7 @@ import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.server.data.dao.error.InsertMessageError
 import eu.torvian.chatbot.server.data.dao.error.MessageError
+import kotlinx.datetime.Instant
 
 /**
  * Data Access Object for ChatMessage entities.
@@ -39,6 +40,8 @@ interface MessageDao {
      * @param content The content of the new message.
      * @param modelId Optional model ID (for assistant messages).
      * @param settingsId Optional settings ID (for assistant messages).
+     * @param createdAt Optional creation timestamp. If null, uses current time.
+     * @param updatedAt Optional update timestamp. If null, uses current time.
      * @return Either an error or the newly created message.
      */
     suspend fun insertMessage(
@@ -48,7 +51,9 @@ interface MessageDao {
         role: ChatMessage.Role,
         content: String,
         modelId: Long?,
-        settingsId: Long?
+        settingsId: Long?,
+        createdAt: Instant? = null,
+        updatedAt: Instant? = null
     ): Either<InsertMessageError, ChatMessage>
 
     /**

@@ -16,11 +16,6 @@ import eu.torvian.chatbot.app.repository.SessionRepository
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
-import eu.torvian.chatbot.common.models.api.core.CreateGroupRequest
-import eu.torvian.chatbot.common.models.api.core.CreateSessionRequest
-import eu.torvian.chatbot.common.models.api.core.RenameGroupRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionGroupRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionNameRequest
 import eu.torvian.chatbot.common.models.core.ChatGroup
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 import kotlinx.coroutines.CoroutineDispatcher
@@ -255,7 +250,7 @@ class SessionListViewModel(
         }
 
         viewModelScope.launch(uiDispatcher) {
-            groupRepository.createGroup(CreateGroupRequest(name))
+            groupRepository.createGroup(name)
                 .fold(
                     ifLeft = { repositoryError ->
                         notificationService.repositoryError(
@@ -307,7 +302,7 @@ class SessionListViewModel(
             return
         }
         viewModelScope.launch(uiDispatcher) {
-            groupRepository.renameGroup(groupToRename.id, RenameGroupRequest(newName))
+            groupRepository.renameGroup(groupToRename.id, newName)
                 .fold(
                     ifLeft = { repositoryError ->
                         notificationService.repositoryError(
@@ -400,6 +395,25 @@ class SessionListViewModel(
     }
 
     /**
+     * Shows the clone session dialog with pre-bound actions.
+     *
+     * @param session The session to clone.
+     */
+    fun showCloneSessionDialog(session: ChatSessionSummary) {
+        val defaultName = "${session.name} (Copy)"
+        _dialogState.value = SessionListDialogState.CloneSession(
+            sessionId = session.id,
+            defaultName = defaultName,
+            nameInput = defaultName,
+            onNameInputChange = { name -> updateDialogCloneName(name) },
+            onCloneConfirm = { name ->
+                cloneSession(session.id, name)
+            },
+            onDismiss = { cancelDialog() }
+        )
+    }
+
+    /**
      * Cancels/closes any dialog by setting state to None.
      */
     fun cancelDialog() {
@@ -418,7 +432,7 @@ class SessionListViewModel(
         val sanitizedName = initialName?.ifBlank { null }
 
         viewModelScope.launch(uiDispatcher) {
-            sessionRepository.createSession(CreateSessionRequest(name = sanitizedName))
+            sessionRepository.createSession(sanitizedName)
                 .fold(
                     ifLeft = { repositoryError ->
                         notificationService.repositoryError(
@@ -448,7 +462,7 @@ class SessionListViewModel(
             return
         }
         viewModelScope.launch(uiDispatcher) {
-            sessionRepository.updateSessionName(session.id, UpdateSessionNameRequest(trimmedName)).fold(
+            sessionRepository.updateSessionName(session.id, trimmedName).fold(
                 ifLeft = { repositoryError ->
                     notificationService.repositoryError(
                         error = repositoryError,
@@ -491,7 +505,7 @@ class SessionListViewModel(
      */
     private fun assignSessionToGroup(sessionId: Long, groupId: Long?) {
         viewModelScope.launch(uiDispatcher) {
-            sessionRepository.updateSessionGroup(sessionId, UpdateSessionGroupRequest(groupId)).fold(
+            sessionRepository.updateSessionGroup(sessionId, groupId).fold(
                 ifLeft = { repositoryError ->
                     notificationService.repositoryError(
                         error = repositoryError,
@@ -517,12 +531,35 @@ class SessionListViewModel(
                     notificationService.repositoryError(
                         error = repositoryError,
                         shortMessage = "Failed to delete group"
-                        )
-                    },
-                    ifRight = {
-                        cancelDialog()
-                    }
-                )
+                    )
+                },
+                ifRight = {
+                    cancelDialog()
+                }
+            )
+        }
+    }
+
+    /**
+     * Clones a chat session with all its messages, tool calls, and configuration.
+     *
+     * @param sessionId The ID of the session to clone.
+     * @param newName The name for the cloned session.
+     */
+    private fun cloneSession(sessionId: Long, newName: String) {
+        viewModelScope.launch(uiDispatcher) {
+            sessionRepository.cloneSession(sessionId, newName.trim()).fold(
+                ifLeft = { repositoryError ->
+                    notificationService.repositoryError(
+                        error = repositoryError,
+                        shortMessage = "Failed to clone session"
+                    )
+                },
+                ifRight = { clonedSession ->
+                    cancelDialog()
+                    selectSession(clonedSession.id)
+                }
+            )
         }
     }
 
@@ -537,6 +574,20 @@ class SessionListViewModel(
             when (dialogState) {
                 is SessionListDialogState.NewSession -> dialogState.copy(sessionNameInput = newName)
                 is SessionListDialogState.RenameSession -> dialogState.copy(newSessionNameInput = newName)
+                else -> dialogState // No change for other states
+            }
+        }
+    }
+
+    /**
+     * Updates the clone session name input in the dialog.
+     *
+     * @param newName The new clone session name input.
+     */
+    private fun updateDialogCloneName(newName: String) {
+        _dialogState.update { dialogState ->
+            when (dialogState) {
+                is SessionListDialogState.CloneSession -> dialogState.copy(nameInput = newName)
                 else -> dialogState // No change for other states
             }
         }

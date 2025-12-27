@@ -3,12 +3,6 @@ package eu.torvian.chatbot.app.service.api
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
-import eu.torvian.chatbot.common.models.api.core.CreateSessionRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionGroupRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionLeafMessageRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionModelRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionNameRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionSettingsRequest
 import eu.torvian.chatbot.common.models.tool.ToolCall
 
 /**
@@ -40,11 +34,11 @@ interface SessionApi {
      * Corresponds to `POST /api/v1/sessions`.
      * (E2.S1)
      *
-     * @param request Optional request body containing a suggested name.
+     * @param name Optional name for the new session.
      * @return [Either.Right] containing the newly created [ChatSession] object on success,
      *         or [Either.Left] containing an [ApiResourceError] on failure.
      */
-    suspend fun createSession(request: CreateSessionRequest): Either<ApiResourceError, ChatSession>
+    suspend fun createSession(name: String? = null): Either<ApiResourceError, ChatSession>
 
     /**
      * Retrieves the full details of a specific chat session, including all its messages.
@@ -78,11 +72,11 @@ interface SessionApi {
      * (E2.S5)
      *
      * @param sessionId The ID of the session to rename.
-     * @param request The request body containing the new name.
+     * @param name The new name for the session.
      * @return [Either.Right] with [Unit] on successful update (typically HTTP 200 OK with no body),
      *         or [Either.Left] containing an [ApiResourceError] on failure.
      */
-    suspend fun updateSessionName(sessionId: Long, request: UpdateSessionNameRequest): Either<ApiResourceError, Unit>
+    suspend fun updateSessionName(sessionId: Long, name: String): Either<ApiResourceError, Unit>
 
     /**
      * Updates the currently selected LLM model for a specific chat session.
@@ -91,11 +85,11 @@ interface SessionApi {
      * (E4.S7)
      *
      * @param sessionId The ID of the session.
-     * @param request The request body containing the new optional model ID.
+     * @param modelId The new optional model ID for the session.
      * @return [Either.Right] with [Unit] on successful update,
      *         or [Either.Left] containing an [ApiResourceError] on failure.
      */
-    suspend fun updateSessionModel(sessionId: Long, request: UpdateSessionModelRequest): Either<ApiResourceError, Unit>
+    suspend fun updateSessionModel(sessionId: Long, modelId: Long?): Either<ApiResourceError, Unit>
 
     /**
      * Updates the currently selected settings profile for a specific chat session.
@@ -104,11 +98,11 @@ interface SessionApi {
      * (E4.S7)
      *
      * @param sessionId The ID of the session.
-     * @param request The request body containing the new optional settings ID.
+     * @param settingsId The new optional settings ID for the session.
      * @return [Either.Right] with [Unit] on successful update,
      *         or [Either.Left] containing an [ApiResourceError] on failure.
      */
-    suspend fun updateSessionSettings(sessionId: Long, request: UpdateSessionSettingsRequest): Either<ApiResourceError, Unit>
+    suspend fun updateSessionSettings(sessionId: Long, settingsId: Long?): Either<ApiResourceError, Unit>
 
     /**
      * Sets the current "active" leaf message for a session, affecting which branch is displayed.
@@ -117,11 +111,11 @@ interface SessionApi {
      * (E1.S5)
      *
      * @param sessionId The ID of the session.
-     * @param request The request body containing the new optional leaf message ID.
+     * @param leafMessageId The new optional leaf message ID for the session.
      * @return [Either.Right] with [Unit] on successful update,
      *         or [Either.Left] containing an [ApiResourceError] on failure.
      */
-    suspend fun updateSessionLeafMessage(sessionId: Long, request: UpdateSessionLeafMessageRequest): Either<ApiResourceError, Unit>
+    suspend fun updateSessionLeafMessage(sessionId: Long, leafMessageId: Long?): Either<ApiResourceError, Unit>
 
     /**
      * Assigns a specific chat session to a chat group, or ungroups it.
@@ -130,11 +124,23 @@ interface SessionApi {
      * (E6.S1, E6.S7)
      *
      * @param sessionId The ID of the session to assign.
-     * @param request The request body containing the new optional group ID.
+     * @param groupId The new optional group ID for the session.
      * @return [Either.Right] with [Unit] on successful update,
      *         or [Either.Left] containing an [ApiResourceError] on failure.
      */
-    suspend fun updateSessionGroup(sessionId: Long, request: UpdateSessionGroupRequest): Either<ApiResourceError, Unit>
+    suspend fun updateSessionGroup(sessionId: Long, groupId: Long?): Either<ApiResourceError, Unit>
+
+    /**
+     * Clones an existing chat session with all its messages, tool calls, and configuration.
+     *
+     * Corresponds to `POST /api/v1/sessions/{sessionId}/clone`.
+     *
+     * @param sessionId The ID of the session to clone.
+     * @param name The name for the cloned session.
+     * @return [Either.Right] containing the newly created [ChatSession] object on success,
+     *         or [Either.Left] containing an [ApiResourceError] on failure.
+     */
+    suspend fun cloneSession(sessionId: Long, name: String): Either<ApiResourceError, ChatSession>
 
     /**
      * Retrieves all tool calls for a specific chat session.

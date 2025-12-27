@@ -9,8 +9,6 @@ import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.service.api.GroupApi
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.models.core.ChatGroup
-import eu.torvian.chatbot.common.models.api.core.CreateGroupRequest
-import eu.torvian.chatbot.common.models.api.core.RenameGroupRequest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -56,8 +54,8 @@ class DefaultGroupRepository(
             }
     }
 
-    override suspend fun createGroup(request: CreateGroupRequest): Either<RepositoryError, ChatGroup> {
-        return groupApi.createGroup(request)
+    override suspend fun createGroup(name: String): Either<RepositoryError, ChatGroup> {
+        return groupApi.createGroup(name)
             .map { newGroup ->
                 // Add the new group to the internal list
                 updateGroupsState { currentGroups ->
@@ -70,14 +68,14 @@ class DefaultGroupRepository(
             }
     }
 
-    override suspend fun renameGroup(groupId: Long, request: RenameGroupRequest): Either<RepositoryError, Unit> {
-        return groupApi.renameGroup(groupId, request)
+    override suspend fun renameGroup(groupId: Long, name: String): Either<RepositoryError, Unit> {
+        return groupApi.renameGroup(groupId, name)
             .map {
                 // Update the group in the internal list
                 updateGroupsState { currentGroups ->
                     currentGroups.map { group ->
                         if (group.id == groupId) {
-                            group.copy(name = request.name)
+                            group.copy(name = name)
                         } else {
                             group
                         }

@@ -61,13 +61,12 @@ class KtorUserApiClient(client: HttpClient) : BaseApiResourceClient(client), Use
         }
     }
 
-    override suspend fun updateUser(userId: Long, request: UpdateUserRequest): Either<ApiResourceError, User> {
-        return safeApiCall {
+    override suspend fun updateUser(userId: Long, username: String, email: String?): Either<ApiResourceError, User> =
+        safeApiCall {
             client.put(ById(userId = userId)) {
-                setBody(request)
+                setBody(UpdateUserRequest(username, email))
             }.body<User>()
         }
-    }
 
     override suspend fun updateUserStatus(userId: Long, status: UserStatus): Either<ApiResourceError, User> {
         return safeApiCall {
@@ -100,13 +99,12 @@ class KtorUserApiClient(client: HttpClient) : BaseApiResourceClient(client), Use
         }
     }
 
-    override suspend fun assignRoleToUser(userId: Long, request: AssignRoleRequest): Either<ApiResourceError, Unit> {
-        return safeApiCall {
+    override suspend fun assignRoleToUser(userId: Long, roleId: Long): Either<ApiResourceError, Unit> =
+        safeApiCall {
             client.post(Roles(ById(userId = userId))) {
-                setBody(request)
+                setBody(AssignRoleRequest(roleId))
             }.body<Unit>()
         }
-    }
 
     override suspend fun revokeRoleFromUser(userId: Long, roleId: Long): Either<ApiResourceError, Unit> {
         return safeApiCall {
@@ -114,11 +112,10 @@ class KtorUserApiClient(client: HttpClient) : BaseApiResourceClient(client), Use
         }
     }
 
-    override suspend fun changeUserPassword(userId: Long, request: ChangePasswordRequest): Either<ApiResourceError, Unit> {
-        return safeApiCall {
+    override suspend fun changeUserPassword(userId: Long, newPassword: String): Either<ApiResourceError, Unit> =
+        safeApiCall {
             client.put(Password(ById(userId = userId))) {
-                setBody(request)
+                setBody(ChangePasswordRequest(newPassword))
             }.body<Unit>()
         }
-    }
 }

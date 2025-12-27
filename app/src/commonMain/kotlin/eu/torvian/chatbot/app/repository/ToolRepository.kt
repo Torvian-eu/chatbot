@@ -2,10 +2,11 @@ package eu.torvian.chatbot.app.repository
 
 import arrow.core.Either
 import eu.torvian.chatbot.app.domain.contracts.DataState
-import eu.torvian.chatbot.common.models.api.tool.CreateToolRequest
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
+import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.common.models.tool.UserToolApprovalPreference
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Repository interface for managing tool definitions and session-specific tool configurations.
@@ -73,10 +74,24 @@ interface ToolRepository {
      * Upon successful creation, the new tool is automatically added to the internal
      * StateFlow, triggering updates to all observers.
      *
-     * @param request The tool creation request containing all necessary details
+     * @param name The unique name of the tool (machine-readable, used in LLM API calls)
+     * @param description A description of what the tool does
+     * @param type The type of tool (e.g., WEB_SEARCH, CALCULATOR)
+     * @param config Tool-specific configuration (JSON object)
+     * @param inputSchema JSON Schema defining expected input parameters
+     * @param outputSchema Optional JSON Schema defining expected output structure
+     * @param isEnabled Whether the tool is enabled by default
      * @return Either.Right with the created ToolDefinition on success, or Either.Left with RepositoryError on failure
      */
-    suspend fun createTool(request: CreateToolRequest): Either<RepositoryError, ToolDefinition>
+    suspend fun createTool(
+        name: String,
+        description: String,
+        type: ToolType,
+        config: JsonObject,
+        inputSchema: JsonObject,
+        outputSchema: JsonObject? = null,
+        isEnabled: Boolean = true
+    ): Either<RepositoryError, ToolDefinition>
 
     /**
      * Updates an existing tool definition.

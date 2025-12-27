@@ -9,8 +9,6 @@ import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.auth.AccountData
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.api.ApiError
-import eu.torvian.chatbot.common.models.api.auth.LoginRequest
-import eu.torvian.chatbot.common.models.api.auth.RegisterRequest
 import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.user.UserStatus
 import io.mockk.coEvery
@@ -67,7 +65,7 @@ class AuthViewModelTest {
         // Arrange
         val username = "testuser"
         val password = "ValidPass123!"
-        coEvery { mockAuthRepository.login(LoginRequest(username, password)) } returns Unit.right()
+        coEvery { mockAuthRepository.login(username, password) } returns Unit.right()
         authViewModel.updateLoginForm(username, password)
 
         // Act
@@ -81,7 +79,7 @@ class AuthViewModelTest {
         assertEquals("", finalState.username)
         assertEquals("", finalState.password)
 
-        coVerify { mockAuthRepository.login(LoginRequest(username, password)) }
+        coVerify { mockAuthRepository.login(username, password) }
     }
 
     @Test
@@ -94,7 +92,7 @@ class AuthViewModelTest {
             ApiResourceError.ServerError(apiError),
             "Login failed"
         )
-        coEvery { mockAuthRepository.login(LoginRequest(username, password)) } returns error.left()
+        coEvery { mockAuthRepository.login(username, password) } returns error.left()
         authViewModel.updateLoginForm(username, password)
 
         // Act
@@ -125,7 +123,7 @@ class AuthViewModelTest {
         assertNull(finalState.passwordError)
         assertNull(finalState.generalError)
 
-        coVerify(exactly = 0) { mockAuthRepository.login(any()) }
+        coVerify(exactly = 0) { mockAuthRepository.login(any(), any()) }
     }
 
     @Test
@@ -143,7 +141,7 @@ class AuthViewModelTest {
         assertEquals("Password is required", finalState.passwordError)
         assertNull(finalState.generalError)
 
-        coVerify(exactly = 0) { mockAuthRepository.login(any()) }
+        coVerify(exactly = 0) { mockAuthRepository.login(any(), any()) }
     }
 
     @Test
@@ -152,7 +150,7 @@ class AuthViewModelTest {
         val username = "testuser"
         val password = "ValidPass123!"
         val deferredResult = CompletableDeferred<Unit>()
-        coEvery { mockAuthRepository.login(LoginRequest(username, password)) } coAnswers {
+        coEvery { mockAuthRepository.login(username, password) } coAnswers {
             deferredResult.await().right()
         }
         authViewModel.updateLoginForm(username, password)
@@ -195,7 +193,7 @@ class AuthViewModelTest {
         )
 
         coEvery {
-            mockAuthRepository.register(RegisterRequest(username, password, email))
+            mockAuthRepository.register(username, password, email)
         } returns user.right()
         authViewModel.updateRegisterForm(username, email, password, confirmPassword)
 
@@ -212,7 +210,7 @@ class AuthViewModelTest {
         assertEquals("", finalState.password)
         assertEquals("", finalState.confirmPassword)
 
-        coVerify { mockAuthRepository.register(RegisterRequest(username, password, email)) }
+        coVerify { mockAuthRepository.register(username, password, email) }
     }
 
     @Test
@@ -229,7 +227,7 @@ class AuthViewModelTest {
         )
 
         coEvery {
-            mockAuthRepository.register(RegisterRequest(username, password, email))
+            mockAuthRepository.register(username, password, email)
         } returns error.left()
         authViewModel.updateRegisterForm(username, email, password, confirmPassword)
 
@@ -257,7 +255,7 @@ class AuthViewModelTest {
         assertEquals("Passwords do not match", finalState.confirmPasswordError)
         assertNull(finalState.generalError)
 
-        coVerify(exactly = 0) { mockAuthRepository.register(any()) }
+        coVerify(exactly = 0) { mockAuthRepository.register(any(), any(), any()) }
     }
 
     @Test
@@ -277,7 +275,7 @@ class AuthViewModelTest {
         )
 
         coEvery {
-            mockAuthRepository.register(RegisterRequest(username, password, null))
+            mockAuthRepository.register(username, password, null)
         } returns user.right()
         authViewModel.updateRegisterForm(username, "", password, confirmPassword)
 
@@ -290,7 +288,7 @@ class AuthViewModelTest {
         assertFalse(finalState.isLoading)
         assertNull(finalState.generalError)
 
-        coVerify { mockAuthRepository.register(RegisterRequest(username, password, null)) }
+        coVerify { mockAuthRepository.register(username, password, null) }
     }
 
     // --- Logout Tests ---
@@ -419,7 +417,7 @@ class AuthViewModelTest {
         val invalidCredentialsError = RepositoryError.DataFetchError(
             ApiResourceError.ServerError(apiError)
         )
-        coEvery { mockAuthRepository.login(any()) } returns invalidCredentialsError.left()
+        coEvery { mockAuthRepository.login(any(), any()) } returns invalidCredentialsError.left()
 
         authViewModel.updateLoginForm("user", "pass")
         authViewModel.login()
@@ -435,7 +433,7 @@ class AuthViewModelTest {
         val usernameExistsError = RepositoryError.DataFetchError(
             ApiResourceError.ServerError(apiError)
         )
-        coEvery { mockAuthRepository.register(any()) } returns usernameExistsError.left()
+        coEvery { mockAuthRepository.register(any(), any(), any()) } returns usernameExistsError.left()
 
         authViewModel.updateRegisterForm("existinguser", "email@test.com", "ValidPass123!", "ValidPass123!")
         authViewModel.register()

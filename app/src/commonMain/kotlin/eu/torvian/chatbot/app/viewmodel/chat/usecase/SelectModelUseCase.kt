@@ -6,7 +6,6 @@ import eu.torvian.chatbot.app.repository.SessionRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionModelRequest
 
 /**
  * Use case for selecting a model for the current chat session in the reactive architecture.
@@ -33,13 +32,12 @@ class SelectModelUseCase(
      */
     suspend fun execute(modelId: Long?) {
         val sessionId = state.activeSessionId.value ?: return
-
         logger.info("Selecting model $modelId for session $sessionId")
 
         // Update session model via repository
         sessionRepository.updateSessionModel(
             sessionId = sessionId,
-            request = UpdateSessionModelRequest(modelId = modelId)
+            modelId = modelId
         ).fold(
             ifLeft = { repositoryError ->
                 logger.error("Failed to update session model: $repositoryError")

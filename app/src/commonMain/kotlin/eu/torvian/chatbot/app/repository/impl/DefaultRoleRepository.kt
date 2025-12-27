@@ -10,8 +10,6 @@ import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.service.api.RoleApi
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.models.user.Role
-import eu.torvian.chatbot.common.models.api.admin.CreateRoleRequest
-import eu.torvian.chatbot.common.models.api.admin.UpdateRoleRequest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -80,8 +78,7 @@ class DefaultRoleRepository(
     override suspend fun createRole(name: String, description: String?): Either<RepositoryError, Role> {
         logger.info("Creating new role: $name")
 
-        val request = CreateRoleRequest(name = name, description = description)
-        return roleApi.createRole(request).fold(
+        return roleApi.createRole(name, description).fold(
             ifLeft = { error ->
                 val repoError = error.toRepositoryError("Failed to create role '$name'")
                 logger.warn("Failed to create role '$name': ${repoError.message}")
@@ -98,8 +95,7 @@ class DefaultRoleRepository(
     override suspend fun updateRole(id: Long, name: String, description: String?): Either<RepositoryError, Role> {
         logger.info("Updating role ID: $id with name: $name")
 
-        val request = UpdateRoleRequest(name = name, description = description)
-        return roleApi.updateRole(id, request).fold(
+        return roleApi.updateRole(id, name, description).fold(
             ifLeft = { error ->
                 val repoError = error.toRepositoryError("Failed to update role ID: $id")
                 logger.warn("Failed to update role ID: $id: ${repoError.message}")

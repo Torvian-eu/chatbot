@@ -10,9 +10,7 @@ import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.service.api.SettingsApi
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
-import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
 import eu.torvian.chatbot.common.models.api.access.ModelSettingsDetails
-import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import kotlinx.coroutines.flow.*
 
@@ -167,24 +165,26 @@ class DefaultModelSettingsRepository(
 
     override suspend fun grantSettingsAccess(
         settingsId: Long,
-        request: GrantAccessRequest
+        groupId: Long,
+        accessMode: String
     ): Either<RepositoryError, ModelSettingsDetails> = either {
         withError({ apiResourceError ->
             apiResourceError.toRepositoryError("Failed to grant settings access")
         }) {
-            settingsApi.grantSettingsAccess(settingsId, request).bind()
+            settingsApi.grantSettingsAccess(settingsId, groupId, accessMode).bind()
         }
         loadSettingsDetails(settingsId).bind()
     }
 
     override suspend fun revokeSettingsAccess(
         settingsId: Long,
-        request: RevokeAccessRequest
+        groupId: Long,
+        accessMode: String
     ): Either<RepositoryError, ModelSettingsDetails> = either {
         withError({ apiResourceError ->
             apiResourceError.toRepositoryError("Failed to revoke settings access")
         }) {
-            settingsApi.revokeSettingsAccess(settingsId, request).bind()
+            settingsApi.revokeSettingsAccess(settingsId, groupId, accessMode).bind()
         }
         loadSettingsDetails(settingsId).bind()
     }

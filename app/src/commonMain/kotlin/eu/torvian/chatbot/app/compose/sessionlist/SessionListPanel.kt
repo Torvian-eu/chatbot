@@ -113,6 +113,7 @@ private fun SessionListSuccessPanelContent(
         DialogActions(
             onRenameSessionRequested = sessionListActions::onShowRenameSessionDialog,
             onDeleteSessionRequested = sessionListActions::onShowDeleteSessionDialog,
+            onCloneSessionRequested = sessionListActions::onShowCloneSessionDialog,
             onAssignToGroupRequested = sessionListActions::onShowAssignGroupDialog,
             onDeleteGroupRequested = sessionListActions::onShowDeleteGroupDialog
         )

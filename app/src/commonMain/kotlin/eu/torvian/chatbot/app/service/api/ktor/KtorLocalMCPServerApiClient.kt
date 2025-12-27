@@ -24,13 +24,12 @@ import io.ktor.client.request.*
  */
 class KtorLocalMCPServerApiClient(client: HttpClient) : BaseApiResourceClient(client), LocalMCPServerApi {
 
-    override suspend fun createServer(request: CreateServerRequest): Either<ApiResourceError, CreateServerResponse> {
-        return safeApiCall {
+    override suspend fun createServer(isEnabled: Boolean): Either<ApiResourceError, CreateServerResponse> =
+        safeApiCall {
             client.post(LocalMCPServerResource.Create()) {
-                setBody(request)
+                setBody(CreateServerRequest(isEnabled))
             }.body<CreateServerResponse>()
         }
-    }
 
     override suspend fun getServerIds(): Either<ApiResourceError, ServerIdsResponse> {
         return safeApiCall {
@@ -44,14 +43,13 @@ class KtorLocalMCPServerApiClient(client: HttpClient) : BaseApiResourceClient(cl
         }
     }
 
-    override suspend fun setServerEnabled(serverId: Long, isEnabled: Boolean): Either<ApiResourceError, Unit> {
-        return safeApiCall {
+    override suspend fun setServerEnabled(serverId: Long, isEnabled: Boolean): Either<ApiResourceError, Unit> =
+        safeApiCall {
             client.put(LocalMCPServerResource.ById.SetEnabled(
                 parent = LocalMCPServerResource.ById(id = serverId)
             )) {
-                setBody(SetServerEnabledRequest(isEnabled = isEnabled))
+                setBody(SetServerEnabledRequest(isEnabled))
             }.body<Unit>()
         }
-    }
 }
 

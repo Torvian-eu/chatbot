@@ -83,6 +83,12 @@ interface SessionListActions {
     fun onShowDeleteSessionDialog(sessionId: Long)
 
     /**
+     * Callback for when the user requests to show the clone session dialog.
+     * @param session The session to clone.
+     */
+    fun onShowCloneSessionDialog(session: ChatSessionSummary)
+
+    /**
      * Callback for when the user requests to show the assign group dialog.
      * @param session The session to assign to a group.
      */

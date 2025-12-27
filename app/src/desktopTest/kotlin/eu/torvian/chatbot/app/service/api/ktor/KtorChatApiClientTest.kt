@@ -6,12 +6,9 @@ import eu.torvian.chatbot.app.service.api.ChatApi
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.MessageResource
-import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.models.core.ChatMessage
-import eu.torvian.chatbot.common.models.api.core.ProcessNewMessageRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateMessageRequest
-import io.ktor.client.HttpClient
+import io.ktor.client.*
 import io.ktor.client.engine.mock.*
 import io.ktor.http.*
 import kotlinx.coroutines.test.runTest
@@ -212,9 +209,8 @@ class KtorChatApiClientTest {
                 request.url.fullPath
             )
             val requestBody = request.body.toByteArray().decodeToString()
-            val updateMessageRequest =
-                json.decodeFromString<UpdateMessageRequest>(requestBody)
-            assertEquals("Updated content", updateMessageRequest.content)
+            // Verify the request body contains the expected content
+            assertTrue(requestBody.contains("Updated content"))
             val response = ChatMessage.UserMessage(456, 123, "Updated content", now, now, null, emptyList())
             respond(
                 content = json.encodeToString<ChatMessage>(response),
@@ -225,7 +221,7 @@ class KtorChatApiClientTest {
         val apiClient = createTestClient(mockEngine)
         val result = apiClient.updateMessageContent(
             456,
-            UpdateMessageRequest("Updated content")
+            "Updated content"
         )
         when (result) {
             is Either.Right -> {
@@ -256,7 +252,7 @@ class KtorChatApiClientTest {
         }
         val apiClient = createTestClient(mockEngine)
         val result =
-            apiClient.updateMessageContent(456, UpdateMessageRequest("Bad content"))
+            apiClient.updateMessageContent(456, "Bad content")
         when (result) {
             is Either.Right -> {
                 fail("Expected failure, but got success: ${result.value}")

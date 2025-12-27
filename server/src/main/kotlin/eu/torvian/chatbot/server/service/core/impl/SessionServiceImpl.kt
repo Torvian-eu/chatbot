@@ -5,18 +5,17 @@ import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.raise.ensureNotNull
 import arrow.core.raise.withError
-import eu.torvian.chatbot.common.models.llm.ChatModelSettings
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
+import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
+import eu.torvian.chatbot.common.models.core.MessageInsertPosition
+import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModelType
-import eu.torvian.chatbot.server.data.dao.ModelDao
-import eu.torvian.chatbot.server.data.dao.SessionDao
-import eu.torvian.chatbot.server.data.dao.SessionOwnershipDao
-import eu.torvian.chatbot.server.data.dao.SettingsDao
+import eu.torvian.chatbot.server.data.dao.*
 import eu.torvian.chatbot.server.data.dao.error.*
 import eu.torvian.chatbot.server.service.core.SessionService
 import eu.torvian.chatbot.server.service.core.error.session.*
-import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 
 /**
  * Implementation of the [SessionService] interface.
@@ -26,6 +25,9 @@ class SessionServiceImpl(
     private val sessionOwnershipDao: SessionOwnershipDao,
     private val settingsDao: SettingsDao,
     private val modelDao: ModelDao,
+    private val messageDao: MessageDao,
+    private val toolCallDao: ToolCallDao,
+    private val sessionToolConfigDao: SessionToolConfigDao,
     private val transactionScope: TransactionScope,
 ) : SessionService {
 
@@ -130,7 +132,9 @@ class SessionServiceImpl(
                 withError({ daoError: SessionError ->
                     when (daoError) {
                         is SessionError.SessionNotFound -> UpdateSessionCurrentModelIdError.SessionNotFound(daoError.id)
-                        is SessionError.ForeignKeyViolation -> UpdateSessionCurrentModelIdError.InvalidRelatedEntity(daoError.message)
+                        is SessionError.ForeignKeyViolation -> UpdateSessionCurrentModelIdError.InvalidRelatedEntity(
+                            daoError.message
+                        )
                     }
                 }) {
                     // Update the model ID
@@ -185,7 +189,9 @@ class SessionServiceImpl(
                 withError({ daoError: SessionError ->
                     when (daoError) {
                         is SessionError.SessionNotFound -> UpdateSessionCurrentSettingsIdError.SessionNotFound(daoError.id)
-                        is SessionError.ForeignKeyViolation -> UpdateSessionCurrentSettingsIdError.InvalidRelatedEntity(daoError.message)
+                        is SessionError.ForeignKeyViolation -> UpdateSessionCurrentSettingsIdError.InvalidRelatedEntity(
+                            daoError.message
+                        )
                     }
                 }) {
                     sessionDao.updateSessionCurrentSettingsId(id, settingsId).bind()
@@ -251,7 +257,9 @@ class SessionServiceImpl(
                 // All validations passed, perform the updates
                 withError({ daoError: SessionError ->
                     when (daoError) {
-                        is SessionError.SessionNotFound -> UpdateSessionCurrentModelAndSettingsIdError.SessionNotFound(daoError.id)
+                        is SessionError.SessionNotFound -> UpdateSessionCurrentModelAndSettingsIdError.SessionNotFound(
+                            daoError.id
+                        )
 
                         is SessionError.ForeignKeyViolation -> UpdateSessionCurrentModelAndSettingsIdError.InvalidRelatedEntity(
                             daoError.message
@@ -277,7 +285,9 @@ class SessionServiceImpl(
                 withError({ daoError: SessionError ->
                     when (daoError) {
                         is SessionError.SessionNotFound -> UpdateSessionLeafMessageIdError.SessionNotFound(daoError.id)
-                        is SessionError.ForeignKeyViolation -> UpdateSessionLeafMessageIdError.InvalidRelatedEntity(daoError.message)
+                        is SessionError.ForeignKeyViolation -> UpdateSessionLeafMessageIdError.InvalidRelatedEntity(
+                            daoError.message
+                        )
                     }
                 }) {
                     sessionDao.updateSessionLeafMessageId(id, messageId).bind()
@@ -292,6 +302,155 @@ class SessionServiceImpl(
                     DeleteSessionError.SessionNotFound(daoError.id)
                 }) {
                     sessionDao.deleteSession(id).bind()
+                }
+            }
+        }
+
+    override suspend fun cloneSession(id: Long, name: String): Either<CloneSessionError, ChatSession> =
+        transactionScope.transaction {
+            either {
+                // Validate name is not blank
+                ensure(name.isNotBlank()) {
+                    CloneSessionError.InvalidName("Session name cannot be blank.")
+                }
+
+                // Load original session
+                val originalSession = withError({ daoError: SessionError.SessionNotFound ->
+                    CloneSessionError.SessionNotFound(daoError.id)
+                }) {
+                    sessionDao.getSessionById(id).bind()
+                }
+
+                // Get original session's owner
+                val ownerId = withError({ daoError: GetOwnerError ->
+                    CloneSessionError.InternalError("Failed to get session ownership: $daoError")
+                }) {
+                    sessionOwnershipDao.getOwner(id).bind()
+                }
+
+                // Create new session with same configuration
+                val newSession = withError({ daoError: SessionError.ForeignKeyViolation ->
+                    CloneSessionError.InternalError("Failed to create cloned session: ${daoError.message}")
+                }) {
+                    sessionDao.insertSession(
+                        name = name,
+                        groupId = originalSession.groupId,
+                        currentModelId = originalSession.currentModelId,
+                        currentSettingsId = originalSession.currentSettingsId
+                    ).bind()
+                }
+
+                // Set ownership for the cloned session
+                withError({ ownershipError: SetOwnerError ->
+                    CloneSessionError.InternalError("Failed to set session ownership: $ownershipError")
+                }) {
+                    sessionOwnershipDao.setOwner(newSession.id, ownerId).bind()
+                }
+
+                // Clone messages
+                val originalMessages = messageDao.getMessagesBySessionId(id)
+                val messageIdMap = mutableMapOf<Long, Long>() // oldId -> newId
+
+                // Helper function to recursively clone messages from root to leaf
+                suspend fun cloneMessageRecursively(message: ChatMessage) {
+                    // Find the new parent ID (will be null for root messages)
+                    val newParentId = message.parentMessageId?.let {
+                        messageIdMap[it]
+                            ?: raise(CloneSessionError.InternalError("Failed to clone messages: Parent message ${message.parentMessageId} not found"))
+                    }
+
+                    // Extract modelId and settingsId if this is an AssistantMessage
+                    val modelId = (message as? ChatMessage.AssistantMessage)?.modelId
+                    val settingsId = (message as? ChatMessage.AssistantMessage)?.settingsId
+
+                    // Clone this message
+                    val newMessage = withError({ daoError: InsertMessageError ->
+                        CloneSessionError.InternalError("Failed to clone messages: $daoError")
+                    }) {
+                        messageDao.insertMessage(
+                            sessionId = newSession.id,
+                            targetMessageId = newParentId,
+                            position = MessageInsertPosition.APPEND,
+                            role = message.role,
+                            content = message.content,
+                            modelId = modelId,
+                            settingsId = settingsId,
+                            createdAt = message.createdAt,
+                            updatedAt = message.updatedAt
+                        ).bind()
+                    }
+
+                    // Store the mapping
+                    messageIdMap[message.id] = newMessage.id
+
+                    // Recursively clone all children
+                    val children = originalMessages.filter { it.parentMessageId == message.id }
+                    for (child in children) {
+                        cloneMessageRecursively(child)
+                    }
+                }
+
+                // Start cloning from root messages (those with no parent)
+                val rootMessages = originalMessages.filter { it.parentMessageId == null }
+                for (rootMessage in rootMessages) {
+                    cloneMessageRecursively(rootMessage)
+                }
+
+                // Update currentLeafMessageId to the mapped value
+                val newLeafMessageId = originalSession.currentLeafMessageId?.let { messageIdMap[it] }
+                if (newLeafMessageId != null) {
+                    withError({ daoError: SessionError ->
+                        CloneSessionError.InternalError("Failed to update leaf message: ${daoError}")
+                    }) {
+                        sessionDao.updateSessionLeafMessageId(newSession.id, newLeafMessageId).bind()
+                    }
+                }
+
+                // Clone tool calls
+                val originalToolCalls = toolCallDao.getToolCallsBySessionId(id)
+                for (originalToolCall in originalToolCalls) {
+                    val newMessageId = messageIdMap[originalToolCall.messageId]
+                        ?: raise(CloneSessionError.InternalError("Failed to clone tool calls: Message ${originalToolCall.messageId} not found"))
+
+                    withError({ daoError: InsertToolCallError ->
+                        CloneSessionError.InternalError("Failed to clone tool calls: $daoError")
+                    }) {
+                        toolCallDao.insertToolCall(
+                            messageId = newMessageId,
+                            toolDefinitionId = originalToolCall.toolDefinitionId,
+                            toolName = originalToolCall.toolName,
+                            toolCallId = originalToolCall.toolCallId,
+                            input = originalToolCall.input,
+                            output = originalToolCall.output,
+                            status = originalToolCall.status,
+                            errorMessage = originalToolCall.errorMessage,
+                            denialReason = originalToolCall.denialReason,
+                            executedAt = originalToolCall.executedAt,
+                            durationMs = originalToolCall.durationMs
+                        ).bind()
+                    }
+                }
+
+                // Clone session tool configurations
+                val enabledTools = sessionToolConfigDao.getEnabledToolsForSession(id)
+                if (enabledTools.isNotEmpty()) {
+                    val toolIds = enabledTools.map { it.id }
+                    withError({ daoError: SetToolsEnabledError ->
+                        CloneSessionError.InternalError("Failed to clone tool configurations: ${daoError}")
+                    }) {
+                        sessionToolConfigDao.setToolsEnabledForSession(
+                            sessionId = newSession.id,
+                            toolDefinitionIds = toolIds,
+                            enabled = true
+                        ).bind()
+                    }
+                }
+
+                // Load and return the complete cloned session with messages
+                withError({ daoError: SessionError.SessionNotFound ->
+                    CloneSessionError.SessionNotFound(daoError.id)
+                }) {
+                    sessionDao.getSessionById(newSession.id).bind()
                 }
             }
         }

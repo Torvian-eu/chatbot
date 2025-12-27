@@ -76,11 +76,15 @@ class MessageDaoExposed(
         role: ChatMessage.Role,
         content: String,
         modelId: Long?,
-        settingsId: Long?
+        settingsId: Long?,
+        createdAt: Instant?,
+        updatedAt: Instant?
     ): Either<InsertMessageError, ChatMessage> =
         transactionScope.transaction {
             either {
                 val now = System.currentTimeMillis()
+                val createdAtMillis = createdAt?.toEpochMilliseconds() ?: now
+                val updatedAtMillis = updatedAt?.toEpochMilliseconds() ?: now
 
                 // 1.Determine Parent and Children for New Message
                 val (newParentId, newChildrenIds) = if (targetMessageId == null) {
@@ -121,13 +125,14 @@ class MessageDaoExposed(
                     }
                 }
 
-                // 2. Insert New Message with calculated parent and children
+                // 2. Insert the new message
                 val insertedRow = insertChatMessageRow(
                     sessionId = sessionId,
                     content = content,
                     parentMessageId = newParentId,
                     role = role,
-                    now = now,
+                    createdAt = createdAtMillis,
+                    updatedAt = updatedAtMillis,
                     childrenMessageIds = newChildrenIds
                 )
                 val newMessageId = insertedRow[ChatMessageTable.id].value
@@ -208,8 +213,8 @@ class MessageDaoExposed(
                         id = newMessageId,
                         sessionId = sessionId,
                         content = content,
-                        createdAt = Instant.fromEpochMilliseconds(now),
-                        updatedAt = Instant.fromEpochMilliseconds(now),
+                        createdAt = Instant.fromEpochMilliseconds(createdAtMillis),
+                        updatedAt = Instant.fromEpochMilliseconds(updatedAtMillis),
                         parentMessageId = newParentId,
                         childrenMessageIds = newChildrenIds,
                         modelId = modelId,
@@ -220,8 +225,8 @@ class MessageDaoExposed(
                         id = newMessageId,
                         sessionId = sessionId,
                         content = content,
-                        createdAt = Instant.fromEpochMilliseconds(now),
-                        updatedAt = Instant.fromEpochMilliseconds(now),
+                        createdAt = Instant.fromEpochMilliseconds(createdAtMillis),
+                        updatedAt = Instant.fromEpochMilliseconds(updatedAtMillis),
                         parentMessageId = newParentId,
                         childrenMessageIds = newChildrenIds
                     )
@@ -385,15 +390,16 @@ class MessageDaoExposed(
         content: String,
         parentMessageId: Long?,
         role: ChatMessage.Role,
-        now: Long,
+        createdAt: Long,
+        updatedAt: Long,
         childrenMessageIds: List<Long> = emptyList()
     ): ResultRow {
         val insertStatement = ChatMessageTable.insert {
             it[ChatMessageTable.sessionId] = sessionId
             it[ChatMessageTable.role] = role
             it[ChatMessageTable.content] = content
-            it[ChatMessageTable.createdAt] = now
-            it[ChatMessageTable.updatedAt] = now
+            it[ChatMessageTable.createdAt] = createdAt
+            it[ChatMessageTable.updatedAt] = updatedAt
             it[ChatMessageTable.parentMessageId] = parentMessageId
             it[ChatMessageTable.childrenMessageIds] = Json.encodeToString(childrenMessageIds)
         }
