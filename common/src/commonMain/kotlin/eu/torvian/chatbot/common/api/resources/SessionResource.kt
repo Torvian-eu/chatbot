@@ -43,6 +43,12 @@ class SessionResource(val parent: Api = Api()) {
         class Group(val parent: ById)
 
         /**
+         * Resource for cloning a session: /api/v1/sessions/{sessionId}/clone
+         */
+        @Resource("clone")
+        class Clone(val parent: ById)
+
+        /**
          * Resource for messages nested under a session: /api/v1/sessions/{sessionId}/messages
          */
         @Resource("messages")

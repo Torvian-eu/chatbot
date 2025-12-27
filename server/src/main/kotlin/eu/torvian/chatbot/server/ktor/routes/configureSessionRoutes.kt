@@ -170,6 +170,20 @@ fun Route.configureSessionRoutes(
             call.respondEither(result)
         }
 
+        // POST /api/v1/sessions/{sessionId}/clone - Clone a session with all its data
+        post<SessionResource.ById.Clone> { resource ->
+            val sessionId = resource.parent.sessionId
+            val userId = call.getUserId()
+            val request = call.receive<CloneSessionRequest>()
+            val result = either {
+                requireSessionAccess(authorizationService, userId, sessionId, AccessMode.READ)
+                withError({ e: CloneSessionError -> e.toApiError() }) {
+                    sessionService.cloneSession(sessionId, request.name).bind()
+                }
+            }
+            call.respondEither(result, HttpStatusCode.Created)
+        }
+
 
 //      WebSocket /api/v1/sessions/{sessionId}/messages - Process a new message for a session
         webSocket<SessionResource.ById.Messages> { resource ->
