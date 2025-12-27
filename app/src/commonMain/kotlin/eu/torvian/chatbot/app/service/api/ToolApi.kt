@@ -1,11 +1,10 @@
 package eu.torvian.chatbot.app.service.api
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.api.tool.CreateToolRequest
-import eu.torvian.chatbot.common.models.api.tool.SetToolEnabledRequest
-import eu.torvian.chatbot.common.models.api.tool.SetToolsEnabledRequest
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
+import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.common.models.tool.UserToolApprovalPreference
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Frontend API interface for interacting with tool-related endpoints.
@@ -46,11 +45,25 @@ interface ToolApi {
      * Corresponds to `POST /api/v1/tools`.
      * Requires MANAGE_TOOLS permission.
      *
-     * @param request The request body with tool details.
+     * @param name The unique name of the tool (machine-readable, used in LLM API calls)
+     * @param description A description of what the tool does
+     * @param type The type of tool (e.g., WEB_SEARCH, CALCULATOR)
+     * @param config Tool-specific configuration (JSON object)
+     * @param inputSchema JSON Schema defining expected input parameters
+     * @param outputSchema Optional JSON Schema defining expected output structure
+     * @param isEnabled Whether the tool is enabled by default
      * @return [Either.Right] containing the newly created [ToolDefinition] on success,
      *         or [Either.Left] containing a [ApiResourceError] on failure.
      */
-    suspend fun createTool(request: CreateToolRequest): Either<ApiResourceError, ToolDefinition>
+    suspend fun createTool(
+        name: String,
+        description: String,
+        type: ToolType,
+        config: JsonObject,
+        inputSchema: JsonObject,
+        outputSchema: JsonObject? = null,
+        isEnabled: Boolean = true
+    ): Either<ApiResourceError, ToolDefinition>
 
     /**
      * Updates an existing tool definition.
@@ -94,14 +107,14 @@ interface ToolApi {
      *
      * @param sessionId The ID of the session.
      * @param toolId The ID of the tool.
-     * @param request The request body containing the enabled flag.
+     * @param enabled Whether to enable (true) or disable (false) the tool for this session.
      * @return [Either.Right] with [Unit] on successful update,
      *         or [Either.Left] containing a [ApiResourceError] on failure.
      */
     suspend fun setToolEnabledForSession(
         sessionId: Long,
         toolId: Long,
-        request: SetToolEnabledRequest
+        enabled: Boolean
     ): Either<ApiResourceError, Unit>
 
     /**
@@ -110,13 +123,15 @@ interface ToolApi {
      * Corresponds to `PUT /api/v1/sessions/{sessionId}/tools`.
      *
      * @param sessionId The ID of the session.
-     * @param request The request body containing the tool IDs and enabled flag.
+     * @param toolIds List of tool IDs to enable or disable.
+     * @param enabled Whether to enable (true) or disable (false) the tools for this session.
      * @return [Either.Right] with [Unit] on successful update,
      *         or [Either.Left] containing a [ApiResourceError] on failure.
      */
     suspend fun setToolsEnabledForSession(
         sessionId: Long,
-        request: SetToolsEnabledRequest
+        toolIds: List<Long>,
+        enabled: Boolean
     ): Either<ApiResourceError, Unit>
 
     /**

@@ -2,8 +2,6 @@ package eu.torvian.chatbot.app.repository
 
 import arrow.core.Either
 import eu.torvian.chatbot.app.service.auth.AccountData
-import eu.torvian.chatbot.common.models.api.auth.LoginRequest
-import eu.torvian.chatbot.common.models.api.auth.RegisterRequest
 import eu.torvian.chatbot.common.models.user.User
 import kotlinx.coroutines.flow.StateFlow
 
@@ -31,19 +29,22 @@ interface AuthRepository {
      * Authenticates a user with the provided credentials.
      * Updates the auth state and stores tokens on successful login.
      *
-     * @param request The login credentials
+     * @param username The username to authenticate
+     * @param password The plaintext password to verify
      * @return Either a [RepositoryError] on failure or Unit on success
      */
-    suspend fun login(request: LoginRequest): Either<RepositoryError, Unit>
+    suspend fun login(username: String, password: String): Either<RepositoryError, Unit>
 
     /**
      * Registers a new user account.
      * Note: This does NOT automatically log the user in after registration.
      *
-     * @param request The registration details
+     * @param username Unique username for the new user account
+     * @param password Plaintext password (will be hashed server-side)
+     * @param email Optional email address for the user (must be unique if provided)
      * @return Either a [RepositoryError] on failure or [User] with user details on success
      */
-    suspend fun register(request: RegisterRequest): Either<RepositoryError, User>
+    suspend fun register(username: String, password: String, email: String? = null): Either<RepositoryError, User>
 
     /**
      * Changes the password for the currently authenticated user.

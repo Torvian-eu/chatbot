@@ -9,12 +9,12 @@ import eu.torvian.chatbot.app.repository.UserRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.models.user.Role
-import eu.torvian.chatbot.common.models.user.UserWithDetails
-import eu.torvian.chatbot.common.models.api.admin.ChangePasswordRequest
-import eu.torvian.chatbot.common.models.api.admin.UpdateUserRequest
 import eu.torvian.chatbot.common.models.user.UserStatus
-import kotlinx.coroutines.*
+import eu.torvian.chatbot.common.models.user.UserWithDetails
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 
 /**
  * Manages the UI state and logic for User Management (admin only).
@@ -51,7 +51,7 @@ class UserManagementViewModel(
             roleRepository.loadRoles()
         }
     }
-    
+
     // --- Public Action Functions ---
 
     /**
@@ -139,12 +139,11 @@ class UserManagementViewModel(
                 )
             }
 
-            val request = UpdateUserRequest(
-                username = formState.username,
-                email = formState.email
-            )
-
-            userRepository.updateUser(currentDialog.user.id, request).fold(
+            userRepository.updateUser(
+                currentDialog.user.id,
+                formState.username,
+                formState.email
+            ).fold(
                 ifLeft = { error ->
                     logger.warn("Failed to update user: ${error.message}")
                     _state.update {
@@ -234,6 +233,7 @@ class UserManagementViewModel(
                         )
                     }
                 }
+
                 is DataState.Error -> {
                     logger.warn("Failed to load available roles: ${currentAvailableRoles.error.message}")
                     notificationService.repositoryError(
@@ -241,9 +241,11 @@ class UserManagementViewModel(
                         shortMessage = "Failed to load available roles"
                     )
                 }
+
                 is DataState.Loading -> {
                     logger.warn("Roles are still loading")
                 }
+
                 is DataState.Idle -> {
                     logger.warn("Roles are in idle state")
                 }
@@ -333,7 +335,8 @@ class UserManagementViewModel(
                     logger.info("Successfully revoked role from user")
                     // update user's roles in dialog state
                     _state.update { userManagementState ->
-                        val updatedUser = currentDialog.user.copy(roles = currentDialog.user.roles.filterNot { it.id == role.id })
+                        val updatedUser =
+                            currentDialog.user.copy(roles = currentDialog.user.roles.filterNot { it.id == role.id })
                         userManagementState.copy(
                             selectedUser = if (userManagementState.selectedUser?.id == currentDialog.user.id) {
                                 updatedUser
@@ -412,8 +415,7 @@ class UserManagementViewModel(
                 )
             }
 
-            val request = ChangePasswordRequest(newPassword = formState.newPassword)
-            userRepository.changeUserPassword(currentDialog.user.id, request).fold(
+            userRepository.changeUserPassword(currentDialog.user.id, formState.newPassword).fold(
                 ifLeft = { error ->
                     logger.warn("Failed to change password: ${error.message}")
                     _state.update {

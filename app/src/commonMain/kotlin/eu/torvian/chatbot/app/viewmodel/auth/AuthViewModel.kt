@@ -8,8 +8,6 @@ import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.service.auth.AccountData
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
-import eu.torvian.chatbot.common.models.api.auth.LoginRequest
-import eu.torvian.chatbot.common.models.api.auth.RegisterRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -118,7 +116,7 @@ class AuthViewModel(
             }
 
             // Perform login
-            val result = authRepository.login(LoginRequest(username, password))
+            val result = authRepository.login(username, password)
 
             result.fold(
                 ifLeft = { error ->
@@ -196,7 +194,7 @@ class AuthViewModel(
 
             // Perform registration
             val emailToSend = email.ifBlank { null }
-            val result = authRepository.register(RegisterRequest(username, password, emailToSend))
+            val result = authRepository.register(username, password, emailToSend)
 
             result.fold(
                 ifLeft = { error ->

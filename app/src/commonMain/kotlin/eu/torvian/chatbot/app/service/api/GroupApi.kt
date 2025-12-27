@@ -2,8 +2,6 @@ package eu.torvian.chatbot.app.service.api
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.core.ChatGroup
-import eu.torvian.chatbot.common.models.api.core.CreateGroupRequest
-import eu.torvian.chatbot.common.models.api.core.RenameGroupRequest
 
 /**
  * Frontend API interface for interacting with Chat Group-related endpoints.
@@ -30,11 +28,11 @@ interface GroupApi {
      * Corresponds to `POST /api/v1/groups`.
      * (E6.S3)
      *
-     * @param request The request body containing the name for the new group.
+     * @param name The name for the new group.
      * @return [Either.Right] containing the newly created [ChatGroup] object on success,
      *         or [Either.Left] containing an [ApiResourceError] on failure.
      */
-    suspend fun createGroup(request: CreateGroupRequest): Either<ApiResourceError, ChatGroup>
+    suspend fun createGroup(name: String): Either<ApiResourceError, ChatGroup>
 
     /**
      * Renames an existing chat session group.
@@ -43,11 +41,11 @@ interface GroupApi {
      * (E6.S5)
      *
      * @param groupId The ID of the group to rename.
-     * @param request The request body containing the new name.
+     * @param name The new name for the group.
      * @return [Either.Right] with [Unit] on successful update,
      *         or [Either.Left] containing an [ApiResourceError] on failure.
      */
-    suspend fun renameGroup(groupId: Long, request: RenameGroupRequest): Either<ApiResourceError, Unit>
+    suspend fun renameGroup(groupId: Long, name: String): Either<ApiResourceError, Unit>
 
     /**
      * Deletes a chat session group.

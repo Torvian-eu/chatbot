@@ -1,12 +1,11 @@
 package eu.torvian.chatbot.app.service.api
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.api.llm.AddModelRequest
 import eu.torvian.chatbot.common.models.api.llm.ApiKeyStatusResponse
 import eu.torvian.chatbot.common.models.llm.LLMModel
-import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
-import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
+import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.api.access.LLMModelDetails
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Frontend API interface for interacting with LLM Model-related endpoints.
@@ -33,11 +32,23 @@ interface ModelApi {
      * Corresponds to `POST /api/v1/models`.
      * (E4.S1)
      *
-     * @param request The request body with model details.
+     * @param name The unique identifier for the model (e.g., "gpt-3.5-turbo", "gpt-4").
+     * @param providerId The ID of the provider that hosts this model.
+     * @param type The operational type of this model (e.g., CHAT, EMBEDDING, etc.).
+     * @param active Whether the model is currently active and available for use.
+     * @param displayName Optional display name for UI purposes.
+     * @param capabilities Optional JSON object containing model capabilities.
      * @return [Either.Right] containing the newly created [LLMModel] object on success,
      *         or [Either.Left] containing a [ApiResourceError] on failure (e.g., invalid input, provider not found, model name already exists).
      */
-    suspend fun addModel(request: AddModelRequest): Either<ApiResourceError, LLMModel>
+    suspend fun addModel(
+        name: String,
+        providerId: Long,
+        type: LLMModelType,
+        active: Boolean = true,
+        displayName: String? = null,
+        capabilities: JsonObject? = null
+    ): Either<ApiResourceError, LLMModel>
 
     /**
      * Retrieves details for a specific LLM model configuration.
@@ -132,12 +143,14 @@ interface ModelApi {
      * Corresponds to `POST /api/v1/models/{modelId}/access`.
      *
      * @param modelId The ID of the model
-     * @param request The grant access request containing groupId and accessMode
+     * @param groupId The ID of the user group
+     * @param accessMode The access mode to grant
      * @return Either.Right with [Unit] on success, or Either.Left with [ApiResourceError] on failure
      */
     suspend fun grantModelAccess(
         modelId: Long,
-        request: GrantAccessRequest
+        groupId: Long,
+        accessMode: String
     ): Either<ApiResourceError, Unit>
 
     /**
@@ -146,11 +159,13 @@ interface ModelApi {
      * Corresponds to `DELETE /api/v1/models/{modelId}/access`.
      *
      * @param modelId The ID of the model
-     * @param request The revoke access request containing groupId and accessMode
+     * @param groupId The ID of the user group
+     * @param accessMode The access mode to revoke
      * @return Either.Right with [Unit] on success, or Either.Left with [ApiResourceError] on failure
      */
     suspend fun revokeModelAccess(
         modelId: Long,
-        request: RevokeAccessRequest
+        groupId: Long,
+        accessMode: String
     ): Either<ApiResourceError, Unit>
 }

@@ -10,9 +10,6 @@ import eu.torvian.chatbot.app.service.api.UserGroupApi
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.user.UserGroup
-import eu.torvian.chatbot.common.models.api.admin.AddUserToGroupRequest
-import eu.torvian.chatbot.common.models.api.admin.CreateUserGroupRequest
-import eu.torvian.chatbot.common.models.api.admin.UpdateUserGroupRequest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -65,8 +62,8 @@ class DefaultUserGroupRepository(
             }
     }
 
-    override suspend fun createGroup(request: CreateUserGroupRequest): Either<RepositoryError, UserGroup> {
-        return userGroupApi.createGroup(request)
+    override suspend fun createGroup(name: String, description: String?): Either<RepositoryError, UserGroup> {
+        return userGroupApi.createGroup(name, description)
             .map { newGroup ->
                 // Add the new group to the internal list
                 updateGroupsState { currentGroups ->
@@ -79,16 +76,16 @@ class DefaultUserGroupRepository(
             }
     }
 
-    override suspend fun updateGroup(groupId: Long, request: UpdateUserGroupRequest): Either<RepositoryError, Unit> {
-        return userGroupApi.updateGroup(groupId, request)
+    override suspend fun updateGroup(groupId: Long, name: String, description: String?): Either<RepositoryError, Unit> {
+        return userGroupApi.updateGroup(groupId, name, description)
             .map {
                 // Update the group in the internal list
                 updateGroupsState { currentGroups ->
                     currentGroups.map { group ->
                         if (group.id == groupId) {
                             group.copy(
-                                name = request.name,
-                                description = request.description
+                                name = name,
+                                description = description
                             )
                         } else {
                             group
@@ -121,8 +118,8 @@ class DefaultUserGroupRepository(
             }
     }
 
-    override suspend fun addUserToGroup(groupId: Long, request: AddUserToGroupRequest): Either<RepositoryError, Unit> {
-        return userGroupApi.addUserToGroup(groupId, request)
+    override suspend fun addUserToGroup(groupId: Long, userId: Long): Either<RepositoryError, Unit> {
+        return userGroupApi.addUserToGroup(groupId, userId)
             .mapLeft { apiResourceError ->
                 apiResourceError.toRepositoryError("Failed to add user to group")
             }

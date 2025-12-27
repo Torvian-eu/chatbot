@@ -2,14 +2,13 @@ package eu.torvian.chatbot.app.repository
 
 import arrow.core.Either
 import eu.torvian.chatbot.app.domain.contracts.DataState
-import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
 import eu.torvian.chatbot.common.models.api.access.LLMModelDetails
-import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
-import eu.torvian.chatbot.common.models.api.llm.AddModelRequest
 import eu.torvian.chatbot.common.models.api.llm.ApiKeyStatusResponse
 import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.llm.LLMModelType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Repository interface for managing LLM model configurations.
@@ -95,10 +94,22 @@ interface ModelRepository {
      * Upon successful creation, the new model's details are automatically added to the internal
      * StateFlow, triggering updates to all observers.
      *
-     * @param request The model creation request containing all necessary details
+     * @param name The unique identifier for the model
+     * @param providerId The ID of the provider hosting this model
+     * @param type The operational type of this model
+     * @param active Whether the model is currently active
+     * @param displayName Optional display name for UI purposes
+     * @param capabilities Optional JSON object containing model capabilities
      * @return Either.Right with the created LLMModelDetails on success, or Either.Left with RepositoryError on failure
      */
-    suspend fun addModel(request: AddModelRequest): Either<RepositoryError, LLMModelDetails>
+    suspend fun addModel(
+        name: String,
+        providerId: Long,
+        type: LLMModelType,
+        active: Boolean = true,
+        displayName: String? = null,
+        capabilities: JsonObject? = null
+    ): Either<RepositoryError, LLMModelDetails>
 
     /**
      * Updates an existing LLM model configuration.
@@ -159,12 +170,14 @@ interface ModelRepository {
      * Upon successful operation, the internal StateFlow of model details is updated.
      *
      * @param modelId The ID of the model.
-     * @param request The grant access request containing groupId and accessMode.
+     * @param groupId The ID of the user group.
+     * @param accessMode The access mode to grant.
      * @return Either.Right with [LLMModelDetails] on success, or Either.Left with [RepositoryError](psi_element://eu.torvian.chatbot.app.repository.RepositoryError) on failure.
      */
     suspend fun grantModelAccess(
         modelId: Long,
-        request: GrantAccessRequest
+        groupId: Long,
+        accessMode: String
     ): Either<RepositoryError, LLMModelDetails>
 
     /**
@@ -173,11 +186,13 @@ interface ModelRepository {
      * Upon successful operation, the internal StateFlow of model details is updated.
      *
      * @param modelId The ID of the model.
-     * @param request The revoke access request containing groupId and accessMode.
+     * @param groupId The ID of the user group.
+     * @param accessMode The access mode to revoke.
      * @return Either.Right with [LLMModelDetails] on success, or Either.Left with [RepositoryError](psi_element://eu.torvian.chatbot.app.repository.RepositoryError) on failure.
      */
     suspend fun revokeModelAccess(
         modelId: Long,
-        request: RevokeAccessRequest
+        groupId: Long,
+        accessMode: String
     ): Either<RepositoryError, LLMModelDetails>
 }

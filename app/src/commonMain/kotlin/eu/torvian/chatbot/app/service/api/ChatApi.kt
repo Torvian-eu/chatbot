@@ -6,7 +6,6 @@ import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.api.core.ChatEvent
 import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
-import eu.torvian.chatbot.common.models.api.core.UpdateMessageRequest
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -54,11 +53,11 @@ interface ChatApi {
      * (E3.S3)
      *
      * @param messageId The ID of the message to update.
-     * @param request The request body containing the new content.
+     * @param content The new content for the message.
      * @return [Either.Right] containing the updated [ChatMessage] object on success,
      *         or [Either.Left] containing an [ApiResourceError] on failure.
      */
-    suspend fun updateMessageContent(messageId: Long, request: UpdateMessageRequest): Either<ApiResourceError, ChatMessage>
+    suspend fun updateMessageContent(messageId: Long, content: String): Either<ApiResourceError, ChatMessage>
 
     /**
      * Deletes a specific message and its children.

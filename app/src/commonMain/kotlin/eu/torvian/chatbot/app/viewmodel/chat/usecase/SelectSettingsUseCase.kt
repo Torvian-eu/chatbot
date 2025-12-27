@@ -6,7 +6,6 @@ import eu.torvian.chatbot.app.repository.SessionRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionSettingsRequest
 
 /**
  * Use case for selecting settings for the current chat session in the reactive architecture.
@@ -33,13 +32,12 @@ class SelectSettingsUseCase(
      */
     suspend fun execute(settingsId: Long?) {
         val sessionId = state.activeSessionId.value ?: return
-
         logger.info("Selecting settings $settingsId for session $sessionId")
 
         // Update session settings via repository
         sessionRepository.updateSessionSettings(
             sessionId = sessionId,
-            request = UpdateSessionSettingsRequest(settingsId = settingsId)
+            settingsId = settingsId
         ).fold(
             ifLeft = { repositoryError ->
                 logger.error("Failed to update session settings: $repositoryError")

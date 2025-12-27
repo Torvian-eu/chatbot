@@ -11,9 +11,6 @@ import eu.torvian.chatbot.app.repository.UserGroupRepository
 import eu.torvian.chatbot.app.repository.UserRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
-import eu.torvian.chatbot.common.models.api.admin.AddUserToGroupRequest
-import eu.torvian.chatbot.common.models.api.admin.CreateUserGroupRequest
-import eu.torvian.chatbot.common.models.api.admin.UpdateUserGroupRequest
 import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.user.UserGroup
 import kotlinx.coroutines.flow.*
@@ -152,12 +149,10 @@ class UserGroupManagementViewModel(
                 )
             }
 
-            val request = CreateUserGroupRequest(
+            userGroupRepository.createGroup(
                 name = formState.name,
                 description = formState.description
-            )
-
-            userGroupRepository.createGroup(request).fold(
+            ).fold(
                 ifLeft = { error ->
                     logger.warn("Failed to create group: ${error.message}")
                     _state.update {
@@ -220,12 +215,11 @@ class UserGroupManagementViewModel(
                 )
             }
 
-            val request = UpdateUserGroupRequest(
+            userGroupRepository.updateGroup(
+                groupId = currentDialog.group.id,
                 name = formState.name,
                 description = formState.description
-            )
-
-            userGroupRepository.updateGroup(currentDialog.group.id, request).fold(
+            ).fold(
                 ifLeft = { error ->
                     logger.warn("Failed to update group: ${error.message}")
                     _state.update {
@@ -396,8 +390,10 @@ class UserGroupManagementViewModel(
                 )
             }
 
-            val request = AddUserToGroupRequest(userId = user.id)
-            userGroupRepository.addUserToGroup(currentDialog.group.id, request).fold(
+            userGroupRepository.addUserToGroup(
+                groupId = currentDialog.group.id,
+                userId = user.id
+            ).fold(
                 ifLeft = { error ->
                     logger.warn("Failed to add user to group: ${error.message}")
                     notificationService.repositoryError(

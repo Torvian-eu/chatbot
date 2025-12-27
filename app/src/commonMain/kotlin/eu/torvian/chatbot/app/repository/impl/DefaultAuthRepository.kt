@@ -16,9 +16,6 @@ import eu.torvian.chatbot.app.service.auth.AuthenticationFailureEvent
 import eu.torvian.chatbot.app.service.auth.TokenStorage
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
-import eu.torvian.chatbot.common.models.api.admin.ChangePasswordRequest
-import eu.torvian.chatbot.common.models.api.auth.LoginRequest
-import eu.torvian.chatbot.common.models.api.auth.RegisterRequest
 import eu.torvian.chatbot.common.models.user.User
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -68,8 +65,8 @@ class DefaultAuthRepository(
         }
     }
 
-    override suspend fun login(request: LoginRequest): Either<RepositoryError, Unit> = either {
-        logger.info("Logging in with username: ${request.username}")
+    override suspend fun login(username: String, password: String): Either<RepositoryError, Unit> = either {
+        logger.info("Logging in with username: $username")
 
         _authState.value = AuthState.Loading
 
@@ -78,7 +75,7 @@ class DefaultAuthRepository(
             _authState.value = AuthState.Unauthenticated
             apiError.toRepositoryError("Login failed")
         }) {
-            authApi.login(request).bind()
+            authApi.login(username, password).bind()
         }
 
         // Save authentication data (tokens, user, and permissions)
@@ -109,28 +106,27 @@ class DefaultAuthRepository(
         logger.info("Login successful for user: ${loginResponse.user.username}")
     }
 
-    override suspend fun register(request: RegisterRequest): Either<RepositoryError, User> = either {
-        logger.info("Registering new user: ${request.username}")
+    override suspend fun register(username: String, password: String, email: String?): Either<RepositoryError, User> =
+        either {
+            logger.info("Registering new user: $username")
 
-        withError({ apiError ->
-            apiError.toRepositoryError("Registration failed")
-        }) {
-            authApi.register(request).bind()
-        }.also {
-            logger.info("Registration successful for user: ${it.username}")
+            withError({ apiError ->
+                apiError.toRepositoryError("Registration failed")
+            }) {
+                authApi.register(username, password, email).bind()
+            }.also {
+                logger.info("Registration successful for user: ${it.username}")
+            }
         }
-    }
 
     override suspend fun changePassword(userId: Long, newPassword: String): Either<RepositoryError, Unit> = either {
         logger.info("Changing password for user: $userId")
-
-        val request = ChangePasswordRequest(newPassword)
 
         // Call the API to change password
         withError({ apiError: ApiResourceError ->
             apiError.toRepositoryError("Password change failed")
         }) {
-            userApi.changeUserPassword(userId, request).bind()
+            userApi.changeUserPassword(userId, newPassword).bind()
         }
 
         logger.info("Password changed successfully for user: $userId")

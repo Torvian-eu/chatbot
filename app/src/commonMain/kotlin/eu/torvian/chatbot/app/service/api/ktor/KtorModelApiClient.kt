@@ -5,21 +5,19 @@ import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.ModelApi
 import eu.torvian.chatbot.common.api.resources.ModelResource
 import eu.torvian.chatbot.common.api.resources.ModelResource.ById
-import eu.torvian.chatbot.common.api.resources.ModelResource.ById.ApiKeyStatus
+import eu.torvian.chatbot.common.api.resources.ModelResource.ById.*
+import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
+import eu.torvian.chatbot.common.models.api.access.LLMModelDetails
+import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
 import eu.torvian.chatbot.common.models.api.llm.AddModelRequest
 import eu.torvian.chatbot.common.models.api.llm.ApiKeyStatusResponse
 import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.llm.LLMModelType
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.resources.*
 import io.ktor.client.request.*
-import eu.torvian.chatbot.common.api.resources.ModelResource.ById.Details
-import eu.torvian.chatbot.common.api.resources.ModelResource.ById.Access
-import eu.torvian.chatbot.common.api.resources.ModelResource.ById.MakePublic
-import eu.torvian.chatbot.common.api.resources.ModelResource.ById.MakePrivate
-import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
-import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
-import eu.torvian.chatbot.common.models.api.access.LLMModelDetails
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Ktor HttpClient implementation of the [ModelApi] interface.
@@ -38,10 +36,26 @@ class KtorModelApiClient(client: HttpClient) : BaseApiResourceClient(client), Mo
         }
     }
 
-    override suspend fun addModel(request: AddModelRequest): Either<ApiResourceError, LLMModel> {
+    override suspend fun addModel(
+        name: String,
+        providerId: Long,
+        type: LLMModelType,
+        active: Boolean,
+        displayName: String?,
+        capabilities: JsonObject?
+    ): Either<ApiResourceError, LLMModel> {
         return safeApiCall {
             client.post(ModelResource()) {
-                setBody(request)
+                setBody(
+                    AddModelRequest(
+                        name = name,
+                        providerId = providerId,
+                        type = type,
+                        active = active,
+                        displayName = displayName,
+                        capabilities = capabilities
+                    )
+                )
             }.body<LLMModel>()
         }
     }
@@ -101,22 +115,24 @@ class KtorModelApiClient(client: HttpClient) : BaseApiResourceClient(client), Mo
 
     override suspend fun grantModelAccess(
         modelId: Long,
-        request: GrantAccessRequest
+        groupId: Long,
+        accessMode: String
     ): Either<ApiResourceError, Unit> {
         return safeApiCall {
             client.post(Access(ById(modelId = modelId))) {
-                setBody(request)
+                setBody(GrantAccessRequest(groupId = groupId, accessMode = accessMode))
             }.body<Unit>()
         }
     }
 
     override suspend fun revokeModelAccess(
         modelId: Long,
-        request: RevokeAccessRequest
+        groupId: Long,
+        accessMode: String
     ): Either<ApiResourceError, Unit> {
         return safeApiCall {
             client.delete(Access(ById(modelId = modelId))) {
-                setBody(request)
+                setBody(RevokeAccessRequest(groupId = groupId, accessMode = accessMode))
             }.body<Unit>()
         }
     }

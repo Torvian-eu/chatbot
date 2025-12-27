@@ -11,7 +11,9 @@ import eu.torvian.chatbot.app.service.api.ChatApi
 import eu.torvian.chatbot.app.service.api.SessionApi
 import eu.torvian.chatbot.app.utils.misc.LruCache
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
-import eu.torvian.chatbot.common.models.api.core.*
+import eu.torvian.chatbot.common.models.api.core.ChatClientEvent
+import eu.torvian.chatbot.common.models.api.core.ChatEvent
+import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
@@ -92,8 +94,8 @@ class DefaultSessionRepository(
             }
     }
 
-    override suspend fun createSession(request: CreateSessionRequest): Either<RepositoryError, ChatSession> {
-        return sessionApi.createSession(request)
+    override suspend fun createSession(name: String?): Either<RepositoryError, ChatSession> {
+        return sessionApi.createSession(name)
             .map { newSession ->
                 // Add the new session to the internal list of summaries
                 _sessions.update { currentState ->
@@ -194,17 +196,17 @@ class DefaultSessionRepository(
 
     override suspend fun updateSessionName(
         sessionId: Long,
-        request: UpdateSessionNameRequest
+        name: String
     ): Either<RepositoryError, Unit> {
-        return sessionApi.updateSessionName(sessionId, request)
+        return sessionApi.updateSessionName(sessionId, name)
             .map {
                 // Update summary list
                 updateSessionInList(sessionId) { session ->
-                    session.copy(name = request.name)
+                    session.copy(name = name)
                 }
                 // Update details cache if present.
                 updateSessionDetailsInCache(sessionId) { session ->
-                    session.copy(name = request.name)
+                    session.copy(name = name)
                 }
             }
             .mapLeft { apiResourceError ->
@@ -214,12 +216,12 @@ class DefaultSessionRepository(
 
     override suspend fun updateSessionModel(
         sessionId: Long,
-        request: UpdateSessionModelRequest
+        modelId: Long?
     ): Either<RepositoryError, Unit> {
-        return sessionApi.updateSessionModel(sessionId, request)
+        return sessionApi.updateSessionModel(sessionId, modelId)
             .map {
                 updateSessionDetailsInCache(sessionId) { session ->
-                    session.copy(currentModelId = request.modelId, currentSettingsId = null)
+                    session.copy(currentModelId = modelId, currentSettingsId = null)
                 }
             }
             .mapLeft { apiResourceError ->
@@ -229,12 +231,12 @@ class DefaultSessionRepository(
 
     override suspend fun updateSessionSettings(
         sessionId: Long,
-        request: UpdateSessionSettingsRequest
+        settingsId: Long?
     ): Either<RepositoryError, Unit> {
-        return sessionApi.updateSessionSettings(sessionId, request)
+        return sessionApi.updateSessionSettings(sessionId, settingsId)
             .map {
                 updateSessionDetailsInCache(sessionId) { session ->
-                    session.copy(currentSettingsId = request.settingsId)
+                    session.copy(currentSettingsId = settingsId)
                 }
             }
             .mapLeft { apiResourceError ->
@@ -244,12 +246,12 @@ class DefaultSessionRepository(
 
     override suspend fun updateSessionLeafMessage(
         sessionId: Long,
-        request: UpdateSessionLeafMessageRequest
+        leafMessageId: Long?
     ): Either<RepositoryError, Unit> {
-        return sessionApi.updateSessionLeafMessage(sessionId, request)
+        return sessionApi.updateSessionLeafMessage(sessionId, leafMessageId)
             .map {
                 updateSessionDetailsInCache(sessionId) { session ->
-                    session.copy(currentLeafMessageId = request.leafMessageId)
+                    session.copy(currentLeafMessageId = leafMessageId)
                 }
             }
             .mapLeft { apiResourceError ->
@@ -259,17 +261,17 @@ class DefaultSessionRepository(
 
     override suspend fun updateSessionGroup(
         sessionId: Long,
-        request: UpdateSessionGroupRequest
+        groupId: Long?
     ): Either<RepositoryError, Unit> {
-        return sessionApi.updateSessionGroup(sessionId, request)
+        return sessionApi.updateSessionGroup(sessionId, groupId)
             .map {
                 // Update summary list
                 updateSessionInList(sessionId) { session ->
-                    session.copy(groupId = request.groupId)
+                    session.copy(groupId = groupId)
                 }
                 // Update details cache if present, as ChatSession also has groupId
                 updateSessionDetailsInCache(sessionId) { session ->
-                    session.copy(groupId = request.groupId)
+                    session.copy(groupId = groupId)
                 }
             }
             .mapLeft { apiResourceError ->
@@ -370,9 +372,9 @@ class DefaultSessionRepository(
     override suspend fun updateMessageContent(
         messageId: Long,
         sessionId: Long,
-        request: UpdateMessageRequest
+        content: String
     ): Either<RepositoryError, Unit> {
-        return chatApi.updateMessageContent(messageId, request)
+        return chatApi.updateMessageContent(messageId, content)
             .map { updatedMessage ->
                 // Update the cached ChatSession with the new message
                 updateSessionDetailsInCache(sessionId) { session ->

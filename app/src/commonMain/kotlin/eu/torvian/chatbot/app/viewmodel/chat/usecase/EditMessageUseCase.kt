@@ -4,7 +4,6 @@ import eu.torvian.chatbot.app.repository.SessionRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
-import eu.torvian.chatbot.common.models.api.core.UpdateMessageRequest
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 
@@ -53,7 +52,7 @@ class EditMessageUseCase(
         sessionRepository.updateMessageContent(
             messageToEdit.id,
             messageToEdit.sessionId,
-            UpdateMessageRequest(newContent)
+            newContent
         )
             .fold(
                 ifLeft = { repositoryError ->

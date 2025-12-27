@@ -6,8 +6,6 @@ import eu.torvian.chatbot.common.models.user.Role
 import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.common.models.user.UserWithDetails
-import eu.torvian.chatbot.common.models.api.admin.ChangePasswordRequest
-import eu.torvian.chatbot.common.models.api.admin.UpdateUserRequest
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -62,10 +60,11 @@ interface UserRepository {
      * internal StateFlow, triggering updates to all observers.
      *
      * @param userId The ID of the user to update
-     * @param request The update request containing new username and email
+     * @param username The new username for the user
+     * @param email The new email address for the user (optional)
      * @return Either.Right with the updated public User on success, or Either.Left with RepositoryError on failure
      */
-    suspend fun updateUser(userId: Long, request: UpdateUserRequest): Either<RepositoryError, User>
+    suspend fun updateUser(userId: Long, username: String, email: String?): Either<RepositoryError, User>
 
     /**
      * Updates a user's status and returns the updated public User.
@@ -137,8 +136,8 @@ interface UserRepository {
      * Changes a user's password (admin operation).
      *
      * @param userId The ID of the user
-     * @param request The password change request containing the new password
+     * @param newPassword The new password for the user
      * @return Either.Right with Unit on successful password change, or Either.Left with RepositoryError on failure
      */
-    suspend fun changeUserPassword(userId: Long, request: ChangePasswordRequest): Either<RepositoryError, Unit>
+    suspend fun changeUserPassword(userId: Long, newPassword: String): Either<RepositoryError, Unit>
 }

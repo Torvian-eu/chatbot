@@ -5,9 +5,6 @@ import eu.torvian.chatbot.common.models.user.Role
 import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.common.models.user.UserWithDetails
-import eu.torvian.chatbot.common.models.api.admin.AssignRoleRequest
-import eu.torvian.chatbot.common.models.api.admin.ChangePasswordRequest
-import eu.torvian.chatbot.common.models.api.admin.UpdateUserRequest
 
 /**
  * Frontend API interface for interacting with User Management endpoints (admin only).
@@ -72,11 +69,12 @@ interface UserApi {
      * Requires admin permission: MANAGE_USERS
      *
      * @param userId The ID of the user to update.
-     * @param request The update request containing new username and email.
+     * @param username The new username for the user.
+     * @param email The new email address for the user (optional).
      * @return [Either.Right] containing the updated public [User] on success,
      *         or [Either.Left] containing an [ApiResourceError] on failure.
      */
-    suspend fun updateUser(userId: Long, request: UpdateUserRequest): Either<ApiResourceError, User>
+    suspend fun updateUser(userId: Long, username: String, email: String?): Either<ApiResourceError, User>
 
     /**
      * Updates a user's status (ACTIVE, DISABLED, LOCKED) and returns updated public [User].
@@ -139,11 +137,11 @@ interface UserApi {
      * Requires admin permission: MANAGE_USERS
      *
      * @param userId The ID of the user.
-     * @param request The role assignment request containing the role ID.
+     * @param roleId The ID of the role to assign.
      * @return [Either.Right] with [Unit] on successful assignment,
      *         or [Either.Left] containing an [ApiResourceError] on failure.
      */
-    suspend fun assignRoleToUser(userId: Long, request: AssignRoleRequest): Either<ApiResourceError, Unit>
+    suspend fun assignRoleToUser(userId: Long, roleId: Long): Either<ApiResourceError, Unit>
 
     /**
      * Revokes a role from a user.
@@ -165,9 +163,9 @@ interface UserApi {
      * Requires admin permission: MANAGE_USERS OR changing own password
      *
      * @param userId The ID of the user.
-     * @param request The password change request containing the new password.
+     * @param newPassword The new password for the user.
      * @return [Either.Right] with [Unit] on successful password change,
      *         or [Either.Left] containing an [ApiResourceError] on failure.
      */
-    suspend fun changeUserPassword(userId: Long, request: ChangePasswordRequest): Either<ApiResourceError, Unit>
+    suspend fun changeUserPassword(userId: Long, newPassword: String): Either<ApiResourceError, Unit>
 }

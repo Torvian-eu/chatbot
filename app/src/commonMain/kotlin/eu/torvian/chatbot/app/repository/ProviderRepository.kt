@@ -2,13 +2,10 @@ package eu.torvian.chatbot.app.repository
 
 import arrow.core.Either
 import eu.torvian.chatbot.app.domain.contracts.DataState
-import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
 import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
-import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
-import eu.torvian.chatbot.common.models.api.llm.AddProviderRequest
-import eu.torvian.chatbot.common.models.api.llm.UpdateProviderCredentialRequest
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
+import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -82,19 +79,26 @@ interface ProviderRepository {
      * Upon successful creation, the new provider's details are automatically added to the internal
      * StateFlow, triggering updates to all observers.
      *
-     * @param request The provider creation request containing all necessary details including optional credentials
+     * @param name The display name for the provider
+     * @param description Description providing additional context about the provider
+     * @param baseUrl The base URL for the LLM API endpoint
+     * @param type The type of LLM provider
+     * @param credential The API key credential to store securely (null for local providers)
      * @return Either.Right with the created LLMProviderDetails on success, or Either.Left with RepositoryError on failure
      */
-    suspend fun addProvider(request: AddProviderRequest): Either<RepositoryError, LLMProviderDetails>
+    suspend fun addProvider(
+        name: String,
+        description: String,
+        baseUrl: String,
+        type: LLMProviderType,
+        credential: String? = null
+    ): Either<RepositoryError, LLMProviderDetails>
 
     /**
      * Updates an existing LLM provider configuration.
      *
      * This method updates the provider's metadata but does NOT update credentials.
      * Use updateProviderCredential() for credential updates.
-     *
-     * Upon successful update, the modified provider's details replace the existing one in the
-     * internal StateFlow, triggering updates to all observers.
      *
      * @param provider The updated provider object with the same ID as the existing provider
      * @return Either.Right with Unit on successful update, or Either.Left with RepositoryError on failure
@@ -105,8 +109,6 @@ interface ProviderRepository {
      * Deletes an LLM provider configuration.
      *
      * This operation will fail if there are still models linked to this provider.
-     * Upon successful deletion, the provider's details are automatically removed from the internal
-     * StateFlow, triggering updates to all observers.
      *
      * @param providerId The unique identifier of the provider to delete
      * @return Either.Right with Unit on successful deletion, or Either.Left with RepositoryError on failure
@@ -120,12 +122,12 @@ interface ProviderRepository {
      * to maintain security and separation of concerns.
      *
      * @param providerId The unique identifier of the provider whose credential to update
-     * @param request The credential update request containing the new credential or null to remove
+     * @param credential The new credential or null to remove
      * @return Either.Right with Unit on successful update, or Either.Left with RepositoryError on failure
      */
     suspend fun updateProviderCredential(
         providerId: Long,
-        request: UpdateProviderCredentialRequest
+        credential: String?
     ): Either<RepositoryError, Unit>
 
     /**
@@ -165,12 +167,14 @@ interface ProviderRepository {
      * Upon successful operation, the internal StateFlow of provider details is updated.
      *
      * @param providerId The ID of the provider.
-     * @param request The grant access request containing groupId and accessMode.
+     * @param groupId The ID of the user group.
+     * @param accessMode The access mode to grant.
      * @return Either.Right with [LLMProviderDetails] on success, or Either.Left with [RepositoryError](psi_element://eu.torvian.chatbot.app.repository.RepositoryError) on failure.
      */
     suspend fun grantProviderAccess(
         providerId: Long,
-        request: GrantAccessRequest
+        groupId: Long,
+        accessMode: String
     ): Either<RepositoryError, LLMProviderDetails>
 
     /**
@@ -179,11 +183,13 @@ interface ProviderRepository {
      * Upon successful operation, the internal StateFlow of provider details is updated.
      *
      * @param providerId The ID of the provider.
-     * @param request The revoke access request containing groupId and accessMode.
+     * @param groupId The ID of the user group.
+     * @param accessMode The access mode to revoke.
      * @return Either.Right with [LLMProviderDetails] on success, or Either.Left with [RepositoryError](psi_element://eu.torvian.chatbot.app.repository.RepositoryError) on failure.
      */
     suspend fun revokeProviderAccess(
         providerId: Long,
-        request: RevokeAccessRequest
+        groupId: Long,
+        accessMode: String
     ): Either<RepositoryError, LLMProviderDetails>
 }

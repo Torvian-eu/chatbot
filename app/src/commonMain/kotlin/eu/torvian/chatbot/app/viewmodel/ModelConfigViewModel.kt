@@ -10,9 +10,7 @@ import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.UserGroupRepository
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.api.AccessMode
-import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
 import eu.torvian.chatbot.common.models.api.access.LLMModelDetails
-import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
 import eu.torvian.chatbot.common.models.api.llm.AddModelRequest
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import kotlinx.coroutines.CoroutineDispatcher
@@ -267,7 +265,14 @@ class ModelConfigViewModel(
                 capabilities = form.capabilities.takeIf { it.isNotEmpty() }
             )
 
-            modelRepository.addModel(request)
+            modelRepository.addModel(
+                name = request.name,
+                providerId = request.providerId,
+                type = request.type,
+                active = request.active,
+                displayName = request.displayName,
+                capabilities = request.capabilities
+            )
                 .fold(
                     ifLeft = { error ->
                         notificationService.repositoryError(
@@ -431,7 +436,8 @@ class ModelConfigViewModel(
         viewModelScope.launch(uiDispatcher) {
             modelRepository.grantModelAccess(
                 modelId,
-                GrantAccessRequest(groupId = groupId, accessMode = accessMode)
+                groupId,
+                accessMode
             ).fold(
                 ifLeft = { error ->
                     notificationService.repositoryError(
@@ -461,7 +467,8 @@ class ModelConfigViewModel(
         viewModelScope.launch(uiDispatcher) {
             modelRepository.revokeModelAccess(
                 modelId,
-                RevokeAccessRequest(groupId = groupId, accessMode = accessMode)
+                groupId,
+                accessMode
             ).fold(
                 ifLeft = { error ->
                     notificationService.repositoryError(

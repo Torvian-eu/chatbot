@@ -4,13 +4,7 @@ import arrow.core.Either
 import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.SessionApi
 import eu.torvian.chatbot.common.api.resources.SessionResource
-import eu.torvian.chatbot.common.models.api.core.CreateSessionRequest
-import eu.torvian.chatbot.common.models.api.core.CloneSessionRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionGroupRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionLeafMessageRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionModelRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionNameRequest
-import eu.torvian.chatbot.common.models.api.core.UpdateSessionSettingsRequest
+import eu.torvian.chatbot.common.models.api.core.*
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 import eu.torvian.chatbot.common.models.tool.ToolCall
@@ -39,13 +33,13 @@ class KtorSessionApiClient(client: HttpClient) : BaseApiResourceClient(client), 
         }
     }
 
-    override suspend fun createSession(request: CreateSessionRequest): Either<ApiResourceError, ChatSession> {
+    override suspend fun createSession(name: String?): Either<ApiResourceError, ChatSession> {
         // Use safeApiCall to wrap the Ktor request
         return safeApiCall {
             // Use Ktor resources to build the URL: /api/v1/sessions
             client.post(SessionResource()) {
                 // Set the request body
-                setBody(request)
+                setBody(CreateSessionRequest(name = name))
             }.body<ChatSession>() // Expect a ChatSession on success (HTTP 201)
         }
     }
@@ -68,64 +62,64 @@ class KtorSessionApiClient(client: HttpClient) : BaseApiResourceClient(client), 
         }
     }
 
-    override suspend fun updateSessionName(sessionId: Long, request: UpdateSessionNameRequest): Either<ApiResourceError, Unit> {
+    override suspend fun updateSessionName(sessionId: Long, name: String): Either<ApiResourceError, Unit> {
         // Use safeApiCall to wrap the Ktor request
         return safeApiCall {
             // Use Ktor resources: /api/v1/sessions/{sessionId}/name
-            client.put(SessionResource.ById.Name(SessionResource.ById( sessionId = sessionId))) {
-                setBody(request)
+            client.put(SessionResource.ById.Name(SessionResource.ById(sessionId = sessionId))) {
+                setBody(UpdateSessionNameRequest(name = name))
             }.body<Unit>() // Explicitly expect Unit body on success (HTTP 200/204)
         }
     }
 
     override suspend fun updateSessionModel(
         sessionId: Long,
-        request: UpdateSessionModelRequest
+        modelId: Long?
     ): Either<ApiResourceError, Unit> {
         // Use safeApiCall to wrap the Ktor request
         return safeApiCall {
             // Use Ktor resources: /api/v1/sessions/{sessionId}/model
             client.put(SessionResource.ById.Model(SessionResource.ById(sessionId = sessionId))) {
-                setBody(request)
+                setBody(UpdateSessionModelRequest(modelId = modelId))
             }.body<Unit>() // Expect Unit body (HTTP 200/204)
         }
     }
 
     override suspend fun updateSessionSettings(
         sessionId: Long,
-        request: UpdateSessionSettingsRequest
+        settingsId: Long?
     ): Either<ApiResourceError, Unit> {
         // Use safeApiCall to wrap the Ktor request
         return safeApiCall {
             // Use Ktor resources: /api/v1/sessions/{sessionId}/settings
             client.put(SessionResource.ById.Settings(SessionResource.ById(sessionId = sessionId))) {
-                setBody(request)
+                setBody(UpdateSessionSettingsRequest(settingsId = settingsId))
             }.body<Unit>() // Expect Unit body (HTTP 200/204)
         }
     }
 
     override suspend fun updateSessionLeafMessage(
         sessionId: Long,
-        request: UpdateSessionLeafMessageRequest
+        leafMessageId: Long?
     ): Either<ApiResourceError, Unit> {
         // Use safeApiCall to wrap the Ktor request
         return safeApiCall {
             // Use Ktor resources: /api/v1/sessions/{sessionId}/leafMessage
             client.put(SessionResource.ById.LeafMessage(SessionResource.ById(sessionId = sessionId))) {
-                setBody(request)
+                setBody(UpdateSessionLeafMessageRequest(leafMessageId = leafMessageId))
             }.body<Unit>() // Expect Unit body (HTTP 200/204)
         }
     }
 
     override suspend fun updateSessionGroup(
         sessionId: Long,
-        request: UpdateSessionGroupRequest
+        groupId: Long?
     ): Either<ApiResourceError, Unit> {
         // Use safeApiCall to wrap the Ktor request
         return safeApiCall {
             // Use Ktor resources: /api/v1/sessions/{sessionId}/group
             client.put(SessionResource.ById.Group(SessionResource.ById(sessionId = sessionId))) {
-                setBody(request)
+                setBody(UpdateSessionGroupRequest(groupId = groupId))
             }.body<Unit>() // Expect Unit body (HTTP 200/204)
         }
     }

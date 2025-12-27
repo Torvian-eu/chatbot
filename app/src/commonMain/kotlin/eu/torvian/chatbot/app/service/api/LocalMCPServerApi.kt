@@ -1,7 +1,6 @@
 package eu.torvian.chatbot.app.service.api
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.api.mcp.CreateServerRequest
 import eu.torvian.chatbot.common.models.api.mcp.CreateServerResponse
 import eu.torvian.chatbot.common.models.api.mcp.ServerIdsResponse
 
@@ -25,11 +24,11 @@ interface LocalMCPServerApi {
      *
      * Corresponds to `POST /api/v1/local-mcp-servers`.
      *
-     * @param request [CreateServerRequest] containing userId and isEnabled state
+     * @param isEnabled The initial enabled state for the server
      * @return [Either.Right] containing [CreateServerResponse] with the generated ID on success,
      *         or [Either.Left] containing a [ApiResourceError] on failure.
      */
-    suspend fun createServer(request: CreateServerRequest): Either<ApiResourceError, CreateServerResponse>
+    suspend fun createServer(isEnabled: Boolean): Either<ApiResourceError, CreateServerResponse>
 
     /**
      * Retrieves all MCP server IDs for the current user.

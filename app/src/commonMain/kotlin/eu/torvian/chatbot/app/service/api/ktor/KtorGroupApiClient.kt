@@ -5,9 +5,9 @@ import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.GroupApi
 import eu.torvian.chatbot.common.api.resources.GroupResource
 import eu.torvian.chatbot.common.api.resources.GroupResource.ById
-import eu.torvian.chatbot.common.models.core.ChatGroup
 import eu.torvian.chatbot.common.models.api.core.CreateGroupRequest
 import eu.torvian.chatbot.common.models.api.core.RenameGroupRequest
+import eu.torvian.chatbot.common.models.core.ChatGroup
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.resources.*
@@ -30,18 +30,18 @@ class KtorGroupApiClient(client: HttpClient) : BaseApiResourceClient(client), Gr
         }
     }
 
-    override suspend fun createGroup(request: CreateGroupRequest): Either<ApiResourceError, ChatGroup> {
+    override suspend fun createGroup(name: String): Either<ApiResourceError, ChatGroup> {
         return safeApiCall {
             client.post(GroupResource()) {
-                setBody(request)
+                setBody(CreateGroupRequest(name = name))
             }.body<ChatGroup>()
         }
     }
 
-    override suspend fun renameGroup(groupId: Long, request: RenameGroupRequest): Either<ApiResourceError, Unit> {
+    override suspend fun renameGroup(groupId: Long, name: String): Either<ApiResourceError, Unit> {
         return safeApiCall {
             client.put(ById(groupId = groupId)) {
-                setBody(request)
+                setBody(RenameGroupRequest(name = name))
             }.body<Unit>()
         }
     }

@@ -1,12 +1,9 @@
 package eu.torvian.chatbot.app.service.api
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.api.llm.AddProviderRequest
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
-import eu.torvian.chatbot.common.models.api.llm.UpdateProviderCredentialRequest
-import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
-import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
+import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
 
 /**
@@ -34,11 +31,21 @@ interface ProviderApi {
      * Corresponds to `POST /api/v1/providers`.
      * (E4.S8)
      *
-     * @param request The request body with provider details, including optional credential.
+     * @param name The display name for the provider
+     * @param description Description providing additional context about the provider
+     * @param baseUrl The base URL for the LLM API endpoint
+     * @param type The type of LLM provider
+     * @param credential The API key credential to store securely (null for local providers)
      * @return [Either.Right] containing the newly created [LLMProvider] object (without raw credential) on success,
      *         or [Either.Left] containing a [ApiResourceError] on failure.
      */
-    suspend fun addProvider(request: AddProviderRequest): Either<ApiResourceError, LLMProvider>
+    suspend fun addProvider(
+        name: String,
+        description: String,
+        baseUrl: String,
+        type: LLMProviderType,
+        credential: String? = null
+    ): Either<ApiResourceError, LLMProvider>
 
     /**
      * Retrieves details for a specific LLM provider configuration.
@@ -84,13 +91,13 @@ interface ProviderApi {
      * (E4.S12)
      *
      * @param providerId The ID of the provider.
-     * @param request The request body containing the new credential string (or null to remove).
+     * @param credential The new credential string (or null to remove).
      * @return [Either.Right] with [Unit] on successful update,
      *         or [Either.Left] containing a [ApiResourceError] on failure (e.g., not found, internal error).
      */
     suspend fun updateProviderCredential(
         providerId: Long,
-        request: UpdateProviderCredentialRequest
+        credential: String?
     ): Either<ApiResourceError, Unit>
 
     /**
@@ -149,12 +156,14 @@ interface ProviderApi {
      * Corresponds to `POST /api/v1/providers/{providerId}/access`.
      *
      * @param providerId The ID of the provider
-     * @param request The grant access request containing groupId and accessMode
+     * @param groupId The ID of the user group
+     * @param accessMode The access mode to grant
      * @return Either.Right with [Unit] on success, or Either.Left with [ApiResourceError] on failure
      */
     suspend fun grantProviderAccess(
         providerId: Long,
-        request: GrantAccessRequest
+        groupId: Long,
+        accessMode: String
     ): Either<ApiResourceError, Unit>
 
     /**
@@ -163,11 +172,13 @@ interface ProviderApi {
      * Corresponds to `DELETE /api/v1/providers/{providerId}/access`.
      *
      * @param providerId The ID of the provider
-     * @param request The revoke access request containing groupId and accessMode
+     * @param groupId The ID of the user group
+     * @param accessMode The access mode to revoke
      * @return Either.Right with [Unit] on success, or Either.Left with [ApiResourceError] on failure
      */
     suspend fun revokeProviderAccess(
         providerId: Long,
-        request: RevokeAccessRequest
+        groupId: Long,
+        accessMode: String
     ): Either<ApiResourceError, Unit>
 }

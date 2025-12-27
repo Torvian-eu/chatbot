@@ -10,13 +10,12 @@ import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.service.api.ModelApi
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
-import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
 import eu.torvian.chatbot.common.models.api.access.LLMModelDetails
-import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
-import eu.torvian.chatbot.common.models.api.llm.AddModelRequest
 import eu.torvian.chatbot.common.models.api.llm.ApiKeyStatusResponse
 import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.llm.LLMModelType
 import kotlinx.coroutines.flow.*
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Default implementation of [ModelRepository] that follows the Single Source of Truth principle.
@@ -119,12 +118,26 @@ class DefaultModelRepository(
         }
     }
 
-    override suspend fun addModel(request: AddModelRequest): Either<RepositoryError, LLMModelDetails> =
+    override suspend fun addModel(
+        name: String,
+        providerId: Long,
+        type: LLMModelType,
+        active: Boolean,
+        displayName: String?,
+        capabilities: JsonObject?
+    ): Either<RepositoryError, LLMModelDetails> =
         either {
             val newModel = withError({ apiResourceError ->
                 apiResourceError.toRepositoryError("Failed to add model")
             }) {
-                modelApi.addModel(request).bind()
+                modelApi.addModel(
+                    name = name,
+                    providerId = providerId,
+                    type = type,
+                    active = active,
+                    displayName = displayName,
+                    capabilities = capabilities
+                ).bind()
             }
             // After creation, fetch details to refresh cache
             loadModelDetails(newModel.id).bind()
@@ -177,24 +190,26 @@ class DefaultModelRepository(
 
     override suspend fun grantModelAccess(
         modelId: Long,
-        request: GrantAccessRequest
+        groupId: Long,
+        accessMode: String
     ): Either<RepositoryError, LLMModelDetails> = either {
         withError({ apiResourceError ->
             apiResourceError.toRepositoryError("Failed to grant model access")
         }) {
-            modelApi.grantModelAccess(modelId, request).bind()
+            modelApi.grantModelAccess(modelId, groupId, accessMode).bind()
         }
         loadModelDetails(modelId).bind()
     }
 
     override suspend fun revokeModelAccess(
         modelId: Long,
-        request: RevokeAccessRequest
+        groupId: Long,
+        accessMode: String
     ): Either<RepositoryError, LLMModelDetails> = either {
         withError({ apiResourceError ->
             apiResourceError.toRepositoryError("Failed to revoke model access")
         }) {
-            modelApi.revokeModelAccess(modelId, request).bind()
+            modelApi.revokeModelAccess(modelId, groupId, accessMode).bind()
         }
         loadModelDetails(modelId).bind()
     }

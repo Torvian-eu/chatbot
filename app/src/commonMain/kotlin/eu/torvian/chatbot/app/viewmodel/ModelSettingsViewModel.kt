@@ -13,9 +13,7 @@ import eu.torvian.chatbot.app.repository.UserGroupRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.api.AccessMode
-import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
 import eu.torvian.chatbot.common.models.api.access.ModelSettingsDetails
-import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import kotlinx.coroutines.CoroutineDispatcher
@@ -387,7 +385,8 @@ class ModelSettingsViewModel(
         viewModelScope.launch(uiDispatcher) {
             modelSettingsRepository.grantSettingsAccess(
                 settingsId,
-                GrantAccessRequest(groupId = groupId, accessMode = accessMode)
+                groupId,
+                accessMode
             ).fold(
                 ifLeft = { error ->
                     notificationService.repositoryError(
@@ -415,7 +414,8 @@ class ModelSettingsViewModel(
         viewModelScope.launch(uiDispatcher) {
             modelSettingsRepository.revokeSettingsAccess(
                 settingsId,
-                RevokeAccessRequest(groupId = groupId, accessMode = accessMode)
+                groupId,
+                accessMode
             ).fold(
                 ifLeft = { error ->
                     notificationService.repositoryError(

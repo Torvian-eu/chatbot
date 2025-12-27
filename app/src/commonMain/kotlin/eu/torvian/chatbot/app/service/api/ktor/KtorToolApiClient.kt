@@ -11,11 +11,13 @@ import eu.torvian.chatbot.common.models.api.tool.SetToolApprovalPreferenceReques
 import eu.torvian.chatbot.common.models.api.tool.SetToolEnabledRequest
 import eu.torvian.chatbot.common.models.api.tool.SetToolsEnabledRequest
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
+import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.common.models.tool.UserToolApprovalPreference
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.resources.*
 import io.ktor.client.request.*
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Ktor HttpClient implementation of the [ToolApi] interface.
@@ -40,13 +42,20 @@ class KtorToolApiClient(client: HttpClient) : BaseApiResourceClient(client), Too
         }
     }
 
-    override suspend fun createTool(request: CreateToolRequest): Either<ApiResourceError, ToolDefinition> {
-        return safeApiCall {
+    override suspend fun createTool(
+        name: String,
+        description: String,
+        type: ToolType,
+        config: JsonObject,
+        inputSchema: JsonObject,
+        outputSchema: JsonObject?,
+        isEnabled: Boolean
+    ): Either<ApiResourceError, ToolDefinition> =
+        safeApiCall {
             client.post(ToolResource()) {
-                setBody(request)
+                setBody(CreateToolRequest(name, description, type, config, inputSchema, outputSchema, isEnabled))
             }.body<ToolDefinition>()
         }
-    }
 
     override suspend fun updateTool(tool: ToolDefinition): Either<ApiResourceError, Unit> {
         return safeApiCall {
@@ -73,32 +82,31 @@ class KtorToolApiClient(client: HttpClient) : BaseApiResourceClient(client), Too
     override suspend fun setToolEnabledForSession(
         sessionId: Long,
         toolId: Long,
-        request: SetToolEnabledRequest
-    ): Either<ApiResourceError, Unit> {
-        return safeApiCall {
+        enabled: Boolean
+    ): Either<ApiResourceError, Unit> =
+        safeApiCall {
             client.put(
                 SessionToolsResource.ById(
                     parent = SessionToolsResource(parent = SessionResource.ById(sessionId = sessionId)),
                     toolId = toolId
                 )
             ) {
-                setBody(request)
+                setBody(SetToolEnabledRequest(enabled))
             }.body<Unit>()
         }
-    }
 
     override suspend fun setToolsEnabledForSession(
         sessionId: Long,
-        request: SetToolsEnabledRequest
-    ): Either<ApiResourceError, Unit> {
-        return safeApiCall {
+        toolIds: List<Long>,
+        enabled: Boolean
+    ): Either<ApiResourceError, Unit> =
+        safeApiCall {
             client.put(
                 SessionToolsResource(parent = SessionResource.ById(sessionId = sessionId))
             ) {
-                setBody(request)
+                setBody(SetToolsEnabledRequest(toolIds, enabled))
             }.body<Unit>()
         }
-    }
 
     override suspend fun getAllToolApprovalPreferences(): Either<ApiResourceError, List<UserToolApprovalPreference>> {
         return safeApiCall {

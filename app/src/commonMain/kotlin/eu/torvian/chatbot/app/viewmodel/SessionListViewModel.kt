@@ -16,7 +16,6 @@ import eu.torvian.chatbot.app.repository.SessionRepository
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
-import eu.torvian.chatbot.common.models.api.core.*
 import eu.torvian.chatbot.common.models.core.ChatGroup
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 import kotlinx.coroutines.CoroutineDispatcher
@@ -251,7 +250,7 @@ class SessionListViewModel(
         }
 
         viewModelScope.launch(uiDispatcher) {
-            groupRepository.createGroup(CreateGroupRequest(name))
+            groupRepository.createGroup(name)
                 .fold(
                     ifLeft = { repositoryError ->
                         notificationService.repositoryError(
@@ -303,7 +302,7 @@ class SessionListViewModel(
             return
         }
         viewModelScope.launch(uiDispatcher) {
-            groupRepository.renameGroup(groupToRename.id, RenameGroupRequest(newName))
+            groupRepository.renameGroup(groupToRename.id, newName)
                 .fold(
                     ifLeft = { repositoryError ->
                         notificationService.repositoryError(
@@ -433,7 +432,7 @@ class SessionListViewModel(
         val sanitizedName = initialName?.ifBlank { null }
 
         viewModelScope.launch(uiDispatcher) {
-            sessionRepository.createSession(CreateSessionRequest(name = sanitizedName))
+            sessionRepository.createSession(sanitizedName)
                 .fold(
                     ifLeft = { repositoryError ->
                         notificationService.repositoryError(
@@ -463,7 +462,7 @@ class SessionListViewModel(
             return
         }
         viewModelScope.launch(uiDispatcher) {
-            sessionRepository.updateSessionName(session.id, UpdateSessionNameRequest(trimmedName)).fold(
+            sessionRepository.updateSessionName(session.id, trimmedName).fold(
                 ifLeft = { repositoryError ->
                     notificationService.repositoryError(
                         error = repositoryError,
@@ -506,7 +505,7 @@ class SessionListViewModel(
      */
     private fun assignSessionToGroup(sessionId: Long, groupId: Long?) {
         viewModelScope.launch(uiDispatcher) {
-            sessionRepository.updateSessionGroup(sessionId, UpdateSessionGroupRequest(groupId)).fold(
+            sessionRepository.updateSessionGroup(sessionId, groupId).fold(
                 ifLeft = { repositoryError ->
                     notificationService.repositoryError(
                         error = repositoryError,
