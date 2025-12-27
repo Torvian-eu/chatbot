@@ -34,11 +34,11 @@ interface SessionApi {
      * Corresponds to `POST /api/v1/sessions`.
      * (E2.S1)
      *
-     * @param name Optional name for the new session.
+     * @param name Required non-blank session name.
      * @return [Either.Right] containing the newly created [ChatSession] object on success,
      *         or [Either.Left] containing an [ApiResourceError] on failure.
      */
-    suspend fun createSession(name: String? = null): Either<ApiResourceError, ChatSession>
+    suspend fun createSession(name: String): Either<ApiResourceError, ChatSession>
 
     /**
      * Retrieves the full details of a specific chat session, including all its messages.

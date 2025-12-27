@@ -94,7 +94,7 @@ class DefaultSessionRepository(
             }
     }
 
-    override suspend fun createSession(name: String?): Either<RepositoryError, ChatSession> {
+    override suspend fun createSession(name: String): Either<RepositoryError, ChatSession> {
         return sessionApi.createSession(name)
             .map { newSession ->
                 // Add the new session to the internal list of summaries
