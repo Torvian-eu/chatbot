@@ -277,6 +277,45 @@ class DefaultSessionRepository(
             }
     }
 
+    override suspend fun cloneSession(
+        sessionId: Long,
+        name: String
+    ): Either<RepositoryError, ChatSession> {
+        return sessionApi.cloneSession(sessionId, name)
+            .mapLeft { apiResourceError ->
+                apiResourceError.toRepositoryError("Failed to clone session")
+            }
+            .onRight { clonedSession ->
+                // Add the cloned session to the internal list of summaries
+                _sessions.update { currentState ->
+                    when (currentState) {
+                        is DataState.Success -> {
+                            val newSummary = ChatSessionSummary(
+                                id = clonedSession.id,
+                                name = clonedSession.name,
+                                groupId = clonedSession.groupId,
+                                createdAt = clonedSession.createdAt,
+                                updatedAt = clonedSession.updatedAt
+                            )
+                            val updatedSessions = currentState.data + newSummary
+                            DataState.Success(updatedSessions)
+                        }
+
+                        else -> currentState // Keep other states (Loading, Error) unchanged
+                    }
+                }
+
+                // Get or create the flow for this new session and set its state to Success
+                _sessionDetailsFlowsMutex.withLock {
+                    val flow = _sessionDetailsFlows.getOrPut(clonedSession.id) {
+                        MutableStateFlow(DataState.Idle)
+                    }
+                    flow.value = DataState.Success(clonedSession)
+                }
+            }
+
+    }
+
     /**
      * Helper to update a ChatSessionSummary in the main `_sessions` StateFlow.
      * Only applies the update if the current state is DataState.Success.

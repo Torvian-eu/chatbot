@@ -192,6 +192,18 @@ interface SessionRepository {
      */
     suspend fun updateSessionGroup(sessionId: Long, request: UpdateSessionGroupRequest): Either<RepositoryError, Unit>
 
+    /**
+     * Clones an existing chat session with all its messages, tool calls, and configuration.
+     *
+     * Upon successful creation, the new session is automatically added to the internal
+     * StateFlow, triggering updates to all observers.
+     *
+     * @param sessionId The unique identifier of the session to clone
+     * @param name The name for the cloned session
+     * @return Either.Right with the cloned ChatSession on success, or Either.Left with RepositoryError on failure
+     */
+    suspend fun cloneSession(sessionId: Long, name: String): Either<RepositoryError, ChatSession>
+
     // --- Chat Message Operations ---
 
     /**
