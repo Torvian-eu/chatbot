@@ -186,47 +186,28 @@ class KtorSessionApiClientTest {
     }
 
     @Test
-    fun `createSession - success with no name`() = runTest {
-        val mockSession = mockSession(1, "Untitled Session") // Assuming backend generates name
-        val mockEngine = MockEngine { request ->
-            assertEquals(HttpMethod.Post, request.method)
-            assertEquals(href(SessionResource()), request.url.fullPath)
-            respond(
-                content = json.encodeToString(mockSession),
-                status = HttpStatusCode.Created,
-                headers = headersOf(HttpHeaders.ContentType, "application/json")
-            )
-        }
-        val apiClient = createTestClient(mockEngine)
-        when (val result = apiClient.createSession(null)) {
-            is Either.Right -> {
-                val session = result.value
-                assertEquals(1, session.id)
-                assertEquals("Untitled Session", session.name)
-            }
-
-            is Either.Left -> fail("Expected success, but got error: ${result.value}")
-        }
-    }
-
-    @Test
-    fun `createSession - failure - 400 Bad Request`() = runTest {
+    fun `createSession - failure - 400 Bad Request for blank name`() = runTest {
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Post, request.method)
             respond(
-                content = json.encodeToString(apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Name cannot be empty")),
+                content = json.encodeToString(
+                    apiError(
+                        CommonApiErrorCodes.INVALID_ARGUMENT,
+                        "Session name cannot be blank."
+                    )
+                ),
                 status = HttpStatusCode.BadRequest,
                 headers = headersOf(HttpHeaders.ContentType, "application/json")
             )
         }
         val apiClient = createTestClient(mockEngine)
-        when (val result = apiClient.createSession("")) {
+        when (val result = apiClient.createSession("   ")) {
             is Either.Right -> fail("Expected failure, but got success: ${result.value}")
             is Either.Left -> {
                 val error = result.value as ApiResourceError.ServerError
                 assertEquals(400, error.apiError.statusCode)
                 assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.apiError.code)
-                assertEquals("Name cannot be empty", error.apiError.message)
+                assertEquals("Session name cannot be blank.", error.apiError.message)
             }
         }
     }

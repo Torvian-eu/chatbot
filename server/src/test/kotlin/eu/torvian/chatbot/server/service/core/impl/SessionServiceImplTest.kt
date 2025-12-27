@@ -2,23 +2,17 @@ package eu.torvian.chatbot.server.service.core.impl
 
 import arrow.core.left
 import arrow.core.right
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType
-import eu.torvian.chatbot.server.data.dao.ModelDao
-import eu.torvian.chatbot.server.data.dao.SessionDao
-import eu.torvian.chatbot.server.data.dao.SessionOwnershipDao
-import eu.torvian.chatbot.server.data.dao.SettingsDao
-import eu.torvian.chatbot.server.data.dao.MessageDao
-import eu.torvian.chatbot.server.data.dao.ToolCallDao
-import eu.torvian.chatbot.server.data.dao.SessionToolConfigDao
+import eu.torvian.chatbot.server.data.dao.*
 import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
 import eu.torvian.chatbot.server.data.dao.error.SessionError
 import eu.torvian.chatbot.server.service.core.error.session.*
 import eu.torvian.chatbot.server.testutils.data.TestDefaults
-import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import io.mockk.clearMocks
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -98,7 +92,16 @@ class SessionServiceImplTest {
         transactionScope = mockk()
 
         // Create the service instance with mocked dependencies
-        sessionService = SessionServiceImpl(sessionDao, sessionOwnershipDao, settingsDao, modelDao, messageDao, toolCallDao, sessionToolConfigDao, transactionScope)
+        sessionService = SessionServiceImpl(
+            sessionDao,
+            sessionOwnershipDao,
+            settingsDao,
+            modelDao,
+            messageDao,
+            toolCallDao,
+            sessionToolConfigDao,
+            transactionScope
+        )
 
         // Mock the transaction scope to execute blocks directly
         coEvery { transactionScope.transaction(any<suspend () -> Any>()) } coAnswers {
@@ -167,24 +170,6 @@ class SessionServiceImplTest {
         coVerify(exactly = 1) { sessionOwnershipDao.setOwner(testSession.id, userId) }
     }
 
-    @Test
-    fun `createSession should create session successfully with null name using default`() = runTest {
-        // Arrange
-        val userId = 1L
-        val defaultName = "New Chat"
-        coEvery { sessionDao.insertSession(defaultName) } returns testSession.right()
-        coEvery { sessionOwnershipDao.setOwner(testSession.id, userId) } returns Unit.right()
-
-        // Act
-        val result = sessionService.createSession(userId, null)
-
-        // Assert
-        assertTrue(result.isRight(), "Should return Right for successful creation")
-        assertEquals(testSession, result.getOrNull(), "Should return the created session")
-        coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { sessionDao.insertSession(defaultName) }
-        coVerify(exactly = 1) { sessionOwnershipDao.setOwner(testSession.id, userId) }
-    }
 
     @Test
     fun `createSession should return InvalidName error for blank name`() = runTest {
@@ -305,7 +290,8 @@ class SessionServiceImplTest {
         // Arrange
         val sessionId = 999L
         val newName = "Updated Name"
-        coEvery { sessionDao.updateSessionName(sessionId, newName) } returns SessionError.SessionNotFound(sessionId).left()
+        coEvery { sessionDao.updateSessionName(sessionId, newName) } returns SessionError.SessionNotFound(sessionId)
+            .left()
 
         // Act
         val result = sessionService.updateSessionName(sessionId, newName)
@@ -358,7 +344,8 @@ class SessionServiceImplTest {
         // Arrange
         val sessionId = 999L
         val groupId = 1L
-        coEvery { sessionDao.updateSessionGroupId(sessionId, groupId) } returns SessionError.SessionNotFound(sessionId).left()
+        coEvery { sessionDao.updateSessionGroupId(sessionId, groupId) } returns SessionError.SessionNotFound(sessionId)
+            .left()
 
         // Act
         val result = sessionService.updateSessionGroupId(sessionId, groupId)
@@ -460,7 +447,9 @@ class SessionServiceImplTest {
         // Arrange
         val sessionId = 999L
         val modelId = 1L
-        coEvery { sessionDao.updateSessionCurrentModelId(sessionId, modelId) } returns SessionError.SessionNotFound(sessionId).left()
+        coEvery { sessionDao.updateSessionCurrentModelId(sessionId, modelId) } returns SessionError.SessionNotFound(
+            sessionId
+        ).left()
         coEvery { modelDao.getModelById(modelId) } returns TestDefaults.llmModel1.right()
 
         // Act
@@ -656,7 +645,9 @@ class SessionServiceImplTest {
         val sessionId = 999L
         val messageId = 1L
         GetOwnerError.ResourceNotFound(sessionId.toString())
-        coEvery { sessionDao.updateSessionLeafMessageId(sessionId, messageId) } returns SessionError.SessionNotFound(sessionId).left()
+        coEvery { sessionDao.updateSessionLeafMessageId(sessionId, messageId) } returns SessionError.SessionNotFound(
+            sessionId
+        ).left()
 
         // Act
         val result = sessionService.updateSessionLeafMessageId(sessionId, messageId)

@@ -33,7 +33,7 @@ class KtorSessionApiClient(client: HttpClient) : BaseApiResourceClient(client), 
         }
     }
 
-    override suspend fun createSession(name: String?): Either<ApiResourceError, ChatSession> {
+    override suspend fun createSession(name: String): Either<ApiResourceError, ChatSession> {
         // Use safeApiCall to wrap the Ktor request
         return safeApiCall {
             // Use Ktor resources to build the URL: /api/v1/sessions

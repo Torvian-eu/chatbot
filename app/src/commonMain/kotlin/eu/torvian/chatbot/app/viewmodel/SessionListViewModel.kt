@@ -428,11 +428,11 @@ class SessionListViewModel(
      * @param initialName Optional initial name.
      */
     private fun createNewSession(initialName: String? = null) {
-        // If initialName is blank, pass null to use default name
-        val sanitizedName = initialName?.ifBlank { null }
+        // If initialName is blank or null, use "New Chat" as default
+        val sessionName = initialName?.trim()?.ifBlank { "New Chat" } ?: "New Chat"
 
         viewModelScope.launch(uiDispatcher) {
-            sessionRepository.createSession(sanitizedName)
+            sessionRepository.createSession(sessionName)
                 .fold(
                     ifLeft = { repositoryError ->
                         notificationService.repositoryError(

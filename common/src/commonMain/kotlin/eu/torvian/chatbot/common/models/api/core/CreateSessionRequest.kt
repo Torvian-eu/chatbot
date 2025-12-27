@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 /**
  * Request body for creating a new chat session.
  *
- * @property name Optional name for the new session.
+ * @property name Name for the new session. Must be non-blank.
  */
 @Serializable
-data class CreateSessionRequest(val name: String? = null) // name is optional
+data class CreateSessionRequest(val name: String)

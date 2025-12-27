@@ -88,10 +88,10 @@ interface SessionRepository {
      * Upon successful creation, the new session is automatically added to the internal
      * StateFlow, triggering updates to all observers.
      *
-     * @param name Optional name for the new session
+     * @param name Required non-blank session name
      * @return Either.Right with the created ChatSession on success, or Either.Left with RepositoryError on failure
      */
-    suspend fun createSession(name: String? = null): Either<RepositoryError, ChatSession>
+    suspend fun createSession(name: String): Either<RepositoryError, ChatSession>
 
     /**
      * Loads the full details of a specific chat session, including all its messages.

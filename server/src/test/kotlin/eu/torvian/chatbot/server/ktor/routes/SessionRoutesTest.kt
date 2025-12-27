@@ -228,29 +228,6 @@ class SessionRoutesTest {
         assertEquals(sessionName, retrievedSession.name)
     }
 
-    @Test
-    fun `POST sessions should create a new session successfully with default name when name is null`() =
-        sessionTestApplication {
-            // Arrange
-            val createRequest = CreateSessionRequest(name = null)
-
-            // Act
-            val response = client.post(href(SessionResource())) {
-                contentType(ContentType.Application.Json)
-                setBody(createRequest)
-                authenticate(authToken)
-            }
-
-            // Assert
-            assertEquals(HttpStatusCode.Created, response.status)
-            val createdSession = response.body<ChatSession>()
-            assertEquals("New Chat", createdSession.name) // Default name from SessionServiceImpl
-
-            // Verify the session was actually created in the database
-            val retrievedSession = testDataManager.getChatSession(createdSession.id)
-            assertNotNull(retrievedSession)
-            assertEquals("New Chat", retrievedSession.name)
-        }
 
     @Test
     fun `POST sessions should return 400 for blank name`() = sessionTestApplication {
@@ -546,70 +523,71 @@ class SessionRoutesTest {
     // --- WS /api/v1/sessions/{sessionId}/messages Tests ---
 
     @Test
-    fun `WS session message should process new message successfully and emit WebSocket events`() = sessionTestApplication {
-        // Arrange
-        testDataManager.insertChatSession(testNonStreamingSession)
-        testDataManager.insertSessionOwnership(testNonStreamingSession.id, authHelper.defaultTestUser.id)
-        val messageContent = "Test message content"
-        val processRequest = ProcessNewMessageRequest(content = messageContent, isStreaming = false)
+    fun `WS session message should process new message successfully and emit WebSocket events`() =
+        sessionTestApplication {
+            // Arrange
+            testDataManager.insertChatSession(testNonStreamingSession)
+            testDataManager.insertSessionOwnership(testNonStreamingSession.id, authHelper.defaultTestUser.id)
+            val messageContent = "Test message content"
+            val processRequest = ProcessNewMessageRequest(content = messageContent, isStreaming = false)
 
-        // Act
-        val receivedEvents = mutableListOf<ChatEvent>()
-        client.webSocket(
-            urlString = href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = testNonStreamingSession.id))),
-            request = { authenticate(authToken) }
-        ) {
-            // Send initial message
-            val initialEvent: ChatClientEvent = ChatClientEvent.ProcessNewMessage(processRequest)
-            send(Frame.Text(json.encodeToString(initialEvent)))
+            // Act
+            val receivedEvents = mutableListOf<ChatEvent>()
+            client.webSocket(
+                urlString = href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = testNonStreamingSession.id))),
+                request = { authenticate(authToken) }
+            ) {
+                // Send initial message
+                val initialEvent: ChatClientEvent = ChatClientEvent.ProcessNewMessage(processRequest)
+                send(Frame.Text(json.encodeToString(initialEvent)))
 
-            // Collect incoming events
-            for (frame in incoming) {
-                val textFrame = frame as? Frame.Text ?: continue
-                val chatEvent = json.decodeFromString<ChatEvent>(textFrame.readText())
-                receivedEvents.add(chatEvent)
+                // Collect incoming events
+                for (frame in incoming) {
+                    val textFrame = frame as? Frame.Text ?: continue
+                    val chatEvent = json.decodeFromString<ChatEvent>(textFrame.readText())
+                    receivedEvents.add(chatEvent)
+                }
             }
+
+            // Assert - WebSocket events
+            assertTrue(receivedEvents.isNotEmpty(), "Should have received WebSocket events")
+
+            // Should have user_message_saved event
+            val userMessageEvent = receivedEvents.filterIsInstance<ChatEvent.UserMessageSaved>().firstOrNull()
+            assertNotNull(userMessageEvent, "Should receive user_message_saved event")
+            assertEquals(messageContent, userMessageEvent.userMessage.content)
+
+            // Should have assistant_message_saved event
+            val assistantMessageEvent = receivedEvents.filterIsInstance<ChatEvent.AssistantMessageSaved>().firstOrNull()
+            assertNotNull(assistantMessageEvent, "Should receive assistant_message_saved event")
+            assertNotNull(assistantMessageEvent.assistantMessage)
+
+            // Should end with done event
+            val doneEvent = receivedEvents.filterIsInstance<ChatEvent.StreamCompleted>().firstOrNull()
+            assertNotNull(doneEvent, "Should receive done event")
+
+            // Verify the messages were actually created in the database
+            val messages = testDataManager.getChatMessagesForSession(testNonStreamingSession.id)
+            assertEquals(2, messages.size, "Should create 2 messages (user and assistant)")
+
+            val userMessage = messages.find { it is ChatMessage.UserMessage } as? ChatMessage.UserMessage
+            assertNotNull(userMessage, "Should have created user message")
+            assertEquals(messageContent, userMessage.content)
+            assertEquals(testNonStreamingSession.id, userMessage.sessionId)
+            assertNull(userMessage.parentMessageId)
+
+            val assistantMessage = messages.find { it is ChatMessage.AssistantMessage } as? ChatMessage.AssistantMessage
+            assertNotNull(assistantMessage, "Should have created assistant message")
+            assertEquals(testNonStreamingSession.id, assistantMessage.sessionId)
+            assertEquals(userMessage.id, assistantMessage.parentMessageId)
+            assertEquals(testModel.id, assistantMessage.modelId)
+            assertEquals(testNonStreamingSettings.id, assistantMessage.settingsId)
+
+            // Verify the session leaf message ID was actually updated
+            val leaf = testDataManager.getSessionCurrentLeaf(testNonStreamingSession.id)
+            assertNotNull(leaf, "Expected leaf message to be created")
+            assertEquals(assistantMessage.id, leaf.messageId)
         }
-
-        // Assert - WebSocket events
-        assertTrue(receivedEvents.isNotEmpty(), "Should have received WebSocket events")
-
-        // Should have user_message_saved event
-        val userMessageEvent = receivedEvents.filterIsInstance<ChatEvent.UserMessageSaved>().firstOrNull()
-        assertNotNull(userMessageEvent, "Should receive user_message_saved event")
-        assertEquals(messageContent, userMessageEvent.userMessage.content)
-
-        // Should have assistant_message_saved event
-        val assistantMessageEvent = receivedEvents.filterIsInstance<ChatEvent.AssistantMessageSaved>().firstOrNull()
-        assertNotNull(assistantMessageEvent, "Should receive assistant_message_saved event")
-        assertNotNull(assistantMessageEvent.assistantMessage)
-
-        // Should end with done event
-        val doneEvent = receivedEvents.filterIsInstance<ChatEvent.StreamCompleted>().firstOrNull()
-        assertNotNull(doneEvent, "Should receive done event")
-
-        // Verify the messages were actually created in the database
-        val messages = testDataManager.getChatMessagesForSession(testNonStreamingSession.id)
-        assertEquals(2, messages.size, "Should create 2 messages (user and assistant)")
-
-        val userMessage = messages.find { it is ChatMessage.UserMessage } as? ChatMessage.UserMessage
-        assertNotNull(userMessage, "Should have created user message")
-        assertEquals(messageContent, userMessage.content)
-        assertEquals(testNonStreamingSession.id, userMessage.sessionId)
-        assertNull(userMessage.parentMessageId)
-
-        val assistantMessage = messages.find { it is ChatMessage.AssistantMessage } as? ChatMessage.AssistantMessage
-        assertNotNull(assistantMessage, "Should have created assistant message")
-        assertEquals(testNonStreamingSession.id, assistantMessage.sessionId)
-        assertEquals(userMessage.id, assistantMessage.parentMessageId)
-        assertEquals(testModel.id, assistantMessage.modelId)
-        assertEquals(testNonStreamingSettings.id, assistantMessage.settingsId)
-
-        // Verify the session leaf message ID was actually updated
-        val leaf = testDataManager.getSessionCurrentLeaf(testNonStreamingSession.id)
-        assertNotNull(leaf, "Expected leaf message to be created")
-        assertEquals(assistantMessage.id, leaf.messageId)
-    }
 
     @Test
     fun `WS session message should emit error event for non-existent session`() = sessionTestApplication {
