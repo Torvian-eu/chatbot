@@ -46,7 +46,7 @@ This action saves the edited message as a new message, and creates a new branch 
 - This action creates a new branch in the conversation, with the selected message as the parent.
 - This feature is more versatile than "Regenerate" because it can be used on any message, not just assistant messages.
 
-### Add Regenerate button for assistant messages
+### (done) Add Regenerate button for assistant messages
 - This is functionally equivalent to "Branch & Continue" from the target's parent message, but it is more intuitive for assistant messages.
 - The regenerate button is already present in the code, but is currently deactivated in the UI. (see MessageActionRow.kt)
 - In case the assistant message is the root of the conversation (very unlikely), the regenerate button should not be shown. (simpler alternative: do null operation in viewmodel instead, or do both)
@@ -74,10 +74,15 @@ In the future we could add a vertical sidebar with icons on the left side of the
 Currently, the user can only add a new session to the "Ungrouped" group. In the future, we should allow the user to specify a group when adding a new session.
 
 ### Allow user to clone a chat session
-- Add a "Clone" button to the session actions menu. (see SessionItemActionsDropdown.kt)
+- Add a "Clone" button to the session actions menu. (see SessionItemActionsDropdown)
 - Cloning a session should create a new session with the same name, but a new ID.
 - The new session should have the same messages and tool calls, but with new IDs.
 - The new session should have the same owner, current leaf message, configured tools, LLM model, settings, etc.
+
+### Popout message input area for entering long messages
+- Currently the maximum number of visible lines is only 5. This makes it difficult to enter long messages.
+- If possible, we should allow the user to pop out the message input area into a separate window.
+- Alternative: make the input area part of the message list flow, which is already scrollable. (when user requests)
 
 ---
 
