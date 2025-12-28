@@ -11,6 +11,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -52,6 +54,8 @@ fun InputArea(
     replyTargetMessage: ChatMessage?,
     onCancelReply: () -> Unit,
     isSendingMessage: Boolean,
+    isExpanded: Boolean = false,
+    onToggleExpansion: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val isSendButtonEnabled = inputContent.isNotBlank() && !isSendingMessage
@@ -68,67 +72,100 @@ fun InputArea(
             }
         }
 
-        // Main Input Field and Send Button (E1.S1)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        // Input area container with unified styling
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 2.dp
         ) {
-            TextField(
-                value = inputContent,
-                onValueChange = onUpdateInput,
-                modifier = Modifier
-                    .weight(1f)
-                    .defaultMinSize(minHeight = 48.dp), // Ensure a minimum height for the input
-                placeholder = { Text("Type a message...") },
-                singleLine = false, // Allow multiline input
-                maxLines = 5, // Limit input area growth
-                shape = RoundedCornerShape(24.dp), // Rounded corners for aesthetics
-                colors = TextFieldDefaults.colors(
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    disabledIndicatorColor = Color.Transparent,
-                    errorIndicatorColor = Color.Transparent
-                ),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(
-                    onSend = {
-                        if (isSendButtonEnabled) {
-                            onSendMessage()
+            Column(modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)) {
+                // Main Input Field (E1.S1)
+                TextField(
+                    value = inputContent,
+                    onValueChange = onUpdateInput,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = 48.dp), // Ensure a minimum height for the input
+                    placeholder = { Text("Type a message...") },
+                    singleLine = false, // Allow multiline input
+                    maxLines = if (isExpanded) Int.MAX_VALUE else 5, // Remove limit when expanded
+                    shape = RoundedCornerShape(20.dp), // Slightly less rounded than container
+                    colors = TextFieldDefaults.colors(
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        disabledIndicatorColor = Color.Transparent,
+                        errorIndicatorColor = Color.Transparent,
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                    ),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(
+                        onSend = {
+                            if (isSendButtonEnabled) {
+                                onSendMessage()
+                            }
                         }
-                    }
+                    )
                 )
-            )
 
-            // Send Button or Stop Button
-            if (isSendingMessage) { // Stop button to cancel sending (E1.S3)
-                PlainTooltipBox(text = stringResource(Res.string.sending_message_tooltip)) {
-                    FilledIconButton(
-                        onClick = onCancelSendMessage,
-                        modifier = Modifier.size(48.dp),
-                        enabled = true
-                    ) {
-                        Icon(
-                            Icons.Default.Stop,
-                            contentDescription = stringResource(Res.string.cancel_send_message_button_description),
-                            tint = MaterialTheme.colorScheme.onPrimary
-                        )
+                // Action Row with Expand/Collapse and Send/Stop buttons
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 2.dp, start = 4.dp, end = 4.dp, bottom = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    // Expand/Collapse Toggle Button (left side)
+                    if (onToggleExpansion != null) {
+                        PlainTooltipBox(
+                            text = if (isExpanded) "Collapse input area" else "Expand input area"
+                        ) {
+                            IconButton(
+                                onClick = onToggleExpansion,
+                                modifier = Modifier.size(40.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
+                                    contentDescription = if (isExpanded) "Collapse input area" else "Expand input area",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    } else {
+                        Spacer(Modifier.width(40.dp)) // Maintain layout when toggle not available
                     }
-                }
-            } else { // Show Send Button (E1.S2)
-                PlainTooltipBox(text = stringResource(Res.string.send_message_button_description)) {
-                    FilledIconButton(
-                        onClick = onSendMessage,
-                        modifier = Modifier.size(48.dp),
-                        enabled = isSendButtonEnabled
-                    ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.Send,
-                            contentDescription = stringResource(Res.string.send_message_button_description),
-                            tint = MaterialTheme.colorScheme.onPrimary
-                        )
+
+                    // Send Button or Stop Button (right side)
+                    if (isSendingMessage) { // Stop button to cancel sending (E1.S3)
+                        PlainTooltipBox(text = stringResource(Res.string.sending_message_tooltip)) {
+                            FilledIconButton(
+                                onClick = onCancelSendMessage,
+                                modifier = Modifier.size(48.dp),
+                                enabled = true
+                            ) {
+                                Icon(
+                                    Icons.Default.Stop,
+                                    contentDescription = stringResource(Res.string.cancel_send_message_button_description),
+                                    tint = MaterialTheme.colorScheme.onPrimary
+                                )
+                            }
+                        }
+                    } else { // Show Send Button (E1.S2)
+                        PlainTooltipBox(text = stringResource(Res.string.send_message_button_description)) {
+                            FilledIconButton(
+                                onClick = onSendMessage,
+                                modifier = Modifier.size(48.dp),
+                                enabled = isSendButtonEnabled
+                            ) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.Send,
+                                    contentDescription = stringResource(Res.string.send_message_button_description),
+                                    tint = MaterialTheme.colorScheme.onPrimary
+                                )
+                            }
+                        }
                     }
                 }
             }
