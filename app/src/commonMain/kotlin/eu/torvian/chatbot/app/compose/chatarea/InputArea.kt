@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -86,7 +87,19 @@ fun InputArea(
                     onValueChange = onUpdateInput,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .defaultMinSize(minHeight = 48.dp), // Ensure a minimum height for the input
+                        .defaultMinSize(minHeight = 48.dp) // Ensure a minimum height for the input
+                        .onKeyEvent { keyEvent: KeyEvent ->
+                            if (keyEvent.isCtrlPressed && keyEvent.key == Key.Enter && keyEvent.type == KeyEventType.KeyDown) {
+                                if (isSendButtonEnabled) {
+                                    onSendMessage()
+                                    true // Consume the event
+                                } else {
+                                    false // Do not consume if not enabled
+                                }
+                            } else {
+                                false // Let other key events be handled normally
+                            }
+                        },
                     placeholder = { Text("Type a message...") },
                     singleLine = false, // Allow multiline input
                     maxLines = if (isExpanded) Int.MAX_VALUE else 5, // Remove limit when expanded
@@ -102,6 +115,7 @@ fun InputArea(
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                     keyboardActions = KeyboardActions(
                         onSend = {
+                            // This handles the regular Enter key press without Ctrl
                             if (isSendButtonEnabled) {
                                 onSendMessage()
                             }
@@ -153,7 +167,7 @@ fun InputArea(
                             }
                         }
                     } else { // Show Send Button (E1.S2)
-                        PlainTooltipBox(text = stringResource(Res.string.send_message_button_description)) {
+                        PlainTooltipBox(text = stringResource(Res.string.send_message_button_description) + " (Ctrl+Enter)") {
                             FilledIconButton(
                                 onClick = onSendMessage,
                                 modifier = Modifier.size(48.dp),
