@@ -11,4 +11,4 @@
 - Only show tool options in chat area if the selected model supports tool calling.
 - Limit the displayed length of snackbar messages. Add "more" link to expand.
 - Hide chat top bar (ChatTopBarContent), when no session is selected.
-- Make CreateSessionRequest.name not nullable. The name should be set by the client app. The server should not provide a default name.
+- Make auto-scrolling during assistant message streaming smoother. Currently, it feels a bit janky. Alternative: Start assistant message stream at the top of the viewport, with empty space below.

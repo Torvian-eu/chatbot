@@ -38,6 +38,16 @@ fun MessageList(
     modelsById: Map<Long, LLMModel> = emptyMap(),
     toolCallsMap: Map<Long, List<ToolCall>> = emptyMap(),
     onShowToolCallDetails: (ToolCall) -> Unit = {},
+    isInputExpanded: Boolean = false,
+    scrollToInputTrigger: Int = 0,
+    inputContent: String = "",
+    onUpdateInput: (String) -> Unit = {},
+    onSendMessage: () -> Unit = {},
+    onCancelSendMessage: () -> Unit = {},
+    replyTargetMessage: ChatMessage? = null,
+    onCancelReply: () -> Unit = {},
+    isSendingMessage: Boolean = false,
+    onToggleExpansion: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     // Create LazyListState for scrollbar integration
@@ -108,6 +118,30 @@ fun MessageList(
         }
     }
 
+    // Scroll to expanded input area when manually expanded
+    LaunchedEffect(scrollToInputTrigger, replyTargetMessage?.id) {
+        if (scrollToInputTrigger > 0 && isInputExpanded) {
+            // If replying, scroll to the reply target message position
+            if (replyTargetMessage != null) {
+                val targetIndex = displayedMessages.indexOfFirst { it.id == replyTargetMessage.id }
+                if (targetIndex >= 0) {
+                    // Get the viewport height to calculate optimal offset
+                    val viewportHeight =
+                        lazyListState.layoutInfo.viewportEndOffset - lazyListState.layoutInfo.viewportStartOffset
+
+                    // Animate to the final position with offset
+                    lazyListState.animateScrollToItem(targetIndex + 1, -viewportHeight)
+                }
+            } else {
+                // Otherwise, scroll to the last item (expanded input at end)
+                val totalItems = lazyListState.layoutInfo.totalItemsCount
+                if (totalItems > 0) {
+                    lazyListState.animateScrollToItem(totalItems)
+                }
+            }
+        }
+    }
+
     // State to trigger manual scroll to bottom
     var scrollToBottomTrigger by remember { mutableStateOf(0) }
 
@@ -160,6 +194,44 @@ fun MessageList(
                         isCollapsible = message.content.length > collapseThreshold,
                         onToggleCollapse = { onToggleCollapse(message.id) }
                     )
+
+                    // Insert expanded input area right after reply target message
+                    if (isInputExpanded && replyTargetMessage != null && message.id == replyTargetMessage.id) {
+                        InputArea(
+                            inputContent = inputContent,
+                            onUpdateInput = onUpdateInput,
+                            onSendMessage = onSendMessage,
+                            onCancelSendMessage = onCancelSendMessage,
+                            replyTargetMessage = replyTargetMessage,
+                            onCancelReply = onCancelReply,
+                            isSendingMessage = isSendingMessage,
+                            isExpanded = true,
+                            onToggleExpansion = onToggleExpansion,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp)
+                        )
+                    }
+                }
+
+                // Add expanded input area as last item when expanded and NOT replying
+                if (isInputExpanded && replyTargetMessage == null) {
+                    item(key = "expanded_input_area") {
+                        InputArea(
+                            inputContent = inputContent,
+                            onUpdateInput = onUpdateInput,
+                            onSendMessage = onSendMessage,
+                            onCancelSendMessage = onCancelSendMessage,
+                            replyTargetMessage = replyTargetMessage,
+                            onCancelReply = onCancelReply,
+                            isSendingMessage = isSendingMessage,
+                            isExpanded = true,
+                            onToggleExpansion = onToggleExpansion,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp)
+                        )
+                    }
                 }
             }
         }

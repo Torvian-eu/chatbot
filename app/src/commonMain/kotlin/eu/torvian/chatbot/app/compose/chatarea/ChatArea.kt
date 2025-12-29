@@ -1,10 +1,13 @@
 package eu.torvian.chatbot.app.compose.chatarea
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -17,6 +20,7 @@ import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.tool.ToolCall
+import kotlinx.coroutines.delay
 
 /**
  * Composable for the main chat message display area.
@@ -137,6 +141,63 @@ private fun SuccessStateDisplay(
         )
     }
 
+    // Expansion state management (Compose-only, not in ViewModel)
+    var manualExpandToggle by rememberSaveable { mutableStateOf<Boolean?>(null) }
+
+    // Scroll trigger to force scroll to input when manually expanding
+    var scrollToInputTrigger by remember { mutableStateOf(0) }
+
+    // State to track automatic expansion based on input content
+    var autoExpand by remember { mutableStateOf(false) }
+
+    // Determine if input should be expanded (manual toggle overrides automatic behavior)
+    val isInputExpanded = remember(manualExpandToggle, autoExpand) {
+        when (manualExpandToggle) {
+            true -> true // Manual expansion is on
+            false -> false // Manual expansion is off
+            null -> autoExpand // No manual toggle, use automatic behavior
+        }
+    }
+
+    // Toggle function for manual expansion
+    val onToggleExpansion = {
+        val wasExpanded = isInputExpanded
+        manualExpandToggle = when (manualExpandToggle) {
+            null -> !isInputExpanded // First toggle: set explicit state
+            true -> false // Expanded -> collapse
+            false -> true // Collapsed -> expand
+        }
+        // Trigger scroll when expanding
+        if (!wasExpanded && manualExpandToggle == true) {
+            scrollToInputTrigger++
+        }
+    }
+
+    // Scroll to reply target when it changes
+    LaunchedEffect(replyTargetMessage) {
+        if (replyTargetMessage != null) {
+            scrollToInputTrigger++
+        }
+    }
+
+    // Auto-expand when input reaches 5 lines or 200 characters
+    // When expanded, collapse only when input is cleared.
+    LaunchedEffect(inputContent) {
+        if (manualExpandToggle != null || autoExpand && inputContent.isNotEmpty()) {
+            return@LaunchedEffect
+        }
+        else if (inputContent.isEmpty()) {
+            autoExpand = false
+        } else {
+            val lineCount = inputContent.count { it == '\n' } + 1
+            if (lineCount > 5 || inputContent.length > 200) {
+                delay(50)
+                autoExpand = true
+                scrollToInputTrigger++
+            }
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
 
         MessageList(
@@ -149,10 +210,8 @@ private fun SuccessStateDisplay(
             modelsById = modelsById, // Pass map for graceful degradation
             toolCallsMap = toolCallsMap,
             onShowToolCallDetails = actions::onShowToolCallDetails,
-            modifier = Modifier.weight(1f) // Messages take up most space
-        )
-
-        InputArea(
+            isInputExpanded = isInputExpanded,
+            scrollToInputTrigger = scrollToInputTrigger,
             inputContent = inputContent,
             onUpdateInput = actions::onUpdateInput,
             onSendMessage = actions::onSendMessage,
@@ -160,10 +219,31 @@ private fun SuccessStateDisplay(
             replyTargetMessage = replyTargetMessage,
             onCancelReply = actions::onCancelReply,
             isSendingMessage = isSendingMessage,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp) // Small padding between messages and input
+            onToggleExpansion = onToggleExpansion,
+            modifier = Modifier.weight(1f) // Messages take up most space
         )
+
+        // Input area at bottom - only visible when not expanded
+        AnimatedVisibility(
+            visible = !isInputExpanded,
+            enter = expandVertically(expandFrom = Alignment.Top),
+            exit = shrinkVertically(shrinkTowards = Alignment.Top)
+        ) {
+            InputArea(
+                inputContent = inputContent,
+                onUpdateInput = actions::onUpdateInput,
+                onSendMessage = actions::onSendMessage,
+                onCancelSendMessage = actions::onCancelSendMessage,
+                replyTargetMessage = replyTargetMessage,
+                onCancelReply = actions::onCancelReply,
+                isSendingMessage = isSendingMessage,
+                isExpanded = false,
+                onToggleExpansion = onToggleExpansion,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp) // Small padding between messages and input
+            )
+        }
     }
 
     Dialogs(

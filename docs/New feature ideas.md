@@ -73,13 +73,13 @@ In the future we could add a vertical sidebar with icons on the left side of the
 ### Allow user to specify chat group when adding a new session
 Currently, the user can only add a new session to the "Ungrouped" group. In the future, we should allow the user to specify a group when adding a new session.
 
-### Allow user to clone a chat session
+### (done) Allow user to clone a chat session
 - Add a "Clone" button to the session actions menu. (see SessionItemActionsDropdown)
 - Cloning a session should create a new session with the same name, but a new ID.
 - The new session should have the same messages and tool calls, but with new IDs.
 - The new session should have the same owner, current leaf message, configured tools, LLM model, settings, etc.
 
-### Popout message input area for entering long messages
+### (done) Popout message input area for entering long messages
 - Currently the maximum number of visible lines is only 5. This makes it difficult to enter long messages.
 - If possible, we should allow the user to pop out the message input area into a separate window.
 - Alternative: make the input area part of the message list flow, which is already scrollable. (when user requests)
@@ -101,6 +101,20 @@ Each user has their own set of credentials, models, settings, and chat history. 
 
 ### Allow user to select predefined LLM Tools for a specific prompt
 Predefined tools could include: Web search, calculator, current weather, etc.
+
+### Allow user to add file references when sending a message
+- The UI should include a button to add file references, which opens a file picker. (below the message input area)
+- By default, the actual file content should not be sent to the LLM, only a reference to the file.
+- The user should be able to select which files to send, and the base path for the file references. The base path is not included in the file references sent to the LLM. Only the relative path from the base path is included in the file reference. By default, the base path is the same as where the file itself is located, or when multiple files are selected, the common (longest) parent path of all selected files. Selecting a custom base path is useful when alligning with Local MCP Tools, which should be using the same base path. That way the LLM can use the file references in the Tools.
+- The user should be able to place a file reference within the message content (inline). Optionally, this could also include the actual file content (usually text-based only).
+- The LLM context should include the file references appended to the message content (For instance: "Referenced files: [file1.txt, file2.txt]"). And, if available, the LLM context should also include the inline file references with or without the file content. 
+- (optional) The user should be able select file references from previous messages in the conversation, for inline placement in the current message.
+- The file references should be visible as badges in the message content (similar to tool call badges). Clicking the badge shows metadata about the file, such as the file name, size, and modification date. The badges should be visible for all messages in the conversation, as well as in the message input area.
+- Inline references should be clickable to show the file's metadata, and optionally the file content if it was included.
+technical notes:
+- Add FileReference data class with base path, relative path, optional content, insert position (for inline placement).
+- Add ChatMessageTable.fileReferences with type TEXT (JSON array of file references)
+- Add ChatMessage.fileReferences property with type List<FileReference>
 
 ---
 
