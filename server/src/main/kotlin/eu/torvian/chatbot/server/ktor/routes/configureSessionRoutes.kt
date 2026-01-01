@@ -253,6 +253,7 @@ fun Route.configureSessionRoutes(
                         llmConfig,
                         request.content,
                         request.parentMessageId,
+                        request.fileReferences,
                         mcpResponseFlow,
                         approvalResponseFlow
                     )
@@ -263,6 +264,7 @@ fun Route.configureSessionRoutes(
                         llmConfig,
                         request.content,
                         request.parentMessageId,
+                        request.fileReferences,
                         mcpResponseFlow,
                         approvalResponseFlow
                     )

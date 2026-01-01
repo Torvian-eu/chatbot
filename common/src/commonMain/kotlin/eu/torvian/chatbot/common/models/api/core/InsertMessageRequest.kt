@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.common.models.api.core
 
 import eu.torvian.chatbot.common.models.core.ChatMessage
+import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import kotlinx.serialization.Serializable
 
@@ -14,6 +15,7 @@ import kotlinx.serialization.Serializable
  * @property content The content of the new message.
  * @property modelId The ID of the model to use for generating the assistant response (optional).
  * @property settingsId The ID of the settings to use for generating the assistant response (optional).
+ * @property fileReferences Optional list of file references attached to the message.
  */
 @Serializable
 data class InsertMessageRequest(
@@ -23,5 +25,6 @@ data class InsertMessageRequest(
     val role: ChatMessage.Role,
     val content: String,
     val modelId: Long? = null,
-    val settingsId: Long? = null
+    val settingsId: Long? = null,
+    val fileReferences: List<FileReference> = emptyList()
 )
