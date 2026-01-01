@@ -177,6 +177,7 @@ object TestDefaults {
         updatedAt = DEFAULT_INSTANT,
         parentMessageId = 1L,
         childrenMessageIds = emptyList(),
+        fileReferences = emptyList(),
         modelId = llmModel1.id,
         settingsId = modelSettings1.id
     )
@@ -199,6 +200,7 @@ object TestDefaults {
         updatedAt = DEFAULT_INSTANT,
         parentMessageId = 3L,
         childrenMessageIds = emptyList(),
+        fileReferences = emptyList(),
         modelId = llmModel2.id,
         settingsId = modelSettings2.id
     )

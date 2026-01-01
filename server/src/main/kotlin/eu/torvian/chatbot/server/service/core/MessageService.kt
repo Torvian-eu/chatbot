@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.service.core
 
 import arrow.core.Either
+import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.server.service.core.error.message.DeleteMessageError
@@ -28,13 +29,18 @@ interface MessageService {
     suspend fun getMessageById(id: Long): Either<GetMessageError, ChatMessage>
 
     /**
-     * Updates the content of an existing message.
+     * Updates the content and optionally file references of an existing message.
      * @param id The ID of the message to update.
      * @param content The new content.
+     * @param fileReferences Optional new list of file references. If null, keeps existing.
      * @return Either an [UpdateMessageContentError] if the message doesn't exist,
      *         or the updated [ChatMessage].
      */
-    suspend fun updateMessageContent(id: Long, content: String): Either<UpdateMessageContentError, ChatMessage>
+    suspend fun updateMessageContent(
+        id: Long,
+        content: String,
+        fileReferences: List<FileReference>? = null
+    ): Either<UpdateMessageContentError, ChatMessage>
 
     /**
      * Deletes a specific message and its children recursively.
@@ -73,6 +79,7 @@ interface MessageService {
      * @param content The content of the new message.
      * @param modelId Optional model ID (for assistant messages).
      * @param settingsId Optional settings ID (for assistant messages).
+     * @param fileReferences Optional list of file references (for user messages).
      * @return Either an [InsertMessageError] or the newly created [ChatMessage].
      */
     suspend fun insertMessage(
@@ -82,6 +89,7 @@ interface MessageService {
         role: ChatMessage.Role,
         content: String,
         modelId: Long?,
-        settingsId: Long?
+        settingsId: Long?,
+        fileReferences: List<FileReference> = emptyList()
     ): Either<InsertMessageError, ChatMessage>
 }

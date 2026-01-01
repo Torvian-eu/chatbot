@@ -4,6 +4,7 @@ import arrow.core.Either
 import arrow.core.raise.either
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
+import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
@@ -50,14 +51,15 @@ class MessageServiceImpl(
 
     override suspend fun updateMessageContent(
         id: Long,
-        content: String
+        content: String,
+        fileReferences: List<FileReference>?
     ): Either<UpdateMessageContentError, ChatMessage> =
         transactionScope.transaction {
             either {
                 withError({ daoError: MessageError.MessageNotFound ->
                     UpdateMessageContentError.MessageNotFound(daoError.id)
                 }) {
-                    messageDao.updateMessageContent(id, content).bind()
+                    messageDao.updateMessageContent(id, content, fileReferences).bind()
                 }
             }
         }
@@ -157,7 +159,8 @@ class MessageServiceImpl(
         role: ChatMessage.Role,
         content: String,
         modelId: Long?,
-        settingsId: Long?
+        settingsId: Long?,
+        fileReferences: List<FileReference>
     ): Either<InsertMessageError, ChatMessage> =
         transactionScope.transaction {
             either {
@@ -172,7 +175,8 @@ class MessageServiceImpl(
                         role = role,
                         content = content,
                         modelId = modelId,
-                        settingsId = settingsId
+                        settingsId = settingsId,
+                        fileReferences = fileReferences
                     ).bind()
                 }
 

@@ -114,6 +114,7 @@ class SessionServiceImplCloneTest {
         updatedAt = testTimestamp2,
         parentMessageId = 101L,
         childrenMessageIds = listOf(103L),
+        fileReferences = emptyList(),
         modelId = testModelId,
         settingsId = testSettingsId
     )
@@ -203,6 +204,7 @@ class SessionServiceImplCloneTest {
                 content = any(),
                 modelId = any(),
                 settingsId = any(),
+                fileReferences = any(),
                 createdAt = any(),
                 updatedAt = any()
             )
@@ -211,8 +213,8 @@ class SessionServiceImplCloneTest {
             val content = arg<String>(4)
             val modelId = arg<Long?>(5)
             val settingsId = arg<Long?>(6)
-            val createdAt = arg<Instant>(7)
-            val updatedAt = arg<Instant>(8)
+            val createdAt = arg<Instant>(8)
+            val updatedAt = arg<Instant>(9)
             val parentMessageId = arg<Long?>(1)
             val messageId = nextMessageId++
 
@@ -225,6 +227,7 @@ class SessionServiceImplCloneTest {
                     updatedAt = updatedAt,
                     parentMessageId = parentMessageId,
                     childrenMessageIds = emptyList(),
+                    fileReferences = emptyList(),
                     modelId = modelId,
                     settingsId = settingsId
                 )
@@ -264,7 +267,7 @@ class SessionServiceImplCloneTest {
         coVerify { sessionDao.insertSession(cloneName, testGroupId, testModelId, testSettingsId) }
         coVerify { sessionOwnershipDao.setOwner(testClonedSessionId, testUserId) }
         coVerify { messageDao.getMessagesBySessionId(testSessionId) }
-        coVerify(exactly = 3) { messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 3) { messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) }
         coVerify { sessionDao.updateSessionLeafMessageId(testClonedSessionId, 203L) }
         coVerify { toolCallDao.getToolCallsBySessionId(testSessionId) }
         coVerify { sessionToolConfigDao.getEnabledToolsForSession(testSessionId) }
@@ -288,10 +291,10 @@ class SessionServiceImplCloneTest {
 
         var nextMessageId = 201L
         coEvery {
-            messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), any())
+            messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
         } answers {
-            val createdAt = arg<Instant>(7)
-            val updatedAt = arg<Instant>(8)
+            val createdAt = arg<Instant>(8)
+            val updatedAt = arg<Instant>(9)
             ChatMessage.UserMessage(
                 id = nextMessageId++,
                 sessionId = testClonedSessionId,
@@ -310,9 +313,9 @@ class SessionServiceImplCloneTest {
         sessionService.cloneSession(testSessionId, cloneName)
 
         // Assert - verify that insertMessage was called with original timestamps
-        coVerify { messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), testTimestamp1, testTimestamp1) }
-        coVerify { messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), testTimestamp2, testTimestamp2) }
-        coVerify { messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), testTimestamp3, testTimestamp3) }
+        coVerify { messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), testTimestamp1, testTimestamp1) }
+        coVerify { messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), testTimestamp2, testTimestamp2) }
+        coVerify { messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), testTimestamp3, testTimestamp3) }
     }
 
     @Test
@@ -333,7 +336,7 @@ class SessionServiceImplCloneTest {
         val insertedMessages = mutableListOf<Pair<Long?, String>>() // parentId, content
         var nextMessageId = 201L
         coEvery {
-            messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), any())
+            messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
         } answers {
             val parentId = arg<Long?>(1)
             val content = arg<String>(4)
@@ -401,7 +404,7 @@ class SessionServiceImplCloneTest {
 
         var nextMessageId = 201L
         coEvery {
-            messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), any())
+            messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
         } answers {
             ChatMessage.UserMessage(
                 id = nextMessageId++,
@@ -454,7 +457,7 @@ class SessionServiceImplCloneTest {
 
         var nextMessageId = 201L
         coEvery {
-            messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), any())
+            messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
         } answers {
             ChatMessage.UserMessage(
                 id = nextMessageId++,
