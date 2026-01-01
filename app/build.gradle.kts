@@ -193,7 +193,7 @@ kotlin {
             // Compose for Desktop
             runtimeOnly(compose.desktop.currentOs)
             // KotlinX Coroutines Swing for JVM Main Dispatcher
-            runtimeOnly(libs.kotlinx.coroutines.swing)
+            implementation(libs.kotlinx.coroutines.swing)
             // Logging (JVM-specific)
             implementation(libs.log4j.api)
             runtimeOnly(libs.log4j.core)
