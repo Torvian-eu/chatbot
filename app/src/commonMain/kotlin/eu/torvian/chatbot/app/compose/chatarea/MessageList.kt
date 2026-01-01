@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ScrollbarWrapper
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
+import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -34,6 +35,8 @@ fun MessageList(
     messageActions: MessageActions,
     editingMessage: ChatMessage?,
     editingContent: String?,
+    editingFileReferences: List<FileReference>,
+    editingBasePathOverride: String?,
     actions: ChatAreaActions,
     modelsById: Map<Long, LLMModel> = emptyMap(),
     toolCallsMap: Map<Long, List<ToolCall>> = emptyMap(),
@@ -48,6 +51,11 @@ fun MessageList(
     onCancelReply: () -> Unit = {},
     isSendingMessage: Boolean = false,
     onToggleExpansion: () -> Unit = {},
+    pendingFileReferences: List<FileReference> = emptyList(),
+    onAddFileReferences: () -> Unit = {},
+    onRemoveFileReference: (FileReference) -> Unit = {},
+    onShowFileReferenceDetails: (FileReference) -> Unit = {},
+    onManageFileReferences: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     // Create LazyListState for scrollbar integration
@@ -186,10 +194,13 @@ fun MessageList(
                         messageActions = messageActions,
                         editingMessage = editingMessage,
                         editingContent = editingContent,
+                        editingFileReferences = editingFileReferences,
+                        editingBasePathOverride = editingBasePathOverride,
                         actions = actions, // Pass actions for editing state access
                         modelsById = modelsById, // Pass map for graceful degradation
                         toolCallsForMessage = toolCallsMap[message.id] ?: emptyList(),
                         onShowToolCallDetails = onShowToolCallDetails,
+                        onShowFileReferenceDetails = onShowFileReferenceDetails,
                         isCollapsed = message.id in collapsedMessageIds,
                         isCollapsible = message.content.length > collapseThreshold,
                         onToggleCollapse = { onToggleCollapse(message.id) }
@@ -207,6 +218,11 @@ fun MessageList(
                             isSendingMessage = isSendingMessage,
                             isExpanded = true,
                             onToggleExpansion = onToggleExpansion,
+                            fileReferences = pendingFileReferences,
+                            onAddFileReferences = onAddFileReferences,
+                            onRemoveFileReference = onRemoveFileReference,
+                            onFileReferenceClick = onShowFileReferenceDetails,
+                            onManageFileReferences = onManageFileReferences,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 8.dp)
@@ -227,6 +243,11 @@ fun MessageList(
                             isSendingMessage = isSendingMessage,
                             isExpanded = true,
                             onToggleExpansion = onToggleExpansion,
+                            fileReferences = pendingFileReferences,
+                            onAddFileReferences = onAddFileReferences,
+                            onRemoveFileReference = onRemoveFileReference,
+                            onFileReferenceClick = onShowFileReferenceDetails,
+                            onManageFileReferences = onManageFileReferences,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 8.dp)

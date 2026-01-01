@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.app.compose.chatarea
 
 import eu.torvian.chatbot.common.models.core.ChatMessage
+import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.tool.ToolCall
 
 /**
@@ -147,4 +148,61 @@ interface ChatAreaActions {
      * @param message The assistant message to regenerate.
      */
     fun onRegenerateMessage(message: ChatMessage)
+
+    // --- File Reference Actions ---
+
+    /**
+     * Callback for when the user wants to add file references to the message.
+     * This should open a file picker dialog.
+     */
+    fun onAddFileReferences()
+
+    /**
+     * Callback for when the user wants to remove a file reference from the pending list.
+     * @param fileReference The file reference to remove.
+     */
+    fun onRemoveFileReference(fileReference: FileReference)
+
+    /**
+     * Callback for when the user clicks on a file reference badge to view details.
+     * @param fileReference The file reference to show details for.
+     */
+    fun onShowFileReferenceDetails(fileReference: FileReference)
+
+    /**
+     * Callback for when the user wants to manage all pending file references.
+     * Opens the file references management dialog.
+     */
+    fun onShowFileReferencesManagement()
+
+    // --- Editing File Reference Actions ---
+
+    /**
+     * Callback for when the user wants to add file references to the message being edited.
+     */
+    fun onAddEditingFileReferences()
+
+    /**
+     * Callback for when the user wants to remove a file reference from the editing message.
+     * @param fileReference The file reference to remove.
+     */
+    fun onRemoveEditingFileReference(fileReference: FileReference)
+
+    /**
+     * Callback for when the user toggles content inclusion for a file reference in editing.
+     * @param fileReference The file reference to toggle.
+     * @param includeContent Whether to include the file content.
+     */
+    fun onToggleEditingFileContent(fileReference: FileReference, includeContent: Boolean)
+
+    /**
+     * Callback for when the user sets the base path override for editing file references.
+     * @param path The new base path, or null to clear.
+     */
+    fun onSetEditingBasePathOverride(path: String?)
+
+    /**
+     * Callback for when the user wants to reset the editing base path to the common path.
+     */
+    fun onResetEditingBasePath()
 }

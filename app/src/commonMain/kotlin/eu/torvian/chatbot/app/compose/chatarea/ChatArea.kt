@@ -18,6 +18,7 @@ import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
+import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import kotlinx.coroutines.delay
@@ -55,9 +56,12 @@ fun ChatArea(
                 isSendingMessage = state.isSendingMessage,
                 editingMessage = state.editingMessage,
                 editingContent = state.editingContent,
+                editingFileReferences = state.editingFileReferences,
+                editingBasePathOverride = state.editingBasePathOverride,
                 dialogState = state.dialogState,
                 modelsById = state.modelsById,
-                toolCallsMap = state.toolCallsMap
+                toolCallsMap = state.toolCallsMap,
+                pendingFileReferences = state.pendingFileReferences
             )
         }
     }
@@ -111,6 +115,7 @@ private fun IdleStateDisplay(modifier: Modifier = Modifier) {
  * @param dialogState The current dialog state from the ViewModel.
  * @param modelsById Map of model IDs to LLMModel objects for quick lookups.
  * @param toolCallsMap Tool calls for the current session, organized by message ID.
+ * @param pendingFileReferences File references attached to the current message being composed.
  */
 @Composable
 private fun SuccessStateDisplay(
@@ -122,9 +127,12 @@ private fun SuccessStateDisplay(
     isSendingMessage: Boolean,
     editingMessage: ChatMessage?,
     editingContent: String?,
+    editingFileReferences: List<FileReference>,
+    editingBasePathOverride: String?,
     dialogState: ChatAreaDialogState,
     modelsById: Map<Long, LLMModel>,
-    toolCallsMap: Map<Long, List<ToolCall>>
+    toolCallsMap: Map<Long, List<ToolCall>>,
+    pendingFileReferences: List<FileReference>
 ) {
     // Prepare message actions to pass down
     val messageActions = remember(actions) {
@@ -206,6 +214,8 @@ private fun SuccessStateDisplay(
             messageActions = messageActions,
             editingMessage = editingMessage,
             editingContent = editingContent,
+            editingFileReferences = editingFileReferences,
+            editingBasePathOverride = editingBasePathOverride,
             actions = actions,
             modelsById = modelsById, // Pass map for graceful degradation
             toolCallsMap = toolCallsMap,
@@ -220,6 +230,11 @@ private fun SuccessStateDisplay(
             onCancelReply = actions::onCancelReply,
             isSendingMessage = isSendingMessage,
             onToggleExpansion = onToggleExpansion,
+            pendingFileReferences = pendingFileReferences,
+            onAddFileReferences = actions::onAddFileReferences,
+            onRemoveFileReference = actions::onRemoveFileReference,
+            onShowFileReferenceDetails = actions::onShowFileReferenceDetails,
+            onManageFileReferences = actions::onShowFileReferencesManagement,
             modifier = Modifier.weight(1f) // Messages take up most space
         )
 
@@ -239,6 +254,11 @@ private fun SuccessStateDisplay(
                 isSendingMessage = isSendingMessage,
                 isExpanded = false,
                 onToggleExpansion = onToggleExpansion,
+                fileReferences = pendingFileReferences,
+                onAddFileReferences = actions::onAddFileReferences,
+                onRemoveFileReference = actions::onRemoveFileReference,
+                onFileReferenceClick = actions::onShowFileReferenceDetails,
+                onManageFileReferences = actions::onShowFileReferencesManagement,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp) // Small padding between messages and input

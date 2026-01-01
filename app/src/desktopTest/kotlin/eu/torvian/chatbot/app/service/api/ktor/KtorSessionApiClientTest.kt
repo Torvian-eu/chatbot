@@ -73,15 +73,16 @@ class KtorSessionApiClientTest {
         modelId: Long = 1,
         settingsId: Long = 1
     ) = ChatMessage.AssistantMessage(
-        id,
-        sessionId,
-        content,
-        now,
-        now,
-        parentId,
-        emptyList(),
-        modelId,
-        settingsId
+        id = id,
+        sessionId = sessionId,
+        content = content,
+        createdAt = now,
+        updatedAt = now,
+        parentMessageId = parentId,
+        childrenMessageIds = emptyList(),
+        fileReferences = emptyList(),
+        modelId = modelId,
+        settingsId = settingsId
     )
 
     // --- Tests for getAllSessions ---

@@ -10,10 +10,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -27,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.PlainTooltipBox
 import eu.torvian.chatbot.app.generated.resources.*
 import eu.torvian.chatbot.common.models.core.ChatMessage
+import eu.torvian.chatbot.common.models.core.FileReference
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -36,6 +34,7 @@ import org.jetbrains.compose.resources.stringResource
  * - Send button
  * - UI for replying to a specific message
  * - Loading indicator on send button (E1.S3)
+ * - File reference badges and attach button
  *
  * @param inputContent The current text content of the input field.
  * @param onUpdateInput Callback for when the input content changes.
@@ -44,6 +43,11 @@ import org.jetbrains.compose.resources.stringResource
  * @param replyTargetMessage The message being replied to, if any.
  * @param onCancelReply Callback to cancel the reply.
  * @param isSendingMessage Indicates if a message is currently being sent.
+ * @param fileReferences List of file references attached to the current message.
+ * @param onAddFileReferences Callback to open file picker and add file references.
+ * @param onRemoveFileReference Callback to remove a file reference.
+ * @param onFileReferenceClick Callback when a file reference badge is clicked.
+ * @param onManageFileReferences Callback to open the file references management dialog.
  * @param modifier Modifier to be applied to the component.
  */
 @Composable
@@ -57,6 +61,11 @@ fun InputArea(
     isSendingMessage: Boolean,
     isExpanded: Boolean = false,
     onToggleExpansion: (() -> Unit)? = null,
+    fileReferences: List<FileReference> = emptyList(),
+    onAddFileReferences: () -> Unit,
+    onRemoveFileReference: (FileReference) -> Unit,
+    onFileReferenceClick: (FileReference) -> Unit,
+    onManageFileReferences: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val isSendButtonEnabled = inputContent.isNotBlank() && !isSendingMessage
@@ -123,7 +132,38 @@ fun InputArea(
                     )
                 )
 
-                // Action Row with Expand/Collapse and Send/Stop buttons
+                // File reference badges section - part of input field styling
+                if (fileReferences.isNotEmpty()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = "Attached Files:",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+
+                        Spacer(Modifier.height(6.dp))
+
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            fileReferences.forEach { ref ->
+                                RemovableFileReferenceBadge(
+                                    fileReference = ref,
+                                    onClick = { onFileReferenceClick(ref) },
+                                    onRemove = { onRemoveFileReference(ref) }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Action Row with Expand/Collapse, Attach File, and Send/Stop buttons
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -131,25 +171,70 @@ fun InputArea(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // Expand/Collapse Toggle Button (left side)
-                    if (onToggleExpansion != null) {
-                        PlainTooltipBox(
-                            text = if (isExpanded) "Collapse input area" else "Expand input area"
-                        ) {
+                    // Left side buttons row
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        // Expand/Collapse Toggle Button
+                        if (onToggleExpansion != null) {
+                            PlainTooltipBox(
+                                text = if (isExpanded) "Collapse input area" else "Expand input area"
+                            ) {
+                                IconButton(
+                                    onClick = onToggleExpansion,
+                                    modifier = Modifier.size(40.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
+                                        contentDescription = if (isExpanded) "Collapse input area" else "Expand input area",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+
+                        // Attach File Button
+                        PlainTooltipBox(text = "Attach files") {
                             IconButton(
-                                onClick = onToggleExpansion,
+                                onClick = onAddFileReferences,
                                 modifier = Modifier.size(40.dp)
                             ) {
                                 Icon(
-                                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
-                                    contentDescription = if (isExpanded) "Collapse input area" else "Expand input area",
+                                    imageVector = Icons.Default.AttachFile,
+                                    contentDescription = "Attach files",
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
-                    } else {
-                        Spacer(Modifier.width(40.dp)) // Maintain layout when toggle not available
+
+                        // Manage Files Button - only show when files are attached
+                        if (fileReferences.isNotEmpty()) {
+                            PlainTooltipBox(text = "Manage attached files") {
+                                BadgedBox(
+                                    badge = {
+                                        Badge {
+                                            Text(fileReferences.size.toString())
+                                        }
+                                    }
+                                ) {
+                                    IconButton(
+                                        onClick = onManageFileReferences,
+                                        modifier = Modifier.size(40.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Settings,
+                                            contentDescription = "Manage attached files",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
+
+                    // Spacer to push send button to the right
+                    Spacer(Modifier.weight(1f))
 
                     // Send Button or Stop Button (right side)
                     if (isSendingMessage) { // Stop button to cancel sending (E1.S3)

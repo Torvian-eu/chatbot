@@ -66,6 +66,7 @@ class MessageRoutesTest {
         updatedAt = TestDefaults.DEFAULT_INSTANT,
         parentMessageId = 1L,
         childrenMessageIds = emptyList(),
+        fileReferences = emptyList(),
         modelId = testModel.id,
         settingsId = testSettings.id
     )

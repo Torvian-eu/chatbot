@@ -18,6 +18,7 @@ import kotlinx.serialization.Serializable
  * @property updatedAt Timestamp when the message was last updated (e.g., edited).
  * @property parentMessageId Optional ID of the parent message. Null for root messages of threads.
  * @property childrenMessageIds List of child message IDs. Empty for leaf messages.
+ * @property fileReferences List of file references attached to this message.
  */
 @Serializable
 sealed class ChatMessage {
@@ -29,6 +30,7 @@ sealed class ChatMessage {
     abstract val updatedAt: Instant
     abstract val parentMessageId: Long?
     abstract val childrenMessageIds: List<Long>
+    abstract val fileReferences: List<FileReference>
 
     /**
      * Represents a message sent by the user.
@@ -40,6 +42,7 @@ sealed class ChatMessage {
      * @property updatedAt Timestamp when the message was last updated (e.g., edited).
      * @property parentMessageId Optional ID of the parent message. Null for root messages of threads.
      * @property childrenMessageIds List of child message IDs. Empty for leaf messages.
+     * @property fileReferences List of file references attached to this message.
      */
     @Serializable
     data class UserMessage(
@@ -49,7 +52,8 @@ sealed class ChatMessage {
         override val createdAt: Instant,
         override val updatedAt: Instant,
         override val parentMessageId: Long?,
-        override val childrenMessageIds: List<Long> = emptyList()
+        override val childrenMessageIds: List<Long> = emptyList(),
+        override val fileReferences: List<FileReference> = emptyList()
     ) : ChatMessage() {
         override val role: Role = Role.USER
     }
@@ -65,6 +69,7 @@ sealed class ChatMessage {
      * @property updatedAt Timestamp when the message was last updated (e.g., edited).
      * @property parentMessageId Optional ID of the parent message. Null for root messages of threads.
      * @property childrenMessageIds List of child message IDs. Empty for leaf messages.
+     * @property fileReferences List of file references attached to this message.
      * @property modelId ID of the LLM model used to generate this message.
      * @property settingsId ID of the settings profile used to generate this message.
      */
@@ -77,6 +82,7 @@ sealed class ChatMessage {
         override val updatedAt: Instant,
         override val parentMessageId: Long?,
         override val childrenMessageIds: List<Long> = emptyList(),
+        override val fileReferences: List<FileReference> = emptyList(),
         val modelId: Long?,
         val settingsId: Long?
     ) : ChatMessage() {

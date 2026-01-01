@@ -6,6 +6,7 @@ import eu.torvian.chatbot.app.compose.chatarea.ChatAreaActions
 import eu.torvian.chatbot.app.compose.chatarea.ChatAreaState
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.common.models.core.ChatSession
+import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.llm.LLMModelType
@@ -93,6 +94,15 @@ fun ChatAreaPreview() {
             override fun onCopyThread() {}
             override fun onBranchAndContinue(message: ChatMessage) {}
             override fun onRegenerateMessage(message: ChatMessage) {}
+            override fun onAddFileReferences() {}
+            override fun onRemoveFileReference(fileReference: FileReference) {}
+            override fun onShowFileReferenceDetails(fileReference: FileReference) {}
+            override fun onShowFileReferencesManagement() {}
+            override fun onAddEditingFileReferences() {}
+            override fun onRemoveEditingFileReference(fileReference: FileReference) {}
+            override fun onToggleEditingFileContent(fileReference: FileReference, includeContent: Boolean) {}
+            override fun onSetEditingBasePathOverride(path: String?) {}
+            override fun onResetEditingBasePath() {}
         }
     )
 }

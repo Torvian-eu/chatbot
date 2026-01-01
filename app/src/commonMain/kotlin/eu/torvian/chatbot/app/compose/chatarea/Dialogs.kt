@@ -64,6 +64,26 @@ fun Dialogs(dialogState: ChatAreaDialogState) {
             )
         }
 
+        is ChatAreaDialogState.FileReferenceDetails -> {
+            FileReferenceDetailsDialog(
+                fileReference = dialogState.fileReference,
+                onDismiss = dialogState.onDismiss
+            )
+        }
+
+        is ChatAreaDialogState.FileReferencesManagement -> {
+            FileReferencesManagementDialog(
+                fileReferencesFlow = dialogState.fileReferencesFlow,
+                basePathFlow = dialogState.basePathFlow,
+                onBasePathChange = dialogState.onBasePathChange,
+                onResetBasePath = dialogState.onResetBasePath,
+                onAddFiles = dialogState.onAddFiles,
+                onRemoveFile = dialogState.onRemoveFile,
+                onToggleContent = dialogState.onToggleContent,
+                onDismiss = dialogState.onDismiss
+            )
+        }
+
         ChatAreaDialogState.None -> {
             // No dialog
         }

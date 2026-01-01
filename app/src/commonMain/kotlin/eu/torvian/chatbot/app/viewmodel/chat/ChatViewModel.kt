@@ -7,6 +7,7 @@ import eu.torvian.chatbot.app.repository.ToolCallsMap
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.usecase.*
+import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
@@ -43,6 +44,7 @@ import kotlinx.coroutines.launch
  * @param updateInputUC Use case for updating input content
  * @param copyToClipboardUC Use case for copying content to clipboard
  * @param toggleToolsUC Use case for toggling tools for sessions
+ * @param fileReferenceUC Use case for managing file references
  * @param normalScope Coroutine scope for UI operations
  * @param backgroundScope Coroutine scope for background operations (should only differ from normalScope in tests)
  */
@@ -60,6 +62,7 @@ class ChatViewModel(
     private val updateInputUC: UpdateInputUseCase,
     private val copyToClipboardUC: CopyToClipboardUseCase,
     private val toggleToolsUC: ToggleToolsUseCase,
+    private val fileReferenceUC: FileReferenceUseCase,
     private val normalScope: CoroutineScope,
     private val backgroundScope: CoroutineScope
 ) : ViewModel(normalScope) {
@@ -146,6 +149,16 @@ class ChatViewModel(
     val editingContent: StateFlow<String> = state.editingContent
 
     /**
+     * File references for the message currently being edited.
+     */
+    val editingFileReferences: StateFlow<List<FileReference>> = state.editingFileReferences
+
+    /**
+     * Base path override for the message currently being edited.
+     */
+    val editingBasePathOverride: StateFlow<String?> = state.editingBasePathOverride
+
+    /**
      * Indicates whether a message is currently in the process of being sent.
      */
     val isSendingMessage: StateFlow<Boolean> = state.isSendingMessage
@@ -154,6 +167,11 @@ class ChatViewModel(
      * The current dialog state for the chat area (e.g., delete confirmation).
      */
     val dialogState: StateFlow<ChatAreaDialogState> = state.dialogState
+
+    /**
+     * File references attached to the current message being composed.
+     */
+    val pendingFileReferences: StateFlow<List<FileReference>> = state.pendingFileReferences
 
     // --- Public Action Functions (Delegated to Use Cases) ---
 
@@ -343,6 +361,70 @@ class ChatViewModel(
         }
     }
 
+    // --- File Reference Management ---
+
+    /**
+     * Opens the file picker and adds selected files as file references.
+     * Uses the current basePathOverride or the common base path of selected files.
+     */
+    fun pickAndAddFileReferences() {
+        normalScope.launch {
+            fileReferenceUC.pickAndAddFiles()
+        }
+    }
+
+    /**
+     * Removes a file reference from the current message being composed.
+     */
+    fun removeFileReference(fileReference: FileReference) {
+        fileReferenceUC.removeFileReference(fileReference)
+    }
+
+    // --- Editing File Reference Management ---
+
+    /**
+     * Opens the file picker and adds selected files to the message being edited.
+     */
+    fun pickAndAddEditingFileReferences() {
+        normalScope.launch {
+            editMessageUC.pickAndAddFiles()
+        }
+    }
+
+    /**
+     * Removes a file reference from the message being edited.
+     */
+    fun removeEditingFileReference(fileReference: FileReference) {
+        editMessageUC.removeFileReference(fileReference)
+    }
+
+    /**
+     * Toggles content inclusion for a file reference in the message being edited.
+     */
+    fun toggleEditingFileContent(fileReference: FileReference, includeContent: Boolean) {
+        normalScope.launch {
+            editMessageUC.toggleFileContent(fileReference, includeContent)
+        }
+    }
+
+    /**
+     * Sets the base path override for editing file references.
+     */
+    fun setEditingBasePathOverride(path: String?) {
+        normalScope.launch {
+            editMessageUC.updateBasePath(path)
+        }
+    }
+
+    /**
+     * Resets the editing base path to the common path of all current editing file references.
+     */
+    fun resetEditingBasePath() {
+        normalScope.launch {
+            editMessageUC.resetBasePathToCommonPath()
+        }
+    }
+
     // --- Tool Management ---
 
     /**
@@ -426,6 +508,21 @@ class ChatViewModel(
                 } else null
             )
         )
+    }
+
+    /**
+     * Shows the file reference details dialog.
+     */
+    fun showFileReferenceDetails(fileReference: FileReference) {
+        fileReferenceUC.showFileReferenceDetailsDialog(fileReference)
+    }
+
+    /**
+     * Shows the file references management dialog.
+     * Allows users to manage pending file references before sending.
+     */
+    fun showFileReferencesManagement() {
+        fileReferenceUC.showFileReferencesManagementDialog()
     }
 
     /**

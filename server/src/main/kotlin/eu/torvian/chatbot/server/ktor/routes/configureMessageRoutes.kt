@@ -45,7 +45,7 @@ fun Route.configureMessageRoutes(
             val result = either {
                 requireMessageAccess(messageService, authorizationService, userId, messageId, AccessMode.WRITE)
                 withError({ error: UpdateMessageContentError -> error.toApiError() }) {
-                    messageService.updateMessageContent(messageId, request.content).bind()
+                    messageService.updateMessageContent(messageId, request.content, request.fileReferences).bind()
                 }
             }
             call.respondEither(result)
@@ -90,7 +90,8 @@ fun Route.configureMessageRoutes(
                         role = request.role,
                         content = request.content,
                         modelId = request.modelId,
-                        settingsId = request.settingsId
+                        settingsId = request.settingsId,
+                        fileReferences = request.fileReferences
                     ).bind()
                 }
             }

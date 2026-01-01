@@ -16,6 +16,7 @@ import org.jetbrains.exposed.sql.ReferenceOption
  * @property updatedAt Timestamp when the message was last updated
  * @property parentMessageId Reference to the parent message in a thread (null for root messages)
  * @property childrenMessageIds JSON array of child message IDs for threading
+ * @property fileReferences JSON array of file references attached to the message
  */
 object ChatMessageTable : LongIdTable("chat_messages") {
     val sessionId = reference(
@@ -33,6 +34,7 @@ object ChatMessageTable : LongIdTable("chat_messages") {
         onDelete = ReferenceOption.SET_NULL
     ).nullable()
     val childrenMessageIds = text("children_message_ids")
+    val fileReferences = text("file_references").default("[]")
 
     // Add indices for sessionId and parentMessageId for efficient querying
     init {

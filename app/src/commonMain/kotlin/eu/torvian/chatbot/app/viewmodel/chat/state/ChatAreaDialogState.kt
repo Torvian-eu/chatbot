@@ -2,6 +2,7 @@ package eu.torvian.chatbot.app.viewmodel.chat.state
 
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.tool.ToolCall
@@ -96,5 +97,40 @@ sealed class ChatAreaDialogState {
         val onDismiss: () -> Unit,
         val onApprove: (() -> Unit)? = null,
         val onDeny: ((String?) -> Unit)? = null
+    ) : ChatAreaDialogState()
+
+    /**
+     * State for the File Reference Details dialog.
+     *
+     * @property fileReference The file reference to display.
+     * @property onDismiss Action to close the dialog.
+     */
+    data class FileReferenceDetails(
+        val fileReference: FileReference,
+        val onDismiss: () -> Unit
+    ) : ChatAreaDialogState()
+
+    /**
+     * State for the File References Management dialog.
+     * Allows users to manage pending file references before sending.
+     *
+     * @property fileReferencesFlow Reactive flow of pending file references.
+     * @property basePathFlow Reactive flow of current base path for relative paths.
+     * @property onBasePathChange Action to update the base path override.
+     * @property onResetBasePath Action to reset the base path to the common path of current files.
+     * @property onAddFiles Action to add more files.
+     * @property onRemoveFile Action to remove a file reference.
+     * @property onToggleContent Action to toggle content inclusion for a file.
+     * @property onDismiss Action to close the dialog.
+     */
+    data class FileReferencesManagement(
+        val fileReferencesFlow: StateFlow<List<FileReference>>,
+        val basePathFlow: StateFlow<String?>,
+        val onBasePathChange: (String?) -> Unit,
+        val onResetBasePath: () -> Unit,
+        val onAddFiles: () -> Unit,
+        val onRemoveFile: (FileReference) -> Unit,
+        val onToggleContent: (FileReference, Boolean) -> Unit,
+        val onDismiss: () -> Unit
     ) : ChatAreaDialogState()
 }

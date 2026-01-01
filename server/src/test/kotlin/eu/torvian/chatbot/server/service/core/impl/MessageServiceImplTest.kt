@@ -57,6 +57,7 @@ class MessageServiceImplTest {
         updatedAt = Instant.fromEpochMilliseconds(1234567890000L),
         parentMessageId = 1L,
         childrenMessageIds = emptyList(),
+        fileReferences = emptyList(),
         modelId = 1L,
         settingsId = 1L
     )

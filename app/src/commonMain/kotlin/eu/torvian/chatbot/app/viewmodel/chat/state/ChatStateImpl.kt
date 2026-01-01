@@ -7,6 +7,7 @@ import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.util.ThreadBuilder
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
+import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType
@@ -46,8 +47,12 @@ class ChatStateImpl(
     private val _replyTargetMessage = MutableStateFlow<ChatMessage?>(null)
     private val _editingMessage = MutableStateFlow<ChatMessage?>(null)
     private val _editingContent = MutableStateFlow("")
+    private val _editingFileReferences = MutableStateFlow<List<FileReference>>(emptyList())
+    private val _editingBasePathOverride = MutableStateFlow<String?>(null)
     private val _isSendingMessage = MutableStateFlow(false)
     private val _dialogState = MutableStateFlow<ChatAreaDialogState>(ChatAreaDialogState.None)
+    private val _pendingFileReferences = MutableStateFlow<List<FileReference>>(emptyList())
+    private val _basePathOverride = MutableStateFlow<String?>(null)
 
     // --- Public Read-Only StateFlows ---
 
@@ -56,8 +61,12 @@ class ChatStateImpl(
     override val replyTargetMessage: StateFlow<ChatMessage?> = _replyTargetMessage.asStateFlow()
     override val editingMessage: StateFlow<ChatMessage?> = _editingMessage.asStateFlow()
     override val editingContent: StateFlow<String> = _editingContent.asStateFlow()
+    override val editingFileReferences: StateFlow<List<FileReference>> = _editingFileReferences.asStateFlow()
+    override val editingBasePathOverride: StateFlow<String?> = _editingBasePathOverride.asStateFlow()
     override val isSendingMessage: StateFlow<Boolean> = _isSendingMessage.asStateFlow()
     override val dialogState: StateFlow<ChatAreaDialogState> = _dialogState.asStateFlow()
+    override val pendingFileReferences: StateFlow<List<FileReference>> = _pendingFileReferences.asStateFlow()
+    override val basePathOverride: StateFlow<String?> = _basePathOverride.asStateFlow()
 
     // --- Reactive State Derivation ---
 
@@ -251,6 +260,18 @@ class ChatStateImpl(
         _editingContent.value = content
     }
 
+    override fun setEditingFileReferences(fileReferences: List<FileReference>) {
+        _editingFileReferences.value = fileReferences
+    }
+
+    override fun updateEditingFileReferences(transform: (List<FileReference>) -> List<FileReference>) {
+        _editingFileReferences.value = transform(_editingFileReferences.value)
+    }
+
+    override fun setEditingBasePathOverride(path: String?) {
+        _editingBasePathOverride.value = path
+    }
+
     override fun setIsSending(isSending: Boolean) {
         _isSendingMessage.value = isSending
     }
@@ -263,13 +284,26 @@ class ChatStateImpl(
         _dialogState.value = ChatAreaDialogState.None
     }
 
+    override fun updateFileReferences(transform: (List<FileReference>) -> List<FileReference>) {
+        _pendingFileReferences.value = transform(_pendingFileReferences.value)
+    }
+
+
+    override fun setBasePathOverride(path: String?) {
+        _basePathOverride.value = path
+    }
+
     override fun resetState() {
         _activeSessionId.value = null
         _inputContent.value = ""
         _replyTargetMessage.value = null
         _editingMessage.value = null
         _editingContent.value = ""
+        _editingFileReferences.value = emptyList()
+        _editingBasePathOverride.value = null
         _isSendingMessage.value = false
         _dialogState.value = ChatAreaDialogState.None
+        _pendingFileReferences.value = emptyList()
+        _basePathOverride.value = null
     }
 }

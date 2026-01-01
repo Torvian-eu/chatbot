@@ -6,6 +6,7 @@ import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.ToolCallsMap
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
+import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
@@ -129,6 +130,18 @@ interface ChatState {
     val editingContent: StateFlow<String>
 
     /**
+     * File references for the message being edited.
+     * Separate from pendingFileReferences (used for new messages).
+     */
+    val editingFileReferences: StateFlow<List<FileReference>>
+
+    /**
+     * Base path override for file references when editing a message.
+     * Separate from basePathOverride (used for new messages).
+     */
+    val editingBasePathOverride: StateFlow<String?>
+
+    /**
      * Whether a message is currently being sent.
      */
     val isSendingMessage: StateFlow<Boolean>
@@ -137,6 +150,19 @@ interface ChatState {
      * The current dialog state for the chat area (e.g., delete confirmation).
      */
     val dialogState: StateFlow<ChatAreaDialogState>
+
+    /**
+     * File references attached to the current message being composed.
+     * These will be included with the message when sent.
+     */
+    val pendingFileReferences: StateFlow<List<FileReference>>
+
+    /**
+     * Override for the base path used when creating file references.
+     * When null, the common parent path of selected files is used.
+     * Stored per session in the ViewModel, not persisted to server.
+     */
+    val basePathOverride: StateFlow<String?>
 
 
     // --- State Mutation Methods ---
@@ -167,6 +193,21 @@ interface ChatState {
     fun setEditingContent(content: String)
 
     /**
+     * Sets the editing file references.
+     */
+    fun setEditingFileReferences(fileReferences: List<FileReference>)
+
+    /**
+     * Updates the editing file references list by applying a transformation function.
+     */
+    fun updateEditingFileReferences(transform: (List<FileReference>) -> List<FileReference>)
+
+    /**
+     * Sets the base path override for editing file references.
+     */
+    fun setEditingBasePathOverride(path: String?)
+
+    /**
      * Sets the sending message flag.
      */
     fun setIsSending(isSending: Boolean)
@@ -180,6 +221,20 @@ interface ChatState {
      * Cancels/closes any dialog by setting state to None.
      */
     fun cancelDialog()
+
+    /**
+     * Updates the file references list by applying a transformation function.
+     * This is the primary method for modifying file references.
+     * Can be used to add, remove, or clear file references via the transform function.
+     *
+     * @param transform Function that transforms the current list of file references
+     */
+    fun updateFileReferences(transform: (List<FileReference>) -> List<FileReference>)
+
+    /**
+     * Sets the base path override for file references.
+     */
+    fun setBasePathOverride(path: String?)
 
     /**
      * Resets the entire chat state to its initial state.

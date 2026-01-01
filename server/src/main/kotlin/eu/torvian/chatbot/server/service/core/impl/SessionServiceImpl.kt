@@ -375,6 +375,7 @@ class SessionServiceImpl(
                             content = message.content,
                             modelId = modelId,
                             settingsId = settingsId,
+                            fileReferences = message.fileReferences,
                             createdAt = message.createdAt,
                             updatedAt = message.updatedAt
                         ).bind()

@@ -17,6 +17,7 @@ import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
+import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import kotlinx.coroutines.flow.*
@@ -372,9 +373,10 @@ class DefaultSessionRepository(
     override suspend fun updateMessageContent(
         messageId: Long,
         sessionId: Long,
-        content: String
+        content: String,
+        fileReferences: List<FileReference>?
     ): Either<RepositoryError, Unit> {
-        return chatApi.updateMessageContent(messageId, content)
+        return chatApi.updateMessageContent(messageId, content, fileReferences)
             .map { updatedMessage ->
                 // Update the cached ChatSession with the new message
                 updateSessionDetailsInCache(sessionId) { session ->
@@ -417,7 +419,8 @@ class DefaultSessionRepository(
         role: ChatMessage.Role,
         content: String,
         modelId: Long?,
-        settingsId: Long?
+        settingsId: Long?,
+        fileReferences: List<FileReference>
     ): Either<RepositoryError, ChatMessage> {
         return chatApi.insertMessage(
             sessionId = sessionId,
@@ -426,7 +429,8 @@ class DefaultSessionRepository(
             role = role,
             content = content,
             modelId = modelId,
-            settingsId = settingsId
+            settingsId = settingsId,
+            fileReferences = fileReferences
         )
             .mapLeft { it.toRepositoryError("Failed to insert message") }
             .onRight {

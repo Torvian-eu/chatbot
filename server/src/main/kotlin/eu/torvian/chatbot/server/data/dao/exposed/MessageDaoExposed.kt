@@ -5,6 +5,7 @@ import arrow.core.getOrElse
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
+import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.server.data.dao.MessageDao
@@ -77,6 +78,7 @@ class MessageDaoExposed(
         content: String,
         modelId: Long?,
         settingsId: Long?,
+        fileReferences: List<FileReference>,
         createdAt: Instant?,
         updatedAt: Instant?
     ): Either<InsertMessageError, ChatMessage> =
@@ -133,7 +135,8 @@ class MessageDaoExposed(
                     role = role,
                     createdAt = createdAtMillis,
                     updatedAt = updatedAtMillis,
-                    childrenMessageIds = newChildrenIds
+                    childrenMessageIds = newChildrenIds,
+                    fileReferences = fileReferences
                 )
                 val newMessageId = insertedRow[ChatMessageTable.id].value
 
@@ -217,6 +220,7 @@ class MessageDaoExposed(
                         updatedAt = Instant.fromEpochMilliseconds(updatedAtMillis),
                         parentMessageId = newParentId,
                         childrenMessageIds = newChildrenIds,
+                        fileReferences = fileReferences,
                         modelId = modelId,
                         settingsId = settingsId
                     )
@@ -228,7 +232,8 @@ class MessageDaoExposed(
                         createdAt = Instant.fromEpochMilliseconds(createdAtMillis),
                         updatedAt = Instant.fromEpochMilliseconds(updatedAtMillis),
                         parentMessageId = newParentId,
-                        childrenMessageIds = newChildrenIds
+                        childrenMessageIds = newChildrenIds,
+                        fileReferences = fileReferences
                     )
                 }
             }
@@ -236,13 +241,17 @@ class MessageDaoExposed(
 
     override suspend fun updateMessageContent(
         id: Long,
-        content: String
+        content: String,
+        fileReferences: List<FileReference>?
     ): Either<MessageError.MessageNotFound, ChatMessage> =
         transactionScope.transaction {
             either {
                 val updatedRowCount = ChatMessageTable.update({ ChatMessageTable.id eq id }) {
                     it[ChatMessageTable.content] = content
                     it[ChatMessageTable.updatedAt] = System.currentTimeMillis()
+                    if (fileReferences != null) {
+                        it[ChatMessageTable.fileReferences] = Json.encodeToString(fileReferences)
+                    }
                 }
                 ensure(updatedRowCount != 0) { MessageError.MessageNotFound(id) }
 
@@ -392,7 +401,8 @@ class MessageDaoExposed(
         role: ChatMessage.Role,
         createdAt: Long,
         updatedAt: Long,
-        childrenMessageIds: List<Long> = emptyList()
+        childrenMessageIds: List<Long> = emptyList(),
+        fileReferences: List<FileReference> = emptyList()
     ): ResultRow {
         val insertStatement = ChatMessageTable.insert {
             it[ChatMessageTable.sessionId] = sessionId
@@ -402,6 +412,7 @@ class MessageDaoExposed(
             it[ChatMessageTable.updatedAt] = updatedAt
             it[ChatMessageTable.parentMessageId] = parentMessageId
             it[ChatMessageTable.childrenMessageIds] = Json.encodeToString(childrenMessageIds)
+            it[ChatMessageTable.fileReferences] = Json.encodeToString(fileReferences)
         }
         return insertStatement.resultedValues?.first()
             ?: throw IllegalStateException("Failed to retrieve newly inserted message (role=$role)")

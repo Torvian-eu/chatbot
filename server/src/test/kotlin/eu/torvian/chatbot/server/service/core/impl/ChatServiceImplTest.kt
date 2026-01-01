@@ -83,6 +83,7 @@ class ChatServiceImplTest {
         updatedAt = Instant.fromEpochMilliseconds(1234567890000L),
         parentMessageId = 1L,
         childrenMessageIds = emptyList(),
+        fileReferences = emptyList(),
         modelId = 1L,
         settingsId = 1L
     )
@@ -399,7 +400,7 @@ class ChatServiceImplTest {
 
         // Act
         val events = mutableListOf<Either<ProcessNewMessageError, MessageEvent>>()
-        chatService.processNewMessage(1L, testSession, testLlmConfig, content, null, emptyFlow(), emptyFlow())
+        chatService.processNewMessage(1L, testSession, testLlmConfig, content, null, emptyList(), emptyFlow(), emptyFlow())
             .collect { event -> events.add(event) }
 
         // Assert
@@ -499,7 +500,7 @@ class ChatServiceImplTest {
 
         // Act
         val events = mutableListOf<Either<ProcessNewMessageError, MessageEvent>>()
-        chatService.processNewMessage(1L, testSession, testLlmConfig, content, parentMessageId, emptyFlow(), emptyFlow())
+        chatService.processNewMessage(1L, testSession, testLlmConfig, content, parentMessageId, emptyList(), emptyFlow(), emptyFlow())
             .collect { event -> events.add(event) }
 
         // Assert
@@ -566,7 +567,7 @@ class ChatServiceImplTest {
 
         // Act
         val events = mutableListOf<Either<ProcessNewMessageError, MessageEvent>>()
-        chatService.processNewMessage(1L, testSession, testLlmConfig, content, null, emptyFlow(), emptyFlow())
+        chatService.processNewMessage(1L, testSession, testLlmConfig, content, null, emptyList(), emptyFlow(), emptyFlow())
             .collect { event -> events.add(event) }
 
         // Assert

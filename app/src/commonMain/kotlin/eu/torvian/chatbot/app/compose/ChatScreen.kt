@@ -14,6 +14,7 @@ import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
 import eu.torvian.chatbot.common.models.core.ChatGroup
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
+import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -56,11 +57,14 @@ fun ChatScreen(
     val chatReplyTargetMessage by chatViewModel.replyTargetMessage.collectAsState()
     val chatEditingMessage by chatViewModel.editingMessage.collectAsState()
     val chatEditingContent by chatViewModel.editingContent.collectAsState()
+    val chatEditingFileReferences by chatViewModel.editingFileReferences.collectAsState()
+    val chatEditingBasePathOverride by chatViewModel.editingBasePathOverride.collectAsState()
     val chatDisplayedMessages by chatViewModel.displayedMessages.collectAsState()
     val chatIsSendingMessage by chatViewModel.isSendingMessage.collectAsState()
     val chatDialogState by chatViewModel.dialogState.collectAsState()
     val enabledToolsForCurrentSession by chatViewModel.enabledToolsForCurrentSession.collectAsState()
     val toolCallsForCurrentSession by chatViewModel.toolCallsForCurrentSession.collectAsState()
+    val pendingFileReferences by chatViewModel.pendingFileReferences.collectAsState()
 
     // Derive enabled tools count
     val enabledToolsCount = enabledToolsForCurrentSession.dataOrNull?.size ?: 0
@@ -164,7 +168,7 @@ fun ChatScreen(
     val chatAreaState = remember(
         chatSessionUiState, availableModels, availableSettings, currentModel, currentSettings, modelsById,
         chatInputContent, chatReplyTargetMessage, chatEditingMessage, chatEditingContent,
-        chatDisplayedMessages, chatIsSendingMessage, chatDialogState, enabledToolsCount, toolCallsMap
+        chatEditingFileReferences, chatEditingBasePathOverride, chatDisplayedMessages, chatIsSendingMessage, chatDialogState, enabledToolsCount, toolCallsMap, pendingFileReferences
     ) {
         ChatAreaState(
             sessionUiState = chatSessionUiState,
@@ -177,11 +181,14 @@ fun ChatScreen(
             replyTargetMessage = chatReplyTargetMessage,
             editingMessage = chatEditingMessage,
             editingContent = chatEditingContent,
+            editingFileReferences = chatEditingFileReferences,
+            editingBasePathOverride = chatEditingBasePathOverride,
             displayedMessages = chatDisplayedMessages,
             isSendingMessage = chatIsSendingMessage,
             dialogState = chatDialogState,
             enabledToolsCount = enabledToolsCount,
-            toolCallsMap = toolCallsMap
+            toolCallsMap = toolCallsMap,
+            pendingFileReferences = pendingFileReferences
         )
     }
     val chatAreaActions = remember(chatViewModel, selectedSession) {
@@ -214,6 +221,25 @@ fun ChatScreen(
                 chatViewModel.sendMessage(continueFromMessage = message)
             override fun onRegenerateMessage(message: ChatMessage) =
                 chatViewModel.regenerateMessage(message)
+            override fun onAddFileReferences() =
+                chatViewModel.pickAndAddFileReferences()
+            override fun onRemoveFileReference(fileReference: FileReference) =
+                chatViewModel.removeFileReference(fileReference)
+            override fun onShowFileReferenceDetails(fileReference: FileReference) =
+                chatViewModel.showFileReferenceDetails(fileReference)
+            override fun onShowFileReferencesManagement() =
+                chatViewModel.showFileReferencesManagement()
+
+            override fun onAddEditingFileReferences() =
+                chatViewModel.pickAndAddEditingFileReferences()
+            override fun onRemoveEditingFileReference(fileReference: FileReference) =
+                chatViewModel.removeEditingFileReference(fileReference)
+            override fun onToggleEditingFileContent(fileReference: FileReference, includeContent: Boolean) =
+                chatViewModel.toggleEditingFileContent(fileReference, includeContent)
+            override fun onSetEditingBasePathOverride(path: String?) =
+                chatViewModel.setEditingBasePathOverride(path)
+            override fun onResetEditingBasePath() =
+                chatViewModel.resetEditingBasePath()
 
             override fun onRetryLoadingSession() {
                 selectedSession?.id?.let { sessionId ->

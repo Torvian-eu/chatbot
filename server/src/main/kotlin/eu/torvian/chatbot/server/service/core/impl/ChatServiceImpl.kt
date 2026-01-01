@@ -13,6 +13,7 @@ import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallResult
 import eu.torvian.chatbot.common.models.api.tool.ToolCallApprovalResponse
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
+import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.llm.*
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
@@ -46,10 +47,13 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
+import java.util.Locale
 import java.util.concurrent.CancellationException
 
 /**
@@ -188,6 +192,7 @@ class ChatServiceImpl(
         llmConfig: LLMConfig,
         content: String?,
         parentMessageId: Long?,
+        fileReferences: List<FileReference>,
         mcpResponseFlow: Flow<LocalMCPToolCallResult>,
         approvalResponseFlow: Flow<ToolCallApprovalResponse>
     ): Flow<Either<ProcessNewMessageError, MessageEvent>> = channelFlow {
@@ -196,7 +201,7 @@ class ChatServiceImpl(
             // Track the last message ID for parent reference and build updated message list
             var lastMessageId: Long
             val updatedSessionMessages = if (content != null) {
-                val userMessage = saveUserMessage(session.id, content, parentMessageId)
+                val userMessage = saveUserMessage(session.id, content, parentMessageId, fileReferences)
                     .let { (userMessage, updatedParentMessage) ->
                         send(MessageEvent.UserMessageSaved(userMessage, updatedParentMessage).right())
                         userMessage
@@ -360,6 +365,7 @@ class ChatServiceImpl(
         llmConfig: LLMConfig,
         content: String?,
         parentMessageId: Long?,
+        fileReferences: List<FileReference>,
         mcpResponseFlow: Flow<LocalMCPToolCallResult>,
         approvalResponseFlow: Flow<ToolCallApprovalResponse>
     ): Flow<Either<ProcessNewMessageError, MessageStreamEvent>> = channelFlow {
@@ -368,7 +374,7 @@ class ChatServiceImpl(
             // Track the last message ID for parent reference and build updated message list
             var lastMessageId: Long
             val updatedSessionMessages = if (content != null) {
-                val userMessage = saveUserMessage(session.id, content, parentMessageId)
+                val userMessage = saveUserMessage(session.id, content, parentMessageId, fileReferences)
                     .let { (userMessage, updatedParentMessage) ->
                         send(MessageStreamEvent.UserMessageSaved(userMessage, updatedParentMessage).right())
                         userMessage
@@ -796,8 +802,9 @@ class ChatServiceImpl(
         threadMessages.forEach { message ->
             when (message) {
                 is ChatMessage.UserMessage -> {
-                    // Convert user message
-                    rawContext.add(RawChatMessage.User(message.content))
+                    // Convert user message with file references embedded in content
+                    val contentWithFileRefs = buildContentWithFileReferences(message.content, message.fileReferences)
+                    rawContext.add(RawChatMessage.User(contentWithFileRefs))
                 }
 
                 is ChatMessage.AssistantMessage -> {
@@ -855,7 +862,8 @@ class ChatServiceImpl(
     private suspend fun saveUserMessage(
         sessionId: Long,
         content: String,
-        parentMessageId: Long?
+        parentMessageId: Long?,
+        fileReferences: List<FileReference> = emptyList()
     ): Pair<ChatMessage.UserMessage, ChatMessage?> = transactionScope.transaction {
         // 1. Insert user message (DAO will handle child linking atomically when parent is provided)
         val userMessage = messageDao.insertMessage(
@@ -865,7 +873,8 @@ class ChatServiceImpl(
             role = ChatMessage.Role.USER,
             content = content,
             modelId = null,
-            settingsId = null
+            settingsId = null,
+            fileReferences = fileReferences
         ).getOrElse { daoError ->
             throw IllegalStateException(
                 "Failed to insert user message. " +
@@ -1136,5 +1145,100 @@ class ChatServiceImpl(
                 }
             }
         }
+    }
+
+    /**
+     * Builds the message content with file references for LLM context.
+     *
+     * For inline references (with inlinePosition set):
+     * - Inserts the file content at the specified position with a header showing the file path
+     * - Or inserts a reference placeholder if no content is included
+     *
+     * For non-inline references:
+     * - Appends a list of referenced files at the end of the message
+     * - Includes file content if available, otherwise just metadata
+     *
+     * @param content The original message content
+     * @param fileReferences The list of file references to include
+     * @return The content with file references embedded
+     */
+    private fun buildContentWithFileReferences(
+        content: String,
+        fileReferences: List<FileReference>
+    ): String {
+        if (fileReferences.isEmpty()) return content
+
+        // Separate inline and non-inline references
+        val inlineRefs = fileReferences.filter { it.isInline }.sortedByDescending { it.inlinePosition ?: 0 }
+        val nonInlineRefs = fileReferences.filter { !it.isInline }
+
+        var result = content
+
+        // Helper function to format file header with metadata
+        fun formatFileHeader(ref: FileReference): String {
+            val header = buildString {
+                append("--- ${ref.relativePath}")
+                append(" [${formatFileSize(ref.fileSize)}, ${ref.mimeType}, ${formatLastModified(ref.lastModified)}]")
+                append(" ---")
+            }
+            return header
+        }
+
+        // Helper function to format file reference without content
+        fun formatFileReference(ref: FileReference): String {
+            return "[reference: ${ref.relativePath} (${formatFileSize(ref.fileSize)}, ${ref.mimeType})]"
+        }
+
+        // Process inline references (in reverse order to maintain positions)
+        for (ref in inlineRefs) {
+            val position = ref.inlinePosition ?: continue
+            val insertion = if (ref.content != null) {
+                "\n${formatFileHeader(ref)}\n${ref.content}\n--- end ${ref.fileName} ---\n"
+            } else {
+                "\n${formatFileReference(ref)}\n"
+            }
+
+            // Insert at position, clamped to valid range
+            val insertPos = position.coerceIn(0, result.length)
+            result = result.take(insertPos) + insertion + result.substring(insertPos)
+        }
+
+        // Append non-inline references at the end
+        if (nonInlineRefs.isNotEmpty()) {
+            result += "\n\n--- Attached Files ---"
+
+            for (ref in nonInlineRefs) {
+                result += if (ref.content != null) {
+                    // Include file content if available
+                    "\n\n${formatFileHeader(ref)}\n${ref.content}\n--- end ${ref.fileName} ---"
+                } else {
+                    // Show metadata for reference-only files
+                    "\n${formatFileReference(ref)}"
+                }
+            }
+        }
+
+        return result
+    }
+
+    /**
+     * Formats file size in bytes to a human-readable string.
+     */
+    private fun formatFileSize(bytes: Long): String {
+        return when {
+            bytes < 1024 -> "$bytes B"
+            bytes < 1024 * 1024 -> "${bytes / 1024} KB"
+            bytes < 1024 * 1024 * 1024 -> "${String.format(Locale.ROOT, "%.2f", bytes / (1024.0 * 1024.0))} MB"
+            else -> "${String.format(Locale.ROOT, "%.2f", bytes / (1024.0 * 1024.0 * 1024.0))} GB"
+        }
+    }
+
+    /**
+     * Formats an Instant to a human-readable date/time string.
+     */
+    private fun formatLastModified(instant: Instant): String {
+        val tz = TimeZone.currentSystemDefault()
+        val localDateTime = instant.toLocalDateTime(tz)
+        return "${localDateTime.date} ${String.format(Locale.ROOT, "%02d:%02d", localDateTime.hour, localDateTime.minute)}"
     }
 }

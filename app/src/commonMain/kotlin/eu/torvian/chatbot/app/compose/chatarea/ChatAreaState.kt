@@ -5,6 +5,7 @@ import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
+import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.tool.ToolCall
@@ -23,10 +24,13 @@ import eu.torvian.chatbot.common.models.tool.ToolCall
  * @property replyTargetMessage The message the user is currently explicitly replying to via the Reply action.
  * @property editingMessage The message currently being edited (E3.S1, E3.S2).
  * @property editingContent The content of the message currently being edited (E3.S1, E3.S2).
+ * @property editingFileReferences The list of file references being edited (E3.S2).
+ * @property editingBasePathOverride The base path override being edited (E3.S2).
  * @property isSendingMessage Indicates whether a message is currently in the process of being sent (E1.S3).
  * @property dialogState The current dialog state for the chat area (e.g., delete confirmation).
  * @property enabledToolsCount The number of tools currently enabled for the session.
  * @property toolCallsMap Tool calls for the current session, organized by message ID.
+ * @property pendingFileReferences File references attached to the current message being composed.
  */
 data class ChatAreaState(
     val sessionUiState: DataState<RepositoryError, ChatSession> = DataState.Idle,
@@ -40,8 +44,11 @@ data class ChatAreaState(
     val replyTargetMessage: ChatMessage? = null,
     val editingMessage: ChatMessage? = null,
     val editingContent: String = "",
+    val editingFileReferences: List<FileReference> = emptyList(),
+    val editingBasePathOverride: String? = null,
     val isSendingMessage: Boolean = false,
     val dialogState: ChatAreaDialogState = ChatAreaDialogState.None,
     val enabledToolsCount: Int = 0,
-    val toolCallsMap: Map<Long, List<ToolCall>> = emptyMap()
+    val toolCallsMap: Map<Long, List<ToolCall>> = emptyMap(),
+    val pendingFileReferences: List<FileReference> = emptyList()
 )
