@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.PlainTooltipBox
 import eu.torvian.chatbot.common.models.core.ChatMessage
+import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.tool.ToolCall
 
@@ -37,10 +38,13 @@ import eu.torvian.chatbot.common.models.tool.ToolCall
  * @param messageActions All available actions for the message.
  * @param editingMessage The message currently being edited (E3.S1, E3.S2).
  * @param editingContent The content of the message currently being edited (E3.S1, E3.S2).
+ * @param editingFileReferences The file references of the message currently being edited.
+ * @param editingBasePathOverride The base path override for editing file references.
  * @param actions The actions contract for the chat area.
  * @param modelsById Map of model IDs to LLMModel objects for displaying model names with graceful degradation.
  * @param toolCallsForMessage List of tool calls associated with this message.
  * @param onShowToolCallDetails Callback to show tool call details.
+ * @param onShowFileReferenceDetails Callback to show file reference details.
  * @param isCollapsed Whether this message is currently collapsed.
  * @param isCollapsible Whether this message can be collapsed (content length > threshold).
  * @param onToggleCollapse Callback to toggle the collapse state of this message.
@@ -53,10 +57,13 @@ fun MessageItem(
     messageActions: MessageActions,
     editingMessage: ChatMessage?,
     editingContent: String?,
+    editingFileReferences: List<FileReference>,
+    editingBasePathOverride: String?,
     actions: ChatAreaActions,
     modelsById: Map<Long, LLMModel> = emptyMap(),
     toolCallsForMessage: List<ToolCall> = emptyList(),
     onShowToolCallDetails: (ToolCall) -> Unit = {},
+    onShowFileReferenceDetails: (FileReference) -> Unit = {},
     isCollapsed: Boolean = false,
     isCollapsible: Boolean = false,
     onToggleCollapse: () -> Unit = {}
@@ -128,6 +135,8 @@ fun MessageItem(
             message = message,
             isBeingEdited = editingMessage?.id == message.id,
             editingContent = if (editingMessage?.id == message.id) editingContent else null,
+            editingFileReferences = if (editingMessage?.id == message.id) editingFileReferences else emptyList(),
+            editingBasePathOverride = if (editingMessage?.id == message.id) editingBasePathOverride else null,
             actions = actions,
             contentColor = contentColor,
             isCollapsed = isCollapsed,
@@ -140,6 +149,21 @@ fun MessageItem(
             ToolCallBadges(
                 toolCalls = toolCallsForMessage,
                 onToolCallClick = onShowToolCallDetails
+            )
+        }
+
+        // File Reference Badges (for messages with file references)
+        if (message.fileReferences.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Files",
+                style = MaterialTheme.typography.labelSmall,
+                color = contentColor.copy(alpha = 0.7f)
+            )
+            Spacer(Modifier.height(4.dp))
+            FileReferenceBadgeRow(
+                fileReferences = message.fileReferences,
+                onFileReferenceClick = onShowFileReferenceDetails
             )
         }
 
