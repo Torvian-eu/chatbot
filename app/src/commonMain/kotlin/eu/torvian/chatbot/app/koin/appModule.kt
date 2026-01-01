@@ -266,6 +266,10 @@ fun appModule(appConfig: AppConfig): Module = module {
         ToggleToolsUseCase(chatState, get(), get())
     }
 
+    factory<FileReferenceUseCase> { (chatState: ChatState, scope: CoroutineScope) ->
+        FileReferenceUseCase(chatState, get(), scope)
+    }
+
     // Provide ViewModels, injecting the required dependencies
     viewModel {
         val scopeProvider = get<CoroutineScopeProvider>()
@@ -287,6 +291,7 @@ fun appModule(appConfig: AppConfig): Module = module {
             updateInputUC = get { parametersOf(chatState) },
             copyToClipboardUC = get { parametersOf(chatState) },
             toggleToolsUC = get { parametersOf(chatState) },
+            fileReferenceUC = get { parametersOf(chatState, normalScope) },
             normalScope = normalScope,
             backgroundScope = backgroundScope
         )

@@ -99,18 +99,20 @@ class SendMessageUseCase(
         }
 
         // Determine content and parent based on mode
-        val (content, parentId) = if (continueFromMessage != null) {
+        val (content, parentId, fileReferences) = if (continueFromMessage != null) {
             // Branch & Continue mode: null content, use specified message as parent
             logger.info("Branch & Continue from message ${continueFromMessage.id} in session ${currentSession.id}")
-            null to continueFromMessage.id
+            Triple(null, continueFromMessage.id, emptyList())
         } else {
             // Regular mode: use input content and determine parent from reply target or current leaf
             val inputContent = state.inputContent.value.trim()
             if (inputContent.isBlank()) return // Cannot send empty message
 
             val parent = state.replyTargetMessage.value?.id ?: currentSession.currentLeafMessageId
-            logger.info("Sending message to session ${currentSession.id}, parent: $parent")
-            inputContent to parent
+            val pendingRefs = state.pendingFileReferences.value
+
+            logger.info("Sending message to session ${currentSession.id}, parent: $parent, fileRefs: ${pendingRefs.size}")
+            Triple(inputContent, parent, pendingRefs)
         }
 
         state.setIsSending(true) // Set sending state to true
@@ -122,7 +124,8 @@ class SendMessageUseCase(
             val request = ProcessNewMessageRequest(
                 content = content,
                 parentMessageId = parentId,
-                isStreaming = isStreamingEnabled
+                isStreaming = isStreamingEnabled,
+                fileReferences = fileReferences
             )
 
             if (isStreamingEnabled) {
@@ -173,9 +176,10 @@ class SendMessageUseCase(
                     // Handle specific events that require UI state updates or further action.
                     when (chatUpdate) {
                         is ChatStreamEvent.UserMessageSaved -> {
-                            // Clear input and reply target after user message is confirmed.
+                            // Clear input, reply target, and file references after user message is confirmed.
                             state.setInputContent("")
                             state.setReplyTarget(null)
+                            state.updateFileReferences { emptyList() }
                         }
 
                         is ChatStreamEvent.LocalMCPToolCallReceived -> {
@@ -246,9 +250,10 @@ class SendMessageUseCase(
                     // Handle specific events that require UI state updates or further action.
                     when (event) {
                         is ChatEvent.UserMessageSaved -> {
-                            // Clear input and reply target after user message is confirmed.
+                            // Clear input, reply target, and file references after user message is confirmed.
                             state.setInputContent("")
                             state.setReplyTarget(null)
+                            state.updateFileReferences { emptyList() }
                         }
 
                         is ChatEvent.LocalMCPToolCallReceived -> {
