@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.data.dao
 
 import arrow.core.Either
+import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.server.data.dao.error.InsertMessageError
@@ -40,6 +41,7 @@ interface MessageDao {
      * @param content The content of the new message.
      * @param modelId Optional model ID (for assistant messages).
      * @param settingsId Optional settings ID (for assistant messages).
+     * @param fileReferences Optional list of file references.
      * @param createdAt Optional creation timestamp. If null, uses current time.
      * @param updatedAt Optional update timestamp. If null, uses current time.
      * @return Either an error or the newly created message.
@@ -52,17 +54,23 @@ interface MessageDao {
         content: String,
         modelId: Long?,
         settingsId: Long?,
+        fileReferences: List<FileReference> = emptyList(),
         createdAt: Instant? = null,
         updatedAt: Instant? = null
     ): Either<InsertMessageError, ChatMessage>
 
     /**
-     * Updates the content and updated timestamp of an existing message.
+     * Updates the content, file references, and updated timestamp of an existing message.
      * @param id The ID of the message to update.
      * @param content The new content.
+     * @param fileReferences The new list of file references (optional, if null keeps existing).
      * @return Either a [MessageError.MessageNotFound] or the updated [ChatMessage] object.
      */
-    suspend fun updateMessageContent(id: Long, content: String): Either<MessageError.MessageNotFound, ChatMessage>
+    suspend fun updateMessageContent(
+        id: Long,
+        content: String,
+        fileReferences: List<FileReference>? = null
+    ): Either<MessageError.MessageNotFound, ChatMessage>
 
     /**
      * Deletes a specific message and handles its impact on thread relationships.
