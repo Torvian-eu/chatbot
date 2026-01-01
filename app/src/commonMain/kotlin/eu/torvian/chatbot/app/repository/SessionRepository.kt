@@ -8,6 +8,7 @@ import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
+import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import kotlinx.coroutines.flow.Flow
@@ -245,7 +246,7 @@ interface SessionRepository {
     ): Flow<Either<RepositoryError, ChatStreamEvent>>
 
     /**
-     * Updates the content of a specific message.
+     * Updates the content and optionally file references of an existing message.
      *
      * Upon successful update, the message is automatically updated in the cached ChatSession,
      * triggering updates to all observers.
@@ -253,12 +254,14 @@ interface SessionRepository {
      * @param messageId The ID of the message to update
      * @param sessionId The ID of the session containing the message
      * @param content The new content for the message
+     * @param fileReferences Optional new list of file references. If null, keeps existing.
      * @return Either.Right with Unit on successful update, or Either.Left with RepositoryError on failure
      */
     suspend fun updateMessageContent(
         messageId: Long,
         sessionId: Long,
-        content: String
+        content: String,
+        fileReferences: List<FileReference>? = null
     ): Either<RepositoryError, Unit>
 
     /**
@@ -296,6 +299,7 @@ interface SessionRepository {
      * @param content The content of the new message.
      * @param modelId Optional ID of the model to use for the message.
      * @param settingsId Optional ID of the settings profile to use.
+     * @param fileReferences Optional list of file references attached to the message.
      * @return Either an error or the newly created message.
      */
     suspend fun insertMessage(
@@ -305,6 +309,7 @@ interface SessionRepository {
         role: ChatMessage.Role,
         content: String,
         modelId: Long? = null,
-        settingsId: Long? = null
+        settingsId: Long? = null,
+        fileReferences: List<FileReference> = emptyList()
     ): Either<RepositoryError, ChatMessage>
 }

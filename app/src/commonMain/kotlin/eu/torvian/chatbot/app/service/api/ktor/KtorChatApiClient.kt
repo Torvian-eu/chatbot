@@ -13,6 +13,7 @@ import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.models.api.core.*
 import eu.torvian.chatbot.common.models.core.ChatMessage
+import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -119,14 +120,15 @@ class KtorChatApiClient(
 
     override suspend fun updateMessageContent(
         messageId: Long,
-        content: String
+        content: String,
+        fileReferences: List<FileReference>?
     ): Either<ApiResourceError, ChatMessage> {
         // Use safeApiCall to wrap the Ktor request
         return safeApiCall {
             // Use Ktor resources to build the URL: /api/v1/messages/{messageId}/content
             client.put(MessageResource.ById.Content(MessageResource.ById(MessageResource(), messageId))) {
                 // Set the request body with the UpdateMessageRequest DTO
-                setBody(UpdateMessageRequest(content = content))
+                setBody(UpdateMessageRequest(content = content, fileReferences = fileReferences))
             }.body<ChatMessage>() // Expect a ChatMessage in the response body on success (HTTP 200)
         }
     }
@@ -159,7 +161,8 @@ class KtorChatApiClient(
         role: ChatMessage.Role,
         content: String,
         modelId: Long?,
-        settingsId: Long?
+        settingsId: Long?,
+        fileReferences: List<FileReference>
     ): Either<ApiResourceError, ChatMessage> {
         val request = InsertMessageRequest(
             sessionId = sessionId,
@@ -168,7 +171,8 @@ class KtorChatApiClient(
             role = role,
             content = content,
             modelId = modelId,
-            settingsId = settingsId
+            settingsId = settingsId,
+            fileReferences = fileReferences
         )
 
         return safeApiCall {

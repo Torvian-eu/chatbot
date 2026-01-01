@@ -39,7 +39,7 @@ fun assistantMessage(
 ): ChatMessage.AssistantMessage = ChatMessage.AssistantMessage(
     id = id, sessionId = sessionId, content = content, createdAt = createdAt,
     updatedAt = updatedAt, parentMessageId = parentMessageId, childrenMessageIds = childrenMessageIds,
-    modelId = modelId, settingsId = settingsId
+    fileReferences = emptyList(), modelId = modelId, settingsId = settingsId
 )
 
 // Helper to create ChatSession

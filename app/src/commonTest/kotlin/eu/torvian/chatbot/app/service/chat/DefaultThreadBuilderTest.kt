@@ -45,6 +45,7 @@ class DefaultThreadBuilderTest {
         updatedAt = now,
         parentMessageId = parentId,
         childrenMessageIds = children,
+        fileReferences = emptyList(),
         modelId = modelId,
         settingsId = settingsId
     )

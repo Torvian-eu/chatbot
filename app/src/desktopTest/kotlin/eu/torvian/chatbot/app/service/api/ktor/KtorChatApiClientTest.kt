@@ -66,7 +66,18 @@ class KtorChatApiClientTest {
             // Simulate a successful response
             val response = listOf(
                 ChatMessage.UserMessage(1, 123, "Hello", now, now, null, emptyList()),
-                ChatMessage.AssistantMessage(2, 123, "Hi there!", now, now, 1, emptyList(), 1, 2)
+                ChatMessage.AssistantMessage(
+                    id = 2,
+                    sessionId = 123,
+                    content = "Hi there!",
+                    createdAt = now,
+                    updatedAt = now,
+                    parentMessageId = 1,
+                    childrenMessageIds = emptyList(),
+                    fileReferences = emptyList(),
+                    modelId = 1,
+                    settingsId = 2
+                )
             )
             respond(
                 content = json.encodeToString(response),

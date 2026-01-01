@@ -5,6 +5,7 @@ import eu.torvian.chatbot.common.models.api.core.ChatClientEvent
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.api.core.ChatEvent
 import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
+import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import kotlinx.coroutines.flow.Flow
 
@@ -47,17 +48,22 @@ interface ChatApi {
     fun processNewMessageStreaming(sessionId: Long, clientEvents: Flow<ChatClientEvent>): Flow<Either<ApiResourceError, ChatStreamEvent>>
 
     /**
-     * Updates the content of an existing message.
+     * Updates the content and optionally file references of an existing message.
      *
      * Corresponds to `PUT /api/v1/messages/{messageId}/content`.
      * (E3.S3)
      *
      * @param messageId The ID of the message to update.
      * @param content The new content for the message.
+     * @param fileReferences Optional new list of file references. If null, keeps existing.
      * @return [Either.Right] containing the updated [ChatMessage] object on success,
      *         or [Either.Left] containing an [ApiResourceError] on failure.
      */
-    suspend fun updateMessageContent(messageId: Long, content: String): Either<ApiResourceError, ChatMessage>
+    suspend fun updateMessageContent(
+        messageId: Long,
+        content: String,
+        fileReferences: List<FileReference>? = null
+    ): Either<ApiResourceError, ChatMessage>
 
     /**
      * Deletes a specific message and its children.
@@ -94,6 +100,7 @@ interface ChatApi {
      * @param content The content of the new message.
      * @param modelId Optional model ID (for assistant messages).
      * @param settingsId Optional settings ID (for assistant messages).
+     * @param fileReferences Optional list of file references attached to the message.
      * @return Either an error or the newly created message.
      */
     suspend fun insertMessage(
@@ -103,6 +110,7 @@ interface ChatApi {
         role: ChatMessage.Role,
         content: String,
         modelId: Long? = null,
-        settingsId: Long? = null
+        settingsId: Long? = null,
+        fileReferences: List<FileReference> = emptyList()
     ): Either<ApiResourceError, ChatMessage>
 }
