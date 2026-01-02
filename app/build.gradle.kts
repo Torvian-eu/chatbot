@@ -230,9 +230,11 @@ compose.desktop {
         mainClass = "eu.torvian.chatbot.app.main.AppMainKt"
 
         nativeDistributions {
-            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
+            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb, TargetFormat.Exe)
             packageName = "Chatbot"
             packageVersion = "1.0.0"
+
+            modules("java.sql") // Prevents exception "NoClassDefFoundError: java/sql/DriverManager"
 
             // Add launcher configuration if needed
             // linux { ... }
