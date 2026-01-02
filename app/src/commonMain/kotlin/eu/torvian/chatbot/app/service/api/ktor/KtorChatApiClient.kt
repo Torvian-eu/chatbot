@@ -78,7 +78,7 @@ class KtorChatApiClient(
                     clientEvents.collect { event ->
                         try {
                             val jsonString = json.encodeToString(ChatClientEvent.serializer(), event)
-                            logger.debug("Sending WS frame: $jsonString")
+//                            logger.debug("Sending WS frame: $jsonString")
                             send(Frame.Text(jsonString))
                         } catch (e: Exception) {
                             logger.error("Failed to send WebSocket frame for session $sessionId", e)
@@ -92,7 +92,7 @@ class KtorChatApiClient(
                 for (frame in incoming) {
                     if (frame is Frame.Text) {
                         val jsonString = frame.readText()
-                        logger.debug("Received WS frame: $jsonString")
+//                        logger.debug("Received WS frame: $jsonString")
                         try {
                             val serverEvent = json.decodeFromString<T>(jsonString)
                             emit(serverEvent.right())
