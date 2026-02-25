@@ -1,0 +1,61 @@
+{
+  /*
+    Environment Variable Mapping
+    The values below are the NAMES of the environment variables
+    that will be looked up in the system environment.
+  */
+
+  "setup": {
+    "required": "CHATBOT_SETUP_REQUIRED"
+  },
+
+  "storage": {
+    "dataDir": "SERVER_DATA_DIR",
+    "databaseFilename": "SERVER_DATABASE_FILENAME",
+    "keystoreFilename": "SERVER_KEYSTORE_FILENAME",
+    "logsDir": "SERVER_LOGS_DIR"
+  },
+
+  "network": {
+    "host": "SERVER_HOST",
+    "port": "SERVER_PORT",
+    "path": "SERVER_PATH",
+    "connectorType": "SERVER_CONNECTOR_TYPE"
+  },
+
+  "ssl": {
+    "port": "SSL_PORT",
+    "keystorePassword": "SSL_KEYSTORE_PASSWORD",
+    "keyAlias": "SSL_KEY_ALIAS",
+    "keyPassword": "SSL_KEY_PASSWORD",
+    "generateSelfSigned": "SSL_GENERATE_SELF_SIGNED"
+  },
+
+  "database": {
+    "vendor": "DATABASE_VENDOR",
+    "type": "DATABASE_TYPE",
+    "filename": "DATABASE_FILENAME",
+    "user": "DATABASE_USER",
+    "password": "DATABASE_PASSWORD"
+  },
+
+  "encryption": {
+    "keyVersion": "ENCRYPTION_KEY_VERSION",
+    "masterKeys": {
+      "1": "ENCRYPTION_MASTER_KEY_V1",
+      "2": "ENCRYPTION_MASTER_KEY_V2"
+    },
+    "algorithm": "ENCRYPTION_ALGORITHM",
+    "transformation": "ENCRYPTION_TRANSFORMATION",
+    "keySizeBits": "ENCRYPTION_KEY_SIZE_BITS"
+  },
+
+  "jwt": {
+    "issuer": "JWT_ISSUER",
+    "audience": "JWT_AUDIENCE",
+    "realm": "JWT_REALM",
+    "secret": "JWT_SECRET",
+    "tokenExpirationMs": "JWT_TOKEN_EXPIRATION_MS",
+    "refreshExpirationMs": "JWT_REFRESH_EXPIRATION_MS"
+  }
+}
