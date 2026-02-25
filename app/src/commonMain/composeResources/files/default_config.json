@@ -1,0 +1,21 @@
+{
+  /*
+    PRODUCTION BLUEPRINT: default_config.json
+    This file is the template used in production mode on first run to create config.json.
+    It contains default values and instructions for the end-user.
+    "Documentation Keys" starting with "//" are ignored by the parser.
+  */
+
+
+  "network": {
+    // The base URL of the Chatbot Server (e.g. https://yourserver.com:8443)
+    "serverUrl": "https://localhost:8443"
+  },
+
+  "storage": {
+    // The subdirectory name within the application directory for user data (database, logs, etc.)
+    "dataDir": "data",
+    "tokenStorageDir": "tokens",
+    "certificateStorageDir": "certs"
+  }
+}
