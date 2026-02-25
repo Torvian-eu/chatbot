@@ -34,6 +34,7 @@ import kotlinx.serialization.json.Json
  * to [Either<ApiResourceError, T>].
  *
  * @property client The Ktor HttpClient instance injected for making requests.
+ * @property wss Whether to use a secure wss:// connection for WebSocket connections.
  */
 class KtorChatApiClient(
     client: HttpClient,

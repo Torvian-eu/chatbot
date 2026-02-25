@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.app.koin
 
-import eu.torvian.chatbot.app.main.AppConfig
+import eu.torvian.chatbot.app.config.AppConfiguration
 import eu.torvian.chatbot.app.repository.*
 import eu.torvian.chatbot.app.repository.impl.*
 import eu.torvian.chatbot.app.service.api.*
@@ -45,12 +45,12 @@ import org.koin.dsl.module
  * - Authentication components (TokenStorage, AuthApi, AuthRepository)
  * - ViewModels for managing the application's state
  *
- * @param appConfig The application configuration containing server URL and other settings.
+ * @param config The application configuration containing server URL and other settings.
  * @return A Koin module with frontend dependencies
  */
-fun appModule(appConfig: AppConfig): Module = module {
+fun appModule(config: AppConfiguration): Module = module {
     // Provide application config
-    single<AppConfig> { appConfig }
+    single<AppConfiguration> { config }
 
     // Provide JSON serializer singleton
     single<Json> { Json }
@@ -63,7 +63,7 @@ fun appModule(appConfig: AppConfig): Module = module {
     // Provide the unauthenticated Ktor HttpClient for auth operations
     single<HttpClient>(named("unauthenticated")) {
         createPlatformHttpClient(
-            baseUri = appConfig.serverUrl,
+            baseUri = config.network.serverUrl,
             json = get(),
             logLevel = LogLevel.INFO,
             certificateStorage = get(),
@@ -129,7 +129,7 @@ fun appModule(appConfig: AppConfig): Module = module {
 
     // Provide concrete API client implementations, injecting the HttpClient
     single<ChatApi> {
-        KtorChatApiClient(get(), wss = appConfig.serverUrl.startsWith("https"))
+        KtorChatApiClient(get(), wss = config.network.serverUrl.startsWith("https"))
     }
     single<SessionApi> {
         KtorSessionApiClient(get())
