@@ -11,6 +11,7 @@ import eu.torvian.chatbot.server.domain.config.DatabaseConfig
 import eu.torvian.chatbot.server.service.llm.RawChatMessage
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
+import java.util.UUID
 
 /**
  * Predefined domain objects and test data entries for use in tests.
@@ -31,8 +32,7 @@ object TestDefaults {
     fun getDefaultDatabaseConfig() = DatabaseConfig(
         vendor = "sqlite",
         type = "memory",
-        filepath = "data",
-        filename = null,
+        filepath = "data/test-${UUID.randomUUID()}.db",
         user = null,
         password = null
     )
