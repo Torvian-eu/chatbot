@@ -22,6 +22,12 @@ import kotlin.time.Duration.Companion.seconds
 /**
  * Executor for web search tools using DuckDuckGo.
  * Performs web searches and returns formatted results.
+ *
+ * TODO: Implement actual DuckDuckGo API integration.
+ * Current implementation uses HTML scraping which may be fragile.
+ * The web search tool definition must be created manually via API.
+ *
+ * @see eu.torvian.chatbot.server.service.setup.ToolDefinitionInitializer
  */
 class WebSearchToolExecutor(
     private val httpClient: HttpClient
