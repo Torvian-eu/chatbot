@@ -249,6 +249,64 @@ compose.desktop {
     }
 }
 
+// Custom task to copy platform-specific launch scripts to distribution
+// This adds convenience scripts that start the application with a console/terminal window visible,
+// allowing users to see log output.
+afterEvaluate {
+    tasks.named("createDistributable") {
+        val windowsBatchFile = layout.projectDirectory.file("dist-resources/Chatbot-with-logs.bat")
+        val unixShellScript = layout.projectDirectory.file("dist-resources/chatbot-with-logs.sh")
+        val distDirProvider = layout.buildDirectory.dir("compose/binaries/main/app/Chatbot")
+
+        doLast {
+            val distDir = distDirProvider.get().asFile
+            val os = System.getProperty("os.name").lowercase()
+
+            when {
+                os.contains("win") -> {
+                    // Windows: copy batch file
+                    val batchFile = windowsBatchFile.asFile
+                    if (batchFile.exists()) {
+                        batchFile.copyTo(File(distDir, batchFile.name), overwrite = true)
+                        println("Copied Windows batch file to distribution: ${distDir.absolutePath}")
+                    } else {
+                        println("WARNING: Windows batch file not found at ${batchFile.absolutePath}")
+                    }
+                }
+                os.contains("mac") || os.contains("darwin") -> {
+                    // macOS: copy shell script
+                    val shellScript = unixShellScript.asFile
+                    if (shellScript.exists()) {
+                        val targetFile = File(distDir, shellScript.name)
+                        shellScript.copyTo(targetFile, overwrite = true)
+                        // Make executable on Unix-like systems
+                        targetFile.setExecutable(true, false)
+                        println("Copied macOS shell script to distribution: ${distDir.absolutePath}")
+                    } else {
+                        println("WARNING: Shell script not found at ${shellScript.absolutePath}")
+                    }
+                }
+                os.contains("nux") || os.contains("nix") -> {
+                    // Linux: copy shell script
+                    val shellScript = unixShellScript.asFile
+                    if (shellScript.exists()) {
+                        val targetFile = File(distDir, shellScript.name)
+                        shellScript.copyTo(targetFile, overwrite = true)
+                        // Make executable on Unix-like systems
+                        targetFile.setExecutable(true, false)
+                        println("Copied Linux shell script to distribution: ${distDir.absolutePath}")
+                    } else {
+                        println("WARNING: Shell script not found at ${shellScript.absolutePath}")
+                    }
+                }
+                else -> {
+                    println("WARNING: Unknown OS '${os}', no launcher script copied")
+                }
+            }
+        }
+    }
+}
+
 compose {
     resources {
         // Set the package name for generated resources
