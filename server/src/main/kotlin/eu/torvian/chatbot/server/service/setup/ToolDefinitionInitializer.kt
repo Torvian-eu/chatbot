@@ -40,9 +40,14 @@ class ToolDefinitionInitializer(
             return@either
         }
 
-        // Create the default tools
-        createWebSearchTool().bind()
-        createWeatherTool().bind()
+        // No default tools are created automatically.
+        // Tools must be created via the API or manually configured.
+        // See WebSearchToolExecutor and WeatherToolExecutor for implementation examples.
+        //
+        // Future implementation: When tool executors are fully implemented,
+        // uncomment the lines below to auto-create default tool definitions:
+        // createWebSearchTool().bind()
+        // createWeatherTool().bind()
     }
 
     /**

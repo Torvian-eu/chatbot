@@ -1,0 +1,10 @@
+{
+  /*
+    Development setup.json
+    For dev we mark setup as already completed to avoid auto-generation on every run.
+  */
+  "setup": {
+    "required": false
+  }
+}
+

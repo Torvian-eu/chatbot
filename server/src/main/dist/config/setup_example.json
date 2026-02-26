@@ -1,0 +1,10 @@
+{
+  /*
+    Production setup.json
+    - On first deployment, set "required": true so the server will run setup and generate secrets.json (and keystore if configured).
+    - After setup completes the setup process typically writes setup.json with required = false.
+  */
+  "setup": {
+    "required": true
+  }
+}

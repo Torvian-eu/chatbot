@@ -10,7 +10,6 @@ plugins {
     id("common-module-convention")  // Apply custom convention plugin
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ktor)
-    application
 }
 
 dependencies {
@@ -48,5 +47,36 @@ dependencies {
 
 // Define the main application entry point
 application {
-    mainClass.set("eu.torvian.chatbot.server.main.ServerMainKt")
+    mainClass.set("eu.torvian.chatbot.server.main.ServerMain")
+    applicationDefaultJvmArgs = listOf(
+        "-Xmx2G", // Max heap size
+        "-Xms512M" // Initial heap size
+    )
+}
+
+// Configure the JAR content (Fat and Thin)
+tasks {
+    shadowJar {
+        mergeServiceFiles() // merge the contents from META-INF/services/* files, in case of duplicate file names
+    }
+
+    // Disable the default start scripts generation
+    named<CreateStartScripts>("startScripts") {
+        enabled = false
+    }
+
+    // Disable shadow start scripts generation (we use custom scripts in src/main/dist)
+    named<CreateStartScripts>("startShadowScripts") {
+        enabled = false
+    }
+}
+
+// Configure ALL distributions (Main and Shadow) at once
+distributions.configureEach {
+    contents {
+        // Include everything from src/main/dist (scripts, etc.)
+        // This is automatically included for 'main', but this line
+        // ensures 'shadow' and any other custom dist gets it too.
+        from("src/main/dist")
+    }
 }

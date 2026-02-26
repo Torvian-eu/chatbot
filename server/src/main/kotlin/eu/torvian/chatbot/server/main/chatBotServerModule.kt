@@ -1,30 +1,42 @@
 package eu.torvian.chatbot.server.main
 
 import eu.torvian.chatbot.common.misc.di.KoinDIContainer
-import eu.torvian.chatbot.server.domain.config.DatabaseConfig
 import eu.torvian.chatbot.common.security.EncryptionConfig
+import eu.torvian.chatbot.server.domain.config.DatabaseConfig
 import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.koin.*
 import eu.torvian.chatbot.server.ktor.configureKtor
 import eu.torvian.chatbot.server.ktor.routes.ApiRoutesKtor
 import eu.torvian.chatbot.server.service.setup.InitializationCoordinator
 import eu.torvian.chatbot.server.utils.misc.DIContainerKey
-import io.ktor.http.HttpHeaders
+import io.ktor.http.*
 import io.ktor.server.application.*
-import io.ktor.server.plugins.cors.routing.CORS
+import io.ktor.server.plugins.cors.routing.*
 import io.ktor.server.routing.*
 import kotlinx.coroutines.runBlocking
+import org.apache.logging.log4j.LogManager
+import org.apache.logging.log4j.Logger
 import org.koin.ktor.ext.get
 import org.koin.ktor.ext.getKoin
 import org.koin.ktor.plugin.Koin
 
+private val logger: Logger = LogManager.getLogger("chatBotServerModule")
+
 /**
  * Configures the Ktor application module with all necessary plugins, DI, database, and routing.
  * This function is an extension on [Application], intended to be passed to `embeddedServer`.
+ *
+ * @param databaseConfig Database configuration
+ * @param encryptionConfig Encryption configuration
+ * @param jwtConfig JWT configuration
  */
-fun Application.chatBotServerModule() {
+fun Application.chatBotServerModule(
+    databaseConfig: DatabaseConfig,
+    encryptionConfig: EncryptionConfig,
+    jwtConfig: JwtConfig
+) {
     // Configure Koin DI FIRST, as plugins and routing will depend on it
-    configureKoin()
+    configureKoin(databaseConfig, encryptionConfig, jwtConfig)
 
     // Configure Ktor (general plugins like content negotiation, status pages, etc.)
     configureKtor(get(), get())
@@ -45,25 +57,16 @@ fun Application.chatBotServerModule() {
 
 /**
  * Configures Koin for dependency injection within the Application.
+ *
+ * @param databaseConfig Database configuration
+ * @param encryptionConfig Encryption configuration
+ * @param jwtConfig JWT configuration
  */
-fun Application.configureKoin() {
-    // Configuration values (e.g., database credentials, encryption keys)
-    val databaseConfig = DatabaseConfig(
-        vendor = "sqlite",
-        type = "file",
-        filepath = null, // null means in the current working directory
-        filename = "chatbot.db",
-        user = null,
-        password = null
-    )
-    val encryptionConfig = EncryptionConfig(
-        keyVersion = 1,
-        masterKeys = mapOf(1 to "G2CgJOQQtIC+yfz+LLoDp/osBLUVzW9JE9BrQA0dQFo=") // TODO: **IMPORTANT:** Change this in production!
-    )
-    val jwtConfig = JwtConfig(
-        secret = "your-jwt-secret-key-change-in-production-make-it-long-and-secure" // TODO: **IMPORTANT:** Change this in production!
-    )
-
+fun Application.configureKoin(
+    databaseConfig: DatabaseConfig,
+    encryptionConfig: EncryptionConfig,
+    jwtConfig: JwtConfig
+) {
     // Initialize Koin plugin with defined modules
     install(Koin) {
         modules(

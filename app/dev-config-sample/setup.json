@@ -1,0 +1,9 @@
+{
+  /*
+    DEVELOPMENT OVERRIDE: setup.json
+    For development, setup is marked as already completed to avoid auto-generation on every run.
+  */
+  "setup": {
+    "required": false
+  }
+}

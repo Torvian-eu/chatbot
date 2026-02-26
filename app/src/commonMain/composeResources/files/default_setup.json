@@ -1,0 +1,10 @@
+{
+  /*
+    PRODUCTION BLUEPRINT: default_setup.json
+    This flag indicates if the app needs to run an initial setup wizard.
+    It is copied to config/setup.json on first run and managed by the application.
+  */
+  "setup": {
+    "required": true
+  }
+}

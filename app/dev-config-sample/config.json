@@ -1,0 +1,15 @@
+{
+  /*
+    DEVELOPMENT OVERRIDE: config.json
+    This file is loaded in Development Mode (when running from IDE)
+    and contains settings specific to the local development environment.
+  */
+  "network": {
+    "serverUrl": "https://localhost:8443"
+  },
+  "storage": {
+    "dataDir": "data-dev",
+    "tokenStorageDir": "tokens-dev",
+    "certificateStorageDir": "certs-dev"
+  }
+}

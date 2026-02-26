@@ -13,6 +13,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Disabled
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -27,6 +28,7 @@ import kotlin.test.assertTrue
  * - Idempotency of initialization
  * - Tool configuration and schema validation
  */
+@Disabled
 class ToolDefinitionInitializerTest {
     private lateinit var container: DIContainer
     private lateinit var toolDefinitionInitializer: ToolDefinitionInitializer

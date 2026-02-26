@@ -1,0 +1,50 @@
+{
+  /*
+    Production/application.json (template)
+    - Copy/edit this into config/application.json on the server.
+    - Do NOT place secrets (passwords, keys) here; put them in config/secrets.json or provide via environment vars.
+    - This template intentionally omits sensitive values so the loader will require them from secrets.json or env.
+    - The data directory (database, keystore) is always a sibling of the config directory.
+  */
+
+  "storage": {
+    "dataDir": "data",
+    "databaseFilename": "chatbot.db",
+    "keystoreFilename": "keystore.jks",
+    "logsDir": "logs"
+  },
+
+  "network": {
+    "host": "localhost",
+    "port": 8080,
+    "path": "",
+    "connectorType": "HTTPS"   /* production default: HTTPS */
+  },
+
+  "ssl": {
+    "port": 8443,
+    /* keystorePassword / keyPassword must be provided in secrets.json or environment variables */
+    "generateSelfSigned": true /* set false if you will provide real certs */
+  },
+
+  "database": {
+    "vendor": "sqlite",
+    "type": "file"
+  },
+
+  "encryption": {
+    "keyVersion": 1,
+    "masterKeys": {
+      /* DO NOT store real keys here in the template; setup will generate values in secrets.json */
+    }
+  },
+
+  "jwt": {
+    "issuer": "chatbot-server",
+    "audience": "chatbot-users",
+    "realm": "chatbot-realm",
+    "tokenExpirationMs": 86400000,
+    "refreshExpirationMs": 604800000
+    /* jwt.secret must be set in secrets.json or via environment variable */
+  }
+}

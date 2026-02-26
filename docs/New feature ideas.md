@@ -99,10 +99,11 @@ Each user has their own set of credentials, models, settings, and chat history. 
 
 ### Select available models for adding by querying LLM provider API
 
-### Allow user to select predefined LLM Tools for a specific prompt
+### (done, partial) Allow user to select predefined (built-in) LLM Tools for a specific prompt
 Predefined tools could include: Web search, calculator, current weather, etc.
+note: Web search not working yet.
 
-### Allow user to add file references when sending a message
+### (done, partial) Allow user to add file references when sending a message
 - The UI should include a button to add file references, which opens a file picker. (below the message input area)
 - By default, the actual file content should not be sent to the LLM, only a reference to the file.
 - The user should be able to select which files to send, and the base path for the file references. The base path is not included in the file references sent to the LLM. Only the relative path from the base path is included in the file reference. By default, the base path is the same as where the file itself is located, or when multiple files are selected, the common (longest) parent path of all selected files. Selecting a custom base path is useful when alligning with Local MCP Tools, which should be using the same base path. That way the LLM can use the file references in the Tools.
@@ -115,18 +116,21 @@ technical notes:
 - Add FileReference data class with base path, relative path, optional content, insert position (for inline placement).
 - Add ChatMessageTable.fileReferences with type TEXT (JSON array of file references)
 - Add ChatMessage.fileReferences property with type List<FileReference>
+Not completed:
+- UI for inline placement of file references
+- Drag & drop files from OS into message input area
 
 ---
 
 ## Advanced features
 
-### Allow users to add local MCP servers
+### (done) Allow users to add local MCP servers
 Users should be able to add local (STDIO) MCP servers to their account, by specifying a local command to launch the MCP server. This command will run on the client machine, and communicate with the AIChat app over STDIO.
 
 ### Allow users to add remote MCP servers
 Users should be able to add remote (Streamable HTTP) MCP servers to their account, by specifying the server URL.
 
-### Add option to add tools to MCP server
+### (done) Add option to add tools to MCP server
 Tools are functions that the LLM can execute. They are defined by the user and can be used to interact with the outside world. For instance a tool could be defined to search the web for information. The LLM could then use this tool to search the web for information to answer a question.
 
 ### Add option to load knowledge base into MCP server
@@ -144,10 +148,21 @@ A level 2 query for "John" could return:
   - etc.
 
 ### AI Everywhere
-Alow LLM agent to control the app itself. For instance: modifying a chat session, Summarizing it, or creating a new session.
+Allow LLM agent to control the app itself. For instance: modifying a chat session, Summarizing it, or creating a new session.
 
 ### AI assistant for prompting
-Assistant gives suggestions for follow-up questions, based on the conversation history. (and possibly other things)
+- Assistant gives suggestions for follow-up questions, based on the conversation history. (and possibly other things)
+- Assistant can be used to enhance (rephrase) the user's prompt, based on the conversation history.
+
+### Allow LLM to enable/disable (MCP) tools for the current chat session
+- Give LLM access to a set of tools: 
+  - Tool to enable/disable tool for the current chat session. (parameters: tool name, enable/disable)
+  - Tool to list all available tools for the current chat session.
+  - Tool to search for tools based on a keyword. (match against tool name and description)
+- The purpose of this feature is to reduce the context size, by only including the tools that are relevant for the current task.
+
+### LLM Council
+Have multiple LLM's (or agent runs) solve the same task, and then have a final LLM summarize the answers and decide which answer is the best.
 
 ---
 
