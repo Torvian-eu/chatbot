@@ -721,7 +721,8 @@ data class LocalMCPServerFormState(
     val autoStartOnLaunch: Boolean = false,
     val autoStopAfterInactivitySeconds: Int? = null,
     val nameError: String? = null,
-    val commandError: String? = null
+    val commandError: String? = null,
+    val fullCommand: String = ""
 ) {
     /**
      * Returns true if the form has no validation errors.
@@ -751,6 +752,25 @@ data class LocalMCPServerFormState(
         }
     }
 
+    /**
+     * Parses [fullCommand] into [command] + [arguments] using shell-like tokenisation.
+     *
+     * Splits on whitespace, respecting single- and double-quoted spans (quotes are stripped).
+     * The first token becomes [command]; remaining tokens become [arguments].
+     * [fullCommand] is cleared and [commandError] is reset after a successful parse.
+     * Returns this unchanged if [fullCommand] is blank or produces no tokens.
+     */
+    fun parseFullCommand(): LocalMCPServerFormState {
+        val tokens = tokenizeCommand(fullCommand)
+        if (tokens.isEmpty()) return this
+        return copy(
+            command = tokens.first(),
+            arguments = tokens.drop(1),
+            fullCommand = "",
+            commandError = null
+        )
+    }
+
     companion object {
         fun fromServer(server: LocalMCPServer): LocalMCPServerFormState {
             return LocalMCPServerFormState(
@@ -767,6 +787,69 @@ data class LocalMCPServerFormState(
             )
         }
     }
+}
+
+/**
+ * Shell-like tokeniser for a command string.
+ *
+ * Splits on whitespace while respecting single-quoted ('...') and double-quoted ("...")
+ * spans. Quotes are stripped from the result. Unclosed quotes consume the remainder of
+ * the input as a single token (graceful fallback). Leading/trailing whitespace is ignored.
+ *
+ * Examples:
+ * - `"npx -y server /path"` → `["npx", "-y", "server", "/path"]`
+ * - `"docker run -e KEY=\"hello world\" image"` → `["docker", "run", "-e", "KEY=hello world", "image"]`
+ * - `"java -jar \"my server.jar\""` → `["java", "-jar", "my server.jar"]`
+ */
+internal fun tokenizeCommand(input: String): List<String> {
+    val tokens = mutableListOf<String>()
+    val current = StringBuilder()
+    var i = 0
+    val s = input.trim()
+
+    while (i < s.length) {
+        when {
+            // Start of a double-quoted span
+            s[i] == '"' -> {
+                val end = s.indexOf('"', i + 1)
+                if (end == -1) {
+                    // Unclosed quote — consume the rest
+                    current.append(s.substring(i + 1))
+                    i = s.length
+                } else {
+                    current.append(s.substring(i + 1, end))
+                    i = end + 1
+                }
+            }
+            // Start of a single-quoted span
+            s[i] == '\'' -> {
+                val end = s.indexOf('\'', i + 1)
+                if (end == -1) {
+                    current.append(s.substring(i + 1))
+                    i = s.length
+                } else {
+                    current.append(s.substring(i + 1, end))
+                    i = end + 1
+                }
+            }
+            // Whitespace — flush current token if any
+            s[i].isWhitespace() -> {
+                if (current.isNotEmpty()) {
+                    tokens.add(current.toString())
+                    current.clear()
+                }
+                i++
+            }
+            // Regular character
+            else -> {
+                current.append(s[i])
+                i++
+            }
+        }
+    }
+
+    if (current.isNotEmpty()) tokens.add(current.toString())
+    return tokens
 }
 
 /**

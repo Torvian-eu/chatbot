@@ -197,6 +197,41 @@ fun LocalMCPServerConfigDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                HorizontalDivider()
+
+                // Quick Fill — paste the full command, then click Fill to parse it
+                Text(
+                    text = "Quick Fill",
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    OutlinedTextField(
+                        value = formState.fullCommand,
+                        onValueChange = { value ->
+                            onUpdateForm { it.copy(fullCommand = value) }
+                        },
+                        label = { Text("Paste full command") },
+                        placeholder = { Text("npx -y @modelcontextprotocol/server-filesystem /path") },
+                        singleLine = true,
+                        enabled = !isSaving,
+                        supportingText = { Text("Splits into Command and Arguments below") },
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(
+                        onClick = { onUpdateForm { it.parseFullCommand() } },
+                        enabled = !isSaving && formState.fullCommand.isNotBlank(),
+                        modifier = Modifier.padding(top = 4.dp)
+                    ) {
+                        Text("Fill")
+                    }
+                }
+
+                HorizontalDivider()
+
                 // Command (required)
                 OutlinedTextField(
                     value = formState.command,
