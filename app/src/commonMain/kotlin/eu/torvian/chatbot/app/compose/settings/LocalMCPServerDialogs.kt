@@ -8,11 +8,19 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.viewmodel.DialogTestResult
 import eu.torvian.chatbot.app.viewmodel.LocalMCPServerDialogState
@@ -541,61 +549,29 @@ fun EnvironmentVariablesSection(
         Spacer(modifier = Modifier.height(8.dp))
 
         envVars.entries.toList().forEachIndexed { index, (key, value) ->
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        OutlinedTextField(
-                            value = key,
-                            onValueChange = { newKey ->
-                                val newMap = envVars.toMutableMap()
-                                newMap.remove(key)
-                                newMap[newKey] = value
-                                onEnvVarsChange(newMap)
-                            },
-                            label = { Text("Key") },
-                            placeholder = { Text("GITHUB_TOKEN") },
-                            singleLine = true,
-                            enabled = enabled,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = value,
-                            onValueChange = { newValue ->
-                                val newMap = envVars.toMutableMap()
-                                newMap[key] = newValue
-                                onEnvVarsChange(newMap)
-                            },
-                            label = { Text("Value") },
-                            placeholder = { Text("ghp_...") },
-                            singleLine = true,
-                            enabled = enabled,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            val newMap = envVars.toMutableMap()
-                            newMap.remove(key)
-                            onEnvVarsChange(newMap)
-                        },
-                        enabled = enabled,
-                        modifier = Modifier.padding(top = 8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "Remove Environment Variable",
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                    }
+            EnvVarRow(
+                envKey = key,
+                envValue = value,
+                enabled = enabled,
+                onKeyChange = { newKey ->
+                    val newMap = envVars.toMutableMap()
+                    newMap.remove(key)
+                    newMap[newKey] = value
+                    onEnvVarsChange(newMap)
+                },
+                onValueChange = { newValue ->
+                    val newMap = envVars.toMutableMap()
+                    newMap[key] = newValue
+                    onEnvVarsChange(newMap)
+                },
+                onRemove = {
+                    val newMap = envVars.toMutableMap()
+                    newMap.remove(key)
+                    onEnvVarsChange(newMap)
                 }
-                if (index < envVars.size - 1) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
+            )
+            if (index < envVars.size - 1) {
+                Spacer(modifier = Modifier.height(8.dp))
             }
         }
 
@@ -606,6 +582,74 @@ fun EnvironmentVariablesSection(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 8.dp)
             )
+        }
+    }
+}
+
+/**
+ * A single environment variable row with key, hidden-by-default value, and a visibility toggle.
+ */
+@Composable
+private fun EnvVarRow(
+    envKey: String,
+    envValue: String,
+    enabled: Boolean,
+    onKeyChange: (String) -> Unit,
+    onValueChange: (String) -> Unit,
+    onRemove: () -> Unit
+) {
+    var valueVisible by remember { mutableStateOf(false) }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                // Key field
+                OutlinedTextField(
+                    value = envKey,
+                    onValueChange = onKeyChange,
+                    label = { Text("Key") },
+                    placeholder = { Text("GITHUB_TOKEN") },
+                    singleLine = true,
+                    enabled = enabled,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                // Value field — hidden by default, toggleable
+                OutlinedTextField(
+                    value = envValue,
+                    onValueChange = onValueChange,
+                    label = { Text("Value") },
+                    placeholder = { Text("ghp_...") },
+                    singleLine = true,
+                    enabled = enabled,
+                    visualTransformation = if (valueVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { valueVisible = !valueVisible }) {
+                            Icon(
+                                imageVector = if (valueVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                contentDescription = if (valueVisible) "Hide value" else "Show value"
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            // Delete button
+            IconButton(
+                onClick = onRemove,
+                enabled = enabled,
+                modifier = Modifier.padding(top = 8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Remove Environment Variable",
+                    tint = MaterialTheme.colorScheme.error
+                )
+            }
         }
     }
 }
