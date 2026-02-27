@@ -33,7 +33,8 @@ fun LocalMCPServerDialogs(
     onDeleteServer: (Long) -> Unit,
     onUpdateToolForm: (update: (LocalMCPToolFormState) -> LocalMCPToolFormState) -> Unit,
     onSaveTool: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    isServerRunning: Boolean = false
 ) {
     when (dialogState) {
         is LocalMCPServerDialogState.None -> {
@@ -61,6 +62,7 @@ fun LocalMCPServerDialogs(
                 isSaving = dialogState.isSaving,
                 isTesting = dialogState.isTesting,
                 testResult = dialogState.testResult,
+                isServerRunning = isServerRunning,
                 onUpdateForm = onUpdateForm,
                 onConfirm = onSaveServer,
                 onTestServer = onTestServer,
@@ -134,6 +136,7 @@ fun LocalMCPServerConfigDialog(
     isSaving: Boolean,
     isTesting: Boolean = false,
     testResult: DialogTestResult? = null,
+    isServerRunning: Boolean = false,
     onUpdateForm: (update: (LocalMCPServerFormState) -> LocalMCPServerFormState) -> Unit,
     onConfirm: () -> Unit,
     onTestServer: () -> Unit,
@@ -149,6 +152,23 @@ fun LocalMCPServerConfigDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // "Changes take effect after restart" banner
+                if (isServerRunning) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "This server is currently running. Configuration changes will take effect after restarting the server.",
+                            modifier = Modifier.padding(12.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
+                }
+
                 // Name (required)
                 OutlinedTextField(
                     value = formState.name,
