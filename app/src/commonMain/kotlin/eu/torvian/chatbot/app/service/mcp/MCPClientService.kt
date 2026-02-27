@@ -2,10 +2,9 @@ package eu.torvian.chatbot.app.service.mcp
 
 import arrow.core.Either
 import eu.torvian.chatbot.app.domain.models.LocalMCPServer
-import io.modelcontextprotocol.kotlin.sdk.CallToolResultBase
-import io.modelcontextprotocol.kotlin.sdk.Tool
+import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
+import io.modelcontextprotocol.kotlin.sdk.types.Tool
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.json.JsonObject
 
 /**
@@ -110,7 +109,7 @@ interface MCPClientService {
         serverId: Long,
         toolName: String,
         arguments: JsonObject
-    ): Either<CallToolError, CallToolResultBase?>
+    ): Either<CallToolError, CallToolResult?>
 
     // ----- Status & health -----
 

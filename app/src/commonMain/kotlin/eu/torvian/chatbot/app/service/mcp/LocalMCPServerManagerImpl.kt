@@ -13,8 +13,8 @@ import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
-import io.modelcontextprotocol.kotlin.sdk.CallToolResultBase
-import io.modelcontextprotocol.kotlin.sdk.Tool
+import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
+import io.modelcontextprotocol.kotlin.sdk.types.Tool
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.datetime.Clock
@@ -457,7 +457,7 @@ class LocalMCPServerManagerImpl(
         serverId: Long,
         toolName: String,
         arguments: JsonObject
-    ): Either<ManageCallToolError, CallToolResultBase?> = either {
+    ): Either<ManageCallToolError, CallToolResult?> = either {
         logger.info("Calling tool '$toolName' on MCP server $serverId")
         logger.debug("Tool arguments: $arguments")
 

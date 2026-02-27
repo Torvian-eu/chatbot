@@ -6,9 +6,9 @@ import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.app.domain.models.LocalMCPServer
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
-import io.modelcontextprotocol.kotlin.sdk.*
 import io.modelcontextprotocol.kotlin.sdk.client.Client
 import io.modelcontextprotocol.kotlin.sdk.client.StdioClientTransport
+import io.modelcontextprotocol.kotlin.sdk.types.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.datetime.Clock
@@ -47,7 +47,7 @@ class MCPClientServiceImpl(
         private const val CLIENT_VERSION = "1.0.0"
 
         // Connection timeout in seconds
-        private const val CONNECTION_TIMEOUT_SECONDS = 15
+        private const val CONNECTION_TIMEOUT_SECONDS = 60
     }
 
     // Thread-safe StateFlow of active MCP clients
@@ -108,7 +108,8 @@ class MCPClientServiceImpl(
             // Create STDIO transport
             val transport = StdioClientTransport(
                 input = inputStream,
-                output = outputStream
+                output = outputStream,
+                error = processManager.getProcessErrorStream(serverId)
             )
 
             // Connect to the MCP server with timeout
@@ -267,7 +268,7 @@ class MCPClientServiceImpl(
         serverId: Long,
         toolName: String,
         arguments: JsonObject
-    ): Either<CallToolError, CallToolResultBase?> {
+    ): Either<CallToolError, CallToolResult?> {
         logger.info("Calling tool '$toolName' on MCP server $serverId")
         logger.debug("Tool arguments: $arguments")
 
@@ -280,8 +281,10 @@ class MCPClientServiceImpl(
             val result = withContext(ioDispatcher) {
                 mcpClient.sdkClient.callTool(
                     request = CallToolRequest(
-                        name = toolName,
-                        arguments = arguments
+                        params = CallToolRequestParams(
+                            name = toolName,
+                            arguments = arguments
+                        )
                     )
                 )
             }

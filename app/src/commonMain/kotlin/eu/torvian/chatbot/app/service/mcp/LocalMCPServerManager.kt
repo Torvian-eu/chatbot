@@ -5,9 +5,8 @@ import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.models.LocalMCPServer
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
-import io.modelcontextprotocol.kotlin.sdk.CallToolResultBase
+import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.json.JsonObject
 
 /**
@@ -237,5 +236,5 @@ interface LocalMCPServerManager {
         serverId: Long,
         toolName: String,
         arguments: JsonObject
-    ): Either<ManageCallToolError, CallToolResultBase?>
+    ): Either<ManageCallToolError, CallToolResult?>
 }
