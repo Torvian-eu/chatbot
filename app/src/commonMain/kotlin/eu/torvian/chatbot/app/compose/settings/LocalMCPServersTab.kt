@@ -108,10 +108,12 @@ fun LocalMCPServersTab(
             dialogState = state.dialogState,
             onUpdateForm = actions::onUpdateServerForm,
             onSaveServer = actions::onSaveServer,
+            onTestServer = actions::onTestServerInDialog,
             onDeleteServer = actions::onDeleteServer,
             onUpdateToolForm = actions::onUpdateToolForm,
             onSaveTool = actions::onSaveTool,
-            onDismiss = actions::onCancelDialog
+            onDismiss = actions::onCancelDialog,
+            isServerRunning = state.selectedServerOverview?.isConnected == true
         )
     }
 }

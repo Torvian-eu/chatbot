@@ -28,7 +28,7 @@ android-targetSdk = "36"     # The target Android version for testing
 slf4j = "2.0.17"             # SLF4J version used for logging
 hikaricp = "7.0.2"           # HikariCP version for connection pooling
 sqldelight = "2.2.1"         # SQLDelight version for multiplatform database
-mcp-sdk = "0.7.3"            # MCP Kotlin SDK version
+mcp-sdk = "0.8.4"            # MCP Kotlin SDK version
 
 [libraries]
 # Kotlin

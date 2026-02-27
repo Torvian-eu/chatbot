@@ -13,10 +13,11 @@ import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
-import io.modelcontextprotocol.kotlin.sdk.CallToolResultBase
-import io.modelcontextprotocol.kotlin.sdk.Tool
+import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
+import io.modelcontextprotocol.kotlin.sdk.types.Tool
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -154,73 +155,27 @@ class LocalMCPServerManagerImpl(
     ): Either<CreateServerError, LocalMCPServer> = either {
         logger.info("Creating new server: $name")
 
-        // Step 1: Create a temporary server config
-        val config = LocalMCPServer(
-            id = (Long.MIN_VALUE..-1L).random(),
-            userId = -1L,
+        // Persist server config to database (no connection or tool discovery)
+        val createdServer = serverRepository.createServer(
             name = name,
             description = description,
             command = command,
             arguments = arguments,
             environmentVariables = environmentVariables,
-            workingDirectory = workingDirectory
+            workingDirectory = workingDirectory,
+            isEnabled = isEnabled,
+            autoStartOnEnable = autoStartOnEnable,
+            autoStartOnLaunch = autoStartOnLaunch,
+            autoStopAfterInactivitySeconds = autoStopAfterInactivitySeconds
         )
-
-        // Step 2: Start and connect to the server
-        mcpClientService.startAndConnect(config).mapLeft { error ->
-            logger.error("Failed to connect to MCP server $name: ${error.message}")
-            CreateServerError.ConnectionFailed(config.id, error)
-        }.bind()
-
-        try {
-            // Step 3: Discover tools
-            val tools = mcpClientService.discoverTools(config.id)
-                .mapLeft { error ->
-                    logger.error("Failed to discover tools from MCP server $name: ${error.message}")
-                    CreateServerError.DiscoveryFailed(config.id, error)
-                }
-                .bind()
-
-            // Step 4: Persist server config
-            val createdServer = serverRepository.createServer(
-                name = name,
-                description = description,
-                command = command,
-                arguments = arguments,
-                environmentVariables = environmentVariables,
-                workingDirectory = workingDirectory,
-                isEnabled = isEnabled,
-                autoStartOnEnable = autoStartOnEnable,
-                autoStartOnLaunch = autoStartOnLaunch,
-                autoStopAfterInactivitySeconds = autoStopAfterInactivitySeconds
-            )
-                .mapLeft { error ->
-                    logger.error("Failed to create MCP server $name: ${error.message}")
-                    CreateServerError.ServerPersistenceFailed(error)
-                }
-                .bind()
-
-            // Step 5: Persist tools
-            val createdTools = toolRepository.persistMCPTools(
-                serverId = createdServer.id,
-                tools = tools.map { convertMCPToolToDefinition(it, createdServer.id) }
-            )
-                .mapLeft { error ->
-                    logger.error("Failed to persist tools for MCP server $name: ${error.message}")
-                    CreateServerError.ToolPersistenceFailed(createdServer.id, error)
-                }
-                .bind()
-
-            // Step 6: Return result
-            logger.info("Successfully created server $name with ${createdTools.size} tools")
-            return@either createdServer
-        } finally {
-            // Step 7: Cleanup - stop the server
-            mcpClientService.stopServer(config.id).onLeft { error ->
-                logger.warn("Failed to stop MCP server $name after creation: ${error.message}")
+            .mapLeft { error ->
+                logger.error("Failed to create MCP server $name: ${error.message}")
+                CreateServerError.ServerPersistenceFailed(error)
             }
-        }
+            .bind()
 
+        logger.info("Successfully created server $name (ID: ${createdServer.id})")
+        createdServer
     }
 
     override suspend fun testConnection(serverId: Long): Either<TestConnectionError, Int> = either {
@@ -325,6 +280,18 @@ class LocalMCPServerManagerImpl(
         }.bind()
 
         logger.info("Successfully started MCP server $serverId")
+
+        // Step 3: Auto-discover tools if this server has none yet (e.g. newly created server)
+        val existingTools = (toolRepository.mcpTools.first() as? DataState.Success)
+            ?.data?.get(serverId)
+        if (existingTools.isNullOrEmpty()) {
+            logger.info("No tools found for MCP server $serverId — running initial tool discovery")
+            refreshTools(serverId).onLeft { error ->
+                logger.warn("Initial tool discovery failed for MCP server $serverId: ${error.message}")
+            }.onRight {
+                logger.info("Initial tool discovery completed for MCP server $serverId")
+            }
+        }
     }
 
     override suspend fun stopServer(serverId: Long): Either<ManageStopServerError, Unit> = either {
@@ -342,86 +309,21 @@ class LocalMCPServerManagerImpl(
     override suspend fun updateServer(server: LocalMCPServer): Either<UpdateServerError, Unit> = either {
         logger.info("Updating MCP server: ${server.id}")
 
-        // Step 1: Get the old configuration to check if restart is needed
+        // Step 1: Get the old configuration to check if isEnabled changed
         val oldServer = getServerConfig(server.id).mapLeft { error ->
             logger.error("Failed to load current config for MCP server ${server.id}: ${error.message}")
             UpdateServerError.ServerUpdateFailed(server.id, error)
         }.bind()
 
-        // Step 2: Update the server configuration in repository
+        // Step 2: Persist the updated server configuration (no restart or tool rediscovery)
         serverRepository.updateServer(server).mapLeft { error ->
             logger.error("Failed to update MCP server configuration ${server.id}: ${error.message}")
             UpdateServerError.ServerUpdateFailed(server.id, error)
         }.bind()
 
-        // Step 3: Check if command, arguments, or environment variables changed
-        val needsRestart = oldServer.command != server.command ||
-                oldServer.arguments != server.arguments ||
-                oldServer.environmentVariables != server.environmentVariables ||
-                oldServer.workingDirectory != server.workingDirectory
+        logger.info("Server configuration saved for MCP server ${server.id}")
 
-        if (needsRestart) {
-            logger.info("Server configuration changed, restarting MCP server ${server.id}")
-
-            // Track if server was running before update
-            val wasRunning = mcpClientService.isClientRegistered(server.id)
-
-            // Stop the server if it's running
-            if (wasRunning) {
-                logger.info("Stopping MCP server ${server.id} before restart")
-                mcpClientService.stopServer(server.id).mapLeft { error ->
-                    logger.error("Failed to stop MCP server ${server.id} before restart: ${error.message}")
-                    UpdateServerError.StopFailed(server.id, error)
-                }.bind()
-            }
-
-            try {
-                // Start and connect with new configuration
-                logger.info("Starting MCP server ${server.id} with new configuration")
-                mcpClientService.startAndConnect(server).mapLeft { error ->
-                    logger.error("Failed to connect to MCP server ${server.id} after restart: ${error.message}")
-                    UpdateServerError.ConnectionFailed(server.id, error)
-                }.bind()
-
-                // Discover tools with new configuration
-                logger.info("Discovering tools from MCP server ${server.id} after restart")
-                val currentToolDefinitions = mcpClientService.discoverTools(server.id)
-                    .mapLeft { error ->
-                        logger.error("Failed to discover tools from MCP server ${server.id} after restart: ${error.message}")
-                        UpdateServerError.DiscoveryFailed(server.id, error)
-                    }
-                    .map { mcpTools ->
-                        mcpTools.map { convertMCPToolToDefinition(it, server.id) }
-                    }
-                    .bind()
-
-                // Refresh tools in repository
-                logger.info("Refreshing tools for MCP server ${server.id} after restart")
-                toolRepository.refreshMCPTools(server.id, currentToolDefinitions)
-                    .mapLeft { error ->
-                        logger.error("Failed to persist tool changes for MCP server ${server.id} after restart: ${error.message}")
-                        UpdateServerError.ToolPersistenceFailed(server.id, error)
-                    }
-                    .onRight { response ->
-                        logger.info("Successfully refreshed tools for MCP server ${server.id}: +${response.addedTools.size} ~${response.updatedTools.size} -${response.deletedTools.size}")
-                    }
-                    .bind()
-
-                logger.info("Successfully restarted and refreshed tools for MCP server ${server.id}")
-            } finally {
-                // Stop the server if it wasn't running before update (cleanup)
-                if (!wasRunning) {
-                    logger.info("Stopping MCP server ${server.id} after configuration update (was not running before)")
-                    mcpClientService.stopServer(server.id).onLeft { error ->
-                        logger.warn("Failed to stop MCP server ${server.id} after configuration update: ${error.message}")
-                    }
-                }
-            }
-        } else {
-            logger.info("Server configuration updated without requiring restart for MCP server ${server.id}")
-        }
-
-        // Step 4: Invalidate enabled tools cache if enabled state changed
+        // Step 3: Invalidate enabled tools cache if enabled state changed
         if (oldServer.isEnabled != server.isEnabled) {
             logger.info("Server enabled state changed, invalidating enabled tools cache for all sessions")
             toolRepository.invalidateEnabledToolsCache()
@@ -457,7 +359,7 @@ class LocalMCPServerManagerImpl(
         serverId: Long,
         toolName: String,
         arguments: JsonObject
-    ): Either<ManageCallToolError, CallToolResultBase?> = either {
+    ): Either<ManageCallToolError, CallToolResult?> = either {
         logger.info("Calling tool '$toolName' on MCP server $serverId")
         logger.debug("Tool arguments: $arguments")
 

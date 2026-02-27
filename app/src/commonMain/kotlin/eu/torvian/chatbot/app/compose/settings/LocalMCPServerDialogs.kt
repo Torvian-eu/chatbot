@@ -8,12 +8,21 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import eu.torvian.chatbot.app.viewmodel.DialogTestResult
 import eu.torvian.chatbot.app.viewmodel.LocalMCPServerDialogState
 import eu.torvian.chatbot.app.viewmodel.LocalMCPServerFormState
 import eu.torvian.chatbot.app.viewmodel.LocalMCPToolFormState
@@ -28,10 +37,12 @@ fun LocalMCPServerDialogs(
     dialogState: LocalMCPServerDialogState,
     onUpdateForm: (update: (LocalMCPServerFormState) -> LocalMCPServerFormState) -> Unit,
     onSaveServer: () -> Unit,
+    onTestServer: () -> Unit,
     onDeleteServer: (Long) -> Unit,
     onUpdateToolForm: (update: (LocalMCPToolFormState) -> LocalMCPToolFormState) -> Unit,
     onSaveTool: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    isServerRunning: Boolean = false
 ) {
     when (dialogState) {
         is LocalMCPServerDialogState.None -> {
@@ -43,8 +54,11 @@ fun LocalMCPServerDialogs(
                 title = "Add New MCP Server",
                 formState = dialogState.formState,
                 isSaving = dialogState.isSaving,
+                isTesting = dialogState.isTesting,
+                testResult = dialogState.testResult,
                 onUpdateForm = onUpdateForm,
                 onConfirm = onSaveServer,
+                onTestServer = onTestServer,
                 onDismiss = onDismiss
             )
         }
@@ -54,8 +68,12 @@ fun LocalMCPServerDialogs(
                 title = "Edit MCP Server",
                 formState = dialogState.formState,
                 isSaving = dialogState.isSaving,
+                isTesting = dialogState.isTesting,
+                testResult = dialogState.testResult,
+                isServerRunning = isServerRunning,
                 onUpdateForm = onUpdateForm,
                 onConfirm = onSaveServer,
+                onTestServer = onTestServer,
                 onDismiss = onDismiss
             )
         }
@@ -124,8 +142,12 @@ fun LocalMCPServerConfigDialog(
     title: String,
     formState: LocalMCPServerFormState,
     isSaving: Boolean,
+    isTesting: Boolean = false,
+    testResult: DialogTestResult? = null,
+    isServerRunning: Boolean = false,
     onUpdateForm: (update: (LocalMCPServerFormState) -> LocalMCPServerFormState) -> Unit,
     onConfirm: () -> Unit,
+    onTestServer: () -> Unit,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
@@ -138,6 +160,23 @@ fun LocalMCPServerConfigDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // "Changes take effect after restart" banner
+                if (isServerRunning) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "This server is currently running. Configuration changes will take effect after restarting the server.",
+                            modifier = Modifier.padding(12.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
+                }
+
                 // Name (required)
                 OutlinedTextField(
                     value = formState.name,
@@ -165,6 +204,41 @@ fun LocalMCPServerConfigDialog(
                     enabled = !isSaving,
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                HorizontalDivider()
+
+                // Quick Fill — paste the full command, then click Fill to parse it
+                Text(
+                    text = "Quick Fill",
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    OutlinedTextField(
+                        value = formState.fullCommand,
+                        onValueChange = { value ->
+                            onUpdateForm { it.copy(fullCommand = value) }
+                        },
+                        label = { Text("Paste full command") },
+                        placeholder = { Text("npx -y @modelcontextprotocol/server-filesystem /path") },
+                        singleLine = true,
+                        enabled = !isSaving,
+                        supportingText = { Text("Splits into Command and Arguments below") },
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(
+                        onClick = { onUpdateForm { it.parseFullCommand() } },
+                        enabled = !isSaving && formState.fullCommand.isNotBlank(),
+                        modifier = Modifier.padding(top = 4.dp)
+                    ) {
+                        Text("Fill")
+                    }
+                }
+
+                HorizontalDivider()
 
                 // Command (required)
                 OutlinedTextField(
@@ -291,27 +365,66 @@ fun LocalMCPServerConfigDialog(
                         enabled = !isSaving
                     )
                 }
+
+                // Test result (shown after a test attempt)
+                testResult?.let { result ->
+                    when (result) {
+                        is DialogTestResult.Success -> Text(
+                            text = "✓ Connected — ${result.toolCount} tool(s) discovered",
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        is DialogTestResult.Failure -> Text(
+                            text = "✗ ${result.message}",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
-            Button(
-                onClick = onConfirm,
-                enabled = !isSaving && formState.isValid()
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                if (isSaving) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        strokeWidth = 2.dp
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
+                // Test Server button
+                OutlinedButton(
+                    onClick = onTestServer,
+                    enabled = !isSaving && !isTesting && formState.command.isNotBlank()
+                ) {
+                    if (isTesting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Testing...")
+                    } else {
+                        Text("Test Server")
+                    }
                 }
-                Text(if (isSaving) "Saving..." else "Save")
+
+                // Save button
+                Button(
+                    onClick = onConfirm,
+                    enabled = !isSaving && !isTesting && formState.isValid()
+                ) {
+                    if (isSaving) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    Text(if (isSaving) "Saving..." else "Save")
+                }
             }
         },
         dismissButton = {
             TextButton(
                 onClick = onDismiss,
-                enabled = !isSaving
+                enabled = !isSaving && !isTesting
             ) {
                 Text("Cancel")
             }
@@ -436,61 +549,29 @@ fun EnvironmentVariablesSection(
         Spacer(modifier = Modifier.height(8.dp))
 
         envVars.entries.toList().forEachIndexed { index, (key, value) ->
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        OutlinedTextField(
-                            value = key,
-                            onValueChange = { newKey ->
-                                val newMap = envVars.toMutableMap()
-                                newMap.remove(key)
-                                newMap[newKey] = value
-                                onEnvVarsChange(newMap)
-                            },
-                            label = { Text("Key") },
-                            placeholder = { Text("GITHUB_TOKEN") },
-                            singleLine = true,
-                            enabled = enabled,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = value,
-                            onValueChange = { newValue ->
-                                val newMap = envVars.toMutableMap()
-                                newMap[key] = newValue
-                                onEnvVarsChange(newMap)
-                            },
-                            label = { Text("Value") },
-                            placeholder = { Text("ghp_...") },
-                            singleLine = true,
-                            enabled = enabled,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            val newMap = envVars.toMutableMap()
-                            newMap.remove(key)
-                            onEnvVarsChange(newMap)
-                        },
-                        enabled = enabled,
-                        modifier = Modifier.padding(top = 8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "Remove Environment Variable",
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                    }
+            EnvVarRow(
+                envKey = key,
+                envValue = value,
+                enabled = enabled,
+                onKeyChange = { newKey ->
+                    val newMap = envVars.toMutableMap()
+                    newMap.remove(key)
+                    newMap[newKey] = value
+                    onEnvVarsChange(newMap)
+                },
+                onValueChange = { newValue ->
+                    val newMap = envVars.toMutableMap()
+                    newMap[key] = newValue
+                    onEnvVarsChange(newMap)
+                },
+                onRemove = {
+                    val newMap = envVars.toMutableMap()
+                    newMap.remove(key)
+                    onEnvVarsChange(newMap)
                 }
-                if (index < envVars.size - 1) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
+            )
+            if (index < envVars.size - 1) {
+                Spacer(modifier = Modifier.height(8.dp))
             }
         }
 
@@ -501,6 +582,74 @@ fun EnvironmentVariablesSection(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 8.dp)
             )
+        }
+    }
+}
+
+/**
+ * A single environment variable row with key, hidden-by-default value, and a visibility toggle.
+ */
+@Composable
+private fun EnvVarRow(
+    envKey: String,
+    envValue: String,
+    enabled: Boolean,
+    onKeyChange: (String) -> Unit,
+    onValueChange: (String) -> Unit,
+    onRemove: () -> Unit
+) {
+    var valueVisible by remember { mutableStateOf(false) }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                // Key field
+                OutlinedTextField(
+                    value = envKey,
+                    onValueChange = onKeyChange,
+                    label = { Text("Key") },
+                    placeholder = { Text("GITHUB_TOKEN") },
+                    singleLine = true,
+                    enabled = enabled,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                // Value field — hidden by default, toggleable
+                OutlinedTextField(
+                    value = envValue,
+                    onValueChange = onValueChange,
+                    label = { Text("Value") },
+                    placeholder = { Text("ghp_...") },
+                    singleLine = true,
+                    enabled = enabled,
+                    visualTransformation = if (valueVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { valueVisible = !valueVisible }) {
+                            Icon(
+                                imageVector = if (valueVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                contentDescription = if (valueVisible) "Hide value" else "Show value"
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            // Delete button
+            IconButton(
+                onClick = onRemove,
+                enabled = enabled,
+                modifier = Modifier.padding(top = 8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Remove Environment Variable",
+                    tint = MaterialTheme.colorScheme.error
+                )
+            }
         }
     }
 }

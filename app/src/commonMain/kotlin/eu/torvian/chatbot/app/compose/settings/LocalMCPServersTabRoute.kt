@@ -56,6 +56,7 @@ fun LocalMCPServersTabRoute(
         override fun onSaveServer() = viewModel.saveServer()
         override fun onDeleteServer(serverId: Long) = viewModel.deleteServer(serverId)
         override fun onTestConnection(serverId: Long) = viewModel.testConnection(serverId)
+        override fun onTestServerInDialog() = viewModel.testServerInDialog()
         override fun onRefreshTools(serverId: Long) = viewModel.refreshTools(serverId)
         override fun onStartServer(serverId: Long) = viewModel.startServer(serverId)
         override fun onStopServer(serverId: Long) = viewModel.stopServer(serverId)

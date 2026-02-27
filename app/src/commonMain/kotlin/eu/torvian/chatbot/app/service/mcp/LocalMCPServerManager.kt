@@ -5,9 +5,8 @@ import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.models.LocalMCPServer
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
-import io.modelcontextprotocol.kotlin.sdk.CallToolResultBase
+import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.json.JsonObject
 
 /**
@@ -98,16 +97,12 @@ interface LocalMCPServerManager {
 
 
     /**
-     * Creates a new MCP server and persists it to the database.
+     * Creates a new MCP server configuration and persists it to the database.
      *
-     * This operation:
-     * 1. Calls LocalMCPServerRepository to create server config
-     * 2. Calls MCPClientService to start and connect
-     * 3. Discovers tools via MCPClientService
-     * 4. Converts MCP SDK Tool objects to LocalMCPToolDefinition format
-     * 5. Calls LocalMCPToolRepository to persist tools (repository handles API call)
-     * 6. Stops the server (cleanup)
-     * 7. Returns created server
+     * This operation only saves the configuration. No process is started,
+     * no connection is made, and no tools are discovered. Use [testConnectionForNewServer]
+     * to verify the configuration before saving, and [refreshTools] after the server
+     * has been started to populate its tool list.
      *
      * @param name The name of the MCP server
      * @param description Optional description of the MCP server
@@ -173,6 +168,9 @@ interface LocalMCPServerManager {
      * This operation:
      * 1. Gets config from LocalMCPServerRepository
      * 2. Calls MCPClientService to start and connect
+     * 3. If no tools exist yet for this server, automatically triggers [refreshTools]
+     *    to populate the tool list (e.g. for newly created servers that have never been started).
+     *    A failure in this auto-discovery step is logged as a warning but does not fail the start.
      *
      * @param serverId The ID of the MCP server to start
      * @return Either.Right with Unit on success, or Either.Left with ManageStartServerError on failure
@@ -191,16 +189,12 @@ interface LocalMCPServerManager {
     suspend fun stopServer(serverId: Long): Either<ManageStopServerError, Unit>
 
     /**
-     * Updates an existing MCP server configuration.
+     * Updates an existing MCP server configuration in the database.
      *
-     * This operation:
-     * 1. Updates the server configuration (via LocalMCPServerRepository)
-     * 2. If command, arguments, or environment variables changed:
-     *    a. Stops the server if it's running (via MCPClientService)
-     *    b. Starts and connects with new config (via MCPClientService)
-     *    c. Discovers tools (via MCPClientService)
-     *    d. Refreshes tools in repository (via LocalMCPToolRepository)
-     *    e. Stops the server if it wasn't running before (cleanup)
+     * This operation only saves the configuration. If the server is currently running,
+     * it will continue with its old configuration until it is restarted.
+     * No restart, reconnection, or tool rediscovery is performed automatically.
+     * If the [LocalMCPServer.isEnabled] state changed, the enabled tools cache is invalidated.
      *
      * @param server The updated MCP server configuration
      * @return Either.Right with Unit on success, or Either.Left with UpdateServerError on failure
@@ -237,5 +231,5 @@ interface LocalMCPServerManager {
         serverId: Long,
         toolName: String,
         arguments: JsonObject
-    ): Either<ManageCallToolError, CallToolResultBase?>
+    ): Either<ManageCallToolError, CallToolResult?>
 }

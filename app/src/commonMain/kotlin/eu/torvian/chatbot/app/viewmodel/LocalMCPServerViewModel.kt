@@ -317,6 +317,56 @@ class LocalMCPServerViewModel(
     }
 
     /**
+     * Tests the server connection using the current form state (unsaved config).
+     * Works for both AddNewServer and EditServer dialogs.
+     * Uses testConnectionForNewServer so the pending (unsaved) config is always tested.
+     */
+    fun testServerInDialog() {
+        val currentDialogState = _dialogState.value
+        val form = when (currentDialogState) {
+            is LocalMCPServerDialogState.AddNewServer -> currentDialogState.formState
+            is LocalMCPServerDialogState.EditServer -> currentDialogState.formState
+            else -> return
+        }
+
+        viewModelScope.launch(uiDispatcher) {
+            // Set loading state, clear previous result
+            _dialogState.update {
+                when (it) {
+                    is LocalMCPServerDialogState.AddNewServer ->
+                        it.copy(isTesting = true, testResult = null)
+                    is LocalMCPServerDialogState.EditServer ->
+                        it.copy(isTesting = true, testResult = null)
+                    else -> it
+                }
+            }
+
+            val result = serverManager.testConnectionForNewServer(
+                name = form.name.ifBlank { "Test" },
+                command = form.command,
+                arguments = form.arguments,
+                environmentVariables = form.environmentVariables,
+                workingDirectory = form.workingDirectory.takeIf { it.isNotBlank() }
+            )
+
+            val testResult = result.fold(
+                ifLeft = { error -> DialogTestResult.Failure(error.message) },
+                ifRight = { toolCount -> DialogTestResult.Success(toolCount) }
+            )
+
+            _dialogState.update {
+                when (it) {
+                    is LocalMCPServerDialogState.AddNewServer ->
+                        it.copy(isTesting = false, testResult = testResult)
+                    is LocalMCPServerDialogState.EditServer ->
+                        it.copy(isTesting = false, testResult = testResult)
+                    else -> it
+                }
+            }
+        }
+    }
+
+    /**
      * Tests connection to a server.
      */
     fun testConnection(serverId: Long) {
@@ -330,9 +380,11 @@ class LocalMCPServerViewModel(
                         shortMessage = "Could not connect to server: $error"
                     )
                 },
-                ifRight = {
+                ifRight = { toolCount ->
                     _operationInProgress.value = null
-                    // Success - could add a success notification system later
+                    notificationService.genericSuccess(
+                        shortMessage = "Connected — $toolCount tool(s) discovered"
+                    )
                 }
             )
         }
@@ -621,13 +673,17 @@ sealed class LocalMCPServerDialogState {
 
     data class AddNewServer(
         val formState: LocalMCPServerFormState = LocalMCPServerFormState(),
-        val isSaving: Boolean = false
+        val isSaving: Boolean = false,
+        val isTesting: Boolean = false,
+        val testResult: DialogTestResult? = null
     ) : LocalMCPServerDialogState()
 
     data class EditServer(
         val server: LocalMCPServer,
         val formState: LocalMCPServerFormState,
-        val isSaving: Boolean = false
+        val isSaving: Boolean = false,
+        val isTesting: Boolean = false,
+        val testResult: DialogTestResult? = null
     ) : LocalMCPServerDialogState()
 
     data class DeleteServer(
@@ -640,6 +696,14 @@ sealed class LocalMCPServerDialogState {
         val formState: LocalMCPToolFormState,
         val isSaving: Boolean = false
     ) : LocalMCPServerDialogState()
+}
+
+/**
+ * Result of a "Test Server" action triggered from within a config dialog.
+ */
+sealed class DialogTestResult {
+    data class Success(val toolCount: Int) : DialogTestResult()
+    data class Failure(val message: String) : DialogTestResult()
 }
 
 /**
@@ -657,7 +721,8 @@ data class LocalMCPServerFormState(
     val autoStartOnLaunch: Boolean = false,
     val autoStopAfterInactivitySeconds: Int? = null,
     val nameError: String? = null,
-    val commandError: String? = null
+    val commandError: String? = null,
+    val fullCommand: String = ""
 ) {
     /**
      * Returns true if the form has no validation errors.
@@ -687,6 +752,25 @@ data class LocalMCPServerFormState(
         }
     }
 
+    /**
+     * Parses [fullCommand] into [command] + [arguments] using shell-like tokenisation.
+     *
+     * Splits on whitespace, respecting single- and double-quoted spans (quotes are stripped).
+     * The first token becomes [command]; remaining tokens become [arguments].
+     * [fullCommand] is cleared and [commandError] is reset after a successful parse.
+     * Returns this unchanged if [fullCommand] is blank or produces no tokens.
+     */
+    fun parseFullCommand(): LocalMCPServerFormState {
+        val tokens = tokenizeCommand(fullCommand)
+        if (tokens.isEmpty()) return this
+        return copy(
+            command = tokens.first(),
+            arguments = tokens.drop(1),
+            fullCommand = "",
+            commandError = null
+        )
+    }
+
     companion object {
         fun fromServer(server: LocalMCPServer): LocalMCPServerFormState {
             return LocalMCPServerFormState(
@@ -703,6 +787,69 @@ data class LocalMCPServerFormState(
             )
         }
     }
+}
+
+/**
+ * Shell-like tokeniser for a command string.
+ *
+ * Splits on whitespace while respecting single-quoted ('...') and double-quoted ("...")
+ * spans. Quotes are stripped from the result. Unclosed quotes consume the remainder of
+ * the input as a single token (graceful fallback). Leading/trailing whitespace is ignored.
+ *
+ * Examples:
+ * - `"npx -y server /path"` → `["npx", "-y", "server", "/path"]`
+ * - `"docker run -e KEY=\"hello world\" image"` → `["docker", "run", "-e", "KEY=hello world", "image"]`
+ * - `"java -jar \"my server.jar\""` → `["java", "-jar", "my server.jar"]`
+ */
+internal fun tokenizeCommand(input: String): List<String> {
+    val tokens = mutableListOf<String>()
+    val current = StringBuilder()
+    var i = 0
+    val s = input.trim()
+
+    while (i < s.length) {
+        when {
+            // Start of a double-quoted span
+            s[i] == '"' -> {
+                val end = s.indexOf('"', i + 1)
+                if (end == -1) {
+                    // Unclosed quote — consume the rest
+                    current.append(s.substring(i + 1))
+                    i = s.length
+                } else {
+                    current.append(s.substring(i + 1, end))
+                    i = end + 1
+                }
+            }
+            // Start of a single-quoted span
+            s[i] == '\'' -> {
+                val end = s.indexOf('\'', i + 1)
+                if (end == -1) {
+                    current.append(s.substring(i + 1))
+                    i = s.length
+                } else {
+                    current.append(s.substring(i + 1, end))
+                    i = end + 1
+                }
+            }
+            // Whitespace — flush current token if any
+            s[i].isWhitespace() -> {
+                if (current.isNotEmpty()) {
+                    tokens.add(current.toString())
+                    current.clear()
+                }
+                i++
+            }
+            // Regular character
+            else -> {
+                current.append(s[i])
+                i++
+            }
+        }
+    }
+
+    if (current.isNotEmpty()) tokens.add(current.toString())
+    return tokens
 }
 
 /**
