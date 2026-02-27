@@ -17,6 +17,7 @@ import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.Tool
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -279,6 +280,18 @@ class LocalMCPServerManagerImpl(
         }.bind()
 
         logger.info("Successfully started MCP server $serverId")
+
+        // Step 3: Auto-discover tools if this server has none yet (e.g. newly created server)
+        val existingTools = (toolRepository.mcpTools.first() as? DataState.Success)
+            ?.data?.get(serverId)
+        if (existingTools.isNullOrEmpty()) {
+            logger.info("No tools found for MCP server $serverId — running initial tool discovery")
+            refreshTools(serverId).onLeft { error ->
+                logger.warn("Initial tool discovery failed for MCP server $serverId: ${error.message}")
+            }.onRight {
+                logger.info("Initial tool discovery completed for MCP server $serverId")
+            }
+        }
     }
 
     override suspend fun stopServer(serverId: Long): Either<ManageStopServerError, Unit> = either {

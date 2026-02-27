@@ -168,6 +168,9 @@ interface LocalMCPServerManager {
      * This operation:
      * 1. Gets config from LocalMCPServerRepository
      * 2. Calls MCPClientService to start and connect
+     * 3. If no tools exist yet for this server, automatically triggers [refreshTools]
+     *    to populate the tool list (e.g. for newly created servers that have never been started).
+     *    A failure in this auto-discovery step is logged as a warning but does not fail the start.
      *
      * @param serverId The ID of the MCP server to start
      * @return Either.Right with Unit on success, or Either.Left with ManageStartServerError on failure
