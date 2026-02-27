@@ -36,6 +36,7 @@ interface LocalMCPServersTabActions {
     fun onSaveServer()
     fun onDeleteServer(serverId: Long)
     fun onTestConnection(serverId: Long)
+    fun onTestServerInDialog()
     fun onRefreshTools(serverId: Long)
     fun onStartServer(serverId: Long)
     fun onStopServer(serverId: Long)

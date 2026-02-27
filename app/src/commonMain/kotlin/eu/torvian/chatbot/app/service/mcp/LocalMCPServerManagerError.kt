@@ -64,30 +64,6 @@ sealed class TestConnectionError : LocalMCPServerManagerError {
 
 sealed class CreateServerError : LocalMCPServerManagerError {
     /**
-     * Failed to connect to the MCP server.
-     */
-    data class ConnectionFailed(
-        val serverId: Long,
-        val startError: StartAndConnectError
-    ) : CreateServerError() {
-        override val message: String =
-            "Failed to connect to MCP server (ID: $serverId): ${startError.message}"
-        override val cause: Any = startError
-    }
-
-    /**
-     * Failed to discover tools from the MCP server.
-     */
-    data class DiscoveryFailed(
-        val serverId: Long,
-        val discoverError: DiscoverToolsError
-    ) : CreateServerError() {
-        override val message: String =
-            "Failed to discover tools from MCP server (ID: $serverId): ${discoverError.message}"
-        override val cause: Any = discoverError
-    }
-
-    /**
      * Failed to persist the server configuration to repository.
      */
     data class ServerPersistenceFailed(
@@ -95,18 +71,6 @@ sealed class CreateServerError : LocalMCPServerManagerError {
     ) : CreateServerError() {
         override val message: String =
             "Failed to persist MCP server configuration: ${repositoryError.message}"
-        override val cause: Any = repositoryError
-    }
-
-    /**
-     * Failed to persist discovered tools to repository.
-     */
-    data class ToolPersistenceFailed(
-        val serverId: Long,
-        val repositoryError: RepositoryError
-    ) : CreateServerError() {
-        override val message: String =
-            "Failed to persist tools for MCP server (ID: $serverId): ${repositoryError.message}"
         override val cause: Any = repositoryError
     }
 }
@@ -293,53 +257,4 @@ sealed class UpdateServerError : LocalMCPServerManagerError {
             "Failed to update MCP server configuration (ID: $serverId): ${repositoryError.message}"
         override val cause: Any = repositoryError
     }
-
-    /**
-     * Failed to stop the MCP server before restarting.
-     */
-    data class StopFailed(
-        val serverId: Long,
-        val stopError: MCPStopServerError
-    ) : UpdateServerError() {
-        override val message: String =
-            "Failed to stop MCP server before restart (ID: $serverId): ${stopError.message}"
-        override val cause: Any = stopError
-    }
-
-    /**
-     * Failed to connect to the MCP server after restart.
-     */
-    data class ConnectionFailed(
-        val serverId: Long,
-        val startError: StartAndConnectError
-    ) : UpdateServerError() {
-        override val message: String =
-            "Failed to connect to MCP server after restart (ID: $serverId): ${startError.message}"
-        override val cause: Any = startError
-    }
-
-    /**
-     * Failed to discover tools from the MCP server after restart.
-     */
-    data class DiscoveryFailed(
-        val serverId: Long,
-        val discoverError: DiscoverToolsError
-    ) : UpdateServerError() {
-        override val message: String =
-            "Failed to discover tools from MCP server after restart (ID: $serverId): ${discoverError.message}"
-        override val cause: Any = discoverError
-    }
-
-    /**
-     * Failed to persist tool changes to repository after restart.
-     */
-    data class ToolPersistenceFailed(
-        val serverId: Long,
-        val repositoryError: RepositoryError
-    ) : UpdateServerError() {
-        override val message: String =
-            "Failed to persist tool changes for MCP server after restart (ID: $serverId): ${repositoryError.message}"
-        override val cause: Any = repositoryError
-    }
 }
-

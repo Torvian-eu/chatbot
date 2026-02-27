@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import eu.torvian.chatbot.app.viewmodel.DialogTestResult
 import eu.torvian.chatbot.app.viewmodel.LocalMCPServerDialogState
 import eu.torvian.chatbot.app.viewmodel.LocalMCPServerFormState
 import eu.torvian.chatbot.app.viewmodel.LocalMCPToolFormState
@@ -28,6 +29,7 @@ fun LocalMCPServerDialogs(
     dialogState: LocalMCPServerDialogState,
     onUpdateForm: (update: (LocalMCPServerFormState) -> LocalMCPServerFormState) -> Unit,
     onSaveServer: () -> Unit,
+    onTestServer: () -> Unit,
     onDeleteServer: (Long) -> Unit,
     onUpdateToolForm: (update: (LocalMCPToolFormState) -> LocalMCPToolFormState) -> Unit,
     onSaveTool: () -> Unit,
@@ -43,8 +45,11 @@ fun LocalMCPServerDialogs(
                 title = "Add New MCP Server",
                 formState = dialogState.formState,
                 isSaving = dialogState.isSaving,
+                isTesting = dialogState.isTesting,
+                testResult = dialogState.testResult,
                 onUpdateForm = onUpdateForm,
                 onConfirm = onSaveServer,
+                onTestServer = onTestServer,
                 onDismiss = onDismiss
             )
         }
@@ -54,8 +59,11 @@ fun LocalMCPServerDialogs(
                 title = "Edit MCP Server",
                 formState = dialogState.formState,
                 isSaving = dialogState.isSaving,
+                isTesting = dialogState.isTesting,
+                testResult = dialogState.testResult,
                 onUpdateForm = onUpdateForm,
                 onConfirm = onSaveServer,
+                onTestServer = onTestServer,
                 onDismiss = onDismiss
             )
         }
@@ -124,8 +132,11 @@ fun LocalMCPServerConfigDialog(
     title: String,
     formState: LocalMCPServerFormState,
     isSaving: Boolean,
+    isTesting: Boolean = false,
+    testResult: DialogTestResult? = null,
     onUpdateForm: (update: (LocalMCPServerFormState) -> LocalMCPServerFormState) -> Unit,
     onConfirm: () -> Unit,
+    onTestServer: () -> Unit,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
@@ -291,27 +302,66 @@ fun LocalMCPServerConfigDialog(
                         enabled = !isSaving
                     )
                 }
+
+                // Test result (shown after a test attempt)
+                testResult?.let { result ->
+                    when (result) {
+                        is DialogTestResult.Success -> Text(
+                            text = "✓ Connected — ${result.toolCount} tool(s) discovered",
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        is DialogTestResult.Failure -> Text(
+                            text = "✗ ${result.message}",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
-            Button(
-                onClick = onConfirm,
-                enabled = !isSaving && formState.isValid()
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                if (isSaving) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        strokeWidth = 2.dp
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
+                // Test Server button
+                OutlinedButton(
+                    onClick = onTestServer,
+                    enabled = !isSaving && !isTesting && formState.command.isNotBlank()
+                ) {
+                    if (isTesting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Testing...")
+                    } else {
+                        Text("Test Server")
+                    }
                 }
-                Text(if (isSaving) "Saving..." else "Save")
+
+                // Save button
+                Button(
+                    onClick = onConfirm,
+                    enabled = !isSaving && !isTesting && formState.isValid()
+                ) {
+                    if (isSaving) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    Text(if (isSaving) "Saving..." else "Save")
+                }
             }
         },
         dismissButton = {
             TextButton(
                 onClick = onDismiss,
-                enabled = !isSaving
+                enabled = !isSaving && !isTesting
             ) {
                 Text("Cancel")
             }

@@ -317,6 +317,56 @@ class LocalMCPServerViewModel(
     }
 
     /**
+     * Tests the server connection using the current form state (unsaved config).
+     * Works for both AddNewServer and EditServer dialogs.
+     * Uses testConnectionForNewServer so the pending (unsaved) config is always tested.
+     */
+    fun testServerInDialog() {
+        val currentDialogState = _dialogState.value
+        val form = when (currentDialogState) {
+            is LocalMCPServerDialogState.AddNewServer -> currentDialogState.formState
+            is LocalMCPServerDialogState.EditServer -> currentDialogState.formState
+            else -> return
+        }
+
+        viewModelScope.launch(uiDispatcher) {
+            // Set loading state, clear previous result
+            _dialogState.update {
+                when (it) {
+                    is LocalMCPServerDialogState.AddNewServer ->
+                        it.copy(isTesting = true, testResult = null)
+                    is LocalMCPServerDialogState.EditServer ->
+                        it.copy(isTesting = true, testResult = null)
+                    else -> it
+                }
+            }
+
+            val result = serverManager.testConnectionForNewServer(
+                name = form.name.ifBlank { "Test" },
+                command = form.command,
+                arguments = form.arguments,
+                environmentVariables = form.environmentVariables,
+                workingDirectory = form.workingDirectory.takeIf { it.isNotBlank() }
+            )
+
+            val testResult = result.fold(
+                ifLeft = { error -> DialogTestResult.Failure(error.message) },
+                ifRight = { toolCount -> DialogTestResult.Success(toolCount) }
+            )
+
+            _dialogState.update {
+                when (it) {
+                    is LocalMCPServerDialogState.AddNewServer ->
+                        it.copy(isTesting = false, testResult = testResult)
+                    is LocalMCPServerDialogState.EditServer ->
+                        it.copy(isTesting = false, testResult = testResult)
+                    else -> it
+                }
+            }
+        }
+    }
+
+    /**
      * Tests connection to a server.
      */
     fun testConnection(serverId: Long) {
@@ -330,9 +380,11 @@ class LocalMCPServerViewModel(
                         shortMessage = "Could not connect to server: $error"
                     )
                 },
-                ifRight = {
+                ifRight = { toolCount ->
                     _operationInProgress.value = null
-                    // Success - could add a success notification system later
+                    notificationService.genericSuccess(
+                        shortMessage = "Connected — $toolCount tool(s) discovered"
+                    )
                 }
             )
         }
@@ -621,13 +673,17 @@ sealed class LocalMCPServerDialogState {
 
     data class AddNewServer(
         val formState: LocalMCPServerFormState = LocalMCPServerFormState(),
-        val isSaving: Boolean = false
+        val isSaving: Boolean = false,
+        val isTesting: Boolean = false,
+        val testResult: DialogTestResult? = null
     ) : LocalMCPServerDialogState()
 
     data class EditServer(
         val server: LocalMCPServer,
         val formState: LocalMCPServerFormState,
-        val isSaving: Boolean = false
+        val isSaving: Boolean = false,
+        val isTesting: Boolean = false,
+        val testResult: DialogTestResult? = null
     ) : LocalMCPServerDialogState()
 
     data class DeleteServer(
@@ -640,6 +696,14 @@ sealed class LocalMCPServerDialogState {
         val formState: LocalMCPToolFormState,
         val isSaving: Boolean = false
     ) : LocalMCPServerDialogState()
+}
+
+/**
+ * Result of a "Test Server" action triggered from within a config dialog.
+ */
+sealed class DialogTestResult {
+    data class Success(val toolCount: Int) : DialogTestResult()
+    data class Failure(val message: String) : DialogTestResult()
 }
 
 /**
