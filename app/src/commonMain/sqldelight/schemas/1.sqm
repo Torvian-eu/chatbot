@@ -1,0 +1,7 @@
+-- Migration 1: Add toolNamePrefix column to LocalMCPServerLocalTable.
+
+-- Adds an optional prefix that is prepended to every tool name from this server.
+-- This helps the LLM distinguish tools from different MCP servers.
+-- Example: prefix "github_" turns "delete_file" into "github_delete_file".
+-- NULL means no prefix (raw MCP tool name is used as-is).
+ALTER TABLE LocalMCPServerLocalTable ADD COLUMN toolNamePrefix TEXT;
