@@ -77,6 +77,7 @@ class LocalMCPServerLocalDaoImpl(
                 autoStartOnEnable = row.autoStartOnEnable,
                 autoStartOnLaunch = row.autoStartOnLaunch,
                 autoStopAfterInactivitySeconds = row.autoStopAfterInactivitySeconds,
+                toolNamePrefix = row.toolNamePrefix,
                 createdAt = Instant.fromEpochMilliseconds(row.createdAt),
                 updatedAt = Instant.fromEpochMilliseconds(row.updatedAt)
             )
@@ -131,6 +132,7 @@ class LocalMCPServerLocalDaoImpl(
                 autoStartOnEnable = server.autoStartOnEnable,
                 autoStartOnLaunch = server.autoStartOnLaunch,
                 autoStopAfterInactivitySeconds = server.autoStopAfterInactivitySeconds,
+                toolNamePrefix = server.toolNamePrefix,
                 createdAt = server.createdAt.toEpochMilliseconds(),
                 updatedAt = server.updatedAt.toEpochMilliseconds()
             )
@@ -191,6 +193,7 @@ class LocalMCPServerLocalDaoImpl(
                     autoStartOnEnable = server.autoStartOnEnable,
                     autoStartOnLaunch = server.autoStartOnLaunch,
                     autoStopAfterInactivitySeconds = server.autoStopAfterInactivitySeconds,
+                    toolNamePrefix = server.toolNamePrefix,
                     updatedAt = server.updatedAt.toEpochMilliseconds(),
                     id = server.id
                 )

@@ -85,6 +85,7 @@ interface LocalMCPServerRepository {
         autoStartOnEnable: Boolean,
         autoStartOnLaunch: Boolean,
         autoStopAfterInactivitySeconds: Int?,
+        toolNamePrefix: String? = null,
     ): Either<RepositoryError, LocalMCPServer>
 
     /**

@@ -228,7 +228,8 @@ class LocalMCPServerViewModel(
                         isEnabled = form.isEnabled,
                         autoStartOnEnable = form.autoStartOnEnable,
                         autoStartOnLaunch = form.autoStartOnLaunch,
-                        autoStopAfterInactivitySeconds = form.autoStopAfterInactivitySeconds
+                        autoStopAfterInactivitySeconds = form.autoStopAfterInactivitySeconds,
+                        toolNamePrefix = form.toolNamePrefix.takeIf { it.isNotBlank() }
                     ).fold(
                         ifLeft = { error ->
                             _dialogState.update {
@@ -270,7 +271,8 @@ class LocalMCPServerViewModel(
                         isEnabled = form.isEnabled,
                         autoStartOnEnable = form.autoStartOnEnable,
                         autoStartOnLaunch = form.autoStartOnLaunch,
-                        autoStopAfterInactivitySeconds = form.autoStopAfterInactivitySeconds
+                        autoStopAfterInactivitySeconds = form.autoStopAfterInactivitySeconds,
+                        toolNamePrefix = form.toolNamePrefix.takeIf { it.isNotBlank() }
                     )
 
                     serverManager.updateServer(updatedServer).fold(
@@ -720,6 +722,7 @@ data class LocalMCPServerFormState(
     val autoStartOnEnable: Boolean = false,
     val autoStartOnLaunch: Boolean = false,
     val autoStopAfterInactivitySeconds: Int? = null,
+    val toolNamePrefix: String = "",
     val nameError: String? = null,
     val commandError: String? = null,
     val fullCommand: String = ""
@@ -783,7 +786,8 @@ data class LocalMCPServerFormState(
                 isEnabled = server.isEnabled,
                 autoStartOnEnable = server.autoStartOnEnable,
                 autoStartOnLaunch = server.autoStartOnLaunch,
-                autoStopAfterInactivitySeconds = server.autoStopAfterInactivitySeconds
+                autoStopAfterInactivitySeconds = server.autoStopAfterInactivitySeconds,
+                toolNamePrefix = server.toolNamePrefix ?: ""
             )
         }
     }

@@ -151,7 +151,8 @@ class LocalMCPServerManagerImpl(
         isEnabled: Boolean,
         autoStartOnEnable: Boolean,
         autoStartOnLaunch: Boolean,
-        autoStopAfterInactivitySeconds: Int?
+        autoStopAfterInactivitySeconds: Int?,
+        toolNamePrefix: String?
     ): Either<CreateServerError, LocalMCPServer> = either {
         logger.info("Creating new server: $name")
 
@@ -166,7 +167,8 @@ class LocalMCPServerManagerImpl(
             isEnabled = isEnabled,
             autoStartOnEnable = autoStartOnEnable,
             autoStartOnLaunch = autoStartOnLaunch,
-            autoStopAfterInactivitySeconds = autoStopAfterInactivitySeconds
+            autoStopAfterInactivitySeconds = autoStopAfterInactivitySeconds,
+            toolNamePrefix = toolNamePrefix
         )
             .mapLeft { error ->
                 logger.error("Failed to create MCP server $name: ${error.message}")
@@ -221,11 +223,12 @@ class LocalMCPServerManagerImpl(
 
         // Step 1: Start and connect to the server (if not already connected)
         val isConnected = mcpClientService.isClientRegistered(serverId)
+        val config = getServerConfig(serverId).mapLeft { error ->
+            logger.error("Failed to load config for MCP server $serverId: ${error.message}")
+            RefreshToolsError.ConfigNotFound(serverId, error)
+        }.bind()
+
         if (!isConnected) {
-            val config = getServerConfig(serverId).mapLeft { error ->
-                logger.error("Failed to load config for MCP server $serverId: ${error.message}")
-                RefreshToolsError.ConfigNotFound(serverId, error)
-            }.bind()
             mcpClientService.startAndConnect(config).mapLeft { error ->
                 logger.error("Failed to connect to MCP server $serverId: ${error.message}")
                 RefreshToolsError.ConnectionFailed(serverId, error)
@@ -240,7 +243,7 @@ class LocalMCPServerManagerImpl(
                     RefreshToolsError.DiscoveryFailed(serverId, error)
                 }
                 .map { mcpTools ->
-                    mcpTools.map { convertMCPToolToDefinition(it, serverId) }
+                    mcpTools.map { convertMCPToolToDefinition(it, config) }
                 }
                 .bind()
 
@@ -405,18 +408,18 @@ class LocalMCPServerManagerImpl(
      * Converts an MCP SDK Tool to a LocalMCPToolDefinition.
      *
      * @param mcpTool The MCP SDK Tool object
-     * @param serverId The ID of the MCP server providing this tool
+     * @param server The full server config (used for serverId and toolNamePrefix)
      * @return LocalMCPToolDefinition ready for persistence
      */
     private fun convertMCPToolToDefinition(
         mcpTool: Tool,
-        serverId: Long
+        server: LocalMCPServer
     ): LocalMCPToolDefinition {
         val now = clock.now()
 
         return LocalMCPToolDefinition(
             id = 0L, // Will be assigned by server
-            name = mcpTool.name,
+            name = buildToolName(server.toolNamePrefix, mcpTool.name),
             description = mcpTool.description ?: "",
             config = buildJsonObject { },
             inputSchema = Json.encodeToJsonElement(mcpTool.inputSchema) as JsonObject,
@@ -424,8 +427,15 @@ class LocalMCPServerManagerImpl(
             isEnabled = true,
             createdAt = now,
             updatedAt = now,
-            serverId = serverId,
+            serverId = server.id,
             mcpToolName = mcpTool.name
         )
     }
+
+    /**
+     * Constructs the tool name the LLM will see by prepending [prefix] to [mcpToolName].
+     * If [prefix] is null or blank the raw [mcpToolName] is returned unchanged.
+     */
+    private fun buildToolName(prefix: String?, mcpToolName: String): String =
+        if (prefix.isNullOrBlank()) mcpToolName else "$prefix$mcpToolName"
 }
