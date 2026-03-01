@@ -121,8 +121,11 @@ class DefaultLocalMCPToolRepository(
         }
 
         // Update cache with the new state of tools after refresh
+        val deletedIds = refreshResponse.deletedTools.map { it.id }.toSet()
+        val updatedIds = refreshResponse.updatedTools.map { it.id }.toSet()
         toolRepository.updateToolCache { currentList ->
-            currentList.filter { it !in refreshResponse.deletedTools && it !in refreshResponse.updatedTools } + refreshResponse.addedTools + refreshResponse.updatedTools
+            currentList.filter { it.id !in deletedIds && it.id !in updatedIds } +
+                    refreshResponse.addedTools + refreshResponse.updatedTools
         }
         // Disable deleted tools for all sessions in cache
         toolRepository.updateEnabledToolsCache(refreshResponse.deletedTools, false)

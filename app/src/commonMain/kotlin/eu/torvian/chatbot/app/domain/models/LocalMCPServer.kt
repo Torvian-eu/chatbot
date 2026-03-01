@@ -28,6 +28,9 @@ import kotlinx.serialization.Serializable
  * @property autoStartOnEnable Auto-start the server when a tool is enabled for a session
  * @property autoStartOnLaunch Auto-start the server when the application launches
  * @property autoStopAfterInactivitySeconds Auto-stop after inactivity (null = use default 300s, 0 = never stop)
+ * @property toolNamePrefix Optional prefix prepended to every tool name discovered from this server.
+ *   Helps the LLM distinguish tools from different servers (e.g. "github_" → "delete_file" becomes
+ *   "github_delete_file"). Null or blank means no prefix; raw MCP tool name is used as-is.
  * @property createdAt Timestamp when the configuration was created
  * @property updatedAt Timestamp when the configuration was last updated
  */
@@ -45,6 +48,7 @@ data class LocalMCPServer(
     val autoStartOnEnable: Boolean = false,
     val autoStartOnLaunch: Boolean = false,
     val autoStopAfterInactivitySeconds: Int? = null,
+    val toolNamePrefix: String? = null,
     val createdAt: Instant = Clock.System.now(),
     val updatedAt: Instant = Clock.System.now()
 ) {

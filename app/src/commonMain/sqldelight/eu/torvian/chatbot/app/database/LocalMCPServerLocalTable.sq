@@ -52,6 +52,9 @@ CREATE TABLE LocalMCPServerLocalTable (
     -- NULL = use default (300s), 0 = never stop
     autoStopAfterInactivitySeconds INTEGER AS Int,
 
+    -- Optional prefix for tool names (e.g., "github_" turns "delete_file" into "github_delete_file")
+    toolNamePrefix TEXT,
+
     -- Timestamps
     createdAt INTEGER NOT NULL,
     updatedAt INTEGER NOT NULL,
@@ -85,9 +88,10 @@ INSERT INTO LocalMCPServerLocalTable (
     autoStartOnEnable,
     autoStartOnLaunch,
     autoStopAfterInactivitySeconds,
+    toolNamePrefix,
     createdAt,
     updatedAt
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- Get all servers for a user
 getAllByUserId:
@@ -124,6 +128,7 @@ SET name = ?,
     autoStartOnEnable = ?,
     autoStartOnLaunch = ?,
     autoStopAfterInactivitySeconds = ?,
+    toolNamePrefix = ?,
     updatedAt = ?
 WHERE id = ?;
 

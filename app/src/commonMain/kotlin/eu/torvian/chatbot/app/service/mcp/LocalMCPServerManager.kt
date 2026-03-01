@@ -126,7 +126,8 @@ interface LocalMCPServerManager {
         isEnabled: Boolean = true,
         autoStartOnEnable: Boolean = false,
         autoStartOnLaunch: Boolean = false,
-        autoStopAfterInactivitySeconds: Int? = null
+        autoStopAfterInactivitySeconds: Int? = null,
+        toolNamePrefix: String? = null
     ): Either<CreateServerError, LocalMCPServer>
 
     /**

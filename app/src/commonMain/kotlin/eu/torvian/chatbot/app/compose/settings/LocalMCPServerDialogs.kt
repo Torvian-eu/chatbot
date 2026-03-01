@@ -205,6 +205,26 @@ fun LocalMCPServerConfigDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                // Tool name prefix (optional)
+                OutlinedTextField(
+                    value = formState.toolNamePrefix,
+                    onValueChange = { value ->
+                        onUpdateForm { it.copy(toolNamePrefix = value) }
+                    },
+                    label = { Text("Tool name prefix") },
+                    placeholder = { Text("github_") },
+                    singleLine = true,
+                    enabled = !isSaving,
+                    supportingText = {
+                        val example = formState.toolNamePrefix
+                            .takeIf { it.isNotBlank() }
+                            ?.let { prefix -> "e.g. \"delete_file\" → \"${prefix}delete_file\"" }
+                            ?: "Optional – prepended to every tool name so the LLM can tell servers apart"
+                        Text(example)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
                 HorizontalDivider()
 
                 // Quick Fill — paste the full command, then click Fill to parse it

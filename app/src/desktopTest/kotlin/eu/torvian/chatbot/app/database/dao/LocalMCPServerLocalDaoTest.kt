@@ -125,6 +125,7 @@ class LocalMCPServerLocalDaoTest {
         autoStartOnEnable: Boolean = false,
         autoStartOnLaunch: Boolean = false,
         autoStopAfterInactivitySeconds: Int? = null,
+        toolNamePrefix: String? = null,
         createdAt: Instant = clock.now(),
         updatedAt: Instant = clock.now()
     ): LocalMCPServer = LocalMCPServer(
@@ -140,6 +141,7 @@ class LocalMCPServerLocalDaoTest {
         autoStartOnEnable = autoStartOnEnable,
         autoStartOnLaunch = autoStartOnLaunch,
         autoStopAfterInactivitySeconds = autoStopAfterInactivitySeconds,
+        toolNamePrefix = toolNamePrefix,
         createdAt = createdAt,
         updatedAt = updatedAt
     )
@@ -435,7 +437,7 @@ class LocalMCPServerLocalDaoTest {
             autoStartOnEnable = true,
             autoStartOnLaunch = true,
             autoStopAfterInactivitySeconds = 600,
-            // toolsEnabledByDefault removed
+            toolNamePrefix = "docker_",
         )
 
         // Act
@@ -454,6 +456,73 @@ class LocalMCPServerLocalDaoTest {
         assertEquals(server.autoStartOnEnable, retrieved.autoStartOnEnable)
         assertEquals(server.autoStartOnLaunch, retrieved.autoStartOnLaunch)
         assertEquals(server.autoStopAfterInactivitySeconds, retrieved.autoStopAfterInactivitySeconds)
+        assertEquals(server.toolNamePrefix, retrieved.toolNamePrefix)
+    }
+
+    @Test
+    fun `insert should store toolNamePrefix and retrieve it correctly`() = runTest {
+        // Arrange
+        val server = createTestServer(toolNamePrefix = "github_")
+
+        // Act
+        dao.insert(server)
+        val retrieved = dao.getById(server.id).getOrNull()
+
+        // Assert
+        assertNotNull(retrieved)
+        assertEquals("github_", retrieved.toolNamePrefix)
+    }
+
+    @Test
+    fun `insert should preserve null toolNamePrefix`() = runTest {
+        // Arrange
+        val server = createTestServer(toolNamePrefix = null)
+
+        // Act
+        dao.insert(server)
+        val retrieved = dao.getById(server.id).getOrNull()
+
+        // Assert
+        assertNotNull(retrieved)
+        assertNull(retrieved.toolNamePrefix)
+    }
+
+    @Test
+    fun `update should update toolNamePrefix`() = runTest {
+        // Arrange
+        val server = createTestServer(toolNamePrefix = null)
+        dao.insert(server)
+
+        clock.advanceTime(1.seconds)
+        val updated = server.copy(toolNamePrefix = "fs_", updatedAt = clock.now())
+
+        // Act
+        val result = dao.update(updated)
+
+        // Assert
+        assertTrue(result.isRight())
+        val retrieved = dao.getById(server.id).getOrNull()
+        assertNotNull(retrieved)
+        assertEquals("fs_", retrieved.toolNamePrefix)
+    }
+
+    @Test
+    fun `update should clear toolNamePrefix when set to null`() = runTest {
+        // Arrange
+        val server = createTestServer(toolNamePrefix = "old_")
+        dao.insert(server)
+
+        clock.advanceTime(1.seconds)
+        val updated = server.copy(toolNamePrefix = null, updatedAt = clock.now())
+
+        // Act
+        val result = dao.update(updated)
+
+        // Assert
+        assertTrue(result.isRight())
+        val retrieved = dao.getById(server.id).getOrNull()
+        assertNotNull(retrieved)
+        assertNull(retrieved.toolNamePrefix)
     }
 
     @Test

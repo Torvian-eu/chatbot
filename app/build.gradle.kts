@@ -34,6 +34,9 @@ sqldelight {
             packageName.set("eu.torvian.chatbot.app.database") // The package for generated database classes
             srcDirs.setFrom("src/commonMain/sqldelight") // The location of SQLDelight schema files (tables and queries)
             generateAsync.set(true) // Allows using suspend functions in transactions
+            // Stores a .db snapshot used by the verifySqlDelightMigration Gradle task
+            // to validate that migrations produce the expected schema.
+            schemaOutputDirectory.set(file("src/commonMain/sqldelight/databases"))
         }
     }
 }
