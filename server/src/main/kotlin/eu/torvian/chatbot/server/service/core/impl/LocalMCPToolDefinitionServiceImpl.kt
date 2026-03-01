@@ -246,11 +246,15 @@ class LocalMCPToolDefinitionServiceImpl(
                 }
             }
 
-            // Identify changed tools (in both, but with different schema/description)
+            // Identify changed tools (in both, but with different name/schema/description).
+            // The name (ToolDefinitionTable.name) can differ from the stored value when the
+            // server's toolNamePrefix was added, removed, or changed: in that case current.name
+            // carries the new prefixed name while existing.name still has the old one.
             val changedTools = currentTools.filter { current ->
                 val existing = existingToolsByName[current.mcpToolName]
                 existing != null && (
-                        existing.description != current.description ||
+                        existing.name != current.name ||
+                                existing.description != current.description ||
                                 existing.inputSchema != current.inputSchema ||
                                 existing.outputSchema != current.outputSchema
                         )
@@ -265,9 +269,10 @@ class LocalMCPToolDefinitionServiceImpl(
                 }) {
                     toolService.validateToolDefinition(tool).bind()
                 }
-                // Update tool definition
+                // Update tool definition, including the (possibly prefixed) name
                 val existing = existingToolsByName[tool.mcpToolName]!!
                 val updatedTool = existing.copy(
+                    name = tool.name,
                     description = tool.description,
                     inputSchema = tool.inputSchema,
                     outputSchema = tool.outputSchema,
