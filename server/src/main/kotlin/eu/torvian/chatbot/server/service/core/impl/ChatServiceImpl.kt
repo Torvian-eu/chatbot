@@ -663,7 +663,9 @@ class ChatServiceImpl(
             toolCallDao.updateToolCall(executingToolCall).getOrElse { error ->
                 throw IllegalStateException("Failed to update tool call to EXECUTING: $error")
             }
-            send(ToolExecutionEvent.ToolCallCompleted(executingToolCall))
+            // FIXED: this call shouldn't be here:
+            // send(ToolExecutionEvent.ToolCallCompleted(executingToolCall))
+            // TODO: add new event for executing tool call
 
             when (toolDef) {
                 is LocalMCPToolDefinition -> {
