@@ -30,7 +30,7 @@ class LocalMCPToolCallMediatorImpl(
                     return@map LocalMCPToolCallResult(
                         toolCallId = request.toolCallId,
                         isError = true,
-                        errorMessage = "Malformed JSON input"
+                        errorMessage = "Malformed JSON input: ${e.message}"
                     )
                 }
             } ?: JsonObject(emptyMap())
