@@ -501,6 +501,12 @@ class DefaultSessionRepository(
                 updateToolCallInCache(sessionId, event.toolCall)
             }
 
+            is ChatEvent.ToolCallExecuting -> {
+                logger.debug("Tool call executing: ${event.toolCall.toolName}")
+                // Update cache with tool call in EXECUTING status so UI can display it
+                updateToolCallInCache(sessionId, event.toolCall)
+            }
+
             is ChatEvent.ToolExecutionCompleted -> {
                 logger.debug("Tool execution completed: ${event.toolCall.toolName} - ${event.toolCall.status}")
                 updateToolCallInCache(sessionId, event.toolCall)
@@ -613,6 +619,12 @@ class DefaultSessionRepository(
             is ChatStreamEvent.ToolCallApprovalRequested -> {
                 logger.debug("Tool call approval requested: ${event.toolCall.toolName}")
                 // Update cache with tool call in AWAITING_APPROVAL status so UI can display it
+                updateToolCallInCache(sessionId, event.toolCall)
+            }
+
+            is ChatStreamEvent.ToolCallExecuting -> {
+                logger.debug("Tool call executing: ${event.toolCall.toolName}")
+                // Update cache with tool call in EXECUTING status so UI can display it
                 updateToolCallInCache(sessionId, event.toolCall)
             }
 

@@ -51,6 +51,10 @@ fun MessageStreamEvent.toChatStreamEvent(): ChatStreamEvent {
             toolCall = toolCall
         )
 
+        is MessageStreamEvent.ToolCallExecuting -> ChatStreamEvent.ToolCallExecuting(
+            toolCall = toolCall
+        )
+
         is MessageStreamEvent.StreamCompleted -> ChatStreamEvent.StreamCompleted
     }
 }

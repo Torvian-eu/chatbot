@@ -53,7 +53,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
-import java.util.Locale
+import java.util.*
 import java.util.concurrent.CancellationException
 
 /**
@@ -312,6 +312,10 @@ class ChatServiceImpl(
                 )
                     .collect { event ->
                         when (event) {
+                            is ToolExecutionEvent.ToolCallExecuting -> {
+                                send(MessageEvent.ToolCallExecuting(event.toolCall).right())
+                            }
+
                             is ToolExecutionEvent.ToolCallCompleted -> {
                                 completedToolCalls.add(event.toolCall)
                                 send(MessageEvent.ToolExecutionCompleted(event.toolCall).right())
@@ -490,6 +494,10 @@ class ChatServiceImpl(
                         )
                             .collect { event ->
                                 when (event) {
+                                    is ToolExecutionEvent.ToolCallExecuting -> {
+                                        send(MessageStreamEvent.ToolCallExecuting(event.toolCall).right())
+                                    }
+
                                     is ToolExecutionEvent.ToolCallCompleted -> {
                                         completedToolCalls.add(event.toolCall)
                                         send(MessageStreamEvent.ToolExecutionCompleted(event.toolCall).right())
@@ -663,9 +671,7 @@ class ChatServiceImpl(
             toolCallDao.updateToolCall(executingToolCall).getOrElse { error ->
                 throw IllegalStateException("Failed to update tool call to EXECUTING: $error")
             }
-            // FIXED: this call shouldn't be here:
-            // send(ToolExecutionEvent.ToolCallCompleted(executingToolCall))
-            // TODO: add new event for executing tool call
+            send(ToolExecutionEvent.ToolCallExecuting(executingToolCall))
 
             when (toolDef) {
                 is LocalMCPToolDefinition -> {
@@ -1111,6 +1117,7 @@ class ChatServiceImpl(
      * (a completed tool call vs. a request for client-side execution vs. approval request) to its caller.
      */
     private sealed interface ToolExecutionEvent {
+        data class ToolCallExecuting(val toolCall: ToolCall) : ToolExecutionEvent
         data class ToolCallCompleted(val toolCall: ToolCall) : ToolExecutionEvent
         data class LocalMCPToolCallReceived(val request: LocalMCPToolCallRequest) : ToolExecutionEvent
         data class ToolCallApprovalRequested(val toolCall: ToolCall) : ToolExecutionEvent
@@ -1241,6 +1248,13 @@ class ChatServiceImpl(
     private fun formatLastModified(instant: Instant): String {
         val tz = TimeZone.currentSystemDefault()
         val localDateTime = instant.toLocalDateTime(tz)
-        return "${localDateTime.date} ${String.format(Locale.ROOT, "%02d:%02d", localDateTime.hour, localDateTime.minute)}"
+        return "${localDateTime.date} ${
+            String.format(
+                Locale.ROOT,
+                "%02d:%02d",
+                localDateTime.hour,
+                localDateTime.minute
+            )
+        }"
     }
 }

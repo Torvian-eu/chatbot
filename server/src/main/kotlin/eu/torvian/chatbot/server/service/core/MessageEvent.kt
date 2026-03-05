@@ -99,6 +99,18 @@ sealed class MessageEvent {
     ) : MessageEvent()
 
     /**
+     * Emitted when a tool call begins execution.
+     *
+     * This event informs the client that a tool call has been approved (either by the user
+     * or by auto-approval) and is now being executed by the appropriate provider.
+     *
+     * @property toolCall The tool call that is now EXECUTING.
+     */
+    data class ToolCallExecuting(
+        val toolCall: ToolCall
+    ) : MessageEvent()
+
+    /**
      * Emitted when a single tool execution completes.
      * 
      * The tool call has been updated in the database with:
