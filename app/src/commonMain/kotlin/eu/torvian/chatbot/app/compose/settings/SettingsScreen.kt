@@ -4,7 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -37,7 +37,7 @@ fun SettingsScreen(
             .background(MaterialTheme.colorScheme.background)
     ) {
         // Tab navigation
-        TabRow(
+        PrimaryTabRow(
             selectedTabIndex = selectedTabIndex,
             modifier = Modifier.fillMaxWidth(),
             containerColor = MaterialTheme.colorScheme.surface,

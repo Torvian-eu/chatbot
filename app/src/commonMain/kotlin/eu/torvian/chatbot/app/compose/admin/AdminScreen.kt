@@ -40,7 +40,7 @@ fun AdminScreen(
 
     Column(modifier = modifier.fillMaxSize()) {
         // Tab Row
-        TabRow(selectedTabIndex = selectedTabIndex) {
+        PrimaryTabRow(selectedTabIndex = selectedTabIndex) {
             tabTitles.forEachIndexed { index, title ->
                 Tab(
                     selected = selectedTabIndex == index,
