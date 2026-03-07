@@ -49,7 +49,9 @@ fun PlainTooltipBox(
                 positionProvider = rememberCustomPlainTooltipPositionProvider(spacingBetweenTooltipAndAnchor),
                 tooltip = {
                     PlainTooltip(
-                        caretSize = caretSize
+                    // Note: The parameter caretSize is no longer supported in PlainTooltip. It now uses: caretShape
+                    // TODO: update to use caretShape
+//                    caretSize = caretSize
                     ) {
                         Text(text)
                     }
