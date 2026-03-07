@@ -2,8 +2,8 @@ package eu.torvian.chatbot.server.data.tables.mappers
 
 import eu.torvian.chatbot.server.data.entities.ChatSessionEntity
 import eu.torvian.chatbot.server.data.tables.ChatSessionTable
-import kotlinx.datetime.Instant
 import org.jetbrains.exposed.sql.ResultRow
+import kotlin.time.Instant
 
 /**
  * Extension function to map an Exposed [ResultRow] to a [ChatSessionEntity].

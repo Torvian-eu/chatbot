@@ -10,7 +10,6 @@ import eu.torvian.chatbot.server.data.dao.error.ToolDefinitionError
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
 import eu.torvian.chatbot.server.testutils.koin.defaultTestContainer
 import kotlinx.coroutines.test.runTest
-import kotlinx.datetime.Clock
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.junit.jupiter.api.AfterEach
@@ -20,6 +19,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlin.time.Clock
 
 /**
  * Tests for [ToolDefinitionDaoExposed].

@@ -2,8 +2,8 @@ package eu.torvian.chatbot.common.models.api.auth
 
 import eu.torvian.chatbot.common.models.user.Permission
 import eu.torvian.chatbot.common.models.user.User
-import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
+import kotlin.time.Instant
 
 /**
  * Response body for successful user login.

@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.common.models.tool
 
-import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
+import kotlin.time.Instant
 
 /**
  * Represents a record of a tool invocation during a conversation.

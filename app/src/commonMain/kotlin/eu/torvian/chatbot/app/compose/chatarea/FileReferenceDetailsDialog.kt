@@ -11,6 +11,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.common.models.core.FileReference
 import kotlinx.datetime.toLocalDateTime
+import kotlin.time.Instant
 
 /**
  * Dialog displaying detailed information about a file reference.
@@ -221,6 +222,7 @@ private fun formatFileSize(bytes: Long): String {
             val mb = bytes / (1024.0 * 1024.0)
             "${(mb * 100).toLong() / 100.0} MB"
         }
+
         else -> {
             val gb = bytes / (1024.0 * 1024.0 * 1024.0)
             "${(gb * 100).toLong() / 100.0} GB"
@@ -231,10 +233,12 @@ private fun formatFileSize(bytes: Long): String {
 /**
  * Formats an Instant to a human-readable date/time string.
  */
-private fun formatInstant(instant: kotlinx.datetime.Instant): String {
+private fun formatInstant(instant: Instant): String {
     val tz = kotlinx.datetime.TimeZone.currentSystemDefault()
     val localDateTime = instant.toLocalDateTime(tz)
-    return "${localDateTime.date} ${localDateTime.hour.toString().padStart(2, '0')}:${localDateTime.minute.toString().padStart(2, '0')}"
+    return "${localDateTime.date} ${localDateTime.hour.toString().padStart(2, '0')}:${
+        localDateTime.minute.toString().padStart(2, '0')
+    }"
 }
 
 @Composable

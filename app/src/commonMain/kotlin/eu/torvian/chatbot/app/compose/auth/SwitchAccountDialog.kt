@@ -16,10 +16,11 @@ import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.app.service.auth.AccountData
 import eu.torvian.chatbot.common.api.CommonPermissions
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Instant
 
 /**
  * Dialog for switching between available user accounts.
@@ -197,7 +198,7 @@ private fun AccountItem(
 /**
  * Formats the last used timestamp as a relative time string.
  */
-private fun formatLastUsed(lastUsed: kotlinx.datetime.Instant, isCurrentAccount: Boolean): String {
+private fun formatLastUsed(lastUsed: Instant, isCurrentAccount: Boolean): String {
     if (isCurrentAccount) {
         return "Active"
     }
@@ -219,8 +220,8 @@ private fun formatLastUsed(lastUsed: kotlinx.datetime.Instant, isCurrentAccount:
 private fun hasAdminPermissions(account: AccountData): Boolean {
     return account.permissions.any { permission ->
         (permission.action == CommonPermissions.MANAGE_USERS.action &&
-         permission.subject == CommonPermissions.MANAGE_USERS.subject) ||
-        (permission.action == CommonPermissions.MANAGE_ROLES.action &&
-         permission.subject == CommonPermissions.MANAGE_ROLES.subject)
+                permission.subject == CommonPermissions.MANAGE_USERS.subject) ||
+                (permission.action == CommonPermissions.MANAGE_ROLES.action &&
+                        permission.subject == CommonPermissions.MANAGE_ROLES.subject)
     }
 }

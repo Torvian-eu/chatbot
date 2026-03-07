@@ -4,32 +4,32 @@ import arrow.core.left
 import arrow.core.right
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
+import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.UserSessionDao
 import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.dao.error.UserSessionError
 import eu.torvian.chatbot.server.data.entities.UserEntity
-import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.server.data.entities.UserSessionEntity
 import eu.torvian.chatbot.server.data.entities.mappers.toUser
 import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.service.core.UserService
 import eu.torvian.chatbot.server.service.core.error.auth.UserNotFoundError
 import eu.torvian.chatbot.server.service.security.error.LoginError
-import eu.torvian.chatbot.server.service.security.error.LogoutError
 import eu.torvian.chatbot.server.service.security.error.LogoutAllError
+import eu.torvian.chatbot.server.service.security.error.LogoutError
 import eu.torvian.chatbot.server.service.security.error.RefreshTokenError
-import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import io.ktor.server.auth.jwt.*
 import io.mockk.*
 import kotlinx.coroutines.test.runTest
-import kotlinx.datetime.Instant
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Instant
 
 class AuthenticationServiceImplTest {
 

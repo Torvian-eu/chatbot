@@ -5,9 +5,9 @@ import arrow.core.getOrElse
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
+import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
-import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.error.InsertMessageError
 import eu.torvian.chatbot.server.data.dao.error.MessageError
@@ -15,12 +15,12 @@ import eu.torvian.chatbot.server.data.tables.AssistantMessageTable
 import eu.torvian.chatbot.server.data.tables.ChatMessageTable
 import eu.torvian.chatbot.server.data.tables.mappers.toAssistantMessage
 import eu.torvian.chatbot.server.data.tables.mappers.toUserMessage
-import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import kotlin.time.Instant
 
 /**
  * Exposed implementation of the [MessageDao].

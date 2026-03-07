@@ -1,10 +1,10 @@
 package eu.torvian.chatbot.app.utils.platform
 
-import kotlinx.datetime.Instant
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.attribute.BasicFileAttributes
+import kotlin.time.Instant
 
 /**
  * Maximum size for a single file's content (1 MB).

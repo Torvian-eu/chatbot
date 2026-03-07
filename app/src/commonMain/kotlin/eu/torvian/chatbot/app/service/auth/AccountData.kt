@@ -2,7 +2,7 @@ package eu.torvian.chatbot.app.service.auth
 
 import eu.torvian.chatbot.common.models.user.Permission
 import eu.torvian.chatbot.common.models.user.User
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 /**
  * Represents metadata about a stored user account.

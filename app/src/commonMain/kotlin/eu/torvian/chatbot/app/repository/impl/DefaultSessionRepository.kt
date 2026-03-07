@@ -23,7 +23,7 @@ import eu.torvian.chatbot.common.models.tool.ToolCall
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 
 /**
  * Default implementation of [SessionRepository] that manages chat sessions.

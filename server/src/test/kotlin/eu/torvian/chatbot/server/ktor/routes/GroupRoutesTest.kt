@@ -6,9 +6,9 @@ import eu.torvian.chatbot.common.api.resources.GroupResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
-import eu.torvian.chatbot.common.models.core.ChatGroup
 import eu.torvian.chatbot.common.models.api.core.CreateGroupRequest
 import eu.torvian.chatbot.common.models.api.core.RenameGroupRequest
+import eu.torvian.chatbot.common.models.core.ChatGroup
 import eu.torvian.chatbot.server.testutils.auth.TestAuthHelper
 import eu.torvian.chatbot.server.testutils.auth.authenticate
 import eu.torvian.chatbot.server.testutils.data.Table
@@ -20,11 +20,11 @@ import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.http.*
 import kotlinx.coroutines.test.runTest
-import kotlinx.datetime.Instant
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.time.Instant
 
 /**
  * Integration tests for Group API routes.

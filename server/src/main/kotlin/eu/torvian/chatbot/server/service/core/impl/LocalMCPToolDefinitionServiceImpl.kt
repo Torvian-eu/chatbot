@@ -18,9 +18,9 @@ import eu.torvian.chatbot.server.service.core.ToolService
 import eu.torvian.chatbot.server.service.core.error.mcp.*
 import eu.torvian.chatbot.server.service.core.error.tool.UpdateToolError
 import eu.torvian.chatbot.server.service.core.error.tool.ValidateToolError
-import kotlinx.datetime.Clock
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
+import kotlin.time.Clock
 
 /**
  * Implementation of [LocalMCPToolDefinitionService].

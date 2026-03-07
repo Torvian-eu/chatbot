@@ -2,11 +2,11 @@ package eu.torvian.chatbot.app.service.chat
 
 import eu.torvian.chatbot.app.viewmodel.chat.util.DefaultThreadBuilder
 import eu.torvian.chatbot.common.models.core.ChatMessage
-import kotlinx.datetime.Clock
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Clock
 
 class DefaultThreadBuilderTest {
     

@@ -2,7 +2,7 @@ package eu.torvian.chatbot.app.service.mcp
 
 import eu.torvian.chatbot.app.domain.models.LocalMCPServer
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 /**
  * Data class representing the aggregate status of a Local MCP Server.

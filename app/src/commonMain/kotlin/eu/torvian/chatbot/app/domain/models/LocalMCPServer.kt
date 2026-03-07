@@ -1,8 +1,8 @@
 package eu.torvian.chatbot.app.domain.models
 
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 /**
  * Represents the complete configuration for a Local MCP (Model Context Protocol) Server.

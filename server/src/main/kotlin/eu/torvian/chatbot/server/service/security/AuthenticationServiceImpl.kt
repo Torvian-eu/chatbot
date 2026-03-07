@@ -27,11 +27,11 @@ import eu.torvian.chatbot.server.service.security.error.RefreshTokenError
 import eu.torvian.chatbot.server.service.security.error.TokenValidationError
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import io.ktor.server.auth.jwt.*
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Instant
 
 /**
  * Implementation of [AuthenticationService] with JWT token generation and validation.

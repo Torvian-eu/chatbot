@@ -9,8 +9,6 @@ import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.common.security.CryptoError
 import eu.torvian.chatbot.common.security.CryptoProvider
 import kotlinx.coroutines.test.runTest
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
 import kotlinx.io.buffered
 import kotlinx.io.files.FileSystem
 import kotlinx.io.files.Path
@@ -22,7 +20,9 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
+import kotlin.time.Instant
 
 /**
  * Comprehensive unit tests for [FileSystemTokenStorage] implementation.

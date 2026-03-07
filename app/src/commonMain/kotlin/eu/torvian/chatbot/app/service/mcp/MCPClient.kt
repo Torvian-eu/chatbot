@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.app.service.mcp
 
 import eu.torvian.chatbot.app.domain.models.LocalMCPServer
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 /**
  * Public representation of an active MCP client connection.

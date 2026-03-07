@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.server.main
 
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 /**
  * Data class to hold server instance information.

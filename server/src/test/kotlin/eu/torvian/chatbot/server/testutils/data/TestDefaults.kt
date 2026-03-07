@@ -9,9 +9,9 @@ import eu.torvian.chatbot.common.security.EncryptionConfig
 import eu.torvian.chatbot.server.data.entities.*
 import eu.torvian.chatbot.server.domain.config.DatabaseConfig
 import eu.torvian.chatbot.server.service.llm.RawChatMessage
-import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
-import java.util.UUID
+import java.util.*
+import kotlin.time.Instant
 
 /**
  * Predefined domain objects and test data entries for use in tests.

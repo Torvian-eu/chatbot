@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.common.models.core
 
-import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
+import kotlin.time.Instant
 
 /**
  * Represents a user-defined group for organizing chat sessions.

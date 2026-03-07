@@ -18,10 +18,10 @@ import eu.torvian.chatbot.server.data.dao.error.UserToolApprovalPreferenceError
 import eu.torvian.chatbot.server.data.dao.error.SetPreferenceError
 import eu.torvian.chatbot.server.service.core.ToolService
 import eu.torvian.chatbot.server.service.core.error.tool.*
-import kotlinx.datetime.Clock
 import kotlinx.serialization.json.JsonObject
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
+import kotlin.time.Clock
 import eu.torvian.chatbot.server.data.dao.error.SetToolEnabledError as DaoSetToolEnabledError
 import eu.torvian.chatbot.server.data.dao.error.SetToolsEnabledError as DaoSetToolsEnabledError
 

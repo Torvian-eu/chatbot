@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.server.data.entities
 
 import eu.torvian.chatbot.common.models.user.UserStatus
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 /**
  * Represents a row from the 'users' database table.

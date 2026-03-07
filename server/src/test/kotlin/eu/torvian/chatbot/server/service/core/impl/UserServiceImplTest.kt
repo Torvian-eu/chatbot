@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.service.core.impl
 import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.api.CommonUserGroups
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.user.UserGroup
 import eu.torvian.chatbot.common.models.user.UserStatus
@@ -16,14 +17,13 @@ import eu.torvian.chatbot.server.service.core.UserGroupService
 import eu.torvian.chatbot.server.service.core.error.auth.RegisterUserError
 import eu.torvian.chatbot.server.service.core.error.auth.UserNotFoundError
 import eu.torvian.chatbot.server.service.security.PasswordService
-import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import io.mockk.*
 import kotlinx.coroutines.test.runTest
-import kotlinx.datetime.Instant
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.time.Instant
 
 class UserServiceImplTest {
 
@@ -34,7 +34,8 @@ class UserServiceImplTest {
     private val userGroupService = mockk<UserGroupService>()
     private val transactionScope = mockk<TransactionScope>()
 
-    private val userService = UserServiceImpl(userDao, passwordService, roleDao, userRoleAssignmentDao, userGroupService, transactionScope)
+    private val userService =
+        UserServiceImpl(userDao, passwordService, roleDao, userRoleAssignmentDao, userGroupService, transactionScope)
 
     private val testUserEntity = UserEntity(
         id = 1L,
@@ -82,7 +83,14 @@ class UserServiceImplTest {
         every { passwordService.validatePasswordStrength(password) } returns Unit.right()
         every { passwordService.hashPassword(password) } returns hashedPassword
 
-        coEvery { userDao.insertUser(username, hashedPassword, email, UserStatus.DISABLED) } returns testUserEntity.copy(
+        coEvery {
+            userDao.insertUser(
+                username,
+                hashedPassword,
+                email,
+                UserStatus.DISABLED
+            )
+        } returns testUserEntity.copy(
             username = username,
             passwordHash = hashedPassword,
             email = email,
@@ -325,7 +333,14 @@ class UserServiceImplTest {
         every { passwordService.validatePasswordStrength(password) } returns Unit.right()
         every { passwordService.hashPassword(password) } returns hashedPassword
 
-        coEvery { userDao.insertUser(username, hashedPassword, email, UserStatus.DISABLED) } returns testUserEntity.copy(
+        coEvery {
+            userDao.insertUser(
+                username,
+                hashedPassword,
+                email,
+                UserStatus.DISABLED
+            )
+        } returns testUserEntity.copy(
             id = 2L,
             username = username,
             passwordHash = hashedPassword,

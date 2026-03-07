@@ -16,10 +16,10 @@ import eu.torvian.chatbot.server.data.tables.LocalMCPToolDefinitionTable
 import eu.torvian.chatbot.server.data.tables.ToolDefinitionTable
 import eu.torvian.chatbot.server.data.tables.mappers.toMiscToolDefinition
 import eu.torvian.chatbot.server.data.tables.mappers.toToolDefinition
-import kotlinx.datetime.Clock
 import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import kotlin.time.Clock
 
 /**
  * Exposed ORM implementation of [ToolDefinitionDao].

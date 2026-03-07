@@ -18,7 +18,7 @@ import eu.torvian.chatbot.server.data.entities.mappers.toUser
 import eu.torvian.chatbot.server.data.tables.*
 import eu.torvian.chatbot.server.data.tables.mappers.toUserEntity
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import org.jetbrains.exposed.exceptions.ExposedSQLException
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq

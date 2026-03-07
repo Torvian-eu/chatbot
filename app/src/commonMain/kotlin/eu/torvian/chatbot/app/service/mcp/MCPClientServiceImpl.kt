@@ -11,9 +11,9 @@ import io.modelcontextprotocol.kotlin.sdk.client.StdioClientTransport
 import io.modelcontextprotocol.kotlin.sdk.types.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
 import kotlinx.serialization.json.JsonObject
+import kotlin.time.Clock
+import kotlin.time.Instant
 import eu.torvian.chatbot.app.utils.misc.ioDispatcher as defaultIODispatcher
 
 /**

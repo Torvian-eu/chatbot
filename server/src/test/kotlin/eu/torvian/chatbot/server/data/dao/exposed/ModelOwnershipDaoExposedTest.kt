@@ -19,12 +19,12 @@ import eu.torvian.chatbot.server.testutils.data.TestDataSet
 import eu.torvian.chatbot.server.testutils.data.TestDefaults
 import eu.torvian.chatbot.server.testutils.koin.defaultTestContainer
 import kotlinx.coroutines.test.runTest
-import kotlinx.datetime.Instant
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.time.Instant
 
 /**
  * Tests for [ModelOwnershipDaoExposed].

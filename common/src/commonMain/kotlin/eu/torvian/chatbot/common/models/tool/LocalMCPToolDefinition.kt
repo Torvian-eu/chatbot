@@ -1,9 +1,9 @@
 package eu.torvian.chatbot.common.models.tool
 
-import kotlinx.datetime.Instant
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
+import kotlin.time.Instant
 
 /**
  * Represents a tool definition that is specific to a local MCP server.

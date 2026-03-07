@@ -6,7 +6,7 @@ import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 // Helper to create Instant for tests (using a fixed time)
 fun instant(epochSeconds: Long): Instant = Instant.fromEpochSeconds(epochSeconds)
