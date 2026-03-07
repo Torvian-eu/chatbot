@@ -16,6 +16,7 @@ typesafe-config = "1.4.6"    # Typesafe Config version
 mockk = "1.14.9"             # MockK version
 arrow = "2.2.2"              # Arrow version
 compose = "1.10.2"           # Compose Multiplatform version
+material3 = "1.9.0"          # Material 3 version
 androidx-lifecycle = "2.9.6" # For Compose Multiplatform ViewModel
 androidx-navigation = "2.9.2" # For Compose Multiplatform Navigation
 kotlin-buildlogic = "1.9.24" # Kotlin version for build-logic compatibility
@@ -120,6 +121,15 @@ koin-compose-viewmodel-navigation = { module = "io.insert-koin:koin-compose-view
 arrow-core = { module = "io.arrow-kt:arrow-core", version.ref = "arrow" }
 arrow-fx-coroutines = { module = "io.arrow-kt:arrow-fx-coroutines", version.ref = "arrow" }
 
+# Compose Multiplatform
+compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "compose" }
+compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "compose" }
+compose-material3 = { module = "org.jetbrains.compose.material3:material3", version.ref = "material3" }
+compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "compose" }
+compose-components-resources = { module = "org.jetbrains.compose.components:components-resources", version.ref = "compose" }
+compose-uiToolingPreview = { module = "org.jetbrains.compose.ui:ui-tooling-preview", version.ref = "compose" }
+compose-uiTooling = { module = "org.jetbrains.compose.ui:ui-tooling", version.ref = "compose" }
+
 # AndroidX ViewModel for Kotlin Multiplatform
 androidx-lifecycle-viewmodel = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel", version.ref = "androidx-lifecycle" }
 
@@ -131,10 +141,6 @@ androidx-lifecycle-runtime-compose = { module = "org.jetbrains.androidx.lifecycl
 
 # AndroidX Navigation for Compose Multiplatform
 androidx-navigation-compose = { module = "org.jetbrains.androidx.navigation:navigation-compose", version.ref = "androidx-navigation" }
-
-# Additional Compose libraries
-compose-material-icons-core = { module = "androidx.compose.material:material-icons-core", version.ref = "compose" }
-compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended", version.ref = "compose" }
 
 # --- Desktop-specific dependencies ---
 # KotlinX Coroutines Swing for JVM Main Dispatcher
