@@ -32,5 +32,9 @@ fun MessageEvent.toChatEvent(): ChatEvent {
         is MessageEvent.ToolCallApprovalRequested -> ChatEvent.ToolCallApprovalRequested(
             toolCall = toolCall
         )
+
+        is MessageEvent.ToolCallExecuting -> ChatEvent.ToolCallExecuting(
+            toolCall = toolCall
+        )
     }
 }

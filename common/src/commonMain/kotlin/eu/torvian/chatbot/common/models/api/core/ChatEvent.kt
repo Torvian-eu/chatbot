@@ -84,6 +84,18 @@ sealed interface ChatEvent {
     }
 
     /**
+     * Sent when a tool call begins execution.
+     *
+     * @property toolCall The tool call that is now EXECUTING.
+     */
+    @Serializable
+    data class ToolCallExecuting(
+        val toolCall: ToolCall
+    ) : ChatEvent {
+        override val eventType: String = "tool_call_executing"
+    }
+
+    /**
      * Sent when a single tool execution completes.
      * The tool call has been updated in the database with results.
      *

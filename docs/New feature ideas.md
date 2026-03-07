@@ -84,6 +84,24 @@ Currently, the user can only add a new session to the "Ungrouped" group. In the 
 - If possible, we should allow the user to pop out the message input area into a separate window.
 - Alternative: make the input area part of the message list flow, which is already scrollable. (when user requests)
 
+### Add model provider test button
+- Add a "Test" button to the add/update model provider configuration form.
+- The test button should call a new endpoint on the server, which takes the provider configuration and tries to list the available models.
+- The server should return the list of models, which are then displayed in the form. (for instance: "Test successful! 35 models available: gpt-3.5-turbo, gpt-4, gpt-5, etc...")
+
+### Add model test button
+- Add a "Test" button to the add/update model configuration form.
+- The test button should call a new endpoint on the server, which takes the model configuration and tries to send a test message to the model.
+- The server should return the response from the model, which is then displayed in the form. (for instance: "Test successful! Model answered: Hello, world!")
+
+### Allow user to auto-approve future tool calls, when the assistant calls a tool during a chat session
+
+### Allow user to call (MCP) tools manually
+Normally, only the assistant can call tools. However, it sometimes is useful for the user to be able to call tools manually, for instance to debug or demonstrate a tool.
+- A dialog should be presented with all the arguments for the tool, which can be filled in manually.
+- The dialog should allow the user to select a tool from the list of available tools for the current session.
+
+
 ---
 
 ## Intermediate features
@@ -119,6 +137,19 @@ technical notes:
 Not completed:
 - UI for inline placement of file references
 - Drag & drop files from OS into message input area
+
+### Add "Agent Skills" feature
+Agent Skills are folders of instructions, scripts, and resources that agents can discover and use to do things more accurately and efficiently. See: https://agentskills.io/home
+
+### Add support for OpenAI's Responses API
+- See: https://developers.openai.com/api/docs/guides/migrate-to-responses
+- We can detect if a model supports the Responses API by sending a POST request to: https://base_url/responses/input_tokens with body: {"model": "<model_name>", "input": "Hello"}. This endpoint is used to count input tokens. If the model supports the Responses API, the response will include the number of input tokens. If not, we get a 404 error. A valid response should be of the form: {"object": "response.input_tokens","input_tokens": 7}.
+- If a model supports the Responses API, add an entry to the model capabilities property (LLMModel.capabilities). For instance, add '"ResponsesAPI" = true' to the JSON object.
+- Modify OpenAIChatStrategy.kt to support Responses API. Within the function 'prepareRequest' we can check for the model capability we added. And in the function 'processSuccessResponse' we can check if the field "object" in the response body contains the value "response". (For the Chat Completions API the value is "chat.completion"). 
+
+### Add support for MCP's resources and prompts
+- The user should be able to retrieve a resource or prompt, if currently active for the chat session. (The MCP server will be contacted to retrieve the resource or prompt)
+- When at least one resource or prompt is active, the UI should indicate this by showing an icon button with badge (indicating the total number of active resources and prompts) underneath the chat input area. Clicking the icon should open a popup with a list of all active resources and prompts (with name, description and type). Clicking an item in the list should copy it's content to the chat input area, or, if the item requires arguments it should open a dialog to enter the arguments, and then copy the formatted resource or prompt to the chat input area.
 
 ---
 
@@ -163,6 +194,16 @@ Allow LLM agent to control the app itself. For instance: modifying a chat sessio
 
 ### LLM Council
 Have multiple LLM's (or agent runs) solve the same task, and then have a final LLM summarize the answers and decide which answer is the best.
+
+### Chatbot MCP server (which can be used as a local MCP server within the Chatbot app)
+- The API for the chatbot server application is quite big, and not all of it is needed for an MCP server. Still, the number of MCP functions will be quite large. So we need to add a second layer for the MCP server. For instance: a search function for MCP functions and a generic execute function which takes a function name and parameters. That way the MCP server would require only two functions: search and execute. Other ideas: "Code mode" as described by FastMCP: https://www.jlowin.dev/blog/fastmcp-3-1-code-mode, Cloudflare: https://blog.cloudflare.com/code-mode/, and Anthropic: https://www.anthropic.com/engineering/code-execution-with-mcp
+
+
+### Sub-agents
+- Agents are responsible for a specific task. The main agent (or system agent) is responsible for managing the conversation and delegating tasks to the sub-agents. Sub-agents can be created on the fly, and have their own memory and tools. They can also be persisted, and loaded for future conversations.
+Open questions: 
+- How to persist sub-agent memory?
+- How to present sub-agents in the UI?
 
 ---
 

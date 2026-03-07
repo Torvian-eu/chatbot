@@ -190,6 +190,7 @@ fun Route.configureSessionRoutes(
             val sessionId = resource.parent.sessionId
             val userId = call.getUserId()
 
+            var request: ProcessNewMessageRequest? = null
             try {
                 // Step 1: Receive the initial request frame from the client
                 val initialFrame = incoming.receive() as? Frame.Text
@@ -201,7 +202,7 @@ fun Route.configureSessionRoutes(
                     )
                 val initialEvent = json.decodeFromString<ChatClientEvent>(initialFrame.readText())
 
-                val request = (initialEvent as? ChatClientEvent.ProcessNewMessage)?.request
+                request = (initialEvent as? ChatClientEvent.ProcessNewMessage)?.request
                     ?: return@webSocket close(
                         CloseReason(
                             CloseReason.Codes.VIOLATED_POLICY,
@@ -224,8 +225,12 @@ fun Route.configureSessionRoutes(
 
                 val (session, llmConfig) = validationResult.getOrElse { apiError ->
                     logger.error("Validation failed for session $sessionId: $apiError")
-                    val errorEvent: ChatEvent = ChatEvent.ErrorOccurred(apiError)
-                    outgoing.send(Frame.Text(json.encodeToString(errorEvent)))
+                    val errorFrame = if (request.isStreaming) {
+                        json.encodeToString(ChatStreamEvent.ErrorOccurred(apiError) as ChatStreamEvent)
+                    } else {
+                        json.encodeToString(ChatEvent.ErrorOccurred(apiError) as ChatEvent)
+                    }
+                    outgoing.send(Frame.Text(errorFrame))
                     close(CloseReason(CloseReason.Codes.NORMAL, "Validation failed"))
                     return@webSocket
                 }
@@ -274,8 +279,12 @@ fun Route.configureSessionRoutes(
                     eitherEvent.fold(
                         ifLeft = { processError ->
                             val apiError = processError.toApiError()
-                            val errorEvent: ChatEvent = ChatEvent.ErrorOccurred(apiError)
-                            outgoing.send(Frame.Text(json.encodeToString(errorEvent)))
+                            val errorFrame = if (request.isStreaming) {
+                                json.encodeToString(ChatStreamEvent.ErrorOccurred(apiError) as ChatStreamEvent)
+                            } else {
+                                json.encodeToString(ChatEvent.ErrorOccurred(apiError) as ChatEvent)
+                            }
+                            outgoing.send(Frame.Text(errorFrame))
                         },
                         ifRight = { event ->
                             val frameData = when (event) {
@@ -292,9 +301,13 @@ fun Route.configureSessionRoutes(
 
             } catch (e: Exception) {
                 logger.error("Error in WebSocket session for session $sessionId: ${e.message}", e)
-                val errorEvent =
-                    ChatEvent.ErrorOccurred(apiError(CommonApiErrorCodes.INTERNAL, "An unexpected error occurred."))
-                outgoing.send(Frame.Text(json.encodeToString(errorEvent)))
+                val internalApiError = apiError(CommonApiErrorCodes.INTERNAL, "An unexpected error occurred.")
+                val errorFrame = if (request?.isStreaming == true) {
+                    json.encodeToString(ChatStreamEvent.ErrorOccurred(internalApiError) as ChatStreamEvent)
+                } else {
+                    json.encodeToString(ChatEvent.ErrorOccurred(internalApiError) as ChatEvent)
+                }
+                outgoing.send(Frame.Text(errorFrame))
             } finally {
                 // The WebSocket session will be closed automatically when the block finishes.
                 logger.info("WebSocket session closed for session $sessionId")
