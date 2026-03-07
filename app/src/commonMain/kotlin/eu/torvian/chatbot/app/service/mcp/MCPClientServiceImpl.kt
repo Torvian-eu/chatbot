@@ -8,11 +8,13 @@ import eu.torvian.chatbot.app.domain.models.LocalMCPServer
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import io.modelcontextprotocol.kotlin.sdk.client.Client
 import io.modelcontextprotocol.kotlin.sdk.client.StdioClientTransport
+import io.modelcontextprotocol.kotlin.sdk.shared.RequestOptions
 import io.modelcontextprotocol.kotlin.sdk.types.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.JsonObject
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 import eu.torvian.chatbot.app.utils.misc.ioDispatcher as defaultIODispatcher
 
@@ -47,7 +49,9 @@ class MCPClientServiceImpl(
         private const val CLIENT_VERSION = "1.0.0"
 
         // Connection timeout in seconds
-        private const val CONNECTION_TIMEOUT_SECONDS = 60
+        private const val CONNECTION_TIMEOUT_SECONDS = 300
+        // Request timeout in seconds
+        private const val REQUEST_TIMEOUT_SECONDS = 600
     }
 
     // Thread-safe StateFlow of active MCP clients
@@ -247,7 +251,7 @@ class MCPClientServiceImpl(
             val toolsResult = withContext(ioDispatcher) {
                 client.sdkClient.listTools(
                     request = ListToolsRequest(),
-                    options = null
+                    options = RequestOptions(timeout = REQUEST_TIMEOUT_SECONDS.seconds) // Effectively infinite timeout
                 )
             }
             val tools = toolsResult.tools
@@ -285,7 +289,8 @@ class MCPClientServiceImpl(
                             name = toolName,
                             arguments = arguments
                         )
-                    )
+                    ),
+                    options = RequestOptions(timeout = REQUEST_TIMEOUT_SECONDS.seconds) // Effectively infinite timeout
                 )
             }
             updateActivity(serverId)
