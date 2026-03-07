@@ -12,3 +12,7 @@
 - Limit the displayed length of snackbar messages. Add "more" link to expand.
 - Hide chat top bar (ChatTopBarContent), when no session is selected.
 - Make auto-scrolling during assistant message streaming smoother. Currently, it feels a bit janky. Alternative: Start assistant message stream at the top of the viewport, with empty space below.
+- Pretty print JSON in tool calls and tool results.
+- Add better support for parallel tool calls (when a model calls multiple tools in a single response). Currently they are executed sequentially.
+- Remove LLMProviderType.OPENROUTER because OpenRouter uses the same API as OpenAI. Also remove LLMProviderType.CUSTOM. And LLMProviderType.ANTHROPIC should be marked as not supported yet in the UI.
+ 
