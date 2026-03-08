@@ -116,11 +116,26 @@ class MCPClientServiceImpl(
                 error = processManager.getProcessErrorStream(serverId)
             )
 
-            // Connect to the MCP server with timeout
+            // Connect to the MCP server with timeout.
+            // sdkClient.connect() may internally throw TimeoutCancellationException due to its own
+            // internal timeout. We retry in a loop until the connection succeeds, or until our own
+            // outer timeout fires (which re-throws as a TimeoutCancellationException that belongs to
+            // the outer coroutine scope and is therefore not caught by the inner catch).
             try {
                 withContext(ioDispatcher) {
                     withTimeout(CONNECTION_TIMEOUT_SECONDS * 1000L) {
-                        sdkClient.connect(transport)
+                        while (true) {
+                            try {
+                                sdkClient.connect(transport)
+                                break  // Connection succeeded
+                            } catch (e: TimeoutCancellationException) {
+                                // This must be an internal SDK timeout (our outer withTimeout would
+                                // cancel the coroutine scope, not throw here) — retry.
+                                logger.debug(
+                                    "sdkClient.connect() timed out internally for server $serverId, retrying... (${e.message})"
+                                )
+                            }
+                        }
                     }
                 }
             } catch (_: TimeoutCancellationException) {
