@@ -6,16 +6,19 @@ import arrow.core.raise.catch
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.right
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.server.data.dao.UserSessionDao
 import eu.torvian.chatbot.server.data.dao.error.UserSessionError
 import eu.torvian.chatbot.server.data.entities.UserSessionEntity
 import eu.torvian.chatbot.server.data.tables.UserSessionsTable
 import eu.torvian.chatbot.server.data.tables.mappers.toUserSessionEntity
-import eu.torvian.chatbot.common.misc.transaction.TransactionScope
-import org.jetbrains.exposed.exceptions.ExposedSQLException
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.less
+import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.update
 
 /**
  * Exposed implementation of the [UserSessionDao].
@@ -60,13 +63,17 @@ class UserSessionDaoExposed(
                     when {
                         e.isForeignKeyViolation() ->
                             raise(UserSessionError.ForeignKeyViolation("User with ID $userId does not exist"))
+
                         else -> throw e
                     }
                 }
             }
         }
 
-    override suspend fun updateLastAccessed(id: Long, lastAccessed: Long): Either<UserSessionError.SessionNotFound, Unit> =
+    override suspend fun updateLastAccessed(
+        id: Long,
+        lastAccessed: Long
+    ): Either<UserSessionError.SessionNotFound, Unit> =
         transactionScope.transaction {
             either {
                 val updatedRowCount = UserSessionsTable.update({ UserSessionsTable.id eq id }) {

@@ -1,7 +1,16 @@
 package eu.torvian.chatbot.server.data.tables
 
 import eu.torvian.chatbot.common.models.tool.ToolType
-import org.jetbrains.exposed.dao.id.LongIdTable
+import eu.torvian.chatbot.server.data.tables.ToolDefinitionTable.configJson
+import eu.torvian.chatbot.server.data.tables.ToolDefinitionTable.createdAt
+import eu.torvian.chatbot.server.data.tables.ToolDefinitionTable.description
+import eu.torvian.chatbot.server.data.tables.ToolDefinitionTable.inputSchemaJson
+import eu.torvian.chatbot.server.data.tables.ToolDefinitionTable.isEnabled
+import eu.torvian.chatbot.server.data.tables.ToolDefinitionTable.name
+import eu.torvian.chatbot.server.data.tables.ToolDefinitionTable.outputSchemaJson
+import eu.torvian.chatbot.server.data.tables.ToolDefinitionTable.type
+import eu.torvian.chatbot.server.data.tables.ToolDefinitionTable.updatedAt
+import org.jetbrains.exposed.v1.core.dao.id.LongIdTable
 
 /**
  * Exposed table definition for tool definitions.

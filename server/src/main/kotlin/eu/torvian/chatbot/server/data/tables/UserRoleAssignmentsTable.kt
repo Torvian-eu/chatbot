@@ -1,7 +1,10 @@
 package eu.torvian.chatbot.server.data.tables
 
-import org.jetbrains.exposed.sql.ReferenceOption
-import org.jetbrains.exposed.sql.Table
+import eu.torvian.chatbot.server.data.tables.UserRoleAssignmentsTable.assignedAt
+import eu.torvian.chatbot.server.data.tables.UserRoleAssignmentsTable.roleId
+import eu.torvian.chatbot.server.data.tables.UserRoleAssignmentsTable.userId
+import org.jetbrains.exposed.v1.core.ReferenceOption
+import org.jetbrains.exposed.v1.core.Table
 
 /**
  * Exposed table definition to assign roles to users.

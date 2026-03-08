@@ -5,14 +5,15 @@ import arrow.core.left
 import arrow.core.raise.catch
 import arrow.core.raise.either
 import arrow.core.right
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.server.data.dao.ProviderOwnershipDao
 import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
 import eu.torvian.chatbot.server.data.dao.error.SetOwnerError
 import eu.torvian.chatbot.server.data.tables.LLMProviderOwnersTable
-import eu.torvian.chatbot.common.misc.transaction.TransactionScope
-import org.jetbrains.exposed.exceptions.ExposedSQLException
-import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.selectAll
 
 /**
  * Exposed implementation of the [ProviderOwnershipDao].
@@ -44,8 +45,10 @@ class ProviderOwnershipDaoExposed(
                     when {
                         e.isForeignKeyViolation() ->
                             raise(SetOwnerError.ForeignKeyViolation(providerId.toString(), userId))
+
                         e.isUniqueConstraintViolation() ->
                             raise(SetOwnerError.AlreadyOwned)
+
                         else -> throw e
                     }
                 }

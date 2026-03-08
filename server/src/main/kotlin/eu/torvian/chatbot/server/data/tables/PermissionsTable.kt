@@ -1,6 +1,8 @@
 package eu.torvian.chatbot.server.data.tables
 
-import org.jetbrains.exposed.dao.id.LongIdTable
+import eu.torvian.chatbot.server.data.tables.PermissionsTable.action
+import eu.torvian.chatbot.server.data.tables.PermissionsTable.subject
+import org.jetbrains.exposed.v1.core.dao.id.LongIdTable
 
 /**
  * Exposed table definition for granular permissions (e.g., create_public_provider, manage_users).

@@ -6,16 +6,21 @@ import arrow.core.raise.catch
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.right
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.server.data.dao.PermissionDao
 import eu.torvian.chatbot.server.data.dao.error.PermissionError
 import eu.torvian.chatbot.server.data.entities.PermissionEntity
 import eu.torvian.chatbot.server.data.tables.PermissionsTable
 import eu.torvian.chatbot.server.data.tables.RolePermissionsTable
 import eu.torvian.chatbot.server.data.tables.mappers.toPermissionEntity
-import eu.torvian.chatbot.common.misc.transaction.TransactionScope
-import org.jetbrains.exposed.exceptions.ExposedSQLException
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.v1.core.JoinType
+import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.selectAll
 
 /**
  * Exposed implementation of the [PermissionDao].

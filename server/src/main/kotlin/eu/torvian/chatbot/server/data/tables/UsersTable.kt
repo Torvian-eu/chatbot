@@ -1,7 +1,15 @@
 package eu.torvian.chatbot.server.data.tables
 
 import eu.torvian.chatbot.common.models.user.UserStatus
-import org.jetbrains.exposed.dao.id.LongIdTable
+import eu.torvian.chatbot.server.data.tables.UsersTable.createdAt
+import eu.torvian.chatbot.server.data.tables.UsersTable.email
+import eu.torvian.chatbot.server.data.tables.UsersTable.lastLogin
+import eu.torvian.chatbot.server.data.tables.UsersTable.passwordHash
+import eu.torvian.chatbot.server.data.tables.UsersTable.requiresPasswordChange
+import eu.torvian.chatbot.server.data.tables.UsersTable.status
+import eu.torvian.chatbot.server.data.tables.UsersTable.updatedAt
+import eu.torvian.chatbot.server.data.tables.UsersTable.username
+import org.jetbrains.exposed.v1.core.dao.id.LongIdTable
 
 /**
  * Exposed table definition for user accounts.

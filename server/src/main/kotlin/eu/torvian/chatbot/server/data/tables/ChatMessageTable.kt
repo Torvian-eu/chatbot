@@ -2,8 +2,16 @@ package eu.torvian.chatbot.server.data.tables
 
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatMessage.Role
-import org.jetbrains.exposed.dao.id.LongIdTable
-import org.jetbrains.exposed.sql.ReferenceOption
+import eu.torvian.chatbot.server.data.tables.ChatMessageTable.childrenMessageIds
+import eu.torvian.chatbot.server.data.tables.ChatMessageTable.content
+import eu.torvian.chatbot.server.data.tables.ChatMessageTable.createdAt
+import eu.torvian.chatbot.server.data.tables.ChatMessageTable.fileReferences
+import eu.torvian.chatbot.server.data.tables.ChatMessageTable.parentMessageId
+import eu.torvian.chatbot.server.data.tables.ChatMessageTable.role
+import eu.torvian.chatbot.server.data.tables.ChatMessageTable.sessionId
+import eu.torvian.chatbot.server.data.tables.ChatMessageTable.updatedAt
+import org.jetbrains.exposed.v1.core.ReferenceOption
+import org.jetbrains.exposed.v1.core.dao.id.LongIdTable
 
 /**
  * Exposed table definition for chat messages.

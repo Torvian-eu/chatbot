@@ -6,22 +6,22 @@ import arrow.core.raise.catch
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.right
-import eu.torvian.chatbot.common.models.user.Role
-import eu.torvian.chatbot.common.models.user.User
-import eu.torvian.chatbot.common.models.user.UserGroup
-import eu.torvian.chatbot.common.models.user.UserStatus
-import eu.torvian.chatbot.common.models.user.UserWithDetails
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
+import eu.torvian.chatbot.common.models.user.*
 import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.entities.UserEntity
 import eu.torvian.chatbot.server.data.entities.mappers.toUser
 import eu.torvian.chatbot.server.data.tables.*
 import eu.torvian.chatbot.server.data.tables.mappers.toUserEntity
-import eu.torvian.chatbot.common.misc.transaction.TransactionScope
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.leftJoin
+import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.update
 import kotlin.time.Instant
-import org.jetbrains.exposed.exceptions.ExposedSQLException
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 
 /**
  * Exposed implementation of the [UserDao].
@@ -265,7 +265,10 @@ class UserDaoExposed(
             }
         }
 
-    override suspend fun updatePasswordChangeRequired(id: Long, requiresPasswordChange: Boolean): Either<UserError.UserNotFound, User> =
+    override suspend fun updatePasswordChangeRequired(
+        id: Long,
+        requiresPasswordChange: Boolean
+    ): Either<UserError.UserNotFound, User> =
         transactionScope.transaction {
             either {
                 val updatedRowCount = UsersTable.update({ UsersTable.id eq id }) {

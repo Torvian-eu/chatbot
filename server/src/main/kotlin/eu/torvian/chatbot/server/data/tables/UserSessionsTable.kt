@@ -1,7 +1,11 @@
 package eu.torvian.chatbot.server.data.tables
 
-import org.jetbrains.exposed.dao.id.LongIdTable
-import org.jetbrains.exposed.sql.ReferenceOption
+import eu.torvian.chatbot.server.data.tables.UserSessionsTable.createdAt
+import eu.torvian.chatbot.server.data.tables.UserSessionsTable.expiresAt
+import eu.torvian.chatbot.server.data.tables.UserSessionsTable.lastAccessed
+import eu.torvian.chatbot.server.data.tables.UserSessionsTable.userId
+import org.jetbrains.exposed.v1.core.ReferenceOption
+import org.jetbrains.exposed.v1.core.dao.id.LongIdTable
 
 /**
  * Exposed table definition for active user sessions.

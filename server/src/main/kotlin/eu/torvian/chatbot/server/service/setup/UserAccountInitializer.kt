@@ -8,15 +8,15 @@ import eu.torvian.chatbot.common.api.CommonPermissions
 import eu.torvian.chatbot.common.api.CommonRoles
 import eu.torvian.chatbot.common.api.CommonUserGroups
 import eu.torvian.chatbot.common.api.PermissionSpec
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.entities.UserEntity
 import eu.torvian.chatbot.server.data.tables.*
 import eu.torvian.chatbot.server.service.core.UserGroupService
-import eu.torvian.chatbot.common.misc.transaction.TransactionScope
-import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.mindrot.jbcrypt.BCrypt
 
 /**

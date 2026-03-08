@@ -1,7 +1,9 @@
 package eu.torvian.chatbot.server.data.tables
 
-import org.jetbrains.exposed.sql.ReferenceOption
-import org.jetbrains.exposed.sql.Table
+import eu.torvian.chatbot.server.data.tables.LLMModelOwnersTable.modelId
+import eu.torvian.chatbot.server.data.tables.LLMModelOwnersTable.userId
+import org.jetbrains.exposed.v1.core.ReferenceOption
+import org.jetbrains.exposed.v1.core.Table
 
 /**
  * Links an LLM model to its owning user.

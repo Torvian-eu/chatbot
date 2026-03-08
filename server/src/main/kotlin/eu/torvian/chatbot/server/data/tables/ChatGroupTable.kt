@@ -1,7 +1,9 @@
 package eu.torvian.chatbot.server.data.tables
 
 import eu.torvian.chatbot.common.models.core.ChatGroup
-import org.jetbrains.exposed.dao.id.LongIdTable
+import eu.torvian.chatbot.server.data.tables.ChatGroupTable.createdAt
+import eu.torvian.chatbot.server.data.tables.ChatGroupTable.name
+import org.jetbrains.exposed.v1.core.dao.id.LongIdTable
 
 /**
  * Exposed table definition for chat session groups.

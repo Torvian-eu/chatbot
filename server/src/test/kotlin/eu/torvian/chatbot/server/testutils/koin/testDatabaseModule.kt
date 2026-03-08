@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.server.testutils.koin
 
 import eu.torvian.chatbot.server.domain.config.DatabaseConfig
-import org.jetbrains.exposed.sql.Database
+import org.jetbrains.exposed.v1.jdbc.Database
 import org.koin.core.scope.Scope
 import org.koin.core.scope.ScopeCallback
 import org.koin.dsl.module

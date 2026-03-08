@@ -1,7 +1,10 @@
 package eu.torvian.chatbot.server.data.tables
 
-import org.jetbrains.exposed.sql.ReferenceOption
-import org.jetbrains.exposed.sql.Table
+import eu.torvian.chatbot.server.data.tables.LocalMCPToolDefinitionTable.mcpServerId
+import eu.torvian.chatbot.server.data.tables.LocalMCPToolDefinitionTable.mcpToolName
+import eu.torvian.chatbot.server.data.tables.LocalMCPToolDefinitionTable.toolDefinitionId
+import org.jetbrains.exposed.v1.core.ReferenceOption
+import org.jetbrains.exposed.v1.core.Table
 
 /**
  * Junction table linking MCP tools to their source MCP servers.

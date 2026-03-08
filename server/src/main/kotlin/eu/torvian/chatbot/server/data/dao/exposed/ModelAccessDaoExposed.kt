@@ -4,6 +4,7 @@ import arrow.core.Either
 import arrow.core.raise.catch
 import arrow.core.raise.either
 import arrow.core.raise.ensure
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.server.data.dao.ModelAccessDao
 import eu.torvian.chatbot.server.data.dao.error.GrantAccessError
 import eu.torvian.chatbot.server.data.dao.error.RevokeAccessError
@@ -11,13 +12,14 @@ import eu.torvian.chatbot.server.data.entities.UserGroupEntity
 import eu.torvian.chatbot.server.data.tables.LLMModelAccessTable
 import eu.torvian.chatbot.server.data.tables.UserGroupsTable
 import eu.torvian.chatbot.server.data.tables.mappers.toUserGroupEntity
-import eu.torvian.chatbot.common.misc.transaction.TransactionScope
-import org.jetbrains.exposed.exceptions.ExposedSQLException
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.deleteWhere
-import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.select
+import org.jetbrains.exposed.v1.jdbc.selectAll
 
 /**
  * Exposed implementation of the [ModelAccessDao].

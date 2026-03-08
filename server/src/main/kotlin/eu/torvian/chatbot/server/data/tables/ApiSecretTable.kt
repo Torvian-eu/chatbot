@@ -1,7 +1,13 @@
 package eu.torvian.chatbot.server.data.tables
 
-import org.jetbrains.exposed.sql.Column
-import org.jetbrains.exposed.sql.Table
+import eu.torvian.chatbot.server.data.tables.ApiSecretTable.alias
+import eu.torvian.chatbot.server.data.tables.ApiSecretTable.created_at
+import eu.torvian.chatbot.server.data.tables.ApiSecretTable.encrypted_credential
+import eu.torvian.chatbot.server.data.tables.ApiSecretTable.key_version
+import eu.torvian.chatbot.server.data.tables.ApiSecretTable.updated_at
+import eu.torvian.chatbot.server.data.tables.ApiSecretTable.wrapped_dek
+import org.jetbrains.exposed.v1.core.Column
+import org.jetbrains.exposed.v1.core.Table
 
 /**
  * Represents the database table schema for storing encrypted API secrets and other sensitive data.
@@ -20,8 +26,10 @@ object ApiSecretTable : Table("api_secrets") {
     // The alias (UUID) is the primary key, used to reference this secret from other tables.
     // VARCHAR(36) is standard for UUID string representation.
     val alias: Column<String> = varchar("alias", 36)
+
     // Using text for encrypted_credential allows for potentially larger encrypted data
     val encrypted_credential: Column<String> = text("encrypted_credential")
+
     // varchar(255) should be sufficient for a Base64 encoded 256-bit AES wrapped DEK + IV (~65 chars)
     val wrapped_dek: Column<String> = varchar("wrapped_dek", 255)
     val key_version: Column<Int> = integer("key_version") // Link to EncryptionConfig.keyVersion

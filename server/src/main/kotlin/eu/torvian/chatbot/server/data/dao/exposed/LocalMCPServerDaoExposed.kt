@@ -8,11 +8,8 @@ import eu.torvian.chatbot.server.data.dao.LocalMCPServerDao
 import eu.torvian.chatbot.server.data.dao.error.DeleteLocalMCPServerError
 import eu.torvian.chatbot.server.data.dao.error.LocalMCPServerError
 import eu.torvian.chatbot.server.data.tables.LocalMCPServerTable
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.deleteWhere
-import org.jetbrains.exposed.sql.insertAndGetId
-import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.update
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.*
 
 /**
  * Exposed implementation of the [LocalMCPServerDao].

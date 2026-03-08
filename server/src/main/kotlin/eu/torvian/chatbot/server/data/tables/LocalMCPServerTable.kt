@@ -1,7 +1,9 @@
 package eu.torvian.chatbot.server.data.tables
 
-import org.jetbrains.exposed.dao.id.LongIdTable
-import org.jetbrains.exposed.sql.ReferenceOption
+import eu.torvian.chatbot.server.data.tables.LocalMCPServerTable.isEnabled
+import eu.torvian.chatbot.server.data.tables.LocalMCPServerTable.userId
+import org.jetbrains.exposed.v1.core.ReferenceOption
+import org.jetbrains.exposed.v1.core.dao.id.LongIdTable
 
 /**
  * Minimal server-side storage for Local MCP Server identification and ownership.

@@ -1,31 +1,23 @@
 package eu.torvian.chatbot.server.testutils.data
 
 import eu.torvian.chatbot.common.api.AccessMode
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.core.ChatGroup
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.ModelSettings
-import eu.torvian.chatbot.server.data.entities.ApiSecretEntity
-import eu.torvian.chatbot.server.data.entities.ChatSessionEntity
-import eu.torvian.chatbot.server.data.entities.SessionCurrentLeafEntity
-import eu.torvian.chatbot.server.data.entities.UserEntity
-import eu.torvian.chatbot.server.data.entities.UserSessionEntity
-import eu.torvian.chatbot.server.data.entities.RoleEntity
-import eu.torvian.chatbot.server.data.entities.PermissionEntity
-import eu.torvian.chatbot.server.data.entities.RolePermissionEntity
-import eu.torvian.chatbot.server.data.entities.UserRoleAssignmentEntity
-import eu.torvian.chatbot.server.data.entities.UserGroupEntity
+import eu.torvian.chatbot.server.data.entities.*
 import eu.torvian.chatbot.server.data.tables.*
 import eu.torvian.chatbot.server.data.tables.mappers.*
 import eu.torvian.chatbot.server.data.toEntity
-import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import kotlinx.serialization.json.Json
-import org.jetbrains.exposed.sql.SchemaUtils
-import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.leftJoin
-import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.leftJoin
+import org.jetbrains.exposed.v1.jdbc.SchemaUtils
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.selectAll
 
 /**
  * Implementation of [TestDataManager] for Exposed ORM.

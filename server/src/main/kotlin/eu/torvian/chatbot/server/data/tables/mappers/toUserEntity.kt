@@ -2,7 +2,7 @@ package eu.torvian.chatbot.server.data.tables.mappers
 
 import eu.torvian.chatbot.server.data.entities.UserEntity
 import eu.torvian.chatbot.server.data.tables.UsersTable
-import org.jetbrains.exposed.sql.ResultRow
+import org.jetbrains.exposed.v1.core.ResultRow
 import kotlin.time.Instant
 
 /**

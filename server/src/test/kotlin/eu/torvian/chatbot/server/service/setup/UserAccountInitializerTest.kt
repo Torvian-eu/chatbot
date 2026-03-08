@@ -4,6 +4,7 @@ import eu.torvian.chatbot.common.api.CommonRoles
 import eu.torvian.chatbot.common.api.CommonUserGroups
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.tables.*
@@ -11,10 +12,10 @@ import eu.torvian.chatbot.server.service.core.UserGroupService
 import eu.torvian.chatbot.server.testutils.data.Table
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
 import eu.torvian.chatbot.server.testutils.koin.defaultTestContainer
-import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import kotlinx.coroutines.test.runTest
-import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -97,7 +98,11 @@ class UserAccountInitializerTest {
         val users = userDao.getAllUsers()
         assertEquals(1, users.size, "Expected exactly one user")
         val adminUser = users.first()
-        assertEquals(UserAccountInitializer.DEFAULT_ADMIN_USERNAME, adminUser.username, "Expected default admin username")
+        assertEquals(
+            UserAccountInitializer.DEFAULT_ADMIN_USERNAME,
+            adminUser.username,
+            "Expected default admin username"
+        )
         assertNotNull(adminUser.passwordHash, "Expected non-null password hash")
         assertNotNull(adminUser.createdAt, "Expected non-null createdAt")
         assertNotNull(adminUser.updatedAt, "Expected non-null updatedAt")

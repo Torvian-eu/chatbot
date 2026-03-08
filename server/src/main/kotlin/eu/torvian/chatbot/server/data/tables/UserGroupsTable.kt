@@ -1,6 +1,8 @@
 package eu.torvian.chatbot.server.data.tables
 
-import org.jetbrains.exposed.dao.id.LongIdTable
+import eu.torvian.chatbot.server.data.tables.UserGroupsTable.description
+import eu.torvian.chatbot.server.data.tables.UserGroupsTable.name
+import org.jetbrains.exposed.v1.core.dao.id.LongIdTable
 
 /**
  * Exposed table definition for user-defined groups (e.g., 'Team A', 'All Users').

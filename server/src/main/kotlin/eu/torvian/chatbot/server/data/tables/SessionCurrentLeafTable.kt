@@ -1,7 +1,9 @@
 package eu.torvian.chatbot.server.data.tables
 
-import org.jetbrains.exposed.sql.ReferenceOption
-import org.jetbrains.exposed.sql.Table
+import eu.torvian.chatbot.server.data.tables.SessionCurrentLeafTable.messageId
+import eu.torvian.chatbot.server.data.tables.SessionCurrentLeafTable.sessionId
+import org.jetbrains.exposed.v1.core.ReferenceOption
+import org.jetbrains.exposed.v1.core.Table
 
 /**
  * Exposed table definition for session current leaf message links.
@@ -19,6 +21,7 @@ object SessionCurrentLeafTable : Table("session_current_leaf") {
         ChatSessionTable,
         onDelete = ReferenceOption.CASCADE // If session deleted, link is deleted
     )
+
     // This UNIQUE constraint ensures a message can appear at most once
     val messageId = reference(
         "message_id",

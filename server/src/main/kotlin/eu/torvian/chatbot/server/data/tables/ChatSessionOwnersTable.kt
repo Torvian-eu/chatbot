@@ -1,7 +1,9 @@
 package eu.torvian.chatbot.server.data.tables
 
-import org.jetbrains.exposed.sql.ReferenceOption
-import org.jetbrains.exposed.sql.Table
+import eu.torvian.chatbot.server.data.tables.ChatSessionOwnersTable.sessionId
+import eu.torvian.chatbot.server.data.tables.ChatSessionOwnersTable.userId
+import org.jetbrains.exposed.v1.core.ReferenceOption
+import org.jetbrains.exposed.v1.core.Table
 
 /**
  * Links a chat session to its owning user.

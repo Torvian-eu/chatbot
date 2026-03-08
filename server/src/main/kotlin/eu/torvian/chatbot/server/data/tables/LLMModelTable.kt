@@ -2,8 +2,14 @@ package eu.torvian.chatbot.server.data.tables
 
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType
-import org.jetbrains.exposed.dao.id.LongIdTable
-import org.jetbrains.exposed.sql.ReferenceOption
+import eu.torvian.chatbot.server.data.tables.LLMModelTable.active
+import eu.torvian.chatbot.server.data.tables.LLMModelTable.capabilities
+import eu.torvian.chatbot.server.data.tables.LLMModelTable.displayName
+import eu.torvian.chatbot.server.data.tables.LLMModelTable.name
+import eu.torvian.chatbot.server.data.tables.LLMModelTable.providerId
+import eu.torvian.chatbot.server.data.tables.LLMModelTable.type
+import org.jetbrains.exposed.v1.core.ReferenceOption
+import org.jetbrains.exposed.v1.core.dao.id.LongIdTable
 
 /**
  * Exposed table definition for LLM model configurations.
