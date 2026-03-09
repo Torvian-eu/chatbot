@@ -50,7 +50,7 @@ class EncryptedSecretLocalDaoImpl(
                 id = row.id,
                 encryptedSecret = row.encryptedSecret,
                 encryptedDEK = row.encryptedDEK,
-                keyVersion = row.keyVersion.toInt(),
+                keyVersion = row.keyVersion,
                 createdAt = row.createdAt,
                 updatedAt = row.updatedAt
             )
@@ -87,7 +87,7 @@ class EncryptedSecretLocalDaoImpl(
                             id = row.id,
                             encryptedSecret = row.encryptedSecret,
                             encryptedDEK = row.encryptedDEK,
-                            keyVersion = row.keyVersion.toInt(),
+                            keyVersion = row.keyVersion,
                             createdAt = row.createdAt,
                             updatedAt = row.updatedAt
                         )
@@ -120,7 +120,7 @@ class EncryptedSecretLocalDaoImpl(
                     id = row.id,
                     encryptedSecret = row.encryptedSecret,
                     encryptedDEK = row.encryptedDEK,
-                    keyVersion = row.keyVersion.toInt(),
+                    keyVersion = row.keyVersion,
                     createdAt = row.createdAt,
                     updatedAt = row.updatedAt
                 )
