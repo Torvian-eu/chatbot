@@ -15,4 +15,7 @@
 - Pretty print JSON in tool calls and tool results.
 - Add better support for parallel tool calls (when a model calls multiple tools in a single response). Currently they are executed sequentially.
 - Remove LLMProviderType.OPENROUTER because OpenRouter uses the same API as OpenAI. Also remove LLMProviderType.CUSTOM. And LLMProviderType.ANTHROPIC should be marked as not supported yet in the UI.
+- Add database migration support for server module.
+- The material icons libraries are now deprecated. Replace them with individual icon downloads. See TODO in app/build.gradle.kts. Other docs: https://kotlinlang.org/docs/multiplatform/compose-multiplatform-resources-usage.html#icons, https://developer.android.com/develop/ui/compose/graphics/images/material, https://developers.google.com/fonts/docs/material_icons#rtl_icons_on_android
+- Fix support for WASM and Android platforms.
  
