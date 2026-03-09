@@ -19,10 +19,10 @@ compose = "1.10.2"           # Compose Multiplatform version
 material3 = "1.9.0"          # Material 3 version
 androidx-lifecycle = "2.9.6" # For Compose Multiplatform ViewModel
 androidx-navigation = "2.9.2" # For Compose Multiplatform Navigation
-kotlin-buildlogic = "1.9.24" # Kotlin version for build-logic compatibility
+kotlin-buildlogic = "2.3.0"  # Kotlin version for build-logic compatibility
 compose-hot-reload = "1.0.0" # Compose Hot Reload version
 androidx-activity = "1.12.4" # For Compose Multiplatform Activity
-android-gradle-plugin = "8.10.1" # Android Gradle Plugin version
+android-gradle-plugin = "8.12.3" # Android Gradle Plugin version
 android-compileSdk = "36"    # The API level to compile against: https://developer.android.com/studio/releases/platforms
 android-minSdk = "26"        # The minimum Android version supported
 android-targetSdk = "36"     # The target Android version for testing
@@ -154,7 +154,6 @@ androidx-activity-compose = { module = "androidx.activity:activity-compose", ver
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 ktor-server-test-host = { module = "io.ktor:ktor-server-test-host", version.ref = "ktor" }
-commons-codec = { module = "commons-codec:commons-codec", version = "1.15" } # Security patch WS-2019-0379
 mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
 
 # MCP Kotlin SDK
@@ -180,7 +179,6 @@ ktor-server = [
 
 ktor-server-test = [
     "ktor-server-test-host",
-    "commons-codec"
 ]
 
 # Ktor Client: Includes dependencies needed for HTTP communication
