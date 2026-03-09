@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.server.data.dao.exposed
 
-import org.jetbrains.exposed.exceptions.ExposedSQLException
+import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
 
 /**
  * Extension function to check if an [ExposedSQLException] represents a unique constraint violation.
@@ -23,17 +23,14 @@ fun ExposedSQLException.isUniqueConstraintViolation(): Boolean {
     val messageCheck = this.message?.contains("UNIQUE constraint failed", ignoreCase = true) == true ||
             this.cause?.message?.contains("UNIQUE constraint failed", ignoreCase = true) == true
 
-    if (messageCheck) {
-        return true
-    }
+    return messageCheck
 
     // Add other database-specific checks here if necessary, e.g., based on error codes
     // For example, for MySQL:
     // if (this.errorCode == 1062) {
     //     return true
     // }
-
-    return false // Not identified as a unique constraint violation by our checks
+    // Not identified as a unique constraint violation by our checks
 }
 
 /**
@@ -57,15 +54,12 @@ fun ExposedSQLException.isForeignKeyViolation(): Boolean {
     val messageCheck = this.message?.contains("FOREIGN KEY constraint failed", ignoreCase = true) == true ||
             this.cause?.message?.contains("FOREIGN KEY constraint failed", ignoreCase = true) == true
 
-    if (messageCheck) {
-        return true
-    }
+    return messageCheck
 
     // Add other database-specific checks here if necessary, e.g., based on error codes
     // For example, for MySQL:
     // if (this.errorCode == 1452) {
     //     return true
     // }
-
-    return false // Not identified as a foreign key violation by our checks
+    // Not identified as a foreign key violation by our checks
 }

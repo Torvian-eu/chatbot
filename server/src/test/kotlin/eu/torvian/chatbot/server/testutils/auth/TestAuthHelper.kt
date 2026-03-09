@@ -9,7 +9,7 @@ import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
 import eu.torvian.chatbot.server.testutils.data.TestDefaults
 import io.ktor.client.request.*
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 /**
  * Helper class for setting up authentication in tests.

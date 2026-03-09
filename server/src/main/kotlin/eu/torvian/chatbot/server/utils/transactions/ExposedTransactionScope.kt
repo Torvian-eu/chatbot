@@ -6,8 +6,8 @@ import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.transactions.suspendTransaction
 import kotlin.uuid.ExperimentalUuidApi
 
 /**
@@ -17,7 +17,7 @@ import kotlin.uuid.ExperimentalUuidApi
  * and prevents problematic nesting by checking for a [TransactionMarker] in the coroutine context.
  *
  * If a transaction is already active (marked by [TransactionMarker]), the block is executed directly
- * within that context. Otherwise, a new [newSuspendedTransaction] is started on the IO dispatcher,
+ * within that context. Otherwise, a new [suspendTransaction] is started on the IO dispatcher,
  * and the [TransactionMarker] is added to the context for subsequent checks within the transaction.
  *
  * @param db The target [Database] to run the transaction on.
@@ -33,8 +33,8 @@ class ExposedTransactionScope(private val db: Database) : TransactionScope {
             // Not in a transaction managed by this scope; create a new one.
             // Add TransactionMarker to the new context.
             withContext(Dispatchers.IO + TransactionMarker()) {
-                // newSuspendedTransaction handles setting up the Exposed transaction in this CoroutineContext
-                newSuspendedTransaction(context = coroutineContext, db = db) {
+                // suspendTransaction handles setting up the Exposed transaction in this CoroutineContext
+                suspendTransaction(db = db) {
                     val result = block() // Execute the suspending block within the transaction
 
                     // If the result is Either.Left, rollback the transaction

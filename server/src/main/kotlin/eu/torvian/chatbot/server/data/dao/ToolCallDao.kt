@@ -7,7 +7,7 @@ import eu.torvian.chatbot.server.data.dao.error.DeleteToolCallError
 import eu.torvian.chatbot.server.data.dao.error.InsertToolCallError
 import eu.torvian.chatbot.server.data.dao.error.ToolCallError
 import eu.torvian.chatbot.server.data.dao.error.UpdateToolCallError
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 /**
  * Data Access Object for ToolCall entities.

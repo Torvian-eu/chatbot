@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.app.utils.platform
 
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 /**
  * Information about a selected file from the file picker.

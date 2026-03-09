@@ -4,16 +4,21 @@ import arrow.core.Either
 import arrow.core.raise.catch
 import arrow.core.raise.either
 import arrow.core.raise.ensure
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.server.data.dao.UserRoleAssignmentDao
 import eu.torvian.chatbot.server.data.dao.error.UserRoleAssignmentError
 import eu.torvian.chatbot.server.data.entities.RoleEntity
 import eu.torvian.chatbot.server.data.tables.RolesTable
 import eu.torvian.chatbot.server.data.tables.UserRoleAssignmentsTable
 import eu.torvian.chatbot.server.data.tables.mappers.toRoleEntity
-import eu.torvian.chatbot.common.misc.transaction.TransactionScope
-import org.jetbrains.exposed.exceptions.ExposedSQLException
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.v1.core.JoinType
+import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.selectAll
 
 /**
  * Exposed implementation of the [UserRoleAssignmentDao].
@@ -62,9 +67,11 @@ class UserRoleAssignmentDaoExposed(
                             raise(UserRoleAssignmentError.AssignmentAlreadyExists(userId, roleId))
 
                         e.isForeignKeyViolation() ->
-                            raise(UserRoleAssignmentError.ForeignKeyViolation(
-                                "User ID $userId or Role ID $roleId does not exist"
-                            ))
+                            raise(
+                                UserRoleAssignmentError.ForeignKeyViolation(
+                                    "User ID $userId or Role ID $roleId does not exist"
+                                )
+                            )
 
                         else -> throw e
                     }
@@ -80,7 +87,7 @@ class UserRoleAssignmentDaoExposed(
             either {
                 val deletedCount = UserRoleAssignmentsTable.deleteWhere {
                     (UserRoleAssignmentsTable.userId eq userId) and
-                    (UserRoleAssignmentsTable.roleId eq roleId)
+                            (UserRoleAssignmentsTable.roleId eq roleId)
                 }
                 ensure(deletedCount != 0) {
                     UserRoleAssignmentError.AssignmentNotFound(userId, roleId)
@@ -94,7 +101,7 @@ class UserRoleAssignmentDaoExposed(
                 .selectAll()
                 .where {
                     (UserRoleAssignmentsTable.userId eq userId) and
-                    (UserRoleAssignmentsTable.roleId eq roleId)
+                            (UserRoleAssignmentsTable.roleId eq roleId)
                 }
                 .singleOrNull() != null
         }

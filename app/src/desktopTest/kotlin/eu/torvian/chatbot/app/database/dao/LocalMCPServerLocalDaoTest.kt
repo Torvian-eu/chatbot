@@ -21,10 +21,10 @@ import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
-import kotlinx.datetime.Instant
 import java.util.*
 import kotlin.test.*
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 /**
  * Tests for LocalMCPServerLocalDaoImpl.

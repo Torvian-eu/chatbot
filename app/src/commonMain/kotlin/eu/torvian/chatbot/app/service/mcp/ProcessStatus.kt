@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.app.service.mcp
 
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 /**
  * Represents the current status of an MCP server process.

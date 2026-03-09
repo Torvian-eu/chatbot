@@ -5,14 +5,13 @@ import eu.torvian.chatbot.app.repository.*
 import eu.torvian.chatbot.app.repository.impl.*
 import eu.torvian.chatbot.app.service.api.*
 import eu.torvian.chatbot.app.service.api.ktor.*
-import eu.torvian.chatbot.app.service.api.ktor.KtorToolApiClient
 import eu.torvian.chatbot.app.service.auth.createAuthenticatedHttpClient
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.service.security.CertificateTrustService
 import eu.torvian.chatbot.app.viewmodel.ModelConfigViewModel
+import eu.torvian.chatbot.app.viewmodel.ModelSettingsViewModel
 import eu.torvian.chatbot.app.viewmodel.ProviderConfigViewModel
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
-import eu.torvian.chatbot.app.viewmodel.ModelSettingsViewModel
 import eu.torvian.chatbot.app.viewmodel.admin.UserGroupManagementViewModel
 import eu.torvian.chatbot.app.viewmodel.admin.UserManagementViewModel
 import eu.torvian.chatbot.app.viewmodel.auth.AuthViewModel
@@ -28,13 +27,13 @@ import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import io.ktor.client.*
 import io.ktor.client.plugins.logging.*
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.datetime.Clock
 import kotlinx.serialization.json.Json
 import org.koin.core.module.Module
 import org.koin.core.module.dsl.viewModel
 import org.koin.core.parameter.parametersOf
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
+import kotlin.time.Clock
 
 /**
  * Koin module for providing dependencies related to the application's frontend.
@@ -243,7 +242,7 @@ fun appModule(config: AppConfiguration): Module = module {
     }
 
     factory<SendMessageUseCase> { (chatState: ChatState) ->
-        SendMessageUseCase(get<SessionRepository>(), get(),chatState, get())
+        SendMessageUseCase(get<SessionRepository>(), get(), chatState, get())
     }
 
     factory<EditMessageUseCase> { (chatState: ChatState) ->
@@ -302,13 +301,39 @@ fun appModule(config: AppConfiguration): Module = module {
         AuthViewModel(get<AuthRepository>(), get<NotificationService>(), normalScope)
     }
     viewModel { SessionListViewModel(get<SessionRepository>(), get<GroupRepository>(), get<EventBus>(), get()) }
-    viewModel { ProviderConfigViewModel(get<ProviderRepository>(), get<UserGroupRepository>(), get<NotificationService>()) }
-    viewModel { ModelConfigViewModel(get<ModelRepository>(), get<ProviderRepository>(), get<UserGroupRepository>(), get<NotificationService>()) }
-    viewModel { ModelSettingsViewModel(get<ModelSettingsRepository>(), get<ModelRepository>(), get<UserGroupRepository>(), get<NotificationService>()) }
+    viewModel {
+        ProviderConfigViewModel(
+            get<ProviderRepository>(),
+            get<UserGroupRepository>(),
+            get<NotificationService>()
+        )
+    }
+    viewModel {
+        ModelConfigViewModel(
+            get<ModelRepository>(),
+            get<ProviderRepository>(),
+            get<UserGroupRepository>(),
+            get<NotificationService>()
+        )
+    }
+    viewModel {
+        ModelSettingsViewModel(
+            get<ModelSettingsRepository>(),
+            get<ModelRepository>(),
+            get<UserGroupRepository>(),
+            get<NotificationService>()
+        )
+    }
     viewModel {
         val scopeProvider = get<CoroutineScopeProvider>()
         val normalScope = scopeProvider.createNormalScope()
         UserManagementViewModel(get<UserRepository>(), get<RoleRepository>(), get<NotificationService>(), normalScope)
     }
-    viewModel { UserGroupManagementViewModel(get<UserGroupRepository>(), get<UserRepository>(), get<NotificationService>()) }
+    viewModel {
+        UserGroupManagementViewModel(
+            get<UserGroupRepository>(),
+            get<UserRepository>(),
+            get<NotificationService>()
+        )
+    }
 }

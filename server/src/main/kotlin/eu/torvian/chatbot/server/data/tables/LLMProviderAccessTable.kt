@@ -1,7 +1,10 @@
 package eu.torvian.chatbot.server.data.tables
 
-import org.jetbrains.exposed.sql.ReferenceOption
-import org.jetbrains.exposed.sql.Table
+import eu.torvian.chatbot.server.data.tables.LLMProviderAccessTable.accessMode
+import eu.torvian.chatbot.server.data.tables.LLMProviderAccessTable.providerId
+import eu.torvian.chatbot.server.data.tables.LLMProviderAccessTable.userGroupId
+import org.jetbrains.exposed.v1.core.ReferenceOption
+import org.jetbrains.exposed.v1.core.Table
 
 /**
  * Defines which user groups (including 'All Users') can access an LLM provider.

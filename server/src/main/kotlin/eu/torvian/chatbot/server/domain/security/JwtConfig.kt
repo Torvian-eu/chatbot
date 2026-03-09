@@ -3,8 +3,8 @@ package eu.torvian.chatbot.server.domain.security
 import com.auth0.jwt.JWT
 import com.auth0.jwt.JWTVerifier
 import com.auth0.jwt.algorithms.Algorithm
-import kotlinx.datetime.Instant
 import java.util.*
+import kotlin.time.Instant
 
 /**
  * Configuration class for JWT token generation and validation.
@@ -20,7 +20,7 @@ import java.util.*
  */
 data class JwtConfig(
     val issuer: String = "chatbot-server",
-    val audience: String = "chatbot-users", 
+    val audience: String = "chatbot-users",
     val realm: String = "chatbot-realm",
     val secret: String,
     val tokenExpirationMs: Long = 24 * 60 * 60 * 1000L, // 24 hours
@@ -71,7 +71,7 @@ data class JwtConfig(
      * @return A signed JWT refresh token string
      */
     fun generateRefreshToken(
-        userId: Long, 
+        userId: Long,
         sessionId: Long,
         currentTime: Long = System.currentTimeMillis()
     ): String {

@@ -1,8 +1,8 @@
 package eu.torvian.chatbot.app.testutils.misc
 
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
+import kotlin.time.Clock
 import kotlin.time.Duration
+import kotlin.time.Instant
 
 /**
  * Test clock implementation for controlling time in tests.

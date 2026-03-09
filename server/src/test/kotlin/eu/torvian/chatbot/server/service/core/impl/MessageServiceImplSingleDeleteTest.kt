@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.service.core.impl
 
 import arrow.core.left
 import arrow.core.right
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.server.data.dao.MessageDao
@@ -9,18 +10,17 @@ import eu.torvian.chatbot.server.data.dao.SessionDao
 import eu.torvian.chatbot.server.data.dao.error.MessageError
 import eu.torvian.chatbot.server.data.dao.error.SessionError
 import eu.torvian.chatbot.server.service.core.error.message.DeleteMessageError
-import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import io.mockk.clearMocks
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
-import kotlinx.datetime.Instant
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.time.Instant
 
 /**
  * Tests for deleteMessage (non-recursive single delete) in [MessageServiceImpl].
@@ -133,8 +133,18 @@ class MessageServiceImplSingleDeleteTest {
         val parentId = 1L
         val leafId = 2L
 
-        val parent = testMessage1.copy(id = parentId, sessionId = sessionId, parentMessageId = null, childrenMessageIds = listOf(leafId))
-        val leaf = testMessage1.copy(id = leafId, sessionId = sessionId, parentMessageId = parentId, childrenMessageIds = emptyList())
+        val parent = testMessage1.copy(
+            id = parentId,
+            sessionId = sessionId,
+            parentMessageId = null,
+            childrenMessageIds = listOf(leafId)
+        )
+        val leaf = testMessage1.copy(
+            id = leafId,
+            sessionId = sessionId,
+            parentMessageId = parentId,
+            childrenMessageIds = emptyList()
+        )
         val session = testSession.copy(id = sessionId, currentLeafMessageId = leafId)
         val allMessages = listOf(parent, leaf)
 
@@ -158,9 +168,11 @@ class MessageServiceImplSingleDeleteTest {
         val a = 2L
         val b = 3L
 
-        val root = testMessage1.copy(id = r, sessionId = sessionId, parentMessageId = null, childrenMessageIds = listOf(a))
+        val root =
+            testMessage1.copy(id = r, sessionId = sessionId, parentMessageId = null, childrenMessageIds = listOf(a))
         val anc = testMessage1.copy(id = a, sessionId = sessionId, parentMessageId = r, childrenMessageIds = listOf(b))
-        val leaf = testMessage1.copy(id = b, sessionId = sessionId, parentMessageId = a, childrenMessageIds = emptyList())
+        val leaf =
+            testMessage1.copy(id = b, sessionId = sessionId, parentMessageId = a, childrenMessageIds = emptyList())
 
         val session = testSession.copy(id = sessionId, currentLeafMessageId = b)
         val allMessages = listOf(root, anc, leaf)
@@ -188,11 +200,16 @@ class MessageServiceImplSingleDeleteTest {
         val x = 4L
         val l2 = 5L
 
-        val root = testMessage1.copy(id = r, sessionId = sessionId, parentMessageId = null, childrenMessageIds = listOf(a, x))
-        val branchA = testMessage1.copy(id = a, sessionId = sessionId, parentMessageId = r, childrenMessageIds = listOf(l1))
-        val leaf1 = testMessage1.copy(id = l1, sessionId = sessionId, parentMessageId = a, childrenMessageIds = emptyList())
-        val branchX = testMessage1.copy(id = x, sessionId = sessionId, parentMessageId = r, childrenMessageIds = listOf(l2))
-        val leaf2 = testMessage1.copy(id = l2, sessionId = sessionId, parentMessageId = x, childrenMessageIds = emptyList())
+        val root =
+            testMessage1.copy(id = r, sessionId = sessionId, parentMessageId = null, childrenMessageIds = listOf(a, x))
+        val branchA =
+            testMessage1.copy(id = a, sessionId = sessionId, parentMessageId = r, childrenMessageIds = listOf(l1))
+        val leaf1 =
+            testMessage1.copy(id = l1, sessionId = sessionId, parentMessageId = a, childrenMessageIds = emptyList())
+        val branchX =
+            testMessage1.copy(id = x, sessionId = sessionId, parentMessageId = r, childrenMessageIds = listOf(l2))
+        val leaf2 =
+            testMessage1.copy(id = l2, sessionId = sessionId, parentMessageId = x, childrenMessageIds = emptyList())
 
         val session = testSession.copy(id = sessionId, currentLeafMessageId = l2)
         val allMessages = listOf(root, branchA, leaf1, branchX, leaf2)
@@ -235,9 +252,11 @@ class MessageServiceImplSingleDeleteTest {
         val r = 1L
         val a = 2L
         val b = 3L
-        val root = testMessage1.copy(id = r, sessionId = sessionId, parentMessageId = null, childrenMessageIds = listOf(a))
+        val root =
+            testMessage1.copy(id = r, sessionId = sessionId, parentMessageId = null, childrenMessageIds = listOf(a))
         val anc = testMessage1.copy(id = a, sessionId = sessionId, parentMessageId = r, childrenMessageIds = listOf(b))
-        val leaf = testMessage1.copy(id = b, sessionId = sessionId, parentMessageId = a, childrenMessageIds = emptyList())
+        val leaf =
+            testMessage1.copy(id = b, sessionId = sessionId, parentMessageId = a, childrenMessageIds = emptyList())
         val session = testSession.copy(id = sessionId, currentLeafMessageId = b)
         val all = listOf(root, anc, leaf)
 
@@ -245,7 +264,8 @@ class MessageServiceImplSingleDeleteTest {
         coEvery { sessionDao.getSessionById(sessionId) } returns session.right()
         coEvery { messageDao.getMessagesBySessionId(sessionId) } returns all
         coEvery { messageDao.deleteMessage(a) } returns Unit.right()
-        coEvery { sessionDao.updateSessionLeafMessageId(sessionId, b) } returns SessionError.SessionNotFound(sessionId).left()
+        coEvery { sessionDao.updateSessionLeafMessageId(sessionId, b) } returns SessionError.SessionNotFound(sessionId)
+            .left()
 
         val result = messageService.deleteMessage(a)
 

@@ -5,6 +5,7 @@ import arrow.core.left
 import arrow.core.raise.catch
 import arrow.core.raise.either
 import arrow.core.right
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 import eu.torvian.chatbot.server.data.dao.SessionOwnershipDao
 import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
@@ -12,10 +13,14 @@ import eu.torvian.chatbot.server.data.dao.error.SetOwnerError
 import eu.torvian.chatbot.server.data.tables.ChatGroupTable
 import eu.torvian.chatbot.server.data.tables.ChatSessionOwnersTable
 import eu.torvian.chatbot.server.data.tables.ChatSessionTable
-import eu.torvian.chatbot.common.misc.transaction.TransactionScope
-import kotlinx.datetime.Instant
-import org.jetbrains.exposed.exceptions.ExposedSQLException
-import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.v1.core.JoinType
+import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.selectAll
+import kotlin.time.Instant
 
 /**
  * Exposed implementation of the [SessionOwnershipDao].
@@ -64,10 +69,12 @@ class SessionOwnershipDaoExposed(
                     }
                 }) { e: ExposedSQLException ->
                     when {
-                        e.isForeignKeyViolation() -> 
+                        e.isForeignKeyViolation() ->
                             raise(SetOwnerError.ForeignKeyViolation(sessionId.toString(), userId))
-                        e.isUniqueConstraintViolation() -> 
+
+                        e.isUniqueConstraintViolation() ->
                             raise(SetOwnerError.AlreadyOwned)
+
                         else -> throw e
                     }
                 }

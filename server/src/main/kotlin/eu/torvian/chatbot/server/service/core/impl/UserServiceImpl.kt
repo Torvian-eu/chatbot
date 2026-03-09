@@ -21,9 +21,9 @@ import eu.torvian.chatbot.server.service.core.UserService
 import eu.torvian.chatbot.server.service.core.error.auth.*
 import eu.torvian.chatbot.server.service.security.PasswordService
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
-import kotlinx.datetime.Clock
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
+import kotlin.time.Clock
 
 /**
  * Implementation of [UserService] with secure user registration and admin operations.

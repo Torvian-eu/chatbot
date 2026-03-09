@@ -1,7 +1,8 @@
 package eu.torvian.chatbot.server.testutils.koin
 
 import eu.torvian.chatbot.server.domain.config.DatabaseConfig
-import org.jetbrains.exposed.sql.Database
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
 import org.koin.core.scope.Scope
 import org.koin.core.scope.ScopeCallback
 import org.koin.dsl.module
@@ -33,13 +34,20 @@ fun testDatabaseModule() = module {
             dataSource.connection
         } else null
 
+        val database = Database.connect(dataSource)
+
         // Register cleanup for the persistent connection
         registerCallback(object : ScopeCallback {
             override fun onScopeClose(scope: Scope) {
+                // IMPORTANT: Unregister the TransactionManager for this database instance.
+                // This prevents state bleed and ensures proper cleanup of Exposed's
+                // internal static maps between parallel tests.
+                // It's crucial for correct isolation in concurrent test environments.
+                TransactionManager.closeAndUnregister(database)
                 persistentConnection?.close()
             }
         })
 
-        Database.connect(dataSource)
+        database
     }
 }

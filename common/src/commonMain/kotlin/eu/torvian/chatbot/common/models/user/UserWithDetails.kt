@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.common.models.user
 
-import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
+import kotlin.time.Instant
 
 /**
  * Rich user projection with assigned roles and group memberships.

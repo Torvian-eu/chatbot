@@ -4,7 +4,7 @@ import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.server.data.ModelSettingsEntity
 import eu.torvian.chatbot.server.data.tables.ModelSettingsTable
 import eu.torvian.chatbot.server.data.toDomain
-import org.jetbrains.exposed.sql.ResultRow
+import org.jetbrains.exposed.v1.core.ResultRow
 
 /**
  * Maps an Exposed ResultRow from ModelSettings table to a ModelSettings DTO.

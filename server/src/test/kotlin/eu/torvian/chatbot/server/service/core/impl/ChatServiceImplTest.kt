@@ -3,9 +3,10 @@ package eu.torvian.chatbot.server.service.core.impl
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
-import eu.torvian.chatbot.common.models.core.MessageInsertPosition
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
+import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.llm.*
 import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
@@ -19,23 +20,22 @@ import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageEr
 import eu.torvian.chatbot.server.service.llm.LLMApiClient
 import eu.torvian.chatbot.server.service.llm.LLMCompletionError
 import eu.torvian.chatbot.server.service.llm.LLMCompletionResult
+import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutor
 import eu.torvian.chatbot.server.service.security.CredentialManager
 import eu.torvian.chatbot.server.service.tool.ToolExecutorFactory
-import eu.torvian.chatbot.common.misc.transaction.TransactionScope
-import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutor
 import io.mockk.clearMocks
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.runTest
-import kotlinx.datetime.Instant
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlin.time.Instant
 
 /**
  * Unit tests for [ChatServiceImpl].
@@ -181,7 +181,7 @@ class ChatServiceImplTest {
             modelSettingsService, llmProviderService, credentialManager, transactionScope, localMcpExecutor,
             userToolApprovalPreferenceDao
         )
-        
+
         // Mock the transaction scope to execute blocks directly
         coEvery { transactionScope.transaction(any<suspend () -> Any>()) } coAnswers {
             val block = firstArg<suspend () -> Any>()
@@ -199,28 +199,29 @@ class ChatServiceImplTest {
             userToolApprovalPreferenceDao
         )
     }
-    
+
     // --- validateProcessNewMessageRequest Tests ---
 
     @Test
-    fun `validateProcessNewMessageRequest should return ModelConfigurationError when content is null and parentMessageId is null`() = runTest {
-        // Arrange
-        val sessionId = 1L
+    fun `validateProcessNewMessageRequest should return ModelConfigurationError when content is null and parentMessageId is null`() =
+        runTest {
+            // Arrange
+            val sessionId = 1L
 
-        // Act - Branch & Continue mode requires parentMessageId when content is null
-        val result = chatService.validateProcessNewMessageRequest(sessionId, null, null, false)
+            // Act - Branch & Continue mode requires parentMessageId when content is null
+            val result = chatService.validateProcessNewMessageRequest(sessionId, null, null, false)
 
-        // Assert
-        assertTrue(result.isLeft(), "Should return Left when content is null and parentMessageId is null")
-        val error = result.leftOrNull()
-        assertNotNull(error, "Error should not be null")
-        assertTrue(error is ValidateNewMessageError.ModelConfigurationError, "Should be ModelConfigurationError")
-        assertTrue(
-            (error as ValidateNewMessageError.ModelConfigurationError).message.contains("Branch & Continue"),
-            "Error message should mention Branch & Continue mode"
-        )
-        coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-    }
+            // Assert
+            assertTrue(result.isLeft(), "Should return Left when content is null and parentMessageId is null")
+            val error = result.leftOrNull()
+            assertNotNull(error, "Error should not be null")
+            assertTrue(error is ValidateNewMessageError.ModelConfigurationError, "Should be ModelConfigurationError")
+            assertTrue(
+                (error as ValidateNewMessageError.ModelConfigurationError).message.contains("Branch & Continue"),
+                "Error message should mention Branch & Continue mode"
+            )
+            coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+        }
 
     @Test
     fun `validateProcessNewMessageRequest should return SessionNotFound when session does not exist`() = runTest {
@@ -400,7 +401,16 @@ class ChatServiceImplTest {
 
         // Act
         val events = mutableListOf<Either<ProcessNewMessageError, MessageEvent>>()
-        chatService.processNewMessage(1L, testSession, testLlmConfig, content, null, emptyList(), emptyFlow(), emptyFlow())
+        chatService.processNewMessage(
+            1L,
+            testSession,
+            testLlmConfig,
+            content,
+            null,
+            emptyList(),
+            emptyFlow(),
+            emptyFlow()
+        )
             .collect { event -> events.add(event) }
 
         // Assert
@@ -500,7 +510,16 @@ class ChatServiceImplTest {
 
         // Act
         val events = mutableListOf<Either<ProcessNewMessageError, MessageEvent>>()
-        chatService.processNewMessage(1L, testSession, testLlmConfig, content, parentMessageId, emptyList(), emptyFlow(), emptyFlow())
+        chatService.processNewMessage(
+            1L,
+            testSession,
+            testLlmConfig,
+            content,
+            parentMessageId,
+            emptyList(),
+            emptyFlow(),
+            emptyFlow()
+        )
             .collect { event -> events.add(event) }
 
         // Assert
@@ -509,14 +528,18 @@ class ChatServiceImplTest {
         // Check UserMessageSaved event
         val firstEvent = events[0].getOrNull()
         assertTrue(firstEvent is MessageEvent.UserMessageSaved, "First event should be UserMessageSaved")
-        assertEquals(parentMessageId, firstEvent.userMessage.parentMessageId,
-            "User message should have correct parent")
+        assertEquals(
+            parentMessageId, firstEvent.userMessage.parentMessageId,
+            "User message should have correct parent"
+        )
 
         // Check AssistantMessageSaved event
         val secondEvent = events[1].getOrNull()
         assertTrue(secondEvent is MessageEvent.AssistantMessageSaved, "Second event should be AssistantMessageSaved")
-        assertEquals(userMessage.id, secondEvent.assistantMessage.parentMessageId,
-            "Assistant message should be child of user message")
+        assertEquals(
+            userMessage.id, secondEvent.assistantMessage.parentMessageId,
+            "Assistant message should be child of user message"
+        )
 
         // Verify interactions
         coVerify(exactly = 1) {
@@ -567,7 +590,16 @@ class ChatServiceImplTest {
 
         // Act
         val events = mutableListOf<Either<ProcessNewMessageError, MessageEvent>>()
-        chatService.processNewMessage(1L, testSession, testLlmConfig, content, null, emptyList(), emptyFlow(), emptyFlow())
+        chatService.processNewMessage(
+            1L,
+            testSession,
+            testLlmConfig,
+            content,
+            null,
+            emptyList(),
+            emptyFlow(),
+            emptyFlow()
+        )
             .collect { event -> events.add(event) }
 
         // Assert

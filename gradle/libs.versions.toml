@@ -1,34 +1,35 @@
 [versions]
 javaVersion = "21"           # Java version
-kotlin = "2.2.0"             # Kotlin version
-ktor = "3.2.3"               # Ktor version
-exposed = "0.61.0"           # Exposed ORM version
-sqlite = "3.50.3.0"          # SQLite JDBC driver version
+kotlin = "2.3.10"            # Kotlin version
+ktor = "3.4.1"               # Ktor version
+exposed = "1.1.1"           # Exposed ORM version
+sqlite = "3.51.2.0"          # SQLite JDBC driver version
 coroutines = "1.10.2"        # Kotlin Coroutines version
-serialization = "1.9.0"      # Kotlin Serialization version
-datetime = "0.6.2"           # Kotlin DateTime version
-kotlinx-io = "0.8.0"         # KotlinX IO version
-log4j = "2.25.1"             # Log4j version
+serialization = "1.10.0"     # Kotlin Serialization version
+datetime = "0.7.1"           # Kotlin DateTime version
+kotlinx-io = "0.9.0"         # KotlinX IO version
+log4j = "2.25.3"             # Log4j version
 jbcrypt = "0.4"              # JBCrypt version
-bouncycastle = "1.81"        # BouncyCastle version
-koin = "4.1.0"               # Koin version
-typesafe-config = "1.4.4"    # Typesafe Config version
-mockk = "1.14.5"             # MockK version
-arrow = "2.1.2"              # Arrow version
-compose = "1.8.2"            # Compose Multiplatform version
-androidx-lifecycle = "2.9.1" # For Compose Multiplatform ViewModel
-androidx-navigation = "2.9.0-beta03" # For Compose Multiplatform Navigation
-kotlin-buildlogic = "1.9.24" # Kotlin version for build-logic compatibility
-compose-hot-reload = "1.0.0-beta04" # Compose Hot Reload version
-androidx-activity = "1.10.1" # For Compose Multiplatform Activity
-android-gradle-plugin = "8.10.0" # Android Gradle Plugin version
+bouncycastle = "1.83"        # BouncyCastle version
+koin = "4.1.1"               # Koin version
+typesafe-config = "1.4.6"    # Typesafe Config version
+mockk = "1.14.9"             # MockK version
+arrow = "2.2.2"              # Arrow version
+compose = "1.10.2"           # Compose Multiplatform version
+material3 = "1.9.0"          # Material 3 version
+androidx-lifecycle = "2.9.6" # For Compose Multiplatform ViewModel
+androidx-navigation = "2.9.2" # For Compose Multiplatform Navigation
+kotlin-buildlogic = "2.3.0"  # Kotlin version for build-logic compatibility
+compose-hot-reload = "1.0.0" # Compose Hot Reload version
+androidx-activity = "1.12.4" # For Compose Multiplatform Activity
+android-gradle-plugin = "8.12.3" # Android Gradle Plugin version
 android-compileSdk = "36"    # The API level to compile against: https://developer.android.com/studio/releases/platforms
 android-minSdk = "26"        # The minimum Android version supported
 android-targetSdk = "36"     # The target Android version for testing
 slf4j = "2.0.17"             # SLF4J version used for logging
 hikaricp = "7.0.2"           # HikariCP version for connection pooling
 sqldelight = "2.2.1"         # SQLDelight version for multiplatform database
-mcp-sdk = "0.8.4"            # MCP Kotlin SDK version
+mcp-sdk = "0.9.0"            # MCP Kotlin SDK version
 
 [libraries]
 # Kotlin
@@ -120,6 +121,15 @@ koin-compose-viewmodel-navigation = { module = "io.insert-koin:koin-compose-view
 arrow-core = { module = "io.arrow-kt:arrow-core", version.ref = "arrow" }
 arrow-fx-coroutines = { module = "io.arrow-kt:arrow-fx-coroutines", version.ref = "arrow" }
 
+# Compose Multiplatform
+compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "compose" }
+compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "compose" }
+compose-material3 = { module = "org.jetbrains.compose.material3:material3", version.ref = "material3" }
+compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "compose" }
+compose-components-resources = { module = "org.jetbrains.compose.components:components-resources", version.ref = "compose" }
+compose-uiToolingPreview = { module = "org.jetbrains.compose.ui:ui-tooling-preview", version.ref = "compose" }
+compose-uiTooling = { module = "org.jetbrains.compose.ui:ui-tooling", version.ref = "compose" }
+
 # AndroidX ViewModel for Kotlin Multiplatform
 androidx-lifecycle-viewmodel = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel", version.ref = "androidx-lifecycle" }
 
@@ -131,10 +141,6 @@ androidx-lifecycle-runtime-compose = { module = "org.jetbrains.androidx.lifecycl
 
 # AndroidX Navigation for Compose Multiplatform
 androidx-navigation-compose = { module = "org.jetbrains.androidx.navigation:navigation-compose", version.ref = "androidx-navigation" }
-
-# Additional Compose libraries
-compose-material-icons-core = { module = "androidx.compose.material:material-icons-core", version.ref = "compose" }
-compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended", version.ref = "compose" }
 
 # --- Desktop-specific dependencies ---
 # KotlinX Coroutines Swing for JVM Main Dispatcher
@@ -148,7 +154,6 @@ androidx-activity-compose = { module = "androidx.activity:activity-compose", ver
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 ktor-server-test-host = { module = "io.ktor:ktor-server-test-host", version.ref = "ktor" }
-commons-codec = { module = "commons-codec:commons-codec", version = "1.15" } # Security patch WS-2019-0379
 mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
 
 # MCP Kotlin SDK
@@ -174,7 +179,6 @@ ktor-server = [
 
 ktor-server-test = [
     "ktor-server-test-host",
-    "commons-codec"
 ]
 
 # Ktor Client: Includes dependencies needed for HTTP communication

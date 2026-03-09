@@ -16,9 +16,9 @@ import eu.torvian.chatbot.common.models.user.UserStatus
 import io.mockk.*
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.test.runTest
-import kotlinx.datetime.Clock
 import kotlin.test.*
 import eu.torvian.chatbot.app.service.auth.AccountData
+import kotlin.time.Clock
 
 /**
  * Unit tests for DefaultAuthRepository account management functionality.

@@ -151,6 +151,9 @@ Agent Skills are folders of instructions, scripts, and resources that agents can
 - The user should be able to retrieve a resource or prompt, if currently active for the chat session. (The MCP server will be contacted to retrieve the resource or prompt)
 - When at least one resource or prompt is active, the UI should indicate this by showing an icon button with badge (indicating the total number of active resources and prompts) underneath the chat input area. Clicking the icon should open a popup with a list of all active resources and prompts (with name, description and type). Clicking an item in the list should copy it's content to the chat input area, or, if the item requires arguments it should open a dialog to enter the arguments, and then copy the formatted resource or prompt to the chat input area.
 
+### Allow user to seamlessly switch between chat sessions while requests are in progress
+- The streaming process should continue running, allowing for parallel processing of multiple requests.
+
 ---
 
 ## Advanced features
@@ -198,12 +201,12 @@ Have multiple LLM's (or agent runs) solve the same task, and then have a final L
 ### Chatbot MCP server (which can be used as a local MCP server within the Chatbot app)
 - The API for the chatbot server application is quite big, and not all of it is needed for an MCP server. Still, the number of MCP functions will be quite large. So we need to add a second layer for the MCP server. For instance: a search function for MCP functions and a generic execute function which takes a function name and parameters. That way the MCP server would require only two functions: search and execute. Other ideas: "Code mode" as described by FastMCP: https://www.jlowin.dev/blog/fastmcp-3-1-code-mode, Cloudflare: https://blog.cloudflare.com/code-mode/, and Anthropic: https://www.anthropic.com/engineering/code-execution-with-mcp
 
-
 ### Sub-agents
 - Agents are responsible for a specific task. The main agent (or system agent) is responsible for managing the conversation and delegating tasks to the sub-agents. Sub-agents can be created on the fly, and have their own memory and tools. They can also be persisted, and loaded for future conversations.
 Open questions: 
 - How to persist sub-agent memory?
 - How to present sub-agents in the UI?
+- Using Chatbot MCP server we could allow the LLM (main agent) call the MCP server to create a new chat session, and send a message with a specially crafted prompt to that session. When the sub-agent in the new chat session completes it's task, it sends a message (with task result) to the main agent to let it know it's done. The main agent can then decide what to do with the result.
 
 ---
 

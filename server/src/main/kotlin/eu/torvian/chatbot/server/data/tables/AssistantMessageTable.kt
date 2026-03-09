@@ -1,7 +1,10 @@
 package eu.torvian.chatbot.server.data.tables
 
-import org.jetbrains.exposed.sql.ReferenceOption
-import org.jetbrains.exposed.sql.Table
+import eu.torvian.chatbot.server.data.tables.AssistantMessageTable.messageId
+import eu.torvian.chatbot.server.data.tables.AssistantMessageTable.modelId
+import eu.torvian.chatbot.server.data.tables.AssistantMessageTable.settingsId
+import org.jetbrains.exposed.v1.core.ReferenceOption
+import org.jetbrains.exposed.v1.core.Table
 
 /**
  * Exposed table definition for assistant-specific message data.

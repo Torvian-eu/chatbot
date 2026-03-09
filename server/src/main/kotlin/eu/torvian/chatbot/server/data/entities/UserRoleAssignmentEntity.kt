@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.server.data.entities
 
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 /**
  * Represents a row from the 'user_role_assignments' database table.

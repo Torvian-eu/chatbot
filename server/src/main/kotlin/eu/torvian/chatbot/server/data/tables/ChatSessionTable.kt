@@ -1,8 +1,14 @@
 package eu.torvian.chatbot.server.data.tables
 
 import eu.torvian.chatbot.server.data.entities.ChatSessionEntity
-import org.jetbrains.exposed.dao.id.LongIdTable
-import org.jetbrains.exposed.sql.ReferenceOption
+import eu.torvian.chatbot.server.data.tables.ChatSessionTable.createdAt
+import eu.torvian.chatbot.server.data.tables.ChatSessionTable.currentModelId
+import eu.torvian.chatbot.server.data.tables.ChatSessionTable.currentSettingsId
+import eu.torvian.chatbot.server.data.tables.ChatSessionTable.groupId
+import eu.torvian.chatbot.server.data.tables.ChatSessionTable.name
+import eu.torvian.chatbot.server.data.tables.ChatSessionTable.updatedAt
+import org.jetbrains.exposed.v1.core.ReferenceOption
+import org.jetbrains.exposed.v1.core.dao.id.LongIdTable
 
 /**
  * Exposed table definition for chat sessions.
@@ -21,7 +27,8 @@ object ChatSessionTable : LongIdTable("chat_sessions") {
     val updatedAt = long("updated_at").default(System.currentTimeMillis())
     val groupId = reference("group_id", ChatGroupTable, onDelete = ReferenceOption.SET_NULL).nullable()
     val currentModelId = reference("current_model_id", LLMModelTable, onDelete = ReferenceOption.SET_NULL).nullable()
-    val currentSettingsId = reference("current_settings_id", ModelSettingsTable, onDelete = ReferenceOption.SET_NULL).nullable()
+    val currentSettingsId =
+        reference("current_settings_id", ModelSettingsTable, onDelete = ReferenceOption.SET_NULL).nullable()
 
     // Add index for groupId to speed up grouped session queries (E6.S2)
     init {

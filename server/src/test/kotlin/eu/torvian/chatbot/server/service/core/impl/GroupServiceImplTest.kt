@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.service.core.impl
 
 import arrow.core.left
 import arrow.core.right
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.core.ChatGroup
 import eu.torvian.chatbot.server.data.dao.GroupDao
 import eu.torvian.chatbot.server.data.dao.GroupOwnershipDao
@@ -10,16 +11,15 @@ import eu.torvian.chatbot.server.data.dao.error.GroupError
 import eu.torvian.chatbot.server.service.core.error.group.CreateGroupError
 import eu.torvian.chatbot.server.service.core.error.group.DeleteGroupError
 import eu.torvian.chatbot.server.service.core.error.group.RenameGroupError
-import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import io.mockk.*
 import kotlinx.coroutines.test.runTest
-import kotlinx.datetime.Instant
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlin.time.Instant
 
 /**
  * Unit tests for [GroupServiceImpl].

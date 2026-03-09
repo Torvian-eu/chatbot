@@ -5,8 +5,8 @@ import eu.torvian.chatbot.server.data.tables.UserToolApprovalPreferencesTable.co
 import eu.torvian.chatbot.server.data.tables.UserToolApprovalPreferencesTable.denialReason
 import eu.torvian.chatbot.server.data.tables.UserToolApprovalPreferencesTable.toolDefinitionId
 import eu.torvian.chatbot.server.data.tables.UserToolApprovalPreferencesTable.userId
-import org.jetbrains.exposed.sql.ReferenceOption
-import org.jetbrains.exposed.sql.Table
+import org.jetbrains.exposed.v1.core.ReferenceOption
+import org.jetbrains.exposed.v1.core.Table
 
 /**
  * Defines user-specific preferences for automatic tool call approval or denial.

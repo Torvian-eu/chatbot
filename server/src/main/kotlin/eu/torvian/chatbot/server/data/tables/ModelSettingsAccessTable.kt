@@ -1,7 +1,10 @@
 package eu.torvian.chatbot.server.data.tables
 
-import org.jetbrains.exposed.sql.ReferenceOption
-import org.jetbrains.exposed.sql.Table
+import eu.torvian.chatbot.server.data.tables.ModelSettingsAccessTable.accessMode
+import eu.torvian.chatbot.server.data.tables.ModelSettingsAccessTable.settingsId
+import eu.torvian.chatbot.server.data.tables.ModelSettingsAccessTable.userGroupId
+import org.jetbrains.exposed.v1.core.ReferenceOption
+import org.jetbrains.exposed.v1.core.Table
 
 /**
  * Defines which user groups can access a ModelSettings profile.

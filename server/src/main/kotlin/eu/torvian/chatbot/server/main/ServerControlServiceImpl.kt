@@ -12,9 +12,9 @@ import io.ktor.server.engine.*
 import io.ktor.server.jetty.jakarta.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import kotlinx.datetime.Clock
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
+import kotlin.time.Clock
 
 /**
  * Default timeout for server startup in milliseconds.

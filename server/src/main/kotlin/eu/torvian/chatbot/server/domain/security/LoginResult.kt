@@ -2,7 +2,7 @@ package eu.torvian.chatbot.server.domain.security
 
 import eu.torvian.chatbot.common.models.user.Permission
 import eu.torvian.chatbot.common.models.user.User
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 /**
  * Represents the result of a successful user login operation.

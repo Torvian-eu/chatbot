@@ -7,7 +7,7 @@ import eu.torvian.chatbot.app.database.dao.error.DeleteEncryptedSecretError
 import eu.torvian.chatbot.app.database.dao.error.UpdateEncryptedSecretError
 import eu.torvian.chatbot.app.database.model.EncryptedSecretEntity
 import eu.torvian.chatbot.common.security.EncryptionService
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 
 /**
  * Implementation of EncryptedSecretService using an EncryptionService and

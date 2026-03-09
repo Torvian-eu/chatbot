@@ -2,30 +2,19 @@ package eu.torvian.chatbot.server.service.core.impl
 
 import arrow.core.left
 import arrow.core.right
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
-import eu.torvian.chatbot.server.data.dao.MessageDao
-import eu.torvian.chatbot.server.data.dao.SessionDao
-import eu.torvian.chatbot.server.data.dao.SessionOwnershipDao
-import eu.torvian.chatbot.server.data.dao.SessionToolConfigDao
-import eu.torvian.chatbot.server.data.dao.SettingsDao
-import eu.torvian.chatbot.server.data.dao.ModelDao
-import eu.torvian.chatbot.server.data.dao.ToolCallDao
+import eu.torvian.chatbot.server.data.dao.*
 import eu.torvian.chatbot.server.data.dao.error.GetOwnerError
 import eu.torvian.chatbot.server.data.dao.error.SessionError
 import eu.torvian.chatbot.server.data.dao.error.SetOwnerError
-import eu.torvian.chatbot.server.service.core.error.session.*
-import eu.torvian.chatbot.common.misc.transaction.TransactionScope
-import io.mockk.clearMocks
-import io.mockk.coEvery
-import io.mockk.coVerify
-import io.mockk.mockk
-import io.mockk.slot
+import eu.torvian.chatbot.server.service.core.error.session.CloneSessionError
+import io.mockk.*
 import kotlinx.coroutines.test.runTest
-import kotlinx.datetime.Instant
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -33,6 +22,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlin.time.Instant
 
 /**
  * Unit tests for [SessionServiceImpl.cloneSession].
@@ -184,7 +174,14 @@ class SessionServiceImplCloneTest {
         val cloneName = "Cloned Session"
         coEvery { sessionDao.getSessionById(testSessionId) } returns originalSession.right()
         coEvery { sessionOwnershipDao.getOwner(testSessionId) } returns testUserId.right()
-        coEvery { sessionDao.insertSession(cloneName, testGroupId, testModelId, testSettingsId) } returns clonedSession.copy(
+        coEvery {
+            sessionDao.insertSession(
+                cloneName,
+                testGroupId,
+                testModelId,
+                testSettingsId
+            )
+        } returns clonedSession.copy(
             name = cloneName,
             currentLeafMessageId = null
         ).right()
@@ -267,7 +264,20 @@ class SessionServiceImplCloneTest {
         coVerify { sessionDao.insertSession(cloneName, testGroupId, testModelId, testSettingsId) }
         coVerify { sessionOwnershipDao.setOwner(testClonedSessionId, testUserId) }
         coVerify { messageDao.getMessagesBySessionId(testSessionId) }
-        coVerify(exactly = 3) { messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 3) {
+            messageDao.insertMessage(
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any()
+            )
+        }
         coVerify { sessionDao.updateSessionLeafMessageId(testClonedSessionId, 203L) }
         coVerify { toolCallDao.getToolCallsBySessionId(testSessionId) }
         coVerify { sessionToolConfigDao.getEnabledToolsForSession(testSessionId) }
@@ -313,9 +323,48 @@ class SessionServiceImplCloneTest {
         sessionService.cloneSession(testSessionId, cloneName)
 
         // Assert - verify that insertMessage was called with original timestamps
-        coVerify { messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), testTimestamp1, testTimestamp1) }
-        coVerify { messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), testTimestamp2, testTimestamp2) }
-        coVerify { messageDao.insertMessage(any(), any(), any(), any(), any(), any(), any(), any(), testTimestamp3, testTimestamp3) }
+        coVerify {
+            messageDao.insertMessage(
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                testTimestamp1,
+                testTimestamp1
+            )
+        }
+        coVerify {
+            messageDao.insertMessage(
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                testTimestamp2,
+                testTimestamp2
+            )
+        }
+        coVerify {
+            messageDao.insertMessage(
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                testTimestamp3,
+                testTimestamp3
+            )
+        }
     }
 
     @Test
@@ -432,7 +481,21 @@ class SessionServiceImplCloneTest {
         sessionService.cloneSession(testSessionId, cloneName)
 
         // Assert - verify tool call was cloned with mapped message ID
-        coVerify { toolCallDao.insertToolCall(202L, any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) }
+        coVerify {
+            toolCallDao.insertToolCall(
+                202L,
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any()
+            )
+        }
         assertEquals(202L, toolCallMessageIdSlot.captured) // 102L -> 202L mapping
     }
 
@@ -539,7 +602,7 @@ class SessionServiceImplCloneTest {
         coEvery { sessionDao.getSessionById(testSessionId) } returns originalSession.right()
         coEvery { sessionOwnershipDao.getOwner(testSessionId) } returns testUserId.right()
         coEvery { sessionDao.insertSession(any(), any(), any(), any()) } returns
-            SessionError.ForeignKeyViolation("Invalid groupId").left()
+                SessionError.ForeignKeyViolation("Invalid groupId").left()
 
         // Act
         val result = sessionService.cloneSession(testSessionId, "Cloned Session")
@@ -560,7 +623,7 @@ class SessionServiceImplCloneTest {
             currentLeafMessageId = null
         ).right()
         coEvery { sessionOwnershipDao.setOwner(testClonedSessionId, testUserId) } returns
-            SetOwnerError.ForeignKeyViolation("session", testUserId).left()
+                SetOwnerError.ForeignKeyViolation("session", testUserId).left()
 
         // Act
         val result = sessionService.cloneSession(testSessionId, "Cloned Session")

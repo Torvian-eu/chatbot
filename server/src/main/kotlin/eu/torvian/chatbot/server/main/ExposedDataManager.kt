@@ -1,9 +1,9 @@
 package eu.torvian.chatbot.server.main
 
-import eu.torvian.chatbot.server.data.tables.*
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
-import org.jetbrains.exposed.sql.SchemaUtils
-import org.jetbrains.exposed.sql.exists
+import eu.torvian.chatbot.server.data.tables.*
+import org.jetbrains.exposed.v1.jdbc.SchemaUtils
+import org.jetbrains.exposed.v1.jdbc.exists
 
 /**
  * Implementation of [DataManager] for Exposed ORM.

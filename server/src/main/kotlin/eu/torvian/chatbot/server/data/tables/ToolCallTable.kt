@@ -1,8 +1,18 @@
 package eu.torvian.chatbot.server.data.tables
 
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
-import org.jetbrains.exposed.dao.id.LongIdTable
-import org.jetbrains.exposed.sql.ReferenceOption
+import eu.torvian.chatbot.server.data.tables.ToolCallTable.durationMs
+import eu.torvian.chatbot.server.data.tables.ToolCallTable.errorMessage
+import eu.torvian.chatbot.server.data.tables.ToolCallTable.executedAt
+import eu.torvian.chatbot.server.data.tables.ToolCallTable.inputJson
+import eu.torvian.chatbot.server.data.tables.ToolCallTable.messageId
+import eu.torvian.chatbot.server.data.tables.ToolCallTable.outputJson
+import eu.torvian.chatbot.server.data.tables.ToolCallTable.status
+import eu.torvian.chatbot.server.data.tables.ToolCallTable.toolCallId
+import eu.torvian.chatbot.server.data.tables.ToolCallTable.toolDefinitionId
+import eu.torvian.chatbot.server.data.tables.ToolCallTable.toolName
+import org.jetbrains.exposed.v1.core.ReferenceOption
+import org.jetbrains.exposed.v1.core.dao.id.LongIdTable
 
 /**
  * Exposed table definition for tool call records.

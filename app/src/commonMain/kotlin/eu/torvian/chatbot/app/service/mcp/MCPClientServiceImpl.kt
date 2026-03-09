@@ -8,12 +8,14 @@ import eu.torvian.chatbot.app.domain.models.LocalMCPServer
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import io.modelcontextprotocol.kotlin.sdk.client.Client
 import io.modelcontextprotocol.kotlin.sdk.client.StdioClientTransport
+import io.modelcontextprotocol.kotlin.sdk.shared.RequestOptions
 import io.modelcontextprotocol.kotlin.sdk.types.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
 import kotlinx.serialization.json.JsonObject
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 import eu.torvian.chatbot.app.utils.misc.ioDispatcher as defaultIODispatcher
 
 /**
@@ -47,7 +49,9 @@ class MCPClientServiceImpl(
         private const val CLIENT_VERSION = "1.0.0"
 
         // Connection timeout in seconds
-        private const val CONNECTION_TIMEOUT_SECONDS = 60
+        private const val CONNECTION_TIMEOUT_SECONDS = 300
+        // Request timeout in seconds
+        private const val REQUEST_TIMEOUT_SECONDS = 600
     }
 
     // Thread-safe StateFlow of active MCP clients
@@ -112,11 +116,26 @@ class MCPClientServiceImpl(
                 error = processManager.getProcessErrorStream(serverId)
             )
 
-            // Connect to the MCP server with timeout
+            // Connect to the MCP server with timeout.
+            // sdkClient.connect() may internally throw TimeoutCancellationException due to its own
+            // internal timeout. We retry in a loop until the connection succeeds, or until our own
+            // outer timeout fires (which re-throws as a TimeoutCancellationException that belongs to
+            // the outer coroutine scope and is therefore not caught by the inner catch).
             try {
                 withContext(ioDispatcher) {
                     withTimeout(CONNECTION_TIMEOUT_SECONDS * 1000L) {
-                        sdkClient.connect(transport)
+                        while (true) {
+                            try {
+                                sdkClient.connect(transport)
+                                break  // Connection succeeded
+                            } catch (e: TimeoutCancellationException) {
+                                // This must be an internal SDK timeout (our outer withTimeout would
+                                // cancel the coroutine scope, not throw here) — retry.
+                                logger.debug(
+                                    "sdkClient.connect() timed out internally for server $serverId, retrying... (${e.message})"
+                                )
+                            }
+                        }
                     }
                 }
             } catch (_: TimeoutCancellationException) {
@@ -247,7 +266,7 @@ class MCPClientServiceImpl(
             val toolsResult = withContext(ioDispatcher) {
                 client.sdkClient.listTools(
                     request = ListToolsRequest(),
-                    options = null
+                    options = RequestOptions(timeout = REQUEST_TIMEOUT_SECONDS.seconds) // Effectively infinite timeout
                 )
             }
             val tools = toolsResult.tools
@@ -285,7 +304,8 @@ class MCPClientServiceImpl(
                             name = toolName,
                             arguments = arguments
                         )
-                    )
+                    ),
+                    options = RequestOptions(timeout = REQUEST_TIMEOUT_SECONDS.seconds) // Effectively infinite timeout
                 )
             }
             updateActivity(serverId)

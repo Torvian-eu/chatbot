@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.common.models.core
 
-import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
+import kotlin.time.Instant
 
 /**
  * Represents a summary of a chat session, typically used for listing sessions

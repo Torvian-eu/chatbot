@@ -23,9 +23,9 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
-import kotlinx.datetime.Clock
 import kotlinx.serialization.json.Json
 import kotlin.test.*
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
 
 /**

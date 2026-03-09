@@ -130,12 +130,15 @@ kotlin {
             implementation(project(":common"))
 
             // Compose dependencies
-            implementation(compose.runtime)
-            implementation(compose.foundation)
-            implementation(compose.material3)
-            implementation(compose.ui)
-            implementation(compose.components.resources)
-            implementation(compose.components.uiToolingPreview)
+            implementation(libs.compose.runtime)
+            implementation(libs.compose.foundation)
+            implementation(libs.compose.material3)
+            implementation(libs.compose.ui)
+            implementation(libs.compose.components.resources)
+            implementation(libs.compose.uiToolingPreview)
+            //TODO: Instead of using the now deprecated material-icons-extended,
+            // download icons invidually from google and add them to /composeResources.
+            // As described here: https://kotlinlang.org/docs/multiplatform/compose-multiplatform-resources-usage.html#icons
             implementation(compose.materialIconsExtended)
 
             // AndroidX Lifecycle
@@ -346,5 +349,5 @@ android {
 
 dependencies {
     // UI tooling for debugging and preview
-    debugImplementation(compose.uiTooling)
+    debugImplementation(libs.compose.uiTooling)
 }

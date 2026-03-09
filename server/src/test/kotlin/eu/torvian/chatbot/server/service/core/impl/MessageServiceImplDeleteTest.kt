@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.service.core.impl
 
 import arrow.core.left
 import arrow.core.right
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.server.data.dao.MessageDao
@@ -9,19 +10,18 @@ import eu.torvian.chatbot.server.data.dao.SessionDao
 import eu.torvian.chatbot.server.data.dao.error.MessageError
 import eu.torvian.chatbot.server.data.dao.error.SessionError
 import eu.torvian.chatbot.server.service.core.error.message.DeleteMessageError
-import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import io.mockk.clearMocks
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
-import kotlinx.datetime.Instant
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlin.time.Instant
 
 /**
  * Focused unit tests for the deleteMessageRecursively functionality in [MessageServiceImpl].
@@ -380,52 +380,53 @@ class MessageServiceImplDeleteTest {
     }
 
     @Test
-    fun `deleteMessageRecursively should not update session when deleted message is not in current leaf path`() = runTest {
-        // Arrange - Create two separate branches, delete from non-current branch
-        val sessionId = 10L
-        val rootId = 1L
-        val branch1Id = 2L // Current leaf path
-        val branch2Id = 3L // Different branch - will be deleted
+    fun `deleteMessageRecursively should not update session when deleted message is not in current leaf path`() =
+        runTest {
+            // Arrange - Create two separate branches, delete from non-current branch
+            val sessionId = 10L
+            val rootId = 1L
+            val branch1Id = 2L // Current leaf path
+            val branch2Id = 3L // Different branch - will be deleted
 
-        val root = testMessage1.copy(
-            id = rootId,
-            sessionId = sessionId,
-            parentMessageId = null,
-            childrenMessageIds = listOf(branch1Id, branch2Id)
-        )
-        val branch1 = testMessage1.copy(
-            id = branch1Id,
-            sessionId = sessionId,
-            parentMessageId = rootId,
-            childrenMessageIds = emptyList()
-        )
-        val branch2 = testMessage1.copy(
-            id = branch2Id,
-            sessionId = sessionId,
-            parentMessageId = rootId,
-            childrenMessageIds = emptyList()
-        )
+            val root = testMessage1.copy(
+                id = rootId,
+                sessionId = sessionId,
+                parentMessageId = null,
+                childrenMessageIds = listOf(branch1Id, branch2Id)
+            )
+            val branch1 = testMessage1.copy(
+                id = branch1Id,
+                sessionId = sessionId,
+                parentMessageId = rootId,
+                childrenMessageIds = emptyList()
+            )
+            val branch2 = testMessage1.copy(
+                id = branch2Id,
+                sessionId = sessionId,
+                parentMessageId = rootId,
+                childrenMessageIds = emptyList()
+            )
 
-        val session = testSession.copy(id = sessionId, currentLeafMessageId = branch1Id) // Current leaf is branch1
-        val allMessages = listOf(root, branch1, branch2)
+            val session = testSession.copy(id = sessionId, currentLeafMessageId = branch1Id) // Current leaf is branch1
+            val allMessages = listOf(root, branch1, branch2)
 
-        coEvery { messageDao.getMessageById(branch2Id) } returns branch2.right()
-        coEvery { sessionDao.getSessionById(sessionId) } returns session.right()
-        coEvery { messageDao.getMessagesBySessionId(sessionId) } returns allMessages
-        coEvery { messageDao.deleteMessageRecursively(branch2Id) } returns Unit.right()
+            coEvery { messageDao.getMessageById(branch2Id) } returns branch2.right()
+            coEvery { sessionDao.getSessionById(sessionId) } returns session.right()
+            coEvery { messageDao.getMessagesBySessionId(sessionId) } returns allMessages
+            coEvery { messageDao.deleteMessageRecursively(branch2Id) } returns Unit.right()
 
-        // Act
-        val result = messageService.deleteMessageRecursively(branch2Id)
+            // Act
+            val result = messageService.deleteMessageRecursively(branch2Id)
 
-        // Assert
-        assertTrue(result.isRight(), "Should return Right for successful deletion")
-        coVerify(exactly = 1) { messageDao.getMessageById(branch2Id) }
-        coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
-        coVerify(exactly = 1) { messageDao.getMessagesBySessionId(sessionId) }
-        coVerify(exactly = 1) { messageDao.deleteMessageRecursively(branch2Id) }
-        // Should NOT update session since branch2 is not in branch1's path
-        coVerify(exactly = 0) { sessionDao.updateSessionLeafMessageId(any(), any()) }
-    }
+            // Assert
+            assertTrue(result.isRight(), "Should return Right for successful deletion")
+            coVerify(exactly = 1) { messageDao.getMessageById(branch2Id) }
+            coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
+            coVerify(exactly = 1) { messageDao.getMessagesBySessionId(sessionId) }
+            coVerify(exactly = 1) { messageDao.deleteMessageRecursively(branch2Id) }
+            // Should NOT update session since branch2 is not in branch1's path
+            coVerify(exactly = 0) { sessionDao.updateSessionLeafMessageId(any(), any()) }
+        }
 
     // === Error Handling Tests ===
 

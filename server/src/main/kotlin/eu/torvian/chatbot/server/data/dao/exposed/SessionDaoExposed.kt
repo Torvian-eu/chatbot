@@ -6,6 +6,7 @@ import arrow.core.raise.catch
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.right
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
@@ -15,13 +16,15 @@ import eu.torvian.chatbot.server.data.dao.error.SessionError
 import eu.torvian.chatbot.server.data.tables.ChatGroupTable
 import eu.torvian.chatbot.server.data.tables.ChatSessionTable
 import eu.torvian.chatbot.server.data.tables.SessionCurrentLeafTable
-import eu.torvian.chatbot.common.misc.transaction.TransactionScope
-import kotlinx.datetime.Instant
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
-import org.jetbrains.exposed.exceptions.ExposedSQLException
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.v1.core.JoinType
+import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
+import org.jetbrains.exposed.v1.jdbc.*
+import kotlin.time.Instant
 
 /**
  * Exposed implementation of the [SessionDao].
@@ -89,7 +92,8 @@ class SessionDaoExposed(
                     insertStatement.resultedValues?.first()?.toChatSession(emptyList())
                         ?: throw IllegalStateException("Failed to retrieve newly inserted session")
                 }) { e: ExposedSQLException ->
-                    val message = "Failed to insert session with name $name, group $groupId, model $currentModelId, settings $currentSettingsId"
+                    val message =
+                        "Failed to insert session with name $name, group $groupId, model $currentModelId, settings $currentSettingsId"
                     logger.error(message, e)
                     ensure(!e.isForeignKeyViolation()) { SessionError.ForeignKeyViolation(message) }
                     throw e

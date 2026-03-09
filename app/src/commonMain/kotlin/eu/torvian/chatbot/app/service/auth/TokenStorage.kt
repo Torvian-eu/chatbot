@@ -3,7 +3,7 @@ package eu.torvian.chatbot.app.service.auth
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.user.Permission
 import eu.torvian.chatbot.common.models.user.User
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 /**
  * Platform-agnostic interface for secure token storage operations.
