@@ -221,8 +221,12 @@ object ServerMain {
 
         // --- 5. Persistence ---
         if (setupDelta != AppConfigDto()) {
-            ServerConfigLoader.saveConfig(setupDelta, "secrets.json")
-            logger.info("Setup: New values saved to config/secrets.json")
+            val secretsToPersist = dto
+                .merge(setupDelta)
+                .toSecretsDto()
+
+            ServerConfigLoader.saveConfig(secretsToPersist, "secrets.json")
+            logger.info("Setup: New values merged into config/secrets.json")
         }
 
         // Mark setup as complete
@@ -373,4 +377,37 @@ object ServerMain {
         SecureRandom().nextBytes(keyData)
         return Base64.getEncoder().encodeToString(keyData)
     }
+
+    /**
+     * Builds the secrets payload that is persisted in `secrets.json`.
+     *
+     * We derive this from the already merged runtime DTO so setup can update values additively
+     * without performing another file read.
+     */
+    private fun AppConfigDto.toSecretsDto(): AppConfigDto = AppConfigDto(
+        ssl = ssl?.let {
+            SslConfigDto(
+                keystorePassword = it.keystorePassword,
+                keyAlias = it.keyAlias,
+                keyPassword = it.keyPassword
+            )
+        },
+        database = database?.let {
+            DatabaseConfigDto(
+                user = it.user,
+                password = it.password
+            )
+        },
+        encryption = encryption?.let {
+            EncryptionConfigDto(
+                keyVersion = it.keyVersion,
+                masterKeys = it.masterKeys
+            )
+        },
+        jwt = jwt?.let {
+            JwtConfigDto(
+                secret = it.secret
+            )
+        }
+    )
 }
