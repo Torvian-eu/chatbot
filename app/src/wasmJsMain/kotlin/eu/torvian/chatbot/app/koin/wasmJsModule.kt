@@ -1,18 +1,20 @@
 package eu.torvian.chatbot.app.koin
 
-import eu.torvian.chatbot.app.main.AppConfig
-import eu.torvian.chatbot.app.service.auth.FileSystemTokenStorage
+import eu.torvian.chatbot.app.config.AppConfiguration
+import eu.torvian.chatbot.app.service.auth.BrowserTokenStorage
 import eu.torvian.chatbot.app.service.auth.TokenStorage
+import eu.torvian.chatbot.app.service.api.ktor.BrowserWebSocketAuthSubprotocolProvider
+import eu.torvian.chatbot.app.service.api.ktor.WebSocketAuthSubprotocolProvider
 import eu.torvian.chatbot.app.service.clipboard.ClipboardService
 import eu.torvian.chatbot.app.service.clipboard.ClipboardServiceWasmJs
+import eu.torvian.chatbot.app.repository.LocalMCPServerRepository
+import eu.torvian.chatbot.app.repository.impl.LocalMCPServerRepositoryDummy
 import eu.torvian.chatbot.app.service.mcp.LocalMCPToolCallMediator
 import eu.torvian.chatbot.app.service.mcp.LocalMCPToolCallMediatorDummy
 import eu.torvian.chatbot.app.service.security.BrowserCertificateStorage
 import eu.torvian.chatbot.app.service.security.CertificateStorage
 import eu.torvian.chatbot.common.security.CryptoProvider
-import eu.torvian.chatbot.common.security.EncryptionConfig
 import eu.torvian.chatbot.common.security.WasmJsWebCryptoProvider
-import kotlinx.io.files.Path
 import org.koin.dsl.module
 
 /**
@@ -21,21 +23,24 @@ import org.koin.dsl.module
  * This module provides dependencies specific to the WASM/JS platform,
  * using the secure Web Crypto API for cryptographic operations.
  *
- * @param appConfig The application configuration containing platform-specific paths.
- * @param encryptionConfig The encryption configuration to use for secure storage.
+ * @param config The application configuration.
  * @return A Koin module with WASM/JS-specific dependencies.
  */
-fun wasmJsModule(appConfig: AppConfig, encryptionConfig: EncryptionConfig) = module {
+fun wasmJsModule(config: AppConfiguration) = module {
     single<CryptoProvider> {
         // Use the secure Web Crypto API provider for WASM/JS.
-        WasmJsWebCryptoProvider(encryptionConfig)
+        WasmJsWebCryptoProvider(config.encryption)
     }
 
     single<TokenStorage> {
-        FileSystemTokenStorage(
+        BrowserTokenStorage(
             cryptoProvider = get(),
-            storageDirectoryPath = Path(appConfig.baseUserDataStoragePath, appConfig.tokenStorageDir).toString()
+            storageNamespace = "${config.storage.baseApplicationPath}/${config.storage.dataDir}/${config.storage.tokenStorageDir}"
         )
+    }
+
+    single<WebSocketAuthSubprotocolProvider> {
+        BrowserWebSocketAuthSubprotocolProvider(tokenStorage = get())
     }
 
     single<CertificateStorage> {
@@ -48,5 +53,9 @@ fun wasmJsModule(appConfig: AppConfig, encryptionConfig: EncryptionConfig) = mod
 
     single<LocalMCPToolCallMediator> {
         LocalMCPToolCallMediatorDummy()
+    }
+
+    single<LocalMCPServerRepository> {
+        LocalMCPServerRepositoryDummy()
     }
 }

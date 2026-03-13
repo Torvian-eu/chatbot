@@ -19,7 +19,7 @@ compose = "1.10.2"           # Compose Multiplatform version
 material3 = "1.9.0"          # Material 3 version
 androidx-lifecycle = "2.9.6" # For Compose Multiplatform ViewModel
 androidx-navigation = "2.9.2" # For Compose Multiplatform Navigation
-kotlin-buildlogic = "2.3.0"  # Kotlin version for build-logic compatibility
+kotlin-buildlogic = "2.2.0"  # Kotlin version for build-logic compatibility
 compose-hot-reload = "1.0.0" # Compose Hot Reload version
 androidx-activity = "1.12.4" # For Compose Multiplatform Activity
 android-gradle-plugin = "8.12.3" # Android Gradle Plugin version
@@ -81,6 +81,7 @@ ktor-client-resources = { module = "io.ktor:ktor-client-resources", version.ref 
 ktor-client-logging = { module = "io.ktor:ktor-client-logging", version.ref = "ktor" }
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
 ktor-client-websockets = { module = "io.ktor:ktor-client-websockets", version.ref = "ktor" }
+ktor-client-js = { module = "io.ktor:ktor-client-js", version.ref = "ktor" }
 
 # Ktor Serialization
 ktor-serialization-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
@@ -129,6 +130,7 @@ compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "compose" }
 compose-components-resources = { module = "org.jetbrains.compose.components:components-resources", version.ref = "compose" }
 compose-uiToolingPreview = { module = "org.jetbrains.compose.ui:ui-tooling-preview", version.ref = "compose" }
 compose-uiTooling = { module = "org.jetbrains.compose.ui:ui-tooling", version.ref = "compose" }
+compose-uiTest = { module = "org.jetbrains.compose.ui:ui-test", version.ref = "compose" }
 
 # AndroidX ViewModel for Kotlin Multiplatform
 androidx-lifecycle-viewmodel = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel", version.ref = "androidx-lifecycle" }

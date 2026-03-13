@@ -2,7 +2,6 @@ package eu.torvian.chatbot.app.viewmodel.startup
 
 import eu.torvian.chatbot.app.config.AppConfiguration
 import eu.torvian.chatbot.app.config.AppConfigDto
-import kotlinx.io.files.Path
 
 /**
  * Sealed interface representing all possible application startup states.
@@ -25,7 +24,7 @@ sealed interface StartupState {
      * @property initialDto Pre-populated configuration data from existing files.
      */
     data class NeedsSetup(
-        val configDir: Path,
+        val configDir: String,
         val initialDto: AppConfigDto
     ) : StartupState
 

@@ -3,7 +3,7 @@ package eu.torvian.chatbot.app.viewmodel.setup
 import arrow.core.Either
 import arrow.core.raise.either
 import eu.torvian.chatbot.app.config.*
-import kotlinx.io.files.Path
+import eu.torvian.chatbot.app.utils.platform.FilePathUtils
 
 /**
  * Use case for completing the initial application setup.
@@ -16,7 +16,9 @@ import kotlinx.io.files.Path
  *
  * Note: Uses ClientConfigLoader directly (no repository abstraction needed).
  */
-class CompleteSetupUseCase {
+class CompleteSetupUseCase(
+    private val configLoader: ClientConfigLoader
+) {
     /**
      * Execute the setup completion flow.
      *
@@ -27,7 +29,7 @@ class CompleteSetupUseCase {
      * @return Either Left(SetupError) or Right(validated AppConfiguration).
      */
     operator fun invoke(
-        configDir: Path,
+        configDir: String,
         serverUrl: String,
         dataDir: String,
         encryptionKey: String
@@ -48,14 +50,14 @@ class CompleteSetupUseCase {
         )
 
         // 2. Validate the configuration
-        val baseDir = configDir.parent ?: Path(".")
+        val baseDir = FilePathUtils.parentPath(configDir)
         val appConfig = configDto.toDomain(baseDir).mapLeft { validationError ->
             SetupError.ValidationError(validationError.toMessage())
         }.bind()
 
         // 3. Save config.json (network + storage settings)
         try {
-            ClientConfigLoader.saveConfig(
+            configLoader.saveConfig(
                 dto = AppConfigDto(
                     network = configDto.network,
                     storage = configDto.storage
@@ -69,7 +71,7 @@ class CompleteSetupUseCase {
 
         // 4. Save secrets.json (encryption keys)
         try {
-            ClientConfigLoader.saveConfig(
+            configLoader.saveConfig(
                 dto = AppConfigDto(encryption = configDto.encryption),
                 configDir = configDir,
                 fileName = "secrets.json"
@@ -80,7 +82,7 @@ class CompleteSetupUseCase {
 
         // 5. Save setup.json (mark setup as complete)
         try {
-            ClientConfigLoader.saveConfig(
+            configLoader.saveConfig(
                 dto = AppConfigDto(setup = SetupConfigDto(required = false)),
                 configDir = configDir,
                 fileName = "setup.json"

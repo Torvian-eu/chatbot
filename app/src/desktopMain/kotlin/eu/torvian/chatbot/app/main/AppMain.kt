@@ -7,12 +7,13 @@ import eu.torvian.chatbot.app.compose.AppShell
 import eu.torvian.chatbot.app.compose.setup.SetupScreen
 import eu.torvian.chatbot.app.compose.startup.StartupErrorScreen
 import eu.torvian.chatbot.app.compose.startup.StartupLoadingScreen
+import eu.torvian.chatbot.app.config.FileSystemClientConfigLoader
 import eu.torvian.chatbot.app.koin.appModule
 import eu.torvian.chatbot.app.koin.databaseModule
 import eu.torvian.chatbot.app.koin.desktopModule
-import eu.torvian.chatbot.app.viewmodel.startup.LoadStartupConfigurationUseCase
 import eu.torvian.chatbot.app.utils.misc.KmpLogger
 import eu.torvian.chatbot.app.utils.misc.createKmpLogger
+import eu.torvian.chatbot.app.viewmodel.startup.LoadStartupConfigurationUseCase
 import eu.torvian.chatbot.app.viewmodel.startup.StartupState
 import eu.torvian.chatbot.app.viewmodel.startup.StartupViewModel
 import kotlinx.coroutines.runBlocking
@@ -73,11 +74,12 @@ fun main() = runBlocking {
  */
 @Composable
 fun AppLifecycleManager(configDir: Path) {
+    val configLoader = remember { FileSystemClientConfigLoader() }
     // Create ViewModel (manual creation, not Koin - Koin isn't initialized yet)
     val viewModel = remember {
         StartupViewModel(
-            configDir = configDir,
-            loadConfigUseCase = LoadStartupConfigurationUseCase()
+            configDir = configDir.toString(),
+            loadConfigUseCase = LoadStartupConfigurationUseCase(configLoader)
         )
     }
 
@@ -114,6 +116,7 @@ fun AppLifecycleManager(configDir: Path) {
             logger.info("Displaying SetupScreen for initial configuration.")
             SetupScreen(
                 configDir = currentState.configDir,
+                configLoader = configLoader,
                 initialDto = currentState.initialDto,
                 onComplete = { appConfiguration ->
                     logger.info("Setup completed successfully. Transitioning to Ready state.")

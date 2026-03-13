@@ -7,6 +7,7 @@ import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.ChatApi
 import eu.torvian.chatbot.app.utils.misc.ioDispatcher
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
+import eu.torvian.chatbot.common.api.CommonWebSocketProtocols
 import eu.torvian.chatbot.common.api.resources.DeleteMode
 import eu.torvian.chatbot.common.api.resources.MessageResource
 import eu.torvian.chatbot.common.api.resources.SessionResource
@@ -17,8 +18,10 @@ import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import io.ktor.client.*
 import io.ktor.client.call.*
+import io.ktor.client.plugins.websocket.WebSocketException
 import io.ktor.client.plugins.resources.*
 import io.ktor.client.request.*
+import io.ktor.http.HttpHeaders
 import io.ktor.websocket.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -35,16 +38,22 @@ import kotlinx.serialization.json.Json
  *
  * @property client The Ktor HttpClient instance injected for making requests.
  * @property wss Whether to use a secure wss:// connection for WebSocket connections.
+ * @property webSocketAuthSubprotocolProvider Optional provider for WebSocket authentication subprotocols.
+ *           Used for browser WebSocket authentication.
  */
 class KtorChatApiClient(
     client: HttpClient,
-    private val wss: Boolean = false
+    private val wss: Boolean = false,
+    private val webSocketAuthSubprotocolProvider: WebSocketAuthSubprotocolProvider? = null
 ) : BaseApiResourceClient(client), ChatApi {
     companion object {
         private val logger = kmpLogger<KtorChatApiClient>()
     }
 
     private val json: Json = Json
+
+    private fun String.redactProtocolValue(): String =
+        if (length <= 20) this else "${take(10)}...(${length} chars)"
 
     override fun processNewMessage(
         sessionId: Long,
@@ -72,45 +81,59 @@ class KtorChatApiClient(
         try {
             val sessionUrl = href(SessionResource.ById.Messages(SessionResource.ById(SessionResource(), sessionId)))
             logger.info("Connecting to WebSocket: $sessionUrl")
+            val providedSubprotocols = webSocketAuthSubprotocolProvider?.getSubprotocols().orEmpty()
+            // For non-browser targets we still offer the marker so protocol negotiation succeeds consistently.
+            val subprotocols = providedSubprotocols.ifEmpty {
+                listOf(CommonWebSocketProtocols.CHATBOT_AUTH)
+            }
+            logger.debug("WS requested subprotocols: ${subprotocols.map { it.redactProtocolValue() }}")
 
-            client.webSocket(path = sessionUrl, wss = wss) {
+            client.webSocket(path = sessionUrl, wss = wss, subprotocols = subprotocols) {
+                val negotiatedSubprotocol = runCatching {
+                    call.response.headers[HttpHeaders.SecWebSocketProtocol]
+                }.getOrNull()
+                logger.info("WebSocket negotiated subprotocol for session $sessionId: ${negotiatedSubprotocol ?: "<none>"}")
+
                 // Launch a coroutine to send client events to the server
                 val senderJob = launch {
                     clientEvents.collect { event ->
                         try {
                             val jsonString = json.encodeToString(ChatClientEvent.serializer(), event)
-//                            logger.debug("Sending WS frame: $jsonString")
                             send(Frame.Text(jsonString))
                         } catch (e: Exception) {
                             logger.error("Failed to send WebSocket frame for session $sessionId", e)
-                            // Error sending, might need to close the connection or emit an error
-                            // For now, we let the receiver handle connection termination
                         }
                     }
                 }
 
-                // Listen for incoming server events
-                for (frame in incoming) {
-                    if (frame is Frame.Text) {
-                        val jsonString = frame.readText()
-//                        logger.debug("Received WS frame: $jsonString")
-                        try {
-                            val serverEvent = json.decodeFromString<T>(jsonString)
-                            emit(serverEvent.right())
-                        } catch (e: Exception) {
-                            logger.error("Deserialization error for incoming frame: $jsonString", e)
-                            emit(
-                                ApiResourceError.SerializationError("Failed to parse server event: $jsonString", e)
-                                    .left()
-                            )
+                try {
+                    // Listen for incoming server events
+                    for (frame in incoming) {
+                        if (frame is Frame.Text) {
+                            val jsonString = frame.readText()
+                            try {
+                                val serverEvent = json.decodeFromString<T>(jsonString)
+                                emit(serverEvent.right())
+                            } catch (e: Exception) {
+                                logger.error("Deserialization error for incoming frame: $jsonString", e)
+                                emit(
+                                    ApiResourceError.SerializationError("Failed to parse server event: $jsonString", e)
+                                        .left()
+                                )
+                            }
                         }
                     }
+                } finally {
+                    senderJob.cancel()
+                    val closeReason = runCatching { closeReason.await() }.getOrNull()
+                    logger.info("WebSocket incoming channel closed for session $sessionId, closeReason=${closeReason?.message ?: "<none>"}, closeCode=${closeReason?.code}")
                 }
-
-                // When incoming channel is closed, cancel the sender job
-                senderJob.cancel()
-                logger.info("WebSocket incoming channel closed for session $sessionId.")
             }
+        } catch (e: WebSocketException) {
+            logger.error("WebSocket exception for session $sessionId: ${e.message}", e)
+            val apiError =
+                ApiResourceError.UnknownError("WebSocket handshake or transport failed.", e)
+            emit(apiError.left())
         } catch (e: Exception) {
             logger.error("WebSocket connection error for session $sessionId", e)
             val apiError =

@@ -128,7 +128,11 @@ fun appModule(config: AppConfiguration): Module = module {
 
     // Provide concrete API client implementations, injecting the HttpClient
     single<ChatApi> {
-        KtorChatApiClient(get(), wss = config.network.serverUrl.startsWith("https"))
+        KtorChatApiClient(
+            client = get(),
+            wss = config.network.serverUrl.startsWith("https"),
+            webSocketAuthSubprotocolProvider = getOrNull()
+        )
     }
     single<SessionApi> {
         KtorSessionApiClient(get())

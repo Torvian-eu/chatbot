@@ -89,6 +89,23 @@ object FilePathUtils {
     }
 
     /**
+     * Returns the parent directory of a given path string.
+     * Handles both forward slashes and backslashes.
+     *
+     * Examples:
+     * - `"/opt/chatbot/config"` → `"/opt/chatbot"`
+     * - `"C:\chatbot\config"` → `"C:\chatbot"`
+     * - `"config"` (no separator) → `"."`
+     *
+     * @param path The path whose parent to derive.
+     * @return The parent directory string, or `"."` if there is no separator.
+     */
+    fun parentPath(path: String): String {
+        val lastSeparatorIndex = maxOf(path.lastIndexOf('/'), path.lastIndexOf('\\'))
+        return if (lastSeparatorIndex > 0) path.take(lastSeparatorIndex) else "."
+    }
+
+    /**
      * Splits a full file path into its directory (base path) and filename components.
      * Handles both forward slashes and backslashes.
      *

@@ -1,7 +1,6 @@
 package eu.torvian.chatbot.app.koin
 
 import eu.torvian.chatbot.app.config.AppConfiguration
-import eu.torvian.chatbot.app.config.dataPath
 import eu.torvian.chatbot.app.database.DriverFactory
 import eu.torvian.chatbot.app.database.DriverFactoryDesktop
 import eu.torvian.chatbot.app.service.auth.FileSystemTokenStorage
@@ -41,13 +40,21 @@ fun desktopModule(config: AppConfiguration) = module {
     single<TokenStorage> {
         FileSystemTokenStorage(
             cryptoProvider = get(),
-            storageDirectoryPath = Path(config.storage.dataPath, config.storage.tokenStorageDir).toString()
+            storageDirectoryPath = Path(
+                config.storage.baseApplicationPath,
+                config.storage.dataDir,
+                config.storage.tokenStorageDir
+            ).toString()
         )
     }
 
     single<CertificateStorage> {
         FileSystemCertificateStorage(
-            storageDirectoryPath = Path(config.storage.dataPath, config.storage.certificateStorageDir).toString()
+            storageDirectoryPath = Path(
+                config.storage.baseApplicationPath,
+                config.storage.dataDir,
+                config.storage.certificateStorageDir
+            ).toString()
         )
     }
 
@@ -56,7 +63,7 @@ fun desktopModule(config: AppConfiguration) = module {
     }
 
     single<DriverFactory> {
-        val databasePath = Path(config.storage.dataPath, "local.db").toString()
+        val databasePath = Path(config.storage.baseApplicationPath, config.storage.dataDir, "local.db").toString()
         DriverFactoryDesktop(databasePath = databasePath)
     }
 

@@ -8,7 +8,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.io.files.Path
 
 private val logger = createKmpLogger("StartupViewModel")
 
@@ -29,7 +28,7 @@ private val logger = createKmpLogger("StartupViewModel")
  * @property loadConfigUseCase Use case for loading startup configuration.
  */
 class StartupViewModel(
-    private val configDir: Path,
+    private val configDir: String,
     private val loadConfigUseCase: LoadStartupConfigurationUseCase
 ) {
     // ViewModel scope for coroutines

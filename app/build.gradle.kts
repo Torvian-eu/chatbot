@@ -71,27 +71,25 @@ kotlin {
 
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs {
-        //moduleName = "composeApp"
         outputModuleName = "composeApp"
         browser {
             val rootDirPath = project.rootDir.path
             val projectDirPath = project.projectDir.path
             commonWebpackConfig {
                 outputFileName = "composeApp.js"
-                devServer = (devServer ?: KotlinWebpackConfig.DevServer()).apply {
-                    static = (static ?: mutableListOf()).apply {
-                        // Serve sources to debug inside browser
-                        add(rootDirPath)
-                        add(projectDirPath)
-                    }
+                devServer = devServer ?: KotlinWebpackConfig.DevServer().apply {
+                    // Serve sources to debug inside browser
+                    static(rootDirPath)
+                    static(projectDirPath)
                 }
             }
         }
         binaries.executable()
-        compilerOptions {
-            // Use the new Wasm exception proposal for better error handling
-            freeCompilerArgs.add("-Xwasm-use-new-exception-proposal")
-        }
+//        // Commented out because it is not working with some packages:
+//        compilerOptions {
+//            // Use the new Wasm exception proposal for better error handling
+//            freeCompilerArgs.add("-Xwasm-use-new-exception-proposal")
+//        }
     }
 
     androidTarget {
@@ -157,8 +155,6 @@ kotlin {
             implementation(libs.ktor.client.logging)
             implementation(libs.ktor.client.auth)
             implementation(libs.ktor.client.websockets)
-            // CIO engine for Desktop, Android and WasmJs
-            implementation(libs.ktor.client.cio)
 
             // Arrow dependencies for Either
             implementation(libs.arrow.core)
@@ -190,8 +186,7 @@ kotlin {
             implementation(libs.koin.test)
             implementation(libs.ktor.client.mock)
 
-            @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
-            implementation(compose.uiTest)
+            implementation(libs.compose.uiTest)
         }
 
         desktopMain.dependencies {
@@ -219,13 +214,17 @@ kotlin {
         }
 
         androidMain.dependencies {
-            implementation(compose.preview)
             implementation(libs.androidx.activity.compose)
             // Logging
             implementation(libs.slf4j.simple)
 
             // SQLDelight Android driver
             implementation(libs.sqldelight.android.driver)
+        }
+
+        wasmJsMain.dependencies {
+            // JavaScript engine for WasmJS target
+            implementation(libs.ktor.client.js)
         }
     }
 }

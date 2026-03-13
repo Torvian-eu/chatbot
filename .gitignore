@@ -52,3 +52,6 @@ CopyFileContentSettings.xml
 
 ### Android related files
 local.properties
+
+### SQL Delight
+app/src/commonMain/sqldelight/databases/

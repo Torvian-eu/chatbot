@@ -44,8 +44,24 @@ fun Application.chatBotServerModule(
     // Configure CORS
     // This allows the WASM app to make requests to the server.
     install(CORS) {
-        anyHost()
+        anyHost() // Allows all origins, including http://localhost:8080
+
+        // Explicitly allow methods that the API will handle
+        allowMethod(HttpMethod.Options) // Crucial for preflight requests
+        allowMethod(HttpMethod.Post)
+        allowMethod(HttpMethod.Get)
+        allowMethod(HttpMethod.Put)
+        allowMethod(HttpMethod.Delete)
+        allowMethod(HttpMethod.Patch)
+
+        // Explicitly allow headers that the client might send
         allowHeader(HttpHeaders.ContentType)
+        allowHeader(HttpHeaders.Authorization)
+        // If there are any other custom headers, add them here:
+        // allowHeader("X-Custom-Header")
+
+        // set maxAge to cache preflight responses
+        maxAgeInSeconds = 3600 // Cache preflight response for 1 hour
     }
 
     // Configure the database schema
