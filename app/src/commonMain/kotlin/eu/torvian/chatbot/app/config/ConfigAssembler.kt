@@ -4,7 +4,6 @@ import arrow.core.Either
 import arrow.core.raise.Raise
 import arrow.core.raise.either
 import eu.torvian.chatbot.common.security.EncryptionConfig
-import kotlinx.io.files.Path
 
 /**
  * Deep-merges two [AppConfigDto] instances. Values from [other] take precedence
@@ -43,7 +42,7 @@ fun AppConfigDto.merge(other: AppConfigDto?): AppConfigDto = AppConfigDto(
  * @return [Either] containing a [ConfigError.ValidationError] on failure, or a valid
  *         [AppConfiguration] object on success.
  */
-fun AppConfigDto.toDomain(baseDir: Path): Either<ConfigError.ValidationError, AppConfiguration> = either {
+fun AppConfigDto.toDomain(baseDir: String): Either<ConfigError.ValidationError, AppConfiguration> = either {
     // Top-level requirements
     val setupRequired = required("setup.required", setup?.required)
 
@@ -87,7 +86,7 @@ private fun Raise<ConfigError.ValidationError>.parseNetwork(dto: NetworkConfigDt
  */
 private fun Raise<ConfigError.ValidationError>.parseStorage(
     dto: StorageConfigDto?,
-    baseDir: Path
+    baseDir: String
 ): StorageConfig {
     val d = dto ?: raise(ConfigError.ValidationError.MissingKey("storage"))
 
