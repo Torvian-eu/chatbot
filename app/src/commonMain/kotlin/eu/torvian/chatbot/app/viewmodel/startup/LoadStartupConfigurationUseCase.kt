@@ -2,12 +2,8 @@ package eu.torvian.chatbot.app.viewmodel.startup
 
 import arrow.core.Either
 import arrow.core.raise.either
-import eu.torvian.chatbot.app.config.AppConfiguration
-import eu.torvian.chatbot.app.config.AppConfigDto
-import eu.torvian.chatbot.app.config.ClientConfigLoader
-import eu.torvian.chatbot.app.config.ConfigError
-import eu.torvian.chatbot.app.config.toDomain
-import kotlinx.io.files.Path
+import eu.torvian.chatbot.app.config.*
+import eu.torvian.chatbot.app.utils.platform.FilePathUtils
 
 /**
  * Use case for loading startup configuration.
@@ -20,7 +16,9 @@ import kotlinx.io.files.Path
  *
  * Note: Uses ClientConfigLoader directly (no repository abstraction needed).
  */
-class LoadStartupConfigurationUseCase {
+class LoadStartupConfigurationUseCase(
+    private val configLoader: ClientConfigLoader
+) {
     /**
      * Execute the configuration loading flow.
      *
@@ -28,17 +26,17 @@ class LoadStartupConfigurationUseCase {
      * @return Either Left(ConfigError) or Right(StartupConfiguration).
      */
     suspend operator fun invoke(
-        configDir: Path
+        configDir: String
     ): Either<ConfigError, StartupConfiguration> = either {
         // 1. Bootstrap default files if they don't exist
         try {
-            ClientConfigLoader.bootstrapFiles(configDir)
+            configLoader.bootstrapFiles(configDir)
         } catch (e: Exception) {
             raise(ConfigError.FileError.IOFailure("bootstrap", "Failed to bootstrap defaults: ${e.message}"))
         }
 
         // 2. Load and merge configuration files
-        val configDto = ClientConfigLoader.loadConfig(configDir).bind()
+        val configDto = configLoader.loadConfig(configDir).bind()
 
         // 3. Check if setup is required
         if (configDto.setup?.required == true) {
@@ -46,7 +44,7 @@ class LoadStartupConfigurationUseCase {
             StartupConfiguration.NeedsSetup(configDto)
         } else {
             // Setup is complete - validate and convert to domain
-            val baseDir = configDir.parent ?: Path(".")
+            val baseDir = FilePathUtils.parentPath(configDir)
             val appConfig = configDto.toDomain(baseDir).bind()
             StartupConfiguration.Ready(appConfig)
         }

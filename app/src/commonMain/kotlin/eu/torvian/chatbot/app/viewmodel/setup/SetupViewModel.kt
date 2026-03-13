@@ -10,7 +10,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.io.files.Path
 
 private val logger = createKmpLogger("SetupViewModel")
 
@@ -32,7 +31,7 @@ private val logger = createKmpLogger("SetupViewModel")
  * @property completeSetupUseCase Use case for completing setup.
  */
 class SetupViewModel(
-    private val configDir: Path,
+    private val configDir: String,
     private val initialDto: AppConfigDto,
     private val completeSetupUseCase: CompleteSetupUseCase
 ) {
@@ -76,7 +75,7 @@ class SetupViewModel(
     /**
      * Generate a secure encryption key.
      */
-    private suspend fun generateKey() {
+    private fun generateKey() {
         logger.info("Generating encryption key")
         generateSecureKey().fold(
             ifLeft = { error ->

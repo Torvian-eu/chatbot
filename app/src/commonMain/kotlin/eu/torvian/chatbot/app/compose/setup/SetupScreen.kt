@@ -17,10 +17,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.config.AppConfiguration
 import eu.torvian.chatbot.app.config.AppConfigDto
+import eu.torvian.chatbot.app.config.ClientConfigLoader
 import eu.torvian.chatbot.app.viewmodel.setup.CompleteSetupUseCase
 import eu.torvian.chatbot.app.viewmodel.setup.SetupEvent
 import eu.torvian.chatbot.app.viewmodel.setup.SetupViewModel
-import kotlinx.io.files.Path
 
 /**
  * Setup screen for initial application configuration.
@@ -33,7 +33,8 @@ import kotlinx.io.files.Path
  */
 @Composable
 fun SetupScreen(
-    configDir: Path,
+    configDir: String,
+    configLoader: ClientConfigLoader,
     initialDto: AppConfigDto,
     onComplete: (AppConfiguration) -> Unit
 ) {
@@ -42,7 +43,7 @@ fun SetupScreen(
         SetupViewModel(
             configDir = configDir,
             initialDto = initialDto,
-            completeSetupUseCase = CompleteSetupUseCase()
+            completeSetupUseCase = CompleteSetupUseCase(configLoader)
         )
     }
 
