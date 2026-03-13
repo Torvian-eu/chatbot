@@ -186,8 +186,7 @@ kotlin {
             implementation(libs.koin.test)
             implementation(libs.ktor.client.mock)
 
-            @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
-            implementation(compose.uiTest)
+            implementation(libs.compose.uiTest)
         }
 
         desktopMain.dependencies {
@@ -215,7 +214,6 @@ kotlin {
         }
 
         androidMain.dependencies {
-            implementation(compose.preview)
             implementation(libs.androidx.activity.compose)
             // Logging
             implementation(libs.slf4j.simple)
