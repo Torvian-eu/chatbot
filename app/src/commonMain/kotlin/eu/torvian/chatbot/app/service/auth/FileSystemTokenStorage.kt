@@ -14,21 +14,10 @@ import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 import kotlinx.io.readString
 import kotlinx.io.writeString
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlin.time.Clock
 import kotlin.time.Instant
-
-/**
- * A serializable container for the DEK metadata.
- * This is stored separately from the encrypted data.
- */
-@Serializable
-private data class DekMetadata(
-    val wrappedDek: String,    // Base64 encoded wrapped Data Encryption Key
-    val kekVersion: Int        // Version of the Key Encryption Key used
-)
 
 /**
  * KMP-compatible implementation of [TokenStorage] using envelope encryption with multi-account support.
@@ -48,6 +37,9 @@ private data class DekMetadata(
  * @param storageDirectoryPath The absolute path to the directory for storing the files.
  * @param fileSystem The KMP FileSystem to use. Defaults to the system's default file system.
  * @param json The JSON serializer instance.
+ *
+ * Note: This implementation does not work on WasmJs, due to incompatibility with kotlinx.io.files.
+ *       Use BrowserTokenStorage instead.
  */
 open class FileSystemTokenStorage(
     private val cryptoProvider: CryptoProvider,
@@ -56,16 +48,6 @@ open class FileSystemTokenStorage(
     private val json: Json = Json { ignoreUnknownKeys = true }
 ) : TokenStorage {
     private val logger = kmpLogger<FileSystemTokenStorage>()
-
-    @Serializable
-    private data class TokenData(
-        val accessToken: String,
-        val refreshToken: String,
-        val expiresAt: Long,
-        val user: User,
-        val permissions: List<Permission> = emptyList(),
-        val lastUsed: Instant = Clock.System.now()
-    )
 
     private val storageDirPath = Path(storageDirectoryPath)
     private val activeAccountPath: Path = Path(storageDirPath, "active_account.json")
