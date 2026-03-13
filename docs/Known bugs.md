@@ -13,5 +13,15 @@ Update: New observation: In very long chats it becomes impossible to scroll up. 
 ## MCP server configuration: info sections "status" and "configuration" are not selectable
 - This causes that the user cannot copy text from these sections.
 
+## (fixed) Websocket connections not working for WasmJs target
+- Browser WebSocket APIs do not support arbitrary custom headers (including `Authorization`) during handshake.
+- Implemented workaround: WasmJs now sends auth through `Sec-WebSocket-Protocol` using `chatbot-auth,<jwt>`.
+- The server keeps normal `Authorization: Bearer <jwt>` behavior and falls back to parsing `Sec-WebSocket-Protocol` when `Authorization` is absent.
+- Follow-up hardening idea: evaluate stricter `Origin` validation for browser-originated websocket handshakes.
+- See: https://stackoverflow.com/questions/4361173/http-headers-in-websockets-client-api/4361358#4361358, https://devcenter.heroku.com/articles/websocket-security, https://ably.com/blog/websocket-authentication
+
+## (by design) Self-signed server certificates are not working for WasmJs target
+- This is caused by the Browser's native networking stack enforcing certificate validation. There is no way to disable this behavior. The only solution is to use a CA signed certificate.
+- During development this can be circumvented by manually going to the server URL in the browser and accepting the certificate. Or by using the 'mkcert' tool: https://github.com/FiloSottile/mkcert
 
 # Code quality
