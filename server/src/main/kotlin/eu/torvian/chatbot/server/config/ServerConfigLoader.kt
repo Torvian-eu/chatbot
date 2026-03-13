@@ -33,6 +33,11 @@ object ServerConfigLoader {
 
     private val logger = LogManager.getLogger(ServerConfigLoader::class.java)
 
+    private fun resolveConfigDirPath(): String =
+        System.getenv(CONFIG_DIR_ENV_VAR)
+            ?: System.getProperty("app.config.dir")
+            ?: "config"
+
     /**
      * JSON instance used for (de)serialization of DTOs and environment mapping.
      *
@@ -63,9 +68,7 @@ object ServerConfigLoader {
      * - configDir = "C:\Dev\chatbot-dev\config"    → base = "C:\Dev\chatbot-dev"
      */
     fun resolveBaseApplicationPath(): String {
-        val configDir = System.getenv(CONFIG_DIR_ENV_VAR)
-            ?: System.getProperty("app.config.dir")
-            ?: "config"
+        val configDir = resolveConfigDirPath()
         return File(configDir).parentFile?.path ?: "."
     }
 
@@ -82,9 +85,7 @@ object ServerConfigLoader {
      * @return [Either] containing a [ConfigError] on failure, or a fully merged [AppConfigDto] on success.
      */
     fun loadConfigDto(): Either<ConfigError, AppConfigDto> = either {
-        val appConfigDir = System.getenv(CONFIG_DIR_ENV_VAR)
-            ?: System.getProperty("app.config.dir")
-            ?: "config"
+        val appConfigDir = resolveConfigDirPath()
 
         val source = when {
             System.getenv(CONFIG_DIR_ENV_VAR) != null -> "environment variable $CONFIG_DIR_ENV_VAR"
@@ -237,9 +238,7 @@ object ServerConfigLoader {
      * @param fileName Target filename within the config directory (e.g., "secrets.json").
      */
     fun saveConfig(dto: AppConfigDto, fileName: String) {
-        val dirPath = System.getenv(CONFIG_DIR_ENV_VAR)
-            ?: System.getProperty("app.config.dir")
-            ?: "config"
+        val dirPath = resolveConfigDirPath()
         val file = File(dirPath, fileName)
 
         logger.info("Saving configuration to: ${file.absolutePath}")
