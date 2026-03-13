@@ -6,9 +6,11 @@ import eu.torvian.chatbot.server.data.entities.UserEntity
 import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.server.data.entities.UserSessionEntity
 import eu.torvian.chatbot.server.domain.security.JwtConfig
+import eu.torvian.chatbot.common.api.CommonWebSocketProtocols
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
 import eu.torvian.chatbot.server.testutils.data.TestDefaults
 import io.ktor.client.request.*
+import io.ktor.http.HttpHeaders
 import kotlin.time.Instant
 
 /**
@@ -160,3 +162,17 @@ class TestAuthHelper(private val container: DIContainer) {
 fun HttpRequestBuilder.authenticate(token: String) {
     header("Authorization", "Bearer $token")
 }
+
+fun HttpRequestBuilder.authenticateWithWebSocketSubprotocol(
+    token: String,
+    marker: String = CommonWebSocketProtocols.CHATBOT_AUTH
+) {
+    header(HttpHeaders.SecWebSocketProtocol, "$marker,$token")
+}
+
+fun HttpRequestBuilder.offerWebSocketAuthSubprotocolMarker(
+    marker: String = CommonWebSocketProtocols.CHATBOT_AUTH
+) {
+    header(HttpHeaders.SecWebSocketProtocol, marker)
+}
+

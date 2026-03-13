@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.ktor
 
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.domain.security.JwtConfig
+import eu.torvian.chatbot.server.ktor.auth.extractJwtAuthHeader
 import eu.torvian.chatbot.server.service.security.AuthenticationService
 import io.ktor.serialization.kotlinx.*
 import io.ktor.serialization.kotlinx.json.*
@@ -39,6 +40,11 @@ fun Application.configureKtor(jwtConfig: JwtConfig, authService: AuthenticationS
         jwt(AuthSchemes.USER_JWT) {
             realm = jwtConfig.realm
             verifier(jwtConfig.verifier)
+            // Browser WebSocket clients cannot set Authorization headers directly.
+            // This extractor keeps normal Bearer auth and adds subprotocol fallback for WS handshakes.
+            authHeader { call ->
+                call.request.extractJwtAuthHeader()
+            }
             validate { credential ->
                 authService.validateCredential(credential)
             }

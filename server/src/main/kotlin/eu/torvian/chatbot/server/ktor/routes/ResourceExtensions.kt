@@ -18,17 +18,19 @@ import kotlinx.serialization.serializer
  * Usage: `webSocket<MyResource> { resource -> ... }`
  *
  * @param T The `@Resource` annotated class.
+ * @param protocol Optional websocket subprotocol selected by the server during handshake.
  * @param handler The block for the WebSocket session. Receives the [DefaultWebSocketServerSession]
  *                as its context and the typed [resource] instance as a parameter.
  * @return The created [Route] for the resource.
  */
 inline fun <reified T : Any> Route.webSocket(
+    protocol: String? = null,
     crossinline handler: suspend DefaultWebSocketServerSession.(T) -> Unit
 ): Route =
     // Register a typed resource route
     resource<T> {
         // Register a WebSocket route within the resource route
-        webSocket {
+        webSocket(protocol = protocol) {
             // Deserialize the resource from the call parameters
             val resources = plugin(Resources)
             val resource = resources.resourcesFormat.decodeFromParameters(serializer<T>(), call.parameters)

@@ -13,6 +13,8 @@ import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 import eu.torvian.chatbot.server.testutils.auth.TestAuthHelper
 import eu.torvian.chatbot.server.testutils.auth.authenticate
+import eu.torvian.chatbot.server.testutils.auth.authenticateWithWebSocketSubprotocol
+import eu.torvian.chatbot.server.testutils.auth.offerWebSocketAuthSubprotocolMarker
 import eu.torvian.chatbot.server.testutils.data.Table
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
 import eu.torvian.chatbot.server.testutils.data.TestDataSet
@@ -535,7 +537,10 @@ class SessionRoutesTest {
             val receivedEvents = mutableListOf<ChatEvent>()
             client.webSocket(
                 urlString = href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = testNonStreamingSession.id))),
-                request = { authenticate(authToken) }
+                request = {
+                    authenticate(authToken)
+                    offerWebSocketAuthSubprotocolMarker()
+                }
             ) {
                 // Send initial message
                 val initialEvent: ChatClientEvent = ChatClientEvent.ProcessNewMessage(processRequest)
@@ -590,6 +595,34 @@ class SessionRoutesTest {
         }
 
     @Test
+    fun `WS session message should authenticate via Sec-WebSocket-Protocol`() = sessionTestApplication {
+        // Arrange
+        testDataManager.insertChatSession(testNonStreamingSession)
+        testDataManager.insertSessionOwnership(testNonStreamingSession.id, authHelper.defaultTestUser.id)
+        val processRequest = ProcessNewMessageRequest(content = "Subprotocol auth message", isStreaming = false)
+
+        // Act
+        val receivedEvents = mutableListOf<ChatEvent>()
+        client.webSocket(
+            urlString = href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = testNonStreamingSession.id))),
+            request = { authenticateWithWebSocketSubprotocol(authToken) }
+        ) {
+            val initialEvent: ChatClientEvent = ChatClientEvent.ProcessNewMessage(processRequest)
+            send(Frame.Text(json.encodeToString(initialEvent)))
+
+            for (frame in incoming) {
+                val textFrame = frame as? Frame.Text ?: continue
+                val chatEvent = json.decodeFromString<ChatEvent>(textFrame.readText())
+                receivedEvents.add(chatEvent)
+            }
+        }
+
+        // Assert
+        val doneEvent = receivedEvents.filterIsInstance<ChatEvent.StreamCompleted>().firstOrNull()
+        assertNotNull(doneEvent, "Should receive done event when authenticating via subprotocol")
+    }
+
+    @Test
     fun `WS session message should emit error event for non-existent session`() = sessionTestApplication {
         // Arrange
         val nonExistentId = 999L
@@ -599,7 +632,10 @@ class SessionRoutesTest {
         val receivedEvents = mutableListOf<ChatEvent>()
         client.webSocket(
             urlString = href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = nonExistentId))),
-            request = { authenticate(authToken) }
+            request = {
+                authenticate(authToken)
+                offerWebSocketAuthSubprotocolMarker()
+            }
         ) {
             val initialEvent: ChatClientEvent = ChatClientEvent.ProcessNewMessage(processRequest)
             send(Frame.Text(json.encodeToString(initialEvent)))
@@ -628,7 +664,10 @@ class SessionRoutesTest {
         val receivedEvents = mutableListOf<ChatEvent>()
         client.webSocket(
             urlString = href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = testSession.id))),
-            request = { authenticate(authToken) }
+            request = {
+                authenticate(authToken)
+                offerWebSocketAuthSubprotocolMarker()
+            }
         ) {
             val initialEvent: ChatClientEvent = ChatClientEvent.ProcessNewMessage(processRequest)
             send(Frame.Text(json.encodeToString(initialEvent)))
@@ -843,7 +882,10 @@ class SessionRoutesTest {
         val receivedEvents = mutableListOf<ChatEvent>()
         client.webSocket(
             urlString = href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = testSession.id))),
-            request = { authenticate(authToken) }
+            request = {
+                authenticate(authToken)
+                offerWebSocketAuthSubprotocolMarker()
+            }
         ) {
             val initialEvent: ChatClientEvent = ChatClientEvent.ProcessNewMessage(processRequest)
             send(Frame.Text(json.encodeToString(initialEvent)))

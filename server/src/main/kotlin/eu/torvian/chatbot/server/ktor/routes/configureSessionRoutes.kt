@@ -5,6 +5,7 @@ import arrow.core.raise.either
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
+import eu.torvian.chatbot.common.api.CommonWebSocketProtocols
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.models.api.core.*
@@ -24,6 +25,7 @@ import io.ktor.server.resources.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.Route
 import io.ktor.websocket.*
+import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -183,12 +185,14 @@ fun Route.configureSessionRoutes(
             }
             call.respondEither(result, HttpStatusCode.Created)
         }
-
-
-//      WebSocket /api/v1/sessions/{sessionId}/messages - Process a new message for a session
-        webSocket<SessionResource.ById.Messages> { resource ->
+        // WebSocket /api/v1/sessions/{sessionId}/messages - Process a new message for a session
+        webSocket<SessionResource.ById.Messages>(protocol = CommonWebSocketProtocols.CHATBOT_AUTH) { resource ->
             val sessionId = resource.parent.sessionId
             val userId = call.getUserId()
+
+            logger.info(
+                "WS open: sessionId=$sessionId, userId=$userId"
+            )
 
             var request: ProcessNewMessageRequest? = null
             try {
@@ -299,6 +303,8 @@ fun Route.configureSessionRoutes(
                     )
                 }
 
+            } catch (e: ClosedReceiveChannelException) {
+                logger.debug("WebSocket client channel closed for session $sessionId: ${e.message}")
             } catch (e: Exception) {
                 logger.error("Error in WebSocket session for session $sessionId: ${e.message}", e)
                 val internalApiError = apiError(CommonApiErrorCodes.INTERNAL, "An unexpected error occurred.")
@@ -307,10 +313,16 @@ fun Route.configureSessionRoutes(
                 } else {
                     json.encodeToString(ChatEvent.ErrorOccurred(internalApiError) as ChatEvent)
                 }
-                outgoing.send(Frame.Text(errorFrame))
+                runCatching {
+                    outgoing.send(Frame.Text(errorFrame))
+                }.onFailure { sendError ->
+                    logger.debug("Skipping internal error frame for session $sessionId: ${sendError.message}")
+                }
             } finally {
                 // The WebSocket session will be closed automatically when the block finishes.
-                logger.info("WebSocket session closed for session $sessionId")
+                logger.info(
+                    "WebSocket closed: sessionId=$sessionId}"
+                )
             }
         }
 
