@@ -16,7 +16,15 @@ import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.tool.ToolCall
+import eu.torvian.chatbot.app.utils.misc.LruCache
 import org.koin.compose.viewmodel.koinViewModel
+
+/**
+ * Maximum number of chat ViewModel slots kept alive at the same time.
+ *
+ * Slots are reused using LRU order when this limit is reached.
+ */
+private const val MAX_CHAT_VIEW_MODELS_IN_MEMORY = 20
 
 /**
  * A stateful wrapper Composable for the main chat interface.
@@ -27,9 +35,9 @@ import org.koin.compose.viewmodel.koinViewModel
  * - Constructing and passing stateless UI state and action contracts to [ChatScreenContent].
  * (E7.S2: Implementing the Stateful part of the Screen with internal ViewModel management)
  *
- * A separate [ChatViewModel] is created for each session and keyed by session ID inside the
- * Chat NavBackStackEntry's ViewModelStore. This allows multiple sessions to run in parallel —
- * in-flight streaming and stop-button state are preserved when the user switches between sessions.
+ * Chat sessions are assigned to a bounded set of ViewModel slots using LRU. Recently used
+ * sessions keep their own [ChatViewModel]; older sessions can be evicted and their slot reused,
+ * keeping memory usage predictable while still supporting seamless switching for active sessions.
  *
  * @param sessionListViewModel The ViewModel managing the session list state.
  */
@@ -42,11 +50,16 @@ fun ChatScreen(
     val selectedSession by sessionListViewModel.selectedSession.collectAsState()
     val selectedSessionId = selectedSession?.id
 
-    // Obtain a session-scoped ChatViewModel keyed by session ID.
-    // Each unique session gets its own VM instance, stored in the Chat
-    // NavBackStackEntry's ViewModelStore. Switching sessions keeps all VMs alive,
-    // so in-flight operations (streaming, stop button state) are preserved.
-    val chatViewModel: ChatViewModel = koinViewModel(key = "chat_${selectedSessionId ?: "none"}")
+    // Keeps track of which sessions currently occupy a limited pool of VM slots.
+    val viewModelSlotAllocator = remember { ChatViewModelSlotAllocator(MAX_CHAT_VIEW_MODELS_IN_MEMORY) }
+    // Stable key for Koin VM lookup; may be reused for a different session after LRU eviction.
+    val chatViewModelKey = remember(selectedSessionId) {
+        viewModelSlotAllocator.resolveViewModelKey(selectedSessionId)
+    }
+
+    // Obtain a session-scoped ChatViewModel keyed by LRU slot.
+    // This keeps memory bounded while preserving state for recently used sessions.
+    val chatViewModel: ChatViewModel = koinViewModel(key = chatViewModelKey)
 
     // --- Collect States for SessionListPanel ---
     val sessionListUiState by sessionListViewModel.listState.collectAsState()
@@ -110,13 +123,11 @@ fun ChatScreen(
     )
 
     // --- Load Session on First Use ---
-    // Fires once per (VM instance, authState) combination. The activeSessionId == null
-    // guard ensures we only call loadSession for freshly created VMs, not for cached
-    // VMs that were already loaded when the user switches back to this session.
-    LaunchedEffect(chatViewModel, authState) {
+    // Load when this VM is fresh OR when an LRU slot is being reused for a different session.
+    LaunchedEffect(chatViewModel, authState, selectedSessionId) {
         if (selectedSessionId != null
             && authState is AuthState.Authenticated
-            && chatViewModel.activeSessionId.value == null
+            && chatViewModel.activeSessionId.value != selectedSessionId
         ) {
             chatViewModel.loadSession(selectedSessionId, authState.userId)
         }
@@ -268,4 +279,43 @@ fun ChatScreen(
         chatAreaActions = chatAreaActions,
         isSessionListCollapsed = isSessionListCollapsed
     )
+}
+
+/**
+ * Maps session IDs to a bounded set of ViewModel slot indices.
+ *
+ * When all slots are occupied, the least-recently-used session mapping is replaced so its
+ * slot can be reused by a newly selected session.
+ *
+ * @param maxViewModels Maximum number of slots that can exist concurrently.
+ */
+private class ChatViewModelSlotAllocator(
+    maxViewModels: Int
+) {
+    /** Session -> slot mapping with access-order tracking. */
+    private val sessionToSlot = LruCache<Long, Int>(maxViewModels)
+
+    /** Pool of slots that have never been assigned yet. */
+    private val freeSlots = (0 until maxViewModels).toMutableSet()
+
+    /**
+     * Resolves the Koin key for the selected session.
+     *
+     * @return A stable slot key (`chat_slot_<n>`) or `chat_none` when no session is selected.
+     */
+    fun resolveViewModelKey(sessionId: Long?): String {
+        if (sessionId == null) return "chat_none"
+
+        val assignedSlot = sessionToSlot.getOrPut(sessionId) {
+            // Prefer an unused slot first.
+            freeSlots.firstOrNull()
+                .also { freeSlots.remove(it) }
+                // If none are free, reuse the slot that belongs to the least recently used session.
+                ?: sessionToSlot.leastRecentlyUsedValue
+                ?: error("Expected an LRU session when no free slots are available")
+        }
+        return slotKey(assignedSlot)
+    }
+
+    private fun slotKey(slot: Int): String = "chat_slot_$slot"
 }

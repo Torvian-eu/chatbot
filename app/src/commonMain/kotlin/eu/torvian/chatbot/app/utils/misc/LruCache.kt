@@ -153,6 +153,12 @@ class LruCache<K, V>(private val maxSize: Int) {
         }
     }
 
+    /**
+     * Returns the least recently used value currently in the cache, or null if empty.
+     */
+    val leastRecentlyUsedValue: V?
+        get() = tail?.value
+
     // --- Internal Doubly Linked List Operations ---
 
     private fun addNodeToHead(node: Node<K, V>) {
