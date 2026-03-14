@@ -27,18 +27,30 @@ import org.koin.compose.viewmodel.koinViewModel
  * - Constructing and passing stateless UI state and action contracts to [ChatScreenContent].
  * (E7.S2: Implementing the Stateful part of the Screen with internal ViewModel management)
  *
+ * A separate [ChatViewModel] is created for each session and keyed by session ID inside the
+ * Chat NavBackStackEntry's ViewModelStore. This allows multiple sessions to run in parallel —
+ * in-flight streaming and stop-button state are preserved when the user switches between sessions.
+ *
  * @param sessionListViewModel The ViewModel managing the session list state.
- * @param chatViewModel The ViewModel managing the active chat session state.
  */
 @Composable
 fun ChatScreen(
     sessionListViewModel: SessionListViewModel = koinViewModel(),
-    chatViewModel: ChatViewModel = koinViewModel(),
     authState: AuthState
 ) {
+    // Collect selected session first — its ID is used as the key for the ChatViewModel.
+    val selectedSession by sessionListViewModel.selectedSession.collectAsState()
+    val selectedSessionId = selectedSession?.id
+
+    // Obtain a session-scoped ChatViewModel keyed by session ID.
+    // Each unique session gets its own VM instance, stored in the Chat
+    // NavBackStackEntry's ViewModelStore. Switching sessions keeps all VMs alive,
+    // so in-flight operations (streaming, stop button state) are preserved.
+    val chatViewModel: ChatViewModel = koinViewModel(key = "chat_${selectedSessionId ?: "none"}")
+
     // --- Collect States for SessionListPanel ---
     val sessionListUiState by sessionListViewModel.listState.collectAsState()
-    val selectedSession by sessionListViewModel.selectedSession.collectAsState()
+    // selectedSession is already collected above
     val isCreatingNewGroup by sessionListViewModel.isCreatingNewGroup.collectAsState()
     val newGroupNameInput by sessionListViewModel.newGroupNameInput.collectAsState()
     val editingGroup by sessionListViewModel.editingGroup.collectAsState()
@@ -47,7 +59,6 @@ fun ChatScreen(
 
     // --- Collect States for ChatArea ---
     val chatSessionUiState by chatViewModel.sessionDataState.collectAsState()
-    val activeSessionId by chatViewModel.activeSessionId.collectAsState() // Collect active ID for comparison
     val availableModels by chatViewModel.availableModels.collectAsState()
     val availableSettings by chatViewModel.availableSettingsForCurrentModel.collectAsState()
     val currentModel by chatViewModel.currentModel.collectAsState()
@@ -98,18 +109,16 @@ fun ChatScreen(
         }
     )
 
-    // --- State-Driven Effect to Load Sessions ---
-    LaunchedEffect(selectedSession, authState) {
-        val newSessionId = selectedSession?.id
-        if (newSessionId != null && newSessionId != activeSessionId) {
-            if (authState is AuthState.Authenticated) {
-                chatViewModel.loadSession(newSessionId, authState.userId)
-            } else {
-                // Not authenticated - clear session to avoid loading user-specific data
-                chatViewModel.clearSession()
-            }
-        } else if (newSessionId == null && activeSessionId != null) {
-            chatViewModel.clearSession()
+    // --- Load Session on First Use ---
+    // Fires once per (VM instance, authState) combination. The activeSessionId == null
+    // guard ensures we only call loadSession for freshly created VMs, not for cached
+    // VMs that were already loaded when the user switches back to this session.
+    LaunchedEffect(chatViewModel, authState) {
+        if (selectedSessionId != null
+            && authState is AuthState.Authenticated
+            && chatViewModel.activeSessionId.value == null
+        ) {
+            chatViewModel.loadSession(selectedSessionId, authState.userId)
         }
     }
 
