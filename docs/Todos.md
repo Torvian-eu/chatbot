@@ -19,4 +19,7 @@
 - The material icons libraries are now deprecated. Replace them with individual icon downloads. See TODO in app/build.gradle.kts. Other docs: https://kotlinlang.org/docs/multiplatform/compose-multiplatform-resources-usage.html#icons, https://developer.android.com/develop/ui/compose/graphics/images/material, https://developers.google.com/fonts/docs/material_icons#rtl_icons_on_android
 - Fix support for WASM and Android platforms.
 - Use the Android keystore for storing encryption keys on Android. See KeyGenerator.android.kt.
+- Add scrollbars to chat screen on WasmJs target.
+- Add support for different screen sizes, in order to support portrait mode on mobile devices.
+- Save expanded states of chat messages (in memory only), so that they are restored when the user revisits the session.
  

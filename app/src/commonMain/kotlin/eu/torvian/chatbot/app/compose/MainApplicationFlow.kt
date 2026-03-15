@@ -35,7 +35,6 @@ import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.app.service.auth.AccountData
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
 import eu.torvian.chatbot.app.viewmodel.auth.AuthViewModel
-import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
 import eu.torvian.chatbot.common.api.CommonPermissions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -53,7 +52,6 @@ fun MainApplicationFlow(
 ) {
     val navController = rememberNavController()
     val sessionListViewModel: SessionListViewModel = koinViewModel()
-    val chatViewModel: ChatViewModel = koinViewModel()
     val scope = rememberCoroutineScope()
 
     var topBarContent by remember { mutableStateOf<TopBarContent?>(null) }
@@ -83,7 +81,6 @@ fun MainApplicationFlow(
                 navController = navController,
                 paddingValues = paddingValues,
                 sessionListViewModel = sessionListViewModel,
-                chatViewModel = chatViewModel,
                 authState = authState,
                 authViewModel = authViewModel
             )
@@ -359,7 +356,6 @@ private fun MainNavHost(
     navController: NavHostController,
     paddingValues: PaddingValues,
     sessionListViewModel: SessionListViewModel,
-    chatViewModel: ChatViewModel,
     authState: AuthState.Authenticated,
     authViewModel: AuthViewModel
 ) {
@@ -369,7 +365,10 @@ private fun MainNavHost(
             startDestination = Chat
         ) {
             composable<Chat> {
-                ChatScreen(sessionListViewModel, chatViewModel, authState)
+                ChatScreen(
+                    sessionListViewModel = sessionListViewModel,
+                    authState = authState
+                )
             }
             composable<Settings> {
                 SettingsScreen(authState = authState)
