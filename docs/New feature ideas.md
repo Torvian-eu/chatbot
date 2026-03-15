@@ -151,7 +151,7 @@ Agent Skills are folders of instructions, scripts, and resources that agents can
 - The user should be able to retrieve a resource or prompt, if currently active for the chat session. (The MCP server will be contacted to retrieve the resource or prompt)
 - When at least one resource or prompt is active, the UI should indicate this by showing an icon button with badge (indicating the total number of active resources and prompts) underneath the chat input area. Clicking the icon should open a popup with a list of all active resources and prompts (with name, description and type). Clicking an item in the list should copy it's content to the chat input area, or, if the item requires arguments it should open a dialog to enter the arguments, and then copy the formatted resource or prompt to the chat input area.
 
-### Allow user to seamlessly switch between chat sessions while requests are in progress
+### (done) Allow user to seamlessly switch between chat sessions while requests are in progress
 - The streaming process should continue running, allowing for parallel processing of multiple requests.
 
 ---
@@ -207,6 +207,21 @@ Open questions:
 - How to persist sub-agent memory?
 - How to present sub-agents in the UI?
 - Using Chatbot MCP server we could allow the LLM (main agent) call the MCP server to create a new chat session, and send a message with a specially crafted prompt to that session. When the sub-agent in the new chat session completes it's task, it sends a message (with task result) to the main agent to let it know it's done. The main agent can then decide what to do with the result.
+
+### Auto-complete user prompts
+- The user starts typing a prompt, and the AI suggests possible completions based on the current conversation, and prompt history (also from other chat sessions), or prompt templates.
+
+### Support for CLI's that an LLM can operate
+- It's still open for debate which approach is better: custom built CLI's, or MCP servers (with Code mode).
+- A benefit of using a CLI is that the LLM doesn't need to know all the details about the tools it can use beforehand (which saves precious context tokens). It could progressively learn about how to use the tools by trying things out. For instance, by running a command with --help flag, or by getting a list of available commands. Also, the CLI could provide more detailed usage information upon request, which delays the use of context tokens until it's actually needed.
+- Another benefit of using a CLI is that it can have state, which can be used to remember things between commands. For instance, the current working directory, or the last used parameters for a command.
+
+### Use Reinforcement Learning to optimize system instructions
+- The goal is that the LLM will use tools more effectively, and have better conversations.
+- First, we would have to create a dataset of tasks, where each task has a preferred way to be completed. For instance:
+  - Task: "Book a flight from New York to San Francisco"
+    - Preferred way: To use the tool "SearchFlights" with the parameters "origin: New York, destination: San Francisco"
+- Next, we would make incremental changes to the system instructions and then evaluate the changes by looking at the conversation quality. This process could be automated if we let an LLM evaluate the results, and update the system instructions.
 
 ---
 

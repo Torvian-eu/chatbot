@@ -24,4 +24,12 @@ Update: New observation: In very long chats it becomes impossible to scroll up. 
 - This is caused by the Browser's native networking stack enforcing certificate validation. There is no way to disable this behavior. The only solution is to use a CA signed certificate.
 - During development this can be circumvented by manually going to the server URL in the browser and accepting the certificate. Or by using the 'mkcert' tool: https://github.com/FiloSottile/mkcert
 
+## Selecting the "MCP servers" tab on the Settings screen results in a crash on WasmJs target
+- This is caused by a missing implementation of the `LocalMCPServerViewModel` for the WasmJs target.
+- Local MCP server functionality is difficult to implement for WasmJs. It would probably require a browser extension, in order to be able to launch local processes.
+Suggested fix: Remove the tab for WasmJs target.
+
+## Hoverable screen elements are not working on mobile targets
+- This is caused by the fact that mobile devices do not have a mouse. The hoverable elements are implemented using the `pointer` input type, which is not supported on mobile devices.
+
 # Code quality
