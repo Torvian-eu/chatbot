@@ -13,7 +13,6 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -32,6 +31,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 fun MessageList(
     chatSession: ChatSession,
     displayedMessages: List<ChatMessage>,
+    collapsedMessageIds: Set<Long>,
+    onToggleMessageCollapsed: (Long) -> Unit,
     messageActions: MessageActions,
     editingMessage: ChatMessage?,
     editingContent: String?,
@@ -66,26 +67,6 @@ fun MessageList(
 
     // Threshold for considering a message "long" (collapsible)
     val collapseThreshold = 500
-
-    // State to track which messages are collapsed
-    var collapsedMessageIds by rememberSaveable { mutableStateOf<Set<Long>>(emptySet()) }
-
-    // Initialize collapsed state when session changes - collapse long messages on load
-    LaunchedEffect(chatSession.id) {
-        collapsedMessageIds = chatSession.messages
-            .filter { it.content.length > collapseThreshold }
-            .map { it.id }
-            .toSet()
-    }
-
-    // Toggle collapse state for a message
-    val onToggleCollapse: (Long) -> Unit = { messageId ->
-        collapsedMessageIds = if (messageId in collapsedMessageIds) {
-            collapsedMessageIds - messageId
-        } else {
-            collapsedMessageIds + messageId
-        }
-    }
 
     // Calculate the distance from the bottom
     val distanceFromBottom by remember {
@@ -203,7 +184,7 @@ fun MessageList(
                         onShowFileReferenceDetails = onShowFileReferenceDetails,
                         isCollapsed = message.id in collapsedMessageIds,
                         isCollapsible = message.content.length > collapseThreshold,
-                        onToggleCollapse = { onToggleCollapse(message.id) }
+                        onToggleCollapse = { onToggleMessageCollapsed(message.id) }
                     )
 
                     // Insert expanded input area right after reply target message

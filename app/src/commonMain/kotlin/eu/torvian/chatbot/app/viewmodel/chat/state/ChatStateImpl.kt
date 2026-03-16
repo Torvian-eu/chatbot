@@ -3,7 +3,6 @@ package eu.torvian.chatbot.app.viewmodel.chat.state
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.models.LocalMCPServer
 import eu.torvian.chatbot.app.repository.*
-import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.util.ThreadBuilder
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
@@ -28,16 +27,17 @@ import kotlinx.coroutines.flow.*
 @OptIn(ExperimentalCoroutinesApi::class)
 class ChatStateImpl(
     private val sessionRepository: SessionRepository,
-    private val modelSettingsRepository: ModelSettingsRepository,
-    private val modelRepository: ModelRepository,
+    modelSettingsRepository: ModelSettingsRepository,
+    modelRepository: ModelRepository,
     private val toolRepository: ToolRepository,
-    private val mcpServerRepository: LocalMCPServerRepository,
+    mcpServerRepository: LocalMCPServerRepository,
     private val threadBuilder: ThreadBuilder,
-    private val backgroundScope: CoroutineScope
+    backgroundScope: CoroutineScope
 ) : ChatState {
 
     companion object {
-        private val logger = kmpLogger<ChatStateImpl>()
+        /** Content length above which a message is collapsible. */
+        private const val COLLAPSE_THRESHOLD = 500
     }
 
     // --- Private MutableStateFlows for Direct User Input ---
@@ -53,6 +53,7 @@ class ChatStateImpl(
     private val _dialogState = MutableStateFlow<ChatAreaDialogState>(ChatAreaDialogState.None)
     private val _pendingFileReferences = MutableStateFlow<List<FileReference>>(emptyList())
     private val _basePathOverride = MutableStateFlow<String?>(null)
+    private val _collapsedMessageIds = MutableStateFlow<Set<Long>>(emptySet())
 
     // --- Public Read-Only StateFlows ---
 
@@ -67,6 +68,7 @@ class ChatStateImpl(
     override val dialogState: StateFlow<ChatAreaDialogState> = _dialogState.asStateFlow()
     override val pendingFileReferences: StateFlow<List<FileReference>> = _pendingFileReferences.asStateFlow()
     override val basePathOverride: StateFlow<String?> = _basePathOverride.asStateFlow()
+    override val collapsedMessageIds: StateFlow<Set<Long>> = _collapsedMessageIds.asStateFlow()
 
     // --- Reactive State Derivation ---
 
@@ -248,6 +250,24 @@ class ChatStateImpl(
         _inputContent.value = content
     }
 
+    override fun toggleMessageCollapsed(messageId: Long) {
+        _collapsedMessageIds.update { current ->
+            if (messageId in current) current - messageId else current + messageId
+        }
+    }
+
+    override fun collapseAllDisplayedMessages() {
+        _collapsedMessageIds.update { current ->
+            displayedMessages.value.filter { it.content.length > COLLAPSE_THRESHOLD }.map { it.id }.toSet() + current
+        }
+    }
+
+    override fun expandAllDisplayedMessages() {
+        _collapsedMessageIds.update { current ->
+            current - displayedMessages.value.map { it.id }.toSet()
+        }
+    }
+
     override fun setReplyTarget(message: ChatMessage?) {
         _replyTargetMessage.value = message
     }
@@ -305,5 +325,6 @@ class ChatStateImpl(
         _dialogState.value = ChatAreaDialogState.None
         _pendingFileReferences.value = emptyList()
         _basePathOverride.value = null
+        _collapsedMessageIds.value = emptySet()
     }
 }

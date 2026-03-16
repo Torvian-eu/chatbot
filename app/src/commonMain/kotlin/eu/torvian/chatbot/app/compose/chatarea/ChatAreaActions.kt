@@ -96,6 +96,12 @@ interface ChatAreaActions {
     fun onSwitchBranchToMessage(messageId: Long)
 
     /**
+     * Callback for when the user toggles collapse/expand on a message.
+     * @param messageId The ID of the message to toggle.
+     */
+    fun onToggleMessageCollapsed(messageId: Long)
+
+    /**
      * Callback for when the user selects a specific LLM model for the session.
      * @param modelId The ID of the model to select, or null to clear selection.
      */
