@@ -84,6 +84,7 @@ fun ChatScreen(
     val chatEditingFileReferences by chatViewModel.editingFileReferences.collectAsState()
     val chatEditingBasePathOverride by chatViewModel.editingBasePathOverride.collectAsState()
     val chatDisplayedMessages by chatViewModel.displayedMessages.collectAsState()
+    val chatCollapsedMessageIds by chatViewModel.collapsedMessageIds.collectAsState()
     val chatIsSendingMessage by chatViewModel.isSendingMessage.collectAsState()
     val chatDialogState by chatViewModel.dialogState.collectAsState()
     val enabledToolsForCurrentSession by chatViewModel.enabledToolsForCurrentSession.collectAsState()
@@ -188,7 +189,8 @@ fun ChatScreen(
     val chatAreaState = remember(
         chatSessionUiState, availableModels, availableSettings, currentModel, currentSettings, modelsById,
         chatInputContent, chatReplyTargetMessage, chatEditingMessage, chatEditingContent,
-        chatEditingFileReferences, chatEditingBasePathOverride, chatDisplayedMessages, chatIsSendingMessage, chatDialogState, enabledToolsCount, toolCallsMap, pendingFileReferences
+        chatEditingFileReferences, chatEditingBasePathOverride, chatDisplayedMessages, chatCollapsedMessageIds,
+        chatIsSendingMessage, chatDialogState, enabledToolsCount, toolCallsMap, pendingFileReferences
     ) {
         ChatAreaState(
             sessionUiState = chatSessionUiState,
@@ -204,6 +206,7 @@ fun ChatScreen(
             editingFileReferences = chatEditingFileReferences,
             editingBasePathOverride = chatEditingBasePathOverride,
             displayedMessages = chatDisplayedMessages,
+            collapsedMessageIds = chatCollapsedMessageIds,
             isSendingMessage = chatIsSendingMessage,
             dialogState = chatDialogState,
             enabledToolsCount = enabledToolsCount,
@@ -228,6 +231,7 @@ fun ChatScreen(
             override fun onRequestInsertMessage(message: ChatMessage) = chatViewModel.onRequestInsertMessage(message)
             override fun onCancelDialog() = chatViewModel.cancelDialog()
             override fun onSwitchBranchToMessage(messageId: Long) = chatViewModel.switchBranchToMessage(messageId)
+            override fun onToggleMessageCollapsed(messageId: Long) = chatViewModel.toggleMessageCollapsed(messageId)
             override fun onSelectModel(modelId: Long?) = chatViewModel.selectModel(modelId)
             override fun onSelectSettings(settingsId: Long?) = chatViewModel.selectSettings(settingsId)
             override fun onShowToolConfig() = chatViewModel.showToolConfigDialog()

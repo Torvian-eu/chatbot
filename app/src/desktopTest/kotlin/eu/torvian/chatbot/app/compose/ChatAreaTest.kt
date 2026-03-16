@@ -1,5 +1,8 @@
 package eu.torvian.chatbot.app.compose
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.*
 import eu.torvian.chatbot.app.compose.chatarea.ChatArea
 import eu.torvian.chatbot.app.compose.common.LOADING_OVERLAY_TAG
@@ -14,6 +17,7 @@ import eu.torvian.chatbot.app.testutils.data.userMessage
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
 import io.mockk.clearMocks
+import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import org.junit.jupiter.api.AfterEach
@@ -510,17 +514,26 @@ class ChatAreaTest {
             messages = testMessages
         )
 
-        val successState = ChatAreaState(
-            sessionUiState = DataState.Success(testSession),
-            displayedMessages = testMessages
-        )
-
         // Act & Assert
         runComposeUiTest {
+            var collapsedIds by mutableStateOf(setOf(1L))
             setContent {
                 ChatArea(
-                    state = successState,
-                    actions = mockActions
+                    state = ChatAreaState(
+                        sessionUiState = DataState.Success(testSession),
+                        displayedMessages = testMessages,
+                        collapsedMessageIds = collapsedIds
+                    ),
+                    actions = mockk(relaxed = true) {
+                        every { onToggleMessageCollapsed(any()) } answers {
+                            val messageId = it.invocation.args[0] as Long
+                            if (messageId in collapsedIds) {
+                                collapsedIds -= messageId
+                            } else {
+                                collapsedIds += messageId
+                            }
+                        }
+                    }
                 )
             }
 
@@ -532,7 +545,6 @@ class ChatAreaTest {
 
             // Act - Click to expand
             messageNode.performClick()
-
             // Assert - Full content should be displayed after expansion
             onNodeWithText(longContent).assertIsDisplayed()
 

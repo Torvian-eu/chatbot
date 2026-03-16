@@ -31,7 +31,7 @@ class LoadSessionUseCase(
     private val state: ChatState,
     private val notificationService: NotificationService,
     private val eventBus: EventBus,
-    private val backgroundScope: CoroutineScope
+    backgroundScope: CoroutineScope
 ) {
 
     private val logger = kmpLogger<LoadSessionUseCase>()
@@ -135,6 +135,8 @@ class LoadSessionUseCase(
                 return@parZip
             }
         }
+        // Collapse all displayed messages after loading
+        state.collapseAllDisplayedMessages()
     }
 
     /**

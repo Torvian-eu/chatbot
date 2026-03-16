@@ -21,5 +21,6 @@
 - Use the Android keystore for storing encryption keys on Android. See KeyGenerator.android.kt.
 - Add scrollbars to chat screen on WasmJs target.
 - Add support for different screen sizes, in order to support portrait mode on mobile devices.
-- Save expanded states of chat messages (in memory only), so that they are restored when the user revisits the session.
+- [x] Save expanded states of chat messages (in memory only), so that they are restored when the user revisits the session.
+- Save scrollbar position (in memory only), so that it is restored when the user revisits the session (when in LRU cache).
  

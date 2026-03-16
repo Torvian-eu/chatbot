@@ -109,6 +109,13 @@ interface ChatState {
     val displayedMessages: StateFlow<List<ChatMessage>>
 
     /**
+     * Message IDs currently rendered as collapsed for the active session.
+     *
+     * This value is derived from current session messages and in-memory user toggles.
+     */
+    val collapsedMessageIds: StateFlow<Set<Long>>
+
+    /**
      * The current text content in the message input field.
      */
     val inputContent: StateFlow<String>
@@ -176,6 +183,21 @@ interface ChatState {
      * Sets the input content.
      */
     fun setInputContent(content: String)
+
+    /**
+     * Toggles whether a message should be collapsed in the UI.
+     */
+    fun toggleMessageCollapsed(messageId: Long)
+
+    /**
+     * Collapses all currently displayed messages in the UI.
+     */
+    fun collapseAllDisplayedMessages()
+
+    /**
+     * Expands all currently displayed messages in the UI.
+     */
+    fun expandAllDisplayedMessages()
 
     /**
      * Sets the reply target message.

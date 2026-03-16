@@ -129,6 +129,11 @@ class ChatViewModel(
     val displayedMessages: StateFlow<List<ChatMessage>> = state.displayedMessages
 
     /**
+     * Message IDs that should render in collapsed mode.
+     */
+    val collapsedMessageIds: StateFlow<Set<Long>> = state.collapsedMessageIds
+
+    /**
      * The current text content in the message input field.
      */
     val inputContent: StateFlow<String> = state.inputContent
@@ -201,6 +206,13 @@ class ChatViewModel(
      */
     fun updateInput(text: String) {
         updateInputUC.execute(text)
+    }
+
+    /**
+     * Toggles collapsed state for a collapsible message.
+     */
+    fun toggleMessageCollapsed(messageId: Long) {
+        state.toggleMessageCollapsed(messageId)
     }
 
     /**

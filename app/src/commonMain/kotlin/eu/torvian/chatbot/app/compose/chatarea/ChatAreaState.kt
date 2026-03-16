@@ -20,6 +20,7 @@ import eu.torvian.chatbot.common.models.tool.ToolCall
  * @property currentSettings The currently selected model settings for the session.
  * @property modelsById A map of all available models indexed by their ID for quick lookup.
  * @property displayedMessages The list of messages to display in the UI, representing the currently selected thread branch.
+ * @property collapsedMessageIds Message IDs that should render in collapsed mode.
  * @property inputContent The current text content in the message input field.
  * @property replyTargetMessage The message the user is currently explicitly replying to via the Reply action.
  * @property editingMessage The message currently being edited (E3.S1, E3.S2).
@@ -40,6 +41,7 @@ data class ChatAreaState(
     val currentSettings: ModelSettings? = null,
     val modelsById: Map<Long, LLMModel> = emptyMap(),
     val displayedMessages: List<ChatMessage> = emptyList(),
+    val collapsedMessageIds: Set<Long> = emptySet(),
     val inputContent: String = "",
     val replyTargetMessage: ChatMessage? = null,
     val editingMessage: ChatMessage? = null,

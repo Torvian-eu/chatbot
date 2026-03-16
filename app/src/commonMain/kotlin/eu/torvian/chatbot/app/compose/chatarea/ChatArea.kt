@@ -50,6 +50,7 @@ fun ChatArea(
             is DataState.Success -> SuccessStateDisplay(
                 chatSession = state.sessionUiState.data,
                 displayedMessages = state.displayedMessages,
+                collapsedMessageIds = state.collapsedMessageIds,
                 actions = actions,
                 inputContent = state.inputContent,
                 replyTargetMessage = state.replyTargetMessage,
@@ -121,6 +122,7 @@ private fun IdleStateDisplay(modifier: Modifier = Modifier) {
 private fun SuccessStateDisplay(
     chatSession: ChatSession,
     displayedMessages: List<ChatMessage>,
+    collapsedMessageIds: Set<Long>,
     actions: ChatAreaActions,
     inputContent: String,
     replyTargetMessage: ChatMessage?,
@@ -211,6 +213,8 @@ private fun SuccessStateDisplay(
         MessageList(
             chatSession = chatSession,
             displayedMessages = displayedMessages,
+            collapsedMessageIds = collapsedMessageIds,
+            onToggleMessageCollapsed = actions::onToggleMessageCollapsed,
             messageActions = messageActions,
             editingMessage = editingMessage,
             editingContent = editingContent,

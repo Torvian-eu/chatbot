@@ -85,6 +85,7 @@ fun ChatAreaPreview() {
             override fun onRequestInsertMessage(message: ChatMessage) {}
             override fun onCancelDialog() {}
             override fun onSwitchBranchToMessage(messageId: Long) {}
+            override fun onToggleMessageCollapsed(messageId: Long) {}
             override fun onSelectModel(modelId: Long?) {}
             override fun onSelectSettings(settingsId: Long?) {}
             override fun onRetryLoadingSession() {}
