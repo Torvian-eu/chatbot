@@ -36,10 +36,9 @@ import eu.torvian.chatbot.common.models.core.FileReference
  * @param editingContent The current editing content if this message is being edited.
  * @param editingFileReferences The file references being edited.
  * @param editingBasePathOverride The base path override for editing file references.
- * @param actions The actions contract, providing the edit message actions.
+ * @param messageActions Message item actions, including edit callbacks.
  * @param contentColor The color to be used for the content, respecting the current theme.
  * @param isCollapsed Whether this message content is collapsed (showing truncated preview).
- * @param onToggleCollapse Callback to toggle the collapse state.
  */
 @Composable
 fun MessageContent(
@@ -48,10 +47,9 @@ fun MessageContent(
     editingContent: String?,
     editingFileReferences: List<FileReference>,
     editingBasePathOverride: String?,
-    actions: ChatAreaActions,
+    messageActions: MessageActions,
     contentColor: Color,
-    isCollapsed: Boolean = false,
-    onToggleCollapse: () -> Unit = {}
+    isCollapsed: Boolean = false
 ) {
     // Preview length for truncated content
     val previewLength = 200
@@ -67,7 +65,7 @@ fun MessageContent(
             value = localEditingContent,
             onValueChange = { newValue ->
                 localEditingContent = newValue
-                actions.onUpdateEditingContent(newValue)
+                messageActions.onUpdateEditingContent(newValue)
             },
             placeholder = { Text("Edit your message...", color = contentColor.copy(alpha = 0.6f)) },
             textStyle = MaterialTheme.typography.bodyLarge.copy(color = contentColor),
@@ -87,13 +85,13 @@ fun MessageContent(
             EditingFileReferencesSection(
                 fileReferences = editingFileReferences,
                 basePathOverride = editingBasePathOverride,
-                onAddFiles = { actions.onAddEditingFileReferences() },
-                onRemoveFile = { actions.onRemoveEditingFileReference(it) },
+                onAddFiles = { messageActions.onAddEditingFileReferences() },
+                onRemoveFile = { messageActions.onRemoveEditingFileReference(it) },
                 onToggleContent = { ref, includeContent ->
-                    actions.onToggleEditingFileContent(ref, includeContent)
+                    messageActions.onToggleEditingFileContent(ref, includeContent)
                 },
-                onSetBasePath = { actions.onSetEditingBasePathOverride(it) },
-                onResetBasePath = { actions.onResetEditingBasePath() },
+                onSetBasePath = { messageActions.onSetEditingBasePathOverride(it) },
+                onResetBasePath = { messageActions.onResetEditingBasePath() },
                 modifier = Modifier.padding(top = 8.dp)
             )
         } else {
@@ -105,7 +103,7 @@ fun MessageContent(
                 horizontalArrangement = Arrangement.Start
             ) {
                 TextButton(
-                    onClick = { actions.onAddEditingFileReferences() }
+                    onClick = { messageActions.onAddEditingFileReferences() }
                 ) {
                     Icon(
                         imageVector = Icons.Default.AttachFile,
@@ -121,13 +119,13 @@ fun MessageContent(
         // Actions for the edited message (Save, Cancel)
         MessageEditActions(
             onSave = {
-                actions.onSaveEditing()
+                messageActions.onSaveEditing()
             },
             onSaveAsCopy = {
-                actions.onSaveEditingAsCopy()
+                messageActions.onSaveEditingAsCopy()
             },
             onCancel = {
-                actions.onCancelEditing()
+                messageActions.onCancelEditing()
             },
             modifier = Modifier.padding(top = 8.dp) // Padding between text field and actions
         )
@@ -147,7 +145,7 @@ fun MessageContent(
                         color = contentColor,
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.clickable { onToggleCollapse() }
+                        modifier = Modifier.clickable { messageActions.onToggleMessageCollapsed(message.id) }
                     )
                 }
             }

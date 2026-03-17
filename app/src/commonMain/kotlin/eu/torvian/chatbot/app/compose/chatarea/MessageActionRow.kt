@@ -21,7 +21,7 @@ import eu.torvian.chatbot.common.models.core.ChatMessage
  * @param message The [ChatMessage] for which controls are displayed (used for role-specific actions).
  * @param allMessagesMap A map of all messages in the session for efficient lookup.
  * @param allRootMessageIds A sorted list of all root message IDs in the session.
- * @param messageActions All available actions for the message.
+ * @param messageActions All available actions for the message item.
  * @param hovered Whether the parent [MessageItem] is currently hovered.
  * @param modifier Modifier to be applied to the component.
  */
@@ -77,7 +77,7 @@ fun MessageActionRow(
  * Displays the general action buttons for a message (e.g., Edit, Copy, Regenerate).
  *
  * @param message The [ChatMessage] for which controls are displayed.
- * @param messageActions All available actions for the message.
+ * @param messageActions All available actions for the message item.
  * @param moreMenuExpanded Whether the "More" menu is currently expanded.
  * @param onMoreMenuExpandedChange Callback to update the expanded state of the "More" menu.
  * @param modifier Modifier to be applied to the component.
@@ -244,7 +244,7 @@ private fun DeleteButton(message: ChatMessage, onDeleteMessage: (ChatMessage) ->
  * cluttering the main action row.
  *
  * @param message The message for which actions are displayed.
- * @param messageActions All available actions for the message.
+ * @param messageActions All available actions for the message item.
  * @param expanded Whether the menu is currently expanded.
  * @param onExpandedChange Callback to update the expanded state.
  */

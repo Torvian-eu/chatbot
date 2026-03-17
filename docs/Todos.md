@@ -23,4 +23,6 @@
 - Add support for different screen sizes, in order to support portrait mode on mobile devices.
 - [x] Save expanded states of chat messages (in memory only), so that they are restored when the user revisits the session.
 - Save scrollbar position (in memory only), so that it is restored when the user revisits the session (when in LRU cache).
- 
+
+
+## Code quality

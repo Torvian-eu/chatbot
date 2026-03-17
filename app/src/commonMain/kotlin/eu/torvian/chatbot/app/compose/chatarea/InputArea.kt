@@ -37,35 +37,20 @@ import org.jetbrains.compose.resources.stringResource
  * - File reference badges and attach button
  *
  * @param inputContent The current text content of the input field.
- * @param onUpdateInput Callback for when the input content changes.
- * @param onSendMessage Callback for when the send button is clicked or Enter is pressed.
- * @param onCancelSendMessage Callback for when the user cancels the message sending operation.
+ * @param actions Grouped callbacks for input area interactions.
  * @param replyTargetMessage The message being replied to, if any.
- * @param onCancelReply Callback to cancel the reply.
  * @param isSendingMessage Indicates if a message is currently being sent.
  * @param fileReferences List of file references attached to the current message.
- * @param onAddFileReferences Callback to open file picker and add file references.
- * @param onRemoveFileReference Callback to remove a file reference.
- * @param onFileReferenceClick Callback when a file reference badge is clicked.
- * @param onManageFileReferences Callback to open the file references management dialog.
  * @param modifier Modifier to be applied to the component.
  */
 @Composable
 fun InputArea(
     inputContent: String,
-    onUpdateInput: (String) -> Unit,
-    onSendMessage: () -> Unit,
-    onCancelSendMessage: () -> Unit,
+    actions: InputAreaActions,
     replyTargetMessage: ChatMessage?,
-    onCancelReply: () -> Unit,
     isSendingMessage: Boolean,
     isExpanded: Boolean = false,
-    onToggleExpansion: (() -> Unit)? = null,
     fileReferences: List<FileReference> = emptyList(),
-    onAddFileReferences: () -> Unit,
-    onRemoveFileReference: (FileReference) -> Unit,
-    onFileReferenceClick: (FileReference) -> Unit,
-    onManageFileReferences: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val isSendButtonEnabled = inputContent.isNotBlank() && !isSendingMessage
@@ -78,7 +63,7 @@ fun InputArea(
             exit = shrinkVertically(shrinkTowards = Alignment.Top)
         ) {
             replyTargetMessage?.let { message ->
-                ReplyTargetBanner(message = message, onCancelReply = onCancelReply)
+                ReplyTargetBanner(message = message, onCancelReply = actions.onCancelReply)
             }
         }
 
@@ -93,14 +78,14 @@ fun InputArea(
                 // Main Input Field (E1.S1)
                 TextField(
                     value = inputContent,
-                    onValueChange = onUpdateInput,
+                    onValueChange = actions.onUpdateInput,
                     modifier = Modifier
                         .fillMaxWidth()
                         .defaultMinSize(minHeight = 48.dp) // Ensure a minimum height for the input
                         .onKeyEvent { keyEvent: KeyEvent ->
                             if (keyEvent.isCtrlPressed && keyEvent.key == Key.Enter && keyEvent.type == KeyEventType.KeyDown) {
                                 if (isSendButtonEnabled) {
-                                    onSendMessage()
+                                    actions.onSendMessage()
                                     true // Consume the event
                                 } else {
                                     false // Do not consume if not enabled
@@ -126,7 +111,7 @@ fun InputArea(
                         onSend = {
                             // This handles the regular Enter key press without Ctrl
                             if (isSendButtonEnabled) {
-                                onSendMessage()
+                                actions.onSendMessage()
                             }
                         }
                     )
@@ -155,8 +140,8 @@ fun InputArea(
                             fileReferences.forEach { ref ->
                                 RemovableFileReferenceBadge(
                                     fileReference = ref,
-                                    onClick = { onFileReferenceClick(ref) },
-                                    onRemove = { onRemoveFileReference(ref) }
+                                    onClick = { actions.onShowFileReferenceDetails(ref) },
+                                    onRemove = { actions.onRemoveFileReference(ref) }
                                 )
                             }
                         }
@@ -177,12 +162,12 @@ fun InputArea(
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         // Expand/Collapse Toggle Button
-                        if (onToggleExpansion != null) {
+                        if (actions.onToggleExpansion != null) {
                             PlainTooltipBox(
                                 text = if (isExpanded) "Collapse input area" else "Expand input area"
                             ) {
                                 IconButton(
-                                    onClick = onToggleExpansion,
+                                    onClick = actions.onToggleExpansion,
                                     modifier = Modifier.size(40.dp)
                                 ) {
                                     Icon(
@@ -197,7 +182,7 @@ fun InputArea(
                         // Attach File Button
                         PlainTooltipBox(text = "Attach files") {
                             IconButton(
-                                onClick = onAddFileReferences,
+                                onClick = actions.onAddFileReferences,
                                 modifier = Modifier.size(40.dp)
                             ) {
                                 Icon(
@@ -219,7 +204,7 @@ fun InputArea(
                                     }
                                 ) {
                                     IconButton(
-                                        onClick = onManageFileReferences,
+                                        onClick = actions.onManageFileReferences,
                                         modifier = Modifier.size(40.dp)
                                     ) {
                                         Icon(
@@ -240,7 +225,7 @@ fun InputArea(
                     if (isSendingMessage) { // Stop button to cancel sending (E1.S3)
                         PlainTooltipBox(text = stringResource(Res.string.sending_message_tooltip)) {
                             FilledIconButton(
-                                onClick = onCancelSendMessage,
+                                onClick = actions.onCancelSendMessage,
                                 modifier = Modifier.size(48.dp),
                                 enabled = true
                             ) {
@@ -254,7 +239,7 @@ fun InputArea(
                     } else { // Show Send Button (E1.S2)
                         PlainTooltipBox(text = stringResource(Res.string.send_message_button_description) + " (Ctrl+Enter)") {
                             FilledIconButton(
-                                onClick = onSendMessage,
+                                onClick = actions.onSendMessage,
                                 modifier = Modifier.size(48.dp),
                                 enabled = isSendButtonEnabled
                             ) {
