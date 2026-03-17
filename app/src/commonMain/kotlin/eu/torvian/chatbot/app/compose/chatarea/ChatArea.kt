@@ -136,7 +136,6 @@ private fun SuccessStateDisplay(
     toolCallsMap: Map<Long, List<ToolCall>>,
     pendingFileReferences: List<FileReference>
 ) {
-    // Prepare message actions to pass down
     val messageActions = remember(actions) {
         MessageActions(
             onSwitchBranchToMessage = actions::onSwitchBranchToMessage,
@@ -146,8 +145,20 @@ private fun SuccessStateDisplay(
             onDeleteThread = actions::onRequestDeleteThread,
             onRequestInsertMessage = actions::onRequestInsertMessage,
             onCopyMessage = actions::onCopyMessage,
+            onUpdateEditingContent = actions::onUpdateEditingContent,
+            onSaveEditing = actions::onSaveEditing,
+            onSaveEditingAsCopy = actions::onSaveEditingAsCopy,
+            onCancelEditing = actions::onCancelEditing,
+            onAddEditingFileReferences = actions::onAddEditingFileReferences,
+            onRemoveEditingFileReference = actions::onRemoveEditingFileReference,
+            onToggleEditingFileContent = actions::onToggleEditingFileContent,
+            onSetEditingBasePathOverride = actions::onSetEditingBasePathOverride,
+            onResetEditingBasePath = actions::onResetEditingBasePath,
             onBranchAndContinue = actions::onBranchAndContinue,
-            onRegenerateMessage = actions::onRegenerateMessage
+            onRegenerateMessage = actions::onRegenerateMessage,
+            onToggleMessageCollapsed = actions::onToggleMessageCollapsed,
+            onShowToolCallDetails = actions::onShowToolCallDetails,
+            onShowFileReferenceDetails = actions::onShowFileReferenceDetails
         )
     }
 
@@ -183,6 +194,21 @@ private fun SuccessStateDisplay(
         }
     }
 
+
+    val inputAreaActions = remember(actions, onToggleExpansion) {
+        InputAreaActions(
+            onUpdateInput = actions::onUpdateInput,
+            onSendMessage = actions::onSendMessage,
+            onCancelSendMessage = actions::onCancelSendMessage,
+            onCancelReply = actions::onCancelReply,
+            onToggleExpansion = onToggleExpansion,
+            onAddFileReferences = actions::onAddFileReferences,
+            onRemoveFileReference = actions::onRemoveFileReference,
+            onShowFileReferenceDetails = actions::onShowFileReferenceDetails,
+            onManageFileReferences = actions::onShowFileReferencesManagement
+        )
+    }
+
     // Scroll to reply target when it changes
     LaunchedEffect(replyTargetMessage) {
         if (replyTargetMessage != null) {
@@ -214,31 +240,20 @@ private fun SuccessStateDisplay(
             chatSession = chatSession,
             displayedMessages = displayedMessages,
             collapsedMessageIds = collapsedMessageIds,
-            onToggleMessageCollapsed = actions::onToggleMessageCollapsed,
             messageActions = messageActions,
+            inputAreaActions = inputAreaActions,
             editingMessage = editingMessage,
             editingContent = editingContent,
             editingFileReferences = editingFileReferences,
             editingBasePathOverride = editingBasePathOverride,
-            actions = actions,
             modelsById = modelsById, // Pass map for graceful degradation
             toolCallsMap = toolCallsMap,
-            onShowToolCallDetails = actions::onShowToolCallDetails,
             isInputExpanded = isInputExpanded,
             scrollToInputTrigger = scrollToInputTrigger,
             inputContent = inputContent,
-            onUpdateInput = actions::onUpdateInput,
-            onSendMessage = actions::onSendMessage,
-            onCancelSendMessage = actions::onCancelSendMessage,
             replyTargetMessage = replyTargetMessage,
-            onCancelReply = actions::onCancelReply,
             isSendingMessage = isSendingMessage,
-            onToggleExpansion = onToggleExpansion,
             pendingFileReferences = pendingFileReferences,
-            onAddFileReferences = actions::onAddFileReferences,
-            onRemoveFileReference = actions::onRemoveFileReference,
-            onShowFileReferenceDetails = actions::onShowFileReferenceDetails,
-            onManageFileReferences = actions::onShowFileReferencesManagement,
             modifier = Modifier.weight(1f) // Messages take up most space
         )
 
@@ -250,19 +265,11 @@ private fun SuccessStateDisplay(
         ) {
             InputArea(
                 inputContent = inputContent,
-                onUpdateInput = actions::onUpdateInput,
-                onSendMessage = actions::onSendMessage,
-                onCancelSendMessage = actions::onCancelSendMessage,
+                actions = inputAreaActions,
                 replyTargetMessage = replyTargetMessage,
-                onCancelReply = actions::onCancelReply,
                 isSendingMessage = isSendingMessage,
                 isExpanded = false,
-                onToggleExpansion = onToggleExpansion,
                 fileReferences = pendingFileReferences,
-                onAddFileReferences = actions::onAddFileReferences,
-                onRemoveFileReference = actions::onRemoveFileReference,
-                onFileReferenceClick = actions::onShowFileReferenceDetails,
-                onManageFileReferences = actions::onShowFileReferencesManagement,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp) // Small padding between messages and input

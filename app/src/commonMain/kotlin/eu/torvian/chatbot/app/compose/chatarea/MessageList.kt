@@ -29,37 +29,45 @@ import kotlinx.coroutines.yield
 
 /**
  * Displays the list of messages in a scrollable column.
+ *
+ * @param chatSession Full chat session, used to derive branch navigation context.
+ * @param displayedMessages Messages currently visible in the active branch.
+ * @param collapsedMessageIds IDs of messages currently rendered in collapsed mode.
+ * @param messageActions Action bundle for message item controls.
+ * @param inputAreaActions Action bundle for inline expanded input areas.
+ * @param editingMessage Message currently being edited, if any.
+ * @param editingContent Current edit content for [editingMessage].
+ * @param editingFileReferences File references attached to the message being edited.
+ * @param editingBasePathOverride Optional editing base path override.
+ * @param modelsById Optional model lookup used for assistant label rendering.
+ * @param toolCallsMap Tool calls grouped by message ID.
+ * @param isInputExpanded Whether the input is rendered inline within the message list.
+ * @param scrollToInputTrigger Incrementing trigger used to request scrolling to inline input.
+ * @param inputContent Current input content.
+ * @param replyTargetMessage Current reply target, if replying.
+ * @param isSendingMessage Whether a send/stream operation is active.
+ * @param pendingFileReferences File references attached to the composer.
+ * @param modifier Modifier applied to the outer container.
  */
 @Composable
 fun MessageList(
     chatSession: ChatSession,
     displayedMessages: List<ChatMessage>,
     collapsedMessageIds: Set<Long>,
-    onToggleMessageCollapsed: (Long) -> Unit,
     messageActions: MessageActions,
+    inputAreaActions: InputAreaActions,
     editingMessage: ChatMessage?,
     editingContent: String?,
     editingFileReferences: List<FileReference>,
     editingBasePathOverride: String?,
-    actions: ChatAreaActions,
     modelsById: Map<Long, LLMModel> = emptyMap(),
     toolCallsMap: Map<Long, List<ToolCall>> = emptyMap(),
-    onShowToolCallDetails: (ToolCall) -> Unit = {},
     isInputExpanded: Boolean = false,
     scrollToInputTrigger: Int = 0,
     inputContent: String = "",
-    onUpdateInput: (String) -> Unit = {},
-    onSendMessage: () -> Unit = {},
-    onCancelSendMessage: () -> Unit = {},
     replyTargetMessage: ChatMessage? = null,
-    onCancelReply: () -> Unit = {},
     isSendingMessage: Boolean = false,
-    onToggleExpansion: () -> Unit = {},
     pendingFileReferences: List<FileReference> = emptyList(),
-    onAddFileReferences: () -> Unit = {},
-    onRemoveFileReference: (FileReference) -> Unit = {},
-    onShowFileReferenceDetails: (FileReference) -> Unit = {},
-    onManageFileReferences: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     // Create ScrollState for scrollbar integration
@@ -75,7 +83,7 @@ fun MessageList(
     var isProgrammaticScroll by remember { mutableStateOf(false) }
 
     // Intercept branch switches at the UI layer before delegating to MessageActions.
-    val messageItemActions = remember(messageActions) {
+    val interceptedMessageItemActions = remember(messageActions) {
         messageActions.copy(
             onSwitchBranchToMessage = { messageId ->
                 followTail = false
@@ -173,38 +181,26 @@ fun MessageList(
                             message = message,
                             allMessagesMap = allMessagesMap,
                             allRootMessageIds = allRootMessageIds,
-                            messageActions = messageItemActions,
+                            actions = interceptedMessageItemActions,
                             editingMessage = editingMessage,
                             editingContent = editingContent,
                             editingFileReferences = editingFileReferences,
                             editingBasePathOverride = editingBasePathOverride,
-                            actions = actions, // Pass actions for editing state access
                             modelsById = modelsById, // Pass map for graceful degradation
                             toolCallsForMessage = toolCallsMap[message.id] ?: emptyList(),
-                            onShowToolCallDetails = onShowToolCallDetails,
-                            onShowFileReferenceDetails = onShowFileReferenceDetails,
                             isCollapsed = message.id in collapsedMessageIds,
-                            isCollapsible = message.content.length > collapseThreshold,
-                            onToggleCollapse = { onToggleMessageCollapsed(message.id) }
+                            isCollapsible = message.content.length > collapseThreshold
                         )
 
                         // Insert expanded input area right after reply target message
                         if (isInputExpanded && replyTargetMessage != null && message.id == replyTargetMessage.id) {
                             InputArea(
                                 inputContent = inputContent,
-                                onUpdateInput = onUpdateInput,
-                                onSendMessage = onSendMessage,
-                                onCancelSendMessage = onCancelSendMessage,
+                                actions = inputAreaActions,
                                 replyTargetMessage = replyTargetMessage,
-                                onCancelReply = onCancelReply,
                                 isSendingMessage = isSendingMessage,
                                 isExpanded = true,
-                                onToggleExpansion = onToggleExpansion,
                                 fileReferences = pendingFileReferences,
-                                onAddFileReferences = onAddFileReferences,
-                                onRemoveFileReference = onRemoveFileReference,
-                                onFileReferenceClick = onShowFileReferenceDetails,
-                                onManageFileReferences = onManageFileReferences,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .bringIntoViewRequester(inlineReplyInputRequester)
@@ -219,19 +215,11 @@ fun MessageList(
                     key("expanded_input_area") {
                         InputArea(
                             inputContent = inputContent,
-                            onUpdateInput = onUpdateInput,
-                            onSendMessage = onSendMessage,
-                            onCancelSendMessage = onCancelSendMessage,
+                            actions = inputAreaActions,
                             replyTargetMessage = replyTargetMessage,
-                            onCancelReply = onCancelReply,
                             isSendingMessage = isSendingMessage,
                             isExpanded = true,
-                            onToggleExpansion = onToggleExpansion,
                             fileReferences = pendingFileReferences,
-                            onAddFileReferences = onAddFileReferences,
-                            onRemoveFileReference = onRemoveFileReference,
-                            onFileReferenceClick = onShowFileReferenceDetails,
-                            onManageFileReferences = onManageFileReferences,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .bringIntoViewRequester(trailingInputRequester)

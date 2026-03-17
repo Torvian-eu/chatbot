@@ -35,38 +35,30 @@ import eu.torvian.chatbot.common.models.tool.ToolCall
  * @param message The message data.
  * @param allMessagesMap A map of all messages in the session for efficient lookup.
  * @param allRootMessageIds A sorted list of all root message IDs in the session.
- * @param messageActions All available actions for the message.
+ * @param actions Grouped callbacks for message item interactions.
  * @param editingMessage The message currently being edited (E3.S1, E3.S2).
  * @param editingContent The content of the message currently being edited (E3.S1, E3.S2).
  * @param editingFileReferences The file references of the message currently being edited.
  * @param editingBasePathOverride The base path override for editing file references.
- * @param actions The actions contract for the chat area.
  * @param modelsById Map of model IDs to LLMModel objects for displaying model names with graceful degradation.
  * @param toolCallsForMessage List of tool calls associated with this message.
- * @param onShowToolCallDetails Callback to show tool call details.
- * @param onShowFileReferenceDetails Callback to show file reference details.
  * @param isCollapsed Whether this message is currently collapsed.
  * @param isCollapsible Whether this message can be collapsed (content length > threshold).
- * @param onToggleCollapse Callback to toggle the collapse state of this message.
  */
 @Composable
 fun MessageItem(
     message: ChatMessage,
     allMessagesMap: Map<Long, ChatMessage>,
     allRootMessageIds: List<Long>,
-    messageActions: MessageActions,
+    actions: MessageActions,
     editingMessage: ChatMessage?,
     editingContent: String?,
     editingFileReferences: List<FileReference>,
     editingBasePathOverride: String?,
-    actions: ChatAreaActions,
     modelsById: Map<Long, LLMModel> = emptyMap(),
     toolCallsForMessage: List<ToolCall> = emptyList(),
-    onShowToolCallDetails: (ToolCall) -> Unit = {},
-    onShowFileReferenceDetails: (FileReference) -> Unit = {},
     isCollapsed: Boolean = false,
-    isCollapsible: Boolean = false,
-    onToggleCollapse: () -> Unit = {}
+    isCollapsible: Boolean = false
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val hovered by interactionSource.collectIsHoveredAsState()
@@ -115,7 +107,7 @@ fun MessageItem(
                     showDelay = 500L
                 ) {
                     IconButton(
-                        onClick = onToggleCollapse,
+                        onClick = { actions.onToggleMessageCollapsed(message.id) },
                         modifier = Modifier.size(24.dp)
                     ) {
                         Icon(
@@ -137,10 +129,9 @@ fun MessageItem(
             editingContent = if (editingMessage?.id == message.id) editingContent else null,
             editingFileReferences = if (editingMessage?.id == message.id) editingFileReferences else emptyList(),
             editingBasePathOverride = if (editingMessage?.id == message.id) editingBasePathOverride else null,
-            actions = actions,
+            messageActions = actions,
             contentColor = contentColor,
-            isCollapsed = isCollapsed,
-            onToggleCollapse = onToggleCollapse
+            isCollapsed = isCollapsed
         )
 
         // Tool Call Badges (for assistant messages)
@@ -148,7 +139,7 @@ fun MessageItem(
             Spacer(Modifier.height(8.dp))
             ToolCallBadges(
                 toolCalls = toolCallsForMessage,
-                onToolCallClick = onShowToolCallDetails
+                onToolCallClick = actions.onShowToolCallDetails
             )
         }
 
@@ -163,7 +154,7 @@ fun MessageItem(
             Spacer(Modifier.height(4.dp))
             FileReferenceBadgeRow(
                 fileReferences = message.fileReferences,
-                onFileReferenceClick = onShowFileReferenceDetails
+                onFileReferenceClick = actions.onShowFileReferenceDetails
             )
         }
 
@@ -173,7 +164,7 @@ fun MessageItem(
             message = message,
             allMessagesMap = allMessagesMap,
             allRootMessageIds = allRootMessageIds,
-            messageActions = messageActions,
+            messageActions = actions,
             hovered = hovered,
             modifier = Modifier
                 .fillMaxWidth()
