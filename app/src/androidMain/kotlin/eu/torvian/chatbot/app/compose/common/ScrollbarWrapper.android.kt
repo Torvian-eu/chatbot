@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.app.compose.common
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
@@ -30,3 +31,18 @@ actual fun ScrollbarWrapper(
         content()
     }
 }
+
+/**
+ * Android implementation of ScrollbarWrapper for non-lazy scroll containers.
+ */
+@Composable
+actual fun ScrollbarWrapper(
+    scrollState: ScrollState,
+    modifier: Modifier,
+    content: @Composable () -> Unit
+) {
+    Box(modifier = modifier) {
+        content()
+    }
+}
+

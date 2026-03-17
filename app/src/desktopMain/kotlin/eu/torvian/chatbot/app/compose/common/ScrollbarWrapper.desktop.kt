@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.app.compose.common
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -36,6 +37,27 @@ actual fun ScrollbarWrapper(
                 .align(Alignment.CenterEnd)
                 .fillMaxHeight(),
             adapter = rememberScrollbarAdapter(listState)
+        )
+    }
+}
+
+/**
+ * Desktop implementation of ScrollbarWrapper for non-lazy scroll containers.
+ */
+@Composable
+actual fun ScrollbarWrapper(
+    scrollState: ScrollState,
+    modifier: Modifier,
+    content: @Composable () -> Unit
+) {
+    Box(modifier = modifier) {
+        content()
+
+        VerticalScrollbar(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxHeight(),
+            adapter = rememberScrollbarAdapter(scrollState)
         )
     }
 }

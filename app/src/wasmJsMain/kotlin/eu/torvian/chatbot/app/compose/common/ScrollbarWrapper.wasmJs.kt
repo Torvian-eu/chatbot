@@ -1,17 +1,18 @@
 package eu.torvian.chatbot.app.compose.common
 
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 
 /**
- * Web implementation of ScrollbarWrapper that relies on browser-native scrollbars.
- * 
- * On web platforms, scrollbars are handled by the browser and can be styled
- * using CSS. This implementation wraps the content in a Box with the provided
- * modifier to ensure consistent layout behavior across platforms.
- * 
+ * Web implementation of ScrollbarWrapper for lazy scrolling content.
+ *
  * Note: Scrollbar appearance can be customized by adding CSS rules to your
  * index.html or stylesheet targeting ::-webkit-scrollbar selectors.
  * 
@@ -25,10 +26,38 @@ actual fun ScrollbarWrapper(
     modifier: Modifier,
     content: @Composable () -> Unit
 ) {
-    // On Web, scrollbars are handled by the browser and styled via CSS.
-    // We apply the modifier to a Box that wraps the content to ensure
-    // consistent layout behavior (size, padding, etc.) across platforms.
     Box(modifier = modifier) {
+        // Render the main content (LazyColumn)
         content()
+
+        // Add the vertical scrollbar aligned to the right edge
+        VerticalScrollbar(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxHeight(),
+            adapter = rememberScrollbarAdapter(listState)
+        )
     }
 }
+
+/**
+ * Web implementation of ScrollbarWrapper for non-lazy scroll containers.
+ */
+@Composable
+actual fun ScrollbarWrapper(
+    scrollState: ScrollState,
+    modifier: Modifier,
+    content: @Composable () -> Unit
+) {
+    Box(modifier = modifier) {
+        content()
+
+        VerticalScrollbar(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxHeight(),
+            adapter = rememberScrollbarAdapter(scrollState)
+        )
+    }
+}
+
