@@ -32,7 +32,8 @@ Suggested fix: Remove the tab for WasmJs target.
 ## Hoverable screen elements are not working on mobile targets
 - This is caused by the fact that mobile devices do not have a mouse. The hoverable elements are implemented using the `pointer` input type, which is not supported on mobile devices.
 
-## Undesirable auto-scroll behavior when switching branches
+## Auto-scroll not working when last message is not at the bottom of the screen
+
+## (fixed) Undesirable auto-scroll behavior when switching branches
 - When a branch is active that is already scrolled to bottom, switching to another branch, causes the UI to automatically scroll to bottom.
 
-# Code quality
