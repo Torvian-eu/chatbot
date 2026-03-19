@@ -24,7 +24,6 @@ import org.koin.dsl.module
  */
 fun mainModule(application: Application) = module {
     single { application }
-    single<DataManager> { ExposedDataManager(get()) }
     single { DatabaseMigrator(get()) }
 
     // --- JSON Serializer ---
