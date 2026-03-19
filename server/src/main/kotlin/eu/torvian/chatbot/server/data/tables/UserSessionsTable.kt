@@ -22,6 +22,6 @@ import org.jetbrains.exposed.v1.core.dao.id.LongIdTable
 object UserSessionsTable : LongIdTable("user_sessions") {
     val userId = reference("user_id", UsersTable, onDelete = ReferenceOption.CASCADE)
     val expiresAt = long("expires_at")
-    val createdAt = long("created_at").default(System.currentTimeMillis())
-    val lastAccessed = long("last_accessed").default(System.currentTimeMillis())
+    val createdAt = long("created_at")
+    val lastAccessed = long("last_accessed")
 }

@@ -178,6 +178,7 @@ class UserAccountInitializer(
         UserRoleAssignmentsTable.insert {
             it[UserRoleAssignmentsTable.userId] = userId
             it[UserRoleAssignmentsTable.roleId] = roleId
+            it[UserRoleAssignmentsTable.assignedAt] = System.currentTimeMillis()
         }
     }
 }

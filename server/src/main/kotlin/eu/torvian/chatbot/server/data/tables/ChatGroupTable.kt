@@ -14,5 +14,5 @@ import org.jetbrains.exposed.v1.core.dao.id.LongIdTable
  */
 object ChatGroupTable : LongIdTable("chat_groups") {
     val name = varchar("name", 255)
-    val createdAt = long("created_at").default(System.currentTimeMillis())
+    val createdAt = long("created_at")
 }

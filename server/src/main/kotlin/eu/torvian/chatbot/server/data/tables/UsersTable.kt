@@ -31,8 +31,8 @@ object UsersTable : LongIdTable("users") {
     val passwordHash = varchar("password_hash", 255)
     val email = varchar("email", 255).nullable().uniqueIndex()
     val status = enumerationByName<UserStatus>("status", length = 50).default(UserStatus.DISABLED)
-    val createdAt = long("created_at").default(System.currentTimeMillis())
-    val updatedAt = long("updated_at").default(System.currentTimeMillis())
+    val createdAt = long("created_at")
+    val updatedAt = long("updated_at")
     val lastLogin = long("last_login").nullable()
     val requiresPasswordChange = bool("requires_password_change").default(false)
 }
