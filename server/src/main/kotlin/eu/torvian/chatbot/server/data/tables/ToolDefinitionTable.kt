@@ -41,6 +41,6 @@ object ToolDefinitionTable : LongIdTable("tool_definitions") {
     val inputSchemaJson = text("input_schema_json")
     val outputSchemaJson = text("output_schema_json").nullable()
     val isEnabled = bool("is_enabled").default(true)
-    val createdAt = long("created_at").default(System.currentTimeMillis())
-    val updatedAt = long("updated_at").default(System.currentTimeMillis())
+    val createdAt = long("created_at")
+    val updatedAt = long("updated_at")
 }

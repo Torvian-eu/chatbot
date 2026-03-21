@@ -20,7 +20,7 @@ import org.jetbrains.exposed.v1.core.Table
 object UserRoleAssignmentsTable : Table("user_role_assignments") {
     val userId = reference("user_id", UsersTable, onDelete = ReferenceOption.CASCADE)
     val roleId = reference("role_id", RolesTable, onDelete = ReferenceOption.CASCADE)
-    val assignedAt = long("assigned_at").default(System.currentTimeMillis())
+    val assignedAt = long("assigned_at")
 
     override val primaryKey = PrimaryKey(userId, roleId)
 }

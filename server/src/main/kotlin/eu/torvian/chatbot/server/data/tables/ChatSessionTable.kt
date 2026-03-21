@@ -23,8 +23,8 @@ import org.jetbrains.exposed.v1.core.dao.id.LongIdTable
  */
 object ChatSessionTable : LongIdTable("chat_sessions") {
     val name = varchar("name", 255)
-    val createdAt = long("created_at").default(System.currentTimeMillis())
-    val updatedAt = long("updated_at").default(System.currentTimeMillis())
+    val createdAt = long("created_at")
+    val updatedAt = long("updated_at")
     val groupId = reference("group_id", ChatGroupTable, onDelete = ReferenceOption.SET_NULL).nullable()
     val currentModelId = reference("current_model_id", LLMModelTable, onDelete = ReferenceOption.SET_NULL).nullable()
     val currentSettingsId =

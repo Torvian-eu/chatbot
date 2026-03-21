@@ -105,27 +105,22 @@ fun Application.configureKoin(
  */
 fun Application.configureDatabase() {
     runBlocking {
-        val dataManager: DataManager = get()
+        val databaseMigrator: DatabaseMigrator = get()
         val initializationCoordinator: InitializationCoordinator = get()
 
-        // Only create tables if the database is empty
-        if (dataManager.isDatabaseEmpty()) {
-            dataManager.createTables()
-            logger.info("Database tables created successfully.")
+        // Migrations are always executed so existing databases can evolve safely.
+        databaseMigrator.migrate()
 
-            // Perform initial setup for all system components
-            initializationCoordinator.runAllInitializers().fold(
-                ifLeft = { error ->
-                    logger.error("Initial setup failed: $error")
-                    throw IllegalStateException("Failed to perform initial setup: $error")
-                },
-                ifRight = {
-                    logger.info("Initial setup completed successfully for all components")
-                }
-            )
-        } else {
-            logger.info("Database already exists, skipping table creation and initial setup.")
-        }
+        // Perform initial setup for all system components (idempotent per initializer).
+        initializationCoordinator.runAllInitializers().fold(
+            ifLeft = { error ->
+                logger.error("Initial setup failed: $error")
+                throw IllegalStateException("Failed to perform initial setup: $error")
+            },
+            ifRight = {
+                logger.info("Initial setup completed successfully for all components")
+            }
+        )
     }
 }
 
