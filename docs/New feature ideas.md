@@ -139,7 +139,23 @@ Not completed:
 - Drag & drop files from OS into message input area
 
 ### Add "Agent Skills" feature
-Agent Skills are folders of instructions, scripts, and resources that agents can discover and use to do things more accurately and efficiently. See: https://agentskills.io/home
+- Agent Skills are folders of instructions, scripts, and resources that agents can discover and use to do things more accurately and efficiently. See: https://agentskills.io/home
+- Skills should be installed in the following way:
+  - User downloads a skill from places like https://skills.sh/ and saves it to the "skills" directory in the user's data directory of the AIChat app.
+  - The user triggers the app to scan the "skills" directory for new skills. And the skill is added to the app's local database.
+  - (optional) The user configures the skill in the app's GUI.
+- A skill should be activated in the following way:
+  - The user mentions the skill in a chat message. For instance: "Could you please help me with the 'git-branch' skill?".
+  - The LLM should be able to understand the user's intent to use the skill, and ask the user to confirm. (For instance: "Do you want to use the 'git-branch' skill to list all local branches?")
+  - Alternatively, the user can manually load the skill into the current chat session, using the GUI.
+- In order for the LLM to know under which conditions a skill should be used, the user should create an AGENTS.md file, which is loaded into the LLM context (as the system message). This file could also contain general project information, with links to other files. A user could have many different AGENTS.md files for different projects, or agent roles. See: https://github.com/agentsmd/agents.md
+- Requirements for using skills:
+  - A built-in agent tool for listing available skills.
+  - A built-in agent tool for loading skills into the LLM context of the current chat session.
+  - An agent tool for running commands on the local machine. (It could be a third-party MCP tool, or a tool built into the app.) This is necessary for the agent to run scripts from the skill.
+  - An agent tool for fetching information from the web. This is necessary for the agent to visit links mentioned in the SKILL.md or AGENTS.md files.
+  - An agent tool for reading files from the local file system. This is necessary for the agent to read the content of files mentioned in the SKILL.md or AGENTS.md files.
+  - A convenient way for users to load the content of an AGENTS.md file into the LLM context for the current chat session. (For instance: a button in the GUI to select an AGENTS.md file, which is then loaded into the LLM context)
 
 ### Add support for OpenAI's Responses API
 - See: https://developers.openai.com/api/docs/guides/migrate-to-responses
@@ -222,6 +238,13 @@ Open questions:
   - Task: "Book a flight from New York to San Francisco"
     - Preferred way: To use the tool "SearchFlights" with the parameters "origin: New York, destination: San Francisco"
 - Next, we would make incremental changes to the system instructions and then evaluate the changes by looking at the conversation quality. This process could be automated if we let an LLM evaluate the results, and update the system instructions.
+
+### Continuous AI - AI Message Board
+- AI agent monitors what the user is doing, and makes suggestions, and can start chat sessions about things it finds interesting. For instance: "It seems you're working on a bug related to the database. Here are some similar bugs that were fixed in the past, and how they were fixed."
+- Given a project with resources (code, docs, etc.), the AI suggests new feature ideas, todo's, and discovers bugs.
+
+### Allow Chatbot AI agent to create simple apps and run them on the local machine in a VM
+ - The app gets a built-in API, so that an agent can interact with it. For instance, it could have endpoints for creating a screenshot of the GUI, simulate mouse movement and clicks, enter text, etc. (Although things like that could also be done with MCP tools, external to the app.)
 
 ---
 

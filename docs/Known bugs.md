@@ -1,17 +1,15 @@
 # Known bugs
 
-## (WIP) Scrollbar acting weird on Desktop target
+## (fixed) Scrollbar acting weird on Desktop target
 Observed behavior:
   - Chat area: Sudden changes in (vertical) scrollbar size while scrolling.
 Question: Could this be related to the use of LazyColumn? This needs to be investigated further.
 Answer: Yes, this behavior is as expected and cannot be changed easily.
 Update: New observation: In very long chats it becomes impossible to scroll up. We probably need to remove the use of LazyColumn in combination with scrollbars.
+Fix applied: Use Column (with vertical scrollbar) instead of LazyColumn.
 
-## When the chat input area is expanded while typing, it becomes out of focus.
+## When the chat input area is automatically expanded while typing, it becomes out of focus.
 - The user has to click back into the input area to continue typing.
-
-## MCP server configuration: info sections "status" and "configuration" are not selectable
-- This causes that the user cannot copy text from these sections.
 
 ## (fixed) Websocket connections not working for WasmJs target
 - Browser WebSocket APIs do not support arbitrary custom headers (including `Authorization`) during handshake.
@@ -37,3 +35,5 @@ Suggested fix: Remove the tab for WasmJs target.
 ## (fixed) Undesirable auto-scroll behavior when switching branches
 - When a branch is active that is already scrolled to bottom, switching to another branch, causes the UI to automatically scroll to bottom.
 
+## MCP Server connection timeout after 60 seconds
+- Write test case that reproduces the issue and fix it.
