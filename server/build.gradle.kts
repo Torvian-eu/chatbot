@@ -55,10 +55,29 @@ application {
     )
 }
 
-// Configure the JAR content (Fat and Thin)
+// Configure Tasks
 tasks {
+    // Configure the shadow JAR task
     shadowJar {
         mergeServiceFiles() // merge the contents from META-INF/services/* files, in case of duplicate file names
+    }
+
+    // Task to install the server distribution to a custom path
+    register<Sync>("installDistTo") {
+        group = "distribution"
+        description = "Installs the server distribution to a custom path using -PinstallPath=<path>."
+
+        dependsOn(named("installDist"))
+        from(layout.buildDirectory.dir("install/server"))
+        into(provider {
+            val installPath = findProperty("installPath")?.toString()?.trim()
+            if (installPath.isNullOrEmpty()) {
+                throw GradleException(
+                    "Missing required property 'installPath'. Usage: ./gradlew server:installDistTo -PinstallPath=/your/target/path"
+                )
+            }
+            file(installPath)
+        })
     }
 
     // Disable the default start scripts generation
