@@ -262,6 +262,13 @@ tasks.register<Sync>("createDistributableTo") {
 
     dependsOn("createDistributable")
     from(layout.buildDirectory.dir("compose/binaries/main/app/Chatbot"))
+    from(layout.projectDirectory.dir("src/commonMain/composeResources/files/config")) {
+        include("default_config.json")
+        include("default_setup.json")
+        rename("default_config.json", "config.json")
+        rename("default_setup.json", "setup.json")
+        into("config")
+    }
     into(provider {
         val installPath = findProperty("installPath")?.toString()?.trim()
         if (installPath.isNullOrEmpty()) {
