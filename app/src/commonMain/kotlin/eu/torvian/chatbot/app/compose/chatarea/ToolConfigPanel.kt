@@ -1,7 +1,8 @@
 package eu.torvian.chatbot.app.compose.chatarea
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -11,6 +12,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import eu.torvian.chatbot.app.compose.common.PlainTooltipBox
 import eu.torvian.chatbot.app.domain.models.LocalMCPServer
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
@@ -47,13 +49,15 @@ fun ToolConfigDialog(
             if (availableTools.isEmpty()) {
                 Text("No tools are currently available.")
             } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxWidth().heightIn(max = 500.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                Box(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 500.dp)
                 ) {
-                    // Non-MCP tools section
-                    if (nonMcpTools.isNotEmpty()) {
-                        item {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // Non-MCP tools section
+                        if (nonMcpTools.isNotEmpty()) {
                             ToolSection(
                                 title = "Built-in Tools",
                                 tools = nonMcpTools,
@@ -62,18 +66,17 @@ fun ToolConfigDialog(
                                 onToggleTools = onToggleTools
                             )
                         }
-                    }
 
-                    // MCP tools sections (one per server)
-                    toolsByServer.forEach { (serverId, tools) ->
-                        item {
+                        // MCP tools sections (one per server)
+                        toolsByServer.forEach { (serverId, tools) ->
                             val server = mcpServersById[serverId]
                             ToolSection(
                                 title = server?.name ?: "Unknown Server ($serverId)",
                                 tools = tools,
                                 enabledToolIds = enabledToolIds,
                                 onToggleTool = onToggleTool,
-                                onToggleTools = onToggleTools
+                                onToggleTools = onToggleTools,
+                                isCollapsedByDefault = true
                             )
                         }
                     }
@@ -98,9 +101,10 @@ private fun ToolSection(
     tools: List<ToolDefinition>,
     enabledToolIds: Set<Long>,
     onToggleTool: (ToolDefinition, Boolean) -> Unit,
-    onToggleTools: (List<ToolDefinition>, Boolean) -> Unit
+    onToggleTools: (List<ToolDefinition>, Boolean) -> Unit,
+    isCollapsedByDefault: Boolean = false
 ) {
-    var expanded by remember { mutableStateOf(true) }
+    var expanded by remember { mutableStateOf(!isCollapsedByDefault) }
     val allEnabled = tools.all { it.id in enabledToolIds }
     val someEnabled = tools.any { it.id in enabledToolIds }
 
@@ -175,6 +179,12 @@ private fun ToolConfigItem(
     isEnabled: Boolean,
     onToggle: (Boolean) -> Unit
 ) {
+    val truncatedDescription = if (tool.description.length > 100) {
+        tool.description.take(100) + "..."
+    } else {
+        tool.description
+    }
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -187,11 +197,16 @@ private fun ToolConfigItem(
                 text = tool.name,
                 style = MaterialTheme.typography.bodyMedium
             )
-            Text(
+            PlainTooltipBox(
                 text = tool.description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+                showDelay = 500
+            ) {
+                Text(
+                    text = truncatedDescription,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
 
         Switch(
