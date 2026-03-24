@@ -64,8 +64,8 @@ class FileSystemClientConfigLoader : ClientConfigLoader {
         }
 
         val blueprints = mapOf(
-            "config.json" to "files/default_config.json",
-            "setup.json" to "files/default_setup.json"
+            "config.json" to "files/config/default_config.json",
+            "setup.json" to "files/config/default_setup.json"
         )
 
         blueprints.forEach { (targetName, resPath) ->

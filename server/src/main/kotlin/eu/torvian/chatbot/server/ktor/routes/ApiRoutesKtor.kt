@@ -81,7 +81,14 @@ class ApiRoutesKtor(
      * Configures routes related to Sessions (/api/v1/sessions).
      */
     fun configureSessionRoutes(route: Route) {
-        route.configureSessionRoutes(sessionService, chatService, toolCallService, authorizationService, json)
+        route.configureSessionRoutes(
+            sessionService,
+            modelSettingsService,
+            chatService,
+            toolCallService,
+            authorizationService,
+            json
+        )
     }
 
     /**

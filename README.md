@@ -1,147 +1,85 @@
-# Chatbot Application
+# Torvian Chatbot
 
-A multi-platform chatbot application with AI/LLM integration, featuring a central server and multiple client options (Desktop, Web).
-
-## Project Overview
+## Project Purpose
+The project is a multi-platform chatbot application with AI/LLM integration. It features a central server and multiple client options (Desktop, Web, Android). It supports various LLM providers (OpenAI, Ollama) and has a plugin system for MCP tools.
 
 - **Server Module**: Ktor-based backend with SQLite database, user authentication, and LLM provider integration
 - **Desktop Client**: Compose Multiplatform desktop application (Windows, macOS, Linux)
 - **Web Client**: WASM-based web application (planned)
+- **Android Client**: Android application (planned)
 - **Common Module**: Shared business logic and models
 
 ## Tech Stack
+- **Languages**: Kotlin 2.3.10
+- **UI Framework**: Compose Multiplatform 1.10.2 (with Material 3 1.9.0)
+- **Server**: Ktor 3.4.1
+- **Database**: SQLite with Exposed ORM 1.1.1 (Server) and SQLDelight 2.2.1 (App)
+- **Dependency Injection**: Koin 4.1.1
+- **Functional Programming**: Arrow 2.2.2
+- **Logic**: kotlinx.serialization
+- **Build Tool**: Gradle 9.4.0
 
-- **Language**: Kotlin 2.2.0
-- **UI Framework**: Compose Multiplatform 1.8.2 with Material 3
-- **Server Framework**: Ktor 3.2.3 (Server & HTTP Client)
-- **Database**: SQLite with Exposed ORM 0.61.0
-- **Dependency Injection**: Koin 4.1.0
-- **Functional Programming**: Arrow 2.1.2
-- **Logging**: Log4j 2.25.1
-- **Build Tool**: Gradle
+## Features
+- User authentication and session management
+- Chat sessions with message threading
+- LLM provider configuration and model selection. Allows using your own API keys from any OpenAI compatible provider (e.g. OpenAI, Gemini, OpenRouter). Also supports using Ollama for local models.
+- Tool execution with local (stdio) MCP server integration. Remote (http) MCP server integration is planned.
+- Agentic LLM responses with tool calling. All tool calls need to be user approved before execution. Automatic approval can be configured on a per-tool basis. Allows streaming multiple LLM responses in parallel (from different chat sessions).
+- File attachment and reference in messages
+- (WIP) Multi-platform support (Desktop, Web, Android)
 
-## Quick Start (Development)
+## Project Status
+The project is in active development. The server and desktop client are feature complete in terms of their core functionality. The desktop client is currently the most stable and useable version available. The web client is partially useable, though MCP server integration is not yet functional. The Android client is the least useable, primarily due to its layout being optimized for landscape mode (not portrait), and it includes elements that require mouse hover to be visible, making them inaccessible on touchscreens.
+
+## Quick Start
 
 ### Prerequisites
+- [Git](https://git-scm.com/install/)
+- [JDK 21](https://adoptium.net/installation) or higher
+- Gradle 9.x (included via wrapper)
 
-- JDK 21 or higher
-- Gradle 8.x (included via wrapper)
-
-### Build & Run Server
-
+### Clone the repository
 ```bash
-# Build server module
-./gradlew server:assemble
-
-# Run server (development mode with default config)
-./gradlew server:run
-
-# Run tests
-./gradlew server:test
+cd <parent-path>
+git clone https://github.com/rwachters/chatbot.git
 ```
 
-### Build & Run Desktop Client
-
+### Install Server application
 ```bash
-# Build desktop application
-./gradlew app:desktopMainClasses
-
-# Run desktop application
-./gradlew app:runDesktop
-
-# Run tests
-./gradlew app:desktopTest
+./gradlew server:installDistTo -PinstallPath=<path>
 ```
 
-## Server Configuration
-
-The server uses a multi-layer JSON configuration system with support for environment variable overrides. C-style comments (`/* */`) are supported in all JSON config files.
-
-### Configuration Files
-
-- `config/application.json` - Main configuration (non-sensitive values)
-- `config/secrets.json` - Sensitive credentials, auto-generated on first run (**DO NOT COMMIT**)
-- `config/env-mapping.json` - Maps environment variable names to configuration keys
-- `config/setup.json` - Setup flow control flag
-
-A `secrets_example.json` is provided in the distribution showing the expected structure with placeholder values.
-
-For development, the server uses configuration from `server/src/main/resources/` which includes standard test credentials.
-
-The config directory can be overridden via the `CHATBOT_SERVER_CONFIG_DIR` environment variable, or the `app.config.dir` system property. By default, it resolves to `./config` relative to the working directory.
-
-### First Run Setup
-
-On first run with `setup.required = true` in `config/setup.json`, the server will:
-
-1. Generate missing secrets (SSL passwords, encryption keys, JWT secret)
-2. Write secrets to `config/secrets.json`
-3. Update `config/setup.json` to mark setup as complete
-4. Continue startup automatically
-
-### Environment Variables
-
-All configuration values can be overridden with environment variables as defined in `config/env-mapping.json`. Key variables:
-
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `CHATBOT_SERVER_CONFIG_DIR` | Override the config directory path | No |
-| `SERVER_HOST` | Server host address (default: localhost) | No |
-| `SERVER_PORT` | HTTP port (default: 8080) | No |
-| `SERVER_CONNECTOR_TYPE` | HTTP, HTTPS, or HTTP_AND_HTTPS | No |
-| `SSL_PORT` | HTTPS port (default: 8443) | No |
-| `SSL_KEYSTORE_PASSWORD` | Keystore password | When using HTTPS |
-| `SSL_KEY_ALIAS` | Key alias in keystore | When using HTTPS |
-| `SSL_KEY_PASSWORD` | Private key password | When using HTTPS |
-| `SERVER_DATABASE_FILENAME` | Database filename (default: chatbot.db) | No |
-| `ENCRYPTION_MASTER_KEY_V1` | Base64 encryption key | Yes (auto-generated) |
-| `JWT_SECRET` | JWT signing secret | Yes (auto-generated) |
-
-
-## Distribution
-
-### Build Server Distribution
-
+### Install Desktop application
 ```bash
-# Create distribution archive (TAR.GZ)
-./gradlew server:distTar
+./gradlew app:createDistributableTo -PinstallPath=<path>
+```
+Note: Please use separate paths for the server and desktop application.
 
-# Create distribution archive (ZIP)
-./gradlew server:distZip
-
-# Output: server/build/distributions/chatbot-server-<version>.tar.gz
-#         server/build/distributions/chatbot-server-<version>.zip
+### Run the server
+```bash
+# Linux/Mac
+<install-path>start-server.sh
+# Windows
+<install-path>start-server.bat
 ```
 
-### Distribution Contents
-
-```
-chatbot-server-<version>/
-├── config/
-│   ├── application.json        # Main configuration
-│   ├── application_example.json # Annotated configuration template
-│   ├── env-mapping.json        # Environment variable mapping
-│   ├── setup.json              # Setup control (setup_required = true)
-│   └── secrets_example.json    # Secrets template (DO NOT use in production)
-├── lib/
-│   └── chatbot-server-<version>.jar
-├── start-server.sh             # Unix/Linux/Mac startup script
-└── start-server.bat            # Windows startup script
+### Run the desktop application
+```bash
+# Linux/Mac
+<install-path>/Chatbot-with-logs.sh
+# Windows
+<install-path>/Chatbot-with-logs.bat
 ```
 
-### Deploy & Run
+### Login
+Login with username `admin` and password `admin123`. You will be asked to change the password on first login.
 
-1. Extract distribution archive
-2. (Optional) Copy `config/secrets_example.json` to `config/secrets.json` and customize
-3. Edit `config/application.json` for your environment (optional - defaults work for most cases)
-4. Run startup script:
-   - **Unix/Linux/Mac**: `./start-server.sh`
-   - **Windows**: `start-server.bat`
-
-First run with `setup.required = true` (default in `config/setup.json`) will auto-generate secrets.
+## Guides
+These guides provide information on how to configure and use specific features of the chatbot.
+- [LLM configuration guide](docs/user%20guides/LLM%20configuration%20guide.md) - How to configure LLM providers, models and model settings. And how to use them in the chatbot.
+- [MCP server configuration guide](docs/user%20guides/MCP%20server%20configuration%20guide.md) - How to configure and use MCP servers.
 
 ## Project Structure
-
 ```
 chatbot/
 ├── app/                    # Desktop client module
@@ -152,59 +90,23 @@ chatbot/
 └── gradle/                 # Gradle wrapper and dependencies
 ```
 
-## Development Guidelines
-
-- Use kotlinx.datetime instead of java.time
-- Error return types in Arrow should be logical errors, not technical errors
-- Follow Material 3 design guidelines for UI components
-
-## Gradle Tasks Reference
-
-```bash
-# Server
-./gradlew server:assemble        # Build server JAR
-./gradlew server:distTar         # Create distribution archive (TAR.GZ)
-./gradlew server:distZip         # Create distribution archive (ZIP)
-./gradlew server:test            # Run server tests
-
-# Desktop App
-./gradlew app:desktopMainClasses # Build desktop app
-./gradlew app:desktopTest        # Run desktop tests
-./gradlew app:createDistributable  # Create distributable (no installer)
-
-# Don't use these (too slow):
-# ./gradlew build
-# ./gradlew test
-```
-
-## API Documentation
-
-- Base URL: `https://localhost:8443/api/v1` (or configured host/port)
-- Authentication: JWT Bearer tokens
-
-### Default Credentials
-
-For development and first-time setup, a default admin user is created:
-- **Username**: `admin`
-- **Password**: `admin123`
-
-**Important**: Change this password immediately after first login!
-
 ## Additional Documentation
-
 - [Project Structure](docs/Project%20and%20Package%20Structure.md)
 - [Known Issues](docs/Known%20bugs.md)
 - [TODO List](docs/Todos.md)
+- [New feature ideas](docs/New%20feature%20ideas.md)
 
 ## License
-
-[TODO: Add license information]
+MIT License
 
 ## Contributing
+We welcome community contributions to the Torvian Chatbot! Your feedback, bug reports, feature suggestions, and code contributions are highly valued.
 
-This is an internal project. For questions or issues, contact the development team.
+Please see our comprehensive [Contributing Guide](CONTRIBUTING.md) for detailed information on how to get involved.
 
 ## Support
+For support or general questions, please post a message in the [GitHub discussion forum](https://github.com/rwachters/chatbot/discussions).
 
-For support, contact the development team.
+## Screenshots
+- Desktop app GUI: ![](https://i.imgur.com/aaFyKLk.png)
 

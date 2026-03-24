@@ -74,14 +74,20 @@ class KtorSessionApiClient(client: HttpClient) : BaseApiResourceClient(client), 
 
     override suspend fun updateSessionModel(
         sessionId: Long,
-        modelId: Long?
-    ): Either<ApiResourceError, Unit> {
+        modelId: Long?,
+        autoSelectFirstAvailableSettings: Boolean
+    ): Either<ApiResourceError, UpdateSessionModelResponse> {
         // Use safeApiCall to wrap the Ktor request
         return safeApiCall {
             // Use Ktor resources: /api/v1/sessions/{sessionId}/model
             client.put(SessionResource.ById.Model(SessionResource.ById(sessionId = sessionId))) {
-                setBody(UpdateSessionModelRequest(modelId = modelId))
-            }.body<Unit>() // Expect Unit body (HTTP 200/204)
+                setBody(
+                    UpdateSessionModelRequest(
+                        modelId = modelId,
+                        autoSelectFirstAvailableSettings = autoSelectFirstAvailableSettings
+                    )
+                )
+            }.body<UpdateSessionModelResponse>()
         }
     }
 

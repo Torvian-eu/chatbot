@@ -242,6 +242,7 @@ class LocalMCPServerViewModel(
                         ifRight = { server ->
                             _dialogState.value = LocalMCPServerDialogState.None
                             selectServer(server.id)
+                            refreshToolsAfterSave(server.id, server.isEnabled)
                         }
                     )
                 }
@@ -286,6 +287,7 @@ class LocalMCPServerViewModel(
                         },
                         ifRight = {
                             _dialogState.value = LocalMCPServerDialogState.None
+                            refreshToolsAfterSave(updatedServer.id, updatedServer.isEnabled)
                         }
                     )
                 }
@@ -294,6 +296,21 @@ class LocalMCPServerViewModel(
                     // No action needed
                 }
             }
+        }
+    }
+
+    /**
+     * Runs a best-effort tool refresh after a successful server save.
+     *
+     * Disabled servers are skipped because they are not expected to be callable.
+     */
+    private suspend fun refreshToolsAfterSave(serverId: Long, isEnabled: Boolean) {
+        if (!isEnabled) return
+
+        serverManager.refreshTools(serverId).onLeft { error ->
+            notificationService.genericError(
+                shortMessage = "Server saved, but tool refresh failed: ${error.message}"
+            )
         }
     }
 

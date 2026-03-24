@@ -3,6 +3,7 @@ import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpackConfig
+import org.gradle.api.tasks.Sync
 
 /**
  * Build configuration for the `app-shared` module.
@@ -252,6 +253,31 @@ compose.desktop {
 //        jvmArgs += "-Duser.country=ES" // Optional, for regional variants like es-ES
 
     }
+}
+
+// Task to create distributable to a custom path
+tasks.register<Sync>("createDistributableTo") {
+    group = "compose desktop"
+    description = "Copies the desktop distributable to a custom path using -PinstallPath=<path>."
+
+    dependsOn("createDistributable")
+    from(layout.buildDirectory.dir("compose/binaries/main/app/Chatbot"))
+    from(layout.projectDirectory.dir("src/commonMain/composeResources/files/config")) {
+        include("default_config.json")
+        include("default_setup.json")
+        rename("default_config.json", "config.json")
+        rename("default_setup.json", "setup.json")
+        into("config")
+    }
+    into(provider {
+        val installPath = findProperty("installPath")?.toString()?.trim()
+        if (installPath.isNullOrEmpty()) {
+            throw GradleException(
+                "Missing required property 'installPath'. Usage: ./gradlew app:createDistributableTo -PinstallPath=/your/target/path"
+            )
+        }
+        file(installPath)
+    })
 }
 
 // Custom task to copy platform-specific launch scripts to distribution

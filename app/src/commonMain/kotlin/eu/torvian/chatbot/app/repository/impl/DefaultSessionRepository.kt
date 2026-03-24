@@ -217,12 +217,19 @@ class DefaultSessionRepository(
 
     override suspend fun updateSessionModel(
         sessionId: Long,
-        modelId: Long?
+        modelId: Long?,
+        autoSelectFirstAvailableSettings: Boolean
     ): Either<RepositoryError, Unit> {
-        return sessionApi.updateSessionModel(sessionId, modelId)
-            .map {
+        return sessionApi.updateSessionModel(
+            sessionId = sessionId,
+            modelId = modelId,
+            autoSelectFirstAvailableSettings = autoSelectFirstAvailableSettings
+        ).map { response ->
                 updateSessionDetailsInCache(sessionId) { session ->
-                    session.copy(currentModelId = modelId, currentSettingsId = null)
+                    session.copy(
+                        currentModelId = response.currentModelId,
+                        currentSettingsId = response.currentSettingsId
+                    )
                 }
             }
             .mapLeft { apiResourceError ->

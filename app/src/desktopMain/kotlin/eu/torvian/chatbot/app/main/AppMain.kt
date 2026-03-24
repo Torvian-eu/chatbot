@@ -57,7 +57,7 @@ fun main() = runBlocking {
 
     // 2. Launch the Compose Multiplatform application.
     application {
-        Window(onCloseRequest = ::exitApplication, title = "Chatbot") {
+        Window(onCloseRequest = ::exitApplication, title = "Torvian chatbot") {
             // AppLifecycleManager handles the startup state machine via StartupViewModel
             AppLifecycleManager(configDir)
         }

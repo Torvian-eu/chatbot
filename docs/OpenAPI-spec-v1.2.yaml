@@ -1233,10 +1233,8 @@ components:
       description: Represents the different types of LLM providers supported by the system.
       enum:
         - OPENAI
-        - OPENROUTER
         - ANTHROPIC
         - OLLAMA
-        - CUSTOM
 
     ModelSettings:
       type: object

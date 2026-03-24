@@ -53,7 +53,6 @@ fun mainModule(application: Application) = module {
     single<LLMApiClient> {
         val strategies = mapOf(
             LLMProviderType.OPENAI to get<OpenAIChatStrategy>(),
-            LLMProviderType.OPENROUTER to get<OpenAIChatStrategy>(), // OpenRouter uses OpenAI-compatible API
             LLMProviderType.OLLAMA to get<OllamaChatStrategy>(),
             // Add other strategies here as they are implemented
             // LLMProviderType.ANTHROPIC to get<AnthropicChatStrategy>(),
