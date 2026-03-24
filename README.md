@@ -97,7 +97,7 @@ chatbot/
 - [New feature ideas](docs/New%20feature%20ideas.md)
 
 ## License
-MIT License
+This project is licensed under the [MIT License](LICENSE)
 
 ## Contributing
 We welcome community contributions to the Torvian Chatbot! Your feedback, bug reports, feature suggestions, and code contributions are highly valued.
