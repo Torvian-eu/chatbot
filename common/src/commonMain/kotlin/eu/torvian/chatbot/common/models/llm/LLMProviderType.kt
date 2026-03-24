@@ -14,12 +14,6 @@ enum class LLMProviderType {
     OPENAI,
 
     /**
-     * OpenRouter provider (multiple model access via their gateway).
-     * Often uses an OpenAI-compatible API format.
-     */
-    OPENROUTER,
-
-    /**
      * Anthropic provider (Claude models). Has a distinct API format.
      */
     ANTHROPIC,
@@ -27,11 +21,5 @@ enum class LLMProviderType {
     /**
      * Ollama provider for local LLM hosting. Uses a different API format.
      */
-    OLLAMA,
-
-    /**
-     * Custom provider for self-hosted or other API-compatible endpoints.
-     * Might try to auto-detect or require specific configuration.
-     */
-    CUSTOM
+    OLLAMA
 }

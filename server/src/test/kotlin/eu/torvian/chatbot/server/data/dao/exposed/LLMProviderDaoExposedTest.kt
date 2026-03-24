@@ -127,7 +127,7 @@ class LLMProviderDaoExposedTest {
         val name = "Test Provider"
         val description = "Test provider description"
         val baseUrl = "https://api.test.com/v1"
-        val type = LLMProviderType.CUSTOM
+        val type = LLMProviderType.OPENAI
 
         // Insert provider
         val result = llmProviderDao.insertProvider(apiKeyId, name, description, baseUrl, type)
@@ -185,7 +185,7 @@ class LLMProviderDaoExposedTest {
             "Different Name",
             "Different description",
             "https://different.url.com",
-            LLMProviderType.CUSTOM
+            LLMProviderType.OPENAI
         )
 
         // Verify
@@ -213,7 +213,7 @@ class LLMProviderDaoExposedTest {
             name = "Updated Name",
             description = "Updated description",
             baseUrl = "https://updated.url.com",
-            type = LLMProviderType.CUSTOM,
+            type = LLMProviderType.OPENAI,
             apiKeyId = "updated-api-key"
         )
 

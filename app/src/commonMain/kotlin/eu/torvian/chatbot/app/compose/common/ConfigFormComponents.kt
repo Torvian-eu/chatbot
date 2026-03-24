@@ -126,6 +126,7 @@ fun ConfigNumberField(
  * @param label Label text for the dropdown
  * @param modifier Modifier for styling
  * @param itemText Function to get display text for an item
+ * @param itemEnabled Function to determine whether an item can be selected
  * @param isError Whether the dropdown is in error state
  * @param errorMessage Error message to display
  */
@@ -138,6 +139,7 @@ fun <T> ConfigDropdown(
     label: String,
     modifier: Modifier = Modifier,
     itemText: (T) -> String = { it.toString() },
+    itemEnabled: (T) -> Boolean = { true },
     isError: Boolean = false,
     errorMessage: String? = null
 ) {
@@ -166,9 +168,12 @@ fun <T> ConfigDropdown(
                 onDismissRequest = { expanded = false }
             ) {
                 items.forEach { item ->
+                    val enabled = itemEnabled(item)
                     DropdownMenuItem(
                         text = { Text(itemText(item)) },
+                        enabled = enabled,
                         onClick = {
+                            if (!enabled) return@DropdownMenuItem
                             onItemSelected(item)
                             expanded = false
                         }

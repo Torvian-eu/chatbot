@@ -17,6 +17,14 @@ import eu.torvian.chatbot.app.domain.contracts.ProviderFormState
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
 
+private fun providerTypeDisplayName(type: LLMProviderType): String = when (type) {
+    LLMProviderType.ANTHROPIC -> "${type.name} (not supported yet)"
+    else -> type.name
+}
+
+private fun isProviderTypeSupportedInUi(type: LLMProviderType): Boolean =
+    type != LLMProviderType.ANTHROPIC
+
 /**
  * Modal dialog for adding a new LLM provider (E4.S8).
  * Includes form validation and proper error handling.
@@ -62,7 +70,8 @@ fun AddProviderDialog(
                     onItemSelected = onTypeChange,
                     items = LLMProviderType.entries,
                     label = "Provider Type",
-                    itemText = { it.name }
+                    itemText = ::providerTypeDisplayName,
+                    itemEnabled = ::isProviderTypeSupportedInUi
                 )
 
                 // Base URL
@@ -169,7 +178,8 @@ fun EditProviderDialog(
                     onItemSelected = onTypeChange,
                     items = LLMProviderType.entries,
                     label = "Provider Type",
-                    itemText = { it.name }
+                    itemText = ::providerTypeDisplayName,
+                    itemEnabled = ::isProviderTypeSupportedInUi
                 )
 
                 // Base URL

@@ -144,7 +144,7 @@ class KtorProviderApiClientTest {
         val mockResponseProvider = mockProvider(
             id = 1,
             name = "New Provider",
-            type = LLMProviderType.CUSTOM,
+            type = LLMProviderType.OPENAI,
             apiKeyId = "alias-abc" // Backend returns the alias, not the raw key
         )
         val mockEngine = MockEngine { request ->
@@ -166,7 +166,7 @@ class KtorProviderApiClientTest {
             name = "New Provider",
             description = "Test description",
             baseUrl = "http://test.com",
-            type = LLMProviderType.CUSTOM,
+            type = LLMProviderType.OPENAI,
             credential = "test-key"
         )
         when (result) {
@@ -186,7 +186,7 @@ class KtorProviderApiClientTest {
         val name = "" // Invalid name
         val description = "Test description"
         val baseUrl = "http://test.com"
-        val type = LLMProviderType.CUSTOM
+        val type = LLMProviderType.OPENAI
         val credential = "test-key"
         val mockEngine = MockEngine { request ->
             assertEquals(HttpMethod.Post, request.method)
@@ -232,7 +232,7 @@ class KtorProviderApiClientTest {
             name = "New Provider",
             description = "Test description",
             baseUrl = "http://test.com",
-            type = LLMProviderType.CUSTOM,
+            type = LLMProviderType.OPENAI,
             credential = "test-key"
         )
         when (result) {
@@ -262,7 +262,7 @@ class KtorProviderApiClientTest {
             name = "New Provider",
             description = "Test description",
             baseUrl = "http://test.com",
-            type = LLMProviderType.CUSTOM,
+            type = LLMProviderType.OPENAI,
             credential = "test-key"
         )
         when (result) {
