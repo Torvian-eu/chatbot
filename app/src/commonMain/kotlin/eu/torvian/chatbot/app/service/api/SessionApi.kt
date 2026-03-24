@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.app.service.api
 
 import arrow.core.Either
+import eu.torvian.chatbot.common.models.api.core.UpdateSessionModelResponse
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 import eu.torvian.chatbot.common.models.tool.ToolCall
@@ -86,10 +87,16 @@ interface SessionApi {
      *
      * @param sessionId The ID of the session.
      * @param modelId The new optional model ID for the session.
-     * @return [Either.Right] with [Unit] on successful update,
+     * @param autoSelectFirstAvailableSettings When true, backend will try to pick the first
+     * available settings profile for the selected model.
+     * @return [Either.Right] with [UpdateSessionModelResponse] on successful update,
      *         or [Either.Left] containing an [ApiResourceError] on failure.
      */
-    suspend fun updateSessionModel(sessionId: Long, modelId: Long?): Either<ApiResourceError, Unit>
+    suspend fun updateSessionModel(
+        sessionId: Long,
+        modelId: Long?,
+        autoSelectFirstAvailableSettings: Boolean = false
+    ): Either<ApiResourceError, UpdateSessionModelResponse>
 
     /**
      * Updates the currently selected settings profile for a specific chat session.

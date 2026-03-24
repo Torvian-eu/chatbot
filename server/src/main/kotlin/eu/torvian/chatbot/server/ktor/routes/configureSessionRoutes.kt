@@ -9,6 +9,7 @@ import eu.torvian.chatbot.common.api.CommonWebSocketProtocols
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.models.api.core.*
+import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.ktor.mappers.toChatEvent
@@ -40,6 +41,7 @@ import org.apache.logging.log4j.Logger
  */
 fun Route.configureSessionRoutes(
     sessionService: SessionService,
+    modelSettingsService: ModelSettingsService,
     chatService: ChatService,
     toolCallService: ToolCallService,
     authorizationService: AuthorizationService,
@@ -112,14 +114,37 @@ fun Route.configureSessionRoutes(
             val sessionId = resource.parent.sessionId
             val userId = call.getUserId()
             val request = call.receive<UpdateSessionModelRequest>()
+            val modelId = request.modelId
             val result = either {
                 requireSessionAccess(authorizationService, userId, sessionId, AccessMode.WRITE)
-                request.modelId?.let { modelId ->
-                    requireModelAccess(authorizationService, userId, modelId, AccessMode.READ)
+                modelId?.let { requestedModelId ->
+                    requireModelAccess(authorizationService, userId, requestedModelId, AccessMode.READ)
                 }
-                withError({ e: UpdateSessionCurrentModelIdError -> e.toApiError() }) {
-                    sessionService.updateSessionCurrentModelId(sessionId, request.modelId).bind()
+
+                val selectedSettingsId = if (request.autoSelectFirstAvailableSettings && modelId != null) {
+                    modelSettingsService
+                        .getAccessibleSettingsByModelId(userId, modelId, AccessMode.READ)
+                        .filterIsInstance<ChatModelSettings>()
+                        .minByOrNull { it.id }
+                        ?.id
+                } else {
+                    null
                 }
+
+                withError({ e: UpdateSessionCurrentModelAndSettingsIdError -> e.toApiError() }) {
+                    sessionService
+                        .updateSessionCurrentModelAndSettingsId(
+                            id = sessionId,
+                            modelId = modelId,
+                            settingsId = selectedSettingsId
+                        )
+                        .bind()
+                }
+
+                UpdateSessionModelResponse(
+                    currentModelId = modelId,
+                    currentSettingsId = selectedSettingsId
+                )
             }
             call.respondEither(result)
         }

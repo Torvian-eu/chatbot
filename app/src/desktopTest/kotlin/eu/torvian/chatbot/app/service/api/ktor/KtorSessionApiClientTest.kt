@@ -7,6 +7,7 @@ import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.api.resources.href
+import eu.torvian.chatbot.common.models.api.core.UpdateSessionModelResponse
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
@@ -459,13 +460,22 @@ class KtorSessionApiClientTest {
             val requestBody = request.body.toByteArray().decodeToString()
             assertTrue(requestBody.contains("10"), "Request body should contain modelId")
             respond(
-                content = "",
-                status = HttpStatusCode.OK
+                content = json.encodeToString(
+                    UpdateSessionModelResponse(
+                        currentModelId = modelId,
+                        currentSettingsId = null
+                    )
+                ),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
             )
         }
         val apiClient = createTestClient(mockEngine)
         when (val result = apiClient.updateSessionModel(sessionId, modelId)) {
-            is Either.Right -> assertEquals(Unit, result.value)
+            is Either.Right -> {
+                assertEquals(modelId, result.value.currentModelId)
+                assertEquals(null, result.value.currentSettingsId)
+            }
             is Either.Left -> fail("Expected success, but got error: ${result.value}")
         }
     }
@@ -480,13 +490,22 @@ class KtorSessionApiClientTest {
                 request.url.fullPath
             )
             respond(
-                content = "",
-                status = HttpStatusCode.OK
+                content = json.encodeToString(
+                    UpdateSessionModelResponse(
+                        currentModelId = null,
+                        currentSettingsId = null
+                    )
+                ),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
             )
         }
         val apiClient = createTestClient(mockEngine)
         when (val result = apiClient.updateSessionModel(sessionId, null)) {
-            is Either.Right -> assertEquals(Unit, result.value)
+            is Either.Right -> {
+                assertEquals(null, result.value.currentModelId)
+                assertEquals(null, result.value.currentSettingsId)
+            }
             is Either.Left -> fail("Expected success, but got error: ${result.value}")
         }
     }

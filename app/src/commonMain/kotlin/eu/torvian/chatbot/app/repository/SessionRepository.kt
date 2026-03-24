@@ -149,9 +149,15 @@ interface SessionRepository {
      *
      * @param sessionId The unique identifier of the session
      * @param modelId The new optional model ID for the session
+     * @param autoSelectFirstAvailableSettings When true, backend will try to pick the first
+     * available settings profile for the selected model.
      * @return Either.Right with Unit on successful update, or Either.Left with RepositoryError on failure
      */
-    suspend fun updateSessionModel(sessionId: Long, modelId: Long?): Either<RepositoryError, Unit>
+    suspend fun updateSessionModel(
+        sessionId: Long,
+        modelId: Long?,
+        autoSelectFirstAvailableSettings: Boolean = false
+    ): Either<RepositoryError, Unit>
 
     /**
      * Updates the currently selected settings profile for a specific chat session.
