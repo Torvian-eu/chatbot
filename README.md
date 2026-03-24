@@ -100,10 +100,12 @@ chatbot/
 MIT License
 
 ## Contributing
-This is an internal project. For questions or issues, post a message in the [GitHub discussion forum](https://github.com/rwachters/chatbot/discussions).
+We welcome community contributions to the Torvian Chatbot! Your feedback, bug reports, feature suggestions, and code contributions are highly valued.
+
+Please see our comprehensive [Contributing Guide](CONTRIBUTING.md) for detailed information on how to get involved.
 
 ## Support
-For support, post a message in the [GitHub discussion forum](https://github.com/rwachters/chatbot/discussions).
+For support or general questions, please post a message in the [GitHub discussion forum](https://github.com/rwachters/chatbot/discussions).
 
 ## Screenshots
 - Desktop app GUI: ![](https://i.imgur.com/aaFyKLk.png)
