@@ -56,4 +56,19 @@ class LLMApiClientStub : LLMApiClient {
     ): Flow<Either<LLMCompletionError, LLMStreamChunk>> {
         TODO("Not yet implemented")
     }
+
+    override suspend fun discoverModels(
+        provider: LLMProvider,
+        apiKey: String?
+    ): Either<ModelDiscoveryError, ModelDiscoveryResult> {
+        return ModelDiscoveryResult(
+            models = listOf(
+                ModelDiscoveryResult.DiscoveredModel(
+                    id = "stub-model-1",
+                    displayName = "Stub Model 1",
+                    metadata = mapOf("provider" to provider.name)
+                )
+            )
+        ).right()
+    }
 }

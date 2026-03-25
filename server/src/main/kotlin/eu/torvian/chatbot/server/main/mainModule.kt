@@ -3,6 +3,8 @@ package eu.torvian.chatbot.server.main
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import eu.torvian.chatbot.server.service.llm.LLMApiClient
 import eu.torvian.chatbot.server.service.llm.LLMApiClientKtor
+import eu.torvian.chatbot.server.service.llm.discovery.OllamaModelDiscoveryStrategy
+import eu.torvian.chatbot.server.service.llm.discovery.OpenAIModelDiscoveryStrategy
 import eu.torvian.chatbot.server.service.llm.strategy.OllamaChatStrategy
 import eu.torvian.chatbot.server.service.llm.strategy.OpenAIChatStrategy
 import eu.torvian.chatbot.server.service.tool.ToolExecutor
@@ -48,6 +50,8 @@ fun mainModule(application: Application) = module {
     // --- LLM Strategies ---
     single<OpenAIChatStrategy> { OpenAIChatStrategy(get()) }
     single<OllamaChatStrategy> { OllamaChatStrategy(get()) }
+    single<OpenAIModelDiscoveryStrategy> { OpenAIModelDiscoveryStrategy(get()) }
+    single<OllamaModelDiscoveryStrategy> { OllamaModelDiscoveryStrategy(get()) }
 
     // --- External Services ---
     single<LLMApiClient> {
@@ -57,7 +61,11 @@ fun mainModule(application: Application) = module {
             // Add other strategies here as they are implemented
             // LLMProviderType.ANTHROPIC to get<AnthropicChatStrategy>(),
         )
-        LLMApiClientKtor(get(), strategies)
+        val modelDiscoveryStrategies = mapOf(
+            LLMProviderType.OPENAI to get<OpenAIModelDiscoveryStrategy>(),
+            LLMProviderType.OLLAMA to get<OllamaModelDiscoveryStrategy>(),
+        )
+        LLMApiClientKtor(get(), strategies, modelDiscoveryStrategies)
     }
 
     // --- Tool Executors ---

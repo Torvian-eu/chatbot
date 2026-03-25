@@ -38,7 +38,8 @@ import org.apache.logging.log4j.Logger
  */
 class LLMApiClientKtor(
     private val httpClient: HttpClient,
-    private val strategies: Map<LLMProviderType, ChatCompletionStrategy>
+    private val strategies: Map<LLMProviderType, ChatCompletionStrategy>,
+    private val modelDiscoveryStrategies: Map<LLMProviderType, ModelDiscoveryStrategy> = emptyMap()
 ) : LLMApiClient {
     companion object {
         private val logger: Logger = LogManager.getLogger(LLMApiClientKtor::class.java)
@@ -248,6 +249,81 @@ class LLMApiClientKtor(
             )
         }
     }.flowOn(Dispatchers.IO)
+
+    override suspend fun discoverModels(
+        provider: LLMProvider,
+        apiKey: String?
+    ): Either<ModelDiscoveryError, ModelDiscoveryResult> {
+        logger.info("LLMApiClientKtor: Received model discovery request for provider ${provider.name} (Type: ${provider.type})")
+
+        val strategy = modelDiscoveryStrategies[provider.type]
+            ?: run {
+                val errorMsg = "No ModelDiscoveryStrategy found for provider type: ${provider.type}"
+                logger.error(errorMsg)
+                return ModelDiscoveryError.ConfigurationError(errorMsg).left()
+            }
+
+        val apiRequestConfig = strategy.prepareRequest(provider, apiKey).getOrElse { error ->
+            logger.error("Strategy ${strategy::class.simpleName} failed to prepare model discovery request: ${error.message}")
+            return error.left()
+        }
+
+        return withContext(Dispatchers.IO) {
+            try {
+                logger.debug("Executing model discovery request: ${apiRequestConfig.method} ${provider.baseUrl}${apiRequestConfig.path}")
+                val httpResponse: HttpResponse = httpClient.request {
+                    method = apiRequestConfig.method.toKtorHttpMethod()
+                    url("${provider.baseUrl}${apiRequestConfig.path}")
+                    contentType(apiRequestConfig.contentType.toKtorContentType())
+                    headers {
+                        apiRequestConfig.customHeaders.forEach { (key, value) ->
+                            append(key, value)
+                        }
+                    }
+                    if (apiRequestConfig.method != GenericHttpMethod.GET) {
+                        setBody(apiRequestConfig.body)
+                    }
+                    timeout {
+                        requestTimeoutMillis = 60_000
+                    }
+                }
+
+                val responseBody = try {
+                    httpResponse.bodyAsText()
+                } catch (e: Exception) {
+                    logger.error("Failed to read model discovery response body from ${provider.name}", e)
+                    return@withContext ModelDiscoveryError.NetworkError(
+                        "Failed to read response body from ${provider.name}",
+                        e
+                    ).left()
+                }
+
+                if (httpResponse.status.isSuccess()) {
+                    strategy.processSuccessResponse(responseBody)
+                        .getOrElse { error ->
+                            logger.error(
+                                "Strategy ${strategy::class.simpleName} failed to process model discovery response: ${error.message}",
+                                error.cause
+                            )
+                            return@withContext error.left()
+                        }
+                        .right()
+                } else {
+                    val apiError = strategy.processErrorResponse(httpResponse.status.value, responseBody)
+                    logger.error(
+                        "LLM API ${provider.name} returned model discovery error (Status: ${httpResponse.status.value}): $apiError"
+                    )
+                    apiError.left()
+                }
+            } catch (e: Exception) {
+                logger.error("LLMApiClientKtor: Model discovery request failed for provider ${provider.name}", e)
+                ModelDiscoveryError.NetworkError(
+                    "Network or communication error with ${provider.name}: ${e.message}",
+                    e
+                ).left()
+            }
+        }
+    }
 }
 
 
