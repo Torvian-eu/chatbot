@@ -7,6 +7,7 @@ import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.ProviderResource
 import eu.torvian.chatbot.common.api.resources.href
+import eu.torvian.chatbot.common.models.api.llm.DiscoveredProviderModel
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.llm.LLMProvider
@@ -271,6 +272,71 @@ class KtorProviderApiClientTest {
                 val error = result.value as ApiResourceError.SerializationError
                 assertTrue(error.message.contains("Serialization Error"))
                 assertTrue(error.description.contains("Failed to parse API response"))
+            }
+        }
+    }
+
+    @Test
+    fun `testProviderConnection - success`() = runTest {
+        val discoveredModels = listOf(
+            DiscoveredProviderModel(id = "gpt-4o", displayName = "GPT-4o"),
+            DiscoveredProviderModel(id = "gpt-4.1", displayName = "GPT-4.1")
+        )
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Post, request.method)
+            assertEquals(href(ProviderResource.TestConnection()), request.url.fullPath)
+            val requestBody = request.body.toByteArray().decodeToString()
+            assertTrue(requestBody.contains("https://api.openai.com/v1"))
+            assertTrue(requestBody.contains("OPENAI"))
+            respond(
+                content = json.encodeToString(discoveredModels),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+
+        val apiClient = createTestClient(mockEngine)
+        val result = apiClient.testProviderConnection(
+            baseUrl = "https://api.openai.com/v1",
+            type = LLMProviderType.OPENAI,
+            credential = "test-key"
+        )
+
+        when (result) {
+            is Either.Right -> {
+                assertEquals(2, result.value.size)
+                assertEquals("gpt-4o", result.value[0].id)
+            }
+
+            is Either.Left -> fail("Expected success, but got error: ${result.value}")
+        }
+    }
+
+    @Test
+    fun `testProviderConnection - failure - 400 Bad Request`() = runTest {
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Post, request.method)
+            assertEquals(href(ProviderResource.TestConnection()), request.url.fullPath)
+            respond(
+                content = json.encodeToString(apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid provider connection test input")),
+                status = HttpStatusCode.BadRequest,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+
+        val apiClient = createTestClient(mockEngine)
+        val result = apiClient.testProviderConnection(
+            baseUrl = "",
+            type = LLMProviderType.OPENAI,
+            credential = null
+        )
+
+        when (result) {
+            is Either.Right -> fail("Expected failure, but got success: ${result.value}")
+            is Either.Left -> {
+                val error = result.value as ApiResourceError.ServerError
+                assertEquals(400, error.apiError.statusCode)
+                assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.apiError.code)
             }
         }
     }

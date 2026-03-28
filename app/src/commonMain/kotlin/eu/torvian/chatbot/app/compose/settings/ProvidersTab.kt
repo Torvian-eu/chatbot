@@ -105,11 +105,13 @@ fun ProvidersTab(
             is ProvidersDialogState.AddNewProvider -> {
                 AddProviderDialog(
                     formState = dialogState.formState,
+                    connectionTestLoading = dialogState.isTestingConnection,
                     onNameChange = { name -> actions.onUpdateProviderForm { it.copy(name = name) } },
                     onTypeChange = { type -> actions.onUpdateProviderForm { it.copy(type = type) } },
                     onBaseUrlChange = { baseUrl -> actions.onUpdateProviderForm { it.copy(baseUrl = baseUrl) } },
                     onDescriptionChange = { description -> actions.onUpdateProviderForm { it.copy(description = description) } },
                     onCredentialChange = { credential -> actions.onUpdateProviderForm { it.copy(credential = credential) } },
+                    onTestConnection = { actions.onTestProviderConnectionInDialog() },
                     onConfirm = { actions.onSaveProvider() },
                     onDismiss = { actions.onCancelDialog() }
                 )

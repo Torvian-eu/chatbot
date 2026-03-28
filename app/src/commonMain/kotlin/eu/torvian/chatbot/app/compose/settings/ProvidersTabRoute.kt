@@ -48,6 +48,7 @@ fun ProvidersTabRoute(
         override fun onStartDeletingProvider(provider: LLMProvider) = viewModel.startDeletingProvider(provider)
         override fun onDeleteProvider(providerId: Long) = viewModel.deleteProvider(providerId)
         override fun onUpdateProviderCredential() = viewModel.updateProviderCredential()
+        override fun onTestProviderConnectionInDialog() = viewModel.testProviderConnectionInDialog()
         override fun onUpdateProviderForm(update: (ProviderFormState) -> ProviderFormState) =
             viewModel.updateProviderForm(update)
 

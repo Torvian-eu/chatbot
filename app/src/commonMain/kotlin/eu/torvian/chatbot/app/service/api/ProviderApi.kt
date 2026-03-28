@@ -5,6 +5,7 @@ import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
+import eu.torvian.chatbot.common.models.api.llm.DiscoveredProviderModel
 
 /**
  * Frontend API interface for interacting with LLM Provider-related endpoints.
@@ -46,6 +47,23 @@ interface ProviderApi {
         type: LLMProviderType,
         credential: String? = null
     ): Either<ApiResourceError, LLMProvider>
+
+    /**
+     * Tests provider connectivity without persisting configuration.
+     *
+     * Corresponds to `POST /api/v1/providers/test-connection`.
+     *
+     * @param baseUrl The provider base URL to test.
+     * @param type The provider type to test.
+     * @param credential Optional credential used for authentication.
+     * @return [Either.Right] with discovered models on success,
+     *         or [Either.Left] containing a [ApiResourceError] on failure.
+     */
+    suspend fun testProviderConnection(
+        baseUrl: String,
+        type: LLMProviderType,
+        credential: String? = null
+    ): Either<ApiResourceError, List<DiscoveredProviderModel>>
 
     /**
      * Retrieves details for a specific LLM provider configuration.

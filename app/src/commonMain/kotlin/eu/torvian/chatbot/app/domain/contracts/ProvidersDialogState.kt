@@ -12,7 +12,8 @@ sealed class ProvidersDialogState {
     object None : ProvidersDialogState()
 
     data class AddNewProvider(
-        val formState: ProviderFormState = ProviderFormState(mode = FormMode.NEW)
+        val formState: ProviderFormState = ProviderFormState(mode = FormMode.NEW),
+        val isTestingConnection: Boolean = false
     ) : ProvidersDialogState()
 
     data class EditProvider(

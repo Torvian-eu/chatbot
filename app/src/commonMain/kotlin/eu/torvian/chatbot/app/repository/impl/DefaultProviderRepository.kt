@@ -11,6 +11,7 @@ import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.service.api.ProviderApi
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
+import eu.torvian.chatbot.common.models.api.llm.DiscoveredProviderModel
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
@@ -118,6 +119,18 @@ class DefaultProviderRepository(
             }
             loadProviderDetails(newProvider.id).bind()
         }
+
+    override suspend fun testProviderConnection(
+        baseUrl: String,
+        type: LLMProviderType,
+        credential: String?
+    ): Either<RepositoryError, List<DiscoveredProviderModel>> = either {
+        withError({ apiResourceError ->
+            apiResourceError.toRepositoryError("Failed to test provider connection")
+        }) {
+            providerApi.testProviderConnection(baseUrl, type, credential).bind()
+        }
+    }
 
     override suspend fun updateProvider(provider: LLMProvider): Either<RepositoryError, Unit> =
         either {

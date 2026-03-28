@@ -3,6 +3,7 @@ package eu.torvian.chatbot.app.repository
 import arrow.core.Either
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
+import eu.torvian.chatbot.common.models.api.llm.DiscoveredProviderModel
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
@@ -93,6 +94,20 @@ interface ProviderRepository {
         type: LLMProviderType,
         credential: String? = null
     ): Either<RepositoryError, LLMProviderDetails>
+
+    /**
+     * Tests provider connectivity using unsaved form data.
+     *
+     * @param baseUrl The provider base URL to test.
+     * @param type The provider type to test.
+     * @param credential Optional credential to use for authentication.
+     * @return Either.Right with discovered models on success, or Either.Left with RepositoryError on failure.
+     */
+    suspend fun testProviderConnection(
+        baseUrl: String,
+        type: LLMProviderType,
+        credential: String? = null
+    ): Either<RepositoryError, List<DiscoveredProviderModel>>
 
     /**
      * Updates an existing LLM provider configuration.

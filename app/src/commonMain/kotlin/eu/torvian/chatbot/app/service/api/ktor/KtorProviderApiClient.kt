@@ -10,6 +10,8 @@ import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
 import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
 import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
 import eu.torvian.chatbot.common.models.api.llm.AddProviderRequest
+import eu.torvian.chatbot.common.models.api.llm.DiscoveredProviderModel
+import eu.torvian.chatbot.common.models.api.llm.TestProviderConnectionRequest
 import eu.torvian.chatbot.common.models.api.llm.UpdateProviderCredentialRequest
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
@@ -55,6 +57,24 @@ class KtorProviderApiClient(client: HttpClient) : BaseApiResourceClient(client),
                     )
                 )
             }.body<LLMProvider>()
+        }
+    }
+
+    override suspend fun testProviderConnection(
+        baseUrl: String,
+        type: LLMProviderType,
+        credential: String?
+    ): Either<ApiResourceError, List<DiscoveredProviderModel>> {
+        return safeApiCall {
+            client.post(ProviderResource.TestConnection()) {
+                setBody(
+                    TestProviderConnectionRequest(
+                        baseUrl = baseUrl,
+                        type = type,
+                        credential = credential
+                    )
+                )
+            }.body<List<DiscoveredProviderModel>>()
         }
     }
 

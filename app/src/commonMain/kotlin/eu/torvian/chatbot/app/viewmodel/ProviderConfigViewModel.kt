@@ -216,6 +216,68 @@ class ProviderConfigViewModel(
     }
 
     /**
+     * Tests provider connection from the add-provider dialog using current unsaved form values.
+     */
+    fun testProviderConnectionInDialog() {
+        val currentState = _dialogState.value
+        val form = (currentState as? ProvidersDialogState.AddNewProvider)?.formState ?: return
+
+        if (form.baseUrl.isBlank()) {
+            updateProviderForm { it.withError("Base URL cannot be empty.") }
+            return
+        }
+
+        viewModelScope.launch(uiDispatcher) {
+            _dialogState.update { state ->
+                when (state) {
+                    is ProvidersDialogState.AddNewProvider -> state.copy(
+                        isTestingConnection = true,
+                        formState = state.formState.withError(null)
+                    )
+                    else -> state
+                }
+            }
+
+            providerRepository.testProviderConnection(
+                baseUrl = form.baseUrl.trim(),
+                type = form.type,
+                credential = form.credential.takeIf { it.isNotBlank() }
+            ).fold(
+                ifLeft = { error ->
+                    _dialogState.update { state ->
+                        when (state) {
+                            is ProvidersDialogState.AddNewProvider -> state.copy(
+                                isTestingConnection = false,
+                                formState = state.formState.withError("Connection test failed: ${error.message}")
+                            )
+                            else -> state
+                        }
+                    }
+                    notificationService.repositoryError(
+                        error = error,
+                        shortMessage = "Provider connection test failed"
+                    )
+                },
+                ifRight = { discoveredModels ->
+                    _dialogState.update { state ->
+                        when (state) {
+                            is ProvidersDialogState.AddNewProvider -> state.copy(
+                                isTestingConnection = false,
+                                formState = state.formState.withError(null)
+                            )
+
+                            else -> state
+                        }
+                    }
+                    notificationService.genericSuccess(
+                        shortMessage = "Connected - ${discoveredModels.size} model(s) discovered"
+                    )
+                }
+            )
+        }
+    }
+
+    /**
      * Deletes a specific LLM provider configuration (E4.S11).
      *
      * @param providerId The ID of the provider to delete.
