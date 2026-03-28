@@ -14,6 +14,11 @@ enum class LLMProviderType {
     OPENAI,
 
     /**
+     * OpenRouter provider. Uses OpenAI-compatible chat endpoints and a dedicated models endpoint payload.
+     */
+    OPENROUTER,
+
+    /**
      * Anthropic provider (Claude models). Has a distinct API format.
      */
     ANTHROPIC,

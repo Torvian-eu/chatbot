@@ -5,6 +5,7 @@ import eu.torvian.chatbot.server.service.llm.LLMApiClient
 import eu.torvian.chatbot.server.service.llm.LLMApiClientKtor
 import eu.torvian.chatbot.server.service.llm.discovery.OllamaModelDiscoveryStrategy
 import eu.torvian.chatbot.server.service.llm.discovery.OpenAIModelDiscoveryStrategy
+import eu.torvian.chatbot.server.service.llm.discovery.OpenRouterModelDiscoveryStrategy
 import eu.torvian.chatbot.server.service.llm.strategy.OllamaChatStrategy
 import eu.torvian.chatbot.server.service.llm.strategy.OpenAIChatStrategy
 import eu.torvian.chatbot.server.service.tool.ToolExecutor
@@ -52,17 +53,20 @@ fun mainModule(application: Application) = module {
     single<OllamaChatStrategy> { OllamaChatStrategy(get()) }
     single<OpenAIModelDiscoveryStrategy> { OpenAIModelDiscoveryStrategy(get()) }
     single<OllamaModelDiscoveryStrategy> { OllamaModelDiscoveryStrategy(get()) }
+    single<OpenRouterModelDiscoveryStrategy> { OpenRouterModelDiscoveryStrategy(get()) }
 
     // --- External Services ---
     single<LLMApiClient> {
         val strategies = mapOf(
             LLMProviderType.OPENAI to get<OpenAIChatStrategy>(),
+            LLMProviderType.OPENROUTER to get<OpenAIChatStrategy>(),
             LLMProviderType.OLLAMA to get<OllamaChatStrategy>(),
             // Add other strategies here as they are implemented
             // LLMProviderType.ANTHROPIC to get<AnthropicChatStrategy>(),
         )
         val modelDiscoveryStrategies = mapOf(
             LLMProviderType.OPENAI to get<OpenAIModelDiscoveryStrategy>(),
+            LLMProviderType.OPENROUTER to get<OpenRouterModelDiscoveryStrategy>(),
             LLMProviderType.OLLAMA to get<OllamaModelDiscoveryStrategy>(),
         )
         LLMApiClientKtor(get(), strategies, modelDiscoveryStrategies)
