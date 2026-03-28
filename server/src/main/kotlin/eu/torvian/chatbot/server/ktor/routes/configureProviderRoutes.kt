@@ -10,6 +10,7 @@ import eu.torvian.chatbot.common.api.resources.ProviderResource
 import eu.torvian.chatbot.common.models.api.access.GrantAccessRequest
 import eu.torvian.chatbot.common.models.api.access.RevokeAccessRequest
 import eu.torvian.chatbot.common.models.api.llm.AddProviderRequest
+import eu.torvian.chatbot.common.models.api.llm.TestProviderConnectionRequest
 import eu.torvian.chatbot.common.models.api.llm.UpdateProviderCredentialRequest
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
@@ -97,6 +98,32 @@ fun Route.configureProviderRoutes(
             }
         }
 
+        // POST /api/v1/providers/test-connection - Test provider connectivity without persisting it
+        post<ProviderResource.TestConnection> {
+            val userId = call.getUserId()
+            val request = call.receive<TestProviderConnectionRequest>()
+
+            either {
+                // Require CREATE or MANAGE permission for providers
+                requireAnyPermission(
+                    authorizationService,
+                    userId,
+                    CommonPermissions.MANAGE_LLM_PROVIDERS,
+                    CommonPermissions.CREATE_LLM_PROVIDER
+                )
+
+                withError({ error: TestProviderConnectionError -> error.toApiError() }) {
+                    llmProviderService.testProviderConnection(
+                        baseUrl = request.baseUrl,
+                        type = request.type,
+                        credential = request.credential
+                    ).bind()
+                }
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.OK)
+            }
+        }
+
         // PUT /api/v1/providers/{providerId} - Update provider by ID
         put<ProviderResource.ById> { resource ->
             val userId = call.getUserId()
@@ -176,6 +203,23 @@ fun Route.configureProviderRoutes(
             // Otherwise, show only models accessible to the user
             else {
                 call.respond(llmModelService.getAccessibleModelsByProviderId(userId, providerId, AccessMode.READ))
+            }
+        }
+
+        // GET /api/v1/providers/{providerId}/discover-models - Discover remote models from provider API
+        get<ProviderResource.ById.DiscoverModels> { resource ->
+            val userId = call.getUserId()
+            val providerId = resource.parent.providerId
+
+            either {
+                // Require READ access to discover models on this provider
+                requireProviderAccess(authorizationService, userId, providerId, AccessMode.READ)
+
+                withError({ error: DiscoverProviderModelsError -> error.toApiError() }) {
+                    llmProviderService.discoverProviderModels(providerId).bind()
+                }
+            }.let { result ->
+                call.respondEither(result, HttpStatusCode.OK)
             }
         }
 

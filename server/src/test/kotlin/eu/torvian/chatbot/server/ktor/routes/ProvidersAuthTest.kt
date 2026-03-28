@@ -58,5 +58,14 @@ class ProvidersAuthTest {
         }
         assertEquals(HttpStatusCode.Unauthorized, response.status)
     }
+
+    @Test
+    fun `POST provider test connection without auth returns 401`() = app {
+        val response = client.post(href(ProviderResource.TestConnection())) {
+            contentType(ContentType.Application.Json)
+            setBody("{}")
+        }
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
+    }
 }
 

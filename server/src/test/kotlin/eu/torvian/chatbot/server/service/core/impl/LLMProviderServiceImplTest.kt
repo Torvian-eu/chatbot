@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.service.core.impl
 
 import arrow.core.left
 import arrow.core.right
+import eu.torvian.chatbot.common.models.api.llm.DiscoveredProviderModel
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.llm.LLMProvider
@@ -11,6 +12,9 @@ import eu.torvian.chatbot.server.data.dao.error.LLMProviderError
 import eu.torvian.chatbot.server.service.core.UserGroupService
 import eu.torvian.chatbot.server.service.core.UserService
 import eu.torvian.chatbot.server.service.core.error.provider.*
+import eu.torvian.chatbot.server.service.llm.LLMApiClient
+import eu.torvian.chatbot.server.service.llm.ModelDiscoveryError
+import eu.torvian.chatbot.server.service.llm.ModelDiscoveryResult
 import eu.torvian.chatbot.server.service.security.CredentialManager
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import io.mockk.clearMocks
@@ -42,6 +46,7 @@ class LLMProviderServiceImplTest {
     private lateinit var userGroupDao: UserGroupDao
     private lateinit var userGroupService: UserGroupService
     private lateinit var userService: UserService
+    private lateinit var llmApiClient: LLMApiClient
     private lateinit var credentialManager: CredentialManager
     private lateinit var transactionScope: TransactionScope
 
@@ -88,6 +93,7 @@ class LLMProviderServiceImplTest {
         userGroupDao = mockk()
         userGroupService = mockk()
         userService = mockk()
+        llmApiClient = mockk()
 
         // Create the service instance with mocked dependencies
         llmProviderService = LLMProviderServiceImpl(
@@ -97,6 +103,7 @@ class LLMProviderServiceImplTest {
             modelDao,
             userGroupService,
             userService,
+            llmApiClient,
             credentialManager,
             transactionScope,
         )
@@ -115,7 +122,7 @@ class LLMProviderServiceImplTest {
     @AfterEach
     fun tearDown() {
         // Clear all mocks after each test to ensure isolation
-        clearMocks(llmProviderDao, modelDao, credentialManager, transactionScope)
+        clearMocks(llmProviderDao, modelDao, llmApiClient, credentialManager, transactionScope)
     }
 
     // --- getAllProviders Tests ---
@@ -185,6 +192,146 @@ class LLMProviderServiceImplTest {
         assertEquals(providerId, (error as GetProviderError.ProviderNotFound).id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { llmProviderDao.getProviderById(providerId) }
+    }
+
+    @Test
+    fun `discoverProviderModels should return mapped discovered models`() = runTest {
+        // Arrange
+        val providerId = testProvider1.id
+        val apiKey = "decrypted-key"
+        val discovered = ModelDiscoveryResult(
+            models = listOf(
+                ModelDiscoveryResult.DiscoveredModel(
+                    id = "gpt-4o",
+                    displayName = "GPT-4o",
+                    metadata = mapOf("owned_by" to "openai")
+                )
+            )
+        )
+
+        coEvery { llmProviderDao.getProviderById(providerId) } returns testProvider1.right()
+        coEvery { credentialManager.getCredential(testProvider1.apiKeyId!!) } returns apiKey.right()
+        coEvery { llmApiClient.discoverModels(testProvider1, apiKey) } returns discovered.right()
+
+        // Act
+        val result = llmProviderService.discoverProviderModels(providerId)
+
+        // Assert
+        assertTrue(result.isRight())
+        assertEquals(
+            listOf(
+                DiscoveredProviderModel(
+                    id = "gpt-4o",
+                    displayName = "GPT-4o",
+                    metadata = mapOf("owned_by" to "openai")
+                )
+            ),
+            result.getOrNull()
+        )
+        coVerify(exactly = 1) { llmProviderDao.getProviderById(providerId) }
+        coVerify(exactly = 1) { credentialManager.getCredential(testProvider1.apiKeyId!!) }
+        coVerify(exactly = 1) { llmApiClient.discoverModels(testProvider1, apiKey) }
+    }
+
+    @Test
+    fun `discoverProviderModels should return ProviderNotFound when provider does not exist`() = runTest {
+        // Arrange
+        val providerId = 999L
+        coEvery { llmProviderDao.getProviderById(providerId) } returns LLMProviderError.LLMProviderNotFound(providerId).left()
+
+        // Act
+        val result = llmProviderService.discoverProviderModels(providerId)
+
+        // Assert
+        assertTrue(result.isLeft())
+        val error = result.leftOrNull()
+        assertTrue(error is DiscoverProviderModelsError.ProviderNotFound)
+        assertEquals(providerId, (error as DiscoverProviderModelsError.ProviderNotFound).id)
+        coVerify(exactly = 1) { llmProviderDao.getProviderById(providerId) }
+        coVerify(exactly = 0) { llmApiClient.discoverModels(any(), any()) }
+    }
+
+    @Test
+    fun `testProviderConnection should return discovered models on success`() = runTest {
+        // Arrange
+        val discovered = ModelDiscoveryResult(
+            models = listOf(
+                ModelDiscoveryResult.DiscoveredModel(
+                    id = "gpt-4.1",
+                    displayName = "GPT 4.1",
+                    metadata = mapOf("owned_by" to "openai")
+                )
+            )
+        )
+        coEvery { llmApiClient.discoverModels(any(), "test-credential") } returns discovered.right()
+
+        // Act
+        val result = llmProviderService.testProviderConnection(
+            baseUrl = "https://api.openai.com/v1",
+            type = LLMProviderType.OPENAI,
+            credential = "test-credential"
+        )
+
+        // Assert
+        assertTrue(result.isRight())
+        assertEquals(
+            listOf(
+                DiscoveredProviderModel(
+                    id = "gpt-4.1",
+                    displayName = "GPT 4.1",
+                    metadata = mapOf("owned_by" to "openai")
+                )
+            ),
+            result.getOrNull()
+        )
+        coVerify(exactly = 1) {
+            llmApiClient.discoverModels(
+                match {
+                    it.baseUrl == "https://api.openai.com/v1" &&
+                        it.type == LLMProviderType.OPENAI &&
+                        it.apiKeyId == "test-credential"
+                },
+                "test-credential"
+            )
+        }
+    }
+
+    @Test
+    fun `testProviderConnection should return InvalidInput for blank base URL`() = runTest {
+        // Act
+        val result = llmProviderService.testProviderConnection(
+            baseUrl = "   ",
+            type = LLMProviderType.OPENAI,
+            credential = null
+        )
+
+        // Assert
+        assertTrue(result.isLeft())
+        val error = result.leftOrNull()
+        assertTrue(error is TestProviderConnectionError.InvalidInput)
+        assertEquals("Provider base URL cannot be blank.", (error as TestProviderConnectionError.InvalidInput).reason)
+        coVerify(exactly = 0) { llmApiClient.discoverModels(any(), any()) }
+    }
+
+    @Test
+    fun `testProviderConnection should map authentication failures`() = runTest {
+        // Arrange
+        coEvery {
+            llmApiClient.discoverModels(any(), any())
+        } returns ModelDiscoveryError.AuthenticationError("bad credentials").left()
+
+        // Act
+        val result = llmProviderService.testProviderConnection(
+            baseUrl = "https://api.openai.com/v1",
+            type = LLMProviderType.OPENAI,
+            credential = "bad"
+        )
+
+        // Assert
+        assertTrue(result.isLeft())
+        val error = result.leftOrNull()
+        assertTrue(error is TestProviderConnectionError.AuthenticationFailed)
+        assertEquals("bad credentials", (error as TestProviderConnectionError.AuthenticationFailed).reason)
     }
 
     // --- addProvider Tests ---

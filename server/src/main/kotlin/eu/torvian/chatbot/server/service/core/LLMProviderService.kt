@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.service.core
 import arrow.core.Either
 import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
+import eu.torvian.chatbot.common.models.api.llm.DiscoveredProviderModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import eu.torvian.chatbot.server.service.core.error.access.GrantResourceAccessError
@@ -127,6 +128,28 @@ interface LLMProviderService {
      * @return Either [GetProviderError] or [LLMProviderDetails]
      */
     suspend fun getProviderDetails(providerId: Long): Either<GetProviderError, LLMProviderDetails>
+
+    /**
+     * Discovers currently available remote models from the provider API.
+     *
+     * @param providerId The ID of the provider whose remote model catalog should be queried.
+     * @return Either [DiscoverProviderModelsError] or a list of [DiscoveredProviderModel].
+     */
+    suspend fun discoverProviderModels(providerId: Long): Either<DiscoverProviderModelsError, List<DiscoveredProviderModel>>
+
+    /**
+     * Tests connectivity for a provider configuration without persisting it.
+     *
+     * @param baseUrl The provider base URL to test.
+     * @param type The provider type to select the correct discovery strategy.
+     * @param credential Optional provider credential to use during the connectivity test.
+     * @return Either [TestProviderConnectionError] or discovered remote models when successful.
+     */
+    suspend fun testProviderConnection(
+        baseUrl: String,
+        type: LLMProviderType,
+        credential: String?
+    ): Either<TestProviderConnectionError, List<DiscoveredProviderModel>>
 
     // --- Convenience Methods ---
 

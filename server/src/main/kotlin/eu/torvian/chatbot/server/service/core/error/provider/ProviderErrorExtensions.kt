@@ -73,3 +73,88 @@ fun UpdateProviderCredentialError.toApiError(): ApiError = when (this) {
         "reason" to this.reason
     )
 }
+
+fun DiscoverProviderModelsError.toApiError(): ApiError = when (this) {
+    is DiscoverProviderModelsError.ProviderNotFound -> apiError(
+        CommonApiErrorCodes.NOT_FOUND,
+        "Provider not found",
+        "providerId" to this.id.toString()
+    )
+
+    is DiscoverProviderModelsError.CredentialNotFound -> apiError(
+        CommonApiErrorCodes.FAILED_PRECONDITION,
+        "Provider credential is missing from secure storage",
+        "alias" to this.alias
+    )
+
+    is DiscoverProviderModelsError.AuthenticationFailed -> apiError(
+        CommonApiErrorCodes.INVALID_CREDENTIALS,
+        "Provider authentication failed",
+        "reason" to this.reason
+    )
+
+    is DiscoverProviderModelsError.InvalidConfiguration -> apiError(
+        CommonApiErrorCodes.FAILED_PRECONDITION,
+        "Provider configuration is invalid for model discovery",
+        "reason" to this.reason
+    )
+
+    is DiscoverProviderModelsError.ProviderApiError -> apiError(
+        CommonApiErrorCodes.INTERNAL,
+        "Provider API returned an error during model discovery",
+        "statusCode" to this.statusCode.toString(),
+        "reason" to this.reason
+    )
+
+    is DiscoverProviderModelsError.InvalidProviderResponse -> apiError(
+        CommonApiErrorCodes.INTERNAL,
+        "Provider returned an invalid discovery response",
+        "reason" to this.reason
+    )
+
+    is DiscoverProviderModelsError.ProviderUnavailable -> apiError(
+        CommonApiErrorCodes.INTERNAL,
+        "Provider is currently unavailable",
+        "reason" to this.reason
+    )
+}
+
+fun TestProviderConnectionError.toApiError(): ApiError = when (this) {
+    is TestProviderConnectionError.InvalidInput -> apiError(
+        CommonApiErrorCodes.INVALID_ARGUMENT,
+        "Invalid provider connection test input",
+        "reason" to this.reason
+    )
+
+    is TestProviderConnectionError.AuthenticationFailed -> apiError(
+        CommonApiErrorCodes.INVALID_CREDENTIALS,
+        "Provider authentication failed",
+        "reason" to this.reason
+    )
+
+    is TestProviderConnectionError.InvalidConfiguration -> apiError(
+        CommonApiErrorCodes.FAILED_PRECONDITION,
+        "Provider configuration is invalid for connection test",
+        "reason" to this.reason
+    )
+
+    is TestProviderConnectionError.ProviderApiError -> apiError(
+        CommonApiErrorCodes.INTERNAL,
+        "Provider API returned an error during connection test",
+        "statusCode" to this.statusCode.toString(),
+        "reason" to this.reason
+    )
+
+    is TestProviderConnectionError.InvalidProviderResponse -> apiError(
+        CommonApiErrorCodes.INTERNAL,
+        "Provider returned an invalid response during connection test",
+        "reason" to this.reason
+    )
+
+    is TestProviderConnectionError.ProviderUnavailable -> apiError(
+        CommonApiErrorCodes.INTERNAL,
+        "Provider is currently unavailable",
+        "reason" to this.reason
+    )
+}
+
