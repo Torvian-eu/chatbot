@@ -1,6 +1,9 @@
 package eu.torvian.chatbot.app.compose.settings
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -8,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ErrorStateDisplay
 import eu.torvian.chatbot.app.compose.common.LoadingStateDisplay
+import eu.torvian.chatbot.app.compose.common.ScrollbarWrapper
 import eu.torvian.chatbot.app.compose.settings.dialogs.ManageAccessDialog
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.contracts.ProvidersDialogState
@@ -63,6 +67,7 @@ fun ProvidersTab(
                         providerDetails = state.selectedProvider,
                         onEditProvider = { actions.onStartEditingProvider(it) },
                         onDeleteProvider = { actions.onStartDeletingProvider(it) },
+                        onListModels = { actions.onListProviderModels(it.provider.id) },
                         onMakePublic = { actions.onMakeProviderPublic(it) },
                         onMakePrivate = { actions.onMakeProviderPrivate(it) },
                         onManageAccess = { actions.onOpenManageAccessDialog(it) },
@@ -140,6 +145,37 @@ fun ProvidersTab(
                         actions.onDeleteProvider(dialogState.provider.id)
                     },
                     onDismiss = { actions.onCancelDialog() }
+                )
+            }
+
+            is ProvidersDialogState.ShowDiscoveredModelsJson -> {
+                val scrollState = rememberScrollState()
+                AlertDialog(
+                    onDismissRequest = actions::onCancelDialog,
+                    title = {
+                        Text("Discovered Models - ${dialogState.providerName}")
+                    },
+                    text = {
+                        ScrollbarWrapper(
+                            scrollState = scrollState,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 240.dp, max = 480.dp)
+                        ) {
+                            SelectionContainer {
+                                Text(
+                                    text = dialogState.rawJson,
+                                    modifier = Modifier.verticalScroll(scrollState),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = actions::onCancelDialog) {
+                            Text("Close")
+                        }
+                    }
                 )
             }
 

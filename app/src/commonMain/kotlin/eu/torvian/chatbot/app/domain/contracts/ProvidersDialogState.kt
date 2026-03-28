@@ -24,6 +24,11 @@ sealed class ProvidersDialogState {
 
     data class DeleteProvider(val provider: LLMProvider) : ProvidersDialogState()
 
+    data class ShowDiscoveredModelsJson(
+        val providerName: String,
+        val rawJson: String
+    ) : ProvidersDialogState()
+
     data class ManageAccess(
         val providerDetails: LLMProviderDetails,
         val availableGroups: List<UserGroup>,

@@ -110,6 +110,16 @@ interface ProviderRepository {
     ): Either<RepositoryError, List<DiscoveredProviderModel>>
 
     /**
+     * Discovers remote models for an existing provider configuration.
+     *
+     * @param providerId The provider ID to query.
+     * @return Either.Right with discovered models on success, or Either.Left with RepositoryError on failure.
+     */
+    suspend fun discoverProviderModels(
+        providerId: Long
+    ): Either<RepositoryError, List<DiscoveredProviderModel>>
+
+    /**
      * Updates an existing LLM provider configuration.
      *
      * This method updates the provider's metadata but does NOT update credentials.

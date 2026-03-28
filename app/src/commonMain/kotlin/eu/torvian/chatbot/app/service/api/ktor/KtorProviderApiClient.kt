@@ -78,6 +78,12 @@ class KtorProviderApiClient(client: HttpClient) : BaseApiResourceClient(client),
         }
     }
 
+    override suspend fun discoverProviderModels(providerId: Long): Either<ApiResourceError, List<DiscoveredProviderModel>> {
+        return safeApiCall {
+            client.get(DiscoverModels(ById(providerId = providerId))).body<List<DiscoveredProviderModel>>()
+        }
+    }
+
     override suspend fun getProviderById(providerId: Long): Either<ApiResourceError, LLMProvider> {
         return safeApiCall {
             client.get(ById(providerId = providerId)).body<LLMProvider>()

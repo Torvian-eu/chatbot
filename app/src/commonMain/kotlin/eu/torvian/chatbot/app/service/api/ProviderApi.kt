@@ -66,6 +66,19 @@ interface ProviderApi {
     ): Either<ApiResourceError, List<DiscoveredProviderModel>>
 
     /**
+     * Discovers remote models for an existing provider configuration.
+     *
+     * Corresponds to `GET /api/v1/providers/{providerId}/discover-models`.
+     *
+     * @param providerId The ID of the provider to query.
+     * @return [Either.Right] with discovered models on success,
+     *         or [Either.Left] containing a [ApiResourceError] on failure.
+     */
+    suspend fun discoverProviderModels(
+        providerId: Long
+    ): Either<ApiResourceError, List<DiscoveredProviderModel>>
+
+    /**
      * Retrieves details for a specific LLM provider configuration.
      *
      * Corresponds to `GET /api/v1/providers/{providerId}`.

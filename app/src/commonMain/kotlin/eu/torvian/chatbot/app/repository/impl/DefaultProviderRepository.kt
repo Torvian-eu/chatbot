@@ -132,6 +132,15 @@ class DefaultProviderRepository(
         }
     }
 
+    override suspend fun discoverProviderModels(providerId: Long): Either<RepositoryError, List<DiscoveredProviderModel>> =
+        either {
+            withError({ apiResourceError ->
+                apiResourceError.toRepositoryError("Failed to discover provider models")
+            }) {
+                providerApi.discoverProviderModels(providerId).bind()
+            }
+        }
+
     override suspend fun updateProvider(provider: LLMProvider): Either<RepositoryError, Unit> =
         either {
             withError({ apiResourceError ->

@@ -12,11 +12,14 @@ import eu.torvian.chatbot.app.repository.UserGroupRepository
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.api.AccessMode
 import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
+import eu.torvian.chatbot.common.models.api.llm.DiscoveredProviderModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
 
 /**
  * Manages the UI state and logic for configuring LLM Providers (E4.S*, E5.S*).
@@ -46,6 +49,10 @@ class ProviderConfigViewModel(
     private val notificationService: NotificationService,
     private val uiDispatcher: CoroutineDispatcher = Dispatchers.Main
 ) : ViewModel() {
+
+    private val prettyJson = Json {
+        prettyPrint = true
+    }
 
     // --- Private State Properties ---
 
@@ -296,6 +303,34 @@ class ProviderConfigViewModel(
                         cancelDialog()
                     }
                 )
+        }
+    }
+
+    /**
+     * Lists discovered models for a provider and opens a read-only raw JSON dialog.
+     */
+    fun listProviderModels(providerId: Long) {
+        viewModelScope.launch(uiDispatcher) {
+            providerRepository.discoverProviderModels(providerId).fold(
+                ifLeft = { error ->
+                    notificationService.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to discover provider models"
+                    )
+                },
+                ifRight = { models ->
+                    val providerName = selectedProvider.value?.provider?.takeIf { it.id == providerId }?.name
+                        ?: "Provider #$providerId"
+                    val rawJson = prettyJson.encodeToString(
+                        ListSerializer(DiscoveredProviderModel.serializer()),
+                        models
+                    )
+                    _dialogState.value = ProvidersDialogState.ShowDiscoveredModelsJson(
+                        providerName = providerName,
+                        rawJson = rawJson
+                    )
+                }
+            )
         }
     }
 

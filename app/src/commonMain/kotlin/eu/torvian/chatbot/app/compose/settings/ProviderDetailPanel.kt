@@ -25,6 +25,7 @@ fun ProviderDetailPanel(
     providerDetails: LLMProviderDetails?,
     onEditProvider: (LLMProvider) -> Unit,
     onDeleteProvider: (LLMProvider) -> Unit,
+    onListModels: (LLMProviderDetails) -> Unit,
     onMakePublic: (LLMProviderDetails) -> Unit,
     onMakePrivate: (LLMProviderDetails) -> Unit,
     onManageAccess: (LLMProviderDetails) -> Unit,
@@ -202,6 +203,7 @@ fun ProviderDetailPanel(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
+
                                 if (providerDetails.isPublic()) {
                                     OutlinedButton(
                                         onClick = { onMakePrivate(providerDetails) },
@@ -262,6 +264,32 @@ fun ProviderDetailPanel(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onTertiaryContainer
                                 )
+                            }
+                        }
+                    }
+
+                    // Model discovery card
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Text(
+                                text = "Model Discovery",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            OutlinedButton(
+                                onClick = { onListModels(providerDetails) },
+                                modifier = Modifier.wrapContentWidth()
+                            ) {
+                                Text("List Models")
                             }
                         }
                     }

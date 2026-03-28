@@ -341,6 +341,68 @@ class KtorProviderApiClientTest {
         }
     }
 
+    @Test
+    fun `discoverProviderModels - success`() = runTest {
+        val providerId = 42L
+        val discoveredModels = listOf(
+            DiscoveredProviderModel(id = "openai/gpt-4o", displayName = "GPT-4o"),
+            DiscoveredProviderModel(id = "anthropic/claude-sonnet-4")
+        )
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Get, request.method)
+            assertEquals(
+                href(ProviderResource.ById.DiscoverModels(ProviderResource.ById(providerId = providerId))),
+                request.url.fullPath
+            )
+            respond(
+                content = json.encodeToString(discoveredModels),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+
+        val apiClient = createTestClient(mockEngine)
+        val result = apiClient.discoverProviderModels(providerId)
+
+        when (result) {
+            is Either.Right -> {
+                assertEquals(2, result.value.size)
+                assertEquals("openai/gpt-4o", result.value[0].id)
+            }
+
+            is Either.Left -> fail("Expected success, but got error: ${result.value}")
+        }
+    }
+
+    @Test
+    fun `discoverProviderModels - failure - 404 Not Found`() = runTest {
+        val providerId = 999L
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Get, request.method)
+            assertEquals(
+                href(ProviderResource.ById.DiscoverModels(ProviderResource.ById(providerId = providerId))),
+                request.url.fullPath
+            )
+            respond(
+                content = json.encodeToString(apiError(CommonApiErrorCodes.NOT_FOUND, "Provider not found")),
+                status = HttpStatusCode.NotFound,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+
+        val apiClient = createTestClient(mockEngine)
+        val result = apiClient.discoverProviderModels(providerId)
+
+        when (result) {
+            is Either.Right -> fail("Expected failure, but got success: ${result.value}")
+            is Either.Left -> {
+                val error = result.value as ApiResourceError.ServerError
+                assertEquals(404, error.apiError.statusCode)
+                assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.apiError.code)
+            }
+        }
+    }
+
     // --- Tests for getProviderById ---
     @Test
     fun `getProviderById - success`() = runTest {
