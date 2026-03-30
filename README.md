@@ -41,7 +41,7 @@ The project is in active development. The server and desktop client are feature 
 ### Clone the repository
 ```bash
 cd <parent-path>
-git clone https://github.com/rwachters/chatbot.git
+git clone https://github.com/Torvian-eu/chatbot.git
 ```
 
 ### Install Server application
@@ -105,8 +105,9 @@ We welcome community contributions to the Torvian Chatbot! Your feedback, bug re
 Please see our comprehensive [Contributing Guide](CONTRIBUTING.md) for detailed information on how to get involved.
 
 ## Support
-For support or general questions, please post a message in the [GitHub discussion forum](https://github.com/rwachters/chatbot/discussions).
+For support or general questions, please post a message in the [GitHub discussion forum](https://github.com/Torvian-eu/chatbot/discussions).
 
 ## Screenshots
 - Desktop app GUI: ![](https://i.imgur.com/aaFyKLk.png)
+- MCP server configuration: ![](https://i.imgur.com/c4Oskp0.png)
 
