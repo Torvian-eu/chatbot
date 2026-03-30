@@ -5,8 +5,10 @@
 - User should be given the standard user role (CommonRoles.STANDARD_USER) upon registration. (see UserServiceImpl)
 - Errors from Ktor's authentication middleware (on the server) should be mapped to proper API errors. (ApiError class)
 - Add better support for parallel tool calls (when a model calls multiple tools in a single response). Currently they are executed sequentially.
-- Remove LLMProviderType.OPENROUTER because OpenRouter uses the same API as OpenAI. Also remove LLMProviderType.CUSTOM. And LLMProviderType.ANTHROPIC should be marked as not supported yet in the UI.
 - The material icons libraries are now deprecated. Replace them with individual icon downloads. See TODO in app/build.gradle.kts. Other docs: https://kotlinlang.org/docs/multiplatform/compose-multiplatform-resources-usage.html#icons, https://developer.android.com/develop/ui/compose/graphics/images/material, https://developers.google.com/fonts/docs/material_icons#rtl_icons_on_android
+- Add Docker support for the server module.
+- Add one-click installers for the desktop client application.
+- Add all-in-one installer for desktop that includes the server and the client, for simple local setup (without Docker).
 
 ## UI/UX
 - After deleting a message, set scroll position to bottom of the parent message. (or top of child message)
@@ -19,8 +21,9 @@
 - Make text in info sections "status" and "configuration" in MCP server configuration screen selectable
 - [x] Save expanded states of chat messages (in memory only), so that they are restored when the user revisits the session.
 - Save scrollbar position (in memory only), so that it is restored when the user revisits the session (when in LRU cache).
-- When the user selects a model in the chat area, the first available settings profile for that model should be selected automatically.
-- MCP tools for chat session should be collapsed by default in the configuration dialog. 
+- [x] When the user selects a model in the chat area, the first available settings profile for that model should be selected automatically.
+- MCP tools for chat session should be collapsed by default in the tool selection dialog. 
+- Add back button to navigation bar, for desktop and web platforms only.
 
 ## Security
 - User account will be locked after a certain number of failed login attempts.

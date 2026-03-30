@@ -57,4 +57,17 @@ interface LLMApiClient {
         apiKey: String?,
         tools: List<ToolDefinition>? = null
     ): Flow<Either<LLMCompletionError, LLMStreamChunk>>
+
+    /**
+     * Discovers available remote models for the given provider.
+     * Delegates provider-specific request/response handling to a model discovery strategy.
+     *
+     * @param provider Provider configuration containing base URL and type information.
+     * @param apiKey The decrypted API key for authentication (nullable if not required by the provider).
+     * @return Either a [ModelDiscoveryError] when discovery fails, or a [ModelDiscoveryResult] on success.
+     */
+    suspend fun discoverModels(
+        provider: LLMProvider,
+        apiKey: String?
+    ): Either<ModelDiscoveryError, ModelDiscoveryResult>
 }

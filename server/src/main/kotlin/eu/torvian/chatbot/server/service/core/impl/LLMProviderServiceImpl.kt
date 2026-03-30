@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.service.core.impl
 
 import arrow.core.Either
 import arrow.core.getOrElse
+import arrow.core.left
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.raise.withError
@@ -10,6 +11,7 @@ import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
 import eu.torvian.chatbot.common.models.api.access.ResourceAccessDetails
 import eu.torvian.chatbot.common.models.api.access.ResourceAccessInfo
 import eu.torvian.chatbot.common.models.api.access.toOwnerInfo
+import eu.torvian.chatbot.common.models.api.llm.DiscoveredProviderModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import eu.torvian.chatbot.server.data.dao.LLMProviderDao
@@ -29,7 +31,10 @@ import eu.torvian.chatbot.server.service.core.error.access.MakeResourcePublicErr
 import eu.torvian.chatbot.server.service.core.error.access.RevokeResourceAccessError
 import eu.torvian.chatbot.server.service.core.error.provider.*
 import eu.torvian.chatbot.server.service.core.error.usergroup.GetGroupByNameError
+import eu.torvian.chatbot.server.service.llm.LLMApiClient
+import eu.torvian.chatbot.server.service.llm.ModelDiscoveryError
 import eu.torvian.chatbot.server.service.security.CredentialManager
+import eu.torvian.chatbot.server.service.security.error.CredentialError
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
@@ -44,6 +49,7 @@ class LLMProviderServiceImpl(
     private val modelDao: ModelDao,
     private val userGroupService: UserGroupService,
     private val userService: UserService,
+    private val llmApiClient: LLMApiClient,
     private val credentialManager: CredentialManager,
     private val transactionScope: TransactionScope
 ) : LLMProviderService {
@@ -313,6 +319,85 @@ class LLMProviderServiceImpl(
             }
         }
 
+    override suspend fun discoverProviderModels(providerId: Long): Either<DiscoverProviderModelsError, List<DiscoveredProviderModel>> {
+        val providerAndApiKey = transactionScope.transaction {
+            either {
+                // Get provider
+                val provider = withError({ daoError: LLMProviderError.LLMProviderNotFound ->
+                    DiscoverProviderModelsError.ProviderNotFound(daoError.id)
+                }) {
+                    llmProviderDao.getProviderById(providerId).bind()
+                }
+
+                // Get API key if required
+                val apiKey = provider.apiKeyId?.let { alias ->
+                    withError({ _: CredentialError.CredentialNotFound ->
+                        DiscoverProviderModelsError.CredentialNotFound(alias)
+                    }) {
+                        credentialManager.getCredential(alias).bind()
+                    }
+                }
+
+                provider to apiKey
+            }
+        }
+
+        return when (providerAndApiKey) {
+            is Either.Left -> providerAndApiKey.value.left()
+            is Either.Right -> {
+                val (provider, apiKey) = providerAndApiKey.value
+                llmApiClient.discoverModels(provider, apiKey)
+                    .mapLeft { it.toDiscoverProviderModelsError() }
+                    .map { result ->
+                        result.models.map { discovered ->
+                            DiscoveredProviderModel(
+                                id = discovered.id,
+                                displayName = discovered.displayName,
+                                metadata = discovered.metadata
+                            )
+                        }
+                    }
+            }
+        }
+    }
+
+    override suspend fun testProviderConnection(
+        baseUrl: String,
+        type: LLMProviderType,
+        credential: String?
+    ): Either<TestProviderConnectionError, List<DiscoveredProviderModel>> =
+        either {
+            ensure(baseUrl.isNotBlank()) {
+                TestProviderConnectionError.InvalidInput("Provider base URL cannot be blank.")
+            }
+            ensure(credential == null || credential.isNotBlank()) {
+                TestProviderConnectionError.InvalidInput("Provider credential cannot be blank when provided.")
+            }
+
+            val transientProvider = LLMProvider(
+                id = 0L,
+                apiKeyId = credential?.let { "test-credential" },
+                name = "Connection test provider",
+                description = "Transient provider configuration for connectivity test",
+                baseUrl = baseUrl.trim(),
+                type = type
+            )
+
+            val discoveryResult = withError({ discoveryError: ModelDiscoveryError ->
+                discoveryError.toTestProviderConnectionError()
+            }) {
+                llmApiClient.discoverModels(transientProvider, credential).bind()
+            }
+
+            discoveryResult.models.map { discovered ->
+                DiscoveredProviderModel(
+                    id = discovered.id,
+                    displayName = discovered.displayName,
+                    metadata = discovered.metadata
+                )
+            }
+        }
+
     // --- Convenience Methods ---
 
     override suspend fun makeProviderPublic(providerId: Long): Either<MakeResourcePublicError, Unit> =
@@ -362,3 +447,28 @@ class LLMProviderServiceImpl(
             }
         }
 }
+
+private fun ModelDiscoveryError.toDiscoverProviderModelsError(): DiscoverProviderModelsError = when (this) {
+    is ModelDiscoveryError.NetworkError -> DiscoverProviderModelsError.ProviderUnavailable(message)
+    is ModelDiscoveryError.ApiError -> DiscoverProviderModelsError.ProviderApiError(
+        statusCode = statusCode,
+        reason = message ?: "Provider returned status $statusCode during discovery"
+    )
+
+    is ModelDiscoveryError.InvalidResponseError -> DiscoverProviderModelsError.InvalidProviderResponse(message)
+    is ModelDiscoveryError.AuthenticationError -> DiscoverProviderModelsError.AuthenticationFailed(message)
+    is ModelDiscoveryError.ConfigurationError -> DiscoverProviderModelsError.InvalidConfiguration(message)
+}
+
+private fun ModelDiscoveryError.toTestProviderConnectionError(): TestProviderConnectionError = when (this) {
+    is ModelDiscoveryError.NetworkError -> TestProviderConnectionError.ProviderUnavailable(message)
+    is ModelDiscoveryError.ApiError -> TestProviderConnectionError.ProviderApiError(
+        statusCode = statusCode,
+        reason = message ?: "Provider returned status $statusCode during connection test"
+    )
+
+    is ModelDiscoveryError.InvalidResponseError -> TestProviderConnectionError.InvalidProviderResponse(message)
+    is ModelDiscoveryError.AuthenticationError -> TestProviderConnectionError.AuthenticationFailed(message)
+    is ModelDiscoveryError.ConfigurationError -> TestProviderConnectionError.InvalidConfiguration(message)
+}
+

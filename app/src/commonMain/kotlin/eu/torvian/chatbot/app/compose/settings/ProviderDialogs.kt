@@ -32,11 +32,13 @@ private fun isProviderTypeSupportedInUi(type: LLMProviderType): Boolean =
 @Composable
 fun AddProviderDialog(
     formState: ProviderFormState,
+    connectionTestLoading: Boolean,
     onNameChange: (String) -> Unit,
     onTypeChange: (LLMProviderType) -> Unit,
     onBaseUrlChange: (String) -> Unit,
     onDescriptionChange: (String) -> Unit,
     onCredentialChange: (String) -> Unit,
+    onTestConnection: () -> Unit,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -119,8 +121,25 @@ fun AddProviderDialog(
             }
         },
         confirmButton = {
-            Button(onClick = onConfirm) {
-                Text("Add Provider")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = onTestConnection,
+                    enabled = !connectionTestLoading && formState.baseUrl.isNotBlank()
+                ) {
+                    if (connectionTestLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Testing...")
+                    } else {
+                        Text("Test Connection")
+                    }
+                }
+                Button(onClick = onConfirm, enabled = !connectionTestLoading) {
+                    Text("Add Provider")
+                }
             }
         },
         dismissButton = {
@@ -272,7 +291,10 @@ fun EditProviderDialog(
             }
         },
         confirmButton = {
-            Button(onClick = onUpdateProvider) {
+            Button(
+                onClick = onUpdateProvider,
+                enabled = !credentialUpdateLoading
+            ) {
                 Text("Update Provider")
             }
         },

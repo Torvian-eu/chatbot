@@ -14,6 +14,12 @@ class ProviderResource(val parent: Api = Api()) {
     class Details(val parent: ProviderResource = ProviderResource())
 
     /**
+     * Resource for testing provider connectivity without persisting it: /api/v1/providers/test-connection
+     */
+    @Resource("test-connection")
+    class TestConnection(val parent: ProviderResource = ProviderResource())
+
+    /**
      * Resource for a specific provider by ID: /api/v1/providers/{providerId}
      */
     @Resource("{providerId}")
@@ -29,6 +35,12 @@ class ProviderResource(val parent: Api = Api()) {
          */
         @Resource("models")
         class Models(val parent: ById)
+
+        /**
+         * Resource for discovering remote models from provider API: /api/v1/providers/{providerId}/discover-models
+         */
+        @Resource("discover-models")
+        class DiscoverModels(val parent: ById)
 
         /**
          * Resource for managing provider access: /api/v1/providers/{providerId}/access

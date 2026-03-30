@@ -24,6 +24,8 @@ interface ProvidersTabActions {
     fun onStartDeletingProvider(provider: LLMProvider)
     fun onDeleteProvider(providerId: Long)
     fun onUpdateProviderCredential()
+    fun onTestProviderConnectionInDialog()
+    fun onListProviderModels(providerId: Long)
     fun onUpdateProviderForm(update: (ProviderFormState) -> ProviderFormState)
 
     // Access management actions

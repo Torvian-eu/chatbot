@@ -170,6 +170,10 @@ Not completed:
 ### (done) Allow user to seamlessly switch between chat sessions while requests are in progress
 - The streaming process should continue running, allowing for parallel processing of multiple requests.
 
+### Allow user to queue multiple messages while a request is in progress
+- The user should be able to queue multiple messages while a request is in progress. The queue should be processed in the order they were received.
+- A queue message button should appear in the input area when a request is in progress. Clicking the button should add the current message to the queue. The button should be visible for the duration of the request.
+
 ---
 
 ## Advanced features

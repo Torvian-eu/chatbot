@@ -12,7 +12,8 @@ sealed class ProvidersDialogState {
     object None : ProvidersDialogState()
 
     data class AddNewProvider(
-        val formState: ProviderFormState = ProviderFormState(mode = FormMode.NEW)
+        val formState: ProviderFormState = ProviderFormState(mode = FormMode.NEW),
+        val isTestingConnection: Boolean = false
     ) : ProvidersDialogState()
 
     data class EditProvider(
@@ -22,6 +23,11 @@ sealed class ProvidersDialogState {
     ) : ProvidersDialogState()
 
     data class DeleteProvider(val provider: LLMProvider) : ProvidersDialogState()
+
+    data class ShowDiscoveredModelsJson(
+        val providerName: String,
+        val rawJson: String
+    ) : ProvidersDialogState()
 
     data class ManageAccess(
         val providerDetails: LLMProviderDetails,

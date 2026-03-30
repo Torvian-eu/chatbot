@@ -1,11 +1,12 @@
 # Project Onboarding: Chatbot Application
 
 ## Project Purpose
-The project is a multi-platform chatbot application with AI/LLM integration. It features a central server and multiple client options (Desktop, Web via WASM). It supports various LLM providers (OpenAI, Ollama) and has a plugin system for tools (Weather, Web Search, MCP).
+The project is a multi-platform chatbot application with AI/LLM integration. It features a central server and multiple client options (Desktop, Web, Android). It supports various LLM providers (OpenAI, Ollama) and has a plugin system for MCP tools.
 
 - **Server Module**: Ktor-based backend with SQLite database, user authentication, and LLM provider integration
 - **Desktop Client**: Compose Multiplatform desktop application (Windows, macOS, Linux)
 - **Web Client**: WASM-based web application (planned)
+- **Android Client**: Android application (planned)
 - **Common Module**: Shared business logic and models
 
 ## Tech Stack

@@ -9,6 +9,7 @@ import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.api.llm.AddProviderRequest
+import eu.torvian.chatbot.common.models.api.llm.TestProviderConnectionRequest
 import eu.torvian.chatbot.common.models.api.llm.UpdateProviderCredentialRequest
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
@@ -319,6 +320,31 @@ class ProviderRoutesTest {
         assertEquals("Provider credential cannot be blank when provided.", error.details?.get("reason"))
     }
 
+    @Test
+    fun `POST provider test-connection should return 400 for blank base URL`() = providerTestApplication {
+        // Arrange
+        addCreatePermissionForUser()
+        val request = TestProviderConnectionRequest(
+            baseUrl = "   ",
+            type = LLMProviderType.OPENAI,
+            credential = null
+        )
+
+        // Act
+        val response = client.post(href(ProviderResource.TestConnection())) {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+            authenticate(authToken)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.INVALID_ARGUMENT.code, error.code)
+        assertEquals(400, error.statusCode)
+        assertEquals("Invalid provider connection test input", error.message)
+    }
+
     // --- GET /api/v1/providers/{providerId} Tests ---
 
     @Test
@@ -370,6 +396,29 @@ class ProviderRoutesTest {
 
         // Act
         val response = client.get(href(ProviderResource.ById(providerId = nonExistentId))) {
+            authenticate(authToken)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.NotFound, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
+        assertEquals(404, error.statusCode)
+    }
+
+    @Test
+    fun `GET discover models with non-existent provider should return 404`() = providerTestApplication {
+        // Arrange
+        val nonExistentId = 999L
+
+        // Act
+        val response = client.get(
+            href(
+                ProviderResource.ById.DiscoverModels(
+                    parent = ProviderResource.ById(providerId = nonExistentId)
+                )
+            )
+        ) {
             authenticate(authToken)
         }
 
