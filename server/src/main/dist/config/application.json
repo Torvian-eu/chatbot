@@ -24,7 +24,10 @@
   "ssl": {
     "port": 8443,
     /* keystorePassword / keyPassword must be provided in secrets.json or environment variables */
-    "generateSelfSigned": true /* set false if you will provide real certs */
+    "generateSelfSigned": true,
+    "sanDomains": ["localhost"],
+    "sanIpAddresses": ["127.0.0.1", "0.0.0.0", "10.0.2.2"]
+    /* set generateSelfSigned false if you will provide real certs */
   },
 
   "database": {

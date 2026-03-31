@@ -81,6 +81,8 @@ data class NetworkConfigDto(
  * @property keyAlias Alias for the certificate within the keystore.
  * @property keyPassword Password for the private key.
  * @property generateSelfSigned Flag to enable/disable self-signed certificate generation.
+ * @property sanDomains Optional DNS SAN entries for generated self-signed certificates.
+ * @property sanIpAddresses Optional IP SAN entries for generated self-signed certificates.
  */
 @Serializable
 data class SslConfigDto(
@@ -88,7 +90,9 @@ data class SslConfigDto(
     val keystorePassword: String? = null,
     val keyAlias: String? = null,
     val keyPassword: String? = null,
-    val generateSelfSigned: Boolean? = null
+    val generateSelfSigned: Boolean? = null,
+    val sanDomains: List<String>? = null,
+    val sanIpAddresses: List<String>? = null
 )
 
 /**

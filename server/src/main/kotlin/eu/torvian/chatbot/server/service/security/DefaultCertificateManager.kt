@@ -3,7 +3,7 @@ package eu.torvian.chatbot.server.service.security
 import eu.torvian.chatbot.server.domain.config.SslConfig
 import io.ktor.network.tls.certificates.*
 import java.io.File
-import java.net.Inet4Address
+import java.net.InetAddress
 import java.security.KeyStore
 
 /**
@@ -23,12 +23,8 @@ class DefaultCertificateManager(
         val keyStore = buildKeyStore {
             certificate(sslConfig.keyAlias) {
                 password = sslConfig.keyPassword
-                domains = listOf("localhost")
-                ipAddresses = listOf(
-                    Inet4Address.getByName("127.0.0.1"),
-                    Inet4Address.getByName("0.0.0.0"),
-                    Inet4Address.getByName("10.0.2.2")
-                )
+                domains = sslConfig.sanDomains
+                ipAddresses = sslConfig.sanIpAddresses.map { InetAddress.getByName(it) }
             }
         }
 
