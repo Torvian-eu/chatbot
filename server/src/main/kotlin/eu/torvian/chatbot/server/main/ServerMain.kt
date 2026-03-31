@@ -115,7 +115,8 @@ object ServerMain {
             val baseAppPath = ServerConfigLoader.resolveBaseApplicationPath()
             val storageDto = dto.storage
             val dataDir = storageDto?.dataDir ?: raise(ConfigError.ValidationError.MissingKey("storage.dataDir"))
-            val keystoreFilename = storageDto.keystoreFilename ?: raise(ConfigError.ValidationError.MissingKey("storage.keystoreFilename"))
+            val keystoreFilename =
+                storageDto.keystoreFilename ?: raise(ConfigError.ValidationError.MissingKey("storage.keystoreFilename"))
             val ksPath = "$baseAppPath/$dataDir/$keystoreFilename"
             val ksFile = File(ksPath)
 
@@ -137,7 +138,9 @@ object ServerMain {
                         keystorePassword = ksPass,
                         keyAlias = ksAlias,
                         keyPassword = keyPass,
-                        generateSelfSigned = true
+                        generateSelfSigned = true,
+                        sanDomains = parseSanDomains(sslDto.sanDomains).bind(),
+                        sanIpAddresses = parseSanIpAddresses(sslDto.sanIpAddresses).bind()
                     )
                     DefaultCertificateManager(domainSsl).generateServerCertificate()
 
@@ -187,7 +190,8 @@ object ServerMain {
             // Resolve full database path from StorageConfig components
             val baseAppPath = ServerConfigLoader.resolveBaseApplicationPath()
             val dataDir = dto.storage?.dataDir ?: raise(ConfigError.ValidationError.MissingKey("storage.dataDir"))
-            val databaseFilename = dto.storage.databaseFilename ?: raise(ConfigError.ValidationError.MissingKey("storage.databaseFilename"))
+            val databaseFilename = dto.storage.databaseFilename
+                ?: raise(ConfigError.ValidationError.MissingKey("storage.databaseFilename"))
             val resolvedDatabasePath = "$baseAppPath/$dataDir/$databaseFilename"
 
             val tempDbConfig = DatabaseConfig(

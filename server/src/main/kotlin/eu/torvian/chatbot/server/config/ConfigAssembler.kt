@@ -77,7 +77,9 @@ private fun mergeSsl(base: SslConfigDto?, overlay: SslConfigDto?) = SslConfigDto
     keystorePassword = overlay?.keystorePassword ?: base?.keystorePassword,
     keyAlias = overlay?.keyAlias ?: base?.keyAlias,
     keyPassword = overlay?.keyPassword ?: base?.keyPassword,
-    generateSelfSigned = overlay?.generateSelfSigned ?: base?.generateSelfSigned
+    generateSelfSigned = overlay?.generateSelfSigned ?: base?.generateSelfSigned,
+    sanDomains = overlay?.sanDomains ?: base?.sanDomains,
+    sanIpAddresses = overlay?.sanIpAddresses ?: base?.sanIpAddresses
 )
 
 /**
@@ -227,7 +229,9 @@ private fun Raise<ConfigError.ValidationError>.parseSsl(
         keystorePassword = required("ssl.keystorePassword", s.keystorePassword),
         keyAlias = required("ssl.keyAlias", s.keyAlias),
         keyPassword = required("ssl.keyPassword", s.keyPassword),
-        generateSelfSigned = s.generateSelfSigned ?: true
+        generateSelfSigned = s.generateSelfSigned ?: true,
+        sanDomains = parseSanDomains(s.sanDomains).bind(),
+        sanIpAddresses = parseSanIpAddresses(s.sanIpAddresses).bind()
     )
 }
 
