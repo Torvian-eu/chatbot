@@ -4,20 +4,75 @@ import eu.torvian.chatbot.server.domain.config.SslConfig
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.fail
 
 class ConfigAssemblerSslSanTest {
 
     @Test
-    fun `toDomain uses default SAN values when ssl SAN config is omitted`() {
+    fun `toDomain parses allowed CORS origins`() {
         val result = buildConfig(
-            ssl = SslConfigDto(
-                port = 8443,
-                keystorePassword = "keystore-pass",
-                keyAlias = "server-key",
-                keyPassword = "key-pass"
+            ssl = defaultSsl(),
+            cors = CorsConfigDto(
+                allowedOrigins = listOf(
+                    "https://chatbot-client-demo.torvian.eu",
+                    "http://localhost:3000"
+                )
             )
         ).toDomain(baseApplicationPath = "base")
+
+        result.fold(
+            ifLeft = { fail("Expected valid config, got error: $it") },
+            ifRight = { config ->
+                assertEquals(2, config.cors.allowedOrigins.size)
+                assertEquals("https", config.cors.allowedOrigins[0].scheme)
+                assertEquals("chatbot-client-demo.torvian.eu", config.cors.allowedOrigins[0].host)
+                assertNull(config.cors.allowedOrigins[0].port)
+                assertEquals("localhost", config.cors.allowedOrigins[1].host)
+                assertEquals(3000, config.cors.allowedOrigins[1].port)
+            }
+        )
+    }
+
+    @Test
+    fun `toDomain rejects CORS origins with a path`() {
+        val result = buildConfig(
+            ssl = defaultSsl(),
+            cors = CorsConfigDto(
+                allowedOrigins = listOf("https://example.com/api")
+            )
+        ).toDomain(baseApplicationPath = "base")
+
+        result.fold(
+            ifLeft = { error ->
+                val invalid = assertIs<ConfigError.ValidationError.InvalidValue>(error)
+                assertEquals("cors.allowedOrigins[0]", invalid.path)
+            },
+            ifRight = { fail("Expected CORS origin with path to fail validation") }
+        )
+    }
+
+    @Test
+    fun `toDomain rejects CORS origins with unsupported scheme`() {
+        val result = buildConfig(
+            ssl = defaultSsl(),
+            cors = CorsConfigDto(
+                allowedOrigins = listOf("ftp://example.com")
+            )
+        ).toDomain(baseApplicationPath = "base")
+
+        result.fold(
+            ifLeft = { error ->
+                val invalid = assertIs<ConfigError.ValidationError.InvalidValue>(error)
+                assertEquals("cors.allowedOrigins[0]", invalid.path)
+            },
+            ifRight = { fail("Expected CORS origin with unsupported scheme to fail validation") }
+        )
+    }
+
+    @Test
+    fun `toDomain uses default SAN values when ssl SAN config is omitted`() {
+        val result = buildConfig(ssl = defaultSsl()).toDomain(baseApplicationPath = "base")
 
         result.fold(
             ifLeft = { fail("Expected valid config, got error: $it") },
@@ -76,7 +131,17 @@ class ConfigAssemblerSslSanTest {
         )
     }
 
-    private fun buildConfig(ssl: SslConfigDto) = AppConfigDto(
+    private fun defaultSsl() = SslConfigDto(
+        port = 8443,
+        keystorePassword = "keystore-pass",
+        keyAlias = "server-key",
+        keyPassword = "key-pass"
+    )
+
+    private fun buildConfig(
+        ssl: SslConfigDto,
+        cors: CorsConfigDto? = null
+    ) = AppConfigDto(
         setup = SetupConfigDto(required = false),
         storage = StorageConfigDto(
             dataDir = "data",
@@ -90,6 +155,7 @@ class ConfigAssemblerSslSanTest {
             path = "",
             connectorType = "HTTPS"
         ),
+        cors = cors,
         ssl = ssl,
         database = DatabaseConfigDto(
             vendor = "sqlite",

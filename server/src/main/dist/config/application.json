@@ -21,6 +21,14 @@
     "connectorType": "HTTPS"   /* production default: HTTPS */
   },
 
+  "cors": {
+    /* Origins must be full origins (scheme + host + optional port) */
+    "allowedOrigins": [
+      "http://localhost:8080",
+      "https://localhost:8443"
+    ]
+  },
+
   "ssl": {
     "port": 8443,
     /* keystorePassword / keyPassword must be provided in secrets.json or environment variables */

@@ -399,7 +399,8 @@ object ServerMain {
             certificateManager = certManager,
             databaseConfig = config.database,
             encryptionConfig = config.encryption,
-            jwtConfig = config.jwt
+            jwtConfig = config.jwt,
+            corsConfig = config.cors
         )
     }
 
