@@ -9,6 +9,7 @@ import eu.torvian.chatbot.common.security.EncryptionService
 import eu.torvian.chatbot.server.data.dao.ApiSecretDao
 import eu.torvian.chatbot.server.data.dao.error.ApiSecretError.SecretAlreadyExists
 import eu.torvian.chatbot.server.data.dao.error.ApiSecretError.SecretNotFound
+import eu.torvian.chatbot.server.service.security.error.CredentialError.CredentialDecryptionFailed
 import eu.torvian.chatbot.server.service.security.error.CredentialError.CredentialNotFound
 import io.mockk.*
 import kotlinx.coroutines.test.runTest
@@ -159,7 +160,7 @@ class DbEncryptedCredentialManagerTest {
     }
 
     @Test
-    fun `getCredential should return CredentialNotFound when decryption fails`() = runTest {
+    fun `getCredential should return CredentialDecryptionFailed when decryption fails`() = runTest {
         // Arrange
         coEvery { apiSecretDao.getSecret(testAlias) } returns testEncryptedData.right()
         val decryptionError = CryptoError.DecryptionError("Failed to decrypt")
@@ -168,8 +169,8 @@ class DbEncryptedCredentialManagerTest {
         // Act
         val result = credentialManager.getCredential(testAlias)
 
-        // Assert - Now expects Either.Left with CredentialNotFound instead of exception
-        assertIs<Either.Left<CredentialNotFound>>(result)
+        // Assert
+        assertIs<Either.Left<CredentialDecryptionFailed>>(result)
         assertEquals(testAlias, result.value.alias)
 
         // Verify interactions

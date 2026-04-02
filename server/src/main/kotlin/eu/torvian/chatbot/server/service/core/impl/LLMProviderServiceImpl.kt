@@ -331,8 +331,16 @@ class LLMProviderServiceImpl(
 
                 // Get API key if required
                 val apiKey = provider.apiKeyId?.let { alias ->
-                    withError({ _: CredentialError.CredentialNotFound ->
-                        DiscoverProviderModelsError.CredentialNotFound(alias)
+                    withError({ credentialError: CredentialError ->
+                        when (credentialError) {
+                            is CredentialError.CredentialNotFound ->
+                                DiscoverProviderModelsError.CredentialNotFound(alias)
+
+                            is CredentialError.CredentialDecryptionFailed ->
+                                DiscoverProviderModelsError.InvalidConfiguration(
+                                    "Credential for alias '$alias' exists but could not be decrypted."
+                                )
+                        }
                     }) {
                         credentialManager.getCredential(alias).bind()
                     }

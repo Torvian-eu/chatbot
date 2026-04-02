@@ -6,6 +6,8 @@ import arrow.core.raise.either
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.security.EncryptionService
 import eu.torvian.chatbot.server.data.dao.ApiSecretDao
+import eu.torvian.chatbot.server.service.security.error.CredentialError
+import eu.torvian.chatbot.server.service.security.error.CredentialError.CredentialDecryptionFailed
 import eu.torvian.chatbot.server.service.security.error.CredentialError.CredentialNotFound
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
@@ -50,10 +52,13 @@ class DbEncryptedCredentialManager(
         return alias
     }
 
-    override suspend fun getCredential(alias: String): Either<CredentialNotFound, String> =
+    override suspend fun getCredential(alias: String): Either<CredentialError, String> =
         either {
-            withError({ CredentialNotFound(alias) }) {
-                val encryptedSecret = apiSecretDao.getSecret(alias).bind()
+            val encryptedSecret = withError({ CredentialNotFound(alias) }) {
+                apiSecretDao.getSecret(alias).bind()
+            }
+
+            withError({ CredentialDecryptionFailed(alias) }) {
                 encryptionService.decrypt(encryptedSecret).bind()
             }
         }
