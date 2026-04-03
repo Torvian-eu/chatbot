@@ -62,8 +62,18 @@ tasks {
         mergeServiceFiles() // merge the contents from META-INF/services/* files, in case of duplicate file names
     }
 
+    // Custom task to clean the installDist directory before each installDist execution
+    register<Delete>("cleanInstallDistDir") {
+        delete(layout.buildDirectory.dir("install/server"))
+    }
+
+    // Ensure the installDist task depends on cleaning the install directory first
+    named("installDist") {
+        dependsOn("cleanInstallDistDir")
+    }
+
     // Task to install the server distribution to a custom path
-    register<Sync>("installDistTo") {
+    register<Copy>("installDistTo") {
         group = "distribution"
         description = "Installs the server distribution to a custom path using -PinstallPath=<path>."
 
