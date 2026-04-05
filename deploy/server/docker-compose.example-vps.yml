@@ -1,0 +1,30 @@
+services:
+  chatbot-server:
+    image: ghcr.io/torvian-eu/chatbot-server:latest
+    container_name: chatbot-server
+    restart: unless-stopped
+    environment:
+      SERVER_HOST: "0.0.0.0"
+      SERVER_PORT: "8080"
+      SERVER_CONNECTOR_TYPE: "HTTP"
+      SERVER_CORS_ALLOWED_ORIGIN_1: "https://chat.example.com"
+    #      JAVA_TOOL_OPTIONS: "-Dlog4j.configurationFile=/app/config/log4j2-debug.xml"
+    volumes:
+      - chatbot-config:/app/config
+      - chatbot-data:/app/data
+      - chatbot-logs:/app/logs
+    expose:
+      - "8080"
+    networks:
+      chatbot-network:
+        aliases:
+          - chatbot-server
+
+networks:
+  chatbot-network:
+    external: true
+
+volumes:
+  chatbot-config:
+  chatbot-data:
+  chatbot-logs:

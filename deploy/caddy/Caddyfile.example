@@ -1,0 +1,42 @@
+# Reverse proxy for API server
+chatbot-server.yourdomain.com {
+    # Ktor server listens on chatbot-server:8080, Caddy will proxy requests to it
+    reverse_proxy chatbot-server:8080 {
+        # Preserve original request information for the backend server
+        header_up Host {host}
+        header_up X-Forwarded-Host {host}
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-For {remote_host}
+    }
+    
+    # Security headers
+    header Strict-Transport-Security max-age=31536000
+    header X-Content-Type-Options nosniff
+    header X-Frame-Options DENY
+}
+
+# Static site for WASM client
+chatbot-client.yourdomain.com {
+    root * /srv/client
+    file_server
+    
+    # SPA fallback: if file not found, serve index.html
+    try_files {path} /index.html
+    
+    # WASM MIME type
+    @wasmFiles {
+        path *.wasm
+    }
+    header @wasmFiles Content-Type application/wasm
+    
+    # Caching
+    header /index.html Cache-Control "no-cache, no-store, must-revalidate"
+    header *.js Cache-Control "public, max-age=31536000, immutable"
+    header *.wasm Cache-Control "public, max-age=31536000, immutable"
+    
+    # Security headers
+    header Strict-Transport-Security max-age=31536000
+    header X-Content-Type-Options nosniff
+    header X-Frame-Options DENY
+    header Permissions-Policy "geolocation=(), microphone=(), camera=()"
+}

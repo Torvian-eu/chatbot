@@ -55,3 +55,9 @@ local.properties
 
 ### SQL Delight
 app/src/commonMain/sqldelight/databases/
+
+### Build output directories
+deploy/server/dist
+deploy/wasm-client
+deploy/caddy/Caddyfile
+deploy/server/docker-compose.yml
