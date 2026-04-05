@@ -30,6 +30,12 @@ import java.io.File
 object ServerConfigLoader {
 
     private const val CONFIG_DIR_ENV_VAR = "CHATBOT_SERVER_CONFIG_DIR"
+    private const val DEFAULT_CONFIG_RESOURCE_DIR = "/default-config"
+    private val BOOTSTRAP_CONFIG_FILES = listOf(
+        "application.json",
+        "setup.json",
+        "env-mapping.json"
+    )
 
     private val logger = LogManager.getLogger(ServerConfigLoader::class.java)
 
@@ -86,6 +92,16 @@ object ServerConfigLoader {
      */
     fun loadConfigDto(): Either<ConfigError, AppConfigDto> = either {
         val appConfigDir = resolveConfigDirPath()
+        val configDir = File(appConfigDir)
+
+        ensure(configDir.exists() || configDir.mkdirs()) {
+            ConfigError.FileError.IOFailure(appConfigDir, "Unable to create configuration directory")
+        }
+        ensure(configDir.isDirectory) {
+            ConfigError.FileError.IOFailure(appConfigDir, "Configuration path is not a directory")
+        }
+
+        bootstrapDefaultConfigFiles(configDir)
 
         val source = when {
             System.getenv(CONFIG_DIR_ENV_VAR) != null -> "environment variable $CONFIG_DIR_ENV_VAR"
@@ -125,6 +141,49 @@ object ServerConfigLoader {
             .merge(secretsDto)
             .merge(setupDto)
             .merge(envDto)
+    }
+
+    /**
+     * Copies bundled default config files into the runtime config directory when they are missing.
+     * Existing files are never overwritten.
+     *
+     * @param configDir The target configuration directory on the filesystem where default files should be bootstrapped if missing.
+     */
+    private fun Raise<ConfigError.FileError>.bootstrapDefaultConfigFiles(configDir: File) {
+        for (fileName in BOOTSTRAP_CONFIG_FILES) {
+            val targetFile = File(configDir, fileName)
+            if (targetFile.exists()) continue
+
+            val resourcePath = "$DEFAULT_CONFIG_RESOURCE_DIR/$fileName"
+            val resourceText = loadBundledResource(resourcePath)
+
+            targetFile.parentFile?.mkdirs()
+            try {
+                targetFile.writeText(resourceText)
+                logger.info("Bootstrapped default config file: ${targetFile.absolutePath}")
+            } catch (e: Exception) {
+                raise(ConfigError.FileError.IOFailure(targetFile.absolutePath, e.message ?: "Failed to write default config file"))
+            }
+        }
+    }
+
+    /**
+     * Loads a bundled default config file from the classpath.
+     *
+     * @param resourcePath The path to the resource within the classpath (e.g., "/default-config/application.json").
+     * @return The text content of the resource.
+     * @raises [ConfigError.FileError.NotFound] if the resource is missing from the classpath.
+     * @raises [ConfigError.FileError.IOFailure] if the resource cannot be read successfully.
+     */
+    private fun Raise<ConfigError.FileError>.loadBundledResource(resourcePath: String): String {
+        val stream = ServerConfigLoader::class.java.getResourceAsStream(resourcePath)
+            ?: raise(ConfigError.FileError.NotFound("classpath:$resourcePath"))
+
+        return try {
+            stream.bufferedReader().use { it.readText() }
+        } catch (e: Exception) {
+            raise(ConfigError.FileError.IOFailure("classpath:$resourcePath", e.message ?: "Failed to read bundled default config"))
+        }
     }
 
     /**
