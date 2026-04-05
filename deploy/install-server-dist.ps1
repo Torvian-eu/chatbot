@@ -31,30 +31,14 @@ finally {
     Pop-Location
 }
 
-# Remove the existing lib/ directory in the target server install directory if it exists
-$TargetLibDir = Join-Path $TargetServerInstallDir "lib"
-if (Test-Path $TargetLibDir) {
-    Write-Host "Removing existing lib/ directory at $TargetLibDir"
-    Remove-Item -Recurse -Force $TargetLibDir
+# Remove and recreate target directory so it mirrors Gradle output exactly
+if (Test-Path $TargetServerInstallDir) {
+    Write-Host "Removing existing server install directory at $TargetServerInstallDir"
+    Remove-Item -Recurse -Force $TargetServerInstallDir
 }
 
-# Ensure target directory exists
-if (-not (Test-Path $TargetServerInstallDir)) {
-    New-Item -ItemType Directory -Path $TargetServerInstallDir | Out-Null
-}
+Write-Host "Creating server install directory at $TargetServerInstallDir"
+New-Item -ItemType Directory -Path $TargetServerInstallDir | Out-Null
 
-# Conditionally exclude config/ if it already exists in target
-$TargetConfigDir = Join-Path $TargetServerInstallDir "config"
-
-if (Test-Path $TargetConfigDir) {
-    Write-Host "Target config directory already exists at $TargetConfigDir - preserving it"
-
-    Get-ChildItem -Path $GradleServerInstallDir | Where-Object { $_.Name -ne "config" } | ForEach-Object {
-        Copy-Item -Path $_.FullName -Destination $TargetServerInstallDir -Recurse -Force
-    }
-}
-else {
-    Write-Host "Copying full server distribution from $GradleServerInstallDir to $TargetServerInstallDir"
-    Copy-Item -Path (Join-Path $GradleServerInstallDir "*") -Destination $TargetServerInstallDir -Recurse -Force
-}
-
+Write-Host "Copying full server distribution from $GradleServerInstallDir to $TargetServerInstallDir"
+Copy-Item -Path (Join-Path $GradleServerInstallDir "*") -Destination $TargetServerInstallDir -Recurse -Force
