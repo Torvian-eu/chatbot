@@ -164,8 +164,14 @@ class ChatServiceImpl(
 
             // 8. Get API Key (if required)
             val apiKey = provider.apiKeyId?.let { keyId ->
-                withError({ _: CredentialError.CredentialNotFound ->
-                    throw IllegalStateException("API key not found in secure storage for provider ID ${provider.id} (key alias: $keyId)")
+                withError({ credentialError: CredentialError ->
+                    when (credentialError) {
+                        is CredentialError.CredentialNotFound ->
+                            throw IllegalStateException("API key not found in secure storage for provider ID ${provider.id} (key alias: $keyId)")
+
+                        is CredentialError.CredentialDecryptionFailed ->
+                            throw IllegalStateException("API key could not be decrypted for provider ID ${provider.id} (key alias: $keyId)")
+                    }
                 }) {
                     credentialManager.getCredential(keyId).bind()
                 }

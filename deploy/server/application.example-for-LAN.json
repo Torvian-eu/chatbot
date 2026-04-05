@@ -15,17 +15,16 @@
   },
 
   "network": {
-    "host": "localhost",
+    "host": "0.0.0.0", /* listen on all interfaces; for use in a Docker container */
     "port": 8080,
     "path": "",
-    "connectorType": "HTTPS"   /* production default: HTTPS */
+    "connectorType": "HTTPS" /* production default: HTTPS */
   },
 
   "cors": {
     /* Origins must be full origins (scheme + host + optional port) */
     "allowedOrigins": [
-      "http://localhost:8080",
-      "https://localhost:8443"
+        "https://pc1.local"
     ]
   },
 

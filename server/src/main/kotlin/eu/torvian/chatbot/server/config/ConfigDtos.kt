@@ -21,10 +21,22 @@ data class AppConfigDto(
     val setup: SetupConfigDto? = null,
     val storage: StorageConfigDto? = null,
     val network: NetworkConfigDto? = null,
+    val cors: CorsConfigDto? = null,
     val ssl: SslConfigDto? = null,
     val database: DatabaseConfigDto? = null,
     val encryption: EncryptionConfigDto? = null,
     val jwt: JwtConfigDto? = null
+)
+
+/**
+ * DTO for CORS configuration.
+ *
+ * @property allowedOrigins Explicit list of allowed origins in full origin format
+ *                          (for example: "https://example.com", "http://localhost:3000").
+ */
+@Serializable
+data class CorsConfigDto(
+    val allowedOrigins: List<String>? = null
 )
 
 /**

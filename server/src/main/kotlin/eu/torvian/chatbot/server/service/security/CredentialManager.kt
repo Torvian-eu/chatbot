@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.service.security
 
 import arrow.core.Either
+import eu.torvian.chatbot.server.service.security.error.CredentialError
 import eu.torvian.chatbot.server.service.security.error.CredentialError.CredentialNotFound
 
 /**
@@ -25,9 +26,9 @@ interface CredentialManager {
      * Retrieves a securely stored credential using its alias/reference ID.
      *
      * @param alias The alias/reference to the credential to retrieve.
-     * @return Either a [CredentialNotFound] if not found, or the decrypted credential string.
+     * @return Either a [CredentialError] if the credential cannot be resolved, or the decrypted credential string.
      */
-    suspend fun getCredential(alias: String): Either<CredentialNotFound, String>
+    suspend fun getCredential(alias: String): Either<CredentialError, String>
 
     /**
      * Deletes a securely stored credential using its alias/reference ID.

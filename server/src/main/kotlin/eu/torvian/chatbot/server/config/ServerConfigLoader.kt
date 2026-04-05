@@ -165,6 +165,11 @@ object ServerConfigLoader {
                 ?: raise(ConfigError.FileError.Malformed(name, "Root of environment mapping must be an object"))
 
             val resolvedElement = substituteEnv(mappingElement)
+            // If the entire resolved element is JsonNull, it means no env vars were provided,
+            // so this layer effectively provides an empty configuration.
+            if (resolvedElement is JsonNull) {
+                return AppConfigDto() // Return an empty DTO for merging
+            }
             json.decodeFromJsonElement<AppConfigDto>(resolvedElement)
         } catch (e: SerializationException) {
             raise(ConfigError.FileError.Malformed(name, e.message ?: "Malformed mapping JSON"))
@@ -178,33 +183,40 @@ object ServerConfigLoader {
      * Recursively traverses a JSON structure, replacing string values with values
      * found in the System Environment.
      *
-     * If an environment variable is missing, the key is removed from the resulting
-     * object to avoid null-pointer issues during DTO decoding.
+     * If an environment variable is missing, its corresponding [JsonPrimitive] resolves to [JsonNull].
+     * If all child elements of a [JsonArray] or [JsonObject] resolve to [JsonNull] (or empty structures),
+     * the array or object itself also resolves to [JsonNull].
+     *
+     * This prevents missing environment variables from implicitly creating empty lists or objects
+     * that would incorrectly override base configuration layers during merging.
+     *
+     * @param element The current [JsonElement] to process.
+     * @return A new [JsonElement] with environment variables substituted, or [JsonNull] if
+     *         the element (or its children) completely resolve to missing environment variables.
      */
     private fun substituteEnv(element: JsonElement): JsonElement = when (element) {
         is JsonObject -> {
-            // Filter out entries where the value resolves to JsonNull
-            val resolvedMap = element.mapValues { substituteEnv(it.value) }
-                .filterValues { it !is JsonNull }
-            JsonObject(resolvedMap)
+            // Recursively substitute in object values and filter out nulls.
+            val resolvedMap = element.mapValues { substituteEnv(it.value) }.filterValues { it !is JsonNull }
+            // If object becomes empty after substitution, resolve to JsonNull to prevent overriding base config.
+            if (resolvedMap.isEmpty()) JsonNull else JsonObject(resolvedMap)
         }
-
         is JsonArray -> {
-            // Filter out nulls from arrays
-            val resolvedList = element.map { substituteEnv(it) }
-                .filter { it !is JsonNull }
-            JsonArray(resolvedList)
+            // Recursively substitute in array elements and filter out nulls.
+            val resolvedList = element.map { substituteEnv(it) }.filter { it !is JsonNull }
+            // If array becomes empty after substitution, resolve to JsonNull to prevent overriding base config.
+            if (resolvedList.isEmpty()) JsonNull else JsonArray(resolvedList)
         }
-
         is JsonPrimitive -> {
+            // If it's a string, attempt environment variable lookup.
             if (element.isString) {
-                val envValue = System.getenv(element.content)
-                // If missing, return JsonNull so the parent can filter it out
-                if (envValue != null) JsonPrimitive(envValue) else JsonNull
-            } else element
+                System.getenv(element.content)?.let { JsonPrimitive(it) } ?: JsonNull
+            } else {
+                // For non-string primitives, return as-is.
+                element
+            }
         }
     }
-
     /**
      * Reads a file from the physical filesystem.
      *

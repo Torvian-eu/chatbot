@@ -34,6 +34,54 @@ The project is in active development. The server and desktop client are feature 
 ## Quick Start
 
 ### Prerequisites
+- **Server**: [JDK 21](https://adoptium.net/installation) or higher (required to run), or Docker
+- **Desktop Client**: Windows (pre-built), or any OS if building from source
+
+### Download Pre-built Binaries
+Pre-built binaries are available from the [Releases page](https://github.com/Torvian-eu/chatbot/releases/tag/v0.1.0):
+- **Server**: Available for all platforms (JDK 21 required)
+- **Desktop Client**: Currently available for Windows (Linux and macOS binaries coming soon)
+- **Web Client**: Coming soon
+
+### Run the server
+```bash
+# Linux/Mac
+<install-path>/start-server.sh
+# Windows
+<install-path>/start-server.bat
+```
+
+**Docker quick start:**
+
+```bash
+docker run -d \
+  --name chatbot-server \
+  -p 8080:8080 \
+  -v chatbot-config:/app/config \
+  -v chatbot-data:/app/data \
+  -v chatbot-logs:/app/logs \
+  -e SERVER_HOST=0.0.0.0 \
+  -e SERVER_CONNECTOR_TYPE=HTTP \
+  --restart unless-stopped \
+  ghcr.io/torvian-eu/chatbot-server:latest
+```
+
+For full deployment options and configuration details (including Docker Compose + Caddy), see `deploy/README.md`.
+
+### Run the desktop application
+```bash
+# Windows
+<install-path>/Chatbot-with-logs.bat
+# Linux/Mac (if building from source, see below)
+<install-path>/Chatbot-with-logs.sh
+```
+
+### Login
+Login with username `admin` and password `admin123`. You will be asked to change the password on first login.
+
+## Build from Source
+
+### Prerequisites
 - [Git](https://git-scm.com/install/)
 - [JDK 21](https://adoptium.net/installation) or higher
 - Gradle 9.x (included via wrapper)
@@ -44,40 +92,33 @@ cd <parent-path>
 git clone https://github.com/Torvian-eu/chatbot.git
 ```
 
-### Install Server application
+### Build & Install Server application
 ```bash
 ./gradlew server:installDistTo -PinstallPath=<path>
 ```
 
-### Install Desktop application
+### Build & Install Desktop application
 ```bash
 ./gradlew app:createDistributableTo -PinstallPath=<path>
 ```
-Note: Please use separate paths for the server and desktop application.
-
-### Run the server
-```bash
-# Linux/Mac
-<install-path>start-server.sh
-# Windows
-<install-path>start-server.bat
-```
-
-### Run the desktop application
-```bash
-# Linux/Mac
-<install-path>/Chatbot-with-logs.sh
-# Windows
-<install-path>/Chatbot-with-logs.bat
-```
-
-### Login
-Login with username `admin` and password `admin123`. You will be asked to change the password on first login.
+Note: Please use separate install paths for the server and desktop application.
 
 ## Guides
 These guides provide information on how to configure and use specific features of the chatbot.
 - [LLM configuration guide](docs/user%20guides/LLM%20configuration%20guide.md) - How to configure LLM providers, models and model settings. And how to use them in the chatbot.
 - [MCP server configuration guide](docs/user%20guides/MCP%20server%20configuration%20guide.md) - How to configure and use MCP servers.
+
+## Deployment
+For information on deploying the chatbot application to a VPS or server environment, please refer to the [Deployment Guide](deploy/README.md). This includes:
+- Quick Docker server startup
+- Docker setup with Caddy reverse proxy
+- VPS deployment with Docker Compose
+- Configuration via environment variables
+
+Additional deployment-related documentation:
+- [VPS Deployment Guide](docs/VPS/Docker%20VPS%20Deployment%20Guide.md) - Comprehensive guide for VPS deployment
+- [VPS Basics Guide](docs/VPS/Ubuntu%20VPS%20Basics%20Guide%20for%20Self-Hosted%20Docker%20Apps.md) - Linux basics for VPS management
+- [Docker Installation Guide](docs/VPS/Docker%20Installation%20guide.md) - How to install Docker on a VPS
 
 ## Project Structure
 ```

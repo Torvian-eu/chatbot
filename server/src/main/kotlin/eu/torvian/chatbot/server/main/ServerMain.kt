@@ -9,6 +9,7 @@ import eu.torvian.chatbot.server.domain.config.DatabaseConfig
 import eu.torvian.chatbot.server.domain.config.ServerConnectorType
 import eu.torvian.chatbot.server.domain.config.SslConfig
 import eu.torvian.chatbot.server.service.security.DefaultCertificateManager
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.runBlocking
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
@@ -24,7 +25,11 @@ import kotlin.system.exitProcess
  * 1. **Configuration**: Loads JSON files (application, secrets, setup) and environment variables.
  * 2. **Setup**: Automatically generates missing secrets or SSL certificates if required.
  * 3. **Validation**: Verifies that the resulting environment is sane and ready for startup.
- * 4. **Execution**: Starts the Ktor engine and enters the CLI control loop.
+ * 4. **Execution**: Starts the Ktor engine and enters either:
+ *    - Interactive console loop (dev/manual mode) if an interactive terminal is detected
+ *    - Indefinite wait for shutdown signal (systemd/service mode) if no terminal is present
+ *
+ * On shutdown, graceful Ktor termination is guaranteed via a JVM shutdown hook and try-finally block.
  */
 object ServerMain {
     private val logger: Logger = LogManager.getLogger(ServerMain::class.java)
@@ -50,6 +55,15 @@ object ServerMain {
 
             // Phase 4: Execution
             val serverControl = createServerControl(config)
+
+            // Install JVM shutdown hook for robust graceful shutdown on SIGTERM
+            Runtime.getRuntime().addShutdownHook(Thread {
+                runBlocking {
+                    logger.info("JVM shutdown hook triggered; initiating graceful shutdown...")
+                    serverControl.stopSuspend(100, 3000)
+                }
+            })
+
             try {
                 serverControl.startSuspend()
 
@@ -57,7 +71,14 @@ object ServerMain {
                 val serverInfo = serverControl.getServerInfo()!!
                 logger.info("Server active on: ${serverInfo.baseUri}")
 
-                runConsoleLoop()
+                // Determine runtime mode: interactive console vs systemd service
+                if (System.console() != null) {
+                    logger.info("Interactive console detected; entering console control loop.")
+                    runConsoleLoop()
+                } else {
+                    logger.info("No interactive console detected; server will run until shutdown signal (SIGTERM).")
+                    awaitShutdownSignal()
+                }
             } finally {
                 logger.info("Initiating graceful shutdown...")
                 serverControl.stopSuspend(100, 3000)
@@ -315,33 +336,51 @@ object ServerMain {
     }
 
     /**
-     * Manages the CLI console loop.
-     * Detects "exit" or a double-press of the Enter key to trigger shutdown.
+     * Manages the CLI console loop (interactive terminal only).
+     * Properly distinguishes EOF from blank input to prevent accidental shutdown.
+     * Detects "exit" command or a double-press of the Enter key to trigger shutdown.
      */
     private fun runConsoleLoop() {
         val reader = System.`in`.bufferedReader()
         var emptyLineCount = 0
 
         while (true) {
-            val input = try {
-                reader.readLine()?.trim() ?: ""
+            val rawInput = try {
+                reader.readLine()
             } catch (_: Exception) {
-                "exit"
+                logger.info("Console input unavailable; leaving console loop.")
+                return
             }
+
+            if (rawInput == null) {
+                logger.info("Console input closed (EOF detected); leaving console loop.")
+                return
+            }
+
+            val input = rawInput.trim()
 
             if (input.lowercase() == "exit") break
 
             if (input.isEmpty()) {
                 emptyLineCount++
                 if (emptyLineCount >= 2) {
-                    logger.info("Shutdown triggered via console.")
+                    logger.info("Shutdown triggered via console (double Enter).")
                     break
                 }
             } else {
                 emptyLineCount = 0
-                println("Unknown command: '$input'. Type 'exit' to quit.")
+                println("Unknown command: '$input'. Type 'exit' or press Enter twice to quit.")
             }
         }
+    }
+
+    /**
+     * Suspends indefinitely until the coroutine is cancelled.
+     * Used for systemd service mode, where the process should stay alive until SIGTERM.
+     * The JVM shutdown hook will handle graceful termination.
+     */
+    private suspend fun awaitShutdownSignal(): Nothing {
+        awaitCancellation()
     }
 
     /**
@@ -360,7 +399,8 @@ object ServerMain {
             certificateManager = certManager,
             databaseConfig = config.database,
             encryptionConfig = config.encryption,
-            jwtConfig = config.jwt
+            jwtConfig = config.jwt,
+            corsConfig = config.cors
         )
     }
 

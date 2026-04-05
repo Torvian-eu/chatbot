@@ -23,6 +23,13 @@
     "connectorType": "SERVER_CONNECTOR_TYPE"
   },
 
+  "cors": {
+    "allowedOrigins": [
+      "SERVER_CORS_ALLOWED_ORIGIN_1",
+      "SERVER_CORS_ALLOWED_ORIGIN_2"
+    ]
+  },
+
   "ssl": {
     "port": "SSL_PORT",
     "keystorePassword": "SSL_KEYSTORE_PASSWORD",

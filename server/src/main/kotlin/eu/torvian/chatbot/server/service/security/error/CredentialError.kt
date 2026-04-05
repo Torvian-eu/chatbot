@@ -8,4 +8,10 @@ sealed interface CredentialError {
      * Indicates that a credential with the specified alias was not found.
      */
     data class CredentialNotFound(val alias: String) : CredentialError
+
+    /**
+     * Indicates a credential exists but cannot be decrypted.
+     */
+    data class CredentialDecryptionFailed(val alias: String) : CredentialError
 }
+

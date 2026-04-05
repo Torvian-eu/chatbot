@@ -15,17 +15,16 @@
   },
 
   "network": {
-    "host": "localhost",
+    "host": "0.0.0.0", /* listen on all interfaces; for use in a Docker container */
     "port": 8080,
     "path": "",
-    "connectorType": "HTTPS"   /* production default: HTTPS */
+    "connectorType": "HTTP"  /* set to HTTP if using a reverse proxy that handles TLS */
   },
 
   "cors": {
     /* Origins must be full origins (scheme + host + optional port) */
     "allowedOrigins": [
-      "http://localhost:8080",
-      "https://localhost:8443"
+      "https://chatbot-client.yourdomain.com"
     ]
   },
 

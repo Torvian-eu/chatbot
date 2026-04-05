@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.main
 
 import eu.torvian.chatbot.common.misc.di.KoinDIContainer
 import eu.torvian.chatbot.common.security.EncryptionConfig
+import eu.torvian.chatbot.server.domain.config.CorsConfig
 import eu.torvian.chatbot.server.domain.config.DatabaseConfig
 import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.koin.*
@@ -33,7 +34,8 @@ private val logger: Logger = LogManager.getLogger("chatBotServerModule")
 fun Application.chatBotServerModule(
     databaseConfig: DatabaseConfig,
     encryptionConfig: EncryptionConfig,
-    jwtConfig: JwtConfig
+    jwtConfig: JwtConfig,
+    corsConfig: CorsConfig
 ) {
     // Configure Koin DI FIRST, as plugins and routing will depend on it
     configureKoin(databaseConfig, encryptionConfig, jwtConfig)
@@ -41,10 +43,11 @@ fun Application.chatBotServerModule(
     // Configure Ktor (general plugins like content negotiation, status pages, etc.)
     configureKtor(get(), get())
 
-    // Configure CORS
-    // This allows the WASM app to make requests to the server.
+    // Configure CORS from explicit allowlist.
     install(CORS) {
-        anyHost() // Allows all origins, including http://localhost:8080
+        corsConfig.allowedOrigins.forEach { origin ->
+            allowHost(origin.hostWithOptionalPort, schemes = listOf(origin.scheme))
+        }
 
         // Explicitly allow methods that the API will handle
         allowMethod(HttpMethod.Options) // Crucial for preflight requests

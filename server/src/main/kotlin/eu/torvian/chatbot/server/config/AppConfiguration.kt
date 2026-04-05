@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.config
 
 import eu.torvian.chatbot.common.security.EncryptionConfig
+import eu.torvian.chatbot.server.domain.config.CorsConfig
 import eu.torvian.chatbot.server.domain.config.DatabaseConfig
 import eu.torvian.chatbot.server.domain.config.NetworkConfig
 import eu.torvian.chatbot.server.domain.config.SslConfig
@@ -16,6 +17,7 @@ import eu.torvian.chatbot.server.domain.security.JwtConfig
  * @property setupRequired Whether the server should perform initial secret generation on startup.
  * @property storage Settings for data storage paths (data directory, keystore filename).
  * @property network Settings for the network engine (host, port).
+ * @property cors Settings for browser CORS access control.
  * @property ssl Settings for SSL/TLS. Required when connectorType is HTTPS or HTTP_AND_HTTPS.
  * @property database Settings for the persistence layer (SQLite).
  * @property encryption Settings for data-at-rest encryption and master keys.
@@ -25,6 +27,7 @@ data class AppConfiguration(
     val setupRequired: Boolean,
     val storage: StorageConfig,
     val network: NetworkConfig,
+    val cors: CorsConfig,
     val ssl: SslConfig?,
     val database: DatabaseConfig,
     val encryption: EncryptionConfig,

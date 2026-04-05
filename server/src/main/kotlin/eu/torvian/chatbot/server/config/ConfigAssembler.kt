@@ -7,6 +7,7 @@ import arrow.core.raise.ensure
 import eu.torvian.chatbot.common.security.EncryptionConfig
 import eu.torvian.chatbot.server.domain.config.*
 import eu.torvian.chatbot.server.domain.security.JwtConfig
+import java.net.URI
 
 /**
  * Deep-merge and assembly helpers.
@@ -31,10 +32,22 @@ fun AppConfigDto.merge(other: AppConfigDto?): AppConfigDto = AppConfigDto(
     setup = SetupConfigDto(other?.setup?.required ?: setup?.required),
     storage = mergeStorage(storage, other?.storage),
     network = mergeNetwork(network, other?.network),
+    cors = mergeCors(cors, other?.cors),
     ssl = mergeSsl(ssl, other?.ssl),
     database = mergeDatabase(database, other?.database),
     encryption = mergeEncryption(encryption, other?.encryption),
     jwt = mergeJwt(jwt, other?.jwt)
+)
+
+/**
+ * Merge helper for CORS DTOs.
+ *
+ * @param base Base CORS DTO.
+ * @param overlay Overlay CORS DTO (takes precedence).
+ * @return merged [CorsConfigDto]
+ */
+private fun mergeCors(base: CorsConfigDto?, overlay: CorsConfigDto?) = CorsConfigDto(
+    allowedOrigins = overlay?.allowedOrigins ?: base?.allowedOrigins
 )
 
 /**
@@ -141,10 +154,70 @@ fun AppConfigDto.toDomain(baseApplicationPath: String): Either<ConfigError.Valid
         setupRequired = required("setup.required", setup?.required),
         storage = storageConfig,
         network = parseNetwork(network),
+        cors = parseCors(cors),
         ssl = parseSsl(ssl, network?.connectorType, storageConfig),
         database = parseDatabase(database, storageConfig),
         encryption = parseEncryption(encryption),
         jwt = parseJwt(jwt)
+    )
+}
+
+/**
+ * Parse and validate [CorsConfigDto] into [CorsConfig].
+ *
+ * Origins must be full origins like `https://example.com` or `http://localhost:3000`.
+ */
+private fun Raise<ConfigError.ValidationError>.parseCors(dto: CorsConfigDto?): CorsConfig {
+    val allowedOrigins = dto?.allowedOrigins.orEmpty().mapIndexed { index, origin ->
+        parseAllowedOrigin(origin, "cors.allowedOrigins[$index]")
+    }
+
+    return CorsConfig(allowedOrigins = allowedOrigins)
+}
+
+private fun Raise<ConfigError.ValidationError>.parseAllowedOrigin(
+    value: String,
+    path: String
+): CorsAllowedOrigin {
+    val trimmed = value.trim()
+    ensure(trimmed.isNotEmpty()) {
+        ConfigError.ValidationError.InvalidValue(path, "Origin must not be blank")
+    }
+
+    val uri = try {
+        URI(trimmed)
+    } catch (_: IllegalArgumentException) {
+        raise(ConfigError.ValidationError.InvalidValue(path, "Origin must be a valid URI"))
+    }
+
+    val scheme = uri.scheme?.lowercase()
+    ensure(scheme == "http" || scheme == "https") {
+        ConfigError.ValidationError.InvalidValue(path, "Only http and https origins are supported")
+    }
+
+    ensure(uri.userInfo == null && uri.query == null && uri.fragment == null) {
+        ConfigError.ValidationError.InvalidValue(path, "Origin cannot contain user info, query, or fragment")
+    }
+
+    val normalizedPath = uri.path.orEmpty()
+    ensure(normalizedPath.isEmpty() || normalizedPath == "/") {
+        ConfigError.ValidationError.InvalidValue(path, "Origin must not include a path")
+    }
+
+    val host = uri.host
+    ensure(!host.isNullOrBlank()) {
+        ConfigError.ValidationError.InvalidValue(path, "Origin must include a host")
+    }
+
+    val port = uri.port.takeIf { it != -1 }
+    ensure(port == null || port in 1..65535) {
+        ConfigError.ValidationError.InvalidValue(path, "Port must be between 1 and 65535")
+    }
+
+    return CorsAllowedOrigin(
+        scheme = scheme,
+        host = host,
+        port = port
     )
 }
 

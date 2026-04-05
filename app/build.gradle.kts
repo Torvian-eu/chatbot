@@ -262,13 +262,6 @@ tasks.register<Sync>("createDistributableTo") {
 
     dependsOn("createDistributable")
     from(layout.buildDirectory.dir("compose/binaries/main/app/Chatbot"))
-    from(layout.projectDirectory.dir("src/commonMain/composeResources/files/config")) {
-        include("default_config.json")
-        include("default_setup.json")
-        rename("default_config.json", "config.json")
-        rename("default_setup.json", "setup.json")
-        into("config")
-    }
     into(provider {
         val installPath = findProperty("installPath")?.toString()?.trim()
         if (installPath.isNullOrEmpty()) {
@@ -280,17 +273,41 @@ tasks.register<Sync>("createDistributableTo") {
     })
 }
 
-// Custom task to copy platform-specific launch scripts to distribution
-// This adds convenience scripts that start the application with a console/terminal window visible,
-// allowing users to see log output.
+// Configure the createDistributable task to also copy config files and launch scripts
 afterEvaluate {
     tasks.named("createDistributable") {
         val windowsBatchFile = layout.projectDirectory.file("dist-resources/Chatbot-with-logs.bat")
         val unixShellScript = layout.projectDirectory.file("dist-resources/chatbot-with-logs.sh")
+        val configDir = layout.projectDirectory.dir("src/commonMain/composeResources/files/config")
         val distDirProvider = layout.buildDirectory.dir("compose/binaries/main/app/Chatbot")
 
         doLast {
             val distDir = distDirProvider.get().asFile
+
+            // Copy default config files into the distributable so createDistributable output is complete.
+            val targetConfigDir = File(distDir, "config")
+            targetConfigDir.mkdirs()
+
+            val defaultConfig = configDir.file("default_config.json").asFile
+            val defaultSetup = configDir.file("default_setup.json").asFile
+
+            if (defaultConfig.exists()) {
+                defaultConfig.copyTo(File(targetConfigDir, "config.json"), overwrite = true)
+                println("Copied config.json to distribution: ${distDir.absolutePath}")
+            } else {
+                println("WARNING: default_config.json not found at ${defaultConfig.absolutePath}")
+            }
+
+            if (defaultSetup.exists()) {
+                defaultSetup.copyTo(File(targetConfigDir, "setup.json"), overwrite = true)
+                println("Copied setup.json to distribution: ${distDir.absolutePath}")
+            } else {
+                println("WARNING: default_setup.json not found at ${defaultSetup.absolutePath}")
+            }
+
+            // Copy platform-specific launch scripts
+            // This adds convenience scripts that start the application with a console/terminal window visible,
+            // allowing users to see log output.
             val os = System.getProperty("os.name").lowercase()
 
             when {
