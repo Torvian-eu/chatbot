@@ -9,7 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 # Run the application
-./Chatbot
+./bin/Chatbot
 
 # Keep terminal open after the application closes (optional)
 # Uncomment the following line if you want the terminal to stay open:

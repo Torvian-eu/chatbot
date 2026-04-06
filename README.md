@@ -4,7 +4,7 @@
 The project is a multi-platform chatbot application with AI/LLM integration. It features a central server and multiple client options (Desktop, Web, Android). It supports various LLM providers (OpenAI, Ollama) and has a plugin system for MCP tools.
 
 - **Server Module**: Ktor-based backend with SQLite database, user authentication, and LLM provider integration
-- **Desktop Client**: Compose Multiplatform desktop application (Windows, macOS, Linux)
+- **Desktop Client**: Compose Multiplatform desktop application (Linux, Windows, macOS)
 - **Web Client**: WASM-based web application (planned)
 - **Android Client**: Android application (planned)
 - **Common Module**: Shared business logic and models
@@ -31,17 +31,13 @@ The project is a multi-platform chatbot application with AI/LLM integration. It 
 ## Project Status
 The project is in active development. The server and desktop client are feature complete in terms of their core functionality. The desktop client is currently the most stable and useable version available. The web client is partially useable, though MCP server integration is not yet functional. The Android client is the least useable, primarily due to its layout being optimized for landscape mode (not portrait), and it includes elements that require mouse hover to be visible, making them inaccessible on touchscreens.
 
-## Quick Start
+## Getting Started
 
-### Prerequisites
-- **Server**: [JDK 21](https://adoptium.net/installation) or higher (required to run), or Docker
-- **Desktop Client**: Windows (pre-built), or any OS if building from source
-
-### Download Pre-built Binaries
-Pre-built binaries are available from the [Releases page](https://github.com/Torvian-eu/chatbot/releases/tag/v0.1.0):
-- **Server**: Available for all platforms (JDK 21 required)
-- **Desktop Client**: Currently available for Windows (Linux and macOS binaries coming soon)
-- **Web Client**: Coming soon
+### Use pre-built packages
+Pre-built packages are available from the [Releases page](https://github.com/Torvian-eu/chatbot/releases):
+- **Server**: Available for all platforms. Use Docker (recommended) or JDK 21+ to run it locally.
+- **Desktop Client**: Available for Windows and Linux.
+- **Web Client**: Available as a static web app. It must be served over HTTP(S).
 
 ### Run the server
 ```bash
@@ -66,7 +62,7 @@ docker run -d \
   ghcr.io/torvian-eu/chatbot-server:latest
 ```
 
-For full deployment options and configuration details (including Docker Compose + Caddy), see `deploy/README.md`.
+For full deployment options and configuration details (including Docker Compose + Caddy), see [deploy/README.md](deploy/README.md).
 
 ### Run the desktop application
 ```bash
@@ -75,6 +71,24 @@ For full deployment options and configuration details (including Docker Compose 
 # Linux/Mac (if building from source, see below)
 <install-path>/Chatbot-with-logs.sh
 ```
+
+### Serve the web client
+The web client is a static web application and must be served over HTTP(S). Opening `index.html` directly via `file://` will not work, because browsers block loading WASM and related assets from local files.
+
+For local testing, you can use any simple static file server.
+
+**Example using Python:**
+```bash
+cd <web-client-dist-path>
+python -m http.server 4000
+```
+
+Then open your browser and navigate to:
+```text
+http://localhost:4000
+```
+
+For production or VPS deployments, serve the same files using a regular web server such as Caddy or nginx.
 
 ### Login
 Login with username `admin` and password `admin123`. You will be asked to change the password on first login.
@@ -94,14 +108,21 @@ git clone https://github.com/Torvian-eu/chatbot.git
 
 ### Build & Install Server application
 ```bash
-./gradlew server:installDistTo -PinstallPath=<path>
+./gradlew server:installDist
 ```
+The files will be installed to `server/build/install/server/`. You can run the server using the scripts in that folder.
 
 ### Build & Install Desktop application
 ```bash
-./gradlew app:createDistributableTo -PinstallPath=<path>
+./gradlew app:createDistributable
 ```
-Note: Please use separate install paths for the server and desktop application.
+The files will be installed to `app/build/compose/binaries/main/app/Chatbot`. You can run the desktop client using the scripts in that folder.
+
+### Build & Install Web application
+```bash
+./gradlew app:wasmJsBrowserDistribution
+```
+The files will be installed to `app/build/dist/wasmJs/productionExecutable`. You can serve the web client using any static file server, as described in the "Serve the web client" section above.
 
 ## Guides
 These guides provide information on how to configure and use specific features of the chatbot.

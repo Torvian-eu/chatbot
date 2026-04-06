@@ -9,6 +9,8 @@
   - when user clicks "Try it out" button on the website, create a new user account for them and connect them to the chatbot server.
   - host WASM chatbot client on: https://chatbot-client-demo.torvian.eu
   - (optional) implement remote MCP server feature, because local MCP servers are not supported in browser
+- create blog pages to improve SEO
+- create news posts that support the case against big-tech companies, and promote open-source alternatives like Torvian chatbot
 
 ## Tips
 - https://m4xshen.dev/posts/promote-open-source-project

@@ -9,6 +9,7 @@
 - Add Docker support for the server module.
 - Add one-click installers for the desktop client application.
 - Add all-in-one installer for desktop that includes the server and the client, for simple local setup (without Docker).
+- Allow admin to add new users through the admin panel.
 
 ## UI/UX
 - After deleting a message, set scroll position to bottom of the parent message. (or top of child message)

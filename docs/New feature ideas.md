@@ -250,6 +250,15 @@ Open questions:
 ### Allow Chatbot AI agent to create simple apps and run them on the local machine in a VM
  - The app gets a built-in API, so that an agent can interact with it. For instance, it could have endpoints for creating a screenshot of the GUI, simulate mouse movement and clicks, enter text, etc. (Although things like that could also be done with MCP tools, external to the app.)
 
+### Allow LLM Agent to access previous chat sessions.
+- Store chat sessions as markdown files and create an index for them in markdown format, to make them searchable and accessible for future conversations. Each item in the index should have:
+  - the name of the markdown file (which is usually the same as the chat session name)
+  - the date of the chat session
+  - a list of keywords or tags that describe the main topics discussed in the chat session
+  - a short summary of the chat session
+- The LLM agent can then query this index to find relevant information from previous chat sessions, and use it to answer questions or provide suggestions.
+- alternative: use [Graphify](https://github.com/safishamsi/graphify) SKILL.
+
 ---
 
 ## Performance improvements

@@ -26,7 +26,9 @@
   "cors": {
     "allowedOrigins": [
       "SERVER_CORS_ALLOWED_ORIGIN_1",
-      "SERVER_CORS_ALLOWED_ORIGIN_2"
+      "SERVER_CORS_ALLOWED_ORIGIN_2",
+      "SERVER_CORS_ALLOWED_ORIGIN_3",
+      "SERVER_CORS_ALLOWED_ORIGIN_4"
     ]
   },
 
@@ -35,7 +37,16 @@
     "keystorePassword": "SSL_KEYSTORE_PASSWORD",
     "keyAlias": "SSL_KEY_ALIAS",
     "keyPassword": "SSL_KEY_PASSWORD",
-    "generateSelfSigned": "SSL_GENERATE_SELF_SIGNED"
+    "generateSelfSigned": "SSL_GENERATE_SELF_SIGNED",
+    "sanDomains": [
+      "SSL_SAN_DOMAIN_1",
+      "SSL_SAN_DOMAIN_2"
+    ],
+    "sanIpAddresses": [
+      "SSL_SAN_IP_ADDRESS_1",
+      "SSL_SAN_IP_ADDRESS_2",
+      "SSL_SAN_IP_ADDRESS_3"
+    ]
   },
 
   "database": {
