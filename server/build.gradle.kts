@@ -72,24 +72,6 @@ tasks {
         dependsOn("cleanInstallDistDir")
     }
 
-    // Task to install the server distribution to a custom path
-    register<Copy>("installDistTo") {
-        group = "distribution"
-        description = "Installs the server distribution to a custom path using -PinstallPath=<path>."
-
-        dependsOn(named("installDist"))
-        from(layout.buildDirectory.dir("install/server"))
-        into(provider {
-            val installPath = findProperty("installPath")?.toString()?.trim()
-            if (installPath.isNullOrEmpty()) {
-                throw GradleException(
-                    "Missing required property 'installPath'. Usage: ./gradlew server:installDistTo -PinstallPath=/your/target/path"
-                )
-            }
-            file(installPath)
-        })
-    }
-
     // Disable the default start scripts generation
     named<CreateStartScripts>("startScripts") {
         enabled = false
