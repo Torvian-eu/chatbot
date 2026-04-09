@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Try the Torvian Chatbot demo and learn how to connect to the shared demo server." />
+  <title>Torvian Chatbot Demo | Try It Out</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&family=Spectral:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="ambient"></div>
+  <header class="site-header shell">
+    <a class="brand" href="index.html" aria-label="Torvian Chatbot home">
+      <span class="brand-mark">T</span>
+      <span class="brand-text">Torvian Chatbot</span>
+    </a>
+    <nav class="top-nav" aria-label="Primary">
+      <a href="index.html">Home</a>
+      <a href="https://github.com/Torvian-eu/chatbot/releases" target="_blank" rel="noopener noreferrer">Desktop app</a>
+      <a href="https://github.com/Torvian-eu/chatbot" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://www.torvian.eu" target="_blank" rel="noopener noreferrer">Torvian.eu</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero shell reveal">
+      <p class="eyebrow">Live playground</p>
+      <h1>Try the Torvian demo</h1>
+      <p class="lead">Use the hosted web client to test the chatbot in minutes.</p>
+      <div class="hero-actions">
+        <a class="button button-primary" href="https://chatbot-client-demo.torvian.eu" target="_blank" rel="noopener noreferrer">Open live demo</a>
+        <a class="button button-ghost" href="index.html">Back to landing page</a>
+      </div>
+    </section>
+
+    <section class="shell cards reveal">
+      <article class="card card-accent">
+        <h2>1) Open the setup page</h2>
+        <p>Go to the live demo and open the setup form.</p>
+      </article>
+      <article class="card">
+        <h2>2) Use this server URL</h2>
+        <p class="mono inline-row">
+          <span id="server-url">https://chatbot-server-demo.torvian.eu</span>
+          <button class="tiny-button" data-copy-target="server-url" type="button">Copy</button>
+        </p>
+      </article>
+      <article class="card">
+        <h2>3) Login credentials</h2>
+        <p class="mono inline-row">
+          <span id="login-creds">admin / Qazxsw321!</span>
+          <button class="tiny-button" data-copy-target="login-creds" type="button">Copy</button>
+        </p>
+      </article>
+    </section>
+
+    <section class="shell split reveal">
+      <div>
+        <p class="eyebrow">Important</p>
+        <h2>Please keep the shared demo healthy</h2>
+        <p>
+          This is an admin account shared by everyone testing the demo.
+          Please do not remove anything you did not add yourself.
+        </p>
+      </div>
+      <div class="note-box">
+        <h3>Desktop app gives the full feature set</h3>
+        <p>
+          Download the desktop client from the
+          <a href="https://github.com/Torvian-eu/chatbot/releases" target="_blank" rel="noopener noreferrer">GitHub releases page</a>
+          for the full experience.
+        </p>
+        <p>
+          MCP servers are not supported in the browser demo. If you want to connect your own MCP server,
+          use the desktop application.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer shell">
+    <p>Need self-hosting details? Check the repository documentation.</p>
+    <p class="mono">chatbot.torvian.eu/demo | www.torvian.eu</p>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
