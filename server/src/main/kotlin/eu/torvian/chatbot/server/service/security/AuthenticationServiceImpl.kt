@@ -82,6 +82,7 @@ class AuthenticationServiceImpl(
                 val currentTime = Clock.System.now()
                 val sessionExpirationMs = jwtConfig.refreshExpirationMs
                 val sessionExpiresAt = currentTime.toEpochMilliseconds() + sessionExpirationMs
+                val accessTokenExpiresAt = currentTime.plus(jwtConfig.tokenExpirationMs.milliseconds)
                 val session: UserSessionEntity = withError({ _: UserSessionError.ForeignKeyViolation ->
                     LoginError.UserNotFound
                 }) {
@@ -114,7 +115,7 @@ class AuthenticationServiceImpl(
                     user = userEntity.toUser(),
                     accessToken = accessToken,
                     refreshToken = refreshToken,
-                    expiresAt = Instant.fromEpochMilliseconds(sessionExpiresAt),
+                    expiresAt = accessTokenExpiresAt,
                     permissions = permissions
                 )
             }
