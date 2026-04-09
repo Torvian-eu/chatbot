@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Torvian Chatbot is an open-source, multi-platform AI chatbot with tool calling and MCP integration." />
+  <title>Torvian Chatbot | Open-Source AI Chat Platform</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&family=Spectral:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="ambient"></div>
+  <header class="site-header shell">
+    <a class="brand" href="index.html" aria-label="Torvian Chatbot home">
+      <span class="brand-mark">T</span>
+      <span class="brand-text">Torvian Chatbot</span>
+    </a>
+    <nav class="top-nav" aria-label="Primary">
+      <a href="#features">Features</a>
+      <a href="#community">Community</a>
+      <a href="demo.html">Demo</a>
+      <a href="https://www.torvian.eu" target="_blank" rel="noopener noreferrer">Torvian.eu</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero shell reveal">
+      <p class="eyebrow">Open source. Multi-platform. Tool-aware AI.</p>
+      <h1>Build and run your own<br />AI chat workflow.</h1>
+      <p class="lead">
+        Torvian Chatbot combines a Ktor server, desktop client, and evolving web client into one practical
+        platform for LLM chats, tool execution, and MCP-powered workflows.
+      </p>
+      <div class="hero-actions">
+        <a class="button button-primary" href="demo.html">Try it out</a>
+        <a class="button button-ghost" href="https://github.com/Torvian-eu/chatbot" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+      </div>
+    </section>
+
+    <section id="features" class="shell cards reveal">
+      <article class="card card-accent">
+        <h2>Flexible model setup</h2>
+        <p>Use OpenAI-compatible providers (OpenAI, Gemini, OpenRouter) or run local models with Ollama.</p>
+      </article>
+      <article class="card">
+        <h2>Tool calling + user approval</h2>
+        <p>Agentic responses can call tools, and every call can require explicit user confirmation.</p>
+      </article>
+      <article class="card">
+        <h2>One server, many clients</h2>
+        <p>Use the stable desktop app today and follow ongoing web and Android improvements.</p>
+      </article>
+    </section>
+
+    <section id="community" class="shell split reveal">
+      <div>
+        <p class="eyebrow">Join the project</p>
+        <h2>Community and releases</h2>
+        <p>
+          Torvian Chatbot is actively developed in the open. Follow updates, test new versions,
+          and help shape future features.
+        </p>
+      </div>
+      <ul class="link-list" aria-label="Project links">
+        <li><a href="https://www.torvian.eu" target="_blank" rel="noopener noreferrer">Torvian organization site</a></li>
+        <li><a href="https://github.com/Torvian-eu/chatbot" target="_blank" rel="noopener noreferrer">GitHub repository</a></li>
+        <li><a href="https://github.com/Torvian-eu/chatbot/releases" target="_blank" rel="noopener noreferrer">GitHub releases</a></li>
+        <li><a href="https://www.reddit.com/r/torvian_eu/" target="_blank" rel="noopener noreferrer">Reddit</a></li>
+        <li><a href="https://mastodon.social/@torvian" target="_blank" rel="noopener noreferrer">Mastodon</a></li>
+        <li><a href="https://bsky.app/profile/torvian.bsky.social" target="_blank" rel="noopener noreferrer">Bluesky</a></li>
+        <li><a href="https://x.com/torvianEU" target="_blank" rel="noopener noreferrer">X</a></li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="site-footer shell">
+    <p>Open-source under MIT. Built by Torvian and contributors.</p>
+    <p class="mono">chatbot.torvian.eu | www.torvian.eu</p>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Torvian builds practical open-source software, starting with Torvian Chatbot." />
+  <title>Torvian | Open-Source Software Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="noise" aria-hidden="true"></div>
+  <header class="site-header frame">
+    <a class="brand" href="index.html" aria-label="Torvian home">
+      <span class="brand-dot"></span>
+      <span>Torvian</span>
+    </a>
+    <nav class="top-nav" aria-label="Primary">
+      <a href="#projects">Projects</a>
+      <a href="#values">Values</a>
+      <a href="https://chatbot.torvian.eu" target="_blank" rel="noopener noreferrer">Chatbot site</a>
+    </nav>
+  </header>
+
+  <main class="frame">
+    <section class="hero reveal">
+      <p class="eyebrow">Organization site - torvian.eu</p>
+      <h1>Small team. Sharp tools.<br />Open by default.</h1>
+      <p>
+        Torvian is an independent software studio focused on useful AI tooling and practical developer experience.
+        We build in the open and iterate with real user feedback.
+      </p>
+      <div class="hero-actions">
+        <a class="button button-primary" href="https://chatbot.torvian.eu" target="_blank" rel="noopener noreferrer">Visit Torvian Chatbot</a>
+        <a class="button button-ghost" href="https://github.com/Torvian-eu/chatbot" target="_blank" rel="noopener noreferrer">Source code</a>
+      </div>
+    </section>
+
+    <section id="projects" class="project-grid reveal" aria-label="Projects">
+      <article class="project-card">
+        <p class="project-kind">Current project</p>
+        <h2>Torvian Chatbot</h2>
+        <p>
+          Multi-platform chatbot with a Kotlin server and clients, support for OpenAI-compatible providers,
+          local Ollama models, tool calling, and MCP integration.
+        </p>
+        <ul>
+          <li>Server module (Ktor + SQLite)</li>
+          <li>Desktop app (Compose Multiplatform)</li>
+          <li>Web and Android clients in progress</li>
+        </ul>
+        <div class="project-actions">
+          <a href="https://chatbot.torvian.eu" target="_blank" rel="noopener noreferrer">Website</a>
+          <a href="https://github.com/Torvian-eu/chatbot" target="_blank" rel="noopener noreferrer">GitHub</a>
+          <a href="https://github.com/Torvian-eu/chatbot/releases" target="_blank" rel="noopener noreferrer">Releases</a>
+        </div>
+      </article>
+    </section>
+
+    <section id="values" class="values reveal">
+      <div class="value-box">
+        <h3>Open-source first</h3>
+        <p>Public repos, transparent roadmap, and collaboration with users.</p>
+      </div>
+      <div class="value-box">
+        <h3>Practical innovation</h3>
+        <p>We favor features that solve real workflows over novelty for novelty's sake.</p>
+      </div>
+      <div class="value-box">
+        <h3>Human-centered AI</h3>
+        <p>Powerful automation with clear user control and trust.</p>
+      </div>
+    </section>
+
+    <section class="social reveal" aria-label="Social links">
+      <h2>Follow Torvian</h2>
+      <div class="social-links">
+        <a href="https://www.reddit.com/r/torvian_eu/" target="_blank" rel="noopener noreferrer">Reddit</a>
+        <a href="https://mastodon.social/@torvian" target="_blank" rel="noopener noreferrer">Mastodon</a>
+        <a href="https://bsky.app/profile/torvian.bsky.social" target="_blank" rel="noopener noreferrer">Bluesky</a>
+        <a href="https://x.com/torvianEU" target="_blank" rel="noopener noreferrer">X</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="frame site-footer">
+    <p>Torvian - Open-source software studio.</p>
+    <p class="mono">www.torvian.eu</p>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
