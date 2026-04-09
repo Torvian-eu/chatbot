@@ -55,6 +55,7 @@ data class JwtConfig(
             .withAudience(audience)
             .withSubject(userId.toString())
             .withClaim("sessionId", sessionId)
+            .withClaim("tokenType", "access")
             .withIssuedAt(Date(currentTime))
             .withExpiresAt(Date(currentTime + tokenExpirationMs))
             .sign(algorithm)

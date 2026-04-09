@@ -574,6 +574,42 @@ class AuthRoutesTest {
     }
 
     @Test
+    fun `GET auth me - with refresh token returns 401`() = authTestApplication {
+        // Arrange
+        testDataManager.setup(
+            TestDataSet(
+                chatGroups = listOf(testGroup)
+            )
+        )
+
+        val passwordService: PasswordService = container.get()
+        val plainPassword = "correctPassword"
+        val hashedPassword = passwordService.hashPassword(plainPassword)
+        val testUserWithHashedPassword = testUser.copy(passwordHash = hashedPassword)
+        testDataManager.insertUser(testUserWithHashedPassword)
+
+        val loginResponse = client.post(href(AuthResource.Login())) {
+            contentType(ContentType.Application.Json)
+            setBody(
+                LoginRequest(
+                    username = testUser.username,
+                    password = plainPassword
+                )
+            )
+        }
+        assertEquals(HttpStatusCode.OK, loginResponse.status)
+        val refreshToken = loginResponse.body<LoginResponse>().refreshToken
+
+        // Act
+        val response = client.get(href(AuthResource.Me())) {
+            authenticate(refreshToken)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
+    }
+
+    @Test
     fun `GET auth me - with token for non-existent user returns 401`() = authTestApplication {
         // Arrange - Create token for user that doesn't exist in database
         val authToken = authHelper.generateToken(999L, 1L)
