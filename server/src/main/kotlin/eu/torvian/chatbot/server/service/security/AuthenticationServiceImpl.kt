@@ -260,6 +260,12 @@ class AuthenticationServiceImpl(
             logger.debug("Validating JWT credential for subject: ${credential.payload.subject}")
             // Ktor already verified the signature and expiration. We validate the business logic.
 
+            // Ensure only access tokens can authenticate protected routes.
+            val tokenType = credential.payload.getClaim("tokenType")?.asString()
+            ensure(tokenType == "access") {
+                TokenValidationError.InvalidClaims
+            }
+
             // Extract claims from the payload
             val userId = credential.payload.subject?.toLongOrNull()
                 ?: raise(TokenValidationError.InvalidClaims)

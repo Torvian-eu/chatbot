@@ -319,6 +319,22 @@ class AuthenticationServiceImplTest {
     }
 
     @Test
+    fun `validateCredential should return null when token type is refresh`() = runTest {
+        // Given
+        val token = jwtConfig.generateRefreshToken(testUser.id, testSession.id)
+        val decodedJWT = JWT.decode(token)
+        val credential = JWTCredential(decodedJWT)
+
+        // When
+        val result = authService.validateCredential(credential)
+
+        // Then
+        assertNull(result)
+        coVerify(exactly = 0) { userSessionDao.getSessionById(any()) }
+        coVerify(exactly = 0) { userService.getUserById(any()) }
+    }
+
+    @Test
     fun `validateCredential should return null for credential with invalid claims`() = runTest {
         // Create a new token without sessionId by manually creating it
         // We'll use a completely invalid subject to simulate invalid claims

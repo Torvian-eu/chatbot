@@ -29,6 +29,7 @@ class JwtConfigTest {
         val decodedJWT = jwtConfig.verifier.verify(token)
         assertEquals(userId.toString(), decodedJWT.subject)
         assertEquals(sessionId, decodedJWT.getClaim("sessionId").asLong())
+        assertEquals("access", decodedJWT.getClaim("tokenType").asString())
         assertEquals(jwtConfig.issuer, decodedJWT.issuer)
         assertEquals(jwtConfig.audience, decodedJWT.audience.first())
     }
