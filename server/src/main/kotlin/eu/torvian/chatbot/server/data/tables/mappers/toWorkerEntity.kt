@@ -1,18 +1,18 @@
 package eu.torvian.chatbot.server.data.tables.mappers
 
-import eu.torvian.chatbot.common.models.worker.Worker
+import eu.torvian.chatbot.server.data.entities.WorkerEntity
 import eu.torvian.chatbot.server.data.tables.WorkersTable
 import org.jetbrains.exposed.v1.core.ResultRow
 import kotlinx.serialization.json.Json
 import kotlin.time.Instant
 
 /**
- * Converts an Exposed row from `workers` into the shared [Worker] model.
+ * Converts an Exposed row from `workers` into [WorkerEntity].
  *
  * @receiver Result row that includes `WorkersTable` columns.
- * @return Mapped [Worker].
+ * @return Mapped [WorkerEntity].
  */
-fun ResultRow.toWorker(): Worker = Worker(
+fun ResultRow.toWorkerEntity(): WorkerEntity = WorkerEntity(
     id = this[WorkersTable.id].value,
     ownerUserId = this[WorkersTable.ownerUserId].value,
     displayName = this[WorkersTable.displayName],

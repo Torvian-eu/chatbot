@@ -6,7 +6,6 @@ import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.user.UserStatus
-import eu.torvian.chatbot.common.models.worker.Worker
 import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.UserSessionDao
 import eu.torvian.chatbot.server.data.dao.WorkerDao
@@ -14,6 +13,7 @@ import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.dao.error.UserSessionError
 import eu.torvian.chatbot.server.data.entities.UserEntity
 import eu.torvian.chatbot.server.data.entities.UserSessionEntity
+import eu.torvian.chatbot.server.data.entities.WorkerEntity
 import eu.torvian.chatbot.server.data.entities.mappers.toUser
 import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.service.core.UserService
@@ -128,7 +128,7 @@ class AuthenticationServiceImplTest {
     @Test
     fun `validateWorkerCredential should successfully validate valid worker token`() = runTest {
         // Given
-        val worker = Worker(
+        val worker = WorkerEntity(
             id = 200L,
             ownerUserId = testUser.id,
             displayName = "worker-1",

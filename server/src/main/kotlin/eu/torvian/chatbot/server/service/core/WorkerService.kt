@@ -2,7 +2,7 @@ package eu.torvian.chatbot.server.service.core
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.api.worker.WorkerChallengeDto
-import eu.torvian.chatbot.common.models.worker.Worker
+import eu.torvian.chatbot.common.models.worker.WorkerDto
 import eu.torvian.chatbot.server.service.core.error.worker.AuthenticateWorkerError
 import eu.torvian.chatbot.server.service.core.error.worker.RegisterWorkerError
 
@@ -24,7 +24,7 @@ interface WorkerService {
         displayName: String,
         certificatePem: String,
         allowedScopes: List<String>
-    ): Either<RegisterWorkerError, Worker>
+    ): Either<RegisterWorkerError, WorkerDto>
 
     /**
      * Authenticates a worker using a one-time challenge response.
@@ -38,7 +38,7 @@ interface WorkerService {
         workerId: Long,
         challengeId: String,
         signatureBase64: String
-    ): Either<AuthenticateWorkerError, Worker>
+    ): Either<AuthenticateWorkerError, WorkerDto>
 
     /**
      * Creates a short-lived challenge used before service-token exchange.
