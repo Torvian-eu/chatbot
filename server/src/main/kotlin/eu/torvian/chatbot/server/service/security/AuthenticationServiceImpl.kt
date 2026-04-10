@@ -8,24 +8,23 @@ import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import com.auth0.jwt.exceptions.JWTDecodeException
 import com.auth0.jwt.exceptions.JWTVerificationException
+import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.UserSessionDao
+import eu.torvian.chatbot.server.data.dao.WorkerDao
 import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.dao.error.UserSessionError
+import eu.torvian.chatbot.server.data.dao.error.WorkerError
 import eu.torvian.chatbot.server.data.entities.UserSessionEntity
 import eu.torvian.chatbot.server.data.entities.mappers.toUser
 import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.domain.security.LoginResult
 import eu.torvian.chatbot.server.domain.security.UserContext
+import eu.torvian.chatbot.server.domain.security.WorkerContext
 import eu.torvian.chatbot.server.service.core.UserService
 import eu.torvian.chatbot.server.service.core.error.auth.UserNotFoundError
-import eu.torvian.chatbot.server.service.security.error.LoginError
-import eu.torvian.chatbot.server.service.security.error.LogoutError
-import eu.torvian.chatbot.server.service.security.error.LogoutAllError
-import eu.torvian.chatbot.server.service.security.error.RefreshTokenError
-import eu.torvian.chatbot.server.service.security.error.TokenValidationError
-import eu.torvian.chatbot.common.misc.transaction.TransactionScope
+import eu.torvian.chatbot.server.service.security.error.*
 import io.ktor.server.auth.jwt.*
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
@@ -48,6 +47,7 @@ class AuthenticationServiceImpl(
     private val jwtConfig: JwtConfig,
     private val userSessionDao: UserSessionDao,
     private val userDao: UserDao,
+    private val workerDao: WorkerDao,
     private val authorizationService: AuthorizationService,
     private val transactionScope: TransactionScope
 ) : AuthenticationService {
@@ -160,7 +160,7 @@ class AuthenticationServiceImpl(
                 // First, decode and verify the refresh token (non-suspend operations)
                 // This block remains as is, as withError is not suitable for early return from Either.catch
                 val decodedJWT = catch({
-                    jwtConfig.verifier.verify(refreshToken)
+                    jwtConfig.userVerifier.verify(refreshToken)
                 }) { e ->
                     when (e) {
                         is JWTDecodeException -> {
@@ -238,7 +238,8 @@ class AuthenticationServiceImpl(
                 val newRefreshToken = jwtConfig.generateRefreshToken(
                     userId = userId,
                     sessionId = newSession.id,
-                    currentTime = currentTime.toEpochMilliseconds())
+                    currentTime = currentTime.toEpochMilliseconds()
+                )
                 val tokenExpiresAt = currentTime.plus(jwtConfig.tokenExpirationMs.milliseconds)
 
                 // Retrieve user permissions
@@ -260,6 +261,11 @@ class AuthenticationServiceImpl(
         either {
             logger.debug("Validating JWT credential for subject: ${credential.payload.subject}")
             // Ktor already verified the signature and expiration. We validate the business logic.
+
+            val principalType = credential.payload.getClaim("principalType")?.asString()
+            ensure(principalType == "user") {
+                TokenValidationError.InvalidClaims
+            }
 
             // Ensure only access tokens can authenticate protected routes.
             val tokenType = credential.payload.getClaim("tokenType")?.asString()
@@ -316,4 +322,57 @@ class AuthenticationServiceImpl(
             null
         }
     }
+
+    override suspend fun validateWorkerCredential(credential: JWTCredential): WorkerContext? =
+        transactionScope.transaction {
+            either {
+                logger.debug("Validating worker credential (subject={})", credential.payload.subject)
+
+                val principalType = credential.payload.getClaim("principalType")?.asString()
+                if (principalType != "service") {
+                    logger.debug("Worker credential rejected: invalid principal type ({})", principalType)
+                    raise(TokenValidationError.InvalidClaims)
+                }
+
+                val tokenType = credential.payload.getClaim("tokenType")?.asString()
+                if (tokenType != "access") {
+                    logger.debug("Worker credential rejected: invalid token type ({})", tokenType)
+                    raise(TokenValidationError.InvalidClaims)
+                }
+
+                val workerId = credential.payload.getClaim("workerId")?.asLong()
+                    ?: raise(TokenValidationError.InvalidClaims)
+                val ownerUserId = credential.payload.getClaim("ownerUserId")?.asLong()
+                    ?: raise(TokenValidationError.InvalidClaims)
+                val scopes = credential.payload.getClaim("scope")?.asList(String::class.java) ?: emptyList()
+                val issuedAt = Instant.fromEpochMilliseconds(credential.payload.issuedAt?.time ?: 0L)
+                val expiresAt = Instant.fromEpochMilliseconds(credential.payload.expiresAt?.time ?: 0L)
+
+                val worker = withError({ _: WorkerError.NotFound ->
+                    logger.warn("Worker credential rejected: worker not found (workerId={})", workerId)
+                    TokenValidationError.InvalidSession("Worker not found")
+                }) {
+                    workerDao.getWorkerById(workerId).bind()
+                }
+
+                if (worker.ownerUserId != ownerUserId) {
+                    logger.warn("Worker credential rejected: owner mismatch (workerId={})", workerId)
+                    raise(TokenValidationError.InvalidClaims)
+                }
+
+                val context = WorkerContext(
+                    workerId = worker.id,
+                    ownerUserId = ownerUserId,
+                    scopes = scopes,
+                    tokenIssuedAt = issuedAt,
+                    tokenExpiresAt = expiresAt
+                )
+
+                logger.debug("Worker credential validation successful (workerId={})", worker.id)
+                context
+            }.getOrElse {
+                logger.debug("Worker credential validation failed: {}", it)
+                null
+            }
+        }
 }
