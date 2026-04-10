@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.common.models.api.worker
 
-import eu.torvian.chatbot.common.models.worker.Worker
+import eu.torvian.chatbot.common.models.worker.WorkerDto
 import kotlinx.serialization.Serializable
 
 /**
@@ -10,6 +10,6 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 data class RegisterWorkerResponse(
-    val worker: Worker
+    val worker: WorkerDto
 )
 

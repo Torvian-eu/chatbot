@@ -1,6 +1,6 @@
 package eu.torvian.chatbot.common.models.api.auth
 
-import eu.torvian.chatbot.common.models.worker.Worker
+import eu.torvian.chatbot.common.models.worker.WorkerDto
 import kotlinx.serialization.Serializable
 import kotlin.time.Instant
 
@@ -15,6 +15,6 @@ import kotlin.time.Instant
 data class ServiceTokenResponse(
     val accessToken: String,
     val expiresAt: Instant,
-    val worker: Worker
+    val worker: WorkerDto
 )
 

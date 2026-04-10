@@ -3,9 +3,9 @@ package eu.torvian.chatbot.server.service.core.impl
 import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
-import eu.torvian.chatbot.common.models.worker.Worker
 import eu.torvian.chatbot.server.data.dao.WorkerDao
 import eu.torvian.chatbot.server.data.dao.error.WorkerError
+import eu.torvian.chatbot.server.data.entities.WorkerEntity
 import eu.torvian.chatbot.server.service.core.error.worker.AuthenticateWorkerError
 import eu.torvian.chatbot.server.service.core.error.worker.RegisterWorkerError
 import eu.torvian.chatbot.server.service.security.CertificateService
@@ -32,7 +32,7 @@ class WorkerServiceImplTest {
         transactionScope = transactionScope
     )
 
-    private val testWorker = Worker(
+    private val testWorker = WorkerEntity(
         id = 10L,
         ownerUserId = 1L,
         displayName = "test-worker",

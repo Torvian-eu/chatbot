@@ -1,9 +1,9 @@
 package eu.torvian.chatbot.server.data.dao
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.worker.Worker
 import eu.torvian.chatbot.server.data.dao.error.WorkerError
 import eu.torvian.chatbot.server.data.entities.WorkerAuthChallengeEntity
+import eu.torvian.chatbot.server.data.entities.WorkerEntity
 
 /**
  * DAO for worker identity and challenge persistence.
@@ -17,7 +17,7 @@ interface WorkerDao {
      * @param certificatePem PEM-encoded public certificate.
      * @param certificateFingerprint SHA-256 certificate fingerprint.
      * @param allowedScopes Logical worker scopes to persist.
-     * @return Either duplicate fingerprint error or the created [Worker].
+     * @return Either duplicate fingerprint error or the created [WorkerEntity].
      */
     suspend fun createWorker(
         ownerUserId: Long,
@@ -25,23 +25,23 @@ interface WorkerDao {
         certificatePem: String,
         certificateFingerprint: String,
         allowedScopes: List<String>
-    ): Either<WorkerError.DuplicateCertificateFingerprint, Worker>
+    ): Either<WorkerError.DuplicateCertificateFingerprint, WorkerEntity>
 
     /**
      * Retrieves a worker by identifier.
      *
      * @param workerId Worker identifier.
-     * @return Either not-found error or the matching [Worker].
+     * @return Either not-found error or the matching [WorkerEntity].
      */
-    suspend fun getWorkerById(workerId: Long): Either<WorkerError.NotFound, Worker>
+    suspend fun getWorkerById(workerId: Long): Either<WorkerError.NotFound, WorkerEntity>
 
     /**
      * Retrieves a worker by certificate fingerprint, if present.
      *
      * @param certificateFingerprint SHA-256 certificate fingerprint.
-     * @return Matching [Worker] or null when not found.
+     * @return Matching [WorkerEntity] or null when not found.
      */
-    suspend fun getWorkerByFingerprint(certificateFingerprint: String): Worker?
+    suspend fun getWorkerByFingerprint(certificateFingerprint: String): WorkerEntity?
 
     /**
      * Records last successful worker activity.

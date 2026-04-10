@@ -7,14 +7,14 @@ import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.right
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
-import eu.torvian.chatbot.common.models.worker.Worker
 import eu.torvian.chatbot.server.data.dao.WorkerDao
 import eu.torvian.chatbot.server.data.dao.error.WorkerError
 import eu.torvian.chatbot.server.data.entities.WorkerAuthChallengeEntity
+import eu.torvian.chatbot.server.data.entities.WorkerEntity
 import eu.torvian.chatbot.server.data.tables.WorkerAuthChallengesTable
 import eu.torvian.chatbot.server.data.tables.WorkersTable
 import eu.torvian.chatbot.server.data.tables.mappers.toWorkerAuthChallengeEntity
-import eu.torvian.chatbot.server.data.tables.mappers.toWorker
+import eu.torvian.chatbot.server.data.tables.mappers.toWorkerEntity
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.greaterEq
@@ -39,7 +39,7 @@ class WorkerDaoExposed(
         certificatePem: String,
         certificateFingerprint: String,
         allowedScopes: List<String>
-    ): Either<WorkerError.DuplicateCertificateFingerprint, Worker> =
+    ): Either<WorkerError.DuplicateCertificateFingerprint, WorkerEntity> =
         transactionScope.transaction {
             either {
                 catch({
@@ -54,31 +54,33 @@ class WorkerDaoExposed(
                         it[WorkersTable.allowedScopesJson] = allowedScopesJson
                         it[WorkersTable.createdAt] = now
                     }
-                    inserted.resultedValues?.first()?.toWorker()
+                    inserted.resultedValues?.first()?.toWorkerEntity()
                         ?: throw IllegalStateException("Failed to create worker")
                 }) { e: ExposedSQLException ->
-                    ensure(
-                        !e.message.orEmpty().contains("workers_certificate_fingerprint_unique", ignoreCase = true)
-                    ) { WorkerError.DuplicateCertificateFingerprint(certificateFingerprint) }
-                    throw e
+                    when {
+                        e.isUniqueConstraintViolation() ->
+                            raise(WorkerError.DuplicateCertificateFingerprint(certificateFingerprint))
+
+                        else -> throw e
+                    }
                 }
             }
         }
 
-    override suspend fun getWorkerById(workerId: Long): Either<WorkerError.NotFound, Worker> =
+    override suspend fun getWorkerById(workerId: Long): Either<WorkerError.NotFound, WorkerEntity> =
         transactionScope.transaction {
             WorkersTable.selectAll().where { WorkersTable.id eq workerId }
                 .singleOrNull()
-                ?.toWorker()
+                ?.toWorkerEntity()
                 ?.right()
                 ?: WorkerError.NotFound(workerId).left()
         }
 
-    override suspend fun getWorkerByFingerprint(certificateFingerprint: String): Worker? =
+    override suspend fun getWorkerByFingerprint(certificateFingerprint: String): WorkerEntity? =
         transactionScope.transaction {
             WorkersTable.selectAll().where { WorkersTable.certificateFingerprint eq certificateFingerprint }
                 .singleOrNull()
-                ?.toWorker()
+                ?.toWorkerEntity()
         }
 
     override suspend fun updateLastSeen(workerId: Long, lastSeenAtEpochMs: Long): Either<WorkerError.NotFound, Unit> =
