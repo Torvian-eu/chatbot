@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.ktor.auth
 
 import eu.torvian.chatbot.server.domain.security.UserContext
+import eu.torvian.chatbot.server.domain.security.WorkerContext
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
 
@@ -37,3 +38,13 @@ fun ApplicationCall.getUserContext(): UserContext {
 
     return userContext
 }
+
+fun ApplicationCall.getWorkerContext(): WorkerContext {
+    val workerContext = principal<WorkerContext>()
+        ?: throw IllegalStateException("No worker principal found - ensure route is protected with worker authentication")
+
+    return workerContext
+}
+
+fun ApplicationCall.getWorkerId(): Long = getWorkerContext().workerId
+

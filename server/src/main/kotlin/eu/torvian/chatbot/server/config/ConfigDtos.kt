@@ -148,7 +148,9 @@ data class EncryptionConfigDto(
  * DTO for JWT (JSON Web Token) configuration.
  *
  * @property issuer JWT issuer claim.
- * @property audience JWT audience claim.
+ * @property userAudience JWT audience claim for user tokens.
+ * @property workerAudience JWT audience claim for worker tokens.
+ * @property audience Legacy JWT audience claim retained for backward compatibility.
  * @property realm Authentication realm.
  * @property secret JWT signing secret.
  * @property tokenExpirationMs Expiration time for access tokens in milliseconds.
@@ -157,6 +159,8 @@ data class EncryptionConfigDto(
 @Serializable
 data class JwtConfigDto(
     val issuer: String? = null,
+    val userAudience: String? = null,
+    val workerAudience: String? = null,
     val audience: String? = null,
     val realm: String? = null,
     val secret: String? = null,

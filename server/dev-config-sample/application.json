@@ -48,7 +48,8 @@
 
   "jwt": {
     "issuer": "chatbot-server-dev",
-    "audience": "chatbot-users",
+    "userAudience": "chatbot-users",
+    "workerAudience": "chatbot-workers",
     "realm": "chatbot-realm",
     "tokenExpirationMs": 86400000,
     "refreshExpirationMs": 604800000

@@ -25,6 +25,7 @@ import eu.torvian.chatbot.server.testutils.data.TestDefaults
 import eu.torvian.chatbot.server.testutils.koin.defaultTestContainer
 import eu.torvian.chatbot.server.testutils.ktor.KtorTestApp
 import eu.torvian.chatbot.server.testutils.ktor.myTestApplication
+import com.auth0.jwt.JWT
 import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.http.*
@@ -35,6 +36,7 @@ import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 /**
  * Integration tests for Authentication API routes.
@@ -291,6 +293,10 @@ class AuthRoutesTest {
         assertEquals(testUser.email, loginResponse.user.email)
         assertNotNull(loginResponse.accessToken)
         assertNotNull(loginResponse.expiresAt)
+        val accessExpiryMs = JWT.decode(loginResponse.accessToken).expiresAt.time
+        val loginExpiryMs = loginResponse.expiresAt.toEpochMilliseconds()
+        assertTrue(loginExpiryMs >= accessExpiryMs)
+        assertTrue(loginExpiryMs - accessExpiryMs < 1000)
     }
 
     @Test

@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.ktor.routes
 
 import eu.torvian.chatbot.server.service.core.*
+import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.service.security.AuthenticationService
 import eu.torvian.chatbot.server.service.security.AuthorizationService
 import io.ktor.server.routing.*
@@ -27,6 +28,8 @@ class ApiRoutesKtor(
     private val userGroupService: UserGroupService,
     private val roleService: RoleService,
     private val authorizationService: AuthorizationService,
+    private val workerService: WorkerService,
+    private val jwtConfig: JwtConfig,
     private val json: Json
 ) {
     /**
@@ -35,6 +38,7 @@ class ApiRoutesKtor(
      */
     fun configureAllRoutes(route: Route) {
         configureAuthRoutes(route)
+        configureWorkerRoutes(route)
         configureUserRoutes(route)
         configureUserGroupRoutes(route)
         configureRoleRoutes(route)
@@ -53,8 +57,16 @@ class ApiRoutesKtor(
      * Configures routes related to Authentication (/api/v1/auth).
      */
     fun configureAuthRoutes(route: Route) {
-        route.configureAuthRoutes(authenticationService, userService)
+        route.configureAuthRoutes(authenticationService, userService, workerService, jwtConfig)
     }
+
+    /**
+     * Configures routes related to Worker Management (/api/v1/workers).
+     */
+    fun configureWorkerRoutes(route: Route) {
+        route.configureWorkerRoutes(workerService)
+    }
+
 
     /**
      * Configures routes related to User Management (/api/v1/users).

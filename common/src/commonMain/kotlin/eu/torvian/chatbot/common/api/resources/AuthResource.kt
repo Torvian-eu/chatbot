@@ -43,4 +43,13 @@ class AuthResource(val parent: Api = Api()) {
      */
     @Resource("refresh")
     class Refresh(val parent: AuthResource = AuthResource())
+
+    /**
+     * Resource for exchanging worker proof for a short-lived service token.
+     */
+    @Resource("service-token")
+    class ServiceToken(val parent: AuthResource = AuthResource())
+
+    @Resource("service-token/challenge")
+    class ServiceTokenChallenge(val parent: AuthResource = AuthResource())
 }
