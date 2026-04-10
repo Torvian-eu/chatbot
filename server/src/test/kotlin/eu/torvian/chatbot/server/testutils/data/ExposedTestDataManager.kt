@@ -53,6 +53,8 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
             Table.USER_SESSIONS to UserSessionsTable,
             Table.USER_GROUPS to UserGroupsTable,
             Table.USER_GROUP_MEMBERSHIPS to UserGroupMembershipsTable,
+            Table.WORKERS to WorkersTable,
+            Table.WORKER_AUTH_CHALLENGES to WorkerAuthChallengesTable,
 
             // Existing core tables
             Table.API_SECRETS to ApiSecretTable,
