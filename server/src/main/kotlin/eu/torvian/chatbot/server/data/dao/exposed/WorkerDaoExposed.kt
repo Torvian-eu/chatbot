@@ -57,10 +57,12 @@ class WorkerDaoExposed(
                     inserted.resultedValues?.first()?.toWorkerEntity()
                         ?: throw IllegalStateException("Failed to create worker")
                 }) { e: ExposedSQLException ->
-                    ensure(
-                        !e.message.orEmpty().contains("workers_certificate_fingerprint_unique", ignoreCase = true)
-                    ) { WorkerError.DuplicateCertificateFingerprint(certificateFingerprint) }
-                    throw e
+                    when {
+                        e.isUniqueConstraintViolation() ->
+                            raise(WorkerError.DuplicateCertificateFingerprint(certificateFingerprint))
+
+                        else -> throw e
+                    }
                 }
             }
         }
