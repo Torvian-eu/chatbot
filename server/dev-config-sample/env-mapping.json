@@ -58,7 +58,8 @@
 
   "jwt": {
     "issuer": "JWT_ISSUER",
-    "audience": "JWT_AUDIENCE",
+    "userAudience": "JWT_USER_AUDIENCE",
+    "workerAudience": "JWT_WORKER_AUDIENCE",
     "realm": "JWT_REALM",
     "secret": "JWT_SECRET",
     "tokenExpirationMs": "JWT_TOKEN_EXPIRATION_MS",
