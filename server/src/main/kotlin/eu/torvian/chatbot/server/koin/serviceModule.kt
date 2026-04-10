@@ -43,11 +43,13 @@ fun serviceModule() = module {
     single<CryptoProvider> { AESCryptoProvider(get()) }
     single<EncryptionService> { EncryptionService(get()) }
     single<CredentialManager> { DbEncryptedCredentialManager(get(), get()) }
+    single<CertificateService> { DefaultCertificateService() }
 
     // --- Authentication Services ---
     single<PasswordService> { BCryptPasswordService() }
     single<UserService> { UserServiceImpl(get(), get(), get(), get(), get(), get()) }
-    single<AuthenticationService> { AuthenticationServiceImpl(get(), get(), get(), get(), get(), get(), get()) }
+    single<AuthenticationService> { AuthenticationServiceImpl(get(), get(), get(), get(), get(), get(), get(), get()) }
+    single<WorkerService> { WorkerServiceImpl(get(), get(), get()) }
 
     // --- Authorizers (resource-level access) ---
     single<ResourceAuthorizer>(named(ResourceType.GROUP.key)) { GroupResourceAuthorizer(get()) }
