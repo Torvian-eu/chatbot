@@ -27,6 +27,7 @@ gradle.beforeProject {
 include("common") // Contains shared code (models)
 include("server") // Contains backend logic (services, data, external, server API)
 include("app") // Contains frontend logic for KMP (API clients, ViewModels, UI)
+include("worker") // Contains standalone worker service logic
 
 // Include the custom build logic
 includeBuild("build-logic")
