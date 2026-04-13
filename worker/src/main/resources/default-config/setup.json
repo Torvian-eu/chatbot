@@ -1,0 +1,12 @@
+{
+  /*
+    Worker setup.json
+    - Keep setup.required=true for first-time provisioning.
+    - After successful setup, the app config is written to application.json
+      and this file is reduced to setup.required=false.
+  */
+  "setup": {
+    "required": true
+  }
+}
+

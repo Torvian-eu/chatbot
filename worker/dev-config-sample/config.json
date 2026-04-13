@@ -1,9 +1,0 @@
-{
-  "serverBaseUrl": "https://localhost:8443/",
-  "workerId": 1,
-  "certificateFingerprint": "replace-with-worker-certificate-fingerprint",
-  "privateKeyPemPath": "./secrets/worker-private-key.pem",
-  "tokenFilePath": "./secrets/worker-token.json",
-  "refreshSkewSeconds": 60
-}
-
