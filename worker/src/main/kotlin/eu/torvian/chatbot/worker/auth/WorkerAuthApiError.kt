@@ -7,9 +7,9 @@ sealed interface WorkerAuthApiError {
     /**
      * Indicates that the server could not find the worker identity referenced by the request.
      *
-     * @property workerId Worker identifier that was rejected by the server.
+     * @property workerUid Worker UID that was rejected by the server.
      */
-    data class WorkerNotFound(val workerId: Long) : WorkerAuthApiError
+    data class WorkerNotFound(val workerUid: String) : WorkerAuthApiError
 
     /**
      * Indicates that the server rejected the worker certificate credentials.

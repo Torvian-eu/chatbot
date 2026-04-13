@@ -17,13 +17,13 @@ import kotlin.time.Instant
 /**
  * Default [WorkerRuntime] that keeps the worker token authenticated and refreshed.
  *
- * @property workerId Worker ID used for logging.
+ * @property workerUid Worker UID used for logging.
  * @property refreshSkew Time before token expiration when a refresh should be attempted.
  * @property authManager Auth manager used for token retrieval and refresh.
  * @property nowProvider Provides current time for refresh scheduling. Defaults to system clock.
  */
 class WorkerRuntimeImpl(
-    private val workerId: Long,
+    private val workerUid: String,
     private val refreshSkew: Duration,
     private val authManager: WorkerAuthManager,
     private val nowProvider: () -> Instant = { Clock.System.now() }
@@ -39,7 +39,7 @@ class WorkerRuntimeImpl(
 
     override suspend fun run(runOnce: Boolean): Either<WorkerAuthManagerError, Unit> = either {
         val token = authManager.getValidToken().bind()
-        logger.info("Worker authenticated (workerId={}, expiresAt={})", workerId, token.expiresAt)
+        logger.info("Worker authenticated (workerUid={}, expiresAt={})", workerUid, token.expiresAt)
 
         if (runOnce) {
             logger.info("--once specified, exiting after authentication.")
@@ -56,7 +56,7 @@ class WorkerRuntimeImpl(
                 delay(sleepMs)
 
                 val refreshed = authManager.getValidToken().bind()
-                logger.info("Worker token checked/refreshed (workerId={}, expiresAt={})", workerId, refreshed.expiresAt)
+                logger.info("Worker token checked/refreshed (workerUid={}, expiresAt={})", workerUid, refreshed.expiresAt)
             }
         } catch (_: CancellationException) {
             logger.info("Worker shutdown requested")
