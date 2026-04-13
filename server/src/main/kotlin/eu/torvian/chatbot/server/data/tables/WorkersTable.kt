@@ -9,6 +9,7 @@ import org.jetbrains.exposed.v1.core.dao.id.LongIdTable
  * Stores ownership, certificate identity, and scopes for service principals.
  *
  * @property ownerUserId FK to the owning user.
+ * @property workerUid Public UID generated during worker setup.
  * @property displayName Human-readable worker label.
  * @property certificatePem Persisted PEM certificate.
  * @property certificateFingerprint Unique SHA-256 certificate fingerprint.
@@ -18,6 +19,7 @@ import org.jetbrains.exposed.v1.core.dao.id.LongIdTable
  */
 object WorkersTable : LongIdTable("workers") {
     val ownerUserId = reference("owner_user_id", UsersTable, onDelete = ReferenceOption.CASCADE)
+    val workerUid = varchar("worker_uid", 64).uniqueIndex()
     val displayName = varchar("display_name", 255)
     val certificatePem = text("certificate_pem")
     val certificateFingerprint = varchar("certificate_fingerprint", 255).uniqueIndex()

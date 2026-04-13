@@ -6,7 +6,7 @@ import kotlin.time.Instant
  * Persistence entity for a one-time worker challenge.
  *
  * @property challengeId Stable challenge identifier.
- * @property workerId Worker this challenge belongs to.
+ * @property workerId Internal worker row ID this challenge belongs to.
  * @property challenge Challenge message expected to be signed.
  * @property expiresAt Challenge expiration timestamp.
  * @property consumedAt Timestamp when challenge was consumed.

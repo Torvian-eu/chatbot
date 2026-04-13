@@ -1,0 +1,11 @@
+{
+  "worker": {
+    "serverBaseUrl": "https://localhost:8443/",
+    "workerUid": "",
+    "certificateFingerprint": "3b6bcc2fb96199bc23b4c253b9dba0d3940fa349b7a1ccf6c8a089297213ae29",
+    "secretsJsonPath": "./secrets.json",
+    "tokenFilePath": "./token.json",
+    "refreshSkewSeconds": 60
+  }
+}
+

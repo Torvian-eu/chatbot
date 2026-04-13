@@ -6,12 +6,12 @@ import kotlinx.serialization.Serializable
 /**
  * Response returned when a service-token challenge is issued for a worker.
  *
- * @property workerId Identifier of the worker that owns the challenge.
+ * @property workerUid Identifier of the worker that owns the challenge.
  * @property challenge One-time challenge that must be signed before token exchange.
  */
 @Serializable
 data class ServiceTokenChallengeResponse(
-    val workerId: Long,
+    val workerUid: String,
     val challenge: WorkerChallengeDto
 )
 

@@ -28,26 +28,26 @@ import org.apache.logging.log4j.Logger
 class KtorWorkerAuthApi(
     private val client: HttpClient
 ) : WorkerAuthApi {
-    override suspend fun createChallenge(workerId: Long, certificateFingerprint: String): Either<WorkerAuthApiError, ServiceTokenChallengeResponse> {
-        logger.debug("Requesting worker challenge (workerId={}, fingerprintSuffix={})", workerId, certificateFingerprint.takeLast(8))
-        return execute("create challenge", workerId) {
+    override suspend fun createChallenge(workerUid: String, certificateFingerprint: String): Either<WorkerAuthApiError, ServiceTokenChallengeResponse> {
+        logger.debug("Requesting worker challenge (workerUid={}, fingerprintSuffix={})", workerUid, certificateFingerprint.takeLast(8))
+        return execute("create challenge", workerUid) {
             client.post(AuthResource.ServiceTokenChallenge()) {
-                setBody(ServiceTokenChallengeRequest(workerId = workerId, certificateFingerprint = certificateFingerprint))
+                setBody(ServiceTokenChallengeRequest(workerUid = workerUid, certificateFingerprint = certificateFingerprint))
             }.body<ServiceTokenChallengeResponse>()
         }
     }
 
     override suspend fun exchangeServiceToken(
-        workerId: Long,
+        workerUid: String,
         challengeId: String,
         signatureBase64: String
     ): Either<WorkerAuthApiError, ServiceTokenResponse> {
-        logger.debug("Exchanging worker challenge for service token (workerId={}, challengeId={})", workerId, challengeId)
-        return execute("exchange service token", workerId) {
+        logger.debug("Exchanging worker challenge for service token (workerUid={}, challengeId={})", workerUid, challengeId)
+        return execute("exchange service token", workerUid) {
             client.post(AuthResource.ServiceToken()) {
                 setBody(
                     ServiceTokenRequest(
-                        workerId = workerId,
+                        workerUid = workerUid,
                         challengeId = challengeId,
                         signatureBase64 = signatureBase64
                     )
@@ -64,18 +64,18 @@ class KtorWorkerAuthApi(
      * logical auth failure.
      *
      * @param operation Human-readable operation name used for logging and mapping.
-     * @param workerId Worker identifier associated with the request.
+     * @param workerUid Worker UID associated with the request.
      * @param block HTTP call block to execute.
      * @return The successful value or a mapped worker-auth API error.
      */
-    private suspend fun <T> execute(operation: String, workerId: Long, block: suspend () -> T): Either<WorkerAuthApiError, T> {
+    private suspend fun <T> execute(operation: String, workerUid: String, block: suspend () -> T): Either<WorkerAuthApiError, T> {
         return try {
             block().right()
         } catch (e: ResponseException) {
             val bodyText = runCatching { e.response.bodyAsText() }.getOrNull()
-            mapHttpFailure(operation, workerId, e.response.status.value, bodyText).left()
+            mapHttpFailure(operation, workerUid, e.response.status.value, bodyText).left()
         } catch (e: Exception) {
-            logger.warn("Unexpected failure while {} for worker {}", operation, workerId, e)
+            logger.warn("Unexpected failure while {} for worker {}", operation, workerUid, e)
             WorkerAuthApiError.TransportFailure(operation, e.message ?: e::class.simpleName.orEmpty()).left()
         }
     }
@@ -84,17 +84,17 @@ class KtorWorkerAuthApi(
      * Maps an HTTP status and optional response body into a logical worker-auth error.
      *
      * @param operation Human-readable operation name.
-     * @param workerId Worker identifier associated with the request.
+     * @param workerUid Worker UID associated with the request.
      * @param statusCode HTTP status returned by the server.
      * @param responseBody Optional raw response body for diagnostics.
      * @return The logical auth API error corresponding to the HTTP response.
      */
-    private fun mapHttpFailure(operation: String, workerId: Long, statusCode: Int, responseBody: String?): WorkerAuthApiError {
+    private fun mapHttpFailure(operation: String, workerUid: String, statusCode: Int, responseBody: String?): WorkerAuthApiError {
         val description = responseBody?.takeIf { it.isNotBlank() }
 
         return when (statusCode) {
             // The server contract uses 404 when the worker identity is unknown.
-            404 -> WorkerAuthApiError.WorkerNotFound(workerId)
+            404 -> WorkerAuthApiError.WorkerNotFound(workerUid)
 
             // The server contract uses 401 when the worker certificate proof is rejected.
             401 -> WorkerAuthApiError.InvalidCredentials("$operation: invalid credentials")

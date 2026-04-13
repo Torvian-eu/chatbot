@@ -24,7 +24,7 @@ class WorkerAuthManagerTest {
         val api = FakeWorkerAuthApi()
 
         val manager: WorkerAuthManager = WorkerAuthManagerImpl(
-            workerId = 7L,
+            workerUid = "worker-7",
             certificateFingerprint = "fp",
             refreshSkew = 60.minutes,
             tokenStore = store,
@@ -47,7 +47,7 @@ class WorkerAuthManagerTest {
         val api = FakeWorkerAuthApi()
 
         val manager: WorkerAuthManager = WorkerAuthManagerImpl(
-            workerId = 7L,
+            workerUid = "worker-7",
             certificateFingerprint = "fp",
             refreshSkew = 1.minutes,
             tokenStore = store,
@@ -72,7 +72,7 @@ class WorkerAuthManagerTest {
         val api = FakeWorkerAuthApi()
 
         val manager: WorkerAuthManager = WorkerAuthManagerImpl(
-            workerId = 7L,
+            workerUid = "worker-7",
             certificateFingerprint = "fp",
             refreshSkew = 60.minutes,
             tokenStore = store,
@@ -95,7 +95,7 @@ class WorkerAuthManagerTest {
         val api = FakeWorkerAuthApi()
 
         val manager: WorkerAuthManager = WorkerAuthManagerImpl(
-            workerId = 7L,
+            workerUid = "worker-7",
             certificateFingerprint = "fp",
             refreshSkew = 1.minutes,
             tokenStore = store,
@@ -115,10 +115,10 @@ class WorkerAuthManagerTest {
     @Test
     fun `propagates logical auth errors from the API`() = runTest {
         val store = InMemoryTokenStore(null)
-        val api = FakeWorkerAuthApi(challengeError = WorkerAuthApiError.WorkerNotFound(999L))
+        val api = FakeWorkerAuthApi(challengeError = WorkerAuthApiError.WorkerNotFound("worker-999"))
 
         val manager: WorkerAuthManager = WorkerAuthManagerImpl(
-            workerId = 999L,
+            workerUid = "worker-999",
             certificateFingerprint = "fp",
             refreshSkew = 1.minutes,
             tokenStore = store,
@@ -139,7 +139,7 @@ class WorkerAuthManagerTest {
         val api = FakeWorkerAuthApi(challengeExpiresAt = Instant.parse("2026-04-10T10:59:00Z"))
 
         val manager: WorkerAuthManager = WorkerAuthManagerImpl(
-            workerId = 7L,
+            workerUid = "worker-7",
             certificateFingerprint = "fp",
             refreshSkew = 1.minutes,
             tokenStore = store,
@@ -162,7 +162,7 @@ class WorkerAuthManagerTest {
         val api = FakeWorkerAuthApi(challengeDelayMs = 50)
 
         val manager: WorkerAuthManager = WorkerAuthManagerImpl(
-            workerId = 7L,
+            workerUid = "worker-7",
             certificateFingerprint = "fp",
             refreshSkew = 1.minutes,
             tokenStore = store,
@@ -188,7 +188,7 @@ class WorkerAuthManagerTest {
         val api = FakeWorkerAuthApi()
 
         val manager: WorkerAuthManager = WorkerAuthManagerImpl(
-            workerId = 7L,
+            workerUid = "worker-7",
             certificateFingerprint = "fp",
             refreshSkew = 1.minutes,
             tokenStore = store,
@@ -212,7 +212,7 @@ class WorkerAuthManagerTest {
         val api = FakeWorkerAuthApi(challengePayload = "   ")
 
         val manager: WorkerAuthManager = WorkerAuthManagerImpl(
-            workerId = 7L,
+            workerUid = "worker-7",
             certificateFingerprint = "fp",
             refreshSkew = 1.minutes,
             tokenStore = store,
@@ -235,7 +235,7 @@ class WorkerAuthManagerTest {
         val api = FakeWorkerAuthApi()
 
         val manager: WorkerAuthManager = WorkerAuthManagerImpl(
-            workerId = 7L,
+            workerUid = "worker-7",
             certificateFingerprint = "fp",
             refreshSkew = 1.minutes,
             tokenStore = store,
@@ -257,7 +257,7 @@ class WorkerAuthManagerTest {
         val api = FakeWorkerAuthApi(exchangeError = WorkerAuthApiError.InvalidCredentials("nope"))
 
         val manager: WorkerAuthManager = WorkerAuthManagerImpl(
-            workerId = 7L,
+            workerUid = "worker-7",
             certificateFingerprint = "fp",
             refreshSkew = 1.minutes,
             tokenStore = store,
@@ -281,7 +281,7 @@ class WorkerAuthManagerTest {
         val api = FakeWorkerAuthApi()
 
         val manager: WorkerAuthManager = WorkerAuthManagerImpl(
-            workerId = 7L,
+            workerUid = "worker-7",
             certificateFingerprint = "fp",
             refreshSkew = 1.minutes,
             tokenStore = store,
@@ -304,7 +304,7 @@ class WorkerAuthManagerTest {
         val api = FakeWorkerAuthApi()
 
         val manager: WorkerAuthManager = WorkerAuthManagerImpl(
-            workerId = 7L,
+            workerUid = "worker-7",
             certificateFingerprint = "fp",
             refreshSkew = 1.minutes,
             tokenStore = store,
@@ -327,7 +327,7 @@ class WorkerAuthManagerTest {
         val api = FakeWorkerAuthApi()
 
         val manager: WorkerAuthManager = WorkerAuthManagerImpl(
-            workerId = 7L,
+            workerUid = "worker-7",
             certificateFingerprint = "fp",
             refreshSkew = 1.minutes,
             tokenStore = store,
@@ -379,7 +379,7 @@ class WorkerAuthManagerTest {
         var challengeCalls = 0
         var exchangeCalls = 0
 
-        override suspend fun createChallenge(workerId: Long, certificateFingerprint: String): Either<WorkerAuthApiError, ServiceTokenChallengeResponse> {
+        override suspend fun createChallenge(workerUid: String, certificateFingerprint: String): Either<WorkerAuthApiError, ServiceTokenChallengeResponse> {
             challengeCalls++
             challengeError?.let { return Either.Left(it) }
             if (challengeDelayMs > 0) {
@@ -387,7 +387,7 @@ class WorkerAuthManagerTest {
             }
             return Either.Right(
                 ServiceTokenChallengeResponse(
-                    workerId = workerId,
+                    workerUid = workerUid,
                     challenge = WorkerChallengeDto(
                         challengeId = "challenge-1",
                         challenge = challengePayload,
@@ -398,7 +398,7 @@ class WorkerAuthManagerTest {
         }
 
         override suspend fun exchangeServiceToken(
-            workerId: Long,
+            workerUid: String,
             challengeId: String,
             signatureBase64: String
         ): Either<WorkerAuthApiError, ServiceTokenResponse> {
@@ -409,7 +409,8 @@ class WorkerAuthManagerTest {
                     accessToken = "fresh-token",
                     expiresAt = Instant.parse("2026-04-10T12:00:00Z"),
                     worker = WorkerDto(
-                        id = workerId,
+                        id = 10L,
+                        workerUid = workerUid,
                         ownerUserId = 1L,
                         displayName = "test-worker",
                         certificateFingerprint = "fp",

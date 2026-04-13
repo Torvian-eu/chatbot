@@ -25,7 +25,7 @@ class WorkerRuntimeImplTest {
             responses = mutableListOf(Either.Right(tokenAt("2026-04-10T12:00:00Z")))
         )
         val runtime = WorkerRuntimeImpl(
-            workerId = 7L,
+            workerUid = "worker-7",
             refreshSkew = 60.seconds,
             authManager = manager,
             nowProvider = { Instant.parse("2026-04-10T11:00:00Z") }
@@ -47,7 +47,7 @@ class WorkerRuntimeImplTest {
             )
         )
         val runtime = WorkerRuntimeImpl(
-            workerId = 7L,
+            workerUid = "worker-7",
             refreshSkew = 60.seconds,
             authManager = manager,
             nowProvider = { Instant.parse("2026-04-10T11:00:00Z") }
@@ -79,7 +79,7 @@ class WorkerRuntimeImplTest {
             )
         )
         val runtime = WorkerRuntimeImpl(
-            workerId = 7L,
+            workerUid = "worker-7",
             refreshSkew = 60.seconds,
             authManager = manager,
             nowProvider = { Instant.parse("2026-04-10T11:00:00Z") }
@@ -98,7 +98,7 @@ class WorkerRuntimeImplTest {
             responses = mutableListOf(Either.Left(WorkerAuthManagerError.BlankChallengePayload))
         )
         val runtime = WorkerRuntimeImpl(
-            workerId = 7L,
+            workerUid = "worker-7",
             refreshSkew = 60.seconds,
             authManager = manager,
             nowProvider = { Instant.parse("2026-04-10T11:00:00Z") }

@@ -47,7 +47,7 @@ fun workerModule(
     single<ChallengeSigner> { PemChallengeSigner(privateKeyPem) }
     single<WorkerAuthManager> {
         WorkerAuthManagerImpl(
-            workerId = config.workerId,
+            workerUid = config.workerUid,
             certificateFingerprint = config.certificateFingerprint,
             refreshSkew = config.refreshSkewSeconds.seconds,
             tokenStore = get(),
@@ -57,7 +57,7 @@ fun workerModule(
     }
     single<WorkerRuntime> {
         WorkerRuntimeImpl(
-            workerId = config.workerId,
+            workerUid = config.workerUid,
             refreshSkew = config.refreshSkewSeconds.seconds,
             authManager = get()
         )

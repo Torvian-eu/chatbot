@@ -18,7 +18,7 @@ import kotlin.time.Instant
  * token is considered too close to expiry, it falls back to the certificate challenge flow,
  * persists the newly issued token, and returns that token to the caller.
  *
- * @property workerId Stable worker identifier used for auth requests.
+ * @property workerUid Stable worker UID used for auth requests.
  * @property certificateFingerprint Fingerprint proving which worker identity is being authenticated.
  * @property refreshSkew Amount of time to refresh before expiry.
  * @property tokenStore Persistence abstraction for the cached service token.
@@ -27,7 +27,7 @@ import kotlin.time.Instant
  * @property nowProvider Clock abstraction used to evaluate expiry in tests.
  */
 class WorkerAuthManagerImpl(
-    private val workerId: Long,
+    private val workerUid: String,
     private val certificateFingerprint: String,
     private val refreshSkew: Duration,
     private val tokenStore: ServiceTokenStore,
@@ -44,7 +44,7 @@ class WorkerAuthManagerImpl(
     suspend fun getValidToken(): Either<WorkerAuthManagerError, StoredServiceToken> = either {
         val existing = loadCachedTokenRecoveringCorruption().bind()
         if (existing != null && !shouldRefresh(existing)) {
-            logger.debug("Using cached worker token (workerId={})", workerId)
+            logger.debug("Using cached worker token (workerUid={})", workerUid)
             return@either existing
         }
 
@@ -52,10 +52,10 @@ class WorkerAuthManagerImpl(
             either<WorkerAuthManagerError, StoredServiceToken> {
                 val reloaded = loadCachedTokenRecoveringCorruption().bind()
                 if (reloaded != null && !shouldRefresh(reloaded)) {
-                    logger.debug("Using cached worker token after lock re-check (workerId={})", workerId)
+                    logger.debug("Using cached worker token after lock re-check (workerUid={})", workerUid)
                     reloaded
                 } else {
-                    logger.info("Cached worker token missing or expired; starting challenge flow (workerId={})", workerId)
+                    logger.info("Cached worker token missing or expired; starting challenge flow (workerUid={})", workerUid)
                     authenticateWithChallengeFlow().bind()
                 }
             }
@@ -66,7 +66,7 @@ class WorkerAuthManagerImpl(
     suspend fun forceReauthenticate(): Either<WorkerAuthManagerError, StoredServiceToken> = either {
         authMutex.withLock {
             either {
-                logger.info("Forcing worker re-authentication (workerId={})", workerId)
+                logger.info("Forcing worker re-authentication (workerUid={})", workerUid)
                 tokenStore.clear().mapLeft { WorkerAuthManagerError.TokenStore(it) }.bind()
                 authenticateWithChallengeFlow().bind()
             }
@@ -84,7 +84,7 @@ class WorkerAuthManagerImpl(
             is Either.Left -> {
                 val error = loadResult.value
                 if (error is ServiceTokenStoreError.TokenCacheCorrupt) {
-                    logger.warn("Worker token cache is corrupt; clearing and reauthenticating (workerId={})", workerId)
+                            logger.warn("Worker token cache is corrupt; clearing and reauthenticating (workerUid={})", workerUid)
                     tokenStore.clear()
                         .mapLeft { WorkerAuthManagerError.TokenStore(it) }
                         .map { null }
@@ -106,7 +106,7 @@ class WorkerAuthManagerImpl(
      */
     private suspend fun authenticateWithChallengeFlow(): Either<WorkerAuthManagerError, StoredServiceToken> = either {
         // Ask the server for a one-time challenge that proves ownership of the worker certificate.
-        val challengeResponse = authApi.createChallenge(workerId = workerId, certificateFingerprint = certificateFingerprint)
+        val challengeResponse = authApi.createChallenge(workerUid = workerUid, certificateFingerprint = certificateFingerprint)
             .mapLeft { WorkerAuthManagerError.AuthApi(it) }
             .bind()
         val challenge = challengeResponse.challenge
@@ -126,15 +126,15 @@ class WorkerAuthManagerImpl(
         }
 
         // Sign the challenge payload with the private key stored for this worker instance.
-        logger.debug("Signing worker challenge (workerId={}, challengeId={})", workerId, challenge.challengeId)
+        logger.debug("Signing worker challenge (workerUid={}, challengeId={})", workerUid, challenge.challengeId)
         val signature = signer.sign(challenge.challenge)
             .mapLeft { WorkerAuthManagerError.ChallengeSigner(it) }
             .bind()
 
         // Exchange the signed challenge for the actual short-lived service token.
-        logger.debug("Submitting signed worker challenge (workerId={}, challengeId={})", workerId, challenge.challengeId)
+        logger.debug("Submitting signed worker challenge (workerUid={}, challengeId={})", workerUid, challenge.challengeId)
         val tokenResponse = authApi.exchangeServiceToken(
-            workerId = workerId,
+            workerUid = workerUid,
             challengeId = challenge.challengeId,
             signatureBase64 = signature
         ).mapLeft { WorkerAuthManagerError.AuthApi(it) }.bind()
@@ -144,7 +144,7 @@ class WorkerAuthManagerImpl(
             expiresAt = tokenResponse.expiresAt
         )
         tokenStore.save(storedToken).mapLeft { WorkerAuthManagerError.TokenStore(it) }.bind()
-        logger.info("Stored new worker token (workerId={}, expiresAt={})", workerId, storedToken.expiresAt)
+        logger.info("Stored new worker token (workerUid={}, expiresAt={})", workerUid, storedToken.expiresAt)
         storedToken
     }
 

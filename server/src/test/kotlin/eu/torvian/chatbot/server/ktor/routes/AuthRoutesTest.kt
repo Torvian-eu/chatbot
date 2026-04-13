@@ -560,7 +560,7 @@ class AuthRoutesTest {
             contentType(ContentType.Application.Json)
             setBody(
                 ServiceTokenChallengeRequest(
-                    workerId = fixture.workerId,
+                    workerUid = fixture.workerUid,
                     certificateFingerprint = fixture.fingerprint
                 )
             )
@@ -568,9 +568,9 @@ class AuthRoutesTest {
 
         assertEquals(HttpStatusCode.OK, response.status)
         val body = response.body<ServiceTokenChallengeResponse>()
-        assertEquals(fixture.workerId, body.workerId)
+        assertEquals(fixture.workerUid, body.workerUid)
         assertTrue(body.challenge.challengeId.isNotBlank())
-        assertTrue(body.challenge.challenge.startsWith("worker:${fixture.workerId}:"))
+        assertTrue(body.challenge.challenge.startsWith("worker:${fixture.workerUid}:"))
     }
 
     @Test
@@ -581,7 +581,7 @@ class AuthRoutesTest {
             contentType(ContentType.Application.Json)
             setBody(
                 ServiceTokenChallengeRequest(
-                    workerId = fixture.workerId + 1,
+                    workerUid = "${fixture.workerUid}-other",
                     certificateFingerprint = fixture.fingerprint
                 )
             )
@@ -601,7 +601,7 @@ class AuthRoutesTest {
             contentType(ContentType.Application.Json)
             setBody(
                 ServiceTokenChallengeRequest(
-                    workerId = fixture.workerId,
+                    workerUid = fixture.workerUid,
                     certificateFingerprint = fixture.fingerprint
                 )
             )
@@ -614,7 +614,7 @@ class AuthRoutesTest {
             contentType(ContentType.Application.Json)
             setBody(
                 ServiceTokenRequest(
-                    workerId = fixture.workerId,
+                    workerUid = fixture.workerUid,
                     challengeId = challengeBody.challenge.challengeId,
                     signatureBase64 = signatureBase64
                 )
@@ -623,7 +623,7 @@ class AuthRoutesTest {
 
         assertEquals(HttpStatusCode.OK, response.status)
         val tokenBody = response.body<ServiceTokenResponse>()
-        assertEquals(fixture.workerId, tokenBody.worker.id)
+        assertEquals(fixture.workerUid, tokenBody.worker.workerUid)
         assertEquals(testUser.id, tokenBody.worker.ownerUserId)
         assertEquals(listOf("messages:read"), tokenBody.worker.allowedScopes)
 
@@ -648,7 +648,7 @@ class AuthRoutesTest {
             contentType(ContentType.Application.Json)
             setBody(
                 ServiceTokenChallengeRequest(
-                    workerId = fixture.workerId,
+                    workerUid = fixture.workerUid,
                     certificateFingerprint = fixture.fingerprint
                 )
             )
@@ -665,7 +665,7 @@ class AuthRoutesTest {
             contentType(ContentType.Application.Json)
             setBody(
                 ServiceTokenRequest(
-                    workerId = fixture.workerId,
+                    workerUid = fixture.workerUid,
                     challengeId = challengeBody.challenge.challengeId,
                     signatureBase64 = invalidSignature
                 )
@@ -684,7 +684,7 @@ class AuthRoutesTest {
             contentType(ContentType.Application.Json)
             setBody(
                 ServiceTokenRequest(
-                    workerId = 9999,
+                    workerUid = "missing-worker",
                     challengeId = "missing",
                     signatureBase64 = "invalid"
                 )
@@ -793,6 +793,7 @@ class AuthRoutesTest {
 
     private data class WorkerCredentialFixture(
         val workerId: Long,
+        val workerUid: String,
         val fingerprint: String,
         val privateKey: PrivateKey
     )
@@ -810,6 +811,7 @@ class AuthRoutesTest {
 
         val worker = workerService.registerWorker(
             ownerUserId = ownerUserId,
+            workerUid = "worker-route-test",
             displayName = "route-test-worker",
             certificatePem = certificatePem,
             allowedScopes = listOf("messages:read")
@@ -818,6 +820,7 @@ class AuthRoutesTest {
 
         return WorkerCredentialFixture(
             workerId = worker.id,
+            workerUid = worker.workerUid,
             fingerprint = fingerprint,
             privateKey = keyPair.private
         )

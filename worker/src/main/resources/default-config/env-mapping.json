@@ -1,0 +1,21 @@
+{
+  /*
+    Environment Variable Mapping
+    The values below are the NAMES of the environment variables
+    that will be looked up in the system environment.
+  */
+
+  "setup": {
+    "required": "CHATBOT_WORKER_SETUP_REQUIRED"
+  },
+
+  "worker": {
+    "serverBaseUrl": "WORKER_SERVER_BASE_URL",
+    "workerUid": "WORKER_UID",
+    "certificateFingerprint": "WORKER_CERTIFICATE_FINGERPRINT",
+    "secretsJsonPath": "WORKER_SECRETS_JSON_PATH",
+    "tokenFilePath": "WORKER_TOKEN_FILE_PATH",
+    "refreshSkewSeconds": "WORKER_REFRESH_SKEW_SECONDS"
+  }
+}
+

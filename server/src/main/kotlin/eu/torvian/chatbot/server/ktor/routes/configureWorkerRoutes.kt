@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.server.ktor.routes
 
+import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.WorkerResource
@@ -33,25 +34,28 @@ fun Route.configureWorkerRoutes(
             call.respondEither(
                 workerService.registerWorker(
                     ownerUserId = ownerUserId,
+                    workerUid = request.workerUid,
                     displayName = request.displayName,
                     certificatePem = request.certificatePem,
                     allowedScopes = request.allowedScopes
-                ).map { worker ->
-                    RegisterWorkerResponse(worker = worker)
-                },
+                ).map { worker -> RegisterWorkerResponse(worker = worker) }
+                    .mapLeft { it.toApiError() },
                 HttpStatusCode.Created
-            ) { error ->
-                when (error) {
-                    is RegisterWorkerError.InvalidInput,
-                    is RegisterWorkerError.InvalidCertificate ->
-                        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid worker registration", "reason" to error.toString())
-
-                    is RegisterWorkerError.CertificateAlreadyRegistered ->
-                        apiError(CommonApiErrorCodes.ALREADY_EXISTS, "Certificate already registered")
-                }
-            }
+            )
         }
     }
+}
+
+private fun RegisterWorkerError.toApiError(): ApiError = when (this) {
+    is RegisterWorkerError.InvalidInput,
+    is RegisterWorkerError.InvalidCertificate ->
+        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid worker registration", "reason" to toString())
+
+    is RegisterWorkerError.CertificateAlreadyRegistered ->
+        apiError(CommonApiErrorCodes.ALREADY_EXISTS, "Certificate already registered")
+
+    is RegisterWorkerError.WorkerUidAlreadyRegistered ->
+        apiError(CommonApiErrorCodes.ALREADY_EXISTS, "Worker UID already registered")
 }
 
 

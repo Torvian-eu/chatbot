@@ -32,6 +32,14 @@ class WorkerCliParserTest {
     }
 
     @Test
+    fun `parses setup overrides`() {
+        val options = WorkerCliParser.parse(arrayOf("--setup", "--server-url=https://localhost:8443/"))
+
+        assertTrue(options.setup)
+        assertEquals("https://localhost:8443/", options.serverUrlOverride)
+    }
+
+    @Test
     fun `ignores unknown flags without failing`() {
         val options = WorkerCliParser.parse(arrayOf("--unknown=42", "--no-op"))
 

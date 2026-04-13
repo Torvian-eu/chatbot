@@ -8,6 +8,7 @@ import eu.torvian.chatbot.server.data.entities.WorkerEntity
  */
 fun WorkerEntity.toWorkerDto(): WorkerDto = WorkerDto(
     id = this.id,
+    workerUid = this.workerUid,
     ownerUserId = this.ownerUserId,
     displayName = this.displayName,
     certificateFingerprint = this.certificateFingerprint,

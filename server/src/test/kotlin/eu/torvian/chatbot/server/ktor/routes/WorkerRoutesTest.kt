@@ -89,6 +89,7 @@ class WorkerRoutesTest {
             contentType(ContentType.Application.Json)
             setBody(
                 RegisterWorkerRequest(
+                    workerUid = "worker-route-test",
                     displayName = "build-agent",
                     certificatePem = fixture.certificatePem,
                     allowedScopes = listOf("messages:read")
@@ -112,6 +113,7 @@ class WorkerRoutesTest {
             contentType(ContentType.Application.Json)
             setBody(
                 RegisterWorkerRequest(
+                    workerUid = "worker-route-test",
                     displayName = "build-agent",
                     certificatePem = fixture.certificatePem,
                     allowedScopes = listOf("messages:read")
@@ -131,6 +133,7 @@ class WorkerRoutesTest {
             contentType(ContentType.Application.Json)
             setBody(
                 RegisterWorkerRequest(
+                    workerUid = "worker-route-test",
                     displayName = "build-agent",
                     certificatePem = "not-a-valid-certificate",
                     allowedScopes = listOf("messages:read")
@@ -150,6 +153,7 @@ class WorkerRoutesTest {
         val fixture = createCertificateFixture()
 
         val request = RegisterWorkerRequest(
+            workerUid = "worker-route-test",
             displayName = "build-agent",
             certificatePem = fixture.certificatePem,
             allowedScopes = listOf("messages:read")

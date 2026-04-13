@@ -35,11 +35,12 @@ class WorkerDaoExposed(
 ) : WorkerDao {
     override suspend fun createWorker(
         ownerUserId: Long,
+        workerUid: String,
         displayName: String,
         certificatePem: String,
         certificateFingerprint: String,
         allowedScopes: List<String>
-    ): Either<WorkerError.DuplicateCertificateFingerprint, WorkerEntity> =
+    ): Either<WorkerError, WorkerEntity> =
         transactionScope.transaction {
             either {
                 catch({
@@ -48,6 +49,7 @@ class WorkerDaoExposed(
                     val allowedScopesJson = Json.encodeToString(allowedScopes.distinct())
                     val inserted = WorkersTable.insert {
                         it[WorkersTable.ownerUserId] = ownerUserId
+                        it[WorkersTable.workerUid] = workerUid
                         it[WorkersTable.displayName] = displayName
                         it[WorkersTable.certificatePem] = certificatePem
                         it[WorkersTable.certificateFingerprint] = certificateFingerprint
@@ -57,11 +59,13 @@ class WorkerDaoExposed(
                     inserted.resultedValues?.first()?.toWorkerEntity()
                         ?: throw IllegalStateException("Failed to create worker")
                 }) { e: ExposedSQLException ->
-                    when {
-                        e.isUniqueConstraintViolation() ->
-                            raise(WorkerError.DuplicateCertificateFingerprint(certificateFingerprint))
-
-                        else -> throw e
+                    if (e.isUniqueConstraintViolation()) {
+                        when {
+                            e.message?.contains("worker_uid", ignoreCase = true) == true -> raise(WorkerError.DuplicateWorkerUid(workerUid))
+                            else -> raise(WorkerError.DuplicateCertificateFingerprint(certificateFingerprint))
+                        }
+                    } else {
+                        throw e
                     }
                 }
             }
@@ -74,6 +78,15 @@ class WorkerDaoExposed(
                 ?.toWorkerEntity()
                 ?.right()
                 ?: WorkerError.NotFound(workerId).left()
+        }
+
+    override suspend fun getWorkerByUid(workerUid: String): Either<WorkerError.UidNotFound, WorkerEntity> =
+        transactionScope.transaction {
+            WorkersTable.selectAll().where { WorkersTable.workerUid eq workerUid }
+                .singleOrNull()
+                ?.toWorkerEntity()
+                ?.right()
+                ?: WorkerError.UidNotFound(workerUid).left()
         }
 
     override suspend fun getWorkerByFingerprint(certificateFingerprint: String): WorkerEntity? =

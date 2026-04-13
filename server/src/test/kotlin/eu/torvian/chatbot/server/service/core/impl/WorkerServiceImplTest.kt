@@ -34,6 +34,7 @@ class WorkerServiceImplTest {
 
     private val testWorker = WorkerEntity(
         id = 10L,
+        workerUid = "worker-10",
         ownerUserId = 1L,
         displayName = "test-worker",
         certificatePem = "pem",
@@ -58,6 +59,7 @@ class WorkerServiceImplTest {
 
         val result = service.registerWorker(
             ownerUserId = 1L,
+            workerUid = "worker-7",
             displayName = "worker",
             certificatePem = "bad-cert",
             allowedScopes = emptyList()
@@ -71,19 +73,19 @@ class WorkerServiceImplTest {
     fun `createServiceTokenChallenge returns WorkerNotFound for mismatched fingerprint`() = runTest {
         coEvery { workerDao.getWorkerByFingerprint("different") } returns null
 
-        val result = service.createServiceTokenChallenge(10L, "different")
+        val result = service.createServiceTokenChallenge("worker-10", "different")
 
         assertTrue(result.isLeft())
-        assertEquals(AuthenticateWorkerError.WorkerNotFound(10L), result.leftOrNull())
+        assertEquals(AuthenticateWorkerError.WorkerNotFound("worker-10"), result.leftOrNull())
     }
 
     @Test
     fun `authenticateWorker returns InvalidChallenge when challenge is missing`() = runTest {
-        coEvery { workerDao.getWorkerById(10L) } returns testWorker.right()
+        coEvery { workerDao.getWorkerByUid("worker-10") } returns testWorker.right()
         coEvery { workerDao.getChallenge(10L, "missing", any()) } returns
             WorkerError.InvalidChallenge("missing").left()
 
-        val result = service.authenticateWorker(10L, "missing", "sig")
+        val result = service.authenticateWorker("worker-10", "missing", "sig")
 
         assertTrue(result.isLeft())
         assertEquals(AuthenticateWorkerError.InvalidChallenge("missing"), result.leftOrNull())
