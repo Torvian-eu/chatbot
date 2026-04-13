@@ -37,13 +37,15 @@ class WorkerServiceImpl(
 
     override suspend fun registerWorker(
         ownerUserId: Long,
+        workerUid: String,
         displayName: String,
         certificatePem: String,
         allowedScopes: List<String>
     ): Either<RegisterWorkerError, WorkerDto> = transactionScope.transaction {
         either {
-            logger.debug("Registering worker request received (ownerUserId={}, displayName={})", ownerUserId, displayName)
+            logger.debug("Registering worker request received (ownerUserId={}, workerUid={}, displayName={})", ownerUserId, workerUid, displayName)
             ensure(displayName.isNotBlank()) { RegisterWorkerError.InvalidInput("displayName cannot be blank") }
+            ensure(workerUid.isNotBlank()) { RegisterWorkerError.InvalidInput("workerUid cannot be blank") }
 
             val certificate = try {
                 certificateService.parseCertificate(certificatePem)
@@ -53,12 +55,24 @@ class WorkerServiceImpl(
             }
 
             val fingerprint = certificateService.computeCertificateFingerprint(certificate)
-            val worker = withError({ error: WorkerError.DuplicateCertificateFingerprint ->
-                logger.warn("Worker registration failed: duplicate certificate fingerprint={}", error.fingerprint)
-                RegisterWorkerError.CertificateAlreadyRegistered(error.fingerprint)
+            val worker = withError({ error: WorkerError ->
+                when (error) {
+                    is WorkerError.DuplicateCertificateFingerprint -> {
+                        logger.warn("Worker registration failed: duplicate certificate fingerprint={}", error.fingerprint)
+                        RegisterWorkerError.CertificateAlreadyRegistered(error.fingerprint)
+                    }
+
+                    is WorkerError.DuplicateWorkerUid -> {
+                        logger.warn("Worker registration failed: duplicate workerUid={}", error.workerUid)
+                        RegisterWorkerError.WorkerUidAlreadyRegistered(error.workerUid)
+                    }
+
+                    else -> error("Unexpected worker DAO error during registration: $error")
+                }
             }) {
                 workerDao.createWorker(
                     ownerUserId = ownerUserId,
+                    workerUid = workerUid.trim(),
                     displayName = displayName.trim(),
                     certificatePem = certificatePem,
                     certificateFingerprint = fingerprint,
@@ -66,29 +80,29 @@ class WorkerServiceImpl(
                 ).bind()
             }
 
-            logger.info("Worker registered successfully (workerId={}, ownerUserId={})", worker.id, worker.ownerUserId)
+            logger.info("Worker registered successfully (workerUid={}, ownerUserId={})", worker.workerUid, worker.ownerUserId)
             worker.toWorkerDto()
         }
     }
 
     override suspend fun authenticateWorker(
-        workerId: Long,
+        workerUid: String,
         challengeId: String,
         signatureBase64: String
     ): Either<AuthenticateWorkerError, WorkerDto> = transactionScope.transaction {
         either {
-            logger.debug("Authenticating worker (workerId={}, challengeId={})", workerId, challengeId)
-            val worker = withError({ _: WorkerError.NotFound -> AuthenticateWorkerError.WorkerNotFound(workerId) }) {
-                workerDao.getWorkerById(workerId).bind()
+            logger.debug("Authenticating worker (workerUid={}, challengeId={})", workerUid, challengeId)
+            val worker = withError({ _: WorkerError.UidNotFound -> AuthenticateWorkerError.WorkerNotFound(workerUid) }) {
+                workerDao.getWorkerByUid(workerUid).bind()
             }
 
             val challenge = withError({ _: WorkerError.InvalidChallenge -> AuthenticateWorkerError.InvalidChallenge(challengeId) }) {
-                workerDao.getChallenge(workerId, challengeId, System.currentTimeMillis()).bind()
+                workerDao.getChallenge(worker.id, challengeId, System.currentTimeMillis()).bind()
             }
 
             val cert = certificateService.parseCertificate(worker.certificatePem)
             if (!certificateService.verifySignature(challenge.challenge, signatureBase64, cert)) {
-                logger.warn("Worker authentication failed: invalid signature (workerId={}, challengeId={})", workerId, challengeId)
+                logger.warn("Worker authentication failed: invalid signature (workerUid={}, challengeId={})", workerUid, challengeId)
                 raise(AuthenticateWorkerError.InvalidSignature("Signature verification failed"))
             }
 
@@ -96,46 +110,47 @@ class WorkerServiceImpl(
                 workerDao.consumeChallenge(challengeId).bind()
             }
 
-            workerDao.updateLastSeen(workerId, System.currentTimeMillis())
-            logger.info("Worker authenticated successfully (workerId={})", workerId)
+            workerDao.updateLastSeen(worker.id, System.currentTimeMillis())
+            logger.info("Worker authenticated successfully (workerUid={})", workerUid)
 
             worker.toWorkerDto()
         }
     }
 
     override suspend fun createServiceTokenChallenge(
-        workerId: Long,
+        workerUid: String,
         certificateFingerprint: String
     ): Either<AuthenticateWorkerError, WorkerChallengeDto> =
         transactionScope.transaction {
             either {
-                logger.debug("Creating service token challenge (workerId={})", workerId)
+                logger.debug("Creating service token challenge (workerUid={})", workerUid)
                 val worker = workerDao.getWorkerByFingerprint(certificateFingerprint)
                     ?: run {
                         logger.warn("Challenge request failed: unknown fingerprint")
-                        raise(AuthenticateWorkerError.WorkerNotFound(workerId))
+                        raise(AuthenticateWorkerError.WorkerNotFound(workerUid))
                     }
 
                 // Keep challenge issuance scoped to the caller-provided worker identity.
-                ensure(worker.id == workerId) {
-                    logger.warn("Challenge request identity mismatch (workerId={})", workerId)
-                    AuthenticateWorkerError.WorkerNotFound(workerId)
+                ensure(worker.workerUid == workerUid) {
+                    logger.warn("Challenge request identity mismatch (workerUid={})", workerUid)
+                    AuthenticateWorkerError.WorkerNotFound(workerUid)
                 }
 
-                createChallenge(workerId)
+                createChallenge(worker.id, worker.workerUid)
             }
         }
 
     /**
      * @param workerId Worker identifier.
+     * @param workerUid Public worker UID.
      * @return Generated challenge DTO.
      */
-    private suspend fun createChallenge(workerId: Long): WorkerChallengeDto {
+    private suspend fun createChallenge(workerId: Long, workerUid: String): WorkerChallengeDto {
         val now = Clock.System.now()
         val expiresAt = now.plus(CHALLENGE_TTL)
         val challengeId = randomId()
         // Challenge payload is deterministic enough for auditing and signature verification.
-        val challenge = "worker:$workerId:${challengeId}:${now.toEpochMilliseconds()}"
+        val challenge = "worker:$workerUid:${challengeId}:${now.toEpochMilliseconds()}"
 
         workerDao.createChallenge(
             workerId = workerId,
@@ -144,7 +159,7 @@ class WorkerServiceImpl(
             expiresAtEpochMs = expiresAt.toEpochMilliseconds()
         )
 
-        logger.debug("Issued worker challenge (workerId={}, challengeId={})", workerId, challengeId)
+        logger.debug("Issued worker challenge (workerId={}, workerUid={}, challengeId={})", workerId, workerUid, challengeId)
 
         return WorkerChallengeDto(
             challengeId = challengeId,

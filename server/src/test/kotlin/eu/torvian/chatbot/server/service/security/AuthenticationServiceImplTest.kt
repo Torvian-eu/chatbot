@@ -130,6 +130,7 @@ class AuthenticationServiceImplTest {
         // Given
         val worker = WorkerEntity(
             id = 200L,
+            workerUid = "worker-200",
             ownerUserId = testUser.id,
             displayName = "worker-1",
             certificatePem = "pem",

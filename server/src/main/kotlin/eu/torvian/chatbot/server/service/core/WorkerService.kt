@@ -14,6 +14,7 @@ interface WorkerService {
      * Registers a new worker.
      *
      * @param ownerUserId Owning user identifier.
+     * @param workerUid Public worker UID generated during setup.
      * @param displayName Worker display name.
      * @param certificatePem PEM-encoded public certificate.
      * @param allowedScopes Logical worker scopes to persist.
@@ -21,6 +22,7 @@ interface WorkerService {
      */
     suspend fun registerWorker(
         ownerUserId: Long,
+        workerUid: String,
         displayName: String,
         certificatePem: String,
         allowedScopes: List<String>
@@ -29,13 +31,13 @@ interface WorkerService {
     /**
      * Authenticates a worker using a one-time challenge response.
      *
-     * @param workerId Worker identifier.
+     * @param workerUid Worker UID.
      * @param challengeId Challenge identifier.
      * @param signatureBase64 Base64-encoded challenge signature.
      * @return Either authentication error or the authenticated worker.
      */
     suspend fun authenticateWorker(
-        workerId: Long,
+        workerUid: String,
         challengeId: String,
         signatureBase64: String
     ): Either<AuthenticateWorkerError, WorkerDto>
@@ -43,12 +45,12 @@ interface WorkerService {
     /**
      * Creates a short-lived challenge used before service-token exchange.
      *
-     * @param workerId Worker identifier.
+     * @param workerUid Worker UID.
      * @param certificateFingerprint Certificate fingerprint for self-identifying challenge scope.
      * @return Either authentication-precheck error or a new service-token challenge.
      */
     suspend fun createServiceTokenChallenge(
-        workerId: Long,
+        workerUid: String,
         certificateFingerprint: String
     ): Either<AuthenticateWorkerError, WorkerChallengeDto>
 }

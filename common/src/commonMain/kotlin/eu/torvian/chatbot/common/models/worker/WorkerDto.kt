@@ -7,6 +7,7 @@ import kotlin.time.Instant
  * Public worker representation returned by worker/auth endpoints.
  *
  * @property id Stable worker identifier.
+ * @property workerUid Stable worker UID generated during setup and used by external APIs.
  * @property ownerUserId User that owns this worker registration.
  * @property displayName User-provided worker display name.
  * @property certificateFingerprint SHA-256 fingerprint used for certificate identity mapping.
@@ -17,6 +18,7 @@ import kotlin.time.Instant
 @Serializable
 data class WorkerDto(
     val id: Long,
+    val workerUid: String,
     val ownerUserId: Long,
     val displayName: String,
     val certificateFingerprint: String,

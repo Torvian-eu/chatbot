@@ -158,8 +158,8 @@ fun Route.configureAuthRoutes(
     post<AuthResource.ServiceTokenChallenge> {
         val request = call.receive<ServiceTokenChallengeRequest>()
         call.respondEither(
-            workerService.createServiceTokenChallenge(request.workerId, request.certificateFingerprint)
-                .map { ServiceTokenChallengeResponse(request.workerId, it) }
+            workerService.createServiceTokenChallenge(request.workerUid, request.certificateFingerprint)
+                .map { ServiceTokenChallengeResponse(request.workerUid, it) }
         ) { error ->
             when (error) {
                 is AuthenticateWorkerError.WorkerNotFound ->
@@ -175,7 +175,7 @@ fun Route.configureAuthRoutes(
     post<AuthResource.ServiceToken> {
         val request = call.receive<ServiceTokenRequest>()
         call.respondEither(
-            workerService.authenticateWorker(request.workerId, request.challengeId, request.signatureBase64)
+            workerService.authenticateWorker(request.workerUid, request.challengeId, request.signatureBase64)
                 .map { worker ->
                     val currentTime = System.currentTimeMillis()
                     val serviceTokenTtlMs = 15 * 60 * 1000L

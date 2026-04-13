@@ -6,6 +6,7 @@ import kotlin.time.Instant
  * Represents a row from the `workers` table.
  *
  * @property id Stable worker identifier.
+ * @property workerUid Public UID generated during worker setup.
  * @property ownerUserId User that owns this worker registration.
  * @property displayName User-provided worker display name.
  * @property certificatePem PEM-encoded X.509 certificate used for authentication.
@@ -16,6 +17,7 @@ import kotlin.time.Instant
  */
 data class WorkerEntity(
     val id: Long,
+    val workerUid: String,
     val ownerUserId: Long,
     val displayName: String,
     val certificatePem: String,

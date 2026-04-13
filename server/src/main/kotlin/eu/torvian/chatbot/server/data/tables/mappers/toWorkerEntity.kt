@@ -14,6 +14,7 @@ import kotlin.time.Instant
  */
 fun ResultRow.toWorkerEntity(): WorkerEntity = WorkerEntity(
     id = this[WorkersTable.id].value,
+    workerUid = this[WorkersTable.workerUid],
     ownerUserId = this[WorkersTable.ownerUserId].value,
     displayName = this[WorkersTable.displayName],
     certificatePem = this[WorkersTable.certificatePem],

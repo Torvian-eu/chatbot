@@ -13,6 +13,7 @@ interface WorkerDao {
      * Creates a new worker.
      *
      * @param ownerUserId Owning user identifier.
+     * @param workerUid Public worker UID generated during setup.
      * @param displayName Worker display name.
      * @param certificatePem PEM-encoded public certificate.
      * @param certificateFingerprint SHA-256 certificate fingerprint.
@@ -21,11 +22,12 @@ interface WorkerDao {
      */
     suspend fun createWorker(
         ownerUserId: Long,
+        workerUid: String,
         displayName: String,
         certificatePem: String,
         certificateFingerprint: String,
         allowedScopes: List<String>
-    ): Either<WorkerError.DuplicateCertificateFingerprint, WorkerEntity>
+    ): Either<WorkerError, WorkerEntity>
 
     /**
      * Retrieves a worker by identifier.
@@ -34,6 +36,14 @@ interface WorkerDao {
      * @return Either not-found error or the matching [WorkerEntity].
      */
     suspend fun getWorkerById(workerId: Long): Either<WorkerError.NotFound, WorkerEntity>
+
+    /**
+     * Retrieves a worker by public UID.
+     *
+     * @param workerUid Worker UID.
+     * @return Either not-found error or the matching [WorkerEntity].
+     */
+    suspend fun getWorkerByUid(workerUid: String): Either<WorkerError.UidNotFound, WorkerEntity>
 
     /**
      * Retrieves a worker by certificate fingerprint, if present.
