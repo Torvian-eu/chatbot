@@ -9,9 +9,13 @@ object WorkerCliParser {
     fun parse(args: Array<String>): WorkerCliOptions {
         val configPathOverride = args.firstOrNull { it.startsWith("--config=") }?.substringAfter("--config=")
         val runOnce = args.any { it == "--once" }
+        val setup = args.any { it == "--setup" }
+        val serverUrlOverride = args.firstOrNull { it.startsWith("--server-url=") }?.substringAfter("--server-url=")
         return WorkerCliOptions(
             configPathOverride = configPathOverride,
-            runOnce = runOnce
+            runOnce = runOnce,
+            setup = setup,
+            serverUrlOverride = serverUrlOverride
         )
     }
 }
