@@ -139,7 +139,7 @@ class AuthenticationServiceImplTest {
             createdAt = Instant.fromEpochMilliseconds(System.currentTimeMillis()),
             lastSeenAt = null
         )
-        val token = jwtConfig.generateServiceAccessToken(worker.id, worker.ownerUserId, listOf("messages:read"))
+        val token = jwtConfig.generateServiceAccessToken(worker.id, worker.workerUid, worker.ownerUserId, listOf("messages:read"))
         val decodedJWT = JWT.decode(token)
         val credential = JWTCredential(decodedJWT)
 
@@ -151,6 +151,7 @@ class AuthenticationServiceImplTest {
         // Then
         assertNotNull(result)
         assertEquals(worker.id, result.workerId)
+        assertEquals(worker.workerUid, result.workerUid)
         assertEquals(worker.ownerUserId, result.ownerUserId)
         assertEquals(listOf("messages:read"), result.scopes)
         assertEquals("service", decodedJWT.getClaim("principalType").asString())
@@ -439,6 +440,7 @@ class AuthenticationServiceImplTest {
         // Given
         val token = jwtConfig.generateServiceAccessToken(
             workerId = 200L,
+            workerUid = "worker-200",
             ownerUserId = testUser.id,
             scopes = listOf("messages:read")
         )

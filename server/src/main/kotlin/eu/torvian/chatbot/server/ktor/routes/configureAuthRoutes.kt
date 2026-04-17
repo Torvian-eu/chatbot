@@ -181,6 +181,7 @@ fun Route.configureAuthRoutes(
                     val serviceTokenTtlMs = 15 * 60 * 1000L
                     val token = jwtConfig.generateServiceAccessToken(
                         workerId = worker.id,
+                        workerUid = worker.workerUid,
                         ownerUserId = worker.ownerUserId,
                         scopes = worker.allowedScopes,
                         currentTime = currentTime,

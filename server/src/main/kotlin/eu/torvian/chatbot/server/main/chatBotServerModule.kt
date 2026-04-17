@@ -8,6 +8,11 @@ import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.koin.*
 import eu.torvian.chatbot.server.ktor.configureKtor
 import eu.torvian.chatbot.server.ktor.routes.ApiRoutesKtor
+import eu.torvian.chatbot.server.ktor.routes.configureWorkerWebSocketRoutes
+import eu.torvian.chatbot.server.worker.protocol.codec.WorkerServerWebSocketMessageCodec
+import eu.torvian.chatbot.server.worker.protocol.routing.WorkerServerIncomingMessageRouter
+import eu.torvian.chatbot.server.worker.command.pending.PendingWorkerCommandRegistry
+import eu.torvian.chatbot.server.worker.session.WorkerSessionRegistry
 import eu.torvian.chatbot.server.service.setup.InitializationCoordinator
 import eu.torvian.chatbot.server.utils.misc.DIContainerKey
 import io.ktor.http.*
@@ -132,7 +137,17 @@ fun Application.configureDatabase() {
  */
 fun Application.configureRouting() {
     val apiRoutesKtor: ApiRoutesKtor = get()
+    val workerSessionRegistry: WorkerSessionRegistry = get()
+    val workerMessageCodec: WorkerServerWebSocketMessageCodec = get()
+    val workerMessageRouter: WorkerServerIncomingMessageRouter = get()
+    val pendingWorkerCommandRegistry: PendingWorkerCommandRegistry = get()
     routing {
         apiRoutesKtor.configureAllRoutes(this)
+        configureWorkerWebSocketRoutes(
+            workerSessionRegistry = workerSessionRegistry,
+            messageCodec = workerMessageCodec,
+            messageRouter = workerMessageRouter,
+            pendingCommandRegistry = pendingWorkerCommandRegistry
+        )
     }
 }

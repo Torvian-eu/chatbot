@@ -342,6 +342,7 @@ class AuthenticationServiceImpl(
 
                 val workerId = credential.payload.getClaim("workerId")?.asLong()
                     ?: raise(TokenValidationError.InvalidClaims)
+                val claimedWorkerUid = credential.payload.getClaim("workerUid")?.asString()
                 val ownerUserId = credential.payload.getClaim("ownerUserId")?.asLong()
                     ?: raise(TokenValidationError.InvalidClaims)
                 val scopes = credential.payload.getClaim("scope")?.asList(String::class.java) ?: emptyList()
@@ -359,9 +360,14 @@ class AuthenticationServiceImpl(
                     logger.warn("Worker credential rejected: owner mismatch (workerId={})", workerId)
                     raise(TokenValidationError.InvalidClaims)
                 }
+                if (claimedWorkerUid != null && claimedWorkerUid != worker.workerUid) {
+                    logger.warn("Worker credential rejected: worker UID mismatch (workerId={})", workerId)
+                    raise(TokenValidationError.InvalidClaims)
+                }
 
                 val context = WorkerContext(
                     workerId = worker.id,
+                    workerUid = worker.workerUid,
                     ownerUserId = ownerUserId,
                     scopes = scopes,
                     tokenIssuedAt = issuedAt,
