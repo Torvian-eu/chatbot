@@ -83,7 +83,7 @@ class WorkerServerIncomingMessageRouter(
             }
 
             is Either.Right -> {
-                // The hello handler already sent the welcome frame and registered the live session.
+                // The hello handler already sent the welcome frame and marked the session ready.
             }
         }
     }

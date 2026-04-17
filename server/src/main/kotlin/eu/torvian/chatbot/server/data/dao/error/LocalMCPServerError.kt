@@ -3,9 +3,6 @@ package eu.torvian.chatbot.server.data.dao.error
 /**
  * Represents possible domain-specific errors that can occur during LocalMCPServer
  * data operations on the server side.
- *
- * Note: Server-side storage is minimal (ID + userId only). Full configuration
- * is stored client-side.
  */
 sealed interface LocalMCPServerError {
     /**

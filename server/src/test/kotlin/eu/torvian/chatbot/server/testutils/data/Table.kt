@@ -165,7 +165,7 @@ enum class Table {
     SESSION_TOOL_CONFIG,
 
     /**
-     * Table for storing local MCP server configurations (server-side ID generation).
+     * Table for storing full local MCP server configurations.
      */
     LOCAL_MCP_SERVERS,
 

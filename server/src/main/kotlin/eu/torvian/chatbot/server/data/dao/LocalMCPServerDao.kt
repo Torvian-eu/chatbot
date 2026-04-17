@@ -1,25 +1,77 @@
 package eu.torvian.chatbot.server.data.dao
 
 import arrow.core.Either
+import eu.torvian.chatbot.server.data.entities.CreateLocalMCPServerEntity
+import eu.torvian.chatbot.server.data.entities.LocalMCPServerEntity
+import eu.torvian.chatbot.server.data.entities.UpdateLocalMCPServerEntity
 import eu.torvian.chatbot.server.data.dao.error.DeleteLocalMCPServerError
 import eu.torvian.chatbot.server.data.dao.error.LocalMCPServerError
 
 /**
- * Data Access Object for LocalMCPServer entities (server-side minimal storage).
+ * Data Access Object for server-side Local MCP server storage.
  *
- * This DAO handles server-side operations for Local MCP Servers, which includes
- * ID generation and ownership tracking. Full MCP server configurations are stored
- * client-side using SQLDelight.
- *
- * Server-side storage schema:
- * - id: Long (PK, auto-generated)
- * - userId: Long (FK to UsersTable)
- * - isEnabled: Boolean (synced from client, default true)
- *
- * The server provides unique IDs that clients use to link tool definitions to
- * MCP servers consistently across the client and server databases.
+ * The server owns full Local MCP server configuration persistence, including
+ * worker assignment and environment variable metadata.
  */
 interface LocalMCPServerDao {
+    /**
+     * Creates a fully configured Local MCP server row.
+     *
+     * @param server Full create payload.
+     * @return Newly created persisted entity.
+     */
+    suspend fun createServer(server: CreateLocalMCPServerEntity): LocalMCPServerEntity
+
+    /**
+     * Updates a fully configured Local MCP server row.
+     *
+     * @param userId Owning user identifier used for authorization.
+     * @param serverId Server identifier to update.
+     * @param server Full update payload.
+     * @return Either unauthorized error or updated entity.
+     */
+    suspend fun updateServer(
+        userId: Long,
+        serverId: Long,
+        server: UpdateLocalMCPServerEntity
+    ): Either<LocalMCPServerError.Unauthorized, LocalMCPServerEntity>
+
+    /**
+     * Retrieves a Local MCP server by ID.
+     *
+     * @param serverId Server identifier.
+     * @return Either not-found error or matching entity.
+     */
+    suspend fun getServerById(serverId: Long): Either<LocalMCPServerError.NotFound, LocalMCPServerEntity>
+
+    /**
+     * Retrieves a Local MCP server for a specific owning user.
+     *
+     * @param userId Owning user identifier.
+     * @param serverId Server identifier.
+     * @return Either unauthorized error or matching entity.
+     */
+    suspend fun getServerByIdForUser(
+        userId: Long,
+        serverId: Long
+    ): Either<LocalMCPServerError.Unauthorized, LocalMCPServerEntity>
+
+    /**
+     * Lists all Local MCP servers owned by a user.
+     *
+     * @param userId Owning user identifier.
+     * @return User-owned Local MCP servers.
+     */
+    suspend fun getServersByUserId(userId: Long): List<LocalMCPServerEntity>
+
+    /**
+     * Lists all Local MCP servers assigned to a worker.
+     *
+     * @param workerId Worker identifier.
+     * @return Local MCP servers assigned to the worker.
+     */
+    suspend fun getServersByWorkerId(workerId: Long): List<LocalMCPServerEntity>
+
     /**
      * Creates a new Local MCP Server entry and stores the ownership and enabled state.
      *
@@ -32,6 +84,7 @@ interface LocalMCPServerDao {
      * @param isEnabled The initial enabled/disabled state (synced from client)
      * @return The generated server ID
      */
+    @Deprecated("Use createServer(CreateLocalMCPServerEntity)")
     suspend fun createServer(userId: Long, isEnabled: Boolean): Long
 
     /**
@@ -56,6 +109,7 @@ interface LocalMCPServerDao {
      * @param userId The ID of the user
      * @return List of server IDs owned by the user (empty list if none)
      */
+    @Deprecated("Use getServersByUserId")
     suspend fun getIdsByUserId(userId: Long): List<Long>
 
     /**
@@ -90,6 +144,7 @@ interface LocalMCPServerDao {
      * @param isEnabled The new enabled state
      * @return Either [LocalMCPServerError.NotFound] if not found, or Unit on success
      */
+    @Deprecated("Use updateServer")
     suspend fun setEnabled(serverId: Long, isEnabled: Boolean): Either<LocalMCPServerError.NotFound, Unit>
 }
 

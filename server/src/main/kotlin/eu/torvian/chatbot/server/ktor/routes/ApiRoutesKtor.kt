@@ -146,7 +146,7 @@ class ApiRoutesKtor(
     }
 
     /**
-     * Configures routes related to Local MCP Server ID management (/api/v1/mcp-servers).
+     * Configures routes related to Local MCP server configuration management (/api/v1/local-mcp-servers).
      */
     fun configureLocalMCPServerRoutes(route: Route) {
         route.configureLocalMCPServerRoutes(localMCPServerService)

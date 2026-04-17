@@ -18,7 +18,6 @@ import eu.torvian.chatbot.server.ktor.routes.configureWorkerWebSocketRoutes
 import eu.torvian.chatbot.server.service.core.WorkerService
 import eu.torvian.chatbot.server.service.security.CertificateService
 import eu.torvian.chatbot.server.worker.session.WorkerSessionRegistry
-import eu.torvian.chatbot.server.worker.command.pending.PendingWorkerCommandRegistry
 import eu.torvian.chatbot.server.testutils.auth.TestAuthHelper
 import eu.torvian.chatbot.server.testutils.auth.authenticate
 import eu.torvian.chatbot.server.testutils.data.Table
@@ -96,11 +95,19 @@ class WorkerServerWorkerWebSocketRoutesTest {
         )
     }
 
+    /**
+     * Releases the shared test container so each repetition gets a fresh database and DI graph.
+     */
     @AfterEach
     fun tearDown() = runTest {
         testDataManager.cleanup()
+        container.close()
     }
 
+    /**
+     * Verifies the worker hello handshake completes cleanly when the client receives the welcome
+     * frame concurrently with sending the initial hello frame.
+     */
     @Test
     fun `WS worker connect - authenticated worker completes hello welcome handshake`() = workerTestApplication {
         testDataManager.insertUser(ownerUser)
@@ -170,10 +177,8 @@ class WorkerServerWorkerWebSocketRoutesTest {
     }
 
     /**
-     * Verifies that hello payload identity is enforced against authenticated worker context.
-     *
-     * The worker presents a valid token but announces a different `workerUid` in `session.hello`,
-     * which must produce a policy-violation close and prevent session registration.
+     * Verifies that an authenticated worker is closed with a policy violation when the hello
+     * payload announces a different worker UID than the JWT-authenticated principal.
      */
     @Test
     fun `WS worker connect - hello worker uid mismatch is rejected`() = workerTestApplication {
