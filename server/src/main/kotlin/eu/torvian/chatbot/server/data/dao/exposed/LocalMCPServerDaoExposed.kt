@@ -7,9 +7,15 @@ import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.server.data.dao.LocalMCPServerDao
 import eu.torvian.chatbot.server.data.dao.error.DeleteLocalMCPServerError
 import eu.torvian.chatbot.server.data.dao.error.LocalMCPServerError
+import eu.torvian.chatbot.server.data.entities.CreateLocalMCPServerEntity
+import eu.torvian.chatbot.server.data.entities.LocalMCPServerEntity
+import eu.torvian.chatbot.server.data.entities.UpdateLocalMCPServerEntity
 import eu.torvian.chatbot.server.data.tables.LocalMCPServerTable
+import eu.torvian.chatbot.server.data.tables.mappers.toLocalMCPServerEntity
+import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.*
+import kotlin.time.Clock
 
 /**
  * Exposed implementation of the [LocalMCPServerDao].
@@ -22,6 +28,124 @@ class LocalMCPServerDaoExposed(
     private val transactionScope: TransactionScope
 ) : LocalMCPServerDao {
 
+    override suspend fun createServer(server: CreateLocalMCPServerEntity): LocalMCPServerEntity =
+        transactionScope.transaction {
+            val nowEpochMs = Clock.System.now().toEpochMilliseconds()
+            val insertedId = LocalMCPServerTable.insertAndGetId {
+                it[userId] = server.userId
+                it[workerId] = server.workerId
+                it[name] = server.name
+                it[description] = server.description
+                it[command] = server.command
+                it[argumentsJson] = Json.encodeToString(server.arguments)
+                it[workingDirectory] = server.workingDirectory
+                it[isEnabled] = server.isEnabled
+                it[autoStartOnEnable] = server.autoStartOnEnable
+                it[autoStartOnLaunch] = server.autoStartOnLaunch
+                it[autoStopAfterInactivitySeconds] = server.autoStopAfterInactivitySeconds
+                it[toolNamePrefix] = server.toolNamePrefix
+                it[environmentVariablesJson] = Json.encodeToString(server.environmentVariables)
+                it[secretEnvironmentVariablesJson] = Json.encodeToString(server.secretEnvironmentVariables)
+                it[createdAt] = nowEpochMs
+                it[updatedAt] = nowEpochMs
+            }.value
+
+            LocalMCPServerTable
+                .selectAll()
+                .where { LocalMCPServerTable.id eq insertedId }
+                .single()
+                .toLocalMCPServerEntity()
+        }
+
+    override suspend fun updateServer(
+        userId: Long,
+        serverId: Long,
+        server: UpdateLocalMCPServerEntity
+    ): Either<LocalMCPServerError.Unauthorized, LocalMCPServerEntity> =
+        transactionScope.transaction {
+            either {
+                val row = LocalMCPServerTable
+                    .selectAll()
+                    .where { LocalMCPServerTable.id eq serverId }
+                    .singleOrNull()
+
+                ensure(row?.get(LocalMCPServerTable.userId)?.value == userId) {
+                    LocalMCPServerError.Unauthorized(userId, serverId)
+                }
+
+                LocalMCPServerTable.update(where = { LocalMCPServerTable.id eq serverId }) {
+                    it[workerId] = server.workerId
+                    it[name] = server.name
+                    it[description] = server.description
+                    it[command] = server.command
+                    it[argumentsJson] = Json.encodeToString(server.arguments)
+                    it[workingDirectory] = server.workingDirectory
+                    it[isEnabled] = server.isEnabled
+                    it[autoStartOnEnable] = server.autoStartOnEnable
+                    it[autoStartOnLaunch] = server.autoStartOnLaunch
+                    it[autoStopAfterInactivitySeconds] = server.autoStopAfterInactivitySeconds
+                    it[toolNamePrefix] = server.toolNamePrefix
+                    it[environmentVariablesJson] = Json.encodeToString(server.environmentVariables)
+                    it[secretEnvironmentVariablesJson] = Json.encodeToString(server.secretEnvironmentVariables)
+                    it[updatedAt] = Clock.System.now().toEpochMilliseconds()
+                }
+
+                LocalMCPServerTable
+                    .selectAll()
+                    .where { LocalMCPServerTable.id eq serverId }
+                    .single()
+                    .toLocalMCPServerEntity()
+            }
+        }
+
+    override suspend fun getServerById(serverId: Long): Either<LocalMCPServerError.NotFound, LocalMCPServerEntity> =
+        transactionScope.transaction {
+            either {
+                val row = LocalMCPServerTable
+                    .selectAll()
+                    .where { LocalMCPServerTable.id eq serverId }
+                    .singleOrNull()
+
+                ensure(row != null) { LocalMCPServerError.NotFound(serverId) }
+                row.toLocalMCPServerEntity()
+            }
+        }
+
+    override suspend fun getServerByIdForUser(
+        userId: Long,
+        serverId: Long
+    ): Either<LocalMCPServerError.Unauthorized, LocalMCPServerEntity> =
+        transactionScope.transaction {
+            either {
+                val row = LocalMCPServerTable
+                    .selectAll()
+                    .where { LocalMCPServerTable.id eq serverId }
+                    .singleOrNull()
+
+                ensure(row?.get(LocalMCPServerTable.userId)?.value == userId) {
+                    LocalMCPServerError.Unauthorized(userId, serverId)
+                }
+                row.toLocalMCPServerEntity()
+            }
+        }
+
+    override suspend fun getServersByUserId(userId: Long): List<LocalMCPServerEntity> =
+        transactionScope.transaction {
+            LocalMCPServerTable
+                .selectAll()
+                .where { LocalMCPServerTable.userId eq userId }
+                .map { it.toLocalMCPServerEntity() }
+        }
+
+    override suspend fun getServersByWorkerId(workerId: Long): List<LocalMCPServerEntity> =
+        transactionScope.transaction {
+            LocalMCPServerTable
+                .selectAll()
+                .where { LocalMCPServerTable.workerId eq workerId }
+                .map { it.toLocalMCPServerEntity() }
+        }
+
+    @Deprecated("Use createServer(CreateLocalMCPServerEntity)")
     override suspend fun createServer(userId: Long, isEnabled: Boolean): Long =
         transactionScope.transaction {
             LocalMCPServerTable.insertAndGetId {
@@ -40,6 +164,7 @@ class LocalMCPServerDaoExposed(
             }
         }
 
+    @Deprecated("Use getServersByUserId")
     override suspend fun getIdsByUserId(userId: Long): List<Long> =
         transactionScope.transaction {
             LocalMCPServerTable
@@ -74,6 +199,7 @@ class LocalMCPServerDaoExposed(
             }
         }
 
+    @Deprecated("Use updateServer")
     override suspend fun setEnabled(serverId: Long, isEnabled: Boolean): Either<LocalMCPServerError.NotFound, Unit> =
         transactionScope.transaction {
             either {

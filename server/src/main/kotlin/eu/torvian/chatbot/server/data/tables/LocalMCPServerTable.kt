@@ -1,30 +1,48 @@
 package eu.torvian.chatbot.server.data.tables
 
-import eu.torvian.chatbot.server.data.tables.LocalMCPServerTable.isEnabled
-import eu.torvian.chatbot.server.data.tables.LocalMCPServerTable.userId
 import org.jetbrains.exposed.v1.core.ReferenceOption
 import org.jetbrains.exposed.v1.core.dao.id.LongIdTable
+import kotlin.time.Clock
 
 /**
- * Minimal server-side storage for Local MCP Server identification and ownership.
+ * Server-side source-of-truth storage for Local MCP server configuration.
  *
- * This table stores only the essential information needed for server-side operations:
- * - Unique ID generation
- * - User ownership tracking
- * - Global enable/disable flag (synced from client)
- * - Tool linkage support
+ * Secret environment variable values are never stored directly in this table. Instead,
+ * `secretEnvironmentVariablesJson` stores credential aliases resolved through CredentialManager.
  *
- * Full MCP server configurations (command, arguments, environment variables, etc.) are
- * stored client-side using SQLDelight, as they are platform-specific and may contain
- * sensitive data that should remain on the client device.
- *
- * @property userId Reference to the user who owns this MCP server configuration. Cascade
- * deletion ensures cleanup when the user is deleted.
- * @property isEnabled Global enable/disable flag. If false, ALL tools from this server
- * are unavailable. Kept in sync with the client-side isEnabled flag.
+ * @property userId Owning user identifier.
+ * @property workerId Assigned worker identifier.
+ * @property name User-facing display name.
+ * @property description Optional descriptive text.
+ * @property command Process command used to start the MCP server.
+ * @property argumentsJson JSON-encoded process argument list.
+ * @property workingDirectory Optional working directory for process execution.
+ * @property isEnabled Whether this server is enabled.
+ * @property autoStartOnEnable Whether this server auto-starts when enabled.
+ * @property autoStartOnLaunch Whether this server auto-starts on worker launch.
+ * @property autoStopAfterInactivitySeconds Optional inactivity timeout for auto-stop behavior.
+ * @property toolNamePrefix Optional tool-name prefix applied during discovery.
+ * @property environmentVariablesJson JSON-encoded non-secret environment variables.
+ * @property secretEnvironmentVariablesJson JSON-encoded secret environment variable aliases.
+ * @property createdAt Creation timestamp in epoch milliseconds.
+ * @property updatedAt Last update timestamp in epoch milliseconds.
  */
 object LocalMCPServerTable : LongIdTable("local_mcp_servers") {
     val userId = reference("user_id", UsersTable, onDelete = ReferenceOption.CASCADE)
+    val workerId = long("worker_id").nullable().index()
+    val name = varchar("name", 255).default("Legacy MCP Server")
+    val description = text("description").nullable()
+    val command = text("command").default("")
+    val argumentsJson = text("arguments_json").default("[]")
+    val workingDirectory = text("working_directory").nullable()
     val isEnabled = bool("is_enabled").default(true)
+    val autoStartOnEnable = bool("auto_start_on_enable").default(false)
+    val autoStartOnLaunch = bool("auto_start_on_launch").default(false)
+    val autoStopAfterInactivitySeconds = integer("auto_stop_after_inactivity_seconds").nullable()
+    val toolNamePrefix = varchar("tool_name_prefix", 255).nullable()
+    val environmentVariablesJson = text("environment_variables_json").default("[]")
+    val secretEnvironmentVariablesJson = text("secret_environment_variables_json").default("[]")
+    val createdAt = long("created_at").clientDefault { Clock.System.now().toEpochMilliseconds() }
+    val updatedAt = long("updated_at").clientDefault { Clock.System.now().toEpochMilliseconds() }
 }
 

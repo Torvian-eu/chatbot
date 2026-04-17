@@ -6,22 +6,64 @@ package eu.torvian.chatbot.server.service.core.error.mcp
 sealed interface LocalMCPServerServiceError
 
 /**
- * Errors that can occur when deleting a server ID.
+ * The requested Local MCP server does not exist.
+ *
+ * @property serverId Missing server identifier.
  */
-sealed interface DeleteServerError : LocalMCPServerServiceError {
-    /**
-     * The requested server was not found.
-     * @property id The ID of the server that was not found.
-     */
-    data class ServerNotFound(val id: Long) : DeleteServerError
-}
+data class LocalMCPServerNotFoundError(val serverId: Long) : LocalMCPServerServiceError
 
 /**
- * Errors that can occur when validating ownership of a server.
+ * The authenticated user is not authorized to access the requested Local MCP server.
+ *
+ * @property userId User identifier from authentication context.
+ * @property serverId Target server identifier.
  */
-sealed interface ValidateOwnershipError : LocalMCPServerServiceError {
-    /**
-     * The user is not authorized to access the server.
-     */
-    data class Unauthorized(val userId: Long, val serverId: Long) : ValidateOwnershipError
-}
+data class LocalMCPServerUnauthorizedError(
+    val userId: Long,
+    val serverId: Long
+) : LocalMCPServerServiceError
+
+/**
+ * The referenced worker assignment does not exist.
+ *
+ * @property workerId Missing worker identifier.
+ */
+data class LocalMCPServerWorkerNotFoundError(val workerId: Long) : LocalMCPServerServiceError
+
+/**
+ * The referenced worker belongs to a different user.
+ *
+ * @property userId Requesting user identifier.
+ * @property workerId Referenced worker identifier.
+ * @property workerOwnerUserId Actual worker owner identifier.
+ */
+data class LocalMCPServerWorkerOwnershipMismatchError(
+    val userId: Long,
+    val workerId: Long,
+    val workerOwnerUserId: Long
+) : LocalMCPServerServiceError
+
+/**
+ * A secret environment variable could not be persisted securely.
+ *
+ * @property variableKey Environment variable name that failed to persist.
+ */
+data class LocalMCPServerSecretStorageError(val variableKey: String) : LocalMCPServerServiceError
+
+/**
+ * A secret environment variable alias could not be resolved to plaintext.
+ *
+ * @property variableKey Environment variable name that failed to resolve.
+ * @property alias Credential alias that failed to resolve.
+ */
+data class LocalMCPServerSecretResolutionError(
+    val variableKey: String,
+    val alias: String
+) : LocalMCPServerServiceError
+
+/**
+ * Request payload failed server-side logical validation.
+ *
+ * @property reason Human-readable explanation of the invalid state.
+ */
+data class LocalMCPServerValidationError(val reason: String) : LocalMCPServerServiceError

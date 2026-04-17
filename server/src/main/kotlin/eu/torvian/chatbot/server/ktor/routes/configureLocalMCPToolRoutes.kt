@@ -11,6 +11,7 @@ import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.service.core.LocalMCPServerService
 import eu.torvian.chatbot.server.service.core.LocalMCPToolDefinitionService
+import eu.torvian.chatbot.server.service.core.error.mcp.LocalMCPServerServiceError
 import eu.torvian.chatbot.server.service.core.error.mcp.*
 import io.ktor.http.*
 import io.ktor.server.auth.*
@@ -56,7 +57,7 @@ fun Route.configureLocalMCPToolRoutes(
 
             val result = either {
                 // Validate that the user owns the server
-                withError({ e: ValidateOwnershipError -> e.toApiError() }) {
+                withError({ e: LocalMCPServerServiceError -> e.toApiError() }) {
                     localMCPServerService.validateOwnership(userId, serverId).bind()
                 }
 
@@ -80,7 +81,7 @@ fun Route.configureLocalMCPToolRoutes(
 
             val result = either {
                 // Validate that the user owns the server
-                withError({ e: ValidateOwnershipError -> e.toApiError() }) {
+                withError({ e: LocalMCPServerServiceError -> e.toApiError() }) {
                     localMCPServerService.validateOwnership(userId, serverId).bind()
                 }
 
@@ -104,7 +105,7 @@ fun Route.configureLocalMCPToolRoutes(
 
             val result = either {
                 // Validate that the user owns the server
-                withError({ e: ValidateOwnershipError -> e.toApiError() }) {
+                withError({ e: LocalMCPServerServiceError -> e.toApiError() }) {
                     localMCPServerService.validateOwnership(userId, serverId).bind()
                 }
 
@@ -131,7 +132,7 @@ fun Route.configureLocalMCPToolRoutes(
 
             val result = either {
                 // Validate that the user owns the server
-                withError({ e: ValidateOwnershipError -> e.toApiError() }) {
+                withError({ e: LocalMCPServerServiceError -> e.toApiError() }) {
                     localMCPServerService.validateOwnership(userId, serverId).bind()
                 }
 
@@ -155,7 +156,7 @@ fun Route.configureLocalMCPToolRoutes(
                 }
 
                 // Validate that the user owns the server
-                withError({ e: ValidateOwnershipError -> e.toApiError() }) {
+                withError({ e: LocalMCPServerServiceError -> e.toApiError() }) {
                     localMCPServerService.validateOwnership(userId, tool.serverId).bind()
                 }
 
@@ -183,7 +184,7 @@ fun Route.configureLocalMCPToolRoutes(
 
             val result = either {
                 // Validate that the user owns the server
-                withError({ e: ValidateOwnershipError -> e.toApiError() }) {
+                withError({ e: LocalMCPServerServiceError -> e.toApiError() }) {
                     localMCPServerService.validateOwnership(userId, tool.serverId).bind()
                 }
 
@@ -202,7 +203,7 @@ fun Route.configureLocalMCPToolRoutes(
 
             val result = either {
                 // Validate that the user owns the server
-                withError({ e: ValidateOwnershipError -> e.toApiError() }) {
+                withError({ e: LocalMCPServerServiceError -> e.toApiError() }) {
                     localMCPServerService.validateOwnership(userId, serverId).bind()
                 }
 

@@ -13,16 +13,50 @@ import eu.torvian.chatbot.common.api.apiError
  */
 
 /**
- * Converts a [DeleteServerError] to an [ApiError].
+ * Converts a [LocalMCPServerServiceError] to an [ApiError].
+ *
+ * @receiver Service error to convert.
+ * @return Structured API error response.
  */
-fun DeleteServerError.toApiError(): ApiError = when (this) {
-    is DeleteServerError.ServerNotFound ->
-        apiError(CommonApiErrorCodes.NOT_FOUND, "MCP server not found", "serverId" to id.toString()) }
+fun LocalMCPServerServiceError.toApiError(): ApiError = when (this) {
+    is LocalMCPServerNotFoundError ->
+        apiError(CommonApiErrorCodes.NOT_FOUND, "MCP server not found", "serverId" to serverId.toString())
 
-/**
- * Converts a [ValidateOwnershipError] to an [ApiError].
- */
-fun ValidateOwnershipError.toApiError(): ApiError = when (this) {
-    is ValidateOwnershipError.Unauthorized ->
-        apiError(CommonApiErrorCodes.PERMISSION_DENIED, "User is not authorized to access this MCP server", "userId" to userId.toString(), "serverId" to serverId.toString())
+    is LocalMCPServerUnauthorizedError ->
+        apiError(
+            CommonApiErrorCodes.PERMISSION_DENIED,
+            "User is not authorized to access this MCP server",
+            "userId" to userId.toString(),
+            "serverId" to serverId.toString()
+        )
+
+    is LocalMCPServerWorkerNotFoundError ->
+        apiError(CommonApiErrorCodes.NOT_FOUND, "Worker not found", "workerId" to workerId.toString())
+
+    is LocalMCPServerWorkerOwnershipMismatchError ->
+        apiError(
+            CommonApiErrorCodes.PERMISSION_DENIED,
+            "Worker is not owned by the requesting user",
+            "userId" to userId.toString(),
+            "workerId" to workerId.toString(),
+            "workerOwnerUserId" to workerOwnerUserId.toString()
+        )
+
+    is LocalMCPServerSecretStorageError ->
+        apiError(
+            CommonApiErrorCodes.INTERNAL,
+            "Failed to securely store secret environment variable",
+            "variableKey" to variableKey
+        )
+
+    is LocalMCPServerSecretResolutionError ->
+        apiError(
+            CommonApiErrorCodes.INTERNAL,
+            "Failed to resolve secret environment variable",
+            "variableKey" to variableKey,
+            "alias" to alias
+        )
+
+    is LocalMCPServerValidationError ->
+        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid Local MCP server configuration", "reason" to reason)
 }
