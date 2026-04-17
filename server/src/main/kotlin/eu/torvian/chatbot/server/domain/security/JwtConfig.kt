@@ -96,8 +96,20 @@ data class JwtConfig(
             .sign(algorithm)
     }
 
+    /**
+     * Generates a JWT access token for an authenticated worker service principal.
+     *
+     * @param workerId Durable worker identifier bound to the token subject.
+     * @param workerUid Stable public worker UID bound to the authenticated worker.
+     * @param ownerUserId Owning user identifier linked to the worker.
+     * @param scopes Service scopes granted to the worker token.
+     * @param currentTime The current timestamp (epoch milliseconds).
+     * @param ttlMs Token lifetime in milliseconds.
+     * @return A signed JWT service access token string.
+     */
     fun generateServiceAccessToken(
         workerId: Long,
+        workerUid: String,
         ownerUserId: Long,
         scopes: List<String>,
         currentTime: Long = System.currentTimeMillis(),
@@ -110,6 +122,7 @@ data class JwtConfig(
             .withClaim("principalType", "service")
             .withClaim("tokenType", "access")
             .withClaim("workerId", workerId)
+            .withClaim("workerUid", workerUid)
             .withClaim("ownerUserId", ownerUserId)
             .withArrayClaim("scope", scopes.toTypedArray())
             .withIssuedAt(Date(currentTime))

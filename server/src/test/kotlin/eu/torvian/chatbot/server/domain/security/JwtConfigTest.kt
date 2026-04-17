@@ -61,11 +61,12 @@ class JwtConfigTest {
     fun `generateServiceAccessToken should create valid worker token`() {
         // Given
         val workerId = 42L
+        val workerUid = "worker-42"
         val ownerUserId = 7L
         val scopes = listOf("messages:read", "messages:write")
 
         // When
-        val token = jwtConfig.generateServiceAccessToken(workerId, ownerUserId, scopes)
+        val token = jwtConfig.generateServiceAccessToken(workerId, workerUid, ownerUserId, scopes)
 
         // Then
         assertTrue(token.isNotEmpty())
@@ -75,6 +76,7 @@ class JwtConfigTest {
         assertEquals("service", decodedJWT.getClaim("principalType").asString())
         assertEquals("access", decodedJWT.getClaim("tokenType").asString())
         assertEquals(workerId, decodedJWT.getClaim("workerId").asLong())
+        assertEquals(workerUid, decodedJWT.getClaim("workerUid").asString())
         assertEquals(ownerUserId, decodedJWT.getClaim("ownerUserId").asLong())
         assertEquals(scopes, decodedJWT.getClaim("scope").asList(String::class.java))
         assertEquals(jwtConfig.workerAudience, decodedJWT.audience.first())
@@ -138,7 +140,7 @@ class JwtConfigTest {
     fun `worker verifier should reject token with wrong audience`() {
         // Given
         val wrongConfig = JwtConfig(secret = jwtConfig.secret, workerAudience = "wrong-worker-audience")
-        val token = wrongConfig.generateServiceAccessToken(42L, 7L, emptyList())
+        val token = wrongConfig.generateServiceAccessToken(42L, "worker-42", 7L, emptyList())
 
         // When & Then
         assertThrows<JWTVerificationException> {

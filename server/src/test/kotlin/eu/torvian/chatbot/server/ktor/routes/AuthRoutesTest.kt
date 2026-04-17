@@ -631,6 +631,7 @@ class AuthRoutesTest {
         assertEquals("service", decoded.getClaim("principalType").asString())
         assertEquals("access", decoded.getClaim("tokenType").asString())
         assertEquals(fixture.workerId, decoded.getClaim("workerId").asLong())
+        assertEquals(fixture.workerUid, decoded.getClaim("workerUid").asString())
         assertEquals(testUser.id, decoded.getClaim("ownerUserId").asLong())
         assertEquals(listOf("messages:read"), decoded.getClaim("scope").asList(String::class.java))
 
