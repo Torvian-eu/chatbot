@@ -31,7 +31,7 @@ fun miscModule() = module {
     single<PendingWorkerCommandRegistry> { InMemoryPendingWorkerCommandRegistry() }
     single<WorkerCommandDispatchService> { DefaultWorkerCommandDispatchService(get(), get()) }
     single { WorkerServerWebSocketMessageCodec() }
-    single { WorkerSessionHelloHandler(get()) }
+    single { WorkerSessionHelloHandler() }
     single { WorkerServerIncomingMessageRouter(get(), get()) }
     single {
         ApiRoutesKtor(

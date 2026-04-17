@@ -14,9 +14,6 @@ class InMemoryWorkerSessionRegistry : WorkerSessionRegistry {
     private val sessionsByWorkerId: ConcurrentHashMap<Long, ConnectedWorkerSession> = ConcurrentHashMap()
 
     override fun register(session: ConnectedWorkerSession): ConnectedWorkerSession? {
-        check(session.isReady()) {
-            "Cannot register a worker session before the hello handshake completes"
-        }
 
         val previous = sessionsByWorkerId.put(session.workerContext.workerId, session)
         if (previous != null && previous !== session) {

@@ -5,12 +5,12 @@ package eu.torvian.chatbot.server.worker.session
  */
 interface WorkerSessionRegistry {
     /**
-     * Registers a ready worker session and returns the replaced session, if any.
+     * Registers a connected worker session and returns the replaced session, if any.
      *
      * The registry is keyed by the authenticated worker identifier so reconnects naturally
      * replace an existing live connection for the same worker.
      *
-     * @param session Ready worker session to store.
+     * @param session Connected worker session to store.
      * @return Previously registered session for the same worker, if one existed.
      */
     fun register(session: ConnectedWorkerSession): ConnectedWorkerSession?

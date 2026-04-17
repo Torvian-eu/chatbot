@@ -122,6 +122,9 @@ class ConnectedWorkerSession(
 
     /**
      * Runs the receive loop until the peer disconnects or a protocol violation occurs.
+     *
+     * The session is registered immediately so reconnect replacement happens as soon as the socket
+     * is authenticated, and any older active session for the same worker is closed gracefully.
      */
     suspend fun run() {
         logger.info(
@@ -130,6 +133,20 @@ class ConnectedWorkerSession(
             workerContext.workerUid,
             workerContext.ownerUserId
         )
+        val previousSession = registry.register(this)
+        if (previousSession != null && previousSession !== this) {
+            logger.info(
+                "Closing replaced worker session after reconnect (workerId={}, workerUid={})",
+                workerContext.workerId,
+                workerContext.workerUid
+            )
+            previousSession.close(
+                CloseReason(
+                    CloseReason.Codes.NORMAL,
+                    "Replaced by a newer worker connection"
+                )
+            )
+        }
         try {
             for (frame in socket.incoming) {
                 when (frame) {

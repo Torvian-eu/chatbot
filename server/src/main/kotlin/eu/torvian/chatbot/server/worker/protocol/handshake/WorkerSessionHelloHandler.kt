@@ -13,8 +13,6 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.core.WorkerProtocolV
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerSessionHelloPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerSessionWelcomePayload
 import eu.torvian.chatbot.server.worker.session.ConnectedWorkerSession
-import eu.torvian.chatbot.server.worker.session.WorkerSessionRegistry
-import io.ktor.websocket.CloseReason
 import java.util.UUID
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
@@ -23,13 +21,9 @@ import org.apache.logging.log4j.Logger
  * Validates and completes the initial `session.hello` / `session.welcome` worker handshake.
  *
  * The handler performs identity checks against the authenticated worker principal, negotiates a
- * compatible protocol version, and registers the session after the welcome frame is sent.
- *
- * @property registry Live session registry used to expose the negotiated socket to future dispatch.
+ * compatible protocol version, and marks the session ready after the welcome frame is sent.
  */
-class WorkerSessionHelloHandler(
-    private val registry: WorkerSessionRegistry
-) {
+class WorkerSessionHelloHandler {
     /**
      * Validates a worker hello envelope and finalizes the handshake on success.
      *
@@ -113,20 +107,6 @@ class WorkerSessionHelloHandler(
             selectedProtocolVersion = selectedProtocolVersion,
             acceptedCapabilities = acceptedCapabilities
         )
-        val previousSession = registry.register(session)
-        if (previousSession != null && previousSession !== session) {
-            logger.info(
-                "Closing replaced worker session after reconnect (workerId={}, workerUid={})",
-                session.workerContext.workerId,
-                session.workerContext.workerUid
-            )
-            previousSession.close(
-                CloseReason(
-                    CloseReason.Codes.NORMAL,
-                    "Replaced by a newer worker connection"
-                )
-            )
-        }
 
         logger.info(
             "Worker handshake completed successfully (workerId={}, workerUid={}, protocolVersion={}, acceptedCapabilities={})",
