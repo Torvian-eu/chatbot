@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.app.compose.settings
 
 import eu.torvian.chatbot.app.domain.contracts.DataState
-import eu.torvian.chatbot.app.domain.models.LocalMCPServer
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.service.mcp.LocalMCPServerOverview
 import eu.torvian.chatbot.app.viewmodel.LocalMCPServerDialogState
@@ -29,8 +29,8 @@ interface LocalMCPServersTabActions {
     fun onLoadServers(userId: Long)
     fun onSelectServer(serverId: Long?)
     fun onStartAddingNewServer()
-    fun onStartEditingServer(server: LocalMCPServer)
-    fun onStartDeletingServer(server: LocalMCPServer)
+    fun onStartEditingServer(server: LocalMCPServerDto)
+    fun onStartDeletingServer(server: LocalMCPServerDto)
     fun onCancelDialog()
     fun onUpdateServerForm(update: (LocalMCPServerFormState) -> LocalMCPServerFormState)
     fun onSaveServer()
@@ -40,7 +40,7 @@ interface LocalMCPServersTabActions {
     fun onRefreshTools(serverId: Long)
     fun onStartServer(serverId: Long)
     fun onStopServer(serverId: Long)
-    fun onToggleServerEnabled(server: LocalMCPServer)
+    fun onToggleServerEnabled(server: LocalMCPServerDto)
     fun onToggleToolEnabled(tool: LocalMCPToolDefinition)
     fun onStartEditingTool(tool: LocalMCPToolDefinition)
     fun onEnableAllTools(serverId: Long)

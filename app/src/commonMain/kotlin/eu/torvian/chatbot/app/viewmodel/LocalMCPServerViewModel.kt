@@ -3,7 +3,8 @@ package eu.torvian.chatbot.app.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import eu.torvian.chatbot.app.domain.contracts.DataState
-import eu.torvian.chatbot.app.domain.models.LocalMCPServer
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
 import eu.torvian.chatbot.app.repository.LocalMCPToolRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.ToolRepository
@@ -155,7 +156,7 @@ class LocalMCPServerViewModel(
     /**
      * Opens the dialog to edit an existing MCP server.
      */
-    fun startEditingServer(server: LocalMCPServer) {
+    fun startEditingServer(server: LocalMCPServerDto) {
         _dialogState.value = LocalMCPServerDialogState.EditServer(
             server = server,
             formState = LocalMCPServerFormState.fromServer(server)
@@ -165,7 +166,7 @@ class LocalMCPServerViewModel(
     /**
      * Opens the confirmation dialog to delete a server.
      */
-    fun startDeletingServer(server: LocalMCPServer) {
+    fun startDeletingServer(server: LocalMCPServerDto) {
         _dialogState.value = LocalMCPServerDialogState.DeleteServer(server)
     }
 
@@ -221,9 +222,11 @@ class LocalMCPServerViewModel(
                     serverManager.createServer(
                         name = form.name,
                         description = form.description.takeIf { it.isNotBlank() },
+                        workerId = form.workerId,
                         command = form.command,
                         arguments = form.arguments,
                         environmentVariables = form.environmentVariables,
+                        secretEnvironmentVariables = form.secretEnvironmentVariables,
                         workingDirectory = form.workingDirectory.takeIf { it.isNotBlank() },
                         isEnabled = form.isEnabled,
                         autoStartOnEnable = form.autoStartOnEnable,
@@ -263,11 +266,13 @@ class LocalMCPServerViewModel(
                     }
 
                     val updatedServer = currentDialogState.server.copy(
+                        workerId = form.workerId,
                         name = form.name,
                         description = form.description.takeIf { it.isNotBlank() },
                         command = form.command,
                         arguments = form.arguments,
                         environmentVariables = form.environmentVariables,
+                        secretEnvironmentVariables = form.secretEnvironmentVariables,
                         workingDirectory = form.workingDirectory.takeIf { it.isNotBlank() },
                         isEnabled = form.isEnabled,
                         autoStartOnEnable = form.autoStartOnEnable,
@@ -364,7 +369,7 @@ class LocalMCPServerViewModel(
                 name = form.name.ifBlank { "Test" },
                 command = form.command,
                 arguments = form.arguments,
-                environmentVariables = form.environmentVariables,
+                environmentVariables = form.environmentVariables + form.secretEnvironmentVariables,
                 workingDirectory = form.workingDirectory.takeIf { it.isNotBlank() }
             )
 
@@ -402,7 +407,7 @@ class LocalMCPServerViewModel(
                 ifRight = { toolCount ->
                     _operationInProgress.value = null
                     notificationService.genericSuccess(
-                        shortMessage = "Connected — $toolCount tool(s) discovered"
+                        shortMessage = "Connected â€” $toolCount tool(s) discovered"
                     )
                 }
             )
@@ -478,7 +483,7 @@ class LocalMCPServerViewModel(
     /**
      * Toggles the global enabled state of a server.
      */
-    fun toggleServerEnabled(server: LocalMCPServer) {
+    fun toggleServerEnabled(server: LocalMCPServerDto) {
         viewModelScope.launch(uiDispatcher) {
             val updatedServer = server.copy(isEnabled = !server.isEnabled)
             serverManager.updateServer(updatedServer).onLeft { error ->
@@ -698,7 +703,7 @@ sealed class LocalMCPServerDialogState {
     ) : LocalMCPServerDialogState()
 
     data class EditServer(
-        val server: LocalMCPServer,
+        val server: LocalMCPServerDto,
         val formState: LocalMCPServerFormState,
         val isSaving: Boolean = false,
         val isTesting: Boolean = false,
@@ -706,7 +711,7 @@ sealed class LocalMCPServerDialogState {
     ) : LocalMCPServerDialogState()
 
     data class DeleteServer(
-        val server: LocalMCPServer
+        val server: LocalMCPServerDto
     ) : LocalMCPServerDialogState()
 
     data class EditTool(
@@ -727,19 +732,27 @@ sealed class DialogTestResult {
 
 /**
  * Form state for adding/editing MCP servers.
+ *
+ * @property workerId Worker assignment ID used by server-side MCP routing.
+ * @property environmentVariables Non-secret environment variables.
+ * @property secretEnvironmentVariables Secret environment variables.
+ * @property workerIdError Validation error shown when worker ID is missing or invalid.
  */
 data class LocalMCPServerFormState(
+    val workerId: Long = 0L,
     val name: String = "",
     val description: String = "",
     val command: String = "",
     val arguments: List<String> = emptyList(),
-    val environmentVariables: Map<String, String> = emptyMap(),
+    val environmentVariables: List<LocalMCPEnvironmentVariableDto> = emptyList(),
+    val secretEnvironmentVariables: List<LocalMCPEnvironmentVariableDto> = emptyList(),
     val workingDirectory: String = "",
     val isEnabled: Boolean = true,
     val autoStartOnEnable: Boolean = false,
     val autoStartOnLaunch: Boolean = false,
     val autoStopAfterInactivitySeconds: Int? = null,
     val toolNamePrefix: String = "",
+    val workerIdError: String? = null,
     val nameError: String? = null,
     val commandError: String? = null,
     val fullCommand: String = ""
@@ -748,7 +761,7 @@ data class LocalMCPServerFormState(
      * Returns true if the form has no validation errors.
      */
     fun isValid(): Boolean {
-        return nameError == null && commandError == null && name.isNotBlank() && command.isNotBlank()
+        return workerIdError == null && nameError == null && commandError == null && workerId > 0 && name.isNotBlank() && command.isNotBlank()
     }
 
     /**
@@ -760,13 +773,17 @@ data class LocalMCPServerFormState(
             name.isBlank() -> "Name is required"
             else -> null
         }
+        val newWorkerIdError = when {
+            workerId <= 0L -> "Worker ID is required"
+            else -> null
+        }
         val newCommandError = when {
             command.isBlank() -> "Command is required"
             else -> null
         }
 
-        return if (newNameError != null || newCommandError != null) {
-            copy(nameError = newNameError, commandError = newCommandError)
+        return if (newWorkerIdError != null || newNameError != null || newCommandError != null) {
+            copy(workerIdError = newWorkerIdError, nameError = newNameError, commandError = newCommandError)
         } else {
             this
         }
@@ -792,13 +809,15 @@ data class LocalMCPServerFormState(
     }
 
     companion object {
-        fun fromServer(server: LocalMCPServer): LocalMCPServerFormState {
+        fun fromServer(server: LocalMCPServerDto): LocalMCPServerFormState {
             return LocalMCPServerFormState(
+                workerId = server.workerId,
                 name = server.name,
                 description = server.description ?: "",
                 command = server.command,
                 arguments = server.arguments,
                 environmentVariables = server.environmentVariables,
+                secretEnvironmentVariables = server.secretEnvironmentVariables,
                 workingDirectory = server.workingDirectory ?: "",
                 isEnabled = server.isEnabled,
                 autoStartOnEnable = server.autoStartOnEnable,
@@ -818,9 +837,9 @@ data class LocalMCPServerFormState(
  * the input as a single token (graceful fallback). Leading/trailing whitespace is ignored.
  *
  * Examples:
- * - `"npx -y server /path"` → `["npx", "-y", "server", "/path"]`
- * - `"docker run -e KEY=\"hello world\" image"` → `["docker", "run", "-e", "KEY=hello world", "image"]`
- * - `"java -jar \"my server.jar\""` → `["java", "-jar", "my server.jar"]`
+ * - `"npx -y server /path"` â†’ `["npx", "-y", "server", "/path"]`
+ * - `"docker run -e KEY=\"hello world\" image"` â†’ `["docker", "run", "-e", "KEY=hello world", "image"]`
+ * - `"java -jar \"my server.jar\""` â†’ `["java", "-jar", "my server.jar"]`
  */
 internal fun tokenizeCommand(input: String): List<String> {
     val tokens = mutableListOf<String>()
@@ -834,7 +853,7 @@ internal fun tokenizeCommand(input: String): List<String> {
             s[i] == '"' -> {
                 val end = s.indexOf('"', i + 1)
                 if (end == -1) {
-                    // Unclosed quote — consume the rest
+                    // Unclosed quote â€” consume the rest
                     current.append(s.substring(i + 1))
                     i = s.length
                 } else {
@@ -853,7 +872,7 @@ internal fun tokenizeCommand(input: String): List<String> {
                     i = end + 1
                 }
             }
-            // Whitespace — flush current token if any
+            // Whitespace â€” flush current token if any
             s[i].isWhitespace() -> {
                 if (current.isNotEmpty()) {
                     tokens.add(current.toString())

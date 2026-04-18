@@ -15,7 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.domain.contracts.DataState
-import eu.torvian.chatbot.app.domain.models.LocalMCPServer
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.service.mcp.LocalMCPServerOverview
 import eu.torvian.chatbot.app.viewmodel.LocalMCPServerOperation
@@ -157,10 +157,10 @@ private fun ServerHeader(
 }
 
 @Composable
-private fun ServerDescription(server: LocalMCPServer) {
+private fun ServerDescription(server: LocalMCPServerDto) {
     if (!server.description.isNullOrBlank()) {
         Text(
-            text = server.description,
+            text = server.description.orEmpty(),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -259,7 +259,7 @@ private fun ServerActionsSection(
 }
 
 @Composable
-private fun ServerConfigurationSection(server: LocalMCPServer) {
+private fun ServerConfigurationSection(server: LocalMCPServerDto) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -271,7 +271,13 @@ private fun ServerConfigurationSection(server: LocalMCPServer) {
 
             if (server.arguments.isNotEmpty()) DetailRow(label = "Arguments", value = server.arguments.joinToString(" "))
 
-            if (server.environmentVariables.isNotEmpty()) DetailRow(label = "Env Vars", value = "${server.environmentVariables.size} configured")
+            if (server.environmentVariables.isNotEmpty()) {
+                DetailRow(label = "Regular Env Vars", value = "${server.environmentVariables.size} configured")
+            }
+
+            if (server.secretEnvironmentVariables.isNotEmpty()) {
+                DetailRow(label = "Secret Env Vars", value = "${server.secretEnvironmentVariables.size} configured")
+            }
 
             server.workingDirectory?.let { dir -> DetailRow(label = "Working Dir", value = dir) }
 

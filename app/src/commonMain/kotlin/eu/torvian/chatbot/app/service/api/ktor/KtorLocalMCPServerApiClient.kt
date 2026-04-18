@@ -4,10 +4,9 @@ import arrow.core.Either
 import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.LocalMCPServerApi
 import eu.torvian.chatbot.common.api.resources.LocalMCPServerResource
-import eu.torvian.chatbot.common.models.api.mcp.CreateServerRequest
-import eu.torvian.chatbot.common.models.api.mcp.CreateServerResponse
-import eu.torvian.chatbot.common.models.api.mcp.ServerIdsResponse
-import eu.torvian.chatbot.common.models.api.mcp.SetServerEnabledRequest
+import eu.torvian.chatbot.common.models.api.mcp.CreateLocalMCPServerRequest
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
+import eu.torvian.chatbot.common.models.api.mcp.UpdateLocalMCPServerRequest
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.resources.*
@@ -24,32 +23,37 @@ import io.ktor.client.request.*
  */
 class KtorLocalMCPServerApiClient(client: HttpClient) : BaseApiResourceClient(client), LocalMCPServerApi {
 
-    override suspend fun createServer(isEnabled: Boolean): Either<ApiResourceError, CreateServerResponse> =
+    override suspend fun createServer(request: CreateLocalMCPServerRequest): Either<ApiResourceError, LocalMCPServerDto> =
         safeApiCall {
-            client.post(LocalMCPServerResource.Create()) {
-                setBody(CreateServerRequest(isEnabled))
-            }.body<CreateServerResponse>()
+            client.post(LocalMCPServerResource()) {
+                setBody(request)
+            }.body<LocalMCPServerDto>()
         }
 
-    override suspend fun getServerIds(): Either<ApiResourceError, ServerIdsResponse> {
+    override suspend fun getServers(): Either<ApiResourceError, List<LocalMCPServerDto>> {
         return safeApiCall {
-            client.get(LocalMCPServerResource.Ids()).body<ServerIdsResponse>()
+            client.get(LocalMCPServerResource()).body<List<LocalMCPServerDto>>()
         }
     }
 
-    override suspend fun deleteServerId(serverId: Long): Either<ApiResourceError, Unit> {
+    override suspend fun getServerById(serverId: Long): Either<ApiResourceError, LocalMCPServerDto> =
+        safeApiCall {
+            client.get(LocalMCPServerResource.ById(id = serverId)).body<LocalMCPServerDto>()
+        }
+
+    override suspend fun updateServer(
+        serverId: Long,
+        request: UpdateLocalMCPServerRequest
+    ): Either<ApiResourceError, LocalMCPServerDto> =
+        safeApiCall {
+            client.put(LocalMCPServerResource.ById(id = serverId)) { setBody(request) }
+                .body<LocalMCPServerDto>()
+        }
+
+    override suspend fun deleteServer(serverId: Long): Either<ApiResourceError, Unit> {
         return safeApiCall {
             client.delete(LocalMCPServerResource.ById(id = serverId)).body<Unit>()
         }
     }
-
-    override suspend fun setServerEnabled(serverId: Long, isEnabled: Boolean): Either<ApiResourceError, Unit> =
-        safeApiCall {
-            client.put(LocalMCPServerResource.ById.SetEnabled(
-                parent = LocalMCPServerResource.ById(id = serverId)
-            )) {
-                setBody(SetServerEnabledRequest(isEnabled))
-            }.body<Unit>()
-        }
 }
 

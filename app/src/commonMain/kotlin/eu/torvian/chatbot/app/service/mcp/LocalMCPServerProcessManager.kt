@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.app.service.mcp
 
 import arrow.core.Either
-import eu.torvian.chatbot.app.domain.models.LocalMCPServer
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import kotlinx.io.Sink
 import kotlinx.io.Source
 
@@ -42,7 +42,7 @@ interface LocalMCPServerProcessManager {
      * @param config The MCP server configuration
      * @return Either.Right with ProcessStatus on success, or Either.Left with StartServerError on failure
      */
-    suspend fun startServer(config: LocalMCPServer): Either<StartServerError, ProcessStatus>
+    suspend fun startServer(config: LocalMCPServerDto): Either<StartServerError, ProcessStatus>
 
     /**
      * Stops an MCP server process.
@@ -74,7 +74,7 @@ interface LocalMCPServerProcessManager {
      * @param config The MCP server configuration
      * @return Either.Right with ProcessStatus on success, or Either.Left with RestartServerError on failure
      */
-    suspend fun restartServer(config: LocalMCPServer): Either<RestartServerError, ProcessStatus>
+    suspend fun restartServer(config: LocalMCPServerDto): Either<RestartServerError, ProcessStatus>
 
     /**
      * Stops all running MCP server processes.

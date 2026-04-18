@@ -1,13 +1,13 @@
 package eu.torvian.chatbot.app.service.mcp
 
-import eu.torvian.chatbot.app.domain.models.LocalMCPServer
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import kotlin.time.Instant
 
 /**
  * Data class representing the aggregate status of a Local MCP Server.
  *
- * @property serverConfig The full LocalMCPServer configuration
+ * @property serverConfig The full LocalMCPServerDto configuration
  * @property tools List of tools discovered from the server (null if not discovered)
  * @property isConnected Whether the server is currently connected
  * @property processStatus The last known process status from the ProcessManager
@@ -16,7 +16,7 @@ import kotlin.time.Instant
  * @property isResponsive Result of a recent ping check
  */
 data class LocalMCPServerOverview(
-    val serverConfig: LocalMCPServer,
+    val serverConfig: LocalMCPServerDto,
     val tools: List<LocalMCPToolDefinition>?,
     val isConnected: Boolean,
     val processStatus: ProcessStatus?,

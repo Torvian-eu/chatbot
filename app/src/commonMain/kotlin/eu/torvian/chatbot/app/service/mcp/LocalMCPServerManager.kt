@@ -2,8 +2,9 @@ package eu.torvian.chatbot.app.service.mcp
 
 import arrow.core.Either
 import eu.torvian.chatbot.app.domain.contracts.DataState
-import eu.torvian.chatbot.app.domain.models.LocalMCPServer
 import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import kotlinx.coroutines.flow.Flow
@@ -20,7 +21,7 @@ import kotlinx.serialization.json.JsonObject
  * Design principles:
  * - High-level orchestration layer between UI and MCP operations
  * - Coordinates data flow across repositories and services
- * - Handles data transformation (MCP SDK Tool → LocalMCPToolDefinition)
+ * - Handles data transformation (MCP SDK Tool â†’ LocalMCPToolDefinition)
  * - Does not manage state (that's Repository's job)
  * - Does not manage processes (that's MCPClientService's job)
  * - Does not call API directly (that's Repository's job)
@@ -91,13 +92,13 @@ interface LocalMCPServerManager {
         name: String,
         command: String,
         arguments: List<String>,
-        environmentVariables: Map<String, String> = emptyMap(),
+        environmentVariables: List<LocalMCPEnvironmentVariableDto> = emptyList(),
         workingDirectory: String? = null
     ): Either<TestConnectionError, Int>
 
 
     /**
-     * Creates a new MCP server configuration and persists it to the database.
+     * Creates a new MCP server configuration and persists it through the server API.
      *
      * This operation only saves the configuration. No process is started,
      * no connection is made, and no tools are discovered. Use [testConnectionForNewServer]
@@ -106,9 +107,11 @@ interface LocalMCPServerManager {
      *
      * @param name The name of the MCP server
      * @param description Optional description of the MCP server
+     * @param workerId Worker assignment used by server-side MCP execution routing
      * @param command The command to start the MCP server
      * @param arguments The arguments to start the MCP server
-     * @param environmentVariables The environment variables to start the MCP server
+     * @param environmentVariables Non-secret environment variables
+     * @param secretEnvironmentVariables Secret environment variables
      * @param workingDirectory The working directory to start the MCP server
      * @param isEnabled Whether the server is globally enabled (if false, tools cannot be enabled for any session)
      * @param autoStartOnEnable Whether the server should be started when a tool is enabled for a session
@@ -119,16 +122,18 @@ interface LocalMCPServerManager {
     suspend fun createServer(
         name: String,
         description: String? = null,
+        workerId: Long,
         command: String,
         arguments: List<String>,
-        environmentVariables: Map<String, String> = emptyMap(),
+        environmentVariables: List<LocalMCPEnvironmentVariableDto> = emptyList(),
+        secretEnvironmentVariables: List<LocalMCPEnvironmentVariableDto> = emptyList(),
         workingDirectory: String? = null,
         isEnabled: Boolean = true,
         autoStartOnEnable: Boolean = false,
         autoStartOnLaunch: Boolean = false,
         autoStopAfterInactivitySeconds: Int? = null,
         toolNamePrefix: String? = null
-    ): Either<CreateServerError, LocalMCPServer>
+    ): Either<CreateServerError, LocalMCPServerDto>
 
     /**
      * Tests connection to an existing MCP server and returns the count of discovered tools.
@@ -195,12 +200,12 @@ interface LocalMCPServerManager {
      * This operation only saves the configuration. If the server is currently running,
      * it will continue with its old configuration until it is restarted.
      * No restart, reconnection, or tool rediscovery is performed automatically.
-     * If the [LocalMCPServer.isEnabled] state changed, the enabled tools cache is invalidated.
+     * If the [LocalMCPServerDto.isEnabled] state changed, the enabled tools cache is invalidated.
      *
      * @param server The updated MCP server configuration
      * @return Either.Right with Unit on success, or Either.Left with UpdateServerError on failure
      */
-    suspend fun updateServer(server: LocalMCPServer): Either<UpdateServerError, Unit>
+    suspend fun updateServer(server: LocalMCPServerDto): Either<UpdateServerError, Unit>
 
     /**
      * Deletes an MCP server and all its associated tools.

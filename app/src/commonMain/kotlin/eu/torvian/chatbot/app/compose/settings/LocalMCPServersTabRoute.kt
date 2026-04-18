@@ -2,7 +2,7 @@ package eu.torvian.chatbot.app.compose.settings
 
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import eu.torvian.chatbot.app.domain.models.LocalMCPServer
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.app.viewmodel.LocalMCPServerFormState
 import eu.torvian.chatbot.app.viewmodel.LocalMCPServerViewModel
@@ -46,9 +46,9 @@ fun LocalMCPServersTabRoute(
         override fun onLoadServers(userId: Long) = viewModel.loadServers(userId)
         override fun onSelectServer(serverId: Long?) = viewModel.selectServer(serverId)
         override fun onStartAddingNewServer() = viewModel.startAddingNewServer()
-        override fun onStartEditingServer(server: LocalMCPServer) =
+        override fun onStartEditingServer(server: LocalMCPServerDto) =
             viewModel.startEditingServer(server)
-        override fun onStartDeletingServer(server: LocalMCPServer) =
+        override fun onStartDeletingServer(server: LocalMCPServerDto) =
             viewModel.startDeletingServer(server)
         override fun onCancelDialog() = viewModel.cancelDialog()
         override fun onUpdateServerForm(update: (LocalMCPServerFormState) -> LocalMCPServerFormState) =
@@ -60,7 +60,7 @@ fun LocalMCPServersTabRoute(
         override fun onRefreshTools(serverId: Long) = viewModel.refreshTools(serverId)
         override fun onStartServer(serverId: Long) = viewModel.startServer(serverId)
         override fun onStopServer(serverId: Long) = viewModel.stopServer(serverId)
-        override fun onToggleServerEnabled(server: LocalMCPServer) =
+        override fun onToggleServerEnabled(server: LocalMCPServerDto) =
             viewModel.toggleServerEnabled(server)
         override fun onToggleToolEnabled(tool: LocalMCPToolDefinition) =
             viewModel.toggleToolEnabled(tool)

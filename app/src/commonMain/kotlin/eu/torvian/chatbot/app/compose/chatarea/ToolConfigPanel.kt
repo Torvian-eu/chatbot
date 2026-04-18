@@ -13,7 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.PlainTooltipBox
-import eu.torvian.chatbot.app.domain.models.LocalMCPServer
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 
@@ -25,7 +25,7 @@ import eu.torvian.chatbot.common.models.tool.ToolDefinition
 fun ToolConfigDialog(
     availableTools: List<ToolDefinition>,
     enabledTools: List<ToolDefinition>,
-    mcpServers: List<LocalMCPServer>,
+    mcpServers: List<LocalMCPServerDto>,
     onToggleTool: (ToolDefinition, Boolean) -> Unit,
     onToggleTools: (List<ToolDefinition>, Boolean) -> Unit,
     onDismiss: () -> Unit

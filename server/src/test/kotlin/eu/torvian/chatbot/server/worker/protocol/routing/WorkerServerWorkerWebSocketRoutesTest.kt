@@ -154,6 +154,11 @@ class WorkerServerWorkerWebSocketRoutesTest {
 
             val registeredSession = registry.get(worker.id)
             assertEquals(worker.id, registeredSession?.workerContext?.workerId)
+            withTimeout(5_000) {
+                while (registeredSession?.isReady() == false) {
+                    delay(50)
+                }
+            }
             val readyState = registeredSession?.readyState()
             assertNotNull(readyState)
             assertEquals(1, readyState.selectedProtocolVersion)

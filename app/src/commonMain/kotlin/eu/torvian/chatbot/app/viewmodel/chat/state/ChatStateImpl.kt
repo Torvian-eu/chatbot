@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.app.viewmodel.chat.state
 
 import eu.torvian.chatbot.app.domain.contracts.DataState
-import eu.torvian.chatbot.app.domain.models.LocalMCPServer
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.app.repository.*
 import eu.torvian.chatbot.app.viewmodel.chat.util.ThreadBuilder
 import eu.torvian.chatbot.common.models.core.ChatMessage
@@ -215,7 +215,7 @@ class ChatStateImpl(
         )
 
     // MCP servers - directly exposed from repository
-    override val mcpServers: StateFlow<DataState<RepositoryError, List<LocalMCPServer>>> =
+    override val mcpServers: StateFlow<DataState<RepositoryError, List<LocalMCPServerDto>>> =
         mcpServerRepository.servers
 
     // Derived displayedMessages from sessionDataState

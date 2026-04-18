@@ -9,7 +9,6 @@ import eu.torvian.chatbot.app.compose.startup.StartupErrorScreen
 import eu.torvian.chatbot.app.compose.startup.StartupLoadingScreen
 import eu.torvian.chatbot.app.config.FileSystemClientConfigLoader
 import eu.torvian.chatbot.app.koin.appModule
-import eu.torvian.chatbot.app.koin.databaseModule
 import eu.torvian.chatbot.app.koin.desktopModule
 import eu.torvian.chatbot.app.utils.misc.KmpLogger
 import eu.torvian.chatbot.app.utils.misc.createKmpLogger
@@ -131,7 +130,6 @@ fun AppLifecycleManager(configDir: Path) {
             KoinApplication(application = {
                 modules(
                     desktopModule(currentState.config),
-                    databaseModule,
                     appModule(currentState.config)
                 )
             }) {

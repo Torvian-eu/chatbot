@@ -1,8 +1,6 @@
 package eu.torvian.chatbot.app.koin
 
 import eu.torvian.chatbot.app.config.AppConfiguration
-import eu.torvian.chatbot.app.database.DriverFactory
-import eu.torvian.chatbot.app.database.DriverFactoryAndroid
 import eu.torvian.chatbot.app.service.auth.FileSystemTokenStorage
 import eu.torvian.chatbot.app.service.auth.TokenStorage
 import eu.torvian.chatbot.app.service.clipboard.ClipboardService
@@ -58,10 +56,6 @@ fun androidModule(config: AppConfiguration) = module {
 
     single<ClipboardService> {
         ClipboardServiceAndroid(androidContext())
-    }
-
-    single<DriverFactory> {
-        DriverFactoryAndroid(androidContext())
     }
 
     single<LocalMCPToolCallMediator> {
