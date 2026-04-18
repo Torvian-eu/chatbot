@@ -13,6 +13,8 @@ import eu.torvian.chatbot.app.service.api.LocalMCPServerApi
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.models.api.mcp.CreateLocalMCPServerRequest
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
+import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
+import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerConnectionResponse
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -123,6 +125,38 @@ class DefaultLocalMCPServerRepository(
         }
 
         updateCache { list -> list.filter { it.id != serverId } }
+    }
+
+    override suspend fun startServer(serverId: Long): Either<RepositoryError, Unit> = either {
+        withError({ apiResourceError ->
+            apiResourceError.toRepositoryError("Failed to start MCP server")
+        }) {
+            api.startServer(serverId).bind()
+        }
+    }
+
+    override suspend fun stopServer(serverId: Long): Either<RepositoryError, Unit> = either {
+        withError({ apiResourceError ->
+            apiResourceError.toRepositoryError("Failed to stop MCP server")
+        }) {
+            api.stopServer(serverId).bind()
+        }
+    }
+
+    override suspend fun testConnection(serverId: Long): Either<RepositoryError, TestLocalMCPServerConnectionResponse> = either {
+        withError({ apiResourceError ->
+            apiResourceError.toRepositoryError("Failed to test MCP server connection")
+        }) {
+            api.testConnection(serverId).bind()
+        }
+    }
+
+    override suspend fun refreshTools(serverId: Long): Either<RepositoryError, RefreshMCPToolsResponse> = either {
+        withError({ apiResourceError ->
+            apiResourceError.toRepositoryError("Failed to refresh MCP server tools")
+        }) {
+            api.refreshTools(serverId).bind()
+        }
     }
 
     /**

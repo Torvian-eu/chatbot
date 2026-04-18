@@ -40,6 +40,38 @@ class LocalMCPServerResource(val parent: Api = Api()) {
     @Resource("{id}")
     class ById(val parent: LocalMCPServerResource = LocalMCPServerResource(), val id: Long) {
         /**
+         * Resource for starting server runtime execution.
+         *
+         * Endpoint: POST /api/v1/local-mcp-servers/{id}/start
+         */
+        @Resource("start")
+        class Start(val parent: ById)
+
+        /**
+         * Resource for stopping server runtime execution.
+         *
+         * Endpoint: POST /api/v1/local-mcp-servers/{id}/stop
+         */
+        @Resource("stop")
+        class Stop(val parent: ById)
+
+        /**
+         * Resource for testing server runtime connectivity.
+         *
+         * Endpoint: POST /api/v1/local-mcp-servers/{id}/test-connection
+         */
+        @Resource("test-connection")
+        class TestConnection(val parent: ById)
+
+        /**
+         * Resource for refreshing server tools through runtime control.
+         *
+         * Endpoint: POST /api/v1/local-mcp-servers/{id}/refresh-tools
+         */
+        @Resource("refresh-tools")
+        class RefreshTools(val parent: ById)
+
+        /**
          * Transitional resource retained for compatibility with the previous API shape.
          */
         @Deprecated("Use PUT on LocalMCPServerResource.ById")

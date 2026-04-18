@@ -22,6 +22,7 @@ class ApiRoutesKtor(
     private val toolService: ToolService,
     private val toolCallService: ToolCallService,
     private val localMCPServerService: LocalMCPServerService,
+    private val localMCPRuntimeControlService: LocalMCPRuntimeControlService,
     private val localMCPToolDefinitionService: LocalMCPToolDefinitionService,
     private val authenticationService: AuthenticationService,
     private val userService: UserService,
@@ -149,7 +150,7 @@ class ApiRoutesKtor(
      * Configures routes related to Local MCP server configuration management (/api/v1/local-mcp-servers).
      */
     fun configureLocalMCPServerRoutes(route: Route) {
-        route.configureLocalMCPServerRoutes(localMCPServerService)
+        route.configureLocalMCPServerRoutes(localMCPServerService, localMCPRuntimeControlService)
     }
 
     /**

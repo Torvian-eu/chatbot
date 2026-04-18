@@ -4,6 +4,8 @@ import arrow.core.Either
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
+import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
+import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerConnectionResponse
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -119,4 +121,36 @@ interface LocalMCPServerRepository {
      * @return Either.Right with Unit on successful deletion, or Either.Left with RepositoryError on failure
      */
     suspend fun deleteServer(serverId: Long): Either<RepositoryError, Unit>
+
+    /**
+     * Requests server-owned runtime start for the target Local MCP server.
+     *
+     * @param serverId The unique identifier of the Local MCP server to start.
+     * @return Either.Right with Unit on success, or Either.Left with RepositoryError on failure.
+     */
+    suspend fun startServer(serverId: Long): Either<RepositoryError, Unit>
+
+    /**
+     * Requests server-owned runtime stop for the target Local MCP server.
+     *
+     * @param serverId The unique identifier of the Local MCP server to stop.
+     * @return Either.Right with Unit on success, or Either.Left with RepositoryError on failure.
+     */
+    suspend fun stopServer(serverId: Long): Either<RepositoryError, Unit>
+
+    /**
+     * Requests a server-owned runtime connection test for a persisted Local MCP server.
+     *
+     * @param serverId The unique identifier of the Local MCP server to test.
+     * @return Either.Right with the test response payload on success, or Either.Left with RepositoryError on failure.
+     */
+    suspend fun testConnection(serverId: Long): Either<RepositoryError, TestLocalMCPServerConnectionResponse>
+
+    /**
+     * Requests a server-owned runtime tool refresh for a persisted Local MCP server.
+     *
+     * @param serverId The unique identifier of the Local MCP server to refresh.
+     * @return Either.Right with refresh summary payload on success, or Either.Left with RepositoryError on failure.
+     */
+    suspend fun refreshTools(serverId: Long): Either<RepositoryError, RefreshMCPToolsResponse>
 }

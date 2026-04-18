@@ -3,6 +3,8 @@ package eu.torvian.chatbot.app.service.api
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.api.mcp.CreateLocalMCPServerRequest
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
+import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
+import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerConnectionResponse
 import eu.torvian.chatbot.common.models.api.mcp.UpdateLocalMCPServerRequest
 
 /**
@@ -65,5 +67,45 @@ interface LocalMCPServerApi {
      * @return [Unit] when deletion succeeds.
      */
     suspend fun deleteServer(serverId: Long): Either<ApiResourceError, Unit>
+
+    /**
+     * Starts runtime execution for a persisted Local MCP server.
+     *
+     * Corresponds to `POST /api/v1/local-mcp-servers/{id}/start`.
+     *
+     * @param serverId Identifier of the server to start.
+     * @return [Unit] when the runtime-control request succeeds.
+     */
+    suspend fun startServer(serverId: Long): Either<ApiResourceError, Unit>
+
+    /**
+     * Stops runtime execution for a persisted Local MCP server.
+     *
+     * Corresponds to `POST /api/v1/local-mcp-servers/{id}/stop`.
+     *
+     * @param serverId Identifier of the server to stop.
+     * @return [Unit] when the runtime-control request succeeds.
+     */
+    suspend fun stopServer(serverId: Long): Either<ApiResourceError, Unit>
+
+    /**
+     * Tests runtime connectivity for a persisted Local MCP server.
+     *
+     * Corresponds to `POST /api/v1/local-mcp-servers/{id}/test-connection`.
+     *
+     * @param serverId Identifier of the server to test.
+     * @return Test response payload returned by the backend.
+     */
+    suspend fun testConnection(serverId: Long): Either<ApiResourceError, TestLocalMCPServerConnectionResponse>
+
+    /**
+     * Refreshes tools through server-owned runtime control for a persisted Local MCP server.
+     *
+     * Corresponds to `POST /api/v1/local-mcp-servers/{id}/refresh-tools`.
+     *
+     * @param serverId Identifier of the server to refresh.
+     * @return Refresh summary payload returned by the backend.
+     */
+    suspend fun refreshTools(serverId: Long): Either<ApiResourceError, RefreshMCPToolsResponse>
 }
 

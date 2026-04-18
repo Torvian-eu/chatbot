@@ -8,6 +8,8 @@ import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.api.mcp.CreateLocalMCPServerRequest
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
+import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
+import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerConnectionResponse
 import eu.torvian.chatbot.common.models.worker.WorkerDto
 import eu.torvian.chatbot.server.data.entities.UserEntity
 import eu.torvian.chatbot.server.domain.security.JwtConfig
@@ -151,6 +153,59 @@ class LocalMCPServerRoutesTest {
         assertEquals(HttpStatusCode.Forbidden, response.status)
         val errorCode = response.body<eu.torvian.chatbot.common.api.ApiError>().code
         assertEquals(CommonApiErrorCodes.PERMISSION_DENIED.code, errorCode)
+    }
+
+    /**
+     * Verifies that runtime-control endpoints are reachable for authenticated owners and
+     * return deterministic dummy payloads.
+     */
+    @Test
+    fun `runtime control endpoints return dummy success responses for authenticated owner`() = app {
+        val userToken = authHelper.createUserAndGetToken(user1)
+        val worker = registerWorker(owner = user1, workerUid = "worker-route-runtime-control")
+
+        val createResponse = client.post(href(LocalMCPServerResource())) {
+            authenticate(userToken)
+            contentType(ContentType.Application.Json)
+            setBody(
+                CreateLocalMCPServerRequest(
+                    workerId = worker.id,
+                    name = "filesystem-runtime",
+                    command = "npx"
+                )
+            )
+        }
+        assertEquals(HttpStatusCode.Created, createResponse.status)
+        val createdServer = createResponse.body<LocalMCPServerDto>()
+        val byId = LocalMCPServerResource.ById(id = createdServer.id)
+
+        val startResponse = client.post(href(LocalMCPServerResource.ById.Start(parent = byId))) {
+            authenticate(userToken)
+        }
+        assertEquals(HttpStatusCode.OK, startResponse.status)
+
+        val stopResponse = client.post(href(LocalMCPServerResource.ById.Stop(parent = byId))) {
+            authenticate(userToken)
+        }
+        assertEquals(HttpStatusCode.OK, stopResponse.status)
+
+        val testResponse = client.post(href(LocalMCPServerResource.ById.TestConnection(parent = byId))) {
+            authenticate(userToken)
+        }
+        assertEquals(HttpStatusCode.OK, testResponse.status)
+        val testPayload = testResponse.body<TestLocalMCPServerConnectionResponse>()
+        assertEquals(createdServer.id, testPayload.serverId)
+        assertEquals(true, testPayload.success)
+        assertEquals(3, testPayload.discoveredToolCount)
+
+        val refreshResponse = client.post(href(LocalMCPServerResource.ById.RefreshTools(parent = byId))) {
+            authenticate(userToken)
+        }
+        assertEquals(HttpStatusCode.OK, refreshResponse.status)
+        val refreshPayload = refreshResponse.body<RefreshMCPToolsResponse>()
+        assertEquals(0, refreshPayload.addedTools.size)
+        assertEquals(0, refreshPayload.updatedTools.size)
+        assertEquals(0, refreshPayload.deletedTools.size)
     }
 
     /**

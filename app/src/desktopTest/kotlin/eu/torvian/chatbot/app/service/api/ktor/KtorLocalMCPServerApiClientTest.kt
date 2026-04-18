@@ -10,6 +10,8 @@ import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
 import eu.torvian.chatbot.common.models.api.mcp.CreateLocalMCPServerRequest
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
+import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
+import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerConnectionResponse
 import eu.torvian.chatbot.common.models.api.mcp.UpdateLocalMCPServerRequest
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -169,6 +171,114 @@ class KtorLocalMCPServerApiClientTest {
                 val error = result.value as ApiResourceError.ServerError
                 assertEquals(404, error.apiError.statusCode)
                 assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.apiError.code)
+            }
+        }
+    }
+
+    /**
+     * Verifies that start requests target the typed runtime start endpoint.
+     */
+    @Test
+    fun `startServer - success uses runtime start endpoint`() = runTest {
+        val byId = LocalMCPServerResource.ById(id = 42L)
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Post, request.method)
+            assertEquals(href(LocalMCPServerResource.ById.Start(parent = byId)), request.url.encodedPath)
+            respond(
+                content = "",
+                status = HttpStatusCode.NoContent
+            )
+        }
+
+        val api = createTestClient(mockEngine)
+        when (val result = api.startServer(serverId = 42L)) {
+            is Either.Left -> fail("Expected success but got ${result.value}")
+            is Either.Right -> assertEquals(Unit, result.value)
+        }
+    }
+
+    /**
+     * Verifies that stop requests target the typed runtime stop endpoint.
+     */
+    @Test
+    fun `stopServer - success uses runtime stop endpoint`() = runTest {
+        val byId = LocalMCPServerResource.ById(id = 42L)
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Post, request.method)
+            assertEquals(href(LocalMCPServerResource.ById.Stop(parent = byId)), request.url.encodedPath)
+            respond(
+                content = "",
+                status = HttpStatusCode.NoContent
+            )
+        }
+
+        val api = createTestClient(mockEngine)
+        when (val result = api.stopServer(serverId = 42L)) {
+            is Either.Left -> fail("Expected success but got ${result.value}")
+            is Either.Right -> assertEquals(Unit, result.value)
+        }
+    }
+
+    /**
+     * Verifies parsing for runtime connection-test responses.
+     */
+    @Test
+    fun `testConnection - success parses runtime test payload`() = runTest {
+        val byId = LocalMCPServerResource.ById(id = 42L)
+        val payload = TestLocalMCPServerConnectionResponse(
+            serverId = 42L,
+            success = true,
+            discoveredToolCount = 3,
+            message = "dummy"
+        )
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Post, request.method)
+            assertEquals(href(LocalMCPServerResource.ById.TestConnection(parent = byId)), request.url.encodedPath)
+            respond(
+                content = json.encodeToString(payload),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+
+        val api = createTestClient(mockEngine)
+        when (val result = api.testConnection(serverId = 42L)) {
+            is Either.Left -> fail("Expected success but got ${result.value}")
+            is Either.Right -> {
+                assertEquals(true, result.value.success)
+                assertEquals(3, result.value.discoveredToolCount)
+            }
+        }
+    }
+
+    /**
+     * Verifies parsing for runtime refresh responses.
+     */
+    @Test
+    fun `refreshTools - success parses runtime refresh payload`() = runTest {
+        val byId = LocalMCPServerResource.ById(id = 42L)
+        val payload = RefreshMCPToolsResponse(
+            addedTools = emptyList(),
+            updatedTools = emptyList(),
+            deletedTools = emptyList()
+        )
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Post, request.method)
+            assertEquals(href(LocalMCPServerResource.ById.RefreshTools(parent = byId)), request.url.encodedPath)
+            respond(
+                content = json.encodeToString(payload),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+
+        val api = createTestClient(mockEngine)
+        when (val result = api.refreshTools(serverId = 42L)) {
+            is Either.Left -> fail("Expected success but got ${result.value}")
+            is Either.Right -> {
+                assertEquals(0, result.value.addedTools.size)
+                assertEquals(0, result.value.updatedTools.size)
+                assertEquals(0, result.value.deletedTools.size)
             }
         }
     }
