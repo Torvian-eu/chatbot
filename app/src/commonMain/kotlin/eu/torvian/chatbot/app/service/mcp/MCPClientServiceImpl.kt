@@ -4,7 +4,7 @@ import arrow.core.Either
 import arrow.core.getOrElse
 import arrow.core.left
 import arrow.core.right
-import eu.torvian.chatbot.app.domain.models.LocalMCPServer
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import io.modelcontextprotocol.kotlin.sdk.client.Client
 import io.modelcontextprotocol.kotlin.sdk.client.StdioClientTransport
@@ -63,7 +63,7 @@ class MCPClientServiceImpl(
     }
 
     override suspend fun startAndConnect(
-        config: LocalMCPServer
+        config: LocalMCPServerDto
     ): Either<StartAndConnectError, Unit> {
         val serverId = config.id
         logger.info("Starting and connecting to MCP server: $serverId (${config.name})")
@@ -378,7 +378,7 @@ class MCPClientServiceImpl(
      * @param config The MCP server configuration
      * @return Sanitized client name
      */
-    private fun buildClientName(config: LocalMCPServer): String {
+    private fun buildClientName(config: LocalMCPServerDto): String {
         val idStr = config.id.toString()
         val name = config.name
             .lowercase()
@@ -463,7 +463,7 @@ class MCPClientServiceImpl(
 /**
  * Internal wrapper for MCP SDK Client with lifecycle tracking.
  *
- * @property serverConfig The full LocalMCPServer configuration if available
+ * @property serverConfig The full LocalMCPServerDto configuration if available
  * @property processStatus The last known process status from the ProcessManager
  * @property sdkClient The MCP SDK Client instance
  * @property connectedAt When the client was connected
@@ -472,7 +472,7 @@ class MCPClientServiceImpl(
  * @property autoStopTimerJob Optional coroutine job for the auto-stop timer (null if no timer active)
  */
 private data class MCPClientInternal(
-    val serverConfig: LocalMCPServer,
+    val serverConfig: LocalMCPServerDto,
     val processStatus: ProcessStatus,
     val sdkClient: Client,
     val connectedAt: Instant,

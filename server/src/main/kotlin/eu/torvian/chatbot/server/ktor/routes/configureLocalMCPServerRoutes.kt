@@ -4,10 +4,6 @@ import arrow.core.raise.either
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.api.resources.LocalMCPServerResource
 import eu.torvian.chatbot.common.models.api.mcp.CreateLocalMCPServerRequest
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerListResponse
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerResponse
-import eu.torvian.chatbot.common.models.api.mcp.ServerIdsResponse
-import eu.torvian.chatbot.common.models.api.mcp.SetServerEnabledRequest
 import eu.torvian.chatbot.common.models.api.mcp.UpdateLocalMCPServerRequest
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
@@ -19,7 +15,6 @@ import io.ktor.http.*
 import io.ktor.server.auth.*
 import io.ktor.server.request.*
 import io.ktor.server.resources.*
-import io.ktor.server.response.*
 import io.ktor.server.routing.Route
 
 /**
@@ -43,7 +38,7 @@ fun Route.configureLocalMCPServerRoutes(
                     localMCPServerService.createServer(userId, request).bind()
                 }
             }
-            call.respondEither(result.map { LocalMCPServerResponse(it) }, HttpStatusCode.Created)
+            call.respondEither(result, HttpStatusCode.Created)
         }
 
         get<LocalMCPServerResource> {
@@ -53,7 +48,7 @@ fun Route.configureLocalMCPServerRoutes(
                     localMCPServerService.getServersByUserId(userId).bind()
                 }
             }
-            call.respondEither(result.map { LocalMCPServerListResponse(it) })
+            call.respondEither(result)
         }
 
         get<LocalMCPServerResource.ById> { resource ->
@@ -63,7 +58,7 @@ fun Route.configureLocalMCPServerRoutes(
                     localMCPServerService.getServerById(userId, resource.id).bind()
                 }
             }
-            call.respondEither(result.map { LocalMCPServerResponse(it) })
+            call.respondEither(result)
         }
 
         put<LocalMCPServerResource.ById> { resource ->
@@ -74,7 +69,7 @@ fun Route.configureLocalMCPServerRoutes(
                     localMCPServerService.updateServer(userId, resource.id, request).bind()
                 }
             }
-            call.respondEither(result.map { LocalMCPServerResponse(it) })
+            call.respondEither(result)
         }
 
         delete<LocalMCPServerResource.ById> { resource ->
@@ -82,26 +77,6 @@ fun Route.configureLocalMCPServerRoutes(
             val result = either {
                 withError({ error: LocalMCPServerServiceError -> error.toApiError() }) {
                     localMCPServerService.deleteServer(userId, resource.id).bind()
-                }
-            }
-            call.respondEither(result, HttpStatusCode.NoContent)
-        }
-
-        // Legacy compatibility endpoint: return projected IDs from full records.
-        get<LocalMCPServerResource.Ids> {
-            val userId = call.getUserId()
-            val serverIds = localMCPServerService.getServerIdsByUserId(userId)
-            call.respond(ServerIdsResponse(ids = serverIds, userId = userId))
-        }
-
-        // Legacy compatibility endpoint: partial enabled-state update.
-        put<LocalMCPServerResource.ById.SetEnabled> { resource ->
-            val serverId = resource.parent.id
-            val request = call.receive<SetServerEnabledRequest>()
-
-            val result = either {
-                withError({ error: LocalMCPServerServiceError -> error.toApiError() }) {
-                    localMCPServerService.setServerEnabled(serverId, request.isEnabled).bind()
                 }
             }
             call.respondEither(result, HttpStatusCode.NoContent)
@@ -116,7 +91,7 @@ fun Route.configureLocalMCPServerRoutes(
                     localMCPServerService.getServersByWorkerId(workerId).bind()
                 }
             }
-            call.respondEither(result.map { LocalMCPServerListResponse(it) })
+            call.respondEither(result)
         }
     }
 }

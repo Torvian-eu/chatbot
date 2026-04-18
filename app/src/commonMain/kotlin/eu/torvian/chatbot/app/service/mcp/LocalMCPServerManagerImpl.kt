@@ -6,11 +6,12 @@ import arrow.core.raise.either
 import arrow.core.right
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.contracts.zipWith
-import eu.torvian.chatbot.app.domain.models.LocalMCPServer
 import eu.torvian.chatbot.app.repository.LocalMCPServerRepository
 import eu.torvian.chatbot.app.repository.LocalMCPToolRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
@@ -35,7 +36,7 @@ import kotlin.time.Clock
  * Design principles:
  * - High-level orchestration layer between UI and MCP operations
  * - Coordinates data flow across repositories and services
- * - Handles data transformation (MCP SDK Tool → LocalMCPToolDefinition)
+ * - Handles data transformation (MCP SDK Tool â†’ LocalMCPToolDefinition)
  * - Pure business logic and workflow coordination
  *
  * @property serverRepository Repository for MCP server configurations
@@ -96,20 +97,24 @@ class LocalMCPServerManagerImpl(
         name: String,
         command: String,
         arguments: List<String>,
-        environmentVariables: Map<String, String>,
+        environmentVariables: List<LocalMCPEnvironmentVariableDto>,
         workingDirectory: String?
     ): Either<TestConnectionError, Int> = either {
         logger.info("Testing new server: $name")
 
         // Step 1: Create a temporary server config
-        val server = LocalMCPServer(
+        val server = LocalMCPServerDto(
             id = (Long.MIN_VALUE..-1L).random(),
             userId = 1L,
+            workerId = 0L,
             name = name,
             command = command,
             arguments = arguments,
             environmentVariables = environmentVariables,
-            workingDirectory = workingDirectory
+            secretEnvironmentVariables = emptyList(),
+            workingDirectory = workingDirectory,
+            createdAt = clock.now(),
+            updatedAt = clock.now()
         )
 
         // Step 2: Start and connect to the server
@@ -144,25 +149,29 @@ class LocalMCPServerManagerImpl(
     override suspend fun createServer(
         name: String,
         description: String?,
+        workerId: Long,
         command: String,
         arguments: List<String>,
-        environmentVariables: Map<String, String>,
+        environmentVariables: List<LocalMCPEnvironmentVariableDto>,
+        secretEnvironmentVariables: List<LocalMCPEnvironmentVariableDto>,
         workingDirectory: String?,
         isEnabled: Boolean,
         autoStartOnEnable: Boolean,
         autoStartOnLaunch: Boolean,
         autoStopAfterInactivitySeconds: Int?,
         toolNamePrefix: String?
-    ): Either<CreateServerError, LocalMCPServer> = either {
+    ): Either<CreateServerError, LocalMCPServerDto> = either {
         logger.info("Creating new server: $name")
 
-        // Persist server config to database (no connection or tool discovery)
+        // Persist server config through repository/server API (no connection or tool discovery)
         val createdServer = serverRepository.createServer(
+            workerId = workerId,
             name = name,
             description = description,
             command = command,
             arguments = arguments,
             environmentVariables = environmentVariables,
+            secretEnvironmentVariables = secretEnvironmentVariables,
             workingDirectory = workingDirectory,
             isEnabled = isEnabled,
             autoStartOnEnable = autoStartOnEnable,
@@ -288,7 +297,7 @@ class LocalMCPServerManagerImpl(
         val existingTools = (toolRepository.mcpTools.first() as? DataState.Success)
             ?.data?.get(serverId)
         if (existingTools.isNullOrEmpty()) {
-            logger.info("No tools found for MCP server $serverId — running initial tool discovery")
+            logger.info("No tools found for MCP server $serverId â€” running initial tool discovery")
             refreshTools(serverId).onLeft { error ->
                 logger.warn("Initial tool discovery failed for MCP server $serverId: ${error.message}")
             }.onRight {
@@ -309,7 +318,7 @@ class LocalMCPServerManagerImpl(
         logger.info("Successfully stopped MCP server $serverId")
     }
 
-    override suspend fun updateServer(server: LocalMCPServer): Either<UpdateServerError, Unit> = either {
+    override suspend fun updateServer(server: LocalMCPServerDto): Either<UpdateServerError, Unit> = either {
         logger.info("Updating MCP server: ${server.id}")
 
         // Step 1: Get the old configuration to check if isEnabled changed
@@ -392,7 +401,7 @@ class LocalMCPServerManagerImpl(
      * @param serverId The ID of the server to retrieve
      * @return Either.Right with the server config or Either.Left with RepositoryError
      */
-    private fun getServerConfig(serverId: Long): Either<RepositoryError, LocalMCPServer> {
+    private fun getServerConfig(serverId: Long): Either<RepositoryError, LocalMCPServerDto> {
         return when (val currentState = serverRepository.servers.value) {
             is DataState.Success -> {
                 val server = currentState.data.find { it.id == serverId }
@@ -413,7 +422,7 @@ class LocalMCPServerManagerImpl(
      */
     private fun convertMCPToolToDefinition(
         mcpTool: Tool,
-        server: LocalMCPServer
+        server: LocalMCPServerDto
     ): LocalMCPToolDefinition {
         val now = clock.now()
 

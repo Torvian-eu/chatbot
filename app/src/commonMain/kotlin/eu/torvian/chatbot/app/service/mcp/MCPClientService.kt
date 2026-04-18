@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.app.service.mcp
 
 import arrow.core.Either
-import eu.torvian.chatbot.app.domain.models.LocalMCPServer
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.Tool
 import kotlinx.coroutines.flow.Flow
@@ -54,10 +54,10 @@ interface MCPClientService {
      * If a client is already connected for the given server id, a suitable
      * `StartAndConnectError` is returned.
      *
-     * @param config Full `LocalMCPServer` configuration (contains id and name)
+     * @param config Full `LocalMCPServerDto` configuration (contains id and name)
      * @return Either.Right(Unit) on success, or Either.Left(StartAndConnectError) on failure
      */
-    suspend fun startAndConnect(config: LocalMCPServer): Either<StartAndConnectError, Unit>
+    suspend fun startAndConnect(config: LocalMCPServerDto): Either<StartAndConnectError, Unit>
 
     /**
      * Stops an MCP server process and disconnects the MCP SDK client.

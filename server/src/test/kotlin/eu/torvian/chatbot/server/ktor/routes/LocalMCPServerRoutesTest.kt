@@ -7,8 +7,7 @@ import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.api.mcp.CreateLocalMCPServerRequest
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerListResponse
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerResponse
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.worker.WorkerDto
 import eu.torvian.chatbot.server.data.entities.UserEntity
 import eu.torvian.chatbot.server.domain.security.JwtConfig
@@ -117,7 +116,7 @@ class LocalMCPServerRoutesTest {
         }
 
         assertEquals(HttpStatusCode.Created, createResponse.status)
-        val createdServer = createResponse.body<LocalMCPServerResponse>().server
+        val createdServer = createResponse.body<LocalMCPServerDto>()
         assertEquals(worker.id, createdServer.workerId)
         assertEquals("secret-value", createdServer.secretEnvironmentVariables.single().value)
 
@@ -125,7 +124,7 @@ class LocalMCPServerRoutesTest {
             authenticate(workerToken)
         }
         assertEquals(HttpStatusCode.OK, workerListResponse.status)
-        val workerServers = workerListResponse.body<LocalMCPServerListResponse>().servers
+        val workerServers = workerListResponse.body<List<LocalMCPServerDto>>()
         assertEquals(1, workerServers.size)
         assertEquals(createdServer.id, workerServers.single().id)
         assertEquals("secret-value", workerServers.single().secretEnvironmentVariables.single().value)

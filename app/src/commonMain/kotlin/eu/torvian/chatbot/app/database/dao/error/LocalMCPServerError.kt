@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.app.database.dao.error
 
 /**
- * Represents possible errors that can occur during LocalMCPServer data operations
+ * Represents possible errors that can occur during LocalMCPServerDto data operations
  * on the client side.
  */
 sealed interface LocalMCPServerError {
@@ -31,7 +31,7 @@ sealed interface LocalMCPServerError {
 }
 
 /**
- * Error type for LocalMCPServer update operations.
+ * Error type for LocalMCPServerDto update operations.
  */
 sealed interface UpdateLocalMCPServerError {
     /**
@@ -54,7 +54,7 @@ sealed interface UpdateLocalMCPServerError {
 }
 
 /**
- * Error type for LocalMCPServer deletion operations.
+ * Error type for LocalMCPServerDto deletion operations.
  */
 sealed interface DeleteLocalMCPServerError {
     /**
@@ -74,7 +74,7 @@ sealed interface DeleteLocalMCPServerError {
 }
 
 /**
- * Error type for LocalMCPServer retrieval operations (getById).
+ * Error type for LocalMCPServerDto retrieval operations (getById).
  * This consolidates the different failure modes of getById into a single error type.
  */
 sealed interface GetLocalMCPServerError {

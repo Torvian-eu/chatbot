@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.app.service.mcp
 
-import eu.torvian.chatbot.app.domain.models.LocalMCPServer
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -298,7 +299,7 @@ class LocalMCPServerProcessManagerTest {
             id = 15L,
             command = "java",
             arguments = listOf("-version"),
-            environmentVariables = mapOf("TEST_VAR" to "test_value")
+            environmentVariables = listOf(LocalMCPEnvironmentVariableDto("TEST_VAR", "test_value"))
         )
 
         // When: Starting the server
@@ -308,22 +309,24 @@ class LocalMCPServerProcessManagerTest {
         assertTrue(result.isRight(), "Expected successful start")
     }
 
-    // Helper function to create test LocalMCPServer instances
+    // Helper function to create test LocalMCPServerDto instances
     private fun createTestServer(
         id: Long,
         command: String,
         arguments: List<String>,
-        environmentVariables: Map<String, String> = emptyMap(),
+        environmentVariables: List<LocalMCPEnvironmentVariableDto> = emptyList(),
         workingDirectory: String? = null
-    ): LocalMCPServer {
-        return LocalMCPServer(
+    ): LocalMCPServerDto {
+        return LocalMCPServerDto(
             id = id,
             userId = 1L,
+            workerId = 1L,
             name = "test-server-$id",
             description = "Test server $id",
             command = command,
             arguments = arguments,
             environmentVariables = environmentVariables,
+            secretEnvironmentVariables = emptyList(),
             workingDirectory = workingDirectory,
             isEnabled = true,
             autoStartOnEnable = false,

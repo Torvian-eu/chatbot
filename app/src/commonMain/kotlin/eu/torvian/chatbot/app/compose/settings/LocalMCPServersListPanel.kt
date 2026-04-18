@@ -12,7 +12,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import eu.torvian.chatbot.app.domain.models.LocalMCPServer
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.app.service.mcp.LocalMCPServerOverview
 import eu.torvian.chatbot.app.viewmodel.LocalMCPServerOperation
 
@@ -82,7 +82,7 @@ fun LocalMCPServersListPanel(
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(serverOverviews, key = { it.serverConfig.id }) { overview ->
-                        val server: LocalMCPServer = overview.serverConfig
+                        val server: LocalMCPServerDto = overview.serverConfig
                         val isOperating = when (operationInProgress) {
                             is LocalMCPServerOperation.TestingConnection -> operationInProgress.serverId == server.id
                             is LocalMCPServerOperation.RefreshingTools -> operationInProgress.serverId == server.id
@@ -110,7 +110,7 @@ fun LocalMCPServersListPanel(
  */
 @Composable
 fun LocalMCPServerListItem(
-    server: LocalMCPServer,
+    server: LocalMCPServerDto,
     overview: LocalMCPServerOverview?,
     isSelected: Boolean,
     isOperating: Boolean,

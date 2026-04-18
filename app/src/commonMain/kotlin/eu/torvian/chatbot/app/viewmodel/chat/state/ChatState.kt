@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.app.viewmodel.chat.state
 
 import eu.torvian.chatbot.app.domain.contracts.DataState
-import eu.torvian.chatbot.app.domain.models.LocalMCPServer
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.ToolCallsMap
 import eu.torvian.chatbot.common.models.core.ChatMessage
@@ -67,7 +67,7 @@ interface ChatState {
      * MCP server configurations for the current user.
      * Used for displaying server information in tool configuration dialogs.
      */
-    val mcpServers: StateFlow<DataState<RepositoryError, List<LocalMCPServer>>>
+    val mcpServers: StateFlow<DataState<RepositoryError, List<LocalMCPServerDto>>>
 
     // --- Derived Lookup Maps (for performance & graceful degradation) ---
     /**

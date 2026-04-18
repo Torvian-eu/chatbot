@@ -3,7 +3,7 @@ package eu.torvian.chatbot.app.service.mcp
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
-import eu.torvian.chatbot.app.domain.models.LocalMCPServer
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -58,7 +58,7 @@ class LocalMCPServerProcessManagerDesktop(
      * @param config The MCP server configuration
      * @return Either.Right with Unit on success, or Either.Left with StartServerError on failure
      */
-    override suspend fun startServer(config: LocalMCPServer): Either<StartServerError, ProcessStatus> {
+    override suspend fun startServer(config: LocalMCPServerDto): Either<StartServerError, ProcessStatus> {
         logger.info("Starting MCP server: ${config.name} (ID: ${config.id})")
 
         // Validate configuration
@@ -83,10 +83,13 @@ class LocalMCPServerProcessManagerDesktop(
             process = withContext(Dispatchers.IO) {
                 val processBuilder = ProcessBuilder(command)
 
-                if (config.environmentVariables.isNotEmpty()) {
+                // Merge regular and secret environment variable lists; secret entries later in the
+                // concatenation will overwrite earlier keys when written into the process env.
+                val runtimeEnvList = config.environmentVariables + config.secretEnvironmentVariables
+                if (runtimeEnvList.isNotEmpty()) {
                     val environment = processBuilder.environment()
-                    config.environmentVariables.forEach { (key, value) -> environment[key] = value }
-                    logger.debug("Set ${config.environmentVariables.size} environment variables for server ${config.id}")
+                    runtimeEnvList.forEach { env -> environment[env.key] = env.value }
+                    logger.debug("Set ${runtimeEnvList.size} environment variables for server ${config.id}")
                 }
 
                 config.workingDirectory?.let { workingDir ->
@@ -262,7 +265,7 @@ class LocalMCPServerProcessManagerDesktop(
         )
     }
 
-    override suspend fun restartServer(config: LocalMCPServer): Either<RestartServerError, ProcessStatus> {
+    override suspend fun restartServer(config: LocalMCPServerDto): Either<RestartServerError, ProcessStatus> {
         logger.info("Restarting MCP server: ${config.name} (ID: ${config.id})")
 
         // Stop the server first (ignore ProcessNotRunning error)
@@ -324,7 +327,7 @@ class LocalMCPServerProcessManagerDesktop(
      * @param config The MCP server configuration to validate
      * @return Either.Right with Unit if validation succeeds, or Either.Left with StartServerError if validation fails
      */
-    private fun validateConfiguration(config: LocalMCPServer): Either<StartServerError, Unit> {
+    private fun validateConfiguration(config: LocalMCPServerDto): Either<StartServerError, Unit> {
         if (config.command.isBlank()) {
             return StartServerError.InvalidConfiguration(config.id, "Command cannot be blank").left()
         }
@@ -354,14 +357,14 @@ class LocalMCPServerProcessManagerDesktop(
      * @param config The MCP server configuration
      * @return A list representing the complete command and its arguments
      */
-    private fun buildCommand(config: LocalMCPServer): List<String> {
+    private fun buildCommand(config: LocalMCPServerDto): List<String> {
         return listOf(config.command) + config.arguments
     }
 
     /**
      * Represents a managed MCP server process with metadata.
      *
-     * @property serverId The logical ID of the MCP server (from LocalMCPServer)
+     * @property serverId The logical ID of the MCP server (from LocalMCPServerDto)
      * @property process The Java Process object for process control
      * @property pid The operating system process ID (cached at creation time)
      * @property startedAt Timestamp when the process was started (for monitoring)
