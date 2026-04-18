@@ -14,7 +14,6 @@ import eu.torvian.chatbot.app.compose.startup.StartupLoadingScreen
 import eu.torvian.chatbot.app.config.FileSystemClientConfigLoader
 import eu.torvian.chatbot.app.koin.androidModule
 import eu.torvian.chatbot.app.koin.appModule
-import eu.torvian.chatbot.app.koin.databaseModule
 import eu.torvian.chatbot.app.utils.misc.createKmpLogger
 import eu.torvian.chatbot.app.viewmodel.startup.LoadStartupConfigurationUseCase
 import eu.torvian.chatbot.app.viewmodel.startup.StartupState
@@ -103,7 +102,6 @@ fun AppLifecycleManager(configDir: String, context: Context) {
                 androidContext(context)
                 modules(
                     androidModule(currentState.config),
-                    databaseModule,
                     appModule(currentState.config)
                 )
             }) {

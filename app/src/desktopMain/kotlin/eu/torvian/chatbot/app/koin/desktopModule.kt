@@ -1,8 +1,6 @@
 package eu.torvian.chatbot.app.koin
 
 import eu.torvian.chatbot.app.config.AppConfiguration
-import eu.torvian.chatbot.app.database.DriverFactory
-import eu.torvian.chatbot.app.database.DriverFactoryDesktop
 import eu.torvian.chatbot.app.service.auth.FileSystemTokenStorage
 import eu.torvian.chatbot.app.service.auth.TokenStorage
 import eu.torvian.chatbot.app.service.clipboard.ClipboardService
@@ -60,11 +58,6 @@ fun desktopModule(config: AppConfiguration) = module {
 
     single<ClipboardService> {
         ClipboardServiceDesktop()
-    }
-
-    single<DriverFactory> {
-        val databasePath = Path(config.storage.baseApplicationPath, config.storage.dataDir, "local.db").toString()
-        DriverFactoryDesktop(databasePath = databasePath)
     }
 
     single<LocalMCPServerProcessManager> {
