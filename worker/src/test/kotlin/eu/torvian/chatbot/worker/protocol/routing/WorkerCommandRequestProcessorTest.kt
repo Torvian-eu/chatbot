@@ -14,6 +14,8 @@ import eu.torvian.chatbot.worker.protocol.ids.WorkerMessageIdProvider
 import eu.torvian.chatbot.worker.protocol.interaction.WorkerActiveInteraction
 import eu.torvian.chatbot.worker.protocol.registry.InMemoryWorkerActiveInteractionRegistry
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
@@ -30,6 +32,93 @@ import kotlin.test.assertTrue
  */
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class WorkerCommandRequestProcessorTest {
+    /**
+     * Verifies that MCP server-control command types are recognized and delegated to factories.
+     */
+    @Test
+    fun `mcp server control command types are routed to registered interactions`() = runTest {
+        val emitter = RecordingEmitter()
+        val registry = InMemoryWorkerActiveInteractionRegistry()
+        val observedCommandTypes: MutableList<String> = mutableListOf()
+        val observedCommandTypesMutex = Mutex()
+        val recordingFactory = WorkerInteractionFactory { envelope, requestPayload, _ ->
+            RecordingInteraction(
+                interactionId = envelope.interactionId,
+                onStart = {
+                    observedCommandTypesMutex.withLock {
+                        observedCommandTypes += requestPayload.commandType
+                    }
+                }
+            )
+        }
+
+        val processor = WorkerCommandRequestProcessor(
+            interactionScope = this,
+            interactionFactoriesByCommandType = mapOf(
+                WorkerProtocolCommandTypes.MCP_SERVER_START to recordingFactory,
+                WorkerProtocolCommandTypes.MCP_SERVER_STOP to recordingFactory,
+                WorkerProtocolCommandTypes.MCP_SERVER_TEST_CONNECTION to recordingFactory,
+                WorkerProtocolCommandTypes.MCP_SERVER_REFRESH_TOOLS to recordingFactory
+            ),
+            emitter = emitter,
+            registry = registry,
+            messageIdProvider = SequenceMessageIdProvider()
+        )
+
+        val supportedCommandTypes = listOf(
+            WorkerProtocolCommandTypes.MCP_SERVER_START,
+            WorkerProtocolCommandTypes.MCP_SERVER_STOP,
+            WorkerProtocolCommandTypes.MCP_SERVER_TEST_CONNECTION,
+            WorkerProtocolCommandTypes.MCP_SERVER_REFRESH_TOOLS
+        )
+
+        supportedCommandTypes.forEachIndexed { index, commandType ->
+            processor.process(
+                commandRequestEnvelope(
+                    inboundMessageId = "in-route-$index",
+                    interactionId = "int-route-$index",
+                    commandType = commandType
+                )
+            )
+        }
+
+        runCurrent()
+
+        assertEquals(0, emitter.messages.size)
+        assertEquals(supportedCommandTypes.sorted(), observedCommandTypes.sorted())
+    }
+
+    /**
+     * Verifies unsupported command types are rejected with a stable reason code.
+     */
+    @Test
+    fun `unsupported command type is rejected`() = runTest {
+        val emitter = RecordingEmitter()
+        val registry = InMemoryWorkerActiveInteractionRegistry()
+        val processor = WorkerCommandRequestProcessor(
+            interactionScope = this,
+            interactionFactoriesByCommandType = emptyMap(),
+            emitter = emitter,
+            registry = registry,
+            messageIdProvider = SequenceMessageIdProvider()
+        )
+
+        processor.process(
+            commandRequestEnvelope(
+                inboundMessageId = "in-unsupported",
+                interactionId = "int-unsupported",
+                commandType = "mcp.server.unsupported"
+            )
+        )
+
+        assertEquals(1, emitter.messages.size)
+        val rejected = decodeProtocolPayload<WorkerCommandRejectedPayload>(
+            emitter.messages.single().payload!!,
+            "WorkerCommandRejectedPayload"
+        ).getOrElse { error("Expected rejection payload to decode: $it") }
+        assertEquals(WorkerProtocolRejectionReasons.UNSUPPORTED_COMMAND_TYPE, rejected.reasonCode)
+    }
+
     /**
      * Verifies that missing request payloads are rejected immediately.
      */
@@ -214,6 +303,33 @@ class WorkerCommandRequestProcessorTest {
                 startObserved = startObserved,
                 allowCompletion = allowCompletion
             )
+        }
+    }
+
+    /**
+     * Minimal [WorkerActiveInteraction] implementation used by command routing assertions.
+     *
+     * @property interactionId Stable interaction identifier tracked by the processor.
+     * @property onStart Callback invoked when the interaction starts.
+     */
+    private class RecordingInteraction(
+        override val interactionId: String,
+        private val onStart: suspend () -> Unit
+    ) : WorkerActiveInteraction {
+        /**
+         * Executes the configured start callback.
+         */
+        override suspend fun start() {
+            onStart()
+        }
+
+        /**
+         * Ignores follow-up envelopes for this test helper.
+         *
+         * @param message Inbound protocol envelope addressed to this interaction.
+         */
+        override suspend fun onMessage(message: WorkerProtocolMessage) {
+            // No-op in this test helper.
         }
     }
 
