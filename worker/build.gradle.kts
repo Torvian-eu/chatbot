@@ -23,9 +23,14 @@ dependencies {
     implementation(libs.arrow.core)
     implementation(libs.coroutines.core)
     implementation(libs.serialization.json)
+    implementation(libs.kotlinx.io.core)
     implementation(libs.koin.core)
     implementation(libs.bundles.log4j)
     implementation(libs.bundles.bouncycastle)
+
+    // MCP runtime dependencies
+    implementation(libs.mcp.sdk.core)
+    implementation(libs.mcp.sdk.client)
 
     // Testing dependencies
     testImplementation(libs.kotlin.test)
@@ -36,4 +41,3 @@ dependencies {
 application {
     mainClass.set("eu.torvian.chatbot.worker.main.WorkerMain")
 }
-

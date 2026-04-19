@@ -1,0 +1,184 @@
+package eu.torvian.chatbot.worker.mcp
+
+import arrow.core.Either
+import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
+
+/**
+ * Runtime-facing service for worker MCP server lifecycle and discovery operations.
+ *
+ * This service owns server-config lookup and MCP runtime orchestration while remaining protocol-agnostic.
+ */
+interface WorkerLocalMcpRuntimeService {
+    /**
+     * Starts a configured local MCP server runtime.
+     *
+     * @param serverId Persisted local MCP server identifier.
+     * @return Either runtime error or Unit.
+     */
+    suspend fun startServer(serverId: Long): Either<WorkerLocalMcpRuntimeError, Unit>
+
+    /**
+     * Stops a configured local MCP server runtime.
+     *
+     * @param serverId Persisted local MCP server identifier.
+     * @return Either runtime error or Unit.
+     */
+    suspend fun stopServer(serverId: Long): Either<WorkerLocalMcpRuntimeError, Unit>
+
+    /**
+     * Verifies MCP runtime connectivity and tool discovery for one configured server.
+     *
+     * @param serverId Persisted local MCP server identifier.
+     * @return Either runtime error or test-connection outcome.
+     */
+    suspend fun testConnection(serverId: Long): Either<WorkerLocalMcpRuntimeError, WorkerLocalMcpTestConnectionOutcome>
+
+    /**
+     * Performs runtime-side refresh behavior supported by the current worker contract.
+     *
+     * @param serverId Persisted local MCP server identifier.
+     * @return Either runtime error or refresh outcome.
+     */
+    suspend fun refreshTools(serverId: Long): Either<WorkerLocalMcpRuntimeError, WorkerLocalMcpRefreshToolsOutcome>
+}
+
+/**
+ * Runtime-level test-connection outcome.
+ *
+ * @property discoveredToolCount Number of tools discovered during the connectivity check.
+ * @property message Optional operator-facing message about the result.
+ */
+data class WorkerLocalMcpTestConnectionOutcome(
+    val discoveredToolCount: Int,
+    val message: String? = null
+)
+
+/**
+ * Runtime-level refresh outcome represented as a tool diff.
+ *
+ * @property addedTools Tools discovered as newly added.
+ * @property updatedTools Tools discovered as updated.
+ * @property deletedTools Tools discovered as deleted.
+ */
+data class WorkerLocalMcpRefreshToolsOutcome(
+    val addedTools: List<LocalMCPToolDefinition>,
+    val updatedTools: List<LocalMCPToolDefinition>,
+    val deletedTools: List<LocalMCPToolDefinition>
+)
+
+/**
+ * Logical runtime errors for worker MCP server control operations.
+ */
+sealed interface WorkerLocalMcpRuntimeError {
+    /**
+     * Stable machine-readable runtime error code.
+     */
+    val code: String
+
+    /**
+     * Human-readable runtime error message.
+     */
+    val message: String
+
+    /**
+     * Optional structured runtime diagnostics rendered as a simple string.
+     */
+    val details: String?
+
+    /**
+     * No configuration was available for the requested server identifier.
+     *
+     * @property serverId Persisted local MCP server identifier.
+     */
+    data class ServerConfigMissing(
+        val serverId: Long
+    ) : WorkerLocalMcpRuntimeError {
+        /**
+         * Stable machine-readable runtime error code.
+         */
+        override val code: String = "SERVER_CONFIG_MISSING"
+
+        /**
+         * Human-readable runtime error message.
+         */
+        override val message: String = "No local MCP server config available for serverId=$serverId"
+
+        /**
+         * Optional diagnostics for this runtime error.
+         */
+        override val details: String? = "The worker config store has no entry for this server"
+    }
+
+    /**
+     * Runtime start operation failed.
+     *
+     * @property serverId Persisted local MCP server identifier.
+     * @property message Human-readable runtime error message.
+     * @property details Optional diagnostics.
+     */
+    data class StartFailed(
+        val serverId: Long,
+        override val message: String,
+        override val details: String? = null
+    ) : WorkerLocalMcpRuntimeError {
+        /**
+         * Stable machine-readable runtime error code.
+         */
+        override val code: String = "START_FAILED"
+    }
+
+    /**
+     * Runtime stop operation failed.
+     *
+     * @property serverId Persisted local MCP server identifier.
+     * @property message Human-readable runtime error message.
+     * @property details Optional diagnostics.
+     */
+    data class StopFailed(
+        val serverId: Long,
+        override val message: String,
+        override val details: String? = null
+    ) : WorkerLocalMcpRuntimeError {
+        /**
+         * Stable machine-readable runtime error code.
+         */
+        override val code: String = "STOP_FAILED"
+    }
+
+    /**
+     * Runtime tool-discovery operation failed.
+     *
+     * @property serverId Persisted local MCP server identifier.
+     * @property message Human-readable runtime error message.
+     * @property details Optional diagnostics.
+     */
+    data class DiscoveryFailed(
+        val serverId: Long,
+        override val message: String,
+        override val details: String? = null
+    ) : WorkerLocalMcpRuntimeError {
+        /**
+         * Stable machine-readable runtime error code.
+         */
+        override val code: String = "DISCOVERY_FAILED"
+    }
+
+    /**
+     * Test-connection cleanup failed after a temporary start.
+     *
+     * @property serverId Persisted local MCP server identifier.
+     * @property message Human-readable runtime error message.
+     * @property details Optional diagnostics.
+     */
+    data class CleanupFailed(
+        val serverId: Long,
+        override val message: String,
+        override val details: String? = null
+    ) : WorkerLocalMcpRuntimeError {
+        /**
+         * Stable machine-readable runtime error code.
+         */
+        override val code: String = "CLEANUP_FAILED"
+    }
+}
+
