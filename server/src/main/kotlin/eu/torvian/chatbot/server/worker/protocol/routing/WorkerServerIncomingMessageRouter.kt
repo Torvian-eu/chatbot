@@ -1,6 +1,8 @@
 package eu.torvian.chatbot.server.worker.protocol.routing
 
 import arrow.core.Either
+import arrow.core.left
+import arrow.core.right
 import eu.torvian.chatbot.common.models.api.worker.protocol.codec.WorkerProtocolCodecError
 import eu.torvian.chatbot.common.models.api.worker.protocol.codec.decodeProtocolPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolMessageTypes
@@ -8,7 +10,8 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.core.WorkerProtocolM
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandAcceptedPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRejectedPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandResultPayload
-import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchResult
+import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchError
+import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchSuccess
 import eu.torvian.chatbot.server.worker.command.pending.PendingWorkerCommand
 import eu.torvian.chatbot.server.worker.command.pending.PendingWorkerCommandRegistry
 import eu.torvian.chatbot.server.worker.protocol.handshake.WorkerSessionHelloHandler
@@ -106,32 +109,29 @@ class WorkerServerIncomingMessageRouter(
             return
         }
 
-        when (message.payload) {
-            null -> {
-                logger.warn(
-                    "Received command.accepted without payload for active interaction (workerId={}, interactionId={}, commandType={})",
-                    session.workerContext.workerId,
-                    message.interactionId,
-                    pendingCommand.commandType
-                )
-                completeMalformedLifecycle(session, pendingCommand, message, "Missing command accepted payload")
-            }
+        val acceptedPayload = message.payload
+        if (acceptedPayload == null) {
+            logger.warn(
+                "Received command.accepted without payload for active interaction (workerId={}, interactionId={}, commandType={})",
+                session.workerContext.workerId,
+                message.interactionId,
+                pendingCommand.commandType
+            )
+            completeMalformedLifecycle(session, pendingCommand, message, "Missing command accepted payload")
+            return
+        }
 
-            else -> {
-                val acceptedPayload = requireNotNull(message.payload)
-                when (val decoded = decodeProtocolPayload<WorkerCommandAcceptedPayload>(
-                    acceptedPayload,
-                    "WorkerCommandAcceptedPayload"
-                )) {
-                    is Either.Left -> handleMalformedLifecyclePayload(session, pendingCommand, message, decoded.value)
-                    is Either.Right -> logger.info(
-                        "Worker accepted command request (workerId={}, interactionId={}, commandType={})",
-                        session.workerContext.workerId,
-                        message.interactionId,
-                        pendingCommand.commandType
-                    )
-                }
-            }
+        when (val decoded = decodeProtocolPayload<WorkerCommandAcceptedPayload>(
+            acceptedPayload,
+            "WorkerCommandAcceptedPayload"
+        )) {
+            is Either.Left -> handleMalformedLifecyclePayload(session, pendingCommand, message, decoded.value)
+            is Either.Right -> logger.info(
+                "Worker accepted command request (workerId={}, interactionId={}, commandType={})",
+                session.workerContext.workerId,
+                message.interactionId,
+                pendingCommand.commandType
+            )
         }
     }
 
@@ -170,12 +170,12 @@ class WorkerServerIncomingMessageRouter(
             is Either.Right -> {
                 val completed = pendingCommandRegistry.complete(
                     interactionId = message.interactionId,
-                    outcome = WorkerCommandDispatchResult.Completed(
+                    outcome = WorkerCommandDispatchSuccess(
                         workerId = session.workerContext.workerId,
                         interactionId = message.interactionId,
                         commandType = pendingCommand.commandType,
                         result = decoded.value
-                    )
+                    ).right()
                 )
                 if (completed) {
                     logger.info(
@@ -226,12 +226,12 @@ class WorkerServerIncomingMessageRouter(
             is Either.Right -> {
                 val completed = pendingCommandRegistry.complete(
                     interactionId = message.interactionId,
-                    outcome = WorkerCommandDispatchResult.Rejected(
+                    outcome = WorkerCommandDispatchError.Rejected(
                         workerId = session.workerContext.workerId,
                         interactionId = message.interactionId,
                         commandType = pendingCommand.commandType,
                         rejection = decoded.value
-                    )
+                    ).left()
                 )
                 if (completed) {
                     logger.info(
@@ -290,13 +290,13 @@ class WorkerServerIncomingMessageRouter(
     ) {
         pendingCommandRegistry.complete(
             interactionId = message.interactionId,
-            outcome = WorkerCommandDispatchResult.MalformedLifecyclePayload(
+            outcome = WorkerCommandDispatchError.MalformedLifecyclePayload(
                 workerId = session.workerContext.workerId,
                 interactionId = message.interactionId,
                 commandType = pendingCommand.commandType,
                 messageType = message.type,
                 reason = reason
-            )
+            ).left()
         )
     }
 

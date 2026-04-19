@@ -1,5 +1,7 @@
 package eu.torvian.chatbot.server.worker.command
 
+import arrow.core.getOrElse
+import arrow.core.right
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolMessageTypes
 import eu.torvian.chatbot.common.models.api.worker.protocol.core.WorkerProtocolMessage
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRequestPayload
@@ -58,17 +60,18 @@ class DefaultWorkerCommandDispatchServiceTest {
             assertEquals(WorkerProtocolMessageTypes.COMMAND_REQUEST, outbound.type)
             val pending = pendingCommandRegistry.get(outbound.interactionId)
             requireNotNull(pending)
+            val outcome = WorkerCommandDispatchSuccess(
+                workerId = workerContext.workerId,
+                interactionId = outbound.interactionId,
+                commandType = pending.commandType,
+                result = WorkerCommandResultPayload(
+                    status = "success",
+                    data = buildJsonObject { put("value", "ok") }
+                )
+            ).right()
             pendingCommandRegistry.complete(
                 interactionId = outbound.interactionId,
-                outcome = WorkerCommandDispatchResult.Completed(
-                    workerId = workerContext.workerId,
-                    interactionId = outbound.interactionId,
-                    commandType = pending.commandType,
-                    result = WorkerCommandResultPayload(
-                        status = "success",
-                        data = buildJsonObject { put("value", "ok") }
-                    )
-                )
+                outcome = outcome
             )
             true
         }
@@ -81,11 +84,11 @@ class DefaultWorkerCommandDispatchServiceTest {
             )
         )
 
-        assertIs<WorkerCommandDispatchResult.Completed>(result)
-        assertEquals(workerContext.workerId, result.workerId)
-        assertEquals("tool.call", result.commandType)
-        assertTrue(result.result.status == "success")
-        assertNull(pendingCommandRegistry.get(result.interactionId))
+        val completed = result.getOrElse { error("Expected completed dispatch result: $it") }
+        assertEquals(workerContext.workerId, completed.workerId)
+        assertEquals("tool.call", completed.commandType)
+        assertTrue(completed.result.status == "success")
+        assertNull(pendingCommandRegistry.get(completed.interactionId))
     }
 
     @Test
@@ -101,10 +104,14 @@ class DefaultWorkerCommandDispatchServiceTest {
             timeout = kotlin.time.Duration.ZERO
         )
 
-        assertIs<WorkerCommandDispatchResult.TimedOut>(result)
-        assertEquals(workerContext.workerId, result.workerId)
-        assertEquals("tool.call", result.commandType)
-        assertNull(pendingCommandRegistry.get(result.interactionId))
+        val timeout = result.fold(
+            ifLeft = { it },
+            ifRight = { error("Expected timeout dispatch error but got completion: $it") }
+        )
+        assertIs<WorkerCommandDispatchError.TimedOut>(timeout)
+        assertEquals(workerContext.workerId, timeout.workerId)
+        assertEquals("tool.call", timeout.commandType)
+        assertNull(pendingCommandRegistry.get(timeout.interactionId))
     }
 
     @Test
@@ -119,8 +126,12 @@ class DefaultWorkerCommandDispatchServiceTest {
             )
         )
 
-        assertEquals(WorkerCommandDispatchResult.WorkerNotConnected(workerContext.workerId), result)
+        assertEquals(
+            WorkerCommandDispatchError.WorkerNotConnected(workerContext.workerId),
+            result.fold(ifLeft = { it }, ifRight = { error("Expected not-connected error but got completion: $it") })
+        )
     }
 }
+
 
 

@@ -6,6 +6,8 @@ import eu.torvian.chatbot.app.service.api.LocalMCPServerApi
 import eu.torvian.chatbot.common.api.resources.LocalMCPServerResource
 import eu.torvian.chatbot.common.models.api.mcp.CreateLocalMCPServerRequest
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
+import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
+import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerConnectionResponse
 import eu.torvian.chatbot.common.models.api.mcp.UpdateLocalMCPServerRequest
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -55,5 +57,31 @@ class KtorLocalMCPServerApiClient(client: HttpClient) : BaseApiResourceClient(cl
             client.delete(LocalMCPServerResource.ById(id = serverId)).body<Unit>()
         }
     }
+
+    override suspend fun startServer(serverId: Long): Either<ApiResourceError, Unit> = safeApiCall {
+        client.post(LocalMCPServerResource.ById.Start(parent = byId(serverId))).body<Unit>()
+    }
+
+    override suspend fun stopServer(serverId: Long): Either<ApiResourceError, Unit> = safeApiCall {
+        client.post(LocalMCPServerResource.ById.Stop(parent = byId(serverId))).body<Unit>()
+    }
+
+    override suspend fun testConnection(serverId: Long): Either<ApiResourceError, TestLocalMCPServerConnectionResponse> =
+        safeApiCall {
+            client.post(LocalMCPServerResource.ById.TestConnection(parent = byId(serverId)))
+                .body<TestLocalMCPServerConnectionResponse>()
+        }
+
+    override suspend fun refreshTools(serverId: Long): Either<ApiResourceError, RefreshMCPToolsResponse> = safeApiCall {
+        client.post(LocalMCPServerResource.ById.RefreshTools(parent = byId(serverId))).body<RefreshMCPToolsResponse>()
+    }
+
+    /**
+     * Builds the typed by-id resource once for nested runtime-control resources.
+     *
+     * @param serverId Identifier of the target Local MCP server.
+     * @return By-id resource that anchors nested runtime-control resources.
+     */
+    private fun byId(serverId: Long): LocalMCPServerResource.ById = LocalMCPServerResource.ById(id = serverId)
 }
 

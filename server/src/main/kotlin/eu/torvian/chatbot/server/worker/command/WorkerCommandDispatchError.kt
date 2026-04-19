@@ -1,31 +1,15 @@
 package eu.torvian.chatbot.server.worker.command
 
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRejectedPayload
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandResultPayload
 import kotlin.time.Duration
 
 /**
- * Final outcome produced by the worker command dispatch layer.
+ * Terminal failure outcome produced by the worker command dispatch layer.
  *
- * The result model stays server-internal and does not alter the wire DTOs. It is intentionally
- * broad enough to represent both terminal worker responses and local dispatch failures.
+ * This error model captures lifecycle failures and local dispatch failures while leaving
+ * successful completion data in [WorkerCommandDispatchSuccess].
  */
-sealed interface WorkerCommandDispatchResult {
-    /**
-     * Indicates that the worker processed the command successfully.
-     *
-     * @property workerId Worker identifier that received the command.
-     * @property interactionId Correlation identifier shared by all lifecycle messages.
-     * @property commandType Domain command type that was dispatched.
-     * @property result Worker-reported final result payload.
-     */
-    data class Completed(
-        val workerId: Long,
-        val interactionId: String,
-        val commandType: String,
-        val result: WorkerCommandResultPayload
-    ) : WorkerCommandDispatchResult
-
+sealed interface WorkerCommandDispatchError {
     /**
      * Indicates that the worker rejected the command.
      *
@@ -39,7 +23,7 @@ sealed interface WorkerCommandDispatchResult {
         val interactionId: String,
         val commandType: String,
         val rejection: WorkerCommandRejectedPayload
-    ) : WorkerCommandDispatchResult
+    ) : WorkerCommandDispatchError
 
     /**
      * Indicates that the worker acknowledged the request but no terminal outcome arrived in time.
@@ -54,7 +38,7 @@ sealed interface WorkerCommandDispatchResult {
         val interactionId: String,
         val commandType: String,
         val timeout: Duration
-    ) : WorkerCommandDispatchResult
+    ) : WorkerCommandDispatchError
 
     /**
      * Indicates that the worker was not connected when dispatch was attempted.
@@ -63,12 +47,10 @@ sealed interface WorkerCommandDispatchResult {
      */
     data class WorkerNotConnected(
         val workerId: Long
-    ) : WorkerCommandDispatchResult
+    ) : WorkerCommandDispatchError
 
     /**
      * Indicates that the live session disappeared before the command could complete.
-     *
-     * This is the explicit disconnect policy used by the first server-side implementation.
      *
      * @property workerId Worker identifier whose session disconnected.
      * @property interactionId Correlation identifier shared by all lifecycle messages.
@@ -80,7 +62,7 @@ sealed interface WorkerCommandDispatchResult {
         val interactionId: String,
         val commandType: String,
         val reason: String? = null
-    ) : WorkerCommandDispatchResult
+    ) : WorkerCommandDispatchError
 
     /**
      * Indicates that the command could not be written to the live socket.
@@ -95,7 +77,7 @@ sealed interface WorkerCommandDispatchResult {
         val interactionId: String,
         val commandType: String,
         val reason: String
-    ) : WorkerCommandDispatchResult
+    ) : WorkerCommandDispatchError
 
     /**
      * Indicates that the worker emitted a malformed command lifecycle frame for a pending command.
@@ -112,7 +94,7 @@ sealed interface WorkerCommandDispatchResult {
         val commandType: String,
         val messageType: String,
         val reason: String
-    ) : WorkerCommandDispatchResult
+    ) : WorkerCommandDispatchError
 
     /**
      * Indicates that the server attempted to register an already-used interaction identifier.
@@ -121,5 +103,6 @@ sealed interface WorkerCommandDispatchResult {
      */
     data class DuplicateInteractionId(
         val interactionId: String
-    ) : WorkerCommandDispatchResult
+    ) : WorkerCommandDispatchError
 }
+

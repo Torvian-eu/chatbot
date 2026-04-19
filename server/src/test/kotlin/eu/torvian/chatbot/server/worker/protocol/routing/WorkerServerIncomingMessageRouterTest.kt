@@ -1,5 +1,8 @@
 package eu.torvian.chatbot.server.worker.protocol.routing
 
+import arrow.core.Either
+import arrow.core.left
+import arrow.core.right
 import eu.torvian.chatbot.common.models.api.worker.protocol.builders.commandAccepted
 import eu.torvian.chatbot.common.models.api.worker.protocol.builders.commandRejected
 import eu.torvian.chatbot.common.models.api.worker.protocol.builders.commandResult
@@ -9,7 +12,8 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerComman
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRejectedPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandResultPayload
 import eu.torvian.chatbot.server.domain.security.WorkerContext
-import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchResult
+import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchError
+import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchSuccess
 import eu.torvian.chatbot.server.worker.command.pending.InMemoryPendingWorkerCommandRegistry
 import eu.torvian.chatbot.server.worker.command.pending.PendingWorkerCommand
 import eu.torvian.chatbot.server.worker.protocol.handshake.WorkerSessionHelloHandler
@@ -54,7 +58,7 @@ class WorkerServerIncomingMessageRouterTest {
 
     @Test
     fun `command accepted keeps pending interaction active`() = runTest {
-        val completion = CompletableDeferred<WorkerCommandDispatchResult>()
+        val completion = CompletableDeferred<Either<WorkerCommandDispatchError, WorkerCommandDispatchSuccess>>()
         val pending = PendingWorkerCommand(
             workerId = workerContext.workerId,
             interactionId = "interaction-accepted",
@@ -80,7 +84,7 @@ class WorkerServerIncomingMessageRouterTest {
 
     @Test
     fun `command result completes pending interaction`() = runTest {
-        val completion = CompletableDeferred<WorkerCommandDispatchResult>()
+        val completion = CompletableDeferred<Either<WorkerCommandDispatchError, WorkerCommandDispatchSuccess>>()
         val pending = PendingWorkerCommand(
             workerId = workerContext.workerId,
             interactionId = "interaction-result",
@@ -106,19 +110,19 @@ class WorkerServerIncomingMessageRouterTest {
 
         assertNull(pendingRegistry.get(pending.interactionId))
         assertEquals(
-            WorkerCommandDispatchResult.Completed(
+            WorkerCommandDispatchSuccess(
                 workerId = workerContext.workerId,
                 interactionId = pending.interactionId,
                 commandType = pending.commandType,
                 result = payload
-            ),
+            ).right(),
             completion.await()
         )
     }
 
     @Test
     fun `command rejected completes pending interaction`() = runTest {
-        val completion = CompletableDeferred<WorkerCommandDispatchResult>()
+        val completion = CompletableDeferred<Either<WorkerCommandDispatchError, WorkerCommandDispatchSuccess>>()
         val pending = PendingWorkerCommand(
             workerId = workerContext.workerId,
             interactionId = "interaction-rejected",
@@ -145,19 +149,19 @@ class WorkerServerIncomingMessageRouterTest {
 
         assertNull(pendingRegistry.get(pending.interactionId))
         assertEquals(
-            WorkerCommandDispatchResult.Rejected(
+            WorkerCommandDispatchError.Rejected(
                 workerId = workerContext.workerId,
                 interactionId = pending.interactionId,
                 commandType = pending.commandType,
                 rejection = payload
-            ),
+            ).left(),
             completion.await()
         )
     }
 
     @Test
     fun `malformed command result completes pending interaction with malformed outcome`() = runTest {
-        val completion = CompletableDeferred<WorkerCommandDispatchResult>()
+        val completion = CompletableDeferred<Either<WorkerCommandDispatchError, WorkerCommandDispatchSuccess>>()
         val pending = PendingWorkerCommand(
             workerId = workerContext.workerId,
             interactionId = "interaction-malformed",
@@ -176,11 +180,15 @@ class WorkerServerIncomingMessageRouterTest {
         router.route(session, malformedMessage)
 
         assertNull(pendingRegistry.get(pending.interactionId))
-        val outcome = completion.await()
-        assertTrue(outcome is WorkerCommandDispatchResult.MalformedLifecyclePayload)
+        val outcome = completion.await().fold(
+            ifLeft = { it },
+            ifRight = { error("Expected malformed lifecycle error but got completion: $it") }
+        )
+        assertTrue(outcome is WorkerCommandDispatchError.MalformedLifecyclePayload)
         assertEquals(pending.interactionId, outcome.interactionId)
         assertEquals(pending.commandType, outcome.commandType)
     }
 }
+
 
 

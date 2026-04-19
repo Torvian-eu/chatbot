@@ -1,7 +1,11 @@
 package eu.torvian.chatbot.server.worker.command.pending
 
+import arrow.core.Either
+import arrow.core.left
+import arrow.core.right
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandResultPayload
-import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchResult
+import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchError
+import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchSuccess
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.buildJsonObject
@@ -19,7 +23,7 @@ class PendingWorkerCommandRegistryTest {
     @Test
     fun `register and complete removes pending command`() = runTest {
         val registry = InMemoryPendingWorkerCommandRegistry()
-        val completion = CompletableDeferred<WorkerCommandDispatchResult>()
+        val completion = CompletableDeferred<Either<WorkerCommandDispatchError, WorkerCommandDispatchSuccess>>()
         val pending = PendingWorkerCommand(
             workerId = 42L,
             interactionId = "interaction-1",
@@ -27,7 +31,7 @@ class PendingWorkerCommandRegistryTest {
             commandType = "tool.call",
             completion = completion
         )
-        val outcome = WorkerCommandDispatchResult.Completed(
+        val outcome = WorkerCommandDispatchSuccess(
             workerId = 42L,
             interactionId = "interaction-1",
             commandType = "tool.call",
@@ -35,7 +39,7 @@ class PendingWorkerCommandRegistryTest {
                 status = "success",
                 data = buildJsonObject { put("value", "ok") }
             )
-        )
+        ).right()
 
         assertTrue(registry.register(pending))
         assertEquals(pending, registry.get("interaction-1"))
@@ -49,8 +53,8 @@ class PendingWorkerCommandRegistryTest {
     @Test
     fun `disconnect completes all commands for a worker`() = runTest {
         val registry = InMemoryPendingWorkerCommandRegistry()
-        val completionOne = CompletableDeferred<WorkerCommandDispatchResult>()
-        val completionTwo = CompletableDeferred<WorkerCommandDispatchResult>()
+        val completionOne = CompletableDeferred<Either<WorkerCommandDispatchError, WorkerCommandDispatchSuccess>>()
+        val completionTwo = CompletableDeferred<Either<WorkerCommandDispatchError, WorkerCommandDispatchSuccess>>()
         val pendingOne = PendingWorkerCommand(
             workerId = 7L,
             interactionId = "interaction-a",
@@ -75,21 +79,21 @@ class PendingWorkerCommandRegistryTest {
         assertTrue(completionOne.isCompleted)
         assertTrue(completionTwo.isCompleted)
         assertEquals(
-            WorkerCommandDispatchResult.SessionDisconnected(
+            WorkerCommandDispatchError.SessionDisconnected(
                 workerId = 7L,
                 interactionId = "interaction-a",
                 commandType = "tool.call",
                 reason = "Worker session disconnected"
-            ),
+            ).left(),
             completionOne.await()
         )
         assertEquals(
-            WorkerCommandDispatchResult.SessionDisconnected(
+            WorkerCommandDispatchError.SessionDisconnected(
                 workerId = 7L,
                 interactionId = "interaction-b",
                 commandType = "mcp.tool.call",
                 reason = "Worker session disconnected"
-            ),
+            ).left(),
             completionTwo.await()
         )
         assertNull(registry.get("interaction-a"))
@@ -97,5 +101,6 @@ class PendingWorkerCommandRegistryTest {
         assertFalse(registry.remove("interaction-a"))
     }
 }
+
 
 

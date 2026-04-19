@@ -1,13 +1,17 @@
 package eu.torvian.chatbot.server.ktor.routes
 
+import arrow.core.right
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.resources.LocalMCPServerResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.misc.di.DIContainer
+import eu.torvian.chatbot.common.misc.di.KoinDIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.api.mcp.CreateLocalMCPServerRequest
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
+import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
+import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerConnectionResponse
 import eu.torvian.chatbot.common.models.worker.WorkerDto
 import eu.torvian.chatbot.server.data.entities.UserEntity
 import eu.torvian.chatbot.server.domain.security.JwtConfig
@@ -21,6 +25,7 @@ import eu.torvian.chatbot.server.testutils.data.TestDefaults
 import eu.torvian.chatbot.server.testutils.koin.defaultTestContainer
 import eu.torvian.chatbot.server.testutils.ktor.KtorTestApp
 import eu.torvian.chatbot.server.testutils.ktor.myTestApplication
+import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.LocalMCPRuntimeControlService
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.post
@@ -32,6 +37,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.koin.dsl.module
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -54,6 +60,12 @@ class LocalMCPServerRoutesTest {
     @BeforeEach
     fun setUp() = runTest {
         container = defaultTestContainer()
+        // Keep route tests deterministic by replacing worker-backed runtime control with a local dummy.
+        (container as KoinDIContainer).addModule(
+            module {
+                single<LocalMCPRuntimeControlService> { createDummyLocalMCPRuntimeControlService() }
+            }
+        )
         val apiRoutesKtor: ApiRoutesKtor = container.get()
 
         app = myTestApplication(
@@ -154,6 +166,59 @@ class LocalMCPServerRoutesTest {
     }
 
     /**
+     * Verifies that runtime-control endpoints are reachable for authenticated owners and
+     * return deterministic dummy payloads.
+     */
+    @Test
+    fun `runtime control endpoints return dummy success responses for authenticated owner`() = app {
+        val userToken = authHelper.createUserAndGetToken(user1)
+        val worker = registerWorker(owner = user1, workerUid = "worker-route-runtime-control")
+
+        val createResponse = client.post(href(LocalMCPServerResource())) {
+            authenticate(userToken)
+            contentType(ContentType.Application.Json)
+            setBody(
+                CreateLocalMCPServerRequest(
+                    workerId = worker.id,
+                    name = "filesystem-runtime",
+                    command = "npx"
+                )
+            )
+        }
+        assertEquals(HttpStatusCode.Created, createResponse.status)
+        val createdServer = createResponse.body<LocalMCPServerDto>()
+        val byId = LocalMCPServerResource.ById(id = createdServer.id)
+
+        val startResponse = client.post(href(LocalMCPServerResource.ById.Start(parent = byId))) {
+            authenticate(userToken)
+        }
+        assertEquals(HttpStatusCode.OK, startResponse.status)
+
+        val stopResponse = client.post(href(LocalMCPServerResource.ById.Stop(parent = byId))) {
+            authenticate(userToken)
+        }
+        assertEquals(HttpStatusCode.OK, stopResponse.status)
+
+        val testResponse = client.post(href(LocalMCPServerResource.ById.TestConnection(parent = byId))) {
+            authenticate(userToken)
+        }
+        assertEquals(HttpStatusCode.OK, testResponse.status)
+        val testPayload = testResponse.body<TestLocalMCPServerConnectionResponse>()
+        assertEquals(createdServer.id, testPayload.serverId)
+        assertEquals(true, testPayload.success)
+        assertEquals(3, testPayload.discoveredToolCount)
+
+        val refreshResponse = client.post(href(LocalMCPServerResource.ById.RefreshTools(parent = byId))) {
+            authenticate(userToken)
+        }
+        assertEquals(HttpStatusCode.OK, refreshResponse.status)
+        val refreshPayload = refreshResponse.body<RefreshMCPToolsResponse>()
+        assertEquals(0, refreshPayload.addedTools.size)
+        assertEquals(0, refreshPayload.updatedTools.size)
+        assertEquals(0, refreshPayload.deletedTools.size)
+    }
+
+    /**
      * Registers a worker for test setup.
      *
      * @param owner Owner user entity.
@@ -179,6 +244,37 @@ class LocalMCPServerRoutesTest {
         assertTrue(worker != null)
         return worker
     }
+
+    /**
+     * Creates a deterministic runtime-control stub so route tests do not depend on worker-backed execution.
+     *
+     * @return A dummy runtime-control service that always reports success.
+     */
+    private fun createDummyLocalMCPRuntimeControlService(): LocalMCPRuntimeControlService =
+        object : LocalMCPRuntimeControlService {
+            override suspend fun startServer(userId: Long, serverId: Long) = Unit.right()
+
+            override suspend fun stopServer(userId: Long, serverId: Long) = Unit.right()
+
+            override suspend fun testConnection(
+                userId: Long,
+                serverId: Long
+            ) = TestLocalMCPServerConnectionResponse(
+                serverId = serverId,
+                success = true,
+                discoveredToolCount = 3,
+                message = null
+            ).right()
+
+            override suspend fun refreshTools(
+                userId: Long,
+                serverId: Long
+            ) = RefreshMCPToolsResponse(
+                addedTools = emptyList(),
+                updatedTools = emptyList(),
+                deletedTools = emptyList()
+            ).right()
+        }
 }
 
 

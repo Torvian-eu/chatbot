@@ -10,10 +10,13 @@ import eu.torvian.chatbot.worker.auth.WorkerAuthApi
 import eu.torvian.chatbot.worker.auth.WorkerAuthManager
 import eu.torvian.chatbot.worker.auth.WorkerAuthManagerImpl
 import eu.torvian.chatbot.worker.config.WorkerRuntimeConfig
+import eu.torvian.chatbot.worker.mcp.DummyWorkerMcpServerControlCommandExecutor
 import eu.torvian.chatbot.worker.mcp.NotConfiguredWorkerMcpToolCallGateway
+import eu.torvian.chatbot.worker.mcp.WorkerMcpServerControlCommandExecutor
 import eu.torvian.chatbot.worker.mcp.WorkerMcpToolCallGateway
 import eu.torvian.chatbot.worker.mcp.WorkerToolCallExecutor
 import eu.torvian.chatbot.worker.mcp.WorkerToolCallExecutorImpl
+import eu.torvian.chatbot.worker.protocol.factory.WorkerMcpServerControlInteractionFactory
 import eu.torvian.chatbot.worker.protocol.factory.WorkerMcpToolCallInteractionFactory
 import eu.torvian.chatbot.worker.protocol.factory.WorkerToolCallInteractionFactory
 import eu.torvian.chatbot.worker.protocol.handshake.InMemoryWorkerSessionHandshakeStateStore
@@ -89,6 +92,7 @@ fun workerModule(
     single<CoroutineScope> { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
     single<WorkerMcpToolCallGateway> { NotConfiguredWorkerMcpToolCallGateway() }
     single<WorkerToolCallExecutor> { WorkerToolCallExecutorImpl(gateway = get(), json = get()) }
+    single<WorkerMcpServerControlCommandExecutor> { DummyWorkerMcpServerControlCommandExecutor() }
     single<WorkerOutboundMessageEmitterHolder> { WorkerOutboundMessageEmitterHolder() }
     single<WorkerOutboundMessageEmitter> { get<WorkerOutboundMessageEmitterHolder>() }
     single<WorkerWebSocketTransportConfig> {
@@ -134,6 +138,12 @@ fun workerModule(
             messageIdProvider = get()
         )
     }
+    single<WorkerMcpServerControlInteractionFactory> {
+        WorkerMcpServerControlInteractionFactory(
+            executor = get(),
+            messageIdProvider = get()
+        )
+    }
     single<WorkerToolCallInteractionFactory> {
         WorkerToolCallInteractionFactory(
             messageIdProvider = get()
@@ -144,7 +154,11 @@ fun workerModule(
             interactionScope = get(),
             interactionFactoriesByCommandType = mapOf(
                 WorkerProtocolCommandTypes.TOOL_CALL to get<WorkerToolCallInteractionFactory>(),
-                WorkerProtocolCommandTypes.MCP_TOOL_CALL to get<WorkerMcpToolCallInteractionFactory>()
+                WorkerProtocolCommandTypes.MCP_TOOL_CALL to get<WorkerMcpToolCallInteractionFactory>(),
+                WorkerProtocolCommandTypes.MCP_SERVER_START to get<WorkerMcpServerControlInteractionFactory>(),
+                WorkerProtocolCommandTypes.MCP_SERVER_STOP to get<WorkerMcpServerControlInteractionFactory>(),
+                WorkerProtocolCommandTypes.MCP_SERVER_TEST_CONNECTION to get<WorkerMcpServerControlInteractionFactory>(),
+                WorkerProtocolCommandTypes.MCP_SERVER_REFRESH_TOOLS to get<WorkerMcpServerControlInteractionFactory>()
             ),
             emitter = get(),
             registry = get(),

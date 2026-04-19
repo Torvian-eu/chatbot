@@ -13,4 +13,24 @@ object WorkerProtocolCommandTypes {
      * Command type used for MCP-backed tool execution.
      */
     const val MCP_TOOL_CALL = "mcp.tool.call"
+
+    /**
+     * Command type used to start an MCP server runtime instance.
+     */
+    const val MCP_SERVER_START = "mcp.server.start"
+
+    /**
+     * Command type used to stop an MCP server runtime instance.
+     */
+    const val MCP_SERVER_STOP = "mcp.server.stop"
+
+    /**
+     * Command type used to test MCP server runtime connectivity.
+     */
+    const val MCP_SERVER_TEST_CONNECTION = "mcp.server.test_connection"
+
+    /**
+     * Command type used to refresh discovered MCP tools for a server runtime.
+     */
+    const val MCP_SERVER_REFRESH_TOOLS = "mcp.server.refresh_tools"
 }

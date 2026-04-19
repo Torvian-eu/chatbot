@@ -11,6 +11,9 @@ import eu.torvian.chatbot.server.ktor.auth.getWorkerId
 import eu.torvian.chatbot.server.service.core.LocalMCPServerService
 import eu.torvian.chatbot.server.service.core.error.mcp.LocalMCPServerServiceError
 import eu.torvian.chatbot.server.service.core.error.mcp.toApiError
+import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.LocalMCPRuntimeControlError
+import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.LocalMCPRuntimeControlService
+import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.toApiError
 import io.ktor.http.*
 import io.ktor.server.auth.*
 import io.ktor.server.request.*
@@ -25,9 +28,11 @@ import io.ktor.server.routing.Route
  * Worker JWT routes expose read-only retrieval for worker-assigned servers.
  *
  * @param localMCPServerService The service handling Local MCP Server business logic
+ * @param localMCPRuntimeControlService The service handling runtime control operations
  */
 fun Route.configureLocalMCPServerRoutes(
     localMCPServerService: LocalMCPServerService,
+    localMCPRuntimeControlService: LocalMCPRuntimeControlService,
 ) {
     authenticate(AuthSchemes.USER_JWT) {
         post<LocalMCPServerResource> {
@@ -80,6 +85,46 @@ fun Route.configureLocalMCPServerRoutes(
                 }
             }
             call.respondEither(result, HttpStatusCode.NoContent)
+        }
+
+        post<LocalMCPServerResource.ById.Start> { resource ->
+            val userId = call.getUserId()
+            val result = either {
+                withError({ error: LocalMCPRuntimeControlError -> error.toApiError() }) {
+                    localMCPRuntimeControlService.startServer(userId, resource.parent.id).bind()
+                }
+            }
+            call.respondEither(result)
+        }
+
+        post<LocalMCPServerResource.ById.Stop> { resource ->
+            val userId = call.getUserId()
+            val result = either {
+                withError({ error: LocalMCPRuntimeControlError -> error.toApiError() }) {
+                    localMCPRuntimeControlService.stopServer(userId, resource.parent.id).bind()
+                }
+            }
+            call.respondEither(result)
+        }
+
+        post<LocalMCPServerResource.ById.TestConnection> { resource ->
+            val userId = call.getUserId()
+            val result = either {
+                withError({ error: LocalMCPRuntimeControlError -> error.toApiError() }) {
+                    localMCPRuntimeControlService.testConnection(userId, resource.parent.id).bind()
+                }
+            }
+            call.respondEither(result)
+        }
+
+        post<LocalMCPServerResource.ById.RefreshTools> { resource ->
+            val userId = call.getUserId()
+            val result = either {
+                withError({ error: LocalMCPRuntimeControlError -> error.toApiError() }) {
+                    localMCPRuntimeControlService.refreshTools(userId, resource.parent.id).bind()
+                }
+            }
+            call.respondEither(result)
         }
     }
 

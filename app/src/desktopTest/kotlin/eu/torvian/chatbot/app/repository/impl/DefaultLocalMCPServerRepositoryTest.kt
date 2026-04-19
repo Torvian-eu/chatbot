@@ -9,6 +9,8 @@ import eu.torvian.chatbot.app.service.api.LocalMCPServerApi
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
+import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
+import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerConnectionResponse
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -112,6 +114,46 @@ class DefaultLocalMCPServerRepositoryTest {
         assertIs<DataState.Error<RepositoryError>>(state)
         assertIs<RepositoryError.DataFetchError>(state.error)
         assertTrue(state.error.message.contains("Failed to load MCP servers"))
+    }
+
+    /**
+     * Ensures runtime-control repository methods delegate to matching API methods.
+     */
+    @Test
+    fun `runtime control methods delegate to server api`() = runTest {
+        val testResponse = TestLocalMCPServerConnectionResponse(
+            serverId = 22L,
+            success = true,
+            discoveredToolCount = 3,
+            message = "dummy"
+        )
+        val refreshResponse = RefreshMCPToolsResponse(
+            addedTools = emptyList(),
+            updatedTools = emptyList(),
+            deletedTools = emptyList()
+        )
+
+        coEvery { api.startServer(22L) } returns Either.Right(Unit)
+        coEvery { api.stopServer(22L) } returns Either.Right(Unit)
+        coEvery { api.testConnection(22L) } returns Either.Right(testResponse)
+        coEvery { api.refreshTools(22L) } returns Either.Right(refreshResponse)
+
+        val startResult = repository.startServer(22L)
+        val stopResult = repository.stopServer(22L)
+        val testResult = repository.testConnection(22L)
+        val refreshResult = repository.refreshTools(22L)
+
+        assertIs<Either.Right<Unit>>(startResult)
+        assertIs<Either.Right<Unit>>(stopResult)
+        assertIs<Either.Right<TestLocalMCPServerConnectionResponse>>(testResult)
+        assertIs<Either.Right<RefreshMCPToolsResponse>>(refreshResult)
+        assertEquals(3, testResult.value.discoveredToolCount)
+        assertEquals(0, refreshResult.value.addedTools.size)
+
+        coVerify(exactly = 1) { api.startServer(22L) }
+        coVerify(exactly = 1) { api.stopServer(22L) }
+        coVerify(exactly = 1) { api.testConnection(22L) }
+        coVerify(exactly = 1) { api.refreshTools(22L) }
     }
 }
 
