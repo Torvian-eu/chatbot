@@ -1,5 +1,8 @@
 package eu.torvian.chatbot.server.worker.command
 
+import arrow.core.Either
+import arrow.core.left
+import arrow.core.raise.either
 import eu.torvian.chatbot.common.models.api.worker.protocol.builders.commandRequest
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRequestPayload
 import eu.torvian.chatbot.server.worker.command.pending.PendingWorkerCommand
@@ -35,9 +38,9 @@ class DefaultWorkerCommandDispatchService(
         workerId: Long,
         commandRequestPayload: WorkerCommandRequestPayload,
         timeout: Duration
-    ): WorkerCommandDispatchResult {
+    ): Either<WorkerCommandDispatchError, WorkerCommandDispatchSuccess> = either {
         val session = workerSessionRegistry.get(workerId)
-            ?: return WorkerCommandDispatchResult.WorkerNotConnected(workerId)
+            ?: raise(WorkerCommandDispatchError.WorkerNotConnected(workerId))
 
         if (!session.isReady()) {
             logger.warn(
@@ -45,7 +48,7 @@ class DefaultWorkerCommandDispatchService(
                 workerId,
                 commandRequestPayload.commandType
             )
-            return WorkerCommandDispatchResult.WorkerNotConnected(workerId)
+            raise(WorkerCommandDispatchError.WorkerNotConnected(workerId))
         }
 
         val interactionId = UUID.randomUUID().toString()
@@ -64,7 +67,7 @@ class DefaultWorkerCommandDispatchService(
                 interactionId,
                 commandRequestPayload.commandType
             )
-            return WorkerCommandDispatchResult.DuplicateInteractionId(interactionId)
+            raise(WorkerCommandDispatchError.DuplicateInteractionId(interactionId))
         }
 
         logger.info(
@@ -95,7 +98,7 @@ class DefaultWorkerCommandDispatchService(
 
         if (!sent) {
             pendingCommandRegistry.remove(interactionId)
-            val result = WorkerCommandDispatchResult.SessionDisconnected(
+            val error = WorkerCommandDispatchError.SessionDisconnected(
                 workerId = workerId,
                 interactionId = interactionId,
                 commandType = commandRequestPayload.commandType,
@@ -107,7 +110,7 @@ class DefaultWorkerCommandDispatchService(
                 interactionId,
                 commandRequestPayload.commandType
             )
-            return result
+            raise(error)
         }
 
         val finalOutcome = withTimeoutOrNull(timeout) {
@@ -122,24 +125,24 @@ class DefaultWorkerCommandDispatchService(
                 commandRequestPayload.commandType,
                 finalOutcome::class.simpleName
             )
-            return finalOutcome
+            finalOutcome.bind()
+        } else {
+            val timeoutError = WorkerCommandDispatchError.TimedOut(
+                workerId = workerId,
+                interactionId = interactionId,
+                commandType = commandRequestPayload.commandType,
+                timeout = timeout
+            )
+            pendingCommandRegistry.complete(interactionId, timeoutError.left())
+            logger.warn(
+                "Worker command dispatch timed out (workerId={}, interactionId={}, commandType={}, timeout={})",
+                workerId,
+                interactionId,
+                commandRequestPayload.commandType,
+                timeout
+            )
+            raise(timeoutError)
         }
-
-        val timeoutOutcome = WorkerCommandDispatchResult.TimedOut(
-            workerId = workerId,
-            interactionId = interactionId,
-            commandType = commandRequestPayload.commandType,
-            timeout = timeout
-        )
-        pendingCommandRegistry.complete(interactionId, timeoutOutcome)
-        logger.warn(
-            "Worker command dispatch timed out (workerId={}, interactionId={}, commandType={}, timeout={})",
-            workerId,
-            interactionId,
-            commandRequestPayload.commandType,
-            timeout
-        )
-        return timeoutOutcome
     }
 
     companion object {
@@ -149,4 +152,5 @@ class DefaultWorkerCommandDispatchService(
         private val logger: Logger = LogManager.getLogger(DefaultWorkerCommandDispatchService::class.java)
     }
 }
+
 

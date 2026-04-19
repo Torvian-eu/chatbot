@@ -1,4 +1,4 @@
-package eu.torvian.chatbot.server.service.core.error.mcp
+package eu.torvian.chatbot.server.worker.mcp.runtimecontrol
 
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
@@ -11,10 +11,10 @@ import eu.torvian.chatbot.common.api.apiError
  * @return Structured API error suitable for route responses.
  */
 fun LocalMCPRuntimeControlError.toApiError(): ApiError = when (this) {
-    is LocalMCPRuntimeControlServerNotFoundError ->
+    is LocalMCPRuntimeControlError.ServerNotFoundError ->
         apiError(CommonApiErrorCodes.NOT_FOUND, "MCP server not found", "serverId" to serverId.toString())
 
-    is LocalMCPRuntimeControlUnauthorizedError ->
+    is LocalMCPRuntimeControlError.UnauthorizedError ->
         apiError(
             CommonApiErrorCodes.PERMISSION_DENIED,
             "User is not authorized to control this MCP server",
@@ -22,7 +22,7 @@ fun LocalMCPRuntimeControlError.toApiError(): ApiError = when (this) {
             "serverId" to serverId.toString()
         )
 
-    is LocalMCPRuntimeControlRuntimeUnavailableError ->
+    is LocalMCPRuntimeControlError.RuntimeUnavailableError ->
         apiError(
             CommonApiErrorCodes.UNAVAILABLE,
             "Local MCP runtime control is unavailable",
@@ -30,7 +30,7 @@ fun LocalMCPRuntimeControlError.toApiError(): ApiError = when (this) {
             "reason" to reason
         )
 
-    is LocalMCPRuntimeControlInternalError ->
+    is LocalMCPRuntimeControlError.InternalError ->
         apiError(CommonApiErrorCodes.INTERNAL, "Failed to process Local MCP runtime control request", "reason" to message)
 }
 

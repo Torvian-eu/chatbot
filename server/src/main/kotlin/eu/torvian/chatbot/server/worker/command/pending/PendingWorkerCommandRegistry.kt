@@ -1,6 +1,8 @@
 package eu.torvian.chatbot.server.worker.command.pending
 
-import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchResult
+import arrow.core.Either
+import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchError
+import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchSuccess
 
 /**
  * Registry for live worker command interactions that are still waiting for a terminal outcome.
@@ -39,7 +41,10 @@ interface PendingWorkerCommandRegistry {
      * @param outcome Final terminal result to deliver to the waiting dispatch caller.
      * @return `true` when the pending command was still active and was completed.
      */
-    fun complete(interactionId: String, outcome: WorkerCommandDispatchResult): Boolean
+    fun complete(
+        interactionId: String,
+        outcome: Either<WorkerCommandDispatchError, WorkerCommandDispatchSuccess>
+    ): Boolean
 
     /**
      * Removes a pending command without completing it.

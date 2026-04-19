@@ -1,6 +1,9 @@
 package eu.torvian.chatbot.server.worker.command.pending
 
-import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchResult
+import arrow.core.Either
+import arrow.core.left
+import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchError
+import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchSuccess
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 import java.util.concurrent.ConcurrentHashMap
@@ -41,7 +44,10 @@ class InMemoryPendingWorkerCommandRegistry : PendingWorkerCommandRegistry {
 
     override fun markAccepted(interactionId: String): PendingWorkerCommand? = commandsByInteractionId[interactionId]
 
-    override fun complete(interactionId: String, outcome: WorkerCommandDispatchResult): Boolean {
+    override fun complete(
+        interactionId: String,
+        outcome: Either<WorkerCommandDispatchError, WorkerCommandDispatchSuccess>
+    ): Boolean {
         val pendingCommand = commandsByInteractionId.remove(interactionId) ?: return false
         removeFromWorkerIndex(pendingCommand.workerId, interactionId)
         val completed = pendingCommand.completion.complete(outcome)
@@ -51,7 +57,10 @@ class InMemoryPendingWorkerCommandRegistry : PendingWorkerCommandRegistry {
                 pendingCommand.workerId,
                 pendingCommand.interactionId,
                 pendingCommand.commandType,
-                outcome::class.simpleName
+                outcome.fold(
+                    ifLeft = { it::class.simpleName },
+                    ifRight = { it::class.simpleName }
+                )
             )
         }
         return completed
@@ -75,12 +84,12 @@ class InMemoryPendingWorkerCommandRegistry : PendingWorkerCommandRegistry {
 
         for (interactionId in interactionIds) {
             val pendingCommand = commandsByInteractionId[interactionId] ?: continue
-            val outcome = WorkerCommandDispatchResult.SessionDisconnected(
+            val outcome = WorkerCommandDispatchError.SessionDisconnected(
                 workerId = pendingCommand.workerId,
                 interactionId = pendingCommand.interactionId,
                 commandType = pendingCommand.commandType,
                 reason = reason
-            )
+            ).left()
             if (complete(interactionId, outcome)) {
                 completedCount += 1
             }

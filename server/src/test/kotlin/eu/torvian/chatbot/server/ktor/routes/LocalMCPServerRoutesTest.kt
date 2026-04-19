@@ -1,9 +1,11 @@
 package eu.torvian.chatbot.server.ktor.routes
 
+import arrow.core.right
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.resources.LocalMCPServerResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.misc.di.DIContainer
+import eu.torvian.chatbot.common.misc.di.KoinDIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.api.mcp.CreateLocalMCPServerRequest
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
@@ -23,6 +25,7 @@ import eu.torvian.chatbot.server.testutils.data.TestDefaults
 import eu.torvian.chatbot.server.testutils.koin.defaultTestContainer
 import eu.torvian.chatbot.server.testutils.ktor.KtorTestApp
 import eu.torvian.chatbot.server.testutils.ktor.myTestApplication
+import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.LocalMCPRuntimeControlService
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.post
@@ -34,6 +37,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.koin.dsl.module
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -56,6 +60,12 @@ class LocalMCPServerRoutesTest {
     @BeforeEach
     fun setUp() = runTest {
         container = defaultTestContainer()
+        // Keep route tests deterministic by replacing worker-backed runtime control with a local dummy.
+        (container as KoinDIContainer).addModule(
+            module {
+                single<LocalMCPRuntimeControlService> { createDummyLocalMCPRuntimeControlService() }
+            }
+        )
         val apiRoutesKtor: ApiRoutesKtor = container.get()
 
         app = myTestApplication(
@@ -234,6 +244,37 @@ class LocalMCPServerRoutesTest {
         assertTrue(worker != null)
         return worker
     }
+
+    /**
+     * Creates a deterministic runtime-control stub so route tests do not depend on worker-backed execution.
+     *
+     * @return A dummy runtime-control service that always reports success.
+     */
+    private fun createDummyLocalMCPRuntimeControlService(): LocalMCPRuntimeControlService =
+        object : LocalMCPRuntimeControlService {
+            override suspend fun startServer(userId: Long, serverId: Long) = Unit.right()
+
+            override suspend fun stopServer(userId: Long, serverId: Long) = Unit.right()
+
+            override suspend fun testConnection(
+                userId: Long,
+                serverId: Long
+            ) = TestLocalMCPServerConnectionResponse(
+                serverId = serverId,
+                success = true,
+                discoveredToolCount = 3,
+                message = null
+            ).right()
+
+            override suspend fun refreshTools(
+                userId: Long,
+                serverId: Long
+            ) = RefreshMCPToolsResponse(
+                addedTools = emptyList(),
+                updatedTools = emptyList(),
+                deletedTools = emptyList()
+            ).right()
+        }
 }
 
 

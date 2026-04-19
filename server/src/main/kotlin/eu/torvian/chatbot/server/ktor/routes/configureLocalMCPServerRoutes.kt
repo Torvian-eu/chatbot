@@ -8,11 +8,12 @@ import eu.torvian.chatbot.common.models.api.mcp.UpdateLocalMCPServerRequest
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.ktor.auth.getWorkerId
-import eu.torvian.chatbot.server.service.core.LocalMCPRuntimeControlService
 import eu.torvian.chatbot.server.service.core.LocalMCPServerService
-import eu.torvian.chatbot.server.service.core.error.mcp.LocalMCPRuntimeControlError
 import eu.torvian.chatbot.server.service.core.error.mcp.LocalMCPServerServiceError
 import eu.torvian.chatbot.server.service.core.error.mcp.toApiError
+import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.LocalMCPRuntimeControlError
+import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.LocalMCPRuntimeControlService
+import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.toApiError
 import io.ktor.http.*
 import io.ktor.server.auth.*
 import io.ktor.server.request.*

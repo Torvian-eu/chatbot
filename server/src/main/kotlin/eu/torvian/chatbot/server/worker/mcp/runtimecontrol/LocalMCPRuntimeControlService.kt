@@ -1,9 +1,8 @@
-package eu.torvian.chatbot.server.service.core
+package eu.torvian.chatbot.server.worker.mcp.runtimecontrol
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
 import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerConnectionResponse
-import eu.torvian.chatbot.server.service.core.error.mcp.LocalMCPRuntimeControlError
 
 /**
  * Service abstraction for server-owned runtime control operations of Local MCP servers.
@@ -55,4 +54,5 @@ interface LocalMCPRuntimeControlService {
         serverId: Long
     ): Either<LocalMCPRuntimeControlError, RefreshMCPToolsResponse>
 }
+
 

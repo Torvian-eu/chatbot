@@ -10,6 +10,10 @@ import eu.torvian.chatbot.server.service.security.*
 import eu.torvian.chatbot.server.service.security.authorizer.*
 import eu.torvian.chatbot.server.service.setup.*
 import eu.torvian.chatbot.server.service.tool.ToolExecutorFactory
+import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.LocalMCPRuntimeCommandDispatchService
+import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.DefaultLocalMCPRuntimeCommandDispatchService
+import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.LocalMCPRuntimeControlService
+import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.DefaultLocalMCPRuntimeControlService
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
@@ -33,7 +37,8 @@ fun serviceModule() = module {
     single<ToolService> { ToolServiceImpl(get(), get(), get(), get(), get()) }
     single<ToolCallService> { ToolCallServiceImpl(get(), get()) }
     single<LocalMCPServerService> { LocalMCPServerServiceImpl(get(), get(), get(), get(), get()) }
-    single<LocalMCPRuntimeControlService> { DummyLocalMCPRuntimeControlService(get()) }
+    single<LocalMCPRuntimeCommandDispatchService> { DefaultLocalMCPRuntimeCommandDispatchService(get()) }
+    single<LocalMCPRuntimeControlService> { DefaultLocalMCPRuntimeControlService(get(), get()) }
     single<LocalMCPToolDefinitionService> { LocalMCPToolDefinitionServiceImpl(get(), get(), get(), get(), get()) }
     single<LocalMCPExecutor> { LocalMCPExecutor() }
 

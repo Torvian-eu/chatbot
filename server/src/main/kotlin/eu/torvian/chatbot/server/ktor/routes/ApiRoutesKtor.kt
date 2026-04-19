@@ -4,6 +4,7 @@ import eu.torvian.chatbot.server.service.core.*
 import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.service.security.AuthenticationService
 import eu.torvian.chatbot.server.service.security.AuthorizationService
+import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.LocalMCPRuntimeControlService
 import io.ktor.server.routing.*
 import kotlinx.serialization.json.Json
 

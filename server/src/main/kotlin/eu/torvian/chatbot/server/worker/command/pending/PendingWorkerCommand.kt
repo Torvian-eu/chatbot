@@ -1,6 +1,8 @@
 package eu.torvian.chatbot.server.worker.command.pending
 
-import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchResult
+import arrow.core.Either
+import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchError
+import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchSuccess
 import kotlinx.coroutines.CompletableDeferred
 
 /**
@@ -20,5 +22,6 @@ data class PendingWorkerCommand(
     val interactionId: String,
     val messageId: String,
     val commandType: String,
-    val completion: CompletableDeferred<WorkerCommandDispatchResult> = CompletableDeferred()
+    val completion: CompletableDeferred<Either<WorkerCommandDispatchError, WorkerCommandDispatchSuccess>> =
+        CompletableDeferred()
 )
