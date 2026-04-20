@@ -76,7 +76,8 @@ interface WorkerMcpClientService {
     /**
      * Disconnects all clients and stops managed processes.
      *
-     * //TODO: This is currently unused; Integrate with worker lifecycle management and ensure proper cleanup on shutdown to avoid orphaned processes.
+     * This method is expected to be called during worker runtime shutdown to prevent orphaned
+     * local MCP processes.
      */
     suspend fun close()
 }

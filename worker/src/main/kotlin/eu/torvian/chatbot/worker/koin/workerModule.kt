@@ -207,7 +207,8 @@ fun workerModule(
     single<WorkerRuntime> {
         WorkerRuntimeImpl(
             workerUid = config.workerUid,
-            connectionLoop = get()
+            connectionLoop = get(),
+            mcpClientService = get()
         )
     }
 }

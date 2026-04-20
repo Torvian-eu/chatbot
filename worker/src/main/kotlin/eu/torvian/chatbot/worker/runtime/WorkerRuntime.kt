@@ -15,5 +15,13 @@ interface WorkerRuntime {
      * @return Either a logical runtime error or `Unit` on successful completion.
      */
     suspend fun run(runOnce: Boolean): Either<WorkerAuthManagerError, Unit>
+
+    /**
+     * Releases runtime-owned resources during worker shutdown.
+     *
+     * Implementations should be idempotent because shutdown may be triggered by multiple
+     * lifecycle paths (for example, normal completion and error handling).
+     */
+    suspend fun close()
 }
 
