@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.server.worker.mcp.runtimecontrol
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerRefreshToolsResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionResultData
@@ -50,16 +50,16 @@ interface LocalMCPRuntimeCommandDispatchService {
     ): Either<LocalMCPRuntimeCommandDispatchError, WorkerMcpServerTestConnectionResultData>
 
     /**
-     * Dispatches `mcp.server.refresh_tools` to a worker and returns decoded refresh result data.
+     * Dispatches `mcp.server.discover_tools` to a worker and returns decoded discovery result data.
      *
      * @param workerId Worker identifier targeted for command dispatch.
-     * @param serverId Local MCP server identifier whose tools should be refreshed.
-     * @return Either orchestration error or typed refresh-tools result data.
+     * @param serverId Local MCP server identifier whose tools should be discovered.
+     * @return Either orchestration error or typed discover-tools result data.
      */
-    suspend fun refreshTools(
+    suspend fun discoverTools(
         workerId: Long,
         serverId: Long
-    ): Either<LocalMCPRuntimeCommandDispatchError, WorkerMcpServerRefreshToolsResultData>
+    ): Either<LocalMCPRuntimeCommandDispatchError, WorkerMcpServerDiscoverToolsResultData>
 }
 
 

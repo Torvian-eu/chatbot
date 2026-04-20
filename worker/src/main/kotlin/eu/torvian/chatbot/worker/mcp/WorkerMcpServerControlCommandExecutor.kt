@@ -2,8 +2,8 @@ package eu.torvian.chatbot.worker.mcp
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerControlErrorResultData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerRefreshToolsCommandData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerRefreshToolsResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopCommandData
@@ -50,13 +50,13 @@ interface WorkerMcpServerControlCommandExecutor {
     ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerTestConnectionResultData>
 
     /**
-     * Executes an MCP server tool refresh command.
+     * Executes an MCP server discover-tools command.
      *
-     * @param request Typed refresh-tools command input data.
+     * @param request Typed discover-tools command input data.
      * @return Either typed failure data or typed success data for the command result.
      */
-    suspend fun refreshTools(
-        request: WorkerMcpServerRefreshToolsCommandData
-    ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerRefreshToolsResultData>
+    suspend fun discoverTools(
+        request: WorkerMcpServerDiscoverToolsCommandData
+    ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerDiscoverToolsResultData>
 }
 

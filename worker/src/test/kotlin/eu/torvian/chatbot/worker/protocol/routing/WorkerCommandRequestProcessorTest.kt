@@ -58,7 +58,7 @@ class WorkerCommandRequestProcessorTest {
                 WorkerProtocolCommandTypes.MCP_SERVER_START to recordingFactory,
                 WorkerProtocolCommandTypes.MCP_SERVER_STOP to recordingFactory,
                 WorkerProtocolCommandTypes.MCP_SERVER_TEST_CONNECTION to recordingFactory,
-                WorkerProtocolCommandTypes.MCP_SERVER_REFRESH_TOOLS to recordingFactory
+                WorkerProtocolCommandTypes.MCP_SERVER_DISCOVER_TOOLS to recordingFactory
             ),
             emitter = emitter,
             registry = registry,
@@ -69,7 +69,7 @@ class WorkerCommandRequestProcessorTest {
             WorkerProtocolCommandTypes.MCP_SERVER_START,
             WorkerProtocolCommandTypes.MCP_SERVER_STOP,
             WorkerProtocolCommandTypes.MCP_SERVER_TEST_CONNECTION,
-            WorkerProtocolCommandTypes.MCP_SERVER_REFRESH_TOOLS
+            WorkerProtocolCommandTypes.MCP_SERVER_DISCOVER_TOOLS
         )
 
         supportedCommandTypes.forEachIndexed { index, commandType ->

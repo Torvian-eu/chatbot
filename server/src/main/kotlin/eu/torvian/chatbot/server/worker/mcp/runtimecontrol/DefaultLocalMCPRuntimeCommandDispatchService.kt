@@ -72,21 +72,21 @@ class DefaultLocalMCPRuntimeCommandDispatchService(
             }
         )
 
-    override suspend fun refreshTools(
+    override suspend fun discoverTools(
         workerId: Long,
         serverId: Long
-    ): Either<LocalMCPRuntimeCommandDispatchError, WorkerMcpServerRefreshToolsResultData> =
+    ): Either<LocalMCPRuntimeCommandDispatchError, WorkerMcpServerDiscoverToolsResultData> =
         dispatchAndDecode(
             workerId = workerId,
-            commandType = WorkerProtocolCommandTypes.MCP_SERVER_REFRESH_TOOLS,
-            requestPayload = WorkerMcpServerRefreshToolsCommandData(serverId).toWorkerCommandRequestPayload(),
+            commandType = WorkerProtocolCommandTypes.MCP_SERVER_DISCOVER_TOOLS,
+            requestPayload = WorkerMcpServerDiscoverToolsCommandData(serverId).toWorkerCommandRequestPayload(),
             decodeSuccessResult = { result, completedCommandType ->
-                result.toWorkerMcpServerRefreshToolsResultData(
+                result.toWorkerMcpServerDiscoverToolsResultData(
                     completedCommandType
                 )
             },
             decodeErrorResult = { result, completedCommandType ->
-                result.toWorkerMcpServerRefreshToolsErrorResultData(completedCommandType)
+                result.toWorkerMcpServerDiscoverToolsErrorResultData(completedCommandType)
             }
         )
 

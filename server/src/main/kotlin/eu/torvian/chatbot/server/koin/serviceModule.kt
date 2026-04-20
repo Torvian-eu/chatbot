@@ -38,7 +38,7 @@ fun serviceModule() = module {
     single<ToolCallService> { ToolCallServiceImpl(get(), get()) }
     single<LocalMCPServerService> { LocalMCPServerServiceImpl(get(), get(), get(), get(), get()) }
     single<LocalMCPRuntimeCommandDispatchService> { DefaultLocalMCPRuntimeCommandDispatchService(get()) }
-    single<LocalMCPRuntimeControlService> { DefaultLocalMCPRuntimeControlService(get(), get()) }
+    single<LocalMCPRuntimeControlService> { DefaultLocalMCPRuntimeControlService(get(), get(), get()) }
     single<LocalMCPToolDefinitionService> { LocalMCPToolDefinitionServiceImpl(get(), get(), get(), get(), get()) }
     single<LocalMCPExecutor> { LocalMCPExecutor() }
 

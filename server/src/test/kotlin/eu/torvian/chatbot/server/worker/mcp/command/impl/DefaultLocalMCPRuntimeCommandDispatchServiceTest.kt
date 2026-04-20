@@ -12,7 +12,7 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerComman
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRequestPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandResultPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerControlErrorResultData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerRefreshToolsResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionResultData
@@ -124,29 +124,25 @@ class DefaultLocalMCPRuntimeCommandDispatchServiceTest {
     }
 
     /**
-     * Verifies that refresh-tools command results are decoded to typed data.
+     * Verifies that discover-tools command results are decoded to typed data.
      */
     @Test
-    fun `refresh tools decodes typed result payload`() = runTest {
+    fun `discover tools decodes typed result payload`() = runTest {
         coEvery { workerCommandDispatchService.dispatch(any(), any(), any()) } returns
             WorkerCommandDispatchSuccess(
                 workerId = 12L,
                 interactionId = "i-4",
-                commandType = WorkerProtocolCommandTypes.MCP_SERVER_REFRESH_TOOLS,
-                result = WorkerMcpServerRefreshToolsResultData(
+                commandType = WorkerProtocolCommandTypes.MCP_SERVER_DISCOVER_TOOLS,
+                result = WorkerMcpServerDiscoverToolsResultData(
                     serverId = 10L,
-                    addedTools = emptyList(),
-                    updatedTools = emptyList(),
-                    deletedTools = emptyList()
+                    tools = emptyList()
                 ).toWorkerCommandResultPayload().orError()
             ).right()
 
-        val result = service.refreshTools(workerId = 12L, serverId = 10L).requireRight()
+        val result = service.discoverTools(workerId = 12L, serverId = 10L).requireRight()
 
         assertEquals(10L, result.serverId)
-        assertEquals(0, result.addedTools.size)
-        assertEquals(0, result.updatedTools.size)
-        assertEquals(0, result.deletedTools.size)
+        assertEquals(0, result.tools.size)
     }
 
     /**
@@ -239,19 +235,19 @@ class DefaultLocalMCPRuntimeCommandDispatchServiceTest {
             WorkerCommandDispatchError.MalformedLifecyclePayload(
                 workerId = 16L,
                 interactionId = "i-8",
-                commandType = WorkerProtocolCommandTypes.MCP_SERVER_REFRESH_TOOLS,
+                commandType = WorkerProtocolCommandTypes.MCP_SERVER_DISCOVER_TOOLS,
                 messageType = "command.result",
                 reason = "invalid json"
             ).left()
 
-        val error = service.refreshTools(workerId = 16L, serverId = 14L).requireLeft()
+        val error = service.discoverTools(workerId = 16L, serverId = 14L).requireLeft()
 
         assertEquals(
             LocalMCPRuntimeCommandDispatchError.DispatchFailed(
                 WorkerCommandDispatchError.MalformedLifecyclePayload(
                     workerId = 16L,
                     interactionId = "i-8",
-                    commandType = WorkerProtocolCommandTypes.MCP_SERVER_REFRESH_TOOLS,
+                    commandType = WorkerProtocolCommandTypes.MCP_SERVER_DISCOVER_TOOLS,
                     messageType = "command.result",
                     reason = "invalid json"
                 )

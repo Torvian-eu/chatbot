@@ -6,11 +6,17 @@ import arrow.core.raise.withError
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
 import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerConnectionResponse
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpDiscoveredToolData
+import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import eu.torvian.chatbot.server.service.core.LocalMCPServerService
+import eu.torvian.chatbot.server.service.core.LocalMCPToolDefinitionService
+import eu.torvian.chatbot.server.service.core.error.mcp.RefreshMCPToolsError
 import eu.torvian.chatbot.server.service.core.error.mcp.LocalMCPServerNotFoundError
 import eu.torvian.chatbot.server.service.core.error.mcp.LocalMCPServerServiceError
 import eu.torvian.chatbot.server.service.core.error.mcp.LocalMCPServerUnauthorizedError
 import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchError
+import kotlinx.serialization.json.buildJsonObject
+import kotlin.time.Clock
 
 /**
  * Worker-backed runtime-control implementation that preserves existing route contracts.
@@ -20,10 +26,12 @@ import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchError
  *
  * @property localMCPServerService Service used for ownership checks and server lookup.
  * @property localMCPRuntimeCommandDispatchService Typed worker command adapter.
+ * @property localMCPToolDefinitionService Service used for persisted MCP tool refresh orchestration.
  */
 class DefaultLocalMCPRuntimeControlService(
     private val localMCPServerService: LocalMCPServerService,
-    private val localMCPRuntimeCommandDispatchService: LocalMCPRuntimeCommandDispatchService
+    private val localMCPRuntimeCommandDispatchService: LocalMCPRuntimeCommandDispatchService,
+    private val localMCPToolDefinitionService: LocalMCPToolDefinitionService
 ) : LocalMCPRuntimeControlService {
     override suspend fun startServer(userId: Long, serverId: Long): Either<LocalMCPRuntimeControlError, Unit> = either {
         val server = resolveOwnedServer(userId = userId, serverId = serverId).bind()
@@ -61,8 +69,18 @@ class DefaultLocalMCPRuntimeControlService(
         serverId: Long
     ): Either<LocalMCPRuntimeControlError, RefreshMCPToolsResponse> = either {
         val server = resolveOwnedServer(userId = userId, serverId = serverId).bind()
+        val discoveredTools = withError({ it.toRuntimeControlError(serverId) }) {
+            localMCPRuntimeCommandDispatchService.discoverTools(workerId = server.workerId, serverId = server.id).bind()
+        }
+        val currentTools = discoveredTools.tools.map { discoveredTool ->
+            discoveredTool.toPersistedToolDefinition(server)
+        }
+
         val result = withError({ it.toRuntimeControlError(serverId) }) {
-            localMCPRuntimeCommandDispatchService.refreshTools(workerId = server.workerId, serverId = server.id).bind()
+            localMCPToolDefinitionService.refreshMCPTools(
+                serverId = server.id,
+                currentTools = currentTools
+            ).bind()
         }
 
         RefreshMCPToolsResponse(
@@ -71,6 +89,44 @@ class DefaultLocalMCPRuntimeControlService(
             deletedTools = result.deletedTools
         )
     }
+
+    /**
+     * Maps worker discovery metadata into a persisted local MCP tool definition candidate.
+     *
+     * Prefixing and persisted-tool shaping happen on the server so worker discovery remains runtime-only.
+     *
+     * @receiver Discovered worker tool metadata.
+     * @param server Owning server configuration used for naming/persistence defaults.
+     * @return Server-shaped tool definition ready for differential refresh.
+     */
+    private fun WorkerMcpDiscoveredToolData.toPersistedToolDefinition(
+        server: LocalMCPServerDto
+    ): LocalMCPToolDefinition {
+        val now = Clock.System.now()
+        return LocalMCPToolDefinition(
+            id = 0L,
+            name = buildToolName(server.toolNamePrefix, name),
+            description = description.orEmpty(),
+            config = buildJsonObject { },
+            inputSchema = inputSchema,
+            outputSchema = outputSchema,
+            isEnabled = true,
+            createdAt = now,
+            updatedAt = now,
+            serverId = server.id,
+            mcpToolName = name
+        )
+    }
+
+    /**
+     * Constructs the persisted tool name shown to LLMs by prepending [prefix] to [mcpToolName].
+     *
+     * @param prefix Optional server-configured tool prefix.
+     * @param mcpToolName Raw MCP tool name returned by runtime discovery.
+     * @return Prefixed name when [prefix] is not blank; otherwise [mcpToolName].
+     */
+    private fun buildToolName(prefix: String?, mcpToolName: String): String =
+        if (prefix.isNullOrBlank()) mcpToolName else "$prefix$mcpToolName"
 
     /**
      * Resolves and ownership-validates a Local MCP server.
@@ -178,5 +234,29 @@ class DefaultLocalMCPRuntimeControlService(
                 "Worker completed $commandType with unsupported status '$status'"
             )
         }
+    }
+
+    /**
+     * Maps Local MCP tool refresh service errors into runtime-control API errors.
+     *
+     * @receiver Tool-refresh service error.
+     * @param serverId Local MCP server identifier involved in refresh orchestration.
+     * @return Runtime-control error for route-level mapping.
+     */
+    private fun RefreshMCPToolsError.toRuntimeControlError(serverId: Long): LocalMCPRuntimeControlError = when (this) {
+        is RefreshMCPToolsError.ServerNotFound -> LocalMCPRuntimeControlError.ServerNotFoundError(serverId)
+        is RefreshMCPToolsError.DuplicateName -> {
+            LocalMCPRuntimeControlError.InternalError(
+                "Tool refresh produced duplicate tool name '$name'"
+            )
+        }
+
+        is RefreshMCPToolsError.ToolValidationError -> {
+            LocalMCPRuntimeControlError.InternalError(
+                "Tool refresh validation failed: $validationError"
+            )
+        }
+
+        is RefreshMCPToolsError.OtherError -> LocalMCPRuntimeControlError.InternalError(message)
     }
 }

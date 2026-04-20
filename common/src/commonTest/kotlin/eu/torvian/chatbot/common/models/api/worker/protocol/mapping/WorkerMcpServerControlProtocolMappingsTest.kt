@@ -5,8 +5,9 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerComm
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolCommandTypes
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRequestPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerControlErrorResultData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerRefreshToolsCommandData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerRefreshToolsResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpDiscoveredToolData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionCommandData
@@ -85,32 +86,37 @@ class WorkerMcpServerControlProtocolMappingsTest {
     }
 
     /**
-     * Ensures refresh-tools request and result data map correctly.
+     * Ensures discover-tools request and result data map correctly.
      */
     @Test
-    fun `refresh tools request and result data encode and decode`() {
-        val request = WorkerMcpServerRefreshToolsCommandData(serverId = 44L)
+    fun `discover tools request and result data encode and decode`() {
+        val request = WorkerMcpServerDiscoverToolsCommandData(serverId = 44L)
 
         val requestPayload = request.toWorkerCommandRequestPayload()
-            .getOrElse { error("Expected refresh-tools request mapping success: $it") }
+            .getOrElse { error("Expected discover-tools request mapping success: $it") }
 
-        assertEquals(WorkerProtocolCommandTypes.MCP_SERVER_REFRESH_TOOLS, requestPayload.commandType)
-        val decodedRequest = requestPayload.toWorkerMcpServerRefreshToolsCommandData()
-            .getOrElse { error("Expected refresh-tools request reverse mapping success: $it") }
+        assertEquals(WorkerProtocolCommandTypes.MCP_SERVER_DISCOVER_TOOLS, requestPayload.commandType)
+        val decodedRequest = requestPayload.toWorkerMcpServerDiscoverToolsCommandData()
+            .getOrElse { error("Expected discover-tools request reverse mapping success: $it") }
         assertEquals(request, decodedRequest)
 
-        val result = WorkerMcpServerRefreshToolsResultData(
+        val result = WorkerMcpServerDiscoverToolsResultData(
             serverId = 44L,
-            addedTools = emptyList(),
-            updatedTools = emptyList(),
-            deletedTools = emptyList()
+            tools = listOf(
+                WorkerMcpDiscoveredToolData(
+                    name = "search_files",
+                    description = "Searches local files",
+                    inputSchema = buildJsonObject { put("type", "object") },
+                    outputSchema = null
+                )
+            )
         )
         val resultPayload = result.toWorkerCommandResultPayload()
-            .getOrElse { error("Expected refresh-tools result mapping success: $it") }
+            .getOrElse { error("Expected discover-tools result mapping success: $it") }
 
-        val decodedResult = resultPayload.toWorkerMcpServerRefreshToolsResultData(
-            commandType = WorkerProtocolCommandTypes.MCP_SERVER_REFRESH_TOOLS
-        ).getOrElse { error("Expected refresh-tools result reverse mapping success: $it") }
+        val decodedResult = resultPayload.toWorkerMcpServerDiscoverToolsResultData(
+            commandType = WorkerProtocolCommandTypes.MCP_SERVER_DISCOVER_TOOLS
+        ).getOrElse { error("Expected discover-tools result reverse mapping success: $it") }
         assertEquals(result, decodedResult)
     }
 

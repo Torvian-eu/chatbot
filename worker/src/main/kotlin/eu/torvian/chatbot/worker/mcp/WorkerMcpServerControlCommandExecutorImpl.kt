@@ -4,8 +4,9 @@ import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerControlErrorResultData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerRefreshToolsCommandData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerRefreshToolsResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpDiscoveredToolData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopCommandData
@@ -59,17 +60,22 @@ class WorkerMcpServerControlCommandExecutorImpl(
         )
     }
 
-    override suspend fun refreshTools(
-        request: WorkerMcpServerRefreshToolsCommandData
-    ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerRefreshToolsResultData> {
-        return runtimeService.refreshTools(request.serverId).fold(
+    override suspend fun discoverTools(
+        request: WorkerMcpServerDiscoverToolsCommandData
+    ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerDiscoverToolsResultData> {
+        return runtimeService.discoverTools(request.serverId).fold(
             ifLeft = { runtimeError -> runtimeError.toProtocolError(request.serverId).left() },
-            ifRight = { outcome ->
-                WorkerMcpServerRefreshToolsResultData(
+            ifRight = { discoveredTools ->
+                WorkerMcpServerDiscoverToolsResultData(
                     serverId = request.serverId,
-                    addedTools = outcome.addedTools,
-                    updatedTools = outcome.updatedTools,
-                    deletedTools = outcome.deletedTools
+                    tools = discoveredTools.map { tool ->
+                        WorkerMcpDiscoveredToolData(
+                            name = tool.name,
+                            description = tool.description,
+                            inputSchema = tool.inputSchema,
+                            outputSchema = tool.outputSchema
+                        )
+                    }
                 ).right()
             }
         )

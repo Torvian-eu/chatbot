@@ -110,17 +110,22 @@ class WorkerLocalMcpRuntimeServiceImplTest {
     }
 
     /**
-     * Verifies refresh uses deterministic minimal runtime behavior and returns an empty diff.
+     * Verifies discover-tools performs runtime discovery and returns discovered metadata.
      */
     @Test
-    fun `refresh returns minimal empty diff`() = runTest {
-        val service = buildService()
+    fun `discover tools returns runtime discovered metadata`() = runTest {
+        val client = FakeWorkerMcpClientService(
+            discoverToolsResult = emptyList<Tool>().right(),
+            connected = false
+        )
+        val service = buildService(clientService = client)
 
-        val result = service.refreshTools(serverId = DEFAULT_SERVER_ID).rightOrError()
+        val result = service.discoverTools(serverId = DEFAULT_SERVER_ID).rightOrError()
 
-        assertEquals(0, result.addedTools.size)
-        assertEquals(0, result.updatedTools.size)
-        assertEquals(0, result.deletedTools.size)
+        assertEquals(0, result.size)
+        assertEquals(1, client.startCalls)
+        assertEquals(1, client.stopCalls)
+        assertEquals(1, client.discoverCalls)
     }
 
     /**

@@ -177,7 +177,7 @@ fun workerModule(
                 WorkerProtocolCommandTypes.MCP_SERVER_START to get<WorkerMcpServerControlInteractionFactory>(),
                 WorkerProtocolCommandTypes.MCP_SERVER_STOP to get<WorkerMcpServerControlInteractionFactory>(),
                 WorkerProtocolCommandTypes.MCP_SERVER_TEST_CONNECTION to get<WorkerMcpServerControlInteractionFactory>(),
-                WorkerProtocolCommandTypes.MCP_SERVER_REFRESH_TOOLS to get<WorkerMcpServerControlInteractionFactory>()
+                WorkerProtocolCommandTypes.MCP_SERVER_DISCOVER_TOOLS to get<WorkerMcpServerControlInteractionFactory>()
             ),
             emitter = get(),
             registry = get(),

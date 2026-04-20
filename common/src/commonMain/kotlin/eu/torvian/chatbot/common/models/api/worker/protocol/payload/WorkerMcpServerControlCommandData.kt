@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.common.models.api.worker.protocol.payload
 
-import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Request data carried by `mcp.server.start` worker commands.
@@ -34,13 +34,29 @@ data class WorkerMcpServerTestConnectionCommandData(
 )
 
 /**
- * Request data carried by `mcp.server.refresh_tools` worker commands.
+ * Request data carried by `mcp.server.discover_tools` worker commands.
  *
- * @property serverId Persisted Local MCP server identifier targeted for tool refresh.
+ * @property serverId Persisted Local MCP server identifier targeted for tool discovery.
  */
 @Serializable
-data class WorkerMcpServerRefreshToolsCommandData(
+data class WorkerMcpServerDiscoverToolsCommandData(
     val serverId: Long
+)
+
+/**
+ * Runtime tool metadata returned by worker-side MCP discovery.
+ *
+ * @property name Raw MCP tool name returned by runtime discovery.
+ * @property description Optional MCP tool description.
+ * @property inputSchema MCP tool input JSON schema.
+ * @property outputSchema Optional MCP tool output JSON schema.
+ */
+@Serializable
+data class WorkerMcpDiscoveredToolData(
+    val name: String,
+    val description: String? = null,
+    val inputSchema: JsonObject,
+    val outputSchema: JsonObject? = null
 )
 
 /**
@@ -80,19 +96,15 @@ data class WorkerMcpServerTestConnectionResultData(
 )
 
 /**
- * Result data emitted for `mcp.server.refresh_tools` worker commands.
+ * Result data emitted for `mcp.server.discover_tools` worker commands.
  *
- * @property serverId Persisted Local MCP server identifier that was refreshed.
- * @property addedTools Tool definitions discovered as newly added.
- * @property updatedTools Tool definitions that changed and were updated.
- * @property deletedTools Tool definitions removed by differential refresh.
+ * @property serverId Persisted Local MCP server identifier that was queried.
+ * @property tools Runtime-discovered MCP tool metadata for this server.
  */
 @Serializable
-data class WorkerMcpServerRefreshToolsResultData(
+data class WorkerMcpServerDiscoverToolsResultData(
     val serverId: Long,
-    val addedTools: List<LocalMCPToolDefinition>,
-    val updatedTools: List<LocalMCPToolDefinition>,
-    val deletedTools: List<LocalMCPToolDefinition>
+    val tools: List<WorkerMcpDiscoveredToolData>
 )
 
 /**

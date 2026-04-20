@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.worker.mcp
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Runtime-facing service for worker MCP server lifecycle and discovery operations.
@@ -34,12 +34,12 @@ interface WorkerLocalMcpRuntimeService {
     suspend fun testConnection(serverId: Long): Either<WorkerLocalMcpRuntimeError, WorkerLocalMcpTestConnectionOutcome>
 
     /**
-     * Performs runtime-side refresh behavior supported by the current worker contract.
+     * Performs runtime tool discovery for one configured server.
      *
      * @param serverId Persisted local MCP server identifier.
-     * @return Either runtime error or refresh outcome.
+     * @return Either runtime error or discovered tool metadata.
      */
-    suspend fun refreshTools(serverId: Long): Either<WorkerLocalMcpRuntimeError, WorkerLocalMcpRefreshToolsOutcome>
+    suspend fun discoverTools(serverId: Long): Either<WorkerLocalMcpRuntimeError, List<WorkerLocalMcpDiscoveredTool>>
 }
 
 /**
@@ -54,16 +54,18 @@ data class WorkerLocalMcpTestConnectionOutcome(
 )
 
 /**
- * Runtime-level refresh outcome represented as a tool diff.
+ * Runtime-level representation of one discovered MCP tool.
  *
- * @property addedTools Tools discovered as newly added.
- * @property updatedTools Tools discovered as updated.
- * @property deletedTools Tools discovered as deleted.
+ * @property name Raw MCP tool name returned by runtime discovery.
+ * @property description Optional MCP tool description.
+ * @property inputSchema MCP tool input JSON schema.
+ * @property outputSchema Optional MCP tool output JSON schema.
  */
-data class WorkerLocalMcpRefreshToolsOutcome(
-    val addedTools: List<LocalMCPToolDefinition>,
-    val updatedTools: List<LocalMCPToolDefinition>,
-    val deletedTools: List<LocalMCPToolDefinition>
+data class WorkerLocalMcpDiscoveredTool(
+    val name: String,
+    val description: String? = null,
+    val inputSchema: JsonObject,
+    val outputSchema: JsonObject? = null
 )
 
 /**

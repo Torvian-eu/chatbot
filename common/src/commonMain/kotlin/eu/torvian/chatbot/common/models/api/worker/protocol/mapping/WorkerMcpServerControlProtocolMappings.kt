@@ -10,8 +10,8 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProt
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRequestPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandResultPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerControlErrorResultData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerRefreshToolsCommandData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerRefreshToolsResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopCommandData
@@ -59,16 +59,16 @@ fun WorkerMcpServerTestConnectionCommandData.toWorkerCommandRequestPayload():
     )
 
 /**
- * Maps MCP server refresh-tools command data to a typed worker command-request payload.
+ * Maps MCP server discover-tools command data to a typed worker command-request payload.
  *
- * @receiver Refresh-tools command request DTO.
+ * @receiver Discover-tools command request DTO.
  * @return Either a worker command-request payload or a logical mapping error.
  */
-fun WorkerMcpServerRefreshToolsCommandData.toWorkerCommandRequestPayload():
+fun WorkerMcpServerDiscoverToolsCommandData.toWorkerCommandRequestPayload():
         Either<WorkerMcpServerControlProtocolMappingError, WorkerCommandRequestPayload> =
     toCommandRequestPayload(
-        commandType = WorkerProtocolCommandTypes.MCP_SERVER_REFRESH_TOOLS,
-        targetType = "WorkerMcpServerRefreshToolsCommandData"
+        commandType = WorkerProtocolCommandTypes.MCP_SERVER_DISCOVER_TOOLS,
+        targetType = "WorkerMcpServerDiscoverToolsCommandData"
     )
 
 /**
@@ -111,16 +111,16 @@ fun WorkerCommandRequestPayload.toWorkerMcpServerTestConnectionCommandData():
     )
 
 /**
- * Decodes worker request payload data as MCP server refresh-tools command data.
+ * Decodes worker request payload data as MCP server discover-tools command data.
  *
  * @receiver Worker command-request payload.
- * @return Either decoded refresh-tools command data or a logical mapping error.
+ * @return Either decoded discover-tools command data or a logical mapping error.
  */
-fun WorkerCommandRequestPayload.toWorkerMcpServerRefreshToolsCommandData():
-        Either<WorkerMcpServerControlProtocolMappingError, WorkerMcpServerRefreshToolsCommandData> =
+fun WorkerCommandRequestPayload.toWorkerMcpServerDiscoverToolsCommandData():
+        Either<WorkerMcpServerControlProtocolMappingError, WorkerMcpServerDiscoverToolsCommandData> =
     decodeCommandRequestData(
-        expectedCommandType = WorkerProtocolCommandTypes.MCP_SERVER_REFRESH_TOOLS,
-        targetType = "WorkerMcpServerRefreshToolsCommandData"
+        expectedCommandType = WorkerProtocolCommandTypes.MCP_SERVER_DISCOVER_TOOLS,
+        targetType = "WorkerMcpServerDiscoverToolsCommandData"
     )
 
 /**
@@ -160,16 +160,16 @@ fun WorkerMcpServerTestConnectionResultData.toWorkerCommandResultPayload(
     toCommandResultPayload(status = status, targetType = "WorkerMcpServerTestConnectionResultData")
 
 /**
- * Maps MCP server refresh-tools result data to a typed worker command-result payload.
+ * Maps MCP server discover-tools result data to a typed worker command-result payload.
  *
- * @receiver Refresh-tools result DTO.
+ * @receiver Discover-tools result DTO.
  * @param status Final command-result status to encode.
  * @return Either a worker command-result payload or a logical mapping error.
  */
-fun WorkerMcpServerRefreshToolsResultData.toWorkerCommandResultPayload(
+fun WorkerMcpServerDiscoverToolsResultData.toWorkerCommandResultPayload(
     status: String = WorkerCommandResultStatuses.SUCCESS
 ): Either<WorkerMcpServerControlProtocolMappingError, WorkerCommandResultPayload> =
-    toCommandResultPayload(status = status, targetType = "WorkerMcpServerRefreshToolsResultData")
+    toCommandResultPayload(status = status, targetType = "WorkerMcpServerDiscoverToolsResultData")
 
 /**
  * Maps MCP server-control error result data to a typed worker command-result payload.
@@ -232,19 +232,19 @@ fun WorkerCommandResultPayload.toWorkerMcpServerTestConnectionResultData(
     )
 
 /**
- * Decodes worker result payload data as MCP server refresh-tools result data.
+ * Decodes worker result payload data as MCP server discover-tools result data.
  *
  * @receiver Worker command-result payload.
  * @param commandType Command type associated with the completed lifecycle.
- * @return Either decoded refresh-tools result data or a logical mapping error.
+ * @return Either decoded discover-tools result data or a logical mapping error.
  */
-fun WorkerCommandResultPayload.toWorkerMcpServerRefreshToolsResultData(
+fun WorkerCommandResultPayload.toWorkerMcpServerDiscoverToolsResultData(
     commandType: String
-): Either<WorkerMcpServerControlProtocolMappingError, WorkerMcpServerRefreshToolsResultData> =
+): Either<WorkerMcpServerControlProtocolMappingError, WorkerMcpServerDiscoverToolsResultData> =
     decodeCommandResultData(
         commandType = commandType,
-        expectedCommandType = WorkerProtocolCommandTypes.MCP_SERVER_REFRESH_TOOLS,
-        targetType = "WorkerMcpServerRefreshToolsResultData"
+        expectedCommandType = WorkerProtocolCommandTypes.MCP_SERVER_DISCOVER_TOOLS,
+        targetType = "WorkerMcpServerDiscoverToolsResultData"
     )
 
 /**
@@ -296,18 +296,18 @@ fun WorkerCommandResultPayload.toWorkerMcpServerTestConnectionErrorResultData(
     )
 
 /**
- * Decodes worker result payload data as MCP server refresh-tools error result data.
+ * Decodes worker result payload data as MCP server discover-tools error result data.
  *
  * @receiver Worker command-result payload.
  * @param commandType Command type associated with the completed lifecycle.
- * @return Either decoded refresh-tools error result data or a logical mapping error.
+ * @return Either decoded discover-tools error result data or a logical mapping error.
  */
-fun WorkerCommandResultPayload.toWorkerMcpServerRefreshToolsErrorResultData(
+fun WorkerCommandResultPayload.toWorkerMcpServerDiscoverToolsErrorResultData(
     commandType: String
 ): Either<WorkerMcpServerControlProtocolMappingError, WorkerMcpServerControlErrorResultData> =
     decodeCommandResultData(
         commandType = commandType,
-        expectedCommandType = WorkerProtocolCommandTypes.MCP_SERVER_REFRESH_TOOLS,
+        expectedCommandType = WorkerProtocolCommandTypes.MCP_SERVER_DISCOVER_TOOLS,
         targetType = "WorkerMcpServerControlErrorResultData"
     )
 

@@ -10,7 +10,7 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProt
 import eu.torvian.chatbot.common.models.api.worker.protocol.core.WorkerProtocolMessage
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.WorkerMcpServerControlProtocolMappingError
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerCommandResultPayload
-import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerRefreshToolsCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerDiscoverToolsCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerStartCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerStopCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerTestConnectionCommandData
@@ -34,7 +34,7 @@ import kotlinx.serialization.json.put
  * - `mcp.server.start`
  * - `mcp.server.stop`
  * - `mcp.server.test_connection`
- * - `mcp.server.refresh_tools`
+ * - `mcp.server.discover_tools`
  *
  * @property envelope Original inbound `command.request` envelope.
  * @property requestPayload Decoded command-request payload for this interaction.
@@ -77,11 +77,11 @@ class WorkerMcpServerControlInteraction(
                 decodeFailureMessage = "Unable to decode mcp.server.test_connection payload"
             )
 
-            WorkerProtocolCommandTypes.MCP_SERVER_REFRESH_TOOLS -> runOneShotCommand(
-                decodeRequest = { toWorkerMcpServerRefreshToolsCommandData() },
-                execute = { command -> executor.refreshTools(command) },
+            WorkerProtocolCommandTypes.MCP_SERVER_DISCOVER_TOOLS -> runOneShotCommand(
+                decodeRequest = { toWorkerMcpServerDiscoverToolsCommandData() },
+                execute = { command -> executor.discoverTools(command) },
                 mapSuccessResult = { result -> result.toWorkerCommandResultPayload() },
-                decodeFailureMessage = "Unable to decode mcp.server.refresh_tools payload"
+                decodeFailureMessage = "Unable to decode mcp.server.discover_tools payload"
             )
 
             else -> {

@@ -3,8 +3,8 @@ package eu.torvian.chatbot.worker.mcp
 import arrow.core.Either
 import arrow.core.right
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerControlErrorResultData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerRefreshToolsCommandData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerRefreshToolsResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopCommandData
@@ -55,17 +55,15 @@ class DummyWorkerMcpServerControlCommandExecutor : WorkerMcpServerControlCommand
     }
 
     /**
-     * @param request Typed refresh-tools command input data.
-     * @return Deterministic successful refresh result with an empty tool diff.
+     * @param request Typed discover-tools command input data.
+     * @return Deterministic successful discover result with an empty tool list.
      */
-    override suspend fun refreshTools(
-        request: WorkerMcpServerRefreshToolsCommandData
-    ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerRefreshToolsResultData> {
-        return WorkerMcpServerRefreshToolsResultData(
+    override suspend fun discoverTools(
+        request: WorkerMcpServerDiscoverToolsCommandData
+    ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerDiscoverToolsResultData> {
+        return WorkerMcpServerDiscoverToolsResultData(
             serverId = request.serverId,
-            addedTools = emptyList(),
-            updatedTools = emptyList(),
-            deletedTools = emptyList()
+            tools = emptyList()
         ).right()
     }
 

@@ -11,8 +11,8 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProt
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolRejectionReasons
 import eu.torvian.chatbot.common.models.api.worker.protocol.core.WorkerProtocolMessage
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerCommandRequestPayload
+import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerDiscoverToolsResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerStartErrorResultData
-import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerRefreshToolsResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerStartResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerStopResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerTestConnectionResultData
@@ -20,8 +20,8 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerComman
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRequestPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandResultPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerControlErrorResultData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerRefreshToolsCommandData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerRefreshToolsResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopCommandData
@@ -82,12 +82,12 @@ class WorkerMcpServerControlCommandProcessorTest {
                 }
             ),
             SupportedCommandScenario(
-                commandType = WorkerProtocolCommandTypes.MCP_SERVER_REFRESH_TOOLS,
-                requestPayload = WorkerMcpServerRefreshToolsCommandData(serverId = 13L)
+                commandType = WorkerProtocolCommandTypes.MCP_SERVER_DISCOVER_TOOLS,
+                requestPayload = WorkerMcpServerDiscoverToolsCommandData(serverId = 13L)
                     .toWorkerCommandRequestPayload()
                     .orError(),
                 verifyResult = { resultPayload, commandType ->
-                    val data = resultPayload.toWorkerMcpServerRefreshToolsResultData(commandType).orError()
+                    val data = resultPayload.toWorkerMcpServerDiscoverToolsResultData(commandType).orError()
                     assertEquals(13L, data.serverId)
                 }
             )
@@ -135,7 +135,7 @@ class WorkerMcpServerControlCommandProcessorTest {
                 data = malformedServerIdPayload()
             ),
             WorkerCommandRequestPayload(
-                commandType = WorkerProtocolCommandTypes.MCP_SERVER_REFRESH_TOOLS,
+                commandType = WorkerProtocolCommandTypes.MCP_SERVER_DISCOVER_TOOLS,
                 data = malformedServerIdPayload()
             )
         )
@@ -194,14 +194,14 @@ class WorkerMcpServerControlCommandProcessorTest {
     }
 
     /**
-     * Verifies the dummy refresh-tools result always carries an empty diff.
+     * Verifies the dummy discover-tools result always carries an empty tool list.
      */
     @Test
-    fun `refresh tools emits deterministic empty diff`() = kotlinx.coroutines.test.runTest {
+    fun `discover tools emits deterministic empty list`() = kotlinx.coroutines.test.runTest {
         val emitter = RecordingEmitter()
         val interaction = buildInteraction(
-            interactionId = "int-refresh-tools",
-            requestPayload = WorkerMcpServerRefreshToolsCommandData(serverId = 45L)
+            interactionId = "int-discover-tools",
+            requestPayload = WorkerMcpServerDiscoverToolsCommandData(serverId = 45L)
                 .toWorkerCommandRequestPayload()
                 .orError(),
             emitter = emitter
@@ -214,13 +214,11 @@ class WorkerMcpServerControlCommandProcessorTest {
             targetType = "WorkerCommandResultPayload"
         ).orError()
         val resultData = resultPayload
-            .toWorkerMcpServerRefreshToolsResultData(WorkerProtocolCommandTypes.MCP_SERVER_REFRESH_TOOLS)
+            .toWorkerMcpServerDiscoverToolsResultData(WorkerProtocolCommandTypes.MCP_SERVER_DISCOVER_TOOLS)
             .orError()
 
         assertEquals(45L, resultData.serverId)
-        assertTrue(resultData.addedTools.isEmpty())
-        assertTrue(resultData.updatedTools.isEmpty())
-        assertTrue(resultData.deletedTools.isEmpty())
+        assertTrue(resultData.tools.isEmpty())
     }
 
     /**
@@ -389,17 +387,15 @@ class WorkerMcpServerControlCommandProcessorTest {
             ).right()
 
         /**
-         * @param request Typed refresh-tools command input data.
-         * @return Deterministic successful empty refresh diff result.
+         * @param request Typed discover-tools command input data.
+         * @return Deterministic successful empty discover result.
          */
-        override suspend fun refreshTools(
-            request: WorkerMcpServerRefreshToolsCommandData
-        ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerRefreshToolsResultData> =
-            WorkerMcpServerRefreshToolsResultData(
+        override suspend fun discoverTools(
+            request: WorkerMcpServerDiscoverToolsCommandData
+        ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerDiscoverToolsResultData> =
+            WorkerMcpServerDiscoverToolsResultData(
                 serverId = request.serverId,
-                addedTools = emptyList(),
-                updatedTools = emptyList(),
-                deletedTools = emptyList()
+                tools = emptyList()
             ).right()
     }
 

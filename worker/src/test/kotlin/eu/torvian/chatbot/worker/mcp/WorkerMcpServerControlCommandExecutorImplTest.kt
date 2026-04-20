@@ -4,11 +4,14 @@ import arrow.core.Either
 import arrow.core.getOrElse
 import arrow.core.left
 import arrow.core.right
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerRefreshToolsCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpDiscoveredToolData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionCommandData
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -73,28 +76,38 @@ class WorkerMcpServerControlCommandExecutorImplTest {
     }
 
     /**
-     * Verifies runtime refresh minimal result maps to protocol refresh payload.
+     * Verifies runtime discover result maps to protocol discover payload.
      */
     @Test
-    fun `refresh maps runtime minimal result`() = runTest {
+    fun `discover tools maps runtime discovered result`() = runTest {
         val executor = WorkerMcpServerControlCommandExecutorImpl(
             runtimeService = FakeRuntimeService(
-                refreshResult = WorkerLocalMcpRefreshToolsOutcome(
-                    addedTools = emptyList(),
-                    updatedTools = emptyList(),
-                    deletedTools = emptyList()
+                discoverResult = listOf(
+                    WorkerLocalMcpDiscoveredTool(
+                        name = "echo",
+                        description = "Echoes input",
+                        inputSchema = buildJsonObject { put("type", "object") },
+                        outputSchema = null
+                    )
                 ).right()
             )
         )
 
-        val result = executor.refreshTools(
-            WorkerMcpServerRefreshToolsCommandData(serverId = 13L)
+        val result = executor.discoverTools(
+            WorkerMcpServerDiscoverToolsCommandData(serverId = 13L)
         ).rightOrError()
 
         assertEquals(13L, result.serverId)
-        assertEquals(0, result.addedTools.size)
-        assertEquals(0, result.updatedTools.size)
-        assertEquals(0, result.deletedTools.size)
+        assertEquals(1, result.tools.size)
+        assertEquals(
+            WorkerMcpDiscoveredToolData(
+                name = "echo",
+                description = "Echoes input",
+                inputSchema = buildJsonObject { put("type", "object") },
+                outputSchema = null
+            ),
+            result.tools.single()
+        )
     }
 
     /**
@@ -125,8 +138,8 @@ class WorkerMcpServerControlCommandExecutorImplTest {
         private val stopResult: Either<WorkerLocalMcpRuntimeError, Unit> = Unit.right(),
         private val testResult: Either<WorkerLocalMcpRuntimeError, WorkerLocalMcpTestConnectionOutcome> =
             WorkerLocalMcpTestConnectionOutcome(discoveredToolCount = 0, message = null).right(),
-        private val refreshResult: Either<WorkerLocalMcpRuntimeError, WorkerLocalMcpRefreshToolsOutcome> =
-            WorkerLocalMcpRefreshToolsOutcome(emptyList(), emptyList(), emptyList()).right()
+        private val discoverResult: Either<WorkerLocalMcpRuntimeError, List<WorkerLocalMcpDiscoveredTool>> =
+            emptyList<WorkerLocalMcpDiscoveredTool>().right()
     ) : WorkerLocalMcpRuntimeService {
         /**
          * @param serverId Persisted local MCP server identifier.
@@ -152,9 +165,9 @@ class WorkerMcpServerControlCommandExecutorImplTest {
          * @param serverId Persisted local MCP server identifier.
          * @return Configured fixture result.
          */
-        override suspend fun refreshTools(
+        override suspend fun discoverTools(
             serverId: Long
-        ): Either<WorkerLocalMcpRuntimeError, WorkerLocalMcpRefreshToolsOutcome> = refreshResult
+        ): Either<WorkerLocalMcpRuntimeError, List<WorkerLocalMcpDiscoveredTool>> = discoverResult
     }
 }
 
