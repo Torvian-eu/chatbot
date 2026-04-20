@@ -2,9 +2,15 @@ package eu.torvian.chatbot.worker.mcp
 
 import arrow.core.Either
 import arrow.core.right
+import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto
+import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerControlErrorResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerGetRuntimeStatusCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerGetRuntimeStatusResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerListRuntimeStatusesCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerListRuntimeStatusesResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopCommandData
@@ -65,6 +71,32 @@ class DummyWorkerMcpServerControlCommandExecutor : WorkerMcpServerControlCommand
             serverId = request.serverId,
             tools = emptyList()
         ).right()
+    }
+
+    /**
+     * @param request Typed get-runtime-status command input data.
+     * @return Deterministic runtime-status result with a stopped state.
+     */
+    override suspend fun getRuntimeStatus(
+        request: WorkerMcpServerGetRuntimeStatusCommandData
+    ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerGetRuntimeStatusResultData> {
+        return WorkerMcpServerGetRuntimeStatusResultData(
+            status = LocalMcpServerRuntimeStatusDto(
+                serverId = request.serverId,
+                state = LocalMcpServerRuntimeStateDto.STOPPED,
+                errorMessage = "Dummy runtime-status response"
+            )
+        ).right()
+    }
+
+    /**
+     * @param request Typed list-runtime-statuses command input data.
+     * @return Deterministic empty runtime-status list.
+     */
+    override suspend fun listRuntimeStatuses(
+        request: WorkerMcpServerListRuntimeStatusesCommandData
+    ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerListRuntimeStatusesResultData> {
+        return WorkerMcpServerListRuntimeStatusesResultData(statuses = emptyList()).right()
     }
 
     companion object {

@@ -38,6 +38,13 @@ interface WorkerLocalMcpServerConfigStore {
      * @param servers Full worker-assigned server set.
      */
     suspend fun replaceAll(servers: List<LocalMCPServerDto>)
+
+    /**
+     * Returns all currently cached worker-assigned server configurations.
+     *
+     * @return Snapshot list of assigned server configurations.
+     */
+    suspend fun listServers(): List<LocalMCPServerDto>
 }
 
 /**
@@ -78,5 +85,10 @@ class InMemoryWorkerLocalMcpServerConfigStore : WorkerLocalMcpServerConfigStore 
             serverById[server.id] = server
         }
     }
+
+    /**
+     * @return Snapshot list of all currently cached server configurations.
+     */
+    override suspend fun listServers(): List<LocalMCPServerDto> = serverById.values.toList()
 }
 

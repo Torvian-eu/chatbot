@@ -90,6 +90,37 @@ class DefaultLocalMCPRuntimeCommandDispatchService(
             }
         )
 
+    override suspend fun getRuntimeStatus(
+        workerId: Long,
+        serverId: Long
+    ): Either<LocalMCPRuntimeCommandDispatchError, WorkerMcpServerGetRuntimeStatusResultData> =
+        dispatchAndDecode(
+            workerId = workerId,
+            commandType = WorkerProtocolCommandTypes.MCP_SERVER_GET_RUNTIME_STATUS,
+            requestPayload = WorkerMcpServerGetRuntimeStatusCommandData(serverId).toWorkerCommandRequestPayload(),
+            decodeSuccessResult = { result, completedCommandType ->
+                result.toWorkerMcpServerGetRuntimeStatusResultData(completedCommandType)
+            },
+            decodeErrorResult = { result, completedCommandType ->
+                result.toWorkerMcpServerGetRuntimeStatusErrorResultData(completedCommandType)
+            }
+        )
+
+    override suspend fun listRuntimeStatuses(
+        workerId: Long
+    ): Either<LocalMCPRuntimeCommandDispatchError, WorkerMcpServerListRuntimeStatusesResultData> =
+        dispatchAndDecode(
+            workerId = workerId,
+            commandType = WorkerProtocolCommandTypes.MCP_SERVER_LIST_RUNTIME_STATUSES,
+            requestPayload = WorkerMcpServerListRuntimeStatusesCommandData.toWorkerCommandRequestPayload(),
+            decodeSuccessResult = { result, completedCommandType ->
+                result.toWorkerMcpServerListRuntimeStatusesResultData(completedCommandType)
+            },
+            decodeErrorResult = { result, completedCommandType ->
+                result.toWorkerMcpServerListRuntimeStatusesErrorResultData(completedCommandType)
+            }
+        )
+
     /**
      * Dispatches a typed request payload and decodes completed lifecycle payloads to typed success/error data.
      *

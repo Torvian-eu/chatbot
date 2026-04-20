@@ -2,6 +2,8 @@ package eu.torvian.chatbot.server.worker.mcp.runtimecontrol
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerGetRuntimeStatusResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerListRuntimeStatusesResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionResultData
@@ -60,6 +62,28 @@ interface LocalMCPRuntimeCommandDispatchService {
         workerId: Long,
         serverId: Long
     ): Either<LocalMCPRuntimeCommandDispatchError, WorkerMcpServerDiscoverToolsResultData>
+
+    /**
+     * Dispatches `mcp.server.get_runtime_status` to a worker and returns decoded runtime status data.
+     *
+     * @param workerId Worker identifier targeted for command dispatch.
+     * @param serverId Local MCP server identifier whose runtime status should be read.
+     * @return Either orchestration error or typed runtime-status result data.
+     */
+    suspend fun getRuntimeStatus(
+        workerId: Long,
+        serverId: Long
+    ): Either<LocalMCPRuntimeCommandDispatchError, WorkerMcpServerGetRuntimeStatusResultData>
+
+    /**
+     * Dispatches `mcp.server.list_runtime_statuses` to a worker and returns decoded runtime-status list data.
+     *
+     * @param workerId Worker identifier targeted for command dispatch.
+     * @return Either orchestration error or typed runtime-status list result data.
+     */
+    suspend fun listRuntimeStatuses(
+        workerId: Long
+    ): Either<LocalMCPRuntimeCommandDispatchError, WorkerMcpServerListRuntimeStatusesResultData>
 }
 
 

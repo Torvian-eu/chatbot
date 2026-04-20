@@ -4,6 +4,10 @@ import arrow.core.Either
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerControlErrorResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerGetRuntimeStatusCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerGetRuntimeStatusResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerListRuntimeStatusesCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerListRuntimeStatusesResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopCommandData
@@ -58,5 +62,25 @@ interface WorkerMcpServerControlCommandExecutor {
     suspend fun discoverTools(
         request: WorkerMcpServerDiscoverToolsCommandData
     ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerDiscoverToolsResultData>
+
+    /**
+     * Executes an MCP server get-runtime-status command.
+     *
+     * @param request Typed get-runtime-status command input data.
+     * @return Either typed failure data or typed success data for the command result.
+     */
+    suspend fun getRuntimeStatus(
+        request: WorkerMcpServerGetRuntimeStatusCommandData
+    ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerGetRuntimeStatusResultData>
+
+    /**
+     * Executes an MCP server list-runtime-statuses command.
+     *
+     * @param request Typed list-runtime-statuses command input data.
+     * @return Either typed failure data or typed success data for the command result.
+     */
+    suspend fun listRuntimeStatuses(
+        request: WorkerMcpServerListRuntimeStatusesCommandData
+    ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerListRuntimeStatusesResultData>
 }
 

@@ -4,6 +4,8 @@ import arrow.core.left
 import arrow.core.getOrElse
 import arrow.core.right
 import arrow.core.Either
+import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto
+import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerCommandResultStatuses
 import eu.torvian.chatbot.common.models.api.worker.protocol.codec.decodeProtocolPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolCommandTypes
@@ -12,6 +14,8 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProt
 import eu.torvian.chatbot.common.models.api.worker.protocol.core.WorkerProtocolMessage
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerCommandRequestPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerDiscoverToolsResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerGetRuntimeStatusResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerListRuntimeStatusesResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerStartErrorResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerStartResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerStopResultData
@@ -22,6 +26,10 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerComman
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerControlErrorResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerGetRuntimeStatusCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerGetRuntimeStatusResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerListRuntimeStatusesCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerListRuntimeStatusesResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopCommandData
@@ -90,6 +98,26 @@ class WorkerMcpServerControlCommandProcessorTest {
                     val data = resultPayload.toWorkerMcpServerDiscoverToolsResultData(commandType).orError()
                     assertEquals(13L, data.serverId)
                 }
+            ),
+            SupportedCommandScenario(
+                commandType = WorkerProtocolCommandTypes.MCP_SERVER_GET_RUNTIME_STATUS,
+                requestPayload = WorkerMcpServerGetRuntimeStatusCommandData(serverId = 14L)
+                    .toWorkerCommandRequestPayload()
+                    .orError(),
+                verifyResult = { resultPayload, commandType ->
+                    val data = resultPayload.toWorkerMcpServerGetRuntimeStatusResultData(commandType).orError()
+                    assertEquals(14L, data.status.serverId)
+                }
+            ),
+            SupportedCommandScenario(
+                commandType = WorkerProtocolCommandTypes.MCP_SERVER_LIST_RUNTIME_STATUSES,
+                requestPayload = WorkerMcpServerListRuntimeStatusesCommandData
+                    .toWorkerCommandRequestPayload()
+                    .orError(),
+                verifyResult = { resultPayload, commandType ->
+                    val data = resultPayload.toWorkerMcpServerListRuntimeStatusesResultData(commandType).orError()
+                    assertTrue(data.statuses.isEmpty())
+                }
             )
         )
 
@@ -117,7 +145,7 @@ class WorkerMcpServerControlCommandProcessorTest {
     }
 
     /**
-     * Verifies malformed payloads are rejected for each supported command type.
+     * Verifies malformed payloads are rejected for command types that require `serverId` request data.
      */
     @Test
     fun `malformed payloads are rejected for every command`() = kotlinx.coroutines.test.runTest {
@@ -136,6 +164,10 @@ class WorkerMcpServerControlCommandProcessorTest {
             ),
             WorkerCommandRequestPayload(
                 commandType = WorkerProtocolCommandTypes.MCP_SERVER_DISCOVER_TOOLS,
+                data = malformedServerIdPayload()
+            ),
+            WorkerCommandRequestPayload(
+                commandType = WorkerProtocolCommandTypes.MCP_SERVER_GET_RUNTIME_STATUS,
                 data = malformedServerIdPayload()
             )
         )
@@ -397,6 +429,30 @@ class WorkerMcpServerControlCommandProcessorTest {
                 serverId = request.serverId,
                 tools = emptyList()
             ).right()
+
+        /**
+         * @param request Typed get-runtime-status command input data.
+         * @return Deterministic successful runtime-status result.
+         */
+        override suspend fun getRuntimeStatus(
+            request: WorkerMcpServerGetRuntimeStatusCommandData
+        ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerGetRuntimeStatusResultData> =
+            WorkerMcpServerGetRuntimeStatusResultData(
+                status = LocalMcpServerRuntimeStatusDto(
+                    serverId = request.serverId,
+                    state = LocalMcpServerRuntimeStateDto.STOPPED,
+                    errorMessage = "ok"
+                )
+            ).right()
+
+        /**
+         * @param request Typed list-runtime-statuses command input data.
+         * @return Deterministic successful empty runtime-status list.
+         */
+        override suspend fun listRuntimeStatuses(
+            request: WorkerMcpServerListRuntimeStatusesCommandData
+        ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerListRuntimeStatusesResultData> =
+            WorkerMcpServerListRuntimeStatusesResultData(statuses = emptyList()).right()
     }
 
     /**

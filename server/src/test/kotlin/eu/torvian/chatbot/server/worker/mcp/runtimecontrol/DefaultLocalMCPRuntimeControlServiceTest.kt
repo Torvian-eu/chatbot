@@ -1,7 +1,10 @@
 package eu.torvian.chatbot.server.worker.mcp.runtimecontrol
 
 import arrow.core.Either
+import arrow.core.left
 import arrow.core.right
+import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto
+import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpDiscoveredToolData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsResultData
@@ -9,6 +12,7 @@ import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import eu.torvian.chatbot.server.service.core.LocalMCPServerService
 import eu.torvian.chatbot.server.service.core.LocalMCPToolDefinitionService
 import eu.torvian.chatbot.server.service.core.RefreshResult
+import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchError
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -97,6 +101,49 @@ class DefaultLocalMCPRuntimeControlServiceTest {
 
         coVerify(exactly = 1) { commandDispatchService.discoverTools(workerId = 3L, serverId = 7L) }
         coVerify(exactly = 1) { toolDefinitionService.refreshMCPTools(serverId = 7L, currentTools = any()) }
+    }
+
+    /**
+     * Verifies single runtime-status read delegates to worker dispatch and returns worker status data.
+     */
+    @Test
+    fun `get runtime status delegates to worker and returns typed status`() = runTest {
+        val server = localServer(toolNamePrefix = null)
+        val status = LocalMcpServerRuntimeStatusDto(
+            serverId = server.id,
+            state = LocalMcpServerRuntimeStateDto.RUNNING,
+            connectedAt = Instant.parse("2025-01-01T00:05:00Z")
+        )
+
+        coEvery { localMCPServerService.getServerById(userId = 9L, serverId = 7L) } returns server.right()
+        coEvery { commandDispatchService.getRuntimeStatus(workerId = 3L, serverId = 7L) } returns
+            eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerGetRuntimeStatusResultData(
+                status = status
+            ).right()
+
+        val result = service.getRuntimeStatus(userId = 9L, serverId = 7L).requireRight()
+
+        assertEquals(status, result)
+    }
+
+    /**
+     * Verifies list runtime-status reads apply deterministic fallback entries when worker is unavailable.
+     */
+    @Test
+    fun `list runtime statuses returns fallback for unavailable worker dispatch`() = runTest {
+        val server = localServer(toolNamePrefix = null)
+        coEvery { localMCPServerService.getServersByUserId(userId = 9L) } returns listOf(server).right()
+        coEvery { commandDispatchService.listRuntimeStatuses(workerId = 3L) } returns
+            LocalMCPRuntimeCommandDispatchError.DispatchFailed(
+                WorkerCommandDispatchError.WorkerNotConnected(workerId = 3L)
+            ).left()
+
+        val result = service.listRuntimeStatuses(userId = 9L).requireRight()
+
+        assertEquals(1, result.size)
+        assertEquals(server.id, result.single().serverId)
+        assertEquals(LocalMcpServerRuntimeStateDto.STOPPED, result.single().state)
+        assertTrue(result.single().errorMessage?.contains("not connected") == true)
     }
 
     /**

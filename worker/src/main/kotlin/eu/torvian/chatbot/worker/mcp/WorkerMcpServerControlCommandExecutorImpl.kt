@@ -7,6 +7,10 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpSer
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpDiscoveredToolData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerGetRuntimeStatusCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerGetRuntimeStatusResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerListRuntimeStatusesCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerListRuntimeStatusesResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopCommandData
@@ -79,6 +83,23 @@ class WorkerMcpServerControlCommandExecutorImpl(
                 ).right()
             }
         )
+    }
+
+    override suspend fun getRuntimeStatus(
+        request: WorkerMcpServerGetRuntimeStatusCommandData
+    ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerGetRuntimeStatusResultData> {
+        return runtimeService.getRuntimeStatus(request.serverId).fold(
+            ifLeft = { runtimeError -> runtimeError.toProtocolError(request.serverId).left() },
+            ifRight = { status -> WorkerMcpServerGetRuntimeStatusResultData(status = status).right() }
+        )
+    }
+
+    override suspend fun listRuntimeStatuses(
+        request: WorkerMcpServerListRuntimeStatusesCommandData
+    ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerListRuntimeStatusesResultData> {
+        return WorkerMcpServerListRuntimeStatusesResultData(
+            statuses = runtimeService.listRuntimeStatuses()
+        ).right()
     }
 
     /**

@@ -79,6 +79,7 @@ fun desktopModule(config: AppConfiguration) = module {
     single<LocalMCPServerManager> {
         LocalMCPServerManagerImpl(
             serverRepository = get(),
+            runtimeStatusRepository = get(),
             toolRepository = get(),
             mcpClientService = get(),
             clock = get()

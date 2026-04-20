@@ -106,7 +106,8 @@ fun workerModule(
     single<WorkerLocalMcpRuntimeService> {
         WorkerLocalMcpRuntimeServiceImpl(
             configStore = get(),
-            clientService = get()
+            clientService = get(),
+            processManager = get()
         )
     }
     single<WorkerMcpServerControlCommandExecutor> {
@@ -177,7 +178,9 @@ fun workerModule(
                 WorkerProtocolCommandTypes.MCP_SERVER_START to get<WorkerMcpServerControlInteractionFactory>(),
                 WorkerProtocolCommandTypes.MCP_SERVER_STOP to get<WorkerMcpServerControlInteractionFactory>(),
                 WorkerProtocolCommandTypes.MCP_SERVER_TEST_CONNECTION to get<WorkerMcpServerControlInteractionFactory>(),
-                WorkerProtocolCommandTypes.MCP_SERVER_DISCOVER_TOOLS to get<WorkerMcpServerControlInteractionFactory>()
+                WorkerProtocolCommandTypes.MCP_SERVER_DISCOVER_TOOLS to get<WorkerMcpServerControlInteractionFactory>(),
+                WorkerProtocolCommandTypes.MCP_SERVER_GET_RUNTIME_STATUS to get<WorkerMcpServerControlInteractionFactory>(),
+                WorkerProtocolCommandTypes.MCP_SERVER_LIST_RUNTIME_STATUSES to get<WorkerMcpServerControlInteractionFactory>()
             ),
             emitter = get(),
             registry = get(),

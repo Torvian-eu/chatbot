@@ -33,4 +33,14 @@ object WorkerProtocolCommandTypes {
      * Command type used to discover runtime MCP tools for a server.
      */
     const val MCP_SERVER_DISCOVER_TOOLS = "mcp.server.discover_tools"
+
+    /**
+     * Command type used to read runtime status for one MCP server.
+     */
+    const val MCP_SERVER_GET_RUNTIME_STATUS = "mcp.server.get_runtime_status"
+
+    /**
+     * Command type used to list runtime statuses for all MCP servers on a worker.
+     */
+    const val MCP_SERVER_LIST_RUNTIME_STATUSES = "mcp.server.list_runtime_statuses"
 }

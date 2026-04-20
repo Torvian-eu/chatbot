@@ -4,8 +4,12 @@ import arrow.core.Either
 import arrow.core.getOrElse
 import arrow.core.left
 import arrow.core.right
+import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto
+import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpDiscoveredToolData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerGetRuntimeStatusCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerListRuntimeStatusesCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionCommandData
@@ -14,6 +18,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.time.Clock
 
 /**
  * Unit tests for [WorkerMcpServerControlCommandExecutorImpl].
@@ -131,6 +136,54 @@ class WorkerMcpServerControlCommandExecutorImplTest {
     }
 
     /**
+     * Verifies runtime-status get success maps to protocol runtime-status result.
+     */
+    @Test
+    fun `get runtime status maps runtime success`() = runTest {
+        val now = Clock.System.now()
+        val status = LocalMcpServerRuntimeStatusDto(
+            serverId = 30L,
+            state = LocalMcpServerRuntimeStateDto.RUNNING,
+            connectedAt = now,
+            lastActivityAt = now
+        )
+        val executor = WorkerMcpServerControlCommandExecutorImpl(
+            runtimeService = FakeRuntimeService(
+                getRuntimeStatusResult = status.right()
+            )
+        )
+
+        val result = executor.getRuntimeStatus(
+            WorkerMcpServerGetRuntimeStatusCommandData(serverId = 30L)
+        ).rightOrError()
+
+        assertEquals(status, result.status)
+    }
+
+    /**
+     * Verifies runtime-status list success maps to protocol runtime-status list result.
+     */
+    @Test
+    fun `list runtime statuses maps runtime success`() = runTest {
+        val status = LocalMcpServerRuntimeStatusDto(
+            serverId = 31L,
+            state = LocalMcpServerRuntimeStateDto.STOPPED,
+            errorMessage = "worker disconnected"
+        )
+        val executor = WorkerMcpServerControlCommandExecutorImpl(
+            runtimeService = FakeRuntimeService(
+                listRuntimeStatusesResult = listOf(status)
+            )
+        )
+
+        val result = executor.listRuntimeStatuses(
+            WorkerMcpServerListRuntimeStatusesCommandData
+        ).rightOrError()
+
+        assertEquals(listOf(status), result.statuses)
+    }
+
+    /**
      * Fake runtime service with configurable command outcomes.
      */
     private class FakeRuntimeService(
@@ -139,7 +192,13 @@ class WorkerMcpServerControlCommandExecutorImplTest {
         private val testResult: Either<WorkerLocalMcpRuntimeError, WorkerLocalMcpTestConnectionOutcome> =
             WorkerLocalMcpTestConnectionOutcome(discoveredToolCount = 0, message = null).right(),
         private val discoverResult: Either<WorkerLocalMcpRuntimeError, List<WorkerLocalMcpDiscoveredTool>> =
-            emptyList<WorkerLocalMcpDiscoveredTool>().right()
+            emptyList<WorkerLocalMcpDiscoveredTool>().right(),
+        private val getRuntimeStatusResult: Either<WorkerLocalMcpRuntimeError, LocalMcpServerRuntimeStatusDto> =
+            LocalMcpServerRuntimeStatusDto(
+                serverId = 0L,
+                state = LocalMcpServerRuntimeStateDto.STOPPED
+            ).right(),
+        private val listRuntimeStatusesResult: List<LocalMcpServerRuntimeStatusDto> = emptyList()
     ) : WorkerLocalMcpRuntimeService {
         /**
          * @param serverId Persisted local MCP server identifier.
@@ -168,6 +227,19 @@ class WorkerMcpServerControlCommandExecutorImplTest {
         override suspend fun discoverTools(
             serverId: Long
         ): Either<WorkerLocalMcpRuntimeError, List<WorkerLocalMcpDiscoveredTool>> = discoverResult
+
+        /**
+         * @param serverId Persisted local MCP server identifier.
+         * @return Configured fixture result.
+         */
+        override suspend fun getRuntimeStatus(
+            serverId: Long
+        ): Either<WorkerLocalMcpRuntimeError, LocalMcpServerRuntimeStatusDto> = getRuntimeStatusResult
+
+        /**
+         * @return Configured fixture runtime-status list.
+         */
+        override suspend fun listRuntimeStatuses(): List<LocalMcpServerRuntimeStatusDto> = listRuntimeStatusesResult
     }
 }
 

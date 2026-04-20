@@ -201,6 +201,11 @@ fun appModule(config: AppConfiguration): Module = module {
             api = get()
         )
     }
+    single<LocalMCPServerRuntimeStatusRepository> {
+        DefaultLocalMCPServerRuntimeStatusRepository(
+            api = get()
+        )
+    }
     single<LocalMCPToolRepository> {
         DefaultLocalMCPToolRepository(
             localMCPToolApi = get(),

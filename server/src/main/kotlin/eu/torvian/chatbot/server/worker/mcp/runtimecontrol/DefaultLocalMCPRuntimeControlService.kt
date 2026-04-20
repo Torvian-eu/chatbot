@@ -3,6 +3,8 @@ package eu.torvian.chatbot.server.worker.mcp.runtimecontrol
 import arrow.core.Either
 import arrow.core.raise.either
 import arrow.core.raise.withError
+import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto
+import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
 import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerConnectionResponse
@@ -90,6 +92,63 @@ class DefaultLocalMCPRuntimeControlService(
         )
     }
 
+    override suspend fun getRuntimeStatus(
+        userId: Long,
+        serverId: Long
+    ): Either<LocalMCPRuntimeControlError, LocalMcpServerRuntimeStatusDto> = either {
+        val server = resolveOwnedServer(userId = userId, serverId = serverId).bind()
+
+        val dispatchResult = localMCPRuntimeCommandDispatchService.getRuntimeStatus(
+            workerId = server.workerId,
+            serverId = server.id
+        )
+
+        dispatchResult.fold(
+            ifLeft = { dispatchError ->
+                // Runtime-status reads degrade gracefully to keep overview rendering deterministic while worker sessions reconnect.
+                fallbackRuntimeStatus(serverId = server.id, reason = dispatchError.toRuntimeStatusFallbackReason())
+            },
+            ifRight = { response -> response.status }
+        )
+    }
+
+    override suspend fun listRuntimeStatuses(
+        userId: Long
+    ): Either<LocalMCPRuntimeControlError, List<LocalMcpServerRuntimeStatusDto>> = either {
+        val ownedServers = resolveOwnedServers(userId = userId).bind()
+        val serverIds = ownedServers.map { it.id }.toSet()
+
+        val statusesByServerId = mutableMapOf<Long, LocalMcpServerRuntimeStatusDto>()
+
+        ownedServers.groupBy { it.workerId }.forEach { (workerId, serversForWorker) ->
+            val dispatchResult = localMCPRuntimeCommandDispatchService.listRuntimeStatuses(workerId = workerId)
+            val workerStatuses = dispatchResult.fold(
+                ifLeft = { dispatchError ->
+                    serversForWorker.associate { server ->
+                        server.id to fallbackRuntimeStatus(
+                            serverId = server.id,
+                            reason = dispatchError.toRuntimeStatusFallbackReason()
+                        )
+                    }
+                },
+                ifRight = { response -> response.statuses.associateBy { it.serverId } }
+            )
+
+            serversForWorker.forEach { server ->
+                statusesByServerId[server.id] = workerStatuses[server.id]
+                    ?: fallbackRuntimeStatus(
+                        serverId = server.id,
+                        reason = "Worker did not return runtime status for this server"
+                    )
+            }
+        }
+
+        ownedServers
+            .map { server -> statusesByServerId[server.id] }
+            .filterNotNull()
+            .filter { status -> status.serverId in serverIds }
+    }
+
     /**
      * Maps worker discovery metadata into a persisted local MCP tool definition candidate.
      *
@@ -144,6 +203,77 @@ class DefaultLocalMCPRuntimeControlService(
                 localMCPServerService.getServerById(userId = userId, serverId = serverId).bind()
             }
         }
+
+    /**
+     * Resolves all Local MCP servers owned by one user.
+     *
+     * @param userId Authenticated user identifier.
+     * @return Either runtime-control error or owned server DTO list.
+     */
+    private suspend fun resolveOwnedServers(
+        userId: Long
+    ): Either<LocalMCPRuntimeControlError, List<LocalMCPServerDto>> = either {
+        withError({ LocalMCPRuntimeControlError.InternalError("Failed to list owned MCP servers for runtime status") }) {
+            localMCPServerService.getServersByUserId(userId).bind()
+        }
+    }
+
+    /**
+     * Builds deterministic fallback runtime status for cases where worker runtime status cannot be retrieved.
+     *
+     * @param serverId Persisted local MCP server identifier.
+     * @param reason Human-readable fallback reason.
+     * @return Fallback runtime status DTO.
+     */
+    private fun fallbackRuntimeStatus(serverId: Long, reason: String): LocalMcpServerRuntimeStatusDto =
+        LocalMcpServerRuntimeStatusDto(
+            serverId = serverId,
+            state = LocalMcpServerRuntimeStateDto.STOPPED,
+            errorMessage = reason
+        )
+
+    /**
+     * Maps a worker-dispatch error to an operator-facing fallback reason used by runtime-status reads.
+     *
+     * @receiver Worker-dispatch error.
+     * @return Human-readable fallback reason.
+     */
+    private fun LocalMCPRuntimeCommandDispatchError.toRuntimeStatusFallbackReason(): String = when (this) {
+        is LocalMCPRuntimeCommandDispatchError.DispatchFailed -> {
+            when (error) {
+                is WorkerCommandDispatchError.WorkerNotConnected -> "Assigned worker is not connected"
+                is WorkerCommandDispatchError.TimedOut -> "Worker runtime status request timed out after ${error.timeout}"
+                is WorkerCommandDispatchError.SessionDisconnected -> {
+                    "Worker session disconnected${error.reason?.let { ": $it" } ?: ""}"
+                }
+
+                is WorkerCommandDispatchError.Rejected -> {
+                    "Worker rejected runtime status command: ${error.rejection.reasonCode} - ${error.rejection.message}"
+                }
+
+                is WorkerCommandDispatchError.SendFailed -> "Failed to send runtime status command to worker: ${error.reason}"
+                is WorkerCommandDispatchError.MalformedLifecyclePayload -> {
+                    "Worker returned malformed runtime status payload for ${error.commandType}/${error.messageType}"
+                }
+
+                is WorkerCommandDispatchError.DuplicateInteractionId -> {
+                    "Worker dispatch failed due to duplicate interaction '${error.interactionId}'"
+                }
+            }
+        }
+
+        is LocalMCPRuntimeCommandDispatchError.CommandFailed -> {
+            "Worker command $commandType failed with code '$code': $message${details?.let { " ($it)" } ?: ""}"
+        }
+
+        is LocalMCPRuntimeCommandDispatchError.InvalidPayload -> {
+            "Runtime status payload mapping failed for $commandType: $details"
+        }
+
+        is LocalMCPRuntimeCommandDispatchError.UnexpectedResultStatus -> {
+            "Worker completed $commandType with unsupported status '$status'"
+        }
+    }
 
     /**
      * Maps Local MCP server service errors into runtime-control API errors.

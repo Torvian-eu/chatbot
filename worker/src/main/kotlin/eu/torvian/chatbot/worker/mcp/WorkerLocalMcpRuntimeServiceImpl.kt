@@ -3,6 +3,8 @@ package eu.torvian.chatbot.worker.mcp
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
+import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto
+import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
 import io.modelcontextprotocol.kotlin.sdk.types.Tool
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -13,10 +15,12 @@ import kotlinx.serialization.json.encodeToJsonElement
  *
  * @property configStore Worker-local assigned MCP server config store.
  * @property clientService MCP SDK/process runtime service.
+ * @property processManager MCP process runtime status provider.
  */
 class WorkerLocalMcpRuntimeServiceImpl(
     private val configStore: WorkerLocalMcpServerConfigStore,
-    private val clientService: WorkerMcpClientService
+    private val clientService: WorkerMcpClientService,
+    private val processManager: WorkerLocalMcpProcessManager
 ) : WorkerLocalMcpRuntimeService {
     /**
      * @param serverId Persisted local MCP server identifier.
@@ -200,6 +204,26 @@ class WorkerLocalMcpRuntimeServiceImpl(
     }
 
     /**
+     * @param serverId Persisted local MCP server identifier.
+     * @return Either runtime error or shared runtime status snapshot.
+     */
+    override suspend fun getRuntimeStatus(serverId: Long): Either<WorkerLocalMcpRuntimeError, LocalMcpServerRuntimeStatusDto> {
+        configStore.getServer(serverId)
+            ?: return WorkerLocalMcpRuntimeError.ServerConfigMissing(serverId).left()
+
+        return buildRuntimeStatus(serverId).right()
+    }
+
+    /**
+     * @return Runtime status snapshots for all assigned local MCP server configurations.
+     */
+    override suspend fun listRuntimeStatuses(): List<LocalMcpServerRuntimeStatusDto> {
+        return configStore.listServers().map { server ->
+            buildRuntimeStatus(server.id)
+        }
+    }
+
+    /**
      * Maps one MCP SDK [Tool] into worker runtime discovery metadata.
      *
      * @receiver MCP SDK tool from `listTools`.
@@ -212,6 +236,41 @@ class WorkerLocalMcpRuntimeServiceImpl(
             inputSchema = Json.encodeToJsonElement(inputSchema) as JsonObject,
             outputSchema = outputSchema?.let { Json.encodeToJsonElement(it) as JsonObject }
         )
+    }
+
+    /**
+     * Builds the shared runtime-status DTO from process and connection snapshots.
+     *
+     * @param serverId Persisted local MCP server identifier.
+     * @return Shared runtime-status DTO for app/server read models.
+     */
+    private suspend fun buildRuntimeStatus(serverId: Long): LocalMcpServerRuntimeStatusDto {
+        val processStatus = processManager.getServerStatus(serverId)
+        val connectionStatus = clientService.getConnectionStatus(serverId)
+
+        return LocalMcpServerRuntimeStatusDto(
+            serverId = serverId,
+            state = processStatus.state.toRuntimeStateDto(),
+            pid = processStatus.pid,
+            startedAt = processStatus.startedAt,
+            exitCode = processStatus.exitCode,
+            stoppedAt = processStatus.stoppedAt,
+            errorMessage = processStatus.errorMessage,
+            connectedAt = connectionStatus?.connectedAt,
+            lastActivityAt = connectionStatus?.lastActivityAt
+        )
+    }
+
+    /**
+     * Maps worker-local process state to shared runtime-state DTO enum.
+     *
+     * @receiver Worker-local process lifecycle state.
+     * @return Shared runtime-state enum value.
+     */
+    private fun WorkerLocalMcpProcessState.toRuntimeStateDto(): LocalMcpServerRuntimeStateDto = when (this) {
+        WorkerLocalMcpProcessState.RUNNING -> LocalMcpServerRuntimeStateDto.RUNNING
+        WorkerLocalMcpProcessState.STOPPED -> LocalMcpServerRuntimeStateDto.STOPPED
+        WorkerLocalMcpProcessState.ERROR -> LocalMcpServerRuntimeStateDto.ERROR
     }
 }
 

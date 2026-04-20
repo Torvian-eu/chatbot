@@ -8,6 +8,8 @@ import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.KoinDIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.api.mcp.CreateLocalMCPServerRequest
+import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto
+import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
@@ -216,6 +218,22 @@ class LocalMCPServerRoutesTest {
         assertEquals(0, refreshPayload.addedTools.size)
         assertEquals(0, refreshPayload.updatedTools.size)
         assertEquals(0, refreshPayload.deletedTools.size)
+
+        val listStatusResponse = client.get(href(LocalMCPServerResource.RuntimeStatuses())) {
+            authenticate(userToken)
+        }
+        assertEquals(HttpStatusCode.OK, listStatusResponse.status)
+        val listStatusPayload = listStatusResponse.body<List<LocalMcpServerRuntimeStatusDto>>()
+        assertEquals(1, listStatusPayload.size)
+        assertEquals(createdServer.id, listStatusPayload.single().serverId)
+
+        val byIdStatusResponse = client.get(href(LocalMCPServerResource.ById.RuntimeStatus(parent = byId))) {
+            authenticate(userToken)
+        }
+        assertEquals(HttpStatusCode.OK, byIdStatusResponse.status)
+        val byIdStatusPayload = byIdStatusResponse.body<LocalMcpServerRuntimeStatusDto>()
+        assertEquals(createdServer.id, byIdStatusPayload.serverId)
+        assertEquals(LocalMcpServerRuntimeStateDto.STOPPED, byIdStatusPayload.state)
     }
 
     /**
@@ -273,6 +291,23 @@ class LocalMCPServerRoutesTest {
                 addedTools = emptyList(),
                 updatedTools = emptyList(),
                 deletedTools = emptyList()
+            ).right()
+
+            override suspend fun getRuntimeStatus(
+                userId: Long,
+                serverId: Long
+            ) = LocalMcpServerRuntimeStatusDto(
+                serverId = serverId,
+                state = LocalMcpServerRuntimeStateDto.STOPPED
+            ).right()
+
+            override suspend fun listRuntimeStatuses(
+                userId: Long
+            ) = listOf(
+                LocalMcpServerRuntimeStatusDto(
+                    serverId = 1L,
+                    state = LocalMcpServerRuntimeStateDto.STOPPED
+                )
             ).right()
         }
 }

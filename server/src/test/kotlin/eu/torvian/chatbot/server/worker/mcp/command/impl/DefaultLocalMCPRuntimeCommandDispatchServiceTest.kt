@@ -6,13 +6,19 @@ import arrow.core.right
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerCommandResultStatuses
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolCommandTypes
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerCommandResultPayload
+import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerGetRuntimeStatusCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerListRuntimeStatusesCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerStartCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerStopCommandData
+import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto
+import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRejectedPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRequestPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandResultPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerControlErrorResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerGetRuntimeStatusResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerListRuntimeStatusesResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionResultData
@@ -32,6 +38,7 @@ import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Clock
 
 /**
  * Verifies typed worker dispatch orchestration for MCP runtime-control commands.
@@ -306,6 +313,68 @@ class DefaultLocalMCPRuntimeCommandDispatchServiceTest {
             ),
             error
         )
+    }
+
+    /**
+     * Verifies get-runtime-status dispatch builds the correct command-request payload and decodes result.
+     */
+    @Test
+    fun `get runtime status builds request and decodes typed result`() = runTest {
+        val now = Clock.System.now()
+        val payloadSlot = slot<WorkerCommandRequestPayload>()
+        val runtimeStatus = LocalMcpServerRuntimeStatusDto(
+            serverId = 17L,
+            state = LocalMcpServerRuntimeStateDto.RUNNING,
+            connectedAt = now,
+            lastActivityAt = now
+        )
+        coEvery { workerCommandDispatchService.dispatch(20L, capture(payloadSlot), any()) } returns
+            WorkerCommandDispatchSuccess(
+                workerId = 20L,
+                interactionId = "i-11",
+                commandType = WorkerProtocolCommandTypes.MCP_SERVER_GET_RUNTIME_STATUS,
+                result = WorkerMcpServerGetRuntimeStatusResultData(status = runtimeStatus)
+                    .toWorkerCommandResultPayload()
+                    .orError()
+            ).right()
+
+        val result = service.getRuntimeStatus(workerId = 20L, serverId = 17L).requireRight()
+
+        assertEquals(runtimeStatus, result.status)
+        assertEquals(WorkerProtocolCommandTypes.MCP_SERVER_GET_RUNTIME_STATUS, payloadSlot.captured.commandType)
+        assertEquals(17L, payloadSlot.captured.toWorkerMcpServerGetRuntimeStatusCommandData().orError().serverId)
+    }
+
+    /**
+     * Verifies list-runtime-statuses dispatch builds the correct command-request payload and decodes result.
+     */
+    @Test
+    fun `list runtime statuses builds request and decodes typed result`() = runTest {
+        val runtimeStatus = LocalMcpServerRuntimeStatusDto(
+            serverId = 18L,
+            state = LocalMcpServerRuntimeStateDto.STOPPED,
+            errorMessage = "worker disconnected"
+        )
+        val payloadSlot = slot<WorkerCommandRequestPayload>()
+        coEvery { workerCommandDispatchService.dispatch(21L, capture(payloadSlot), any()) } returns
+            WorkerCommandDispatchSuccess(
+                workerId = 21L,
+                interactionId = "i-12",
+                commandType = WorkerProtocolCommandTypes.MCP_SERVER_LIST_RUNTIME_STATUSES,
+                result = WorkerMcpServerListRuntimeStatusesResultData(statuses = listOf(runtimeStatus))
+                    .toWorkerCommandResultPayload()
+                    .orError()
+            ).right()
+
+        val result = service.listRuntimeStatuses(workerId = 21L).requireRight()
+
+        assertEquals(1, result.statuses.size)
+        assertEquals(runtimeStatus, result.statuses.single())
+        assertEquals(
+            WorkerProtocolCommandTypes.MCP_SERVER_LIST_RUNTIME_STATUSES,
+            payloadSlot.captured.commandType
+        )
+        payloadSlot.captured.toWorkerMcpServerListRuntimeStatusesCommandData().orError()
     }
 
     /**

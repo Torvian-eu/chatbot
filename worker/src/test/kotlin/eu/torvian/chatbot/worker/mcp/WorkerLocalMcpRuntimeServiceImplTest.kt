@@ -4,6 +4,7 @@ import arrow.core.Either
 import arrow.core.getOrElse
 import arrow.core.left
 import arrow.core.right
+import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
 import io.modelcontextprotocol.kotlin.sdk.types.Tool
@@ -11,6 +12,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.time.Instant
 
 /**
@@ -129,6 +131,53 @@ class WorkerLocalMcpRuntimeServiceImplTest {
     }
 
     /**
+     * Verifies runtime-status read maps process and client connection metadata.
+     */
+    @Test
+    fun `get runtime status maps process and connection metadata`() = runTest {
+        val client = FakeWorkerMcpClientService(connected = true)
+        val processManager = FakeWorkerLocalMcpProcessManager(
+            status = WorkerLocalMcpProcessStatus(
+                serverId = DEFAULT_SERVER_ID,
+                state = WorkerLocalMcpProcessState.RUNNING,
+                pid = 3001L,
+                startedAt = Instant.parse("2025-01-01T00:00:00Z")
+            )
+        )
+        val service = buildService(clientService = client, processManager = processManager)
+
+        val status = service.getRuntimeStatus(DEFAULT_SERVER_ID).rightOrError()
+
+        assertEquals(LocalMcpServerRuntimeStateDto.RUNNING, status.state)
+        assertEquals(3001L, status.pid)
+        assertNotNull(status.connectedAt)
+        assertNotNull(status.lastActivityAt)
+    }
+
+    /**
+     * Verifies list-runtime-statuses returns one status per assigned server config.
+     */
+    @Test
+    fun `list runtime statuses returns status for each assigned server`() = runTest {
+        val configStore = SingleServerConfigStore()
+        val processManager = FakeWorkerLocalMcpProcessManager(
+            status = WorkerLocalMcpProcessStatus(
+                serverId = DEFAULT_SERVER_ID,
+                state = WorkerLocalMcpProcessState.STOPPED
+            )
+        )
+        val service = buildService(
+            configStore = configStore,
+            processManager = processManager
+        )
+
+        val statuses = service.listRuntimeStatuses()
+
+        assertEquals(1, statuses.size)
+        assertEquals(DEFAULT_SERVER_ID, statuses.single().serverId)
+    }
+
+    /**
      * Builds a service fixture with optional fake collaborators.
      *
      * @param configStore Config store used by runtime service.
@@ -137,11 +186,13 @@ class WorkerLocalMcpRuntimeServiceImplTest {
      */
     private fun buildService(
         configStore: WorkerLocalMcpServerConfigStore = SingleServerConfigStore(),
-        clientService: FakeWorkerMcpClientService = FakeWorkerMcpClientService()
+        clientService: FakeWorkerMcpClientService = FakeWorkerMcpClientService(),
+        processManager: WorkerLocalMcpProcessManager = FakeWorkerLocalMcpProcessManager()
     ): WorkerLocalMcpRuntimeServiceImpl {
         return WorkerLocalMcpRuntimeServiceImpl(
             configStore = configStore,
-            clientService = clientService
+            clientService = clientService,
+            processManager = processManager
         )
     }
 
@@ -182,6 +233,11 @@ class WorkerLocalMcpRuntimeServiceImplTest {
         override suspend fun replaceAll(servers: List<LocalMCPServerDto>) {
             server = servers.firstOrNull()
         }
+
+        /**
+         * @return Snapshot list containing the single stored server when present.
+         */
+        override suspend fun listServers(): List<LocalMCPServerDto> = listOfNotNull(server)
     }
 
     /**
@@ -251,6 +307,76 @@ class WorkerLocalMcpRuntimeServiceImplTest {
          * @return Current connected flag.
          */
         override fun isClientConnected(serverId: Long): Boolean = connected
+
+        /**
+         * @param serverId Persisted local MCP server identifier.
+         * @return Deterministic connection metadata when connected.
+         */
+        override fun getConnectionStatus(serverId: Long): WorkerMcpClientConnectionStatus? {
+            if (!connected) {
+                return null
+            }
+
+            val now = Instant.parse("2025-01-01T00:00:10Z")
+            return WorkerMcpClientConnectionStatus(
+                connectedAt = now,
+                lastActivityAt = now
+            )
+        }
+
+        /**
+         * No-op close for test fixture.
+         */
+        override suspend fun close() = Unit
+    }
+
+    /**
+     * Fake process manager used for runtime-status tests.
+     *
+     * @property status Process status snapshot returned by [getServerStatus].
+     */
+    private class FakeWorkerLocalMcpProcessManager(
+        private val status: WorkerLocalMcpProcessStatus = WorkerLocalMcpProcessStatus(
+            serverId = DEFAULT_SERVER_ID,
+            state = WorkerLocalMcpProcessState.STOPPED
+        )
+    ) : WorkerLocalMcpProcessManager {
+        /**
+         * @param config Resolved local MCP server configuration.
+         * @return Deterministic start status.
+         */
+        override suspend fun startServer(config: LocalMCPServerDto): Either<WorkerLocalMcpStartProcessError, WorkerLocalMcpProcessStatus> =
+            status.copy(serverId = config.id).right()
+
+        /**
+         * @param serverId Persisted local MCP server identifier.
+         * @return Deterministic stop success.
+         */
+        override suspend fun stopServer(serverId: Long): Either<WorkerLocalMcpStopProcessError, Unit> = Unit.right()
+
+        /**
+         * @param serverId Persisted local MCP server identifier.
+         * @return Deterministic process status snapshot.
+         */
+        override suspend fun getServerStatus(serverId: Long): WorkerLocalMcpProcessStatus = status.copy(serverId = serverId)
+
+        /**
+         * @param serverId Persisted local MCP server identifier.
+         * @return Always null in this test fixture.
+         */
+        override fun getProcessInputStream(serverId: Long) = null
+
+        /**
+         * @param serverId Persisted local MCP server identifier.
+         * @return Always null in this test fixture.
+         */
+        override fun getProcessOutputStream(serverId: Long) = null
+
+        /**
+         * @param serverId Persisted local MCP server identifier.
+         * @return Always null in this test fixture.
+         */
+        override fun getProcessErrorStream(serverId: Long) = null
 
         /**
          * No-op close for test fixture.

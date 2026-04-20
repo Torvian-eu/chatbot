@@ -188,13 +188,23 @@ private fun ServerStatusSection(serverOverview: LocalMCPServerOverview, isOperat
                 }
             )
 
-            serverOverview.processStatus?.let { status -> DetailRow(label = "Process", value = status.toString()) }
+            serverOverview.runtimeStatus?.let { status ->
+                DetailRow(label = "Process", value = status.state.name)
+                status.errorMessage?.let { errorMessage ->
+                    DetailRow(label = "Runtime Error", value = errorMessage)
+                }
+            }
 
             serverOverview.tools?.let { tools -> DetailRow(label = "Tools", value = "${tools.size} discovered") }
 
-            serverOverview.connectedAt?.let { timestamp ->
+            serverOverview.runtimeStatus?.connectedAt?.let { timestamp ->
                 val localDateTime = timestamp.toLocalDateTime(TimeZone.currentSystemDefault())
                 DetailRow(label = "Connected At", value = localDateTime.toString())
+            }
+
+            serverOverview.runtimeStatus?.lastActivityAt?.let { timestamp ->
+                val localDateTime = timestamp.toLocalDateTime(TimeZone.currentSystemDefault())
+                DetailRow(label = "Last Activity", value = localDateTime.toString())
             }
         }
     }

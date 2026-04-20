@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.worker.mcp
 
 import arrow.core.Either
+import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
 import kotlinx.serialization.json.JsonObject
 
 /**
@@ -40,6 +41,21 @@ interface WorkerLocalMcpRuntimeService {
      * @return Either runtime error or discovered tool metadata.
      */
     suspend fun discoverTools(serverId: Long): Either<WorkerLocalMcpRuntimeError, List<WorkerLocalMcpDiscoveredTool>>
+
+    /**
+     * Returns a runtime status snapshot for one configured local MCP server.
+     *
+     * @param serverId Persisted local MCP server identifier.
+     * @return Either runtime error or runtime status snapshot DTO.
+     */
+    suspend fun getRuntimeStatus(serverId: Long): Either<WorkerLocalMcpRuntimeError, LocalMcpServerRuntimeStatusDto>
+
+    /**
+     * Returns runtime status snapshots for all worker-assigned local MCP servers.
+     *
+     * @return Runtime status snapshots keyed by assignment membership.
+     */
+    suspend fun listRuntimeStatuses(): List<LocalMcpServerRuntimeStatusDto>
 }
 
 /**
@@ -108,7 +124,7 @@ sealed interface WorkerLocalMcpRuntimeError {
         /**
          * Optional diagnostics for this runtime error.
          */
-        override val details: String? = "The worker config store has no entry for this server"
+        override val details: String = "The worker config store has no entry for this server"
     }
 
     /**

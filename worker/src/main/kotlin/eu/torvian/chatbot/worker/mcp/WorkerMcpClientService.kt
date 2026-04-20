@@ -3,6 +3,7 @@ package eu.torvian.chatbot.worker.mcp
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import io.modelcontextprotocol.kotlin.sdk.types.Tool
+import kotlin.time.Instant
 
 /**
  * Runtime MCP SDK client abstraction used by worker-local server control services.
@@ -41,8 +42,29 @@ interface WorkerMcpClientService {
     fun isClientConnected(serverId: Long): Boolean
 
     /**
+     * Returns connection-status metadata for one server if the worker currently tracks a connected client.
+     *
+     * @param serverId Persisted local MCP server identifier.
+     * @return Connection-status snapshot or null when no connected client is tracked.
+     */
+    fun getConnectionStatus(serverId: Long): WorkerMcpClientConnectionStatus?
+
+    /**
      * Disconnects all clients and stops managed processes.
+     *
+     * //TODO: This is currently unused; Integrate with worker lifecycle management and ensure proper cleanup on shutdown to avoid orphaned processes.
      */
     suspend fun close()
 }
+
+/**
+ * Connection metadata snapshot for one worker-managed MCP client.
+ *
+ * @property connectedAt Timestamp when the SDK client connection was established.
+ * @property lastActivityAt Timestamp of the latest observed client activity.
+ */
+data class WorkerMcpClientConnectionStatus(
+    val connectedAt: Instant,
+    val lastActivityAt: Instant
+)
 

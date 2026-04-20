@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.common.models.api.worker.protocol.payload
 
+import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 
@@ -42,6 +43,22 @@ data class WorkerMcpServerTestConnectionCommandData(
 data class WorkerMcpServerDiscoverToolsCommandData(
     val serverId: Long
 )
+
+/**
+ * Request data carried by `mcp.server.get_runtime_status` worker commands.
+ *
+ * @property serverId Persisted Local MCP server identifier targeted for runtime status retrieval.
+ */
+@Serializable
+data class WorkerMcpServerGetRuntimeStatusCommandData(
+    val serverId: Long
+)
+
+/**
+ * Request data carried by `mcp.server.list_runtime_statuses` worker commands.
+ */
+@Serializable
+data object WorkerMcpServerListRuntimeStatusesCommandData
 
 /**
  * Runtime tool metadata returned by worker-side MCP discovery.
@@ -105,6 +122,26 @@ data class WorkerMcpServerTestConnectionResultData(
 data class WorkerMcpServerDiscoverToolsResultData(
     val serverId: Long,
     val tools: List<WorkerMcpDiscoveredToolData>
+)
+
+/**
+ * Result data emitted for `mcp.server.get_runtime_status` worker commands.
+ *
+ * @property status Runtime status snapshot for the requested server.
+ */
+@Serializable
+data class WorkerMcpServerGetRuntimeStatusResultData(
+    val status: LocalMcpServerRuntimeStatusDto
+)
+
+/**
+ * Result data emitted for `mcp.server.list_runtime_statuses` worker commands.
+ *
+ * @property statuses Runtime status snapshots for all worker-visible servers.
+ */
+@Serializable
+data class WorkerMcpServerListRuntimeStatusesResultData(
+    val statuses: List<LocalMcpServerRuntimeStatusDto>
 )
 
 /**

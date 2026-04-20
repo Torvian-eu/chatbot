@@ -11,6 +11,8 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.core.WorkerProtocolM
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.WorkerMcpServerControlProtocolMappingError
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerCommandResultPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerDiscoverToolsCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerGetRuntimeStatusCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerListRuntimeStatusesCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerStartCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerStopCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerTestConnectionCommandData
@@ -35,6 +37,8 @@ import kotlinx.serialization.json.put
  * - `mcp.server.stop`
  * - `mcp.server.test_connection`
  * - `mcp.server.discover_tools`
+ * - `mcp.server.get_runtime_status`
+ * - `mcp.server.list_runtime_statuses`
  *
  * @property envelope Original inbound `command.request` envelope.
  * @property requestPayload Decoded command-request payload for this interaction.
@@ -82,6 +86,20 @@ class WorkerMcpServerControlInteraction(
                 execute = { command -> executor.discoverTools(command) },
                 mapSuccessResult = { result -> result.toWorkerCommandResultPayload() },
                 decodeFailureMessage = "Unable to decode mcp.server.discover_tools payload"
+            )
+
+            WorkerProtocolCommandTypes.MCP_SERVER_GET_RUNTIME_STATUS -> runOneShotCommand(
+                decodeRequest = { toWorkerMcpServerGetRuntimeStatusCommandData() },
+                execute = { command -> executor.getRuntimeStatus(command) },
+                mapSuccessResult = { result -> result.toWorkerCommandResultPayload() },
+                decodeFailureMessage = "Unable to decode mcp.server.get_runtime_status payload"
+            )
+
+            WorkerProtocolCommandTypes.MCP_SERVER_LIST_RUNTIME_STATUSES -> runOneShotCommand(
+                decodeRequest = { toWorkerMcpServerListRuntimeStatusesCommandData() },
+                execute = { command -> executor.listRuntimeStatuses(command) },
+                mapSuccessResult = { result -> result.toWorkerCommandResultPayload() },
+                decodeFailureMessage = "Unable to decode mcp.server.list_runtime_statuses payload"
             )
 
             else -> {

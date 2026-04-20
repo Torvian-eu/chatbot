@@ -12,6 +12,10 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerComman
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerControlErrorResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerGetRuntimeStatusCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerGetRuntimeStatusResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerListRuntimeStatusesCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerListRuntimeStatusesResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopCommandData
@@ -72,6 +76,32 @@ fun WorkerMcpServerDiscoverToolsCommandData.toWorkerCommandRequestPayload():
     )
 
 /**
+ * Maps MCP server get-runtime-status command data to a typed worker command-request payload.
+ *
+ * @receiver Get-runtime-status command request DTO.
+ * @return Either a worker command-request payload or a logical mapping error.
+ */
+fun WorkerMcpServerGetRuntimeStatusCommandData.toWorkerCommandRequestPayload():
+        Either<WorkerMcpServerControlProtocolMappingError, WorkerCommandRequestPayload> =
+    toCommandRequestPayload(
+        commandType = WorkerProtocolCommandTypes.MCP_SERVER_GET_RUNTIME_STATUS,
+        targetType = "WorkerMcpServerGetRuntimeStatusCommandData"
+    )
+
+/**
+ * Maps MCP server list-runtime-statuses command data to a typed worker command-request payload.
+ *
+ * @receiver List-runtime-statuses command request DTO.
+ * @return Either a worker command-request payload or a logical mapping error.
+ */
+fun WorkerMcpServerListRuntimeStatusesCommandData.toWorkerCommandRequestPayload():
+        Either<WorkerMcpServerControlProtocolMappingError, WorkerCommandRequestPayload> =
+    toCommandRequestPayload(
+        commandType = WorkerProtocolCommandTypes.MCP_SERVER_LIST_RUNTIME_STATUSES,
+        targetType = "WorkerMcpServerListRuntimeStatusesCommandData"
+    )
+
+/**
  * Decodes worker request payload data as MCP server-start command data.
  *
  * @receiver Worker command-request payload.
@@ -124,6 +154,32 @@ fun WorkerCommandRequestPayload.toWorkerMcpServerDiscoverToolsCommandData():
     )
 
 /**
+ * Decodes worker request payload data as MCP server get-runtime-status command data.
+ *
+ * @receiver Worker command-request payload.
+ * @return Either decoded get-runtime-status command data or a logical mapping error.
+ */
+fun WorkerCommandRequestPayload.toWorkerMcpServerGetRuntimeStatusCommandData():
+        Either<WorkerMcpServerControlProtocolMappingError, WorkerMcpServerGetRuntimeStatusCommandData> =
+    decodeCommandRequestData(
+        expectedCommandType = WorkerProtocolCommandTypes.MCP_SERVER_GET_RUNTIME_STATUS,
+        targetType = "WorkerMcpServerGetRuntimeStatusCommandData"
+    )
+
+/**
+ * Decodes worker request payload data as MCP server list-runtime-statuses command data.
+ *
+ * @receiver Worker command-request payload.
+ * @return Either decoded list-runtime-statuses command data or a logical mapping error.
+ */
+fun WorkerCommandRequestPayload.toWorkerMcpServerListRuntimeStatusesCommandData():
+        Either<WorkerMcpServerControlProtocolMappingError, WorkerMcpServerListRuntimeStatusesCommandData> =
+    decodeCommandRequestData(
+        expectedCommandType = WorkerProtocolCommandTypes.MCP_SERVER_LIST_RUNTIME_STATUSES,
+        targetType = "WorkerMcpServerListRuntimeStatusesCommandData"
+    )
+
+/**
  * Maps MCP server-start result data to a typed worker command-result payload.
  *
  * @receiver Start command result DTO.
@@ -170,6 +226,30 @@ fun WorkerMcpServerDiscoverToolsResultData.toWorkerCommandResultPayload(
     status: String = WorkerCommandResultStatuses.SUCCESS
 ): Either<WorkerMcpServerControlProtocolMappingError, WorkerCommandResultPayload> =
     toCommandResultPayload(status = status, targetType = "WorkerMcpServerDiscoverToolsResultData")
+
+/**
+ * Maps MCP server get-runtime-status result data to a typed worker command-result payload.
+ *
+ * @receiver Get-runtime-status result DTO.
+ * @param status Final command-result status to encode.
+ * @return Either a worker command-result payload or a logical mapping error.
+ */
+fun WorkerMcpServerGetRuntimeStatusResultData.toWorkerCommandResultPayload(
+    status: String = WorkerCommandResultStatuses.SUCCESS
+): Either<WorkerMcpServerControlProtocolMappingError, WorkerCommandResultPayload> =
+    toCommandResultPayload(status = status, targetType = "WorkerMcpServerGetRuntimeStatusResultData")
+
+/**
+ * Maps MCP server list-runtime-statuses result data to a typed worker command-result payload.
+ *
+ * @receiver List-runtime-statuses result DTO.
+ * @param status Final command-result status to encode.
+ * @return Either a worker command-result payload or a logical mapping error.
+ */
+fun WorkerMcpServerListRuntimeStatusesResultData.toWorkerCommandResultPayload(
+    status: String = WorkerCommandResultStatuses.SUCCESS
+): Either<WorkerMcpServerControlProtocolMappingError, WorkerCommandResultPayload> =
+    toCommandResultPayload(status = status, targetType = "WorkerMcpServerListRuntimeStatusesResultData")
 
 /**
  * Maps MCP server-control error result data to a typed worker command-result payload.
@@ -248,6 +328,38 @@ fun WorkerCommandResultPayload.toWorkerMcpServerDiscoverToolsResultData(
     )
 
 /**
+ * Decodes worker result payload data as MCP server get-runtime-status result data.
+ *
+ * @receiver Worker command-result payload.
+ * @param commandType Command type associated with the completed lifecycle.
+ * @return Either decoded get-runtime-status result data or a logical mapping error.
+ */
+fun WorkerCommandResultPayload.toWorkerMcpServerGetRuntimeStatusResultData(
+    commandType: String
+): Either<WorkerMcpServerControlProtocolMappingError, WorkerMcpServerGetRuntimeStatusResultData> =
+    decodeCommandResultData(
+        commandType = commandType,
+        expectedCommandType = WorkerProtocolCommandTypes.MCP_SERVER_GET_RUNTIME_STATUS,
+        targetType = "WorkerMcpServerGetRuntimeStatusResultData"
+    )
+
+/**
+ * Decodes worker result payload data as MCP server list-runtime-statuses result data.
+ *
+ * @receiver Worker command-result payload.
+ * @param commandType Command type associated with the completed lifecycle.
+ * @return Either decoded list-runtime-statuses result data or a logical mapping error.
+ */
+fun WorkerCommandResultPayload.toWorkerMcpServerListRuntimeStatusesResultData(
+    commandType: String
+): Either<WorkerMcpServerControlProtocolMappingError, WorkerMcpServerListRuntimeStatusesResultData> =
+    decodeCommandResultData(
+        commandType = commandType,
+        expectedCommandType = WorkerProtocolCommandTypes.MCP_SERVER_LIST_RUNTIME_STATUSES,
+        targetType = "WorkerMcpServerListRuntimeStatusesResultData"
+    )
+
+/**
  * Decodes worker result payload data as MCP server-start error result data.
  *
  * @receiver Worker command-result payload.
@@ -308,6 +420,38 @@ fun WorkerCommandResultPayload.toWorkerMcpServerDiscoverToolsErrorResultData(
     decodeCommandResultData(
         commandType = commandType,
         expectedCommandType = WorkerProtocolCommandTypes.MCP_SERVER_DISCOVER_TOOLS,
+        targetType = "WorkerMcpServerControlErrorResultData"
+    )
+
+/**
+ * Decodes worker result payload data as MCP server get-runtime-status error result data.
+ *
+ * @receiver Worker command-result payload.
+ * @param commandType Command type associated with the completed lifecycle.
+ * @return Either decoded get-runtime-status error result data or a logical mapping error.
+ */
+fun WorkerCommandResultPayload.toWorkerMcpServerGetRuntimeStatusErrorResultData(
+    commandType: String
+): Either<WorkerMcpServerControlProtocolMappingError, WorkerMcpServerControlErrorResultData> =
+    decodeCommandResultData(
+        commandType = commandType,
+        expectedCommandType = WorkerProtocolCommandTypes.MCP_SERVER_GET_RUNTIME_STATUS,
+        targetType = "WorkerMcpServerControlErrorResultData"
+    )
+
+/**
+ * Decodes worker result payload data as MCP server list-runtime-statuses error result data.
+ *
+ * @receiver Worker command-result payload.
+ * @param commandType Command type associated with the completed lifecycle.
+ * @return Either decoded list-runtime-statuses error result data or a logical mapping error.
+ */
+fun WorkerCommandResultPayload.toWorkerMcpServerListRuntimeStatusesErrorResultData(
+    commandType: String
+): Either<WorkerMcpServerControlProtocolMappingError, WorkerMcpServerControlErrorResultData> =
+    decodeCommandResultData(
+        commandType = commandType,
+        expectedCommandType = WorkerProtocolCommandTypes.MCP_SERVER_LIST_RUNTIME_STATUSES,
         targetType = "WorkerMcpServerControlErrorResultData"
     )
 

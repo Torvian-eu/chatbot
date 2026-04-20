@@ -16,6 +16,7 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -26,12 +27,18 @@ import kotlin.time.Duration.Companion.seconds
  */
 class WorkerMcpClientServiceImpl(
     private val processManager: WorkerLocalMcpProcessManager,
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val clock: Clock = Clock.System
 ) : WorkerMcpClientService {
     /**
      * Per-server connected SDK client registry.
      */
     private val clientByServerId: ConcurrentHashMap<Long, Client> = ConcurrentHashMap()
+
+    /**
+     * Per-server connected client metadata registry.
+     */
+    private val connectionStatusByServerId: ConcurrentHashMap<Long, WorkerMcpClientConnectionStatus> = ConcurrentHashMap()
 
     /**
      * Base client-name prefix used for SDK client identity.
@@ -53,10 +60,7 @@ class WorkerMcpClientServiceImpl(
      */
     private val requestTimeoutSeconds: Int = 120
 
-    /**
-     * @param config Resolved local MCP server configuration.
-     * @return Either start/connect error or Unit.
-     */
+    //TODO: LocalMCPServerDto.autoStopAfterInactivitySeconds not yet implemented;
     override suspend fun startAndConnect(config: LocalMCPServerDto): Either<WorkerMcpClientStartError, Unit> {
         val serverId = config.id
         if (clientByServerId.containsKey(serverId)) {
@@ -102,6 +106,11 @@ class WorkerMcpClientServiceImpl(
                 }
             }
             clientByServerId[serverId] = client
+            val now = clock.now()
+            connectionStatusByServerId[serverId] = WorkerMcpClientConnectionStatus(
+                connectedAt = now,
+                lastActivityAt = now
+            )
             Unit.right()
         } catch (_: TimeoutCancellationException) {
             processManager.stopServer(serverId)
@@ -119,15 +128,12 @@ class WorkerMcpClientServiceImpl(
         }
     }
 
-    /**
-     * @param serverId Persisted local MCP server identifier.
-     * @return Either stop error or Unit.
-     */
     override suspend fun stopServer(serverId: Long): Either<WorkerMcpClientStopError, Unit> {
         val client = clientByServerId.remove(serverId)
         if (client == null) {
             return WorkerMcpClientStopError.NotConnected(serverId).left()
         }
+        connectionStatusByServerId.remove(serverId)
 
         try {
             withContext(ioDispatcher) {
@@ -173,6 +179,9 @@ class WorkerMcpClientServiceImpl(
                     options = RequestOptions(timeout = requestTimeoutSeconds.seconds)
                 )
             }
+            connectionStatusByServerId[serverId]?.let { currentStatus ->
+                connectionStatusByServerId[serverId] = currentStatus.copy(lastActivityAt = clock.now())
+            }
             listToolsResult.tools.right()
         } catch (exception: Exception) {
             WorkerMcpClientDiscoverToolsError.ListToolsFailed(
@@ -183,20 +192,19 @@ class WorkerMcpClientServiceImpl(
         }
     }
 
-    /**
-     * @param serverId Persisted local MCP server identifier.
-     * @return True when a client is currently registered.
-     */
     override fun isClientConnected(serverId: Long): Boolean = clientByServerId.containsKey(serverId)
 
-    /**
-     * Stops all tracked clients and delegates final cleanup to process manager.
-     */
+
+    override fun getConnectionStatus(serverId: Long): WorkerMcpClientConnectionStatus? =
+        connectionStatusByServerId[serverId]
+
+
     override suspend fun close() {
         val serverIds = clientByServerId.keys.toList()
         serverIds.forEach { serverId ->
             stopServer(serverId)
         }
+        connectionStatusByServerId.clear()
         processManager.close()
     }
 
