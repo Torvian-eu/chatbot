@@ -9,6 +9,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.io.asSink
 import kotlinx.io.asSource
 import kotlinx.io.buffered
+import org.apache.logging.log4j.LogManager
+import org.apache.logging.log4j.Logger
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
@@ -27,6 +29,13 @@ import kotlin.time.Instant
 class JvmWorkerLocalMcpProcessManager(
     private val clock: Clock = Clock.System
 ) : WorkerLocalMcpProcessManager {
+    companion object {
+        /**
+         * Logger used for local MCP process lifecycle diagnostics.
+         */
+        private val logger: Logger = LogManager.getLogger(JvmWorkerLocalMcpProcessManager::class.java)
+    }
+
     /**
      * Graceful-shutdown timeout before forceful termination fallback.
      */
@@ -45,12 +54,15 @@ class JvmWorkerLocalMcpProcessManager(
     override suspend fun startServer(
         config: LocalMCPServerDto
     ): Either<WorkerLocalMcpStartProcessError, WorkerLocalMcpProcessStatus> {
+        logger.info("Starting local MCP process for serverId={} name='{}'", config.id, config.name)
         validateConfiguration(config).onLeft { validationError ->
+            logger.warn("Invalid process configuration for serverId={}: {}", config.id, validationError.message)
             return validationError.left()
         }
 
         processByServerId[config.id]?.let { existingProcess ->
             if (existingProcess.isAlive) {
+                logger.warn("Process already running for serverId={} pid={}", config.id, existingProcess.pid)
                 return WorkerLocalMcpStartProcessError.ProcessAlreadyRunning(config.id).left()
             }
         }
@@ -59,6 +71,7 @@ class JvmWorkerLocalMcpProcessManager(
         val process = try {
             startProcess(config, command)
         } catch (exception: IOException) {
+            logger.error("IO failure while starting process for serverId={}: {}", config.id, exception.message, exception)
             return WorkerLocalMcpStartProcessError.ProcessStartFailed(
                 serverId = config.id,
                 command = command.joinToString(" "),
@@ -66,6 +79,7 @@ class JvmWorkerLocalMcpProcessManager(
                 cause = exception
             ).left()
         } catch (exception: SecurityException) {
+            logger.error("Security failure while starting process for serverId={}: {}", config.id, exception.message, exception)
             return WorkerLocalMcpStartProcessError.ProcessStartFailed(
                 serverId = config.id,
                 command = command.joinToString(" "),
@@ -85,6 +99,7 @@ class JvmWorkerLocalMcpProcessManager(
             val existingProcess = processByServerId[config.id]
             if (existingProcess == null) {
                 if (processByServerId.putIfAbsent(config.id, managedProcess) == null) {
+                    logger.info("Started local MCP process for serverId={} pid={}", config.id, managedProcess.pid)
                     return WorkerLocalMcpProcessStatus(
                         serverId = config.id,
                         state = WorkerLocalMcpProcessState.RUNNING,
@@ -99,10 +114,17 @@ class JvmWorkerLocalMcpProcessManager(
                 withContext(Dispatchers.IO) {
                     managedProcess.process.destroyForcibly()
                 }
+                logger.warn(
+                    "Start race for serverId={} detected existing alive process pid={}, stopped duplicate pid={}",
+                    config.id,
+                    existingProcess.pid,
+                    managedProcess.pid
+                )
                 return WorkerLocalMcpStartProcessError.ProcessAlreadyRunning(config.id).left()
             }
 
             if (processByServerId.replace(config.id, existingProcess, managedProcess)) {
+                logger.info("Replaced stale process entry for serverId={} with pid={}", config.id, managedProcess.pid)
                 return WorkerLocalMcpProcessStatus(
                     serverId = config.id,
                     state = WorkerLocalMcpProcessState.RUNNING,
@@ -114,8 +136,12 @@ class JvmWorkerLocalMcpProcessManager(
     }
 
     override suspend fun stopServer(serverId: Long): Either<WorkerLocalMcpStopProcessError, Unit> {
+        logger.info("Stopping local MCP process for serverId={}", serverId)
         val managedProcess = processByServerId.remove(serverId)
-            ?: return WorkerLocalMcpStopProcessError.ProcessNotRunning(serverId).left()
+            ?: run {
+                logger.warn("Cannot stop local MCP process because it is not running for serverId={}", serverId)
+                return WorkerLocalMcpStopProcessError.ProcessNotRunning(serverId).left()
+            }
         return stopManagedProcess(managedProcess)
     }
 
@@ -133,6 +159,7 @@ class JvmWorkerLocalMcpProcessManager(
                 null
             }
             processByServerId.remove(serverId, managedProcess)
+            logger.info("Observed stopped local MCP process for serverId={} exitCode={}", serverId, exitCode)
             return@withContext WorkerLocalMcpProcessStatus(
                 serverId = serverId,
                 state = if (exitCode != null && exitCode != 0) {
@@ -164,12 +191,14 @@ class JvmWorkerLocalMcpProcessManager(
         processByServerId[serverId]?.process?.errorStream?.asSource()?.buffered()
 
     override suspend fun close() {
+        logger.info("Closing process manager and stopping all tracked local MCP processes")
         val managedProcesses = processByServerId.keys.mapNotNull { serverId ->
             processByServerId.remove(serverId)
         }
         managedProcesses.forEach { managedProcess ->
             stopManagedProcess(managedProcess)
         }
+        logger.info("Process manager closed; stopped {} processes", managedProcesses.size)
     }
 
     /**
@@ -183,6 +212,13 @@ class JvmWorkerLocalMcpProcessManager(
         config: LocalMCPServerDto,
         command: List<String>
     ): Process = withContext(Dispatchers.IO) {
+        logger.debug(
+            "Launching process for serverId={} command='{}' workingDirectory='{}' envVarCount={}",
+            config.id,
+            command.joinToString(" "),
+            config.workingDirectory,
+            config.environmentVariables.size + config.secretEnvironmentVariables.size
+        )
         val processBuilder = ProcessBuilder(command)
         val runtimeEnvironmentVariables = config.environmentVariables + config.secretEnvironmentVariables
         runtimeEnvironmentVariables.forEach { variable ->
@@ -192,6 +228,12 @@ class JvmWorkerLocalMcpProcessManager(
             val directory = File(configuredDirectory)
             if (directory.exists() && directory.isDirectory) {
                 processBuilder.directory(directory)
+            } else {
+                logger.warn(
+                    "Ignoring invalid working directory for serverId={} path='{}'",
+                    config.id,
+                    configuredDirectory
+                )
             }
         }
         processBuilder.start()
@@ -207,32 +249,76 @@ class JvmWorkerLocalMcpProcessManager(
         managedProcess: ManagedProcess
     ): Either<WorkerLocalMcpStopProcessError, Unit> = withContext(Dispatchers.IO) {
         if (!managedProcess.isAlive) {
+            logger.debug(
+                "Skipping stop for already-terminated process serverId={} pid={}",
+                managedProcess.serverId,
+                managedProcess.pid
+            )
             return@withContext Unit.right()
         }
 
         try {
+            logger.debug(
+                "Attempting graceful process shutdown for serverId={} pid={} timeoutMs={}",
+                managedProcess.serverId,
+                managedProcess.pid,
+                gracefulShutdownTimeoutMillis
+            )
             managedProcess.process.destroy()
             if (managedProcess.process.waitFor(gracefulShutdownTimeoutMillis, TimeUnit.MILLISECONDS)) {
+                logger.info(
+                    "Graceful process shutdown succeeded for serverId={} pid={}",
+                    managedProcess.serverId,
+                    managedProcess.pid
+                )
                 return@withContext Unit.right()
             }
 
+            logger.warn(
+                "Graceful shutdown timed out for serverId={} pid={}, forcing termination",
+                managedProcess.serverId,
+                managedProcess.pid
+            )
             managedProcess.process.destroyForcibly()
             if (managedProcess.process.waitFor(forceShutdownTimeoutMillis, TimeUnit.MILLISECONDS)) {
+                logger.info(
+                    "Forceful process shutdown succeeded for serverId={} pid={}",
+                    managedProcess.serverId,
+                    managedProcess.pid
+                )
                 return@withContext Unit.right()
             }
 
+            logger.error(
+                "Forceful shutdown timed out for serverId={} pid={}",
+                managedProcess.serverId,
+                managedProcess.pid
+            )
             WorkerLocalMcpStopProcessError.ProcessStopFailed(
                 serverId = managedProcess.serverId,
                 reason = "Process did not terminate after forceful shutdown"
             ).left()
         } catch (exception: InterruptedException) {
             Thread.currentThread().interrupt()
+            logger.error(
+                "Interrupted while stopping process for serverId={} pid={}",
+                managedProcess.serverId,
+                managedProcess.pid,
+                exception
+            )
             WorkerLocalMcpStopProcessError.ProcessStopFailed(
                 serverId = managedProcess.serverId,
                 reason = "Interrupted while waiting for process termination",
                 cause = exception
             ).left()
         } catch (exception: Exception) {
+            logger.error(
+                "Unexpected failure while stopping process for serverId={} pid={}: {}",
+                managedProcess.serverId,
+                managedProcess.pid,
+                exception.message,
+                exception
+            )
             WorkerLocalMcpStopProcessError.ProcessStopFailed(
                 serverId = managedProcess.serverId,
                 reason = exception.message ?: "Unknown error",

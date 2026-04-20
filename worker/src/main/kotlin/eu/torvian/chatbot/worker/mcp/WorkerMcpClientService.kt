@@ -2,7 +2,9 @@ package eu.torvian.chatbot.worker.mcp
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
+import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.Tool
+import kotlinx.serialization.json.JsonObject
 import kotlin.time.Instant
 
 /**
@@ -32,6 +34,28 @@ interface WorkerMcpClientService {
      * @return Either discovery error or discovered tool list.
      */
     suspend fun discoverTools(serverId: Long): Either<WorkerMcpClientDiscoverToolsError, List<Tool>>
+
+    /**
+     * Pings one connected MCP SDK client to verify transport responsiveness.
+     *
+     * @param serverId Persisted local MCP server identifier.
+     * @return Either ping error or Unit when the client responds.
+     */
+    suspend fun pingClient(serverId: Long): Either<WorkerMcpClientPingError, Unit>
+
+    /**
+     * Calls one MCP tool on a connected SDK client.
+     *
+     * @param serverId Persisted local MCP server identifier.
+     * @param toolName MCP tool name to invoke.
+     * @param arguments JSON argument object passed to the tool.
+     * @return Either call failure or MCP SDK call result.
+     */
+    suspend fun callTool(
+        serverId: Long,
+        toolName: String,
+        arguments: JsonObject
+    ): Either<WorkerMcpClientCallToolError, CallToolResult>
 
     /**
      * Indicates whether a connected SDK client is currently tracked for one server.

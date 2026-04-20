@@ -4,11 +4,13 @@ import arrow.core.Either
 import arrow.core.getOrElse
 import arrow.core.left
 import arrow.core.right
-import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
+import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto
+import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.Tool
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.JsonObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -205,38 +207,22 @@ class WorkerLocalMcpRuntimeServiceImplTest {
          */
         private var server: LocalMCPServerDto? = localServerConfig(DEFAULT_SERVER_ID)
 
-        /**
-         * @param serverId Persisted local MCP server identifier.
-         * @return Stored config when IDs match.
-         */
         override suspend fun getServer(serverId: Long): LocalMCPServerDto? = server?.takeIf { it.id == serverId }
 
-        /**
-         * @param config Server config replacement.
-         */
         override suspend fun upsertServer(config: LocalMCPServerDto) {
             server = config
         }
 
-        /**
-         * @param serverId Server identifier to remove.
-         */
         override suspend fun removeServer(serverId: Long) {
             if (server?.id == serverId) {
                 server = null
             }
         }
 
-        /**
-         * @param servers Replacement list.
-         */
         override suspend fun replaceAll(servers: List<LocalMCPServerDto>) {
             server = servers.firstOrNull()
         }
 
-        /**
-         * @return Snapshot list containing the single stored server when present.
-         */
         override suspend fun listServers(): List<LocalMCPServerDto> = listOfNotNull(server)
     }
 
@@ -269,10 +255,6 @@ class WorkerLocalMcpRuntimeServiceImplTest {
          */
         var discoverCalls: Int = 0
 
-        /**
-         * @param config Resolved server configuration.
-         * @return Configured fixture result.
-         */
         override suspend fun startAndConnect(config: LocalMCPServerDto): Either<WorkerMcpClientStartError, Unit> {
             startCalls += 1
             if (startResult.isRight()) {
@@ -281,10 +263,6 @@ class WorkerLocalMcpRuntimeServiceImplTest {
             return startResult
         }
 
-        /**
-         * @param serverId Persisted local MCP server identifier.
-         * @return Configured fixture result.
-         */
         override suspend fun stopServer(serverId: Long): Either<WorkerMcpClientStopError, Unit> {
             stopCalls += 1
             if (stopResult.isRight()) {
@@ -293,25 +271,26 @@ class WorkerLocalMcpRuntimeServiceImplTest {
             return stopResult
         }
 
-        /**
-         * @param serverId Persisted local MCP server identifier.
-         * @return Configured fixture result.
-         */
         override suspend fun discoverTools(serverId: Long): Either<WorkerMcpClientDiscoverToolsError, List<Tool>> {
             discoverCalls += 1
             return discoverToolsResult
         }
 
-        /**
-         * @param serverId Persisted local MCP server identifier.
-         * @return Current connected flag.
-         */
+        override suspend fun pingClient(serverId: Long): Either<WorkerMcpClientPingError, Unit> = Unit.right()
+
+        override suspend fun callTool(
+            serverId: Long,
+            toolName: String,
+            arguments: JsonObject
+        ): Either<WorkerMcpClientCallToolError, CallToolResult> =
+            CallToolResult(
+                content = emptyList(),
+                isError = false,
+                structuredContent = null
+            ).right()
+
         override fun isClientConnected(serverId: Long): Boolean = connected
 
-        /**
-         * @param serverId Persisted local MCP server identifier.
-         * @return Deterministic connection metadata when connected.
-         */
         override fun getConnectionStatus(serverId: Long): WorkerMcpClientConnectionStatus? {
             if (!connected) {
                 return null
@@ -324,9 +303,6 @@ class WorkerLocalMcpRuntimeServiceImplTest {
             )
         }
 
-        /**
-         * No-op close for test fixture.
-         */
         override suspend fun close() = Unit
     }
 
@@ -341,46 +317,20 @@ class WorkerLocalMcpRuntimeServiceImplTest {
             state = WorkerLocalMcpProcessState.STOPPED
         )
     ) : WorkerLocalMcpProcessManager {
-        /**
-         * @param config Resolved local MCP server configuration.
-         * @return Deterministic start status.
-         */
         override suspend fun startServer(config: LocalMCPServerDto): Either<WorkerLocalMcpStartProcessError, WorkerLocalMcpProcessStatus> =
             status.copy(serverId = config.id).right()
 
-        /**
-         * @param serverId Persisted local MCP server identifier.
-         * @return Deterministic stop success.
-         */
         override suspend fun stopServer(serverId: Long): Either<WorkerLocalMcpStopProcessError, Unit> = Unit.right()
 
-        /**
-         * @param serverId Persisted local MCP server identifier.
-         * @return Deterministic process status snapshot.
-         */
-        override suspend fun getServerStatus(serverId: Long): WorkerLocalMcpProcessStatus = status.copy(serverId = serverId)
+        override suspend fun getServerStatus(serverId: Long): WorkerLocalMcpProcessStatus =
+            status.copy(serverId = serverId)
 
-        /**
-         * @param serverId Persisted local MCP server identifier.
-         * @return Always null in this test fixture.
-         */
         override fun getProcessInputStream(serverId: Long) = null
 
-        /**
-         * @param serverId Persisted local MCP server identifier.
-         * @return Always null in this test fixture.
-         */
         override fun getProcessOutputStream(serverId: Long) = null
 
-        /**
-         * @param serverId Persisted local MCP server identifier.
-         * @return Always null in this test fixture.
-         */
         override fun getProcessErrorStream(serverId: Long) = null
 
-        /**
-         * No-op close for test fixture.
-         */
         override suspend fun close() = Unit
     }
 

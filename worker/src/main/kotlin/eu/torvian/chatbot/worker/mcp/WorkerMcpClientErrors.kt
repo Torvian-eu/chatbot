@@ -198,3 +198,93 @@ sealed class WorkerMcpClientDiscoverToolsError : WorkerMcpClientError {
     }
 }
 
+/**
+ * Errors from ping operations.
+ */
+sealed class WorkerMcpClientPingError : WorkerMcpClientError {
+    /**
+     * Ping failed because no client is connected.
+     *
+     * @property serverId Persisted local MCP server identifier.
+     */
+    data class NotConnected(
+        val serverId: Long
+    ) : WorkerMcpClientPingError() {
+        /**
+         * Human-readable diagnostic message.
+         */
+        override val message: String = "MCP client is not connected for ping (serverId=$serverId)"
+
+        /**
+         * Not-connected condition has no technical throwable cause.
+         */
+        override val cause: Throwable? = null
+    }
+
+    /**
+     * Ping failed while invoking MCP SDK ping.
+     *
+     * @property serverId Persisted local MCP server identifier.
+     * @property reason Human-readable reason.
+     * @property cause Optional technical cause.
+     */
+    data class PingFailed(
+        val serverId: Long,
+        val reason: String,
+        override val cause: Throwable? = null
+    ) : WorkerMcpClientPingError() {
+        /**
+         * Human-readable diagnostic message.
+         */
+        override val message: String = "MCP client ping failed (serverId=$serverId): $reason"
+    }
+}
+
+/**
+ * Errors from tool-call operations.
+ */
+sealed class WorkerMcpClientCallToolError : WorkerMcpClientError {
+    /**
+     * Tool call failed because no client is connected.
+     *
+     * @property serverId Persisted local MCP server identifier.
+     * @property toolName Requested MCP tool name.
+     */
+    data class NotConnected(
+        val serverId: Long,
+        val toolName: String
+    ) : WorkerMcpClientCallToolError() {
+        /**
+         * Human-readable diagnostic message.
+         */
+        override val message: String =
+            "MCP client is not connected for tool call (serverId=$serverId, toolName=$toolName)"
+
+        /**
+         * Not-connected condition has no technical throwable cause.
+         */
+        override val cause: Throwable? = null
+    }
+
+    /**
+     * Tool call failed while invoking MCP SDK call-tool.
+     *
+     * @property serverId Persisted local MCP server identifier.
+     * @property toolName Requested MCP tool name.
+     * @property reason Human-readable reason.
+     * @property cause Optional technical cause.
+     */
+    data class ToolCallFailed(
+        val serverId: Long,
+        val toolName: String,
+        val reason: String,
+        override val cause: Throwable? = null
+    ) : WorkerMcpClientCallToolError() {
+        /**
+         * Human-readable diagnostic message.
+         */
+        override val message: String =
+            "MCP tool call failed (serverId=$serverId, toolName=$toolName): $reason"
+    }
+}
+
