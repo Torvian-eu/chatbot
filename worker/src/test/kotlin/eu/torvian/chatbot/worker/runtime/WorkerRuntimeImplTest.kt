@@ -3,14 +3,14 @@ package eu.torvian.chatbot.worker.runtime
 import arrow.core.Either
 import eu.torvian.chatbot.worker.auth.WorkerAuthManagerError
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
-import eu.torvian.chatbot.worker.mcp.WorkerMcpClientCallToolError
-import eu.torvian.chatbot.worker.mcp.WorkerMcpClientConnectionStatus
-import eu.torvian.chatbot.worker.mcp.WorkerMcpClientDiscoverToolsError
-import eu.torvian.chatbot.worker.mcp.WorkerMcpClientPingError
-import eu.torvian.chatbot.worker.mcp.WorkerMcpClientService
-import eu.torvian.chatbot.worker.mcp.WorkerMcpClientStartError
-import eu.torvian.chatbot.worker.mcp.WorkerMcpClientStopError
-import eu.torvian.chatbot.worker.protocol.transport.WorkerTransportConnectionLoopRunner
+import eu.torvian.chatbot.worker.mcp.McpClientCallToolError
+import eu.torvian.chatbot.worker.mcp.McpClientConnectionStatus
+import eu.torvian.chatbot.worker.mcp.McpClientDiscoverToolsError
+import eu.torvian.chatbot.worker.mcp.McpClientPingError
+import eu.torvian.chatbot.worker.mcp.McpClientService
+import eu.torvian.chatbot.worker.mcp.McpClientStartError
+import eu.torvian.chatbot.worker.mcp.McpClientStopError
+import eu.torvian.chatbot.worker.protocol.transport.TransportConnectionLoopRunner
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.Tool
 import kotlinx.coroutines.test.runTest
@@ -76,7 +76,7 @@ class WorkerRuntimeImplTest {
 
     private class RecordingConnectionLoop(
         private val result: Either<WorkerAuthManagerError, Unit>
-    ) : WorkerTransportConnectionLoopRunner {
+    ) : TransportConnectionLoopRunner {
         var calls: Int = 0
         var lastRunOnce: Boolean? = null
 
@@ -90,35 +90,35 @@ class WorkerRuntimeImplTest {
     /**
      * Recording MCP client service used to assert runtime shutdown behavior.
      */
-    private class RecordingMcpClientService : WorkerMcpClientService {
+    private class RecordingMcpClientService : McpClientService {
         /**
          * Number of close calls observed.
          */
         var closeCalls: Int = 0
 
-        override suspend fun startAndConnect(config: LocalMCPServerDto): Either<WorkerMcpClientStartError, Unit> =
+        override suspend fun startAndConnect(config: LocalMCPServerDto): Either<McpClientStartError, Unit> =
             error("Not used in WorkerRuntimeImplTest")
 
-        override suspend fun stopServer(serverId: Long): Either<WorkerMcpClientStopError, Unit> =
+        override suspend fun stopServer(serverId: Long): Either<McpClientStopError, Unit> =
             error("Not used in WorkerRuntimeImplTest")
 
-        override suspend fun discoverTools(serverId: Long): Either<WorkerMcpClientDiscoverToolsError, List<Tool>> =
+        override suspend fun discoverTools(serverId: Long): Either<McpClientDiscoverToolsError, List<Tool>> =
             error("Not used in WorkerRuntimeImplTest")
 
-        override suspend fun pingClient(serverId: Long): Either<WorkerMcpClientPingError, Unit> =
+        override suspend fun pingClient(serverId: Long): Either<McpClientPingError, Unit> =
             error("Not used in WorkerRuntimeImplTest")
 
         override suspend fun callTool(
             serverId: Long,
             toolName: String,
             arguments: JsonObject
-        ): Either<WorkerMcpClientCallToolError, CallToolResult> =
+        ): Either<McpClientCallToolError, CallToolResult> =
             error("Not used in WorkerRuntimeImplTest")
 
         override fun isClientConnected(serverId: Long): Boolean =
             error("Not used in WorkerRuntimeImplTest")
 
-        override fun getConnectionStatus(serverId: Long): WorkerMcpClientConnectionStatus? =
+        override fun getConnectionStatus(serverId: Long): McpClientConnectionStatus? =
             error("Not used in WorkerRuntimeImplTest")
 
         override suspend fun close() {

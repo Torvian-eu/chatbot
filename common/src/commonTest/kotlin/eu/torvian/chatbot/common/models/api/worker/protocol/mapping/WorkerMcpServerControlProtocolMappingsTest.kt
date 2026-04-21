@@ -164,7 +164,7 @@ class WorkerMcpServerControlProtocolMappingsTest {
             ifRight = { error("Expected command-type validation failure") }
         )
 
-        val invalidCommandType = assertIs<WorkerMcpServerControlProtocolMappingError.InvalidCommandType>(error)
+        val invalidCommandType = assertIs<WorkerMcpRuntimeCommandProtocolMappingError.InvalidCommandType>(error)
         assertEquals(WorkerProtocolCommandTypes.MCP_SERVER_START, invalidCommandType.expected)
         assertEquals(WorkerProtocolCommandTypes.TOOL_CALL, invalidCommandType.actual)
     }
@@ -184,7 +184,7 @@ class WorkerMcpServerControlProtocolMappingsTest {
             ifRight = { error("Expected malformed payload decoding to fail") }
         )
 
-        assertTrue(error is WorkerMcpServerControlProtocolMappingError.SerializationFailed)
+        assertTrue(error is WorkerMcpRuntimeCommandProtocolMappingError.SerializationFailed)
     }
 
     /**

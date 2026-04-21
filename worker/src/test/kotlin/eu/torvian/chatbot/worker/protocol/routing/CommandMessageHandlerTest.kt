@@ -1,86 +1,88 @@
 package eu.torvian.chatbot.worker.protocol.routing
 
+import arrow.core.getOrElse
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRejectedPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.core.WorkerProtocolMessage
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolMessageTypes
+import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolRejectionReasons
+import eu.torvian.chatbot.common.models.api.worker.protocol.codec.decodeProtocolPayload
 import eu.torvian.chatbot.worker.protocol.transport.OutboundMessageEmitter
 import eu.torvian.chatbot.worker.protocol.ids.MessageIdProvider
 import eu.torvian.chatbot.worker.protocol.interaction.Interaction
 import eu.torvian.chatbot.worker.protocol.registry.InMemoryInteractionRegistry
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * Unit tests for [WorkerProtocolMessageRouter].
+ * Unit tests for [CommandMessageHandler].
  */
-@OptIn(ExperimentalCoroutinesApi::class)
-class WorkerProtocolMessageRouterTest {
+class CommandMessageHandlerTest {
     /**
-     * Verifies that active interactions receive envelopes by interaction ID before type-based routing executes.
+     * Verifies that `command.message` payloads are routed to the active interaction by interaction ID.
      */
     @Test
-    fun `active interaction routing is prioritized over type routing`() = runTest {
+    fun `command message is routed to active interaction`() = kotlinx.coroutines.test.runTest {
         val registry = InMemoryInteractionRegistry()
         val emitter = RecordingEmitter()
         val interaction = RecordingInteraction(interactionId = "int-1")
         registry.register(interaction)
 
-        val commandRequestProcessor = RecordingIncomingMessageProcessor()
-        val commandMessageHandler = CommandMessageHandler(
+        val handler = CommandMessageHandler(
             registry = registry,
-            emitter = emitter,
-            messageIdProvider = SequenceMessageIdProvider()
-        )
-        val router = WorkerProtocolMessageRouter(
-            registry = registry,
-            commandRequestProcessor = commandRequestProcessor,
-            commandMessageHandler = commandMessageHandler,
             emitter = emitter,
             messageIdProvider = SequenceMessageIdProvider()
         )
 
-        val welcomeEnvelope = WorkerProtocolMessage(
+        val inboundMessage = WorkerProtocolMessage(
             id = "in-1",
-            type = WorkerProtocolMessageTypes.SESSION_WELCOME,
-            interactionId = "int-1"
+            type = WorkerProtocolMessageTypes.COMMAND_MESSAGE,
+            interactionId = "int-1",
+            payload = buildJsonObject {
+                put("messageKind", "proceed")
+                put("data", JsonObject(emptyMap()))
+            }
         )
-        router.process(welcomeEnvelope)
 
-        assertEquals(listOf(welcomeEnvelope), interaction.receivedMessages)
-        assertEquals(emptyList(), commandRequestProcessor.messages)
-        assertEquals(emptyList(), emitter.messages)
+        handler.handle(inboundMessage)
+
+        assertEquals(1, interaction.receivedMessages.size)
+        assertEquals(inboundMessage, interaction.receivedMessages.single())
+        assertEquals(0, emitter.messages.size)
     }
 
     /**
-     * Verifies that command requests still use type-based routing when no active interaction matches.
+     * Verifies that unknown interaction IDs are rejected for `command.message` routing.
      */
     @Test
-    fun `command request falls back to type routing when interaction is not active`() = runTest {
-        val registry = InMemoryInteractionRegistry()
+    fun `unknown interaction id is rejected`() = kotlinx.coroutines.test.runTest {
         val emitter = RecordingEmitter()
-        val commandRequestProcessor = RecordingIncomingMessageProcessor()
-        val commandMessageHandler = CommandMessageHandler(
-            registry = registry,
-            emitter = emitter,
-            messageIdProvider = SequenceMessageIdProvider()
-        )
-        val router = WorkerProtocolMessageRouter(
-            registry = registry,
-            commandRequestProcessor = commandRequestProcessor,
-            commandMessageHandler = commandMessageHandler,
+        val handler = CommandMessageHandler(
+            registry = InMemoryInteractionRegistry(),
             emitter = emitter,
             messageIdProvider = SequenceMessageIdProvider()
         )
 
-        val requestEnvelope = WorkerProtocolMessage(
-            id = "in-2",
-            type = WorkerProtocolMessageTypes.COMMAND_REQUEST,
-            interactionId = "int-missing"
+        handler.handle(
+            WorkerProtocolMessage(
+                id = "in-2",
+                type = WorkerProtocolMessageTypes.COMMAND_MESSAGE,
+                interactionId = "int-missing",
+                payload = buildJsonObject {
+                    put("messageKind", "proceed")
+                    put("data", JsonObject(emptyMap()))
+                }
+            )
         )
-        router.process(requestEnvelope)
 
-        assertEquals(listOf(requestEnvelope), commandRequestProcessor.messages)
+        assertEquals(1, emitter.messages.size)
+        val rejected = decodeProtocolPayload<WorkerCommandRejectedPayload>(
+            emitter.messages.single().payload!!,
+            "WorkerCommandRejectedPayload"
+        ).getOrElse { error("Expected rejection payload to decode: $it") }
+        assertEquals(WorkerProtocolRejectionReasons.UNKNOWN_INTERACTION_ID, rejected.reasonCode)
     }
 
     /**
@@ -101,7 +103,7 @@ class WorkerProtocolMessageRouterTest {
     }
 
     /**
-     * Recording interaction used to verify registry-based delivery.
+     * Recording active interaction used to verify follow-up message delivery.
      *
      * @property interactionId Stable interaction identifier used by the registry.
      */
@@ -129,23 +131,6 @@ class WorkerProtocolMessageRouterTest {
     }
 
     /**
-     * Recording processor used to capture type-routed envelopes.
-     */
-    private class RecordingIncomingMessageProcessor : IncomingMessageProcessor {
-        /**
-         * Messages processed by this helper.
-         */
-        val messages: MutableList<WorkerProtocolMessage> = mutableListOf()
-
-        /**
-         * @param message Inbound protocol envelope to record.
-         */
-        override suspend fun process(message: WorkerProtocolMessage) {
-            messages += message
-        }
-    }
-
-    /**
      * Deterministic message-id provider for stable protocol assertions.
      */
     private class SequenceMessageIdProvider : MessageIdProvider {
@@ -165,4 +150,6 @@ class WorkerProtocolMessageRouterTest {
         }
     }
 }
+
+
 

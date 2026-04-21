@@ -2,8 +2,8 @@ package eu.torvian.chatbot.worker.runtime
 
 import arrow.core.Either
 import eu.torvian.chatbot.worker.auth.WorkerAuthManagerError
-import eu.torvian.chatbot.worker.mcp.WorkerMcpClientService
-import eu.torvian.chatbot.worker.protocol.transport.WorkerTransportConnectionLoopRunner
+import eu.torvian.chatbot.worker.mcp.McpClientService
+import eu.torvian.chatbot.worker.protocol.transport.TransportConnectionLoopRunner
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 import java.util.concurrent.atomic.AtomicBoolean
@@ -17,8 +17,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 class WorkerRuntimeImpl(
     private val workerUid: String,
-    private val connectionLoop: WorkerTransportConnectionLoopRunner,
-    private val mcpClientService: WorkerMcpClientService
+    private val connectionLoop: TransportConnectionLoopRunner,
+    private val mcpClientService: McpClientService
 ) : WorkerRuntime {
 
     /**

@@ -134,9 +134,9 @@ class DefaultLocalMCPRuntimeCommandDispatchService(
     private suspend fun <TSuccess> dispatchAndDecode(
         workerId: Long,
         commandType: String,
-        requestPayload: Either<WorkerMcpServerControlProtocolMappingError, WorkerCommandRequestPayload>,
-        decodeSuccessResult: (WorkerCommandResultPayload, String) -> Either<WorkerMcpServerControlProtocolMappingError, TSuccess>,
-        decodeErrorResult: (WorkerCommandResultPayload, String) -> Either<WorkerMcpServerControlProtocolMappingError, WorkerMcpServerControlErrorResultData>
+        requestPayload: Either<WorkerMcpRuntimeCommandProtocolMappingError, WorkerCommandRequestPayload>,
+        decodeSuccessResult: (WorkerCommandResultPayload, String) -> Either<WorkerMcpRuntimeCommandProtocolMappingError, TSuccess>,
+        decodeErrorResult: (WorkerCommandResultPayload, String) -> Either<WorkerMcpRuntimeCommandProtocolMappingError, WorkerMcpServerControlErrorResultData>
     ): Either<LocalMCPRuntimeCommandDispatchError, TSuccess> = either {
         val payload = requestPayload.mapLeft { mappingError ->
             mappingError.toServerError(commandType = commandType)
@@ -203,17 +203,17 @@ class DefaultLocalMCPRuntimeCommandDispatchService(
      * @param commandType Command type being orchestrated.
      * @return Server-side orchestration error.
      */
-    private fun WorkerMcpServerControlProtocolMappingError.toServerError(
+    private fun WorkerMcpRuntimeCommandProtocolMappingError.toServerError(
         commandType: String
     ): LocalMCPRuntimeCommandDispatchError = when (this) {
-        is WorkerMcpServerControlProtocolMappingError.InvalidCommandType -> {
+        is WorkerMcpRuntimeCommandProtocolMappingError.InvalidCommandType -> {
             LocalMCPRuntimeCommandDispatchError.InvalidPayload(
                 commandType = commandType,
                 details = "Expected commandType=$expected but was $actual"
             )
         }
 
-        is WorkerMcpServerControlProtocolMappingError.SerializationFailed -> {
+        is WorkerMcpRuntimeCommandProtocolMappingError.SerializationFailed -> {
             LocalMCPRuntimeCommandDispatchError.InvalidPayload(
                 commandType = commandType,
                 details = "Serialization failed during $operation for $targetType${details?.let { ": $it" } ?: ""}"
