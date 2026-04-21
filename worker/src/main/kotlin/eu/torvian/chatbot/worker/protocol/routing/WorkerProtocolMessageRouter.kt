@@ -5,10 +5,10 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.core.WorkerProtocolM
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolMessageTypes
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolRejectionReasons
 import eu.torvian.chatbot.common.models.api.worker.protocol.builders.commandRejected
-import eu.torvian.chatbot.worker.protocol.transport.WorkerOutboundMessageEmitter
-import eu.torvian.chatbot.worker.protocol.ids.UuidWorkerMessageIdProvider
-import eu.torvian.chatbot.worker.protocol.ids.WorkerMessageIdProvider
-import eu.torvian.chatbot.worker.protocol.registry.WorkerActiveInteractionRegistry
+import eu.torvian.chatbot.worker.protocol.transport.OutboundMessageEmitter
+import eu.torvian.chatbot.worker.protocol.ids.UuidMessageIdProvider
+import eu.torvian.chatbot.worker.protocol.ids.MessageIdProvider
+import eu.torvian.chatbot.worker.protocol.registry.InteractionRegistry
 
 /**
  * Routes inbound worker protocol envelopes by envelope message type.
@@ -20,12 +20,12 @@ import eu.torvian.chatbot.worker.protocol.registry.WorkerActiveInteractionRegist
  * @property messageIdProvider Message-ID provider used for emitted rejections.
  */
 class WorkerProtocolMessageRouter(
-    private val registry: WorkerActiveInteractionRegistry,
-    private val commandRequestProcessor: WorkerIncomingMessageProcessor,
-    private val commandMessageHandler: WorkerCommandMessageHandler,
-    private val emitter: WorkerOutboundMessageEmitter,
-    private val messageIdProvider: WorkerMessageIdProvider = UuidWorkerMessageIdProvider()
-) : WorkerIncomingMessageProcessor {
+    private val registry: InteractionRegistry,
+    private val commandRequestProcessor: IncomingMessageProcessor,
+    private val commandMessageHandler: CommandMessageHandler,
+    private val emitter: OutboundMessageEmitter,
+    private val messageIdProvider: MessageIdProvider = UuidMessageIdProvider()
+) : IncomingMessageProcessor {
     /**
      * Dispatches the inbound envelope to the matching envelope-type processor.
      *

@@ -72,21 +72,52 @@ class DefaultLocalMCPRuntimeCommandDispatchService(
             }
         )
 
-    override suspend fun refreshTools(
+    override suspend fun discoverTools(
         workerId: Long,
         serverId: Long
-    ): Either<LocalMCPRuntimeCommandDispatchError, WorkerMcpServerRefreshToolsResultData> =
+    ): Either<LocalMCPRuntimeCommandDispatchError, WorkerMcpServerDiscoverToolsResultData> =
         dispatchAndDecode(
             workerId = workerId,
-            commandType = WorkerProtocolCommandTypes.MCP_SERVER_REFRESH_TOOLS,
-            requestPayload = WorkerMcpServerRefreshToolsCommandData(serverId).toWorkerCommandRequestPayload(),
+            commandType = WorkerProtocolCommandTypes.MCP_SERVER_DISCOVER_TOOLS,
+            requestPayload = WorkerMcpServerDiscoverToolsCommandData(serverId).toWorkerCommandRequestPayload(),
             decodeSuccessResult = { result, completedCommandType ->
-                result.toWorkerMcpServerRefreshToolsResultData(
+                result.toWorkerMcpServerDiscoverToolsResultData(
                     completedCommandType
                 )
             },
             decodeErrorResult = { result, completedCommandType ->
-                result.toWorkerMcpServerRefreshToolsErrorResultData(completedCommandType)
+                result.toWorkerMcpServerDiscoverToolsErrorResultData(completedCommandType)
+            }
+        )
+
+    override suspend fun getRuntimeStatus(
+        workerId: Long,
+        serverId: Long
+    ): Either<LocalMCPRuntimeCommandDispatchError, WorkerMcpServerGetRuntimeStatusResultData> =
+        dispatchAndDecode(
+            workerId = workerId,
+            commandType = WorkerProtocolCommandTypes.MCP_SERVER_GET_RUNTIME_STATUS,
+            requestPayload = WorkerMcpServerGetRuntimeStatusCommandData(serverId).toWorkerCommandRequestPayload(),
+            decodeSuccessResult = { result, completedCommandType ->
+                result.toWorkerMcpServerGetRuntimeStatusResultData(completedCommandType)
+            },
+            decodeErrorResult = { result, completedCommandType ->
+                result.toWorkerMcpServerGetRuntimeStatusErrorResultData(completedCommandType)
+            }
+        )
+
+    override suspend fun listRuntimeStatuses(
+        workerId: Long
+    ): Either<LocalMCPRuntimeCommandDispatchError, WorkerMcpServerListRuntimeStatusesResultData> =
+        dispatchAndDecode(
+            workerId = workerId,
+            commandType = WorkerProtocolCommandTypes.MCP_SERVER_LIST_RUNTIME_STATUSES,
+            requestPayload = WorkerMcpServerListRuntimeStatusesCommandData.toWorkerCommandRequestPayload(),
+            decodeSuccessResult = { result, completedCommandType ->
+                result.toWorkerMcpServerListRuntimeStatusesResultData(completedCommandType)
+            },
+            decodeErrorResult = { result, completedCommandType ->
+                result.toWorkerMcpServerListRuntimeStatusesErrorResultData(completedCommandType)
             }
         )
 
@@ -103,9 +134,9 @@ class DefaultLocalMCPRuntimeCommandDispatchService(
     private suspend fun <TSuccess> dispatchAndDecode(
         workerId: Long,
         commandType: String,
-        requestPayload: Either<WorkerMcpServerControlProtocolMappingError, WorkerCommandRequestPayload>,
-        decodeSuccessResult: (WorkerCommandResultPayload, String) -> Either<WorkerMcpServerControlProtocolMappingError, TSuccess>,
-        decodeErrorResult: (WorkerCommandResultPayload, String) -> Either<WorkerMcpServerControlProtocolMappingError, WorkerMcpServerControlErrorResultData>
+        requestPayload: Either<WorkerMcpRuntimeCommandProtocolMappingError, WorkerCommandRequestPayload>,
+        decodeSuccessResult: (WorkerCommandResultPayload, String) -> Either<WorkerMcpRuntimeCommandProtocolMappingError, TSuccess>,
+        decodeErrorResult: (WorkerCommandResultPayload, String) -> Either<WorkerMcpRuntimeCommandProtocolMappingError, WorkerMcpServerControlErrorResultData>
     ): Either<LocalMCPRuntimeCommandDispatchError, TSuccess> = either {
         val payload = requestPayload.mapLeft { mappingError ->
             mappingError.toServerError(commandType = commandType)
@@ -172,17 +203,17 @@ class DefaultLocalMCPRuntimeCommandDispatchService(
      * @param commandType Command type being orchestrated.
      * @return Server-side orchestration error.
      */
-    private fun WorkerMcpServerControlProtocolMappingError.toServerError(
+    private fun WorkerMcpRuntimeCommandProtocolMappingError.toServerError(
         commandType: String
     ): LocalMCPRuntimeCommandDispatchError = when (this) {
-        is WorkerMcpServerControlProtocolMappingError.InvalidCommandType -> {
+        is WorkerMcpRuntimeCommandProtocolMappingError.InvalidCommandType -> {
             LocalMCPRuntimeCommandDispatchError.InvalidPayload(
                 commandType = commandType,
                 details = "Expected commandType=$expected but was $actual"
             )
         }
 
-        is WorkerMcpServerControlProtocolMappingError.SerializationFailed -> {
+        is WorkerMcpRuntimeCommandProtocolMappingError.SerializationFailed -> {
             LocalMCPRuntimeCommandDispatchError.InvalidPayload(
                 commandType = commandType,
                 details = "Serialization failed during $operation for $targetType${details?.let { ": $it" } ?: ""}"

@@ -2,10 +2,10 @@ package eu.torvian.chatbot.worker.protocol.routing
 
 import eu.torvian.chatbot.common.models.api.worker.protocol.core.WorkerProtocolMessage
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolMessageTypes
-import eu.torvian.chatbot.worker.protocol.transport.WorkerOutboundMessageEmitter
-import eu.torvian.chatbot.worker.protocol.ids.WorkerMessageIdProvider
-import eu.torvian.chatbot.worker.protocol.interaction.WorkerActiveInteraction
-import eu.torvian.chatbot.worker.protocol.registry.InMemoryWorkerActiveInteractionRegistry
+import eu.torvian.chatbot.worker.protocol.transport.OutboundMessageEmitter
+import eu.torvian.chatbot.worker.protocol.ids.MessageIdProvider
+import eu.torvian.chatbot.worker.protocol.interaction.Interaction
+import eu.torvian.chatbot.worker.protocol.registry.InMemoryInteractionRegistry
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -21,13 +21,13 @@ class WorkerProtocolMessageRouterTest {
      */
     @Test
     fun `active interaction routing is prioritized over type routing`() = runTest {
-        val registry = InMemoryWorkerActiveInteractionRegistry()
+        val registry = InMemoryInteractionRegistry()
         val emitter = RecordingEmitter()
         val interaction = RecordingInteraction(interactionId = "int-1")
         registry.register(interaction)
 
         val commandRequestProcessor = RecordingIncomingMessageProcessor()
-        val commandMessageHandler = WorkerCommandMessageHandler(
+        val commandMessageHandler = CommandMessageHandler(
             registry = registry,
             emitter = emitter,
             messageIdProvider = SequenceMessageIdProvider()
@@ -57,10 +57,10 @@ class WorkerProtocolMessageRouterTest {
      */
     @Test
     fun `command request falls back to type routing when interaction is not active`() = runTest {
-        val registry = InMemoryWorkerActiveInteractionRegistry()
+        val registry = InMemoryInteractionRegistry()
         val emitter = RecordingEmitter()
         val commandRequestProcessor = RecordingIncomingMessageProcessor()
-        val commandMessageHandler = WorkerCommandMessageHandler(
+        val commandMessageHandler = CommandMessageHandler(
             registry = registry,
             emitter = emitter,
             messageIdProvider = SequenceMessageIdProvider()
@@ -86,7 +86,7 @@ class WorkerProtocolMessageRouterTest {
     /**
      * Recording outbound emitter used for assertions.
      */
-    private class RecordingEmitter : WorkerOutboundMessageEmitter {
+    private class RecordingEmitter : OutboundMessageEmitter {
         /**
          * Collected outbound messages in send order.
          */
@@ -107,7 +107,7 @@ class WorkerProtocolMessageRouterTest {
      */
     private class RecordingInteraction(
         override val interactionId: String
-    ) : WorkerActiveInteraction {
+    ) : Interaction {
         /**
          * Messages delivered through [onMessage].
          */
@@ -131,7 +131,7 @@ class WorkerProtocolMessageRouterTest {
     /**
      * Recording processor used to capture type-routed envelopes.
      */
-    private class RecordingIncomingMessageProcessor : WorkerIncomingMessageProcessor {
+    private class RecordingIncomingMessageProcessor : IncomingMessageProcessor {
         /**
          * Messages processed by this helper.
          */
@@ -148,7 +148,7 @@ class WorkerProtocolMessageRouterTest {
     /**
      * Deterministic message-id provider for stable protocol assertions.
      */
-    private class SequenceMessageIdProvider : WorkerMessageIdProvider {
+    private class SequenceMessageIdProvider : MessageIdProvider {
         /**
          * Internal counter used to produce stable increasing IDs.
          */

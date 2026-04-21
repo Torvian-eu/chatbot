@@ -2,6 +2,7 @@ package eu.torvian.chatbot.app.service.api
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.api.mcp.CreateLocalMCPServerRequest
+import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
 import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerConnectionResponse
@@ -107,5 +108,24 @@ interface LocalMCPServerApi {
      * @return Refresh summary payload returned by the backend.
      */
     suspend fun refreshTools(serverId: Long): Either<ApiResourceError, RefreshMCPToolsResponse>
+
+    /**
+     * Lists runtime statuses for all persisted Local MCP servers owned by the current user.
+     *
+     * Corresponds to `GET /api/v1/local-mcp-servers/runtime-statuses`.
+     *
+     * @return Runtime status snapshots returned by the backend.
+     */
+    suspend fun listRuntimeStatuses(): Either<ApiResourceError, List<LocalMcpServerRuntimeStatusDto>>
+
+    /**
+     * Reads runtime status for one persisted Local MCP server.
+     *
+     * Corresponds to `GET /api/v1/local-mcp-servers/{id}/runtime-status`.
+     *
+     * @param serverId Identifier of the server whose runtime status should be fetched.
+     * @return Runtime status snapshot returned by the backend.
+     */
+    suspend fun getRuntimeStatus(serverId: Long): Either<ApiResourceError, LocalMcpServerRuntimeStatusDto>
 }
 

@@ -5,6 +5,7 @@ import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.LocalMCPServerApi
 import eu.torvian.chatbot.common.api.resources.LocalMCPServerResource
 import eu.torvian.chatbot.common.models.api.mcp.CreateLocalMCPServerRequest
+import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
 import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerConnectionResponse
@@ -74,6 +75,16 @@ class KtorLocalMCPServerApiClient(client: HttpClient) : BaseApiResourceClient(cl
 
     override suspend fun refreshTools(serverId: Long): Either<ApiResourceError, RefreshMCPToolsResponse> = safeApiCall {
         client.post(LocalMCPServerResource.ById.RefreshTools(parent = byId(serverId))).body<RefreshMCPToolsResponse>()
+    }
+
+    override suspend fun listRuntimeStatuses(): Either<ApiResourceError, List<LocalMcpServerRuntimeStatusDto>> = safeApiCall {
+        client.get(LocalMCPServerResource.RuntimeStatuses()).body<List<LocalMcpServerRuntimeStatusDto>>()
+    }
+
+    override suspend fun getRuntimeStatus(
+        serverId: Long
+    ): Either<ApiResourceError, LocalMcpServerRuntimeStatusDto> = safeApiCall {
+        client.get(LocalMCPServerResource.ById.RuntimeStatus(parent = byId(serverId))).body<LocalMcpServerRuntimeStatusDto>()
     }
 
     /**

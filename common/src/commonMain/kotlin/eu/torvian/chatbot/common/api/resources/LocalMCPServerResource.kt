@@ -11,6 +11,14 @@ import io.ktor.resources.*
 @Resource("local-mcp-servers")
 class LocalMCPServerResource(val parent: Api = Api()) {
     /**
+     * Resource for listing runtime statuses for all Local MCP servers owned by the authenticated user.
+     *
+     * Endpoint: GET /api/v1/local-mcp-servers/runtime-statuses
+     */
+    @Resource("runtime-statuses")
+    class RuntimeStatuses(val parent: LocalMCPServerResource = LocalMCPServerResource())
+
+    /**
      * Transitional resource retained for compatibility with the previous API shape.
      */
     @Deprecated("Use LocalMCPServerResource root resource")
@@ -39,6 +47,14 @@ class LocalMCPServerResource(val parent: Api = Api()) {
      */
     @Resource("{id}")
     class ById(val parent: LocalMCPServerResource = LocalMCPServerResource(), val id: Long) {
+        /**
+         * Resource for reading runtime status for one Local MCP server.
+         *
+         * Endpoint: GET /api/v1/local-mcp-servers/{id}/runtime-status
+         */
+        @Resource("runtime-status")
+        class RuntimeStatus(val parent: ById)
+
         /**
          * Resource for starting server runtime execution.
          *

@@ -3,10 +3,17 @@ package eu.torvian.chatbot.common.models.api.worker.protocol.mapping
 import arrow.core.getOrElse
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerCommandResultStatuses
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolCommandTypes
+import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto
+import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRequestPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerControlErrorResultData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerRefreshToolsCommandData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerRefreshToolsResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpDiscoveredToolData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerGetRuntimeStatusCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerGetRuntimeStatusResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerListRuntimeStatusesCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerListRuntimeStatusesResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionCommandData
@@ -17,6 +24,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlin.time.Clock
 
 /**
  * Verifies MCP server-control specific worker protocol mapping helpers.
@@ -85,32 +93,37 @@ class WorkerMcpServerControlProtocolMappingsTest {
     }
 
     /**
-     * Ensures refresh-tools request and result data map correctly.
+     * Ensures discover-tools request and result data map correctly.
      */
     @Test
-    fun `refresh tools request and result data encode and decode`() {
-        val request = WorkerMcpServerRefreshToolsCommandData(serverId = 44L)
+    fun `discover tools request and result data encode and decode`() {
+        val request = WorkerMcpServerDiscoverToolsCommandData(serverId = 44L)
 
         val requestPayload = request.toWorkerCommandRequestPayload()
-            .getOrElse { error("Expected refresh-tools request mapping success: $it") }
+            .getOrElse { error("Expected discover-tools request mapping success: $it") }
 
-        assertEquals(WorkerProtocolCommandTypes.MCP_SERVER_REFRESH_TOOLS, requestPayload.commandType)
-        val decodedRequest = requestPayload.toWorkerMcpServerRefreshToolsCommandData()
-            .getOrElse { error("Expected refresh-tools request reverse mapping success: $it") }
+        assertEquals(WorkerProtocolCommandTypes.MCP_SERVER_DISCOVER_TOOLS, requestPayload.commandType)
+        val decodedRequest = requestPayload.toWorkerMcpServerDiscoverToolsCommandData()
+            .getOrElse { error("Expected discover-tools request reverse mapping success: $it") }
         assertEquals(request, decodedRequest)
 
-        val result = WorkerMcpServerRefreshToolsResultData(
+        val result = WorkerMcpServerDiscoverToolsResultData(
             serverId = 44L,
-            addedTools = emptyList(),
-            updatedTools = emptyList(),
-            deletedTools = emptyList()
+            tools = listOf(
+                WorkerMcpDiscoveredToolData(
+                    name = "search_files",
+                    description = "Searches local files",
+                    inputSchema = buildJsonObject { put("type", "object") },
+                    outputSchema = null
+                )
+            )
         )
         val resultPayload = result.toWorkerCommandResultPayload()
-            .getOrElse { error("Expected refresh-tools result mapping success: $it") }
+            .getOrElse { error("Expected discover-tools result mapping success: $it") }
 
-        val decodedResult = resultPayload.toWorkerMcpServerRefreshToolsResultData(
-            commandType = WorkerProtocolCommandTypes.MCP_SERVER_REFRESH_TOOLS
-        ).getOrElse { error("Expected refresh-tools result reverse mapping success: $it") }
+        val decodedResult = resultPayload.toWorkerMcpServerDiscoverToolsResultData(
+            commandType = WorkerProtocolCommandTypes.MCP_SERVER_DISCOVER_TOOLS
+        ).getOrElse { error("Expected discover-tools result reverse mapping success: $it") }
         assertEquals(result, decodedResult)
     }
 
@@ -151,7 +164,7 @@ class WorkerMcpServerControlProtocolMappingsTest {
             ifRight = { error("Expected command-type validation failure") }
         )
 
-        val invalidCommandType = assertIs<WorkerMcpServerControlProtocolMappingError.InvalidCommandType>(error)
+        val invalidCommandType = assertIs<WorkerMcpRuntimeCommandProtocolMappingError.InvalidCommandType>(error)
         assertEquals(WorkerProtocolCommandTypes.MCP_SERVER_START, invalidCommandType.expected)
         assertEquals(WorkerProtocolCommandTypes.TOOL_CALL, invalidCommandType.actual)
     }
@@ -171,7 +184,72 @@ class WorkerMcpServerControlProtocolMappingsTest {
             ifRight = { error("Expected malformed payload decoding to fail") }
         )
 
-        assertTrue(error is WorkerMcpServerControlProtocolMappingError.SerializationFailed)
+        assertTrue(error is WorkerMcpRuntimeCommandProtocolMappingError.SerializationFailed)
+    }
+
+    /**
+     * Ensures get-runtime-status request and result data map correctly.
+     */
+    @Test
+    fun `get runtime status request and result data encode and decode`() {
+        val now = Clock.System.now()
+        val request = WorkerMcpServerGetRuntimeStatusCommandData(serverId = 66L)
+
+        val requestPayload = request.toWorkerCommandRequestPayload()
+            .getOrElse { error("Expected get-runtime-status request mapping success: $it") }
+
+        assertEquals(WorkerProtocolCommandTypes.MCP_SERVER_GET_RUNTIME_STATUS, requestPayload.commandType)
+        val decodedRequest = requestPayload.toWorkerMcpServerGetRuntimeStatusCommandData()
+            .getOrElse { error("Expected get-runtime-status request reverse mapping success: $it") }
+        assertEquals(request, decodedRequest)
+
+        val result = WorkerMcpServerGetRuntimeStatusResultData(
+            status = LocalMcpServerRuntimeStatusDto(
+                serverId = 66L,
+                state = LocalMcpServerRuntimeStateDto.RUNNING,
+                connectedAt = now,
+                lastActivityAt = now
+            )
+        )
+        val resultPayload = result.toWorkerCommandResultPayload()
+            .getOrElse { error("Expected get-runtime-status result mapping success: $it") }
+
+        val decodedResult = resultPayload.toWorkerMcpServerGetRuntimeStatusResultData(
+            commandType = WorkerProtocolCommandTypes.MCP_SERVER_GET_RUNTIME_STATUS
+        ).getOrElse { error("Expected get-runtime-status result reverse mapping success: $it") }
+        assertEquals(result, decodedResult)
+    }
+
+    /**
+     * Ensures list-runtime-statuses request and result data map correctly.
+     */
+    @Test
+    fun `list runtime statuses request and result data encode and decode`() {
+        val request = WorkerMcpServerListRuntimeStatusesCommandData
+
+        val requestPayload = request.toWorkerCommandRequestPayload()
+            .getOrElse { error("Expected list-runtime-statuses request mapping success: $it") }
+
+        assertEquals(WorkerProtocolCommandTypes.MCP_SERVER_LIST_RUNTIME_STATUSES, requestPayload.commandType)
+        requestPayload.toWorkerMcpServerListRuntimeStatusesCommandData()
+            .getOrElse { error("Expected list-runtime-statuses request reverse mapping success: $it") }
+
+        val result = WorkerMcpServerListRuntimeStatusesResultData(
+            statuses = listOf(
+                LocalMcpServerRuntimeStatusDto(
+                    serverId = 77L,
+                    state = LocalMcpServerRuntimeStateDto.STOPPED,
+                    errorMessage = "worker disconnected"
+                )
+            )
+        )
+        val resultPayload = result.toWorkerCommandResultPayload()
+            .getOrElse { error("Expected list-runtime-statuses result mapping success: $it") }
+
+        val decodedResult = resultPayload.toWorkerMcpServerListRuntimeStatusesResultData(
+            commandType = WorkerProtocolCommandTypes.MCP_SERVER_LIST_RUNTIME_STATUSES
+        ).getOrElse { error("Expected list-runtime-statuses result reverse mapping success: $it") }
+        assertEquals(result, decodedResult)
     }
 }
 

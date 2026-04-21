@@ -60,6 +60,18 @@ sealed class TestConnectionError : LocalMCPServerManagerError {
             "Failed to discover tools from MCP server (ID: $serverId): ${discoverError.message}"
         override val cause: Any = discoverError
     }
+
+    /**
+     * Failed to execute server-owned runtime-control connection testing.
+     */
+    data class RuntimeControlFailed(
+        val serverId: Long,
+        val repositoryError: RepositoryError
+    ) : TestConnectionError() {
+        override val message: String =
+            "Failed to test MCP server connection through server runtime control (ID: $serverId): ${repositoryError.message}"
+        override val cause: Any = repositoryError
+    }
 }
 
 sealed class CreateServerError : LocalMCPServerManagerError {
@@ -128,6 +140,18 @@ sealed class RefreshToolsError : LocalMCPServerManagerError {
             "Failed to persist tool changes for MCP server (ID: $serverId): ${repositoryError.message}"
         override val cause: Any = repositoryError
     }
+
+    /**
+     * Failed to execute server-owned runtime-control tool refresh.
+     */
+    data class RuntimeControlFailed(
+        val serverId: Long,
+        val repositoryError: RepositoryError
+    ) : RefreshToolsError() {
+        override val message: String =
+            "Failed to refresh MCP server tools through server runtime control (ID: $serverId): ${repositoryError.message}"
+        override val cause: Any = repositoryError
+    }
 }
 
 sealed class ManageStartServerError : LocalMCPServerManagerError {
@@ -154,6 +178,18 @@ sealed class ManageStartServerError : LocalMCPServerManagerError {
             "Failed to start MCP server (ID: $serverId): ${startError.message}"
         override val cause: Any = startError
     }
+
+    /**
+     * Failed to execute server-owned runtime-control start operation.
+     */
+    data class RuntimeControlFailed(
+        val serverId: Long,
+        val repositoryError: RepositoryError
+    ) : ManageStartServerError() {
+        override val message: String =
+            "Failed to start MCP server through server runtime control (ID: $serverId): ${repositoryError.message}"
+        override val cause: Any = repositoryError
+    }
 }
 
 sealed class ManageStopServerError : LocalMCPServerManagerError {
@@ -167,6 +203,18 @@ sealed class ManageStopServerError : LocalMCPServerManagerError {
         override val message: String =
             "Failed to stop MCP server (ID: $serverId): ${stopError.message}"
         override val cause: Any = stopError
+    }
+
+    /**
+     * Failed to execute server-owned runtime-control stop operation.
+     */
+    data class RuntimeControlFailed(
+        val serverId: Long,
+        val repositoryError: RepositoryError
+    ) : ManageStopServerError() {
+        override val message: String =
+            "Failed to stop MCP server through server runtime control (ID: $serverId): ${repositoryError.message}"
+        override val cause: Any = repositoryError
     }
 }
 

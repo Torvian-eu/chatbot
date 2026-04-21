@@ -9,6 +9,8 @@ import eu.torvian.chatbot.common.api.resources.LocalMCPServerResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
 import eu.torvian.chatbot.common.models.api.mcp.CreateLocalMCPServerRequest
+import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto
+import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
 import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerConnectionResponse
@@ -279,6 +281,72 @@ class KtorLocalMCPServerApiClientTest {
                 assertEquals(0, result.value.addedTools.size)
                 assertEquals(0, result.value.updatedTools.size)
                 assertEquals(0, result.value.deletedTools.size)
+            }
+        }
+    }
+
+    /**
+     * Verifies parsing for runtime-status list responses.
+     */
+    @Test
+    fun `listRuntimeStatuses - success parses runtime status list`() = runTest {
+        val payload = listOf(
+            LocalMcpServerRuntimeStatusDto(
+                serverId = 42L,
+                state = LocalMcpServerRuntimeStateDto.RUNNING,
+                pid = 2001L,
+                connectedAt = now,
+                lastActivityAt = now
+            )
+        )
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Get, request.method)
+            assertEquals(href(LocalMCPServerResource.RuntimeStatuses()), request.url.encodedPath)
+            respond(
+                content = json.encodeToString(payload),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+
+        val api = createTestClient(mockEngine)
+        when (val result = api.listRuntimeStatuses()) {
+            is Either.Left -> fail("Expected success but got ${result.value}")
+            is Either.Right -> {
+                assertEquals(1, result.value.size)
+                assertEquals(LocalMcpServerRuntimeStateDto.RUNNING, result.value.single().state)
+            }
+        }
+    }
+
+    /**
+     * Verifies parsing for single runtime-status responses.
+     */
+    @Test
+    fun `getRuntimeStatus - success parses runtime status payload`() = runTest {
+        val byId = LocalMCPServerResource.ById(id = 42L)
+        val payload = LocalMcpServerRuntimeStatusDto(
+            serverId = 42L,
+            state = LocalMcpServerRuntimeStateDto.STOPPED,
+            errorMessage = "worker disconnected"
+        )
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Get, request.method)
+            assertEquals(href(LocalMCPServerResource.ById.RuntimeStatus(parent = byId)), request.url.encodedPath)
+            respond(
+                content = json.encodeToString(payload),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+
+        val api = createTestClient(mockEngine)
+        when (val result = api.getRuntimeStatus(serverId = 42L)) {
+            is Either.Left -> fail("Expected success but got ${result.value}")
+            is Either.Right -> {
+                assertEquals(42L, result.value.serverId)
+                assertEquals(LocalMcpServerRuntimeStateDto.STOPPED, result.value.state)
+                assertEquals("worker disconnected", result.value.errorMessage)
             }
         }
     }

@@ -66,6 +66,26 @@ fun Route.configureLocalMCPServerRoutes(
             call.respondEither(result)
         }
 
+        get<LocalMCPServerResource.RuntimeStatuses> {
+            val userId = call.getUserId()
+            val result = either {
+                withError({ error: LocalMCPRuntimeControlError -> error.toApiError() }) {
+                    localMCPRuntimeControlService.listRuntimeStatuses(userId).bind()
+                }
+            }
+            call.respondEither(result)
+        }
+
+        get<LocalMCPServerResource.ById.RuntimeStatus> { resource ->
+            val userId = call.getUserId()
+            val result = either {
+                withError({ error: LocalMCPRuntimeControlError -> error.toApiError() }) {
+                    localMCPRuntimeControlService.getRuntimeStatus(userId, resource.parent.id).bind()
+                }
+            }
+            call.respondEither(result)
+        }
+
         put<LocalMCPServerResource.ById> { resource ->
             val userId = call.getUserId()
             val request = call.receive<UpdateLocalMCPServerRequest>()

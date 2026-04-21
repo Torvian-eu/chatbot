@@ -136,16 +136,10 @@ interface LocalMCPServerManager {
     ): Either<CreateServerError, LocalMCPServerDto>
 
     /**
-     * Tests connection to an existing MCP server and returns the count of discovered tools.
+     * Tests connection to an existing MCP server through server-owned runtime control.
      *
-     * This operation:
-     * 1. Gets config from LocalMCPServerRepository
-     * 2. Calls MCPClientService to start and connect (if not already connected)
-     * 3. Discovers tools via MCPClientService
-     * 4. Stops the server (if started by this operation)
-     * 5. Returns success/failure with tool count
-     *
-     * Tools are NOT persisted during testing.
+     * Runtime execution ownership for this operation is server-side; this manager delegates
+     * to repository/API wiring and returns the discovered tool count from the server response.
      *
      * @param serverId The ID of the MCP server to test
      * @return Either.Right with tool count on success, or Either.Left with TestConnectionError on failure
@@ -153,15 +147,10 @@ interface LocalMCPServerManager {
     suspend fun testConnection(serverId: Long): Either<TestConnectionError, Int>
 
     /**
-     * Refreshes tools from an MCP server by comparing with existing tools.
+     * Refreshes tools for an MCP server through server-owned runtime control.
      *
-     * This operation:
-     * 1. Gets config from LocalMCPServerRepository
-     * 2. Calls MCPClientService to start and connect (if not already connected)
-     * 3. Discovers tools via MCPClientService
-     * 4. Calls LocalMCPToolRepository to refresh tools (repository handles comparison and API call)
-     * 5. Stops the server (if started by this operation)
-     * 6. Returns refresh summary
+     * Runtime execution ownership for this operation is server-side; this manager delegates
+     * to repository/API wiring and returns the server response.
      *
      * @param serverId The ID of the MCP server
      * @return Either.Right with refresh summary on success, or Either.Left with RefreshToolsError on failure
@@ -169,14 +158,7 @@ interface LocalMCPServerManager {
     suspend fun refreshTools(serverId: Long): Either<RefreshToolsError, RefreshMCPToolsResponse>
 
     /**
-     * Starts an MCP server process and connects the MCP SDK client.
-     *
-     * This operation:
-     * 1. Gets config from LocalMCPServerRepository
-     * 2. Calls MCPClientService to start and connect
-     * 3. If no tools exist yet for this server, automatically triggers [refreshTools]
-     *    to populate the tool list (e.g. for newly created servers that have never been started).
-     *    A failure in this auto-discovery step is logged as a warning but does not fail the start.
+     * Starts MCP runtime execution through server-owned runtime control.
      *
      * @param serverId The ID of the MCP server to start
      * @return Either.Right with Unit on success, or Either.Left with ManageStartServerError on failure
@@ -184,10 +166,7 @@ interface LocalMCPServerManager {
     suspend fun startServer(serverId: Long): Either<ManageStartServerError, Unit>
 
     /**
-     * Stops an MCP server process and disconnects the MCP SDK client.
-     *
-     * This operation:
-     * 1. Calls MCPClientService to stop
+     * Stops MCP runtime execution through server-owned runtime control.
      *
      * @param serverId The ID of the MCP server to stop
      * @return Either.Right with Unit on success, or Either.Left with ManageStopServerError on failure
