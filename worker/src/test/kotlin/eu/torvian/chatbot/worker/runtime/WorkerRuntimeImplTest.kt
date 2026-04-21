@@ -39,8 +39,8 @@ class WorkerRuntimeImplTest {
     }
 
     @Test
-    fun `runtime propagates auth errors returned by connection loop`() = runTest {
-        val expectedError = WorkerAuthManagerError.BlankChallengePayload
+    fun `runtime propagates runtime errors returned by connection loop`() = runTest {
+        val expectedError = WorkerRuntimeError.Auth(WorkerAuthManagerError.BlankChallengePayload)
         val loop = RecordingConnectionLoop(Either.Left(expectedError))
         val mcpClientService = RecordingMcpClientService()
         val runtime = WorkerRuntimeImpl(
@@ -74,13 +74,25 @@ class WorkerRuntimeImplTest {
         assertEquals(1, mcpClientService.closeCalls)
     }
 
+    /**
+     * Records connection loop invocations for test assertion.
+     *
+     * @property result Pre-configured result to return from run calls.
+     */
     private class RecordingConnectionLoop(
-        private val result: Either<WorkerAuthManagerError, Unit>
+        private val result: Either<WorkerRuntimeError, Unit>
     ) : TransportConnectionLoopRunner {
+        /**
+         * Number of times run was called.
+         */
         var calls: Int = 0
+
+        /**
+         * The last runOnce flag value passed to run.
+         */
         var lastRunOnce: Boolean? = null
 
-        override suspend fun run(runOnce: Boolean): Either<WorkerAuthManagerError, Unit> {
+        override suspend fun run(runOnce: Boolean): Either<WorkerRuntimeError, Unit> {
             calls += 1
             lastRunOnce = runOnce
             return result
@@ -118,7 +130,7 @@ class WorkerRuntimeImplTest {
         override fun isClientConnected(serverId: Long): Boolean =
             error("Not used in WorkerRuntimeImplTest")
 
-        override fun getConnectionStatus(serverId: Long): McpClientConnectionStatus? =
+        override fun getConnectionStatus(serverId: Long): McpClientConnectionStatus =
             error("Not used in WorkerRuntimeImplTest")
 
         override suspend fun close() {

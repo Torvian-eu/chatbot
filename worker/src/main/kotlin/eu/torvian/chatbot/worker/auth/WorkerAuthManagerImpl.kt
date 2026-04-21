@@ -40,19 +40,43 @@ class WorkerAuthManagerImpl(
      */
     private val authMutex = Mutex()
 
+    /**
+     * In-memory cache of the last-loaded or last-issued service token.
+     *
+     * Used to avoid repeated disk reads for the common case of repeated `getValidToken()` calls
+     * within the token's validity window. Cleared when:
+     * - `forceReauthenticate()` is called (to force fresh auth)
+     * - Disk token corruption is detected and recovered (to prevent stale state)
+     *
+     * Access is thread-safe under the [authMutex] lock during critical sections.
+     */
+    @Volatile
+    private var cachedToken: StoredServiceToken? = null
+
     override
     suspend fun getValidToken(): Either<WorkerAuthManagerError, StoredServiceToken> = either {
-        val existing = loadCachedTokenRecoveringCorruption().bind()
-        if (existing != null && !shouldRefresh(existing)) {
-            logger.debug("Using cached worker token (workerUid={})", workerUid)
-            return@either existing
+        // Fast path: check in-memory cache first to avoid disk access.
+        val inMemory = cachedToken
+        if (inMemory != null && !shouldRefresh(inMemory)) {
+            logger.debug("Using in-memory cached worker token (workerUid={})", workerUid)
+            return@either inMemory
         }
 
+        // Slow path: acquire lock to safely load from disk or authenticate.
+        // This ensures concurrent callers do not redundantly read from disk.
         authMutex.withLock {
             either<WorkerAuthManagerError, StoredServiceToken> {
+                // Re-check in-memory cache under lock in case another caller just populated it.
+                val reloadedInMemory = cachedToken
+                if (reloadedInMemory != null && !shouldRefresh(reloadedInMemory)) {
+                    logger.debug("Using in-memory cached worker token after lock re-check (workerUid={})", workerUid)
+                    return@either reloadedInMemory
+                }
+
                 val reloaded = loadCachedTokenRecoveringCorruption().bind()
                 if (reloaded != null && !shouldRefresh(reloaded)) {
-                    logger.debug("Using cached worker token after lock re-check (workerUid={})", workerUid)
+                    logger.debug("Using disk-backed cached worker token after lock re-check (workerUid={})", workerUid)
+                    cachedToken = reloaded
                     reloaded
                 } else {
                     logger.info("Cached worker token missing or expired; starting challenge flow (workerUid={})", workerUid)
@@ -67,6 +91,8 @@ class WorkerAuthManagerImpl(
         authMutex.withLock {
             either {
                 logger.info("Forcing worker re-authentication (workerUid={})", workerUid)
+                // Clear both in-memory and persisted token state to force fresh challenge flow.
+                cachedToken = null
                 tokenStore.clear().mapLeft { WorkerAuthManagerError.TokenStore(it) }.bind()
                 authenticateWithChallengeFlow().bind()
             }
@@ -76,6 +102,9 @@ class WorkerAuthManagerImpl(
     /**
      * Loads the cached token and treats corruption as recoverable by clearing the cache once.
      *
+     * When corruption is detected, clears both the in-memory cache and persisted store to ensure
+     * no stale token state survives recovery.
+     *
      * @return Either a token-store/auth-manager logical error or the cached token (or `null` if absent/reset).
      */
     private suspend fun loadCachedTokenRecoveringCorruption(): Either<WorkerAuthManagerError, StoredServiceToken?> {
@@ -84,7 +113,9 @@ class WorkerAuthManagerImpl(
             is Either.Left -> {
                 val error = loadResult.value
                 if (error is ServiceTokenStoreError.TokenCacheCorrupt) {
-                            logger.warn("Worker token cache is corrupt; clearing and reauthenticating (workerUid={})", workerUid)
+                    logger.warn("Worker token cache is corrupt; clearing in-memory and persisted state (workerUid={})", workerUid)
+                    // Clear in-memory cache first to ensure stale state cannot survive recovery.
+                    cachedToken = null
                     tokenStore.clear()
                         .mapLeft { WorkerAuthManagerError.TokenStore(it) }
                         .map { null }
@@ -145,6 +176,8 @@ class WorkerAuthManagerImpl(
         )
         tokenStore.save(storedToken).mapLeft { WorkerAuthManagerError.TokenStore(it) }.bind()
         logger.info("Stored new worker token (workerUid={}, expiresAt={})", workerUid, storedToken.expiresAt)
+        // Populate in-memory cache with the newly issued token.
+        cachedToken = storedToken
         storedToken
     }
 

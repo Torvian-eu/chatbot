@@ -155,7 +155,7 @@ class WorkerMain(
         val runtime = koin.get<WorkerRuntime>()
         try {
             logger.info("Worker HTTP client initialized for {}", config.serverBaseUrl)
-            runtime.run(options.runOnce).mapLeft { WorkerMainError.Auth(it) }.bind()
+            runtime.run(options.runOnce).mapLeft { WorkerMainError.Runtime(it) }.bind()
         } finally {
             runtime.close()
             httpClient.close()

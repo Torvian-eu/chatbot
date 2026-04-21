@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.worker.main
 
-import eu.torvian.chatbot.worker.auth.WorkerAuthManagerError
 import eu.torvian.chatbot.worker.config.WorkerConfigError
+import eu.torvian.chatbot.worker.runtime.WorkerRuntimeError
 import eu.torvian.chatbot.worker.setup.WorkerSetupError
 
 /**
@@ -31,11 +31,13 @@ sealed interface WorkerMainError {
     data class SecretsReadFailed(val path: String, val reason: String) : WorkerMainError
 
     /**
-     * Wraps an auth flow error that occurred while bootstrapping the worker.
+     * Wraps a worker runtime error that occurred during operation.
      *
-     * @property error The underlying worker auth orchestration error.
+     * Can represent either auth failures or assigned-config bootstrap failures.
+     *
+     * @property error The underlying worker runtime orchestration error.
      */
-    data class Auth(val error: WorkerAuthManagerError) : WorkerMainError
+    data class Runtime(val error: WorkerRuntimeError) : WorkerMainError
 
     /**
      * Wraps a setup flow error that occurred while preparing initial configuration.
