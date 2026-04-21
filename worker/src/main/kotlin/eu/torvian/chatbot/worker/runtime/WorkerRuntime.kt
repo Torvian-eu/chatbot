@@ -1,7 +1,6 @@
 package eu.torvian.chatbot.worker.runtime
 
 import arrow.core.Either
-import eu.torvian.chatbot.worker.auth.WorkerAuthManagerError
 
 /**
  * Orchestrates worker runtime behavior after process bootstrap has completed.
@@ -11,10 +10,17 @@ interface WorkerRuntime {
     /**
      * Runs the main worker loop, performing authentication and other startup tasks as needed.
      *
+     * Handles:
+     * - Worker authentication and token lifecycle
+     * - Assigned configuration bootstrap
+     * - WebSocket session management
+     * - Reconnection with backoff
+     *
      * @param runOnce If `true`, performs a single authentication attempt and exits; otherwise, runs indefinitely.
-     * @return Either a logical runtime error or `Unit` on successful completion.
+     * @return Either a worker runtime error (auth or bootstrap failure) or `Unit` on successful completion.
+     *         In runOnce mode, any startup failure is returned as a Left.
      */
-    suspend fun run(runOnce: Boolean): Either<WorkerAuthManagerError, Unit>
+    suspend fun run(runOnce: Boolean): Either<WorkerRuntimeError, Unit>
 
     /**
      * Releases runtime-owned resources during worker shutdown.

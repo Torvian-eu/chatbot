@@ -1,7 +1,6 @@
 package eu.torvian.chatbot.worker.runtime
 
 import arrow.core.Either
-import eu.torvian.chatbot.worker.auth.WorkerAuthManagerError
 import eu.torvian.chatbot.worker.mcp.McpClientService
 import eu.torvian.chatbot.worker.protocol.transport.TransportConnectionLoopRunner
 import org.apache.logging.log4j.LogManager
@@ -30,7 +29,7 @@ class WorkerRuntimeImpl(
         private val logger: Logger = LogManager.getLogger(WorkerRuntimeImpl::class.java)
     }
 
-    override suspend fun run(runOnce: Boolean): Either<WorkerAuthManagerError, Unit> {
+    override suspend fun run(runOnce: Boolean): Either<WorkerRuntimeError, Unit> {
         logger.info("Starting worker runtime transport loop (workerUid={}, runOnce={})", workerUid, runOnce)
         return connectionLoop.run(runOnce = runOnce)
     }

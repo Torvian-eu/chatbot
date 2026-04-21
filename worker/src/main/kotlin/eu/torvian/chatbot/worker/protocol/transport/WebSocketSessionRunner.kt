@@ -18,19 +18,55 @@ import org.apache.logging.log4j.Logger
 /**
  * Runs one authenticated worker WebSocket session lifecycle.
  *
- * @property client Ktor client configured with WebSockets support.
- * @property transportConfig Immutable settings for endpoint and hello payload metadata.
- * @property codec Text-frame codec for worker protocol envelopes.
- * @property outboundEmitterHolder Mutable outbound bridge bound to the active session sender.
- * @property helloStarter Hello interaction launcher invoked after transport binding.
- * @property incomingMessageProcessor Processor that handles decoded inbound envelopes.
+ * Responsibility: manage one websocket connection and session frame processing.
+ *
+ * Does NOT handle:
+ * - REST bootstrap (delegated to connection loop)
+ * - auth/retry logic (delegated to authenticated request executor)
+ * - reconnect/backoff (delegated to connection loop)
  */
 class WebSocketSessionRunner(
+    /**
+     * Ktor client configured with WebSockets support.
+     *
+     * Used to open the WebSocket connection with bearer authentication.
+     */
     private val client: HttpClient,
+
+    /**
+     * Immutable settings for endpoint and hello payload metadata.
+     *
+     * Provides the WebSocket URL, worker UID, capabilities, protocol versions, and worker version.
+     */
     private val transportConfig: WebSocketTransportConfig,
+
+    /**
+     * Text-frame codec for worker protocol envelopes.
+     *
+     * Encodes outbound messages and decodes inbound frames.
+     */
     private val codec: WebSocketMessageCodec,
+
+    /**
+     * Mutable outbound bridge bound to the active session sender.
+     *
+     * Initialized with the websocket sender when connection opens;
+     * cleared when connection closes.
+     */
     private val outboundEmitterHolder: OutboundMessageEmitterHolder,
+
+    /**
+     * Hello interaction launcher invoked after transport binding.
+     *
+     * Starts the session handshake with server-provided metadata.
+     */
     private val helloStarter: HelloStarter,
+
+    /**
+     * Processor that handles decoded inbound envelopes.
+     *
+     * Routes incoming protocol messages to appropriate handlers.
+     */
     private val incomingMessageProcessor: IncomingMessageProcessor
 ) {
     /**
@@ -46,11 +82,13 @@ class WebSocketSessionRunner(
                 url(transportConfig.webSocketUrl)
                 bearerAuth(accessToken)
             }) {
+                logger.debug("WebSocket transport binding: setting up outbound message emitter")
                 outboundEmitterHolder.bind { message ->
+                    logger.debug("Sending outbound worker protocol message (type={})", message.type)
                     send(Frame.Text(codec.encode(message)))
                 }
 
-                logger.info("Worker WebSocket connected")
+                logger.info("Worker WebSocket connected and ready for communication")
                 when (
                     val helloResult = helloStarter.start(
                         workerUid = transportConfig.workerUid,
@@ -122,6 +160,9 @@ class WebSocketSessionRunner(
     companion object {
         /**
          * Logger used for worker transport lifecycle diagnostics.
+         *
+         * Logs socket opening/closing, frame transmission, hello handshake progress,
+         * inbound message processing, and transport errors.
          */
         private val logger: Logger = LogManager.getLogger(WebSocketSessionRunner::class.java)
     }

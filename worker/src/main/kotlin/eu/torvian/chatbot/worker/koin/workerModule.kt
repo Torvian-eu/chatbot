@@ -2,6 +2,7 @@ package eu.torvian.chatbot.worker.koin
 
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolCommandTypes
 import eu.torvian.chatbot.worker.auth.ChallengeSigner
+import eu.torvian.chatbot.worker.auth.DefaultWorkerAuthenticatedRequestExecutor
 import eu.torvian.chatbot.worker.auth.FileServiceTokenStore
 import eu.torvian.chatbot.worker.auth.KtorWorkerAuthApi
 import eu.torvian.chatbot.worker.auth.PemChallengeSigner
@@ -9,6 +10,7 @@ import eu.torvian.chatbot.worker.auth.ServiceTokenStore
 import eu.torvian.chatbot.worker.auth.WorkerAuthApi
 import eu.torvian.chatbot.worker.auth.WorkerAuthManager
 import eu.torvian.chatbot.worker.auth.WorkerAuthManagerImpl
+import eu.torvian.chatbot.worker.auth.WorkerAuthenticatedRequestExecutor
 import eu.torvian.chatbot.worker.config.WorkerRuntimeConfig
 import eu.torvian.chatbot.worker.mcp.InMemoryMcpServerConfigStore
 import eu.torvian.chatbot.worker.mcp.JvmMcpProcessManager
@@ -22,6 +24,9 @@ import eu.torvian.chatbot.worker.mcp.McpRuntimeCommandExecutor
 import eu.torvian.chatbot.worker.mcp.McpRuntimeCommandExecutorImpl
 import eu.torvian.chatbot.worker.mcp.McpToolCallExecutor
 import eu.torvian.chatbot.worker.mcp.McpToolCallExecutorImpl
+import eu.torvian.chatbot.worker.mcp.api.AssignedConfigBootstrapper
+import eu.torvian.chatbot.worker.mcp.api.KtorWorkerMcpServerApi
+import eu.torvian.chatbot.worker.mcp.api.WorkerMcpServerApi
 import eu.torvian.chatbot.worker.protocol.factory.McpRuntimeCommandInteractionFactory
 import eu.torvian.chatbot.worker.protocol.factory.McpToolCallInteractionFactory
 import eu.torvian.chatbot.worker.protocol.factory.ToolCallInteractionFactory
@@ -98,6 +103,23 @@ fun workerModule(
     single<CoroutineScope> { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
     single<McpServerConfigStore> { InMemoryMcpServerConfigStore() }
     single<McpProcessManager> { JvmMcpProcessManager() }
+    single<WorkerAuthenticatedRequestExecutor> {
+        DefaultWorkerAuthenticatedRequestExecutor(
+            authManager = get()
+        )
+    }
+    single<WorkerMcpServerApi> {
+        KtorWorkerMcpServerApi(
+            client = get(),
+            authenticatedRequestExecutor = get()
+        )
+    }
+    single<AssignedConfigBootstrapper> {
+        AssignedConfigBootstrapper(
+            mcpServerApi = get(),
+            configStore = get()
+        )
+    }
     single<McpClientService> { McpClientServiceImpl(processManager = get()) }
     single<McpRuntimeService> {
         McpRuntimeServiceImpl(
@@ -133,6 +155,7 @@ fun workerModule(
         WebSocketConnectionLoop(
             authManager = get(),
             sessionRunner = get(),
+            bootstrapper = get(),
             transportConfig = get()
         )
     }
