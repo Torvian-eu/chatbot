@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.worker.mcp
 
 import arrow.core.Either
+import arrow.core.right
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallRequest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -15,14 +16,14 @@ import kotlin.test.assertTrue
 class WorkerToolCallExecutorImplTest {
 
     /**
-     * Verifies that malformed request JSON is mapped to a logical result error and does not hit the gateway.
+     * Verifies that malformed request JSON is mapped to a logical result error and does not hit the runtime service.
      */
     @Test
-    fun `malformed json returns logical error without gateway call`() = kotlinx.coroutines.test.runTest {
-        val gateway = RecordingGateway(
+    fun `malformed json returns logical error without runtime service call`() = kotlinx.coroutines.test.runTest {
+        val runtimeService = RecordingRuntimeService(
             result = Either.Right(WorkerMcpToolCallOutcome(isError = false, textContent = "ok"))
         )
-        val executor = WorkerToolCallExecutorImpl(gateway = gateway, json = Json { ignoreUnknownKeys = true })
+        val executor = WorkerToolCallExecutorImpl(runtimeService = runtimeService, json = Json { ignoreUnknownKeys = true })
 
         val result = executor.execute(
             LocalMCPToolCallRequest(
@@ -35,26 +36,30 @@ class WorkerToolCallExecutorImplTest {
 
         assertTrue(result.isError)
         assertTrue(result.errorMessage?.contains("Malformed JSON input") == true)
-        assertEquals(0, gateway.callCount)
+        assertEquals(0, runtimeService.callCount)
     }
 
     /**
-     * Verifies that gateway-level logical errors are propagated as tool-call errors.
+     * Verifies that runtime-level logical errors are propagated as tool-call errors.
      */
     @Test
-    fun `gateway error becomes tool call error result`() = kotlinx.coroutines.test.runTest {
-        val gateway = RecordingGateway(
+    fun `runtime error becomes tool call error result`() = kotlinx.coroutines.test.runTest {
+        val runtimeService = RecordingRuntimeService(
             result = Either.Left(
-                WorkerMcpToolCallGatewayError.InvocationFailed("Tool process not reachable")
+                WorkerLocalMcpRuntimeError.ToolCallFailed(
+                    serverId = 10,
+                    toolName = "searchDocs",
+                    message = "Tool process not reachable"
+                )
             )
         )
-        val executor = WorkerToolCallExecutorImpl(gateway = gateway, json = Json { ignoreUnknownKeys = true })
+        val executor = WorkerToolCallExecutorImpl(runtimeService = runtimeService, json = Json { ignoreUnknownKeys = true })
 
         val result = executor.execute(validRequest())
 
         assertTrue(result.isError)
         assertEquals("Tool process not reachable", result.errorMessage)
-        assertEquals(1, gateway.callCount)
+        assertEquals(1, runtimeService.callCount)
     }
 
     /**
@@ -62,7 +67,7 @@ class WorkerToolCallExecutorImplTest {
      */
     @Test
     fun `successful outcome returns text output`() = kotlinx.coroutines.test.runTest {
-        val gateway = RecordingGateway(
+        val runtimeService = RecordingRuntimeService(
             result = Either.Right(
                 WorkerMcpToolCallOutcome(
                     isError = false,
@@ -70,13 +75,13 @@ class WorkerToolCallExecutorImplTest {
                 )
             )
         )
-        val executor = WorkerToolCallExecutorImpl(gateway = gateway, json = Json { ignoreUnknownKeys = true })
+        val executor = WorkerToolCallExecutorImpl(runtimeService = runtimeService, json = Json { ignoreUnknownKeys = true })
 
         val result = executor.execute(validRequest())
 
         assertFalse(result.isError)
         assertEquals("{\"items\":[\"ktor\"]}", result.output)
-        assertEquals(1, gateway.callCount)
+        assertEquals(1, runtimeService.callCount)
     }
 
     /**
@@ -84,7 +89,7 @@ class WorkerToolCallExecutorImplTest {
      */
     @Test
     fun `error outcome maps structured content to error message`() = kotlinx.coroutines.test.runTest {
-        val gateway = RecordingGateway(
+        val runtimeService = RecordingRuntimeService(
             result = Either.Right(
                 WorkerMcpToolCallOutcome(
                     isError = true,
@@ -92,23 +97,23 @@ class WorkerToolCallExecutorImplTest {
                 )
             )
         )
-        val executor = WorkerToolCallExecutorImpl(gateway = gateway, json = Json { ignoreUnknownKeys = true })
+        val executor = WorkerToolCallExecutorImpl(runtimeService = runtimeService, json = Json { ignoreUnknownKeys = true })
 
         val result = executor.execute(validRequest())
 
         assertTrue(result.isError)
         assertEquals("{\"code\":\"TOOL_TIMEOUT\"}", result.errorMessage)
-        assertEquals(1, gateway.callCount)
+        assertEquals(1, runtimeService.callCount)
     }
 
     /**
-     * Simple recording gateway used for deterministic executor tests.
+     * Simple recording runtime service used for deterministic executor tests.
      *
-     * @property result Invocation result returned by each call.
+     * @property result Invocation result returned by each callTool call.
      */
-    private class RecordingGateway(
-        private val result: Either<WorkerMcpToolCallGatewayError, WorkerMcpToolCallOutcome?>
-    ) : WorkerMcpToolCallGateway {
+    private class RecordingRuntimeService(
+        private val result: Either<WorkerLocalMcpRuntimeError, WorkerMcpToolCallOutcome?>
+    ) : WorkerLocalMcpRuntimeService {
 
         /**
          * Number of times [callTool] was invoked.
@@ -127,10 +132,27 @@ class WorkerToolCallExecutorImplTest {
             serverId: Long,
             toolName: String,
             arguments: JsonObject
-        ): Either<WorkerMcpToolCallGatewayError, WorkerMcpToolCallOutcome?> {
+        ): Either<WorkerLocalMcpRuntimeError, WorkerMcpToolCallOutcome?> {
             callCount++
             return result
         }
+
+        // Stub implementations for other runtime service methods (not used in tests)
+        override suspend fun startServer(serverId: Long): Either<WorkerLocalMcpRuntimeError, Unit> =
+            Unit.right()
+        override suspend fun stopServer(serverId: Long): Either<WorkerLocalMcpRuntimeError, Unit> =
+            Unit.right()
+        override suspend fun testConnection(serverId: Long): Either<WorkerLocalMcpRuntimeError, WorkerLocalMcpTestConnectionOutcome> =
+            WorkerLocalMcpTestConnectionOutcome(0).right()
+        override suspend fun discoverTools(serverId: Long): Either<WorkerLocalMcpRuntimeError, List<WorkerLocalMcpDiscoveredTool>> =
+            emptyList<WorkerLocalMcpDiscoveredTool>().right()
+        override suspend fun getRuntimeStatus(serverId: Long): Either<WorkerLocalMcpRuntimeError, eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto> =
+            eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto(
+                serverId = serverId,
+                state = eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto.STOPPED
+            ).right()
+        override suspend fun listRuntimeStatuses(): List<eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto> =
+            emptyList()
     }
 
     /**

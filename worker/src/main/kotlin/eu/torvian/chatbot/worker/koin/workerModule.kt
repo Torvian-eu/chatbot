@@ -12,7 +12,6 @@ import eu.torvian.chatbot.worker.auth.WorkerAuthManagerImpl
 import eu.torvian.chatbot.worker.config.WorkerRuntimeConfig
 import eu.torvian.chatbot.worker.mcp.InMemoryWorkerLocalMcpServerConfigStore
 import eu.torvian.chatbot.worker.mcp.JvmWorkerLocalMcpProcessManager
-import eu.torvian.chatbot.worker.mcp.NotConfiguredWorkerMcpToolCallGateway
 import eu.torvian.chatbot.worker.mcp.WorkerLocalMcpRuntimeService
 import eu.torvian.chatbot.worker.mcp.WorkerLocalMcpRuntimeServiceImpl
 import eu.torvian.chatbot.worker.mcp.WorkerLocalMcpServerConfigStore
@@ -21,7 +20,6 @@ import eu.torvian.chatbot.worker.mcp.WorkerMcpClientService
 import eu.torvian.chatbot.worker.mcp.WorkerMcpClientServiceImpl
 import eu.torvian.chatbot.worker.mcp.WorkerMcpServerControlCommandExecutor
 import eu.torvian.chatbot.worker.mcp.WorkerMcpServerControlCommandExecutorImpl
-import eu.torvian.chatbot.worker.mcp.WorkerMcpToolCallGateway
 import eu.torvian.chatbot.worker.mcp.WorkerToolCallExecutor
 import eu.torvian.chatbot.worker.mcp.WorkerToolCallExecutorImpl
 import eu.torvian.chatbot.worker.protocol.factory.WorkerMcpServerControlInteractionFactory
@@ -98,8 +96,6 @@ fun workerModule(
     single<WorkerMessageIdProvider> { UuidWorkerMessageIdProvider() }
     single<WorkerInteractionIdProvider> { UuidWorkerInteractionIdProvider() }
     single<CoroutineScope> { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
-    single<WorkerMcpToolCallGateway> { NotConfiguredWorkerMcpToolCallGateway() }
-    single<WorkerToolCallExecutor> { WorkerToolCallExecutorImpl(gateway = get(), json = get()) }
     single<WorkerLocalMcpServerConfigStore> { InMemoryWorkerLocalMcpServerConfigStore() }
     single<WorkerLocalMcpProcessManager> { JvmWorkerLocalMcpProcessManager() }
     single<WorkerMcpClientService> { WorkerMcpClientServiceImpl(processManager = get()) }
@@ -110,6 +106,7 @@ fun workerModule(
             processManager = get()
         )
     }
+    single<WorkerToolCallExecutor> { WorkerToolCallExecutorImpl(runtimeService = get(), json = get()) }
     single<WorkerMcpServerControlCommandExecutor> {
         WorkerMcpServerControlCommandExecutorImpl(runtimeService = get())
     }

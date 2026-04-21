@@ -56,6 +56,23 @@ interface WorkerLocalMcpRuntimeService {
      * @return Runtime status snapshots keyed by assignment membership.
      */
     suspend fun listRuntimeStatuses(): List<LocalMcpServerRuntimeStatusDto>
+
+    /**
+     * Calls a tool on a configured local MCP server.
+     *
+     * Handles server config resolution, ensures runtime/client connection exists,
+     * invokes the tool through MCP SDK, and maps the result to a runtime-level outcome.
+     *
+     * @param serverId Persisted local MCP server identifier.
+     * @param toolName MCP tool name to invoke.
+     * @param arguments JSON argument object passed to the tool.
+     * @return Either runtime error or tool-call outcome.
+     */
+    suspend fun callTool(
+        serverId: Long,
+        toolName: String,
+        arguments: JsonObject
+    ): Either<WorkerLocalMcpRuntimeError, WorkerMcpToolCallOutcome?>
 }
 
 /**
@@ -197,6 +214,26 @@ sealed interface WorkerLocalMcpRuntimeError {
          * Stable machine-readable runtime error code.
          */
         override val code: String = "CLEANUP_FAILED"
+    }
+
+    /**
+     * Tool-call execution failed.
+     *
+     * @property serverId Persisted local MCP server identifier.
+     * @property toolName Requested MCP tool name.
+     * @property message Human-readable runtime error message.
+     * @property details Optional diagnostics.
+     */
+    data class ToolCallFailed(
+        val serverId: Long,
+        val toolName: String,
+        override val message: String,
+        override val details: String? = null
+    ) : WorkerLocalMcpRuntimeError {
+        /**
+         * Stable machine-readable runtime error code.
+         */
+        override val code: String = "TOOL_CALL_FAILED"
     }
 }
 

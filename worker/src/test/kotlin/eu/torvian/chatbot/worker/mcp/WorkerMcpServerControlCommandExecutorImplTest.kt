@@ -14,6 +14,7 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpSer
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionCommandData
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlin.test.Test
@@ -240,6 +241,19 @@ class WorkerMcpServerControlCommandExecutorImplTest {
          * @return Configured fixture runtime-status list.
          */
         override suspend fun listRuntimeStatuses(): List<LocalMcpServerRuntimeStatusDto> = listRuntimeStatusesResult
+
+        /**
+         * @param serverId Persisted local MCP server identifier.
+         * @param toolName MCP tool name to invoke.
+         * @param arguments JSON argument object passed to the tool.
+         * @return Always returns empty success outcome (not used in these tests).
+         */
+        override suspend fun callTool(
+            serverId: Long,
+            toolName: String,
+            arguments: JsonObject
+        ): Either<WorkerLocalMcpRuntimeError, WorkerMcpToolCallOutcome?> =
+            WorkerMcpToolCallOutcome(isError = false, textContent = "{}").right()
     }
 }
 

@@ -7,24 +7,24 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 
 /**
- * Default implementation that reuses the app-side mediator mapping semantics in worker context.
+ * Default implementation that maps local MCP tool-call requests to runtime outcomes.
  *
- * Mapping rules:
+ * This semantic mapper reuses the app-side mediator mapping logic in worker context:
  * - malformed JSON input produces an immediate logical error result;
- * - gateway errors become logical tool-call errors;
+ * - runtime errors become logical tool-call errors;
  * - MCP error outcomes map to `isError = true` with structured details;
  * - successful outcomes use textual content when present, otherwise a small success JSON payload.
  *
- * @property gateway Gateway responsible for performing the actual tool call.
+ * @property runtimeService Runtime service responsible for tool-call orchestration.
  * @property json JSON parser for request argument payload.
  */
 class WorkerToolCallExecutorImpl(
-    private val gateway: WorkerMcpToolCallGateway,
+    private val runtimeService: WorkerLocalMcpRuntimeService,
     private val json: Json
 ) : WorkerToolCallExecutor {
 
     /**
-     * Executes one tool call request and maps gateway-level outcomes to [eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallResult].
+     * Executes one tool call request and maps runtime-level outcomes to [eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallResult].
      *
      * @param request Tool-call request received from the worker command processor.
      * @return Final shared DTO result used by worker protocol response messages.
@@ -44,7 +44,7 @@ class WorkerToolCallExecutorImpl(
             }
             ?: JsonObject(emptyMap())
 
-        return gateway.callTool(
+        return runtimeService.callTool(
             serverId = request.serverId,
             toolName = request.toolName,
             arguments = arguments

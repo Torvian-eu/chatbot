@@ -5,6 +5,7 @@ import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
+import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import io.modelcontextprotocol.kotlin.sdk.types.Tool
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -22,10 +23,7 @@ class WorkerLocalMcpRuntimeServiceImpl(
     private val clientService: WorkerMcpClientService,
     private val processManager: WorkerLocalMcpProcessManager
 ) : WorkerLocalMcpRuntimeService {
-    /**
-     * @param serverId Persisted local MCP server identifier.
-     * @return Either runtime error or Unit.
-     */
+
     override suspend fun startServer(serverId: Long): Either<WorkerLocalMcpRuntimeError, Unit> {
         val config = configStore.getServer(serverId)
             ?: return WorkerLocalMcpRuntimeError.ServerConfigMissing(serverId).left()
@@ -57,10 +55,6 @@ class WorkerLocalMcpRuntimeServiceImpl(
         )
     }
 
-    /**
-     * @param serverId Persisted local MCP server identifier.
-     * @return Either runtime error or Unit.
-     */
     override suspend fun stopServer(serverId: Long): Either<WorkerLocalMcpRuntimeError, Unit> {
         configStore.getServer(serverId)
             ?: return WorkerLocalMcpRuntimeError.ServerConfigMissing(serverId).left()
@@ -86,10 +80,6 @@ class WorkerLocalMcpRuntimeServiceImpl(
         )
     }
 
-    /**
-     * @param serverId Persisted local MCP server identifier.
-     * @return Either runtime error or test outcome.
-     */
     override suspend fun testConnection(
         serverId: Long
     ): Either<WorkerLocalMcpRuntimeError, WorkerLocalMcpTestConnectionOutcome> {
@@ -142,10 +132,6 @@ class WorkerLocalMcpRuntimeServiceImpl(
         ).right()
     }
 
-    /**
-     * @param serverId Persisted local MCP server identifier.
-     * @return Either runtime error or discovered tool metadata.
-     */
     override suspend fun discoverTools(
         serverId: Long
     ): Either<WorkerLocalMcpRuntimeError, List<WorkerLocalMcpDiscoveredTool>> {
@@ -203,10 +189,6 @@ class WorkerLocalMcpRuntimeServiceImpl(
         return discoveryResult
     }
 
-    /**
-     * @param serverId Persisted local MCP server identifier.
-     * @return Either runtime error or shared runtime status snapshot.
-     */
     override suspend fun getRuntimeStatus(serverId: Long): Either<WorkerLocalMcpRuntimeError, LocalMcpServerRuntimeStatusDto> {
         configStore.getServer(serverId)
             ?: return WorkerLocalMcpRuntimeError.ServerConfigMissing(serverId).left()
@@ -214,13 +196,63 @@ class WorkerLocalMcpRuntimeServiceImpl(
         return buildRuntimeStatus(serverId).right()
     }
 
-    /**
-     * @return Runtime status snapshots for all assigned local MCP server configurations.
-     */
     override suspend fun listRuntimeStatuses(): List<LocalMcpServerRuntimeStatusDto> {
         return configStore.listServers().map { server ->
             buildRuntimeStatus(server.id)
         }
+    }
+
+    override suspend fun callTool(
+        serverId: Long,
+        toolName: String,
+        arguments: JsonObject
+    ): Either<WorkerLocalMcpRuntimeError, WorkerMcpToolCallOutcome?> {
+        val config = configStore.getServer(serverId)
+            ?: return WorkerLocalMcpRuntimeError.ServerConfigMissing(serverId).left()
+
+        // Ensure client is connected, starting it if necessary.
+        val wasConnected = clientService.isClientConnected(serverId)
+        if (!wasConnected) {
+            val startResult = clientService.startAndConnect(config)
+            startResult.fold(
+                ifLeft = { startError ->
+                    if (startError !is WorkerMcpClientStartError.AlreadyConnected) {
+                        return WorkerLocalMcpRuntimeError.StartFailed(
+                            serverId = serverId,
+                            message = startError.message,
+                            details = startError.cause?.message
+                        ).left()
+                    }
+                },
+                ifRight = {}
+            )
+        }
+
+        // Call the tool through the client service.
+        return clientService.callTool(serverId, toolName, arguments).fold(
+            ifLeft = { callError ->
+                WorkerLocalMcpRuntimeError.ToolCallFailed(
+                    serverId = serverId,
+                    toolName = toolName,
+                    message = callError.message,
+                    details = callError.cause?.message
+                ).left()
+            },
+            ifRight = { callToolResult ->
+                // Map SDK CallToolResult into runtime-level outcome.
+                // Extract first text content from the result.
+                val textContent = callToolResult.content
+                    .filterIsInstance<TextContent>()
+                    .firstOrNull()
+                    ?.text
+
+                WorkerMcpToolCallOutcome(
+                    isError = callToolResult.isError ?: false,
+                    structuredContent = if (callToolResult.isError == true) textContent else null,
+                    textContent = if (callToolResult.isError != true) textContent else null
+                ).right()
+            }
+        )
     }
 
     /**
