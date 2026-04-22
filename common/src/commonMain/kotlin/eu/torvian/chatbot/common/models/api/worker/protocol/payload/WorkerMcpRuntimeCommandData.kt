@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.common.models.api.worker.protocol.payload
 
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
@@ -59,6 +60,36 @@ data class WorkerMcpServerGetRuntimeStatusCommandData(
  */
 @Serializable
 data object WorkerMcpServerListRuntimeStatusesCommandData
+
+/**
+ * Request data carried by `mcp.server.create` worker commands.
+ *
+ * @property server Persisted Local MCP server configuration to upsert in worker cache.
+ */
+@Serializable
+data class WorkerMcpServerCreateCommandData(
+    val server: LocalMCPServerDto
+)
+
+/**
+ * Request data carried by `mcp.server.update` worker commands.
+ *
+ * @property server Persisted Local MCP server configuration to upsert in worker cache.
+ */
+@Serializable
+data class WorkerMcpServerUpdateCommandData(
+    val server: LocalMCPServerDto
+)
+
+/**
+ * Request data carried by `mcp.server.delete` worker commands.
+ *
+ * @property serverId Persisted Local MCP server identifier to remove from worker cache.
+ */
+@Serializable
+data class WorkerMcpServerDeleteCommandData(
+    val serverId: Long
+)
 
 /**
  * Runtime tool metadata returned by worker-side MCP discovery.
@@ -142,6 +173,36 @@ data class WorkerMcpServerGetRuntimeStatusResultData(
 @Serializable
 data class WorkerMcpServerListRuntimeStatusesResultData(
     val statuses: List<LocalMcpServerRuntimeStatusDto>
+)
+
+/**
+ * Result data emitted for successful `mcp.server.create` worker commands.
+ *
+ * @property serverId Persisted Local MCP server identifier that was upserted in worker cache.
+ */
+@Serializable
+data class WorkerMcpServerCreateResultData(
+    val serverId: Long
+)
+
+/**
+ * Result data emitted for successful `mcp.server.update` worker commands.
+ *
+ * @property serverId Persisted Local MCP server identifier that was upserted in worker cache.
+ */
+@Serializable
+data class WorkerMcpServerUpdateResultData(
+    val serverId: Long
+)
+
+/**
+ * Result data emitted for successful `mcp.server.delete` worker commands.
+ *
+ * @property serverId Persisted Local MCP server identifier that was removed from worker cache.
+ */
+@Serializable
+data class WorkerMcpServerDeleteResultData(
+    val serverId: Long
 )
 
 /**

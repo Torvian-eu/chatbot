@@ -13,6 +13,7 @@ import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
+import eu.torvian.chatbot.common.models.api.mcp.UpdateLocalMCPServerRequest
 import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerConnectionResponse
 import eu.torvian.chatbot.common.models.worker.WorkerDto
 import eu.torvian.chatbot.server.data.entities.UserEntity
@@ -27,9 +28,11 @@ import eu.torvian.chatbot.server.testutils.data.TestDefaults
 import eu.torvian.chatbot.server.testutils.koin.defaultTestContainer
 import eu.torvian.chatbot.server.testutils.ktor.KtorTestApp
 import eu.torvian.chatbot.server.testutils.ktor.myTestApplication
+import eu.torvian.chatbot.server.worker.mcp.configsync.LocalMCPServerConfigSyncService
 import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.LocalMCPRuntimeControlService
 import io.ktor.client.call.body
 import io.ktor.client.request.get
+import io.ktor.client.request.put
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
@@ -39,6 +42,8 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import io.mockk.coVerify
+import io.mockk.mockk
 import org.koin.dsl.module
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -55,6 +60,7 @@ class LocalMCPServerRoutesTest {
     private lateinit var certificateService: CertificateService
     private lateinit var workerService: WorkerService
     private lateinit var jwtConfig: JwtConfig
+    private lateinit var localMCPServerConfigSyncService: LocalMCPServerConfigSyncService
 
     private val user1 = TestDefaults.user1
     private val user2 = TestDefaults.user2
@@ -62,9 +68,11 @@ class LocalMCPServerRoutesTest {
     @BeforeEach
     fun setUp() = runTest {
         container = defaultTestContainer()
+        localMCPServerConfigSyncService = mockk(relaxed = true)
         // Keep route tests deterministic by replacing worker-backed runtime control with a local dummy.
         (container as KoinDIContainer).addModule(
             module {
+                single<LocalMCPServerConfigSyncService> { localMCPServerConfigSyncService }
                 single<LocalMCPRuntimeControlService> { createDummyLocalMCPRuntimeControlService() }
             }
         )
@@ -142,6 +150,48 @@ class LocalMCPServerRoutesTest {
         assertEquals(1, workerServers.size)
         assertEquals(createdServer.id, workerServers.single().id)
         assertEquals("secret-value", workerServers.single().secretEnvironmentVariables.single().value)
+    }
+
+    @Test
+    fun `user can update Local MCP server and route syncs previous and current states`() = app {
+        val userToken = authHelper.createUserAndGetToken(user1)
+        val originalWorker = registerWorker(owner = user1, workerUid = "worker-route-update-original")
+        val reassignedWorker = registerWorker(owner = user1, workerUid = "worker-route-update-new")
+
+        val createResponse = client.post(href(LocalMCPServerResource())) {
+            authenticate(userToken)
+            contentType(ContentType.Application.Json)
+            setBody(
+                CreateLocalMCPServerRequest(
+                    workerId = originalWorker.id,
+                    name = "filesystem-update",
+                    command = "npx"
+                )
+            )
+        }
+        assertEquals(HttpStatusCode.Created, createResponse.status)
+        val createdServer = createResponse.body<LocalMCPServerDto>()
+
+        val updateResponse = client.put(href(LocalMCPServerResource.ById(id = createdServer.id))) {
+            authenticate(userToken)
+            contentType(ContentType.Application.Json)
+            setBody(
+                UpdateLocalMCPServerRequest(
+                    workerId = reassignedWorker.id,
+                    name = "filesystem-update-renamed",
+                    command = "node"
+                )
+            )
+        }
+
+        assertEquals(HttpStatusCode.OK, updateResponse.status)
+        val updatedServer = updateResponse.body<LocalMCPServerDto>()
+        assertEquals(reassignedWorker.id, updatedServer.workerId)
+        assertEquals("filesystem-update-renamed", updatedServer.name)
+
+        coVerify(exactly = 1) {
+            localMCPServerConfigSyncService.syncUpdated(updatedServer, originalWorker.id)
+        }
     }
 
     @Test

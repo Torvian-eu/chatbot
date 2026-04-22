@@ -11,6 +11,7 @@ import eu.torvian.chatbot.server.ktor.auth.getWorkerId
 import eu.torvian.chatbot.server.service.core.LocalMCPServerService
 import eu.torvian.chatbot.server.service.core.error.mcp.LocalMCPServerServiceError
 import eu.torvian.chatbot.server.service.core.error.mcp.toApiError
+import eu.torvian.chatbot.server.worker.mcp.configsync.LocalMCPServerConfigSyncService
 import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.LocalMCPRuntimeControlError
 import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.LocalMCPRuntimeControlService
 import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.toApiError
@@ -29,10 +30,12 @@ import io.ktor.server.routing.Route
  *
  * @param localMCPServerService The service handling Local MCP Server business logic
  * @param localMCPRuntimeControlService The service handling runtime control operations
+ * @param localMCPServerConfigSyncService The service handling best-effort worker config synchronization
  */
 fun Route.configureLocalMCPServerRoutes(
     localMCPServerService: LocalMCPServerService,
     localMCPRuntimeControlService: LocalMCPRuntimeControlService,
+    localMCPServerConfigSyncService: LocalMCPServerConfigSyncService,
 ) {
     authenticate(AuthSchemes.USER_JWT) {
         post<LocalMCPServerResource> {
@@ -40,7 +43,9 @@ fun Route.configureLocalMCPServerRoutes(
             val request = call.receive<CreateLocalMCPServerRequest>()
             val result = either {
                 withError({ error: LocalMCPServerServiceError -> error.toApiError() }) {
-                    localMCPServerService.createServer(userId, request).bind()
+                    val server = localMCPServerService.createServer(userId, request).bind()
+                    localMCPServerConfigSyncService.syncCreated(server)
+                    server
                 }
             }
             call.respondEither(result, HttpStatusCode.Created)
@@ -91,7 +96,13 @@ fun Route.configureLocalMCPServerRoutes(
             val request = call.receive<UpdateLocalMCPServerRequest>()
             val result = either {
                 withError({ error: LocalMCPServerServiceError -> error.toApiError() }) {
-                    localMCPServerService.updateServer(userId, resource.id, request).bind()
+                    val oldServer = localMCPServerService.getServerById(userId, resource.id).bind()
+                    val updatedServer = localMCPServerService.updateServer(userId, resource.id, request).bind()
+                    localMCPServerConfigSyncService.syncUpdated(
+                        previousWorkerId = oldServer.workerId,
+                        server = updatedServer
+                    )
+                    updatedServer
                 }
             }
             call.respondEither(result)
@@ -101,7 +112,9 @@ fun Route.configureLocalMCPServerRoutes(
             val userId = call.getUserId()
             val result = either {
                 withError({ error: LocalMCPServerServiceError -> error.toApiError() }) {
+                    val server = localMCPServerService.getServerById(userId, resource.id).bind()
                     localMCPServerService.deleteServer(userId, resource.id).bind()
+                    localMCPServerConfigSyncService.syncDeleted(workerId = server.workerId, serverId = server.id)
                 }
             }
             call.respondEither(result, HttpStatusCode.NoContent)
@@ -160,4 +173,5 @@ fun Route.configureLocalMCPServerRoutes(
         }
     }
 }
+
 

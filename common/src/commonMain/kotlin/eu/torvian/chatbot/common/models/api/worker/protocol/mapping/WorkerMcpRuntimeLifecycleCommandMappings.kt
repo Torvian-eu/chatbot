@@ -1,10 +1,6 @@
 package eu.torvian.chatbot.common.models.api.worker.protocol.mapping
 
 import arrow.core.Either
-import arrow.core.raise.either
-import eu.torvian.chatbot.common.models.api.worker.protocol.codec.WorkerProtocolCodecError
-import eu.torvian.chatbot.common.models.api.worker.protocol.codec.decodeProtocolPayload
-import eu.torvian.chatbot.common.models.api.worker.protocol.codec.encodeProtocolPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerCommandResultStatuses
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolCommandTypes
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRequestPayload
@@ -252,18 +248,6 @@ fun WorkerMcpServerListRuntimeStatusesResultData.toWorkerCommandResultPayload(
     toCommandResultPayload(status = status, targetType = "WorkerMcpServerListRuntimeStatusesResultData")
 
 /**
- * Maps MCP server-control error result data to a typed worker command-result payload.
- *
- * @receiver MCP server-control error result DTO.
- * @param status Final command-result status to encode.
- * @return Either a worker command-result payload or a logical mapping error.
- */
-fun WorkerMcpServerControlErrorResultData.toWorkerCommandResultPayload(
-    status: String = WorkerCommandResultStatuses.ERROR
-): Either<WorkerMcpRuntimeCommandProtocolMappingError, WorkerCommandResultPayload> =
-    toCommandResultPayload(status = status, targetType = "WorkerMcpServerControlErrorResultData")
-
-/**
  * Decodes worker result payload data as MCP server-start result data.
  *
  * @receiver Worker command-result payload.
@@ -455,124 +439,4 @@ fun WorkerCommandResultPayload.toWorkerMcpServerListRuntimeStatusesErrorResultDa
         targetType = "WorkerMcpServerControlErrorResultData"
     )
 
-/**
- * Encodes command request data and wraps it in a worker command-request payload.
- *
- * @receiver Command request DTO.
- * @param commandType Command type written into the request payload.
- * @param targetType Human-readable type label used in mapping diagnostics.
- * @return Either encoded payload or mapping error.
- */
-private inline fun <reified T> T.toCommandRequestPayload(
-    commandType: String,
-    targetType: String
-): Either<WorkerMcpRuntimeCommandProtocolMappingError, WorkerCommandRequestPayload> = either {
-    val data = encodeProtocolPayload(value = this@toCommandRequestPayload, targetType = targetType)
-        .mapLeft { it.toMappingError() }
-        .bind()
-
-    WorkerCommandRequestPayload(
-        commandType = commandType,
-        data = data
-    )
-}
-
-/**
- * Decodes worker command-request payload data into a typed request DTO.
- *
- * @receiver Command-request payload carrying typed JSON data.
- * @param expectedCommandType Command type required for this decoding path.
- * @param targetType Human-readable type label used in mapping diagnostics.
- * @return Either decoded DTO or mapping error.
- */
-private inline fun <reified T> WorkerCommandRequestPayload.decodeCommandRequestData(
-    expectedCommandType: String,
-    targetType: String
-): Either<WorkerMcpRuntimeCommandProtocolMappingError, T> = either {
-    validateCommandType(actual = commandType, expected = expectedCommandType).bind()
-
-    decodeProtocolPayload<T>(payload = data, targetType = targetType)
-        .mapLeft { it.toMappingError() }
-        .bind()
-}
-
-/**
- * Encodes command result data and wraps it in a worker command-result payload.
- *
- * @receiver Command result DTO.
- * @param status Final command status written into the payload.
- * @param targetType Human-readable type label used in mapping diagnostics.
- * @return Either encoded payload or mapping error.
- */
-private inline fun <reified T> T.toCommandResultPayload(
-    status: String,
-    targetType: String
-): Either<WorkerMcpRuntimeCommandProtocolMappingError, WorkerCommandResultPayload> = either {
-    val data = encodeProtocolPayload(value = this@toCommandResultPayload, targetType = targetType)
-        .mapLeft { it.toMappingError() }
-        .bind()
-
-    WorkerCommandResultPayload(
-        status = status,
-        data = data
-    )
-}
-
-/**
- * Decodes worker command-result payload data into a typed result DTO.
- *
- * @receiver Command-result payload carrying typed JSON data.
- * @param commandType Command type associated with the completed lifecycle.
- * @param expectedCommandType Command type required for this decoding path.
- * @param targetType Human-readable type label used in mapping diagnostics.
- * @return Either decoded DTO or mapping error.
- */
-private inline fun <reified T> WorkerCommandResultPayload.decodeCommandResultData(
-    commandType: String,
-    expectedCommandType: String,
-    targetType: String
-): Either<WorkerMcpRuntimeCommandProtocolMappingError, T> = either {
-    validateCommandType(actual = commandType, expected = expectedCommandType).bind()
-
-    decodeProtocolPayload<T>(payload = data, targetType = targetType)
-        .mapLeft { it.toMappingError() }
-        .bind()
-}
-
-/**
- * Validates that a payload command type matches the expected mapping command type.
- *
- * @param actual Actual command type.
- * @param expected Expected command type.
- * @return Either Unit or mapping error describing the mismatch.
- */
-private fun validateCommandType(
-    actual: String,
-    expected: String
-): Either<WorkerMcpRuntimeCommandProtocolMappingError, Unit> = either {
-    if (actual != expected) {
-        raise(
-            WorkerMcpRuntimeCommandProtocolMappingError.InvalidCommandType(
-                expected = expected,
-                actual = actual
-            )
-        )
-    }
-}
-
-/**
- * Converts a generic protocol codec error to an MCP server-control mapping error.
- *
- * @receiver Generic protocol codec error.
- * @return Server-control mapping error carrying the same diagnostic context.
- */
-private fun WorkerProtocolCodecError.toMappingError(): WorkerMcpRuntimeCommandProtocolMappingError = when (this) {
-    is WorkerProtocolCodecError.SerializationFailed -> {
-        WorkerMcpRuntimeCommandProtocolMappingError.SerializationFailed(
-            operation = operation,
-            targetType = targetType,
-            details = details
-        )
-    }
-}
 

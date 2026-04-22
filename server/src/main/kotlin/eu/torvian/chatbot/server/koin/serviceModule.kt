@@ -10,6 +10,8 @@ import eu.torvian.chatbot.server.service.security.*
 import eu.torvian.chatbot.server.service.security.authorizer.*
 import eu.torvian.chatbot.server.service.setup.*
 import eu.torvian.chatbot.server.service.tool.ToolExecutorFactory
+import eu.torvian.chatbot.server.worker.mcp.configsync.DefaultLocalMCPServerConfigSyncService
+import eu.torvian.chatbot.server.worker.mcp.configsync.LocalMCPServerConfigSyncService
 import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.LocalMCPRuntimeCommandDispatchService
 import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.DefaultLocalMCPRuntimeCommandDispatchService
 import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.LocalMCPRuntimeControlService
@@ -39,6 +41,7 @@ fun serviceModule() = module {
     single<LocalMCPServerService> { LocalMCPServerServiceImpl(get(), get(), get(), get(), get()) }
     single<LocalMCPRuntimeCommandDispatchService> { DefaultLocalMCPRuntimeCommandDispatchService(get()) }
     single<LocalMCPRuntimeControlService> { DefaultLocalMCPRuntimeControlService(get(), get(), get()) }
+    single<LocalMCPServerConfigSyncService> { DefaultLocalMCPServerConfigSyncService(get()) }
     single<LocalMCPToolDefinitionService> { LocalMCPToolDefinitionServiceImpl(get(), get(), get(), get(), get()) }
     single<LocalMCPExecutor> { LocalMCPExecutor() }
 

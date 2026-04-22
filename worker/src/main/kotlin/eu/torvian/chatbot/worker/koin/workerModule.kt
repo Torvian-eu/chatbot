@@ -130,7 +130,10 @@ fun workerModule(
     }
     single<McpToolCallExecutor> { McpToolCallExecutorImpl(runtimeService = get(), json = get()) }
     single<McpRuntimeCommandExecutor> {
-        McpRuntimeCommandExecutorImpl(runtimeService = get())
+        McpRuntimeCommandExecutorImpl(
+            runtimeService = get(),
+            configStore = get()
+        )
     }
     single<OutboundMessageEmitterHolder> { OutboundMessageEmitterHolder() }
     single<OutboundMessageEmitter> { get<OutboundMessageEmitterHolder>() }
@@ -200,7 +203,10 @@ fun workerModule(
                 WorkerProtocolCommandTypes.MCP_SERVER_TEST_CONNECTION to get<McpRuntimeCommandInteractionFactory>(),
                 WorkerProtocolCommandTypes.MCP_SERVER_DISCOVER_TOOLS to get<McpRuntimeCommandInteractionFactory>(),
                 WorkerProtocolCommandTypes.MCP_SERVER_GET_RUNTIME_STATUS to get<McpRuntimeCommandInteractionFactory>(),
-                WorkerProtocolCommandTypes.MCP_SERVER_LIST_RUNTIME_STATUSES to get<McpRuntimeCommandInteractionFactory>()
+                WorkerProtocolCommandTypes.MCP_SERVER_LIST_RUNTIME_STATUSES to get<McpRuntimeCommandInteractionFactory>(),
+                WorkerProtocolCommandTypes.MCP_SERVER_CREATE to get<McpRuntimeCommandInteractionFactory>(),
+                WorkerProtocolCommandTypes.MCP_SERVER_UPDATE to get<McpRuntimeCommandInteractionFactory>(),
+                WorkerProtocolCommandTypes.MCP_SERVER_DELETE to get<McpRuntimeCommandInteractionFactory>()
             ),
             emitter = get(),
             registry = get(),

@@ -6,6 +6,7 @@ import arrow.core.right
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerCommandResultStatuses
 import eu.torvian.chatbot.common.models.api.worker.protocol.codec.decodeProtocolPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolCommandTypes
@@ -14,18 +15,25 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProt
 import eu.torvian.chatbot.common.models.api.worker.protocol.core.WorkerProtocolMessage
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerCommandRequestPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerDiscoverToolsResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerCreateResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerDeleteResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerGetRuntimeStatusResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerListRuntimeStatusesResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerStartErrorResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerStartResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerStopResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerTestConnectionResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerUpdateResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRejectedPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRequestPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandResultPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerControlErrorResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerCreateCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerCreateResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDeleteCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDeleteResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerGetRuntimeStatusCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerGetRuntimeStatusResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerListRuntimeStatusesCommandData
@@ -36,6 +44,8 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpSer
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerUpdateCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerUpdateResultData
 import eu.torvian.chatbot.worker.mcp.DummyMcpRuntimeCommandExecutor
 import eu.torvian.chatbot.worker.mcp.McpRuntimeCommandExecutor
 import eu.torvian.chatbot.worker.protocol.ids.MessageIdProvider
@@ -47,6 +57,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlin.time.Instant
 
 /**
  * Unit tests for [McpRuntimeCommandInteraction].
@@ -118,6 +129,36 @@ class McpRuntimeCommandInteractionTest {
                     val data = resultPayload.toWorkerMcpServerListRuntimeStatusesResultData(commandType).orError()
                     assertTrue(data.statuses.isEmpty())
                 }
+            ),
+            SupportedCommandScenario(
+                commandType = WorkerProtocolCommandTypes.MCP_SERVER_CREATE,
+                requestPayload = WorkerMcpServerCreateCommandData(server = testServerDto(serverId = 19L))
+                    .toWorkerCommandRequestPayload()
+                    .orError(),
+                verifyResult = { resultPayload, commandType ->
+                    val data = resultPayload.toWorkerMcpServerCreateResultData(commandType).orError()
+                    assertEquals(19L, data.serverId)
+                }
+            ),
+            SupportedCommandScenario(
+                commandType = WorkerProtocolCommandTypes.MCP_SERVER_UPDATE,
+                requestPayload = WorkerMcpServerUpdateCommandData(server = testServerDto(serverId = 20L))
+                    .toWorkerCommandRequestPayload()
+                    .orError(),
+                verifyResult = { resultPayload, commandType ->
+                    val data = resultPayload.toWorkerMcpServerUpdateResultData(commandType).orError()
+                    assertEquals(20L, data.serverId)
+                }
+            ),
+            SupportedCommandScenario(
+                commandType = WorkerProtocolCommandTypes.MCP_SERVER_DELETE,
+                requestPayload = WorkerMcpServerDeleteCommandData(serverId = 21L)
+                    .toWorkerCommandRequestPayload()
+                    .orError(),
+                verifyResult = { resultPayload, commandType ->
+                    val data = resultPayload.toWorkerMcpServerDeleteResultData(commandType).orError()
+                    assertEquals(21L, data.serverId)
+                }
             )
         )
 
@@ -168,6 +209,10 @@ class McpRuntimeCommandInteractionTest {
             ),
             WorkerCommandRequestPayload(
                 commandType = WorkerProtocolCommandTypes.MCP_SERVER_GET_RUNTIME_STATUS,
+                data = malformedServerIdPayload()
+            ),
+            WorkerCommandRequestPayload(
+                commandType = WorkerProtocolCommandTypes.MCP_SERVER_DELETE,
                 data = malformedServerIdPayload()
             )
         )
@@ -328,6 +373,22 @@ class McpRuntimeCommandInteractionTest {
     }
 
     /**
+     * Builds a deterministic Local MCP server DTO for config-sync command fixtures.
+     *
+     * @param serverId Persisted server identifier used in command assertions.
+     * @return Deterministic Local MCP server DTO.
+     */
+    private fun testServerDto(serverId: Long): LocalMCPServerDto = LocalMCPServerDto(
+        id = serverId,
+        userId = 5L,
+        workerId = 6L,
+        name = "filesystem",
+        command = "npx",
+        createdAt = Instant.fromEpochMilliseconds(1_700_000_000_000),
+        updatedAt = Instant.fromEpochMilliseconds(1_700_000_100_000)
+    )
+
+    /**
      * Fixture for a supported command-type lifecycle scenario.
      *
      * @property commandType Command type expected for result decoding.
@@ -453,6 +514,33 @@ class McpRuntimeCommandInteractionTest {
             request: WorkerMcpServerListRuntimeStatusesCommandData
         ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerListRuntimeStatusesResultData> =
             WorkerMcpServerListRuntimeStatusesResultData(statuses = emptyList()).right()
+
+        /**
+         * @param request Typed create-config command input data.
+         * @return Deterministic successful create-config result.
+         */
+        override suspend fun createServer(
+            request: WorkerMcpServerCreateCommandData
+        ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerCreateResultData> =
+            WorkerMcpServerCreateResultData(serverId = request.server.id).right()
+
+        /**
+         * @param request Typed update-config command input data.
+         * @return Deterministic successful update-config result.
+         */
+        override suspend fun updateServer(
+            request: WorkerMcpServerUpdateCommandData
+        ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerUpdateResultData> =
+            WorkerMcpServerUpdateResultData(serverId = request.server.id).right()
+
+        /**
+         * @param request Typed delete-config command input data.
+         * @return Deterministic successful delete-config result.
+         */
+        override suspend fun deleteServer(
+            request: WorkerMcpServerDeleteCommandData
+        ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerDeleteResultData> =
+            WorkerMcpServerDeleteResultData(serverId = request.serverId).right()
     }
 
     /**

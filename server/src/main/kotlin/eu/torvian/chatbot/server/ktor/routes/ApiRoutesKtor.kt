@@ -4,6 +4,7 @@ import eu.torvian.chatbot.server.service.core.*
 import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.service.security.AuthenticationService
 import eu.torvian.chatbot.server.service.security.AuthorizationService
+import eu.torvian.chatbot.server.worker.mcp.configsync.LocalMCPServerConfigSyncService
 import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.LocalMCPRuntimeControlService
 import io.ktor.server.routing.*
 import kotlinx.serialization.json.Json
@@ -11,6 +12,7 @@ import kotlinx.serialization.json.Json
 /**
  * Ktor route configuration using type-safe Resources plugin.
  * Implements the ApiRoutes interface and uses injected dependencies.
+ * Local MCP configuration sync is delegated to a dedicated service so HTTP routes stay transport-focused.
  */
 class ApiRoutesKtor(
     private val sessionService: SessionService,
@@ -24,6 +26,7 @@ class ApiRoutesKtor(
     private val toolCallService: ToolCallService,
     private val localMCPServerService: LocalMCPServerService,
     private val localMCPRuntimeControlService: LocalMCPRuntimeControlService,
+    private val localMCPServerConfigSyncService: LocalMCPServerConfigSyncService,
     private val localMCPToolDefinitionService: LocalMCPToolDefinitionService,
     private val authenticationService: AuthenticationService,
     private val userService: UserService,
@@ -151,7 +154,11 @@ class ApiRoutesKtor(
      * Configures routes related to Local MCP server configuration management (/api/v1/local-mcp-servers).
      */
     fun configureLocalMCPServerRoutes(route: Route) {
-        route.configureLocalMCPServerRoutes(localMCPServerService, localMCPRuntimeControlService)
+        route.configureLocalMCPServerRoutes(
+            localMCPServerService = localMCPServerService,
+            localMCPRuntimeControlService = localMCPRuntimeControlService,
+            localMCPServerConfigSyncService = localMCPServerConfigSyncService
+        )
     }
 
     /**

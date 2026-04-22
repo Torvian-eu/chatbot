@@ -10,12 +10,15 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProt
 import eu.torvian.chatbot.common.models.api.worker.protocol.core.WorkerProtocolMessage
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.WorkerMcpRuntimeCommandProtocolMappingError
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerCommandResultPayload
+import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerCreateCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerDeleteCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerDiscoverToolsCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerGetRuntimeStatusCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerListRuntimeStatusesCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerStartCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerStopCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerTestConnectionCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerUpdateCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandAcceptedPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRejectedPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRequestPayload
@@ -39,6 +42,9 @@ import kotlinx.serialization.json.put
  * - `mcp.server.discover_tools`
  * - `mcp.server.get_runtime_status`
  * - `mcp.server.list_runtime_statuses`
+ * - `mcp.server.create`
+ * - `mcp.server.update`
+ * - `mcp.server.delete`
  *
  * @property envelope Original inbound `command.request` envelope.
  * @property requestPayload Decoded command-request payload for this interaction.
@@ -100,6 +106,27 @@ class McpRuntimeCommandInteraction(
                 execute = { command -> executor.listRuntimeStatuses(command) },
                 mapSuccessResult = { result -> result.toWorkerCommandResultPayload() },
                 decodeFailureMessage = "Unable to decode mcp.server.list_runtime_statuses payload"
+            )
+
+            WorkerProtocolCommandTypes.MCP_SERVER_CREATE -> runOneShotCommand(
+                decodeRequest = { toWorkerMcpServerCreateCommandData() },
+                execute = { command -> executor.createServer(command) },
+                mapSuccessResult = { result -> result.toWorkerCommandResultPayload() },
+                decodeFailureMessage = "Unable to decode mcp.server.create payload"
+            )
+
+            WorkerProtocolCommandTypes.MCP_SERVER_UPDATE -> runOneShotCommand(
+                decodeRequest = { toWorkerMcpServerUpdateCommandData() },
+                execute = { command -> executor.updateServer(command) },
+                mapSuccessResult = { result -> result.toWorkerCommandResultPayload() },
+                decodeFailureMessage = "Unable to decode mcp.server.update payload"
+            )
+
+            WorkerProtocolCommandTypes.MCP_SERVER_DELETE -> runOneShotCommand(
+                decodeRequest = { toWorkerMcpServerDeleteCommandData() },
+                execute = { command -> executor.deleteServer(command) },
+                mapSuccessResult = { result -> result.toWorkerCommandResultPayload() },
+                decodeFailureMessage = "Unable to decode mcp.server.delete payload"
             )
 
             else -> {

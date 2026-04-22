@@ -5,9 +5,14 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerComm
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolCommandTypes
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRequestPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerControlErrorResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpDiscoveredToolData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerCreateCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerCreateResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDeleteCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDeleteResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerGetRuntimeStatusCommandData
@@ -18,6 +23,8 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpSer
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerUpdateCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerUpdateResultData
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlin.test.Test
@@ -25,6 +32,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Instant
 
 /**
  * Verifies MCP server-control specific worker protocol mapping helpers.
@@ -251,6 +259,75 @@ class WorkerMcpServerControlProtocolMappingsTest {
         ).getOrElse { error("Expected list-runtime-statuses result reverse mapping success: $it") }
         assertEquals(result, decodedResult)
     }
+
+    /**
+     * Ensures create/update/delete cache-sync request and result payloads map correctly.
+     */
+    @Test
+    fun `cache sync create update and delete payloads encode and decode`() {
+        val server = testServer(serverId = 88L)
+
+        val createRequestPayload = WorkerMcpServerCreateCommandData(server = server)
+            .toWorkerCommandRequestPayload()
+            .getOrElse { error("Expected create request mapping success: $it") }
+        assertEquals(WorkerProtocolCommandTypes.MCP_SERVER_CREATE, createRequestPayload.commandType)
+        assertEquals(server, createRequestPayload.toWorkerMcpServerCreateCommandData().getOrElse { error(it) }.server)
+
+        val updateRequestPayload = WorkerMcpServerUpdateCommandData(server = server.copy(name = "filesystem-v2"))
+            .toWorkerCommandRequestPayload()
+            .getOrElse { error("Expected update request mapping success: $it") }
+        assertEquals(WorkerProtocolCommandTypes.MCP_SERVER_UPDATE, updateRequestPayload.commandType)
+        assertEquals("filesystem-v2", updateRequestPayload.toWorkerMcpServerUpdateCommandData().getOrElse { error(it) }.server.name)
+
+        val deleteRequestPayload = WorkerMcpServerDeleteCommandData(serverId = server.id)
+            .toWorkerCommandRequestPayload()
+            .getOrElse { error("Expected delete request mapping success: $it") }
+        assertEquals(WorkerProtocolCommandTypes.MCP_SERVER_DELETE, deleteRequestPayload.commandType)
+        assertEquals(server.id, deleteRequestPayload.toWorkerMcpServerDeleteCommandData().getOrElse { error(it) }.serverId)
+
+        val createResult = WorkerMcpServerCreateResultData(serverId = server.id)
+        val createResultPayload = createResult.toWorkerCommandResultPayload()
+            .getOrElse { error("Expected create result mapping success: $it") }
+        assertEquals(
+            createResult,
+            createResultPayload.toWorkerMcpServerCreateResultData(WorkerProtocolCommandTypes.MCP_SERVER_CREATE)
+                .getOrElse { error("Expected create result reverse mapping success: $it") }
+        )
+
+        val updateResult = WorkerMcpServerUpdateResultData(serverId = server.id)
+        val updateResultPayload = updateResult.toWorkerCommandResultPayload()
+            .getOrElse { error("Expected update result mapping success: $it") }
+        assertEquals(
+            updateResult,
+            updateResultPayload.toWorkerMcpServerUpdateResultData(WorkerProtocolCommandTypes.MCP_SERVER_UPDATE)
+                .getOrElse { error("Expected update result reverse mapping success: $it") }
+        )
+
+        val deleteResult = WorkerMcpServerDeleteResultData(serverId = server.id)
+        val deleteResultPayload = deleteResult.toWorkerCommandResultPayload()
+            .getOrElse { error("Expected delete result mapping success: $it") }
+        assertEquals(
+            deleteResult,
+            deleteResultPayload.toWorkerMcpServerDeleteResultData(WorkerProtocolCommandTypes.MCP_SERVER_DELETE)
+                .getOrElse { error("Expected delete result reverse mapping success: $it") }
+        )
+    }
+
+    /**
+     * Builds a deterministic Local MCP server DTO fixture for config-sync mapping tests.
+     *
+     * @param serverId Persisted server identifier used in the fixture.
+     * @return Deterministic server DTO.
+     */
+    private fun testServer(serverId: Long): LocalMCPServerDto = LocalMCPServerDto(
+        id = serverId,
+        userId = 5L,
+        workerId = 7L,
+        name = "filesystem",
+        command = "npx",
+        createdAt = Instant.fromEpochMilliseconds(1_700_000_000_000),
+        updatedAt = Instant.fromEpochMilliseconds(1_700_000_100_000)
+    )
 }
 
 

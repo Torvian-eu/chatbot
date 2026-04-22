@@ -2,6 +2,10 @@ package eu.torvian.chatbot.worker.mcp
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerControlErrorResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerCreateCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerCreateResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDeleteCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDeleteResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerGetRuntimeStatusCommandData
@@ -14,6 +18,8 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpSer
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerUpdateCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerUpdateResultData
 
 /**
  * Executes worker local MCP runtime commands.
@@ -83,4 +89,34 @@ interface McpRuntimeCommandExecutor {
     suspend fun listRuntimeStatuses(
         request: WorkerMcpServerListRuntimeStatusesCommandData
     ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerListRuntimeStatusesResultData>
+
+    /**
+     * Executes an MCP server create-config sync command.
+     *
+     * @param request Typed create-config command input data.
+     * @return Either typed failure data or typed success data for the command result.
+     */
+    suspend fun createServer(
+        request: WorkerMcpServerCreateCommandData
+    ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerCreateResultData>
+
+    /**
+     * Executes an MCP server update-config sync command.
+     *
+     * @param request Typed update-config command input data.
+     * @return Either typed failure data or typed success data for the command result.
+     */
+    suspend fun updateServer(
+        request: WorkerMcpServerUpdateCommandData
+    ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerUpdateResultData>
+
+    /**
+     * Executes an MCP server delete-config sync command.
+     *
+     * @param request Typed delete-config command input data.
+     * @return Either typed failure data or typed success data for the command result.
+     */
+    suspend fun deleteServer(
+        request: WorkerMcpServerDeleteCommandData
+    ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerDeleteResultData>
 }

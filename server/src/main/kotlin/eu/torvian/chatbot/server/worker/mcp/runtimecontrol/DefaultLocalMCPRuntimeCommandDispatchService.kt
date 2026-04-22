@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.worker.mcp.runtimecontrol
 
 import arrow.core.Either
 import arrow.core.raise.either
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerCommandResultStatuses
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolCommandTypes
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.*
@@ -118,6 +119,54 @@ class DefaultLocalMCPRuntimeCommandDispatchService(
             },
             decodeErrorResult = { result, completedCommandType ->
                 result.toWorkerMcpServerListRuntimeStatusesErrorResultData(completedCommandType)
+            }
+        )
+
+    override suspend fun createServer(
+        workerId: Long,
+        server: LocalMCPServerDto
+    ): Either<LocalMCPRuntimeCommandDispatchError, WorkerMcpServerCreateResultData> =
+        dispatchAndDecode(
+            workerId = workerId,
+            commandType = WorkerProtocolCommandTypes.MCP_SERVER_CREATE,
+            requestPayload = WorkerMcpServerCreateCommandData(server = server).toWorkerCommandRequestPayload(),
+            decodeSuccessResult = { result, completedCommandType ->
+                result.toWorkerMcpServerCreateResultData(completedCommandType)
+            },
+            decodeErrorResult = { result, completedCommandType ->
+                result.toWorkerMcpServerCreateErrorResultData(completedCommandType)
+            }
+        )
+
+    override suspend fun updateServer(
+        workerId: Long,
+        server: LocalMCPServerDto
+    ): Either<LocalMCPRuntimeCommandDispatchError, WorkerMcpServerUpdateResultData> =
+        dispatchAndDecode(
+            workerId = workerId,
+            commandType = WorkerProtocolCommandTypes.MCP_SERVER_UPDATE,
+            requestPayload = WorkerMcpServerUpdateCommandData(server = server).toWorkerCommandRequestPayload(),
+            decodeSuccessResult = { result, completedCommandType ->
+                result.toWorkerMcpServerUpdateResultData(completedCommandType)
+            },
+            decodeErrorResult = { result, completedCommandType ->
+                result.toWorkerMcpServerUpdateErrorResultData(completedCommandType)
+            }
+        )
+
+    override suspend fun deleteServer(
+        workerId: Long,
+        serverId: Long
+    ): Either<LocalMCPRuntimeCommandDispatchError, WorkerMcpServerDeleteResultData> =
+        dispatchAndDecode(
+            workerId = workerId,
+            commandType = WorkerProtocolCommandTypes.MCP_SERVER_DELETE,
+            requestPayload = WorkerMcpServerDeleteCommandData(serverId = serverId).toWorkerCommandRequestPayload(),
+            decodeSuccessResult = { result, completedCommandType ->
+                result.toWorkerMcpServerDeleteResultData(completedCommandType)
+            },
+            decodeErrorResult = { result, completedCommandType ->
+                result.toWorkerMcpServerDeleteErrorResultData(completedCommandType)
             }
         )
 
