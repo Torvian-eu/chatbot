@@ -6,22 +6,29 @@ import arrow.core.right
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerCommandResultStatuses
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolCommandTypes
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerCommandResultPayload
+import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerCreateCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerDeleteCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerGetRuntimeStatusCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerListRuntimeStatusesCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerStartCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerStopCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerUpdateCommandData
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRejectedPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRequestPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandResultPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerControlErrorResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerCreateResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDeleteResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerGetRuntimeStatusResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerListRuntimeStatusesResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerUpdateResultData
 import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchError
 import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchSuccess
 import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchService
@@ -39,6 +46,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Clock
+import kotlin.time.Instant
 
 /**
  * Verifies typed worker dispatch orchestration for MCP runtime-control commands.
@@ -376,6 +384,93 @@ class DefaultLocalMCPRuntimeCommandDispatchServiceTest {
         )
         payloadSlot.captured.toWorkerMcpServerListRuntimeStatusesCommandData().orError()
     }
+
+    /**
+     * Verifies create-server cache sync dispatch builds the expected request payload.
+     */
+    @Test
+    fun `create server builds create command request payload`() = runTest {
+        val payloadSlot = slot<WorkerCommandRequestPayload>()
+        val server = testServer(serverId = 22L)
+        coEvery { workerCommandDispatchService.dispatch(30L, capture(payloadSlot), any()) } returns
+            WorkerCommandDispatchSuccess(
+                workerId = 30L,
+                interactionId = "i-13",
+                commandType = WorkerProtocolCommandTypes.MCP_SERVER_CREATE,
+                result = WorkerMcpServerCreateResultData(serverId = server.id)
+                    .toWorkerCommandResultPayload()
+                    .orError()
+            ).right()
+
+        val result = service.createServer(workerId = 30L, server = server).requireRight()
+
+        assertEquals(server.id, result.serverId)
+        assertEquals(WorkerProtocolCommandTypes.MCP_SERVER_CREATE, payloadSlot.captured.commandType)
+        assertEquals(server, payloadSlot.captured.toWorkerMcpServerCreateCommandData().orError().server)
+    }
+
+    /**
+     * Verifies update-server cache sync dispatch builds the expected request payload.
+     */
+    @Test
+    fun `update server builds update command request payload`() = runTest {
+        val payloadSlot = slot<WorkerCommandRequestPayload>()
+        val server = testServer(serverId = 23L)
+        coEvery { workerCommandDispatchService.dispatch(31L, capture(payloadSlot), any()) } returns
+            WorkerCommandDispatchSuccess(
+                workerId = 31L,
+                interactionId = "i-14",
+                commandType = WorkerProtocolCommandTypes.MCP_SERVER_UPDATE,
+                result = WorkerMcpServerUpdateResultData(serverId = server.id)
+                    .toWorkerCommandResultPayload()
+                    .orError()
+            ).right()
+
+        val result = service.updateServer(workerId = 31L, server = server).requireRight()
+
+        assertEquals(server.id, result.serverId)
+        assertEquals(WorkerProtocolCommandTypes.MCP_SERVER_UPDATE, payloadSlot.captured.commandType)
+        assertEquals(server, payloadSlot.captured.toWorkerMcpServerUpdateCommandData().orError().server)
+    }
+
+    /**
+     * Verifies delete-server cache sync dispatch builds the expected request payload.
+     */
+    @Test
+    fun `delete server builds delete command request payload`() = runTest {
+        val payloadSlot = slot<WorkerCommandRequestPayload>()
+        coEvery { workerCommandDispatchService.dispatch(32L, capture(payloadSlot), any()) } returns
+            WorkerCommandDispatchSuccess(
+                workerId = 32L,
+                interactionId = "i-15",
+                commandType = WorkerProtocolCommandTypes.MCP_SERVER_DELETE,
+                result = WorkerMcpServerDeleteResultData(serverId = 24L)
+                    .toWorkerCommandResultPayload()
+                    .orError()
+            ).right()
+
+        val result = service.deleteServer(workerId = 32L, serverId = 24L).requireRight()
+
+        assertEquals(24L, result.serverId)
+        assertEquals(WorkerProtocolCommandTypes.MCP_SERVER_DELETE, payloadSlot.captured.commandType)
+        assertEquals(24L, payloadSlot.captured.toWorkerMcpServerDeleteCommandData().orError().serverId)
+    }
+
+    /**
+     * Builds a deterministic Local MCP server DTO fixture for dispatch payload assertions.
+     *
+     * @param serverId Persisted server identifier.
+     * @return Deterministic Local MCP server DTO.
+     */
+    private fun testServer(serverId: Long): LocalMCPServerDto = LocalMCPServerDto(
+        id = serverId,
+        userId = 9L,
+        workerId = 30L,
+        name = "filesystem",
+        command = "npx",
+        createdAt = Instant.fromEpochMilliseconds(1_700_000_000_000),
+        updatedAt = Instant.fromEpochMilliseconds(1_700_000_100_000)
+    )
 
     /**
      * Returns the right value from an [Either] or fails the test.

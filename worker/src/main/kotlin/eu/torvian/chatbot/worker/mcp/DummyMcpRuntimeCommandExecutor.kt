@@ -63,6 +63,24 @@ class DummyMcpRuntimeCommandExecutor : McpRuntimeCommandExecutor {
         return WorkerMcpServerListRuntimeStatusesResultData(statuses = emptyList()).right()
     }
 
+    override suspend fun createServer(
+        request: WorkerMcpServerCreateCommandData
+    ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerCreateResultData> {
+        return WorkerMcpServerCreateResultData(serverId = request.server.id).right()
+    }
+
+    override suspend fun updateServer(
+        request: WorkerMcpServerUpdateCommandData
+    ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerUpdateResultData> {
+        return WorkerMcpServerUpdateResultData(serverId = request.server.id).right()
+    }
+
+    override suspend fun deleteServer(
+        request: WorkerMcpServerDeleteCommandData
+    ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerDeleteResultData> {
+        return WorkerMcpServerDeleteResultData(serverId = request.serverId).right()
+    }
+
     companion object {
         /**
          * Stable dummy tool count returned by test-connection responses.

@@ -4,6 +4,10 @@ import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerControlErrorResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerCreateCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerCreateResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDeleteCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDeleteResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpDiscoveredToolData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsResultData
@@ -17,6 +21,8 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpSer
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerUpdateCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerUpdateResultData
 
 /**
  * Runtime-backed [McpRuntimeCommandExecutor] implementation.
@@ -25,9 +31,11 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpSer
  * [McpRuntimeService], while mapping runtime errors to protocol result DTOs.
  *
  * @property runtimeService Worker runtime service that performs MCP process/client operations.
+ * @property configStore Worker-local assigned MCP server cache updated by create/update/delete sync commands.
  */
 class McpRuntimeCommandExecutorImpl(
-    private val runtimeService: McpRuntimeService
+    private val runtimeService: McpRuntimeService,
+    private val configStore: McpServerConfigStore
 ) : McpRuntimeCommandExecutor {
 
     override suspend fun startServer(
@@ -100,6 +108,56 @@ class McpRuntimeCommandExecutorImpl(
         return WorkerMcpServerListRuntimeStatusesResultData(
             statuses = runtimeService.listRuntimeStatuses()
         ).right()
+    }
+
+    override suspend fun createServer(
+        request: WorkerMcpServerCreateCommandData
+    ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerCreateResultData> {
+        return runConfigSyncCommand(serverId = request.server.id) {
+            configStore.upsertServer(request.server)
+            WorkerMcpServerCreateResultData(serverId = request.server.id)
+        }
+    }
+
+    override suspend fun updateServer(
+        request: WorkerMcpServerUpdateCommandData
+    ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerUpdateResultData> {
+        return runConfigSyncCommand(serverId = request.server.id) {
+            configStore.upsertServer(request.server)
+            WorkerMcpServerUpdateResultData(serverId = request.server.id)
+        }
+    }
+
+    override suspend fun deleteServer(
+        request: WorkerMcpServerDeleteCommandData
+    ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerDeleteResultData> {
+        return runConfigSyncCommand(serverId = request.serverId) {
+            configStore.removeServer(request.serverId)
+            WorkerMcpServerDeleteResultData(serverId = request.serverId)
+        }
+    }
+
+    /**
+     * Executes one config-sync cache mutation and maps technical failures to protocol error data.
+     *
+     * @param serverId Persisted Local MCP server identifier associated with the mutation.
+     * @param block Mutation action that returns typed success result data.
+     * @return Either protocol error payload data or typed success result data.
+     */
+    private inline fun <TSuccess> runConfigSyncCommand(
+        serverId: Long,
+        block: () -> TSuccess
+    ): Either<WorkerMcpServerControlErrorResultData, TSuccess> {
+        return try {
+            block().right()
+        } catch (exception: Exception) {
+            WorkerMcpServerControlErrorResultData(
+                serverId = serverId,
+                code = "CONFIG_SYNC_FAILED",
+                message = "Failed to apply MCP server config sync command",
+                details = exception.message
+            ).left()
+        }
     }
 
     /**

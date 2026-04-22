@@ -43,4 +43,19 @@ object WorkerProtocolCommandTypes {
      * Command type used to list runtime statuses for all MCP servers on a worker.
      */
     const val MCP_SERVER_LIST_RUNTIME_STATUSES = "mcp.server.list_runtime_statuses"
+
+    /**
+     * Command type used to upsert one assigned MCP server configuration in worker cache.
+     */
+    const val MCP_SERVER_CREATE = "mcp.server.create"
+
+    /**
+     * Command type used to update one assigned MCP server configuration in worker cache.
+     */
+    const val MCP_SERVER_UPDATE = "mcp.server.update"
+
+    /**
+     * Command type used to remove one assigned MCP server configuration from worker cache.
+     */
+    const val MCP_SERVER_DELETE = "mcp.server.delete"
 }

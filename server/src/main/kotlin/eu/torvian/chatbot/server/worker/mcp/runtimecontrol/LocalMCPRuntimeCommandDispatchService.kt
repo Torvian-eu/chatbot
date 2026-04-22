@@ -1,12 +1,16 @@
 package eu.torvian.chatbot.server.worker.mcp.runtimecontrol
 
 import arrow.core.Either
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerCreateResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDeleteResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerGetRuntimeStatusResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerListRuntimeStatusesResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerUpdateResultData
 
 /**
  * Server-side typed adapter over worker command dispatch for Local MCP runtime-control operations.
@@ -84,6 +88,42 @@ interface LocalMCPRuntimeCommandDispatchService {
     suspend fun listRuntimeStatuses(
         workerId: Long
     ): Either<LocalMCPRuntimeCommandDispatchError, WorkerMcpServerListRuntimeStatusesResultData>
+
+    /**
+     * Dispatches `mcp.server.create` to a worker and returns decoded cache-sync result data.
+     *
+     * @param workerId Worker identifier targeted for command dispatch.
+     * @param server Local MCP server configuration to upsert in worker cache.
+     * @return Either orchestration error or typed create result data.
+     */
+    suspend fun createServer(
+        workerId: Long,
+        server: LocalMCPServerDto
+    ): Either<LocalMCPRuntimeCommandDispatchError, WorkerMcpServerCreateResultData>
+
+    /**
+     * Dispatches `mcp.server.update` to a worker and returns decoded cache-sync result data.
+     *
+     * @param workerId Worker identifier targeted for command dispatch.
+     * @param server Local MCP server configuration to upsert in worker cache.
+     * @return Either orchestration error or typed update result data.
+     */
+    suspend fun updateServer(
+        workerId: Long,
+        server: LocalMCPServerDto
+    ): Either<LocalMCPRuntimeCommandDispatchError, WorkerMcpServerUpdateResultData>
+
+    /**
+     * Dispatches `mcp.server.delete` to a worker and returns decoded cache-sync result data.
+     *
+     * @param workerId Worker identifier targeted for command dispatch.
+     * @param serverId Local MCP server identifier to remove from worker cache.
+     * @return Either orchestration error or typed delete result data.
+     */
+    suspend fun deleteServer(
+        workerId: Long,
+        serverId: Long
+    ): Either<LocalMCPRuntimeCommandDispatchError, WorkerMcpServerDeleteResultData>
 }
 
 

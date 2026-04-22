@@ -6,13 +6,17 @@ import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpDiscoveredToolData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerCreateCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDeleteCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerGetRuntimeStatusCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerListRuntimeStatusesCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerUpdateCommandData
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -20,6 +24,7 @@ import kotlinx.serialization.json.put
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.time.Clock
+import kotlin.time.Instant
 
 /**
  * Unit tests for [McpRuntimeCommandExecutorImpl].
@@ -31,9 +36,8 @@ class McpRuntimeCommandExecutorImplTest {
     @Test
     fun `start maps runtime success`() = runTest {
         val executor = McpRuntimeCommandExecutorImpl(
-            runtimeService = FakeRuntimeService(
-                startResult = Unit.right()
-            )
+            runtimeService = FakeRuntimeService(startResult = Unit.right()),
+            configStore = InMemoryMcpServerConfigStore()
         )
 
         val result = executor.startServer(WorkerMcpServerStartCommandData(serverId = 10L)).rightOrError()
@@ -47,9 +51,8 @@ class McpRuntimeCommandExecutorImplTest {
     @Test
     fun `stop maps runtime success`() = runTest {
         val executor = McpRuntimeCommandExecutorImpl(
-            runtimeService = FakeRuntimeService(
-                stopResult = Unit.right()
-            )
+            runtimeService = FakeRuntimeService(stopResult = Unit.right()),
+            configStore = InMemoryMcpServerConfigStore()
         )
 
         val result = executor.stopServer(WorkerMcpServerStopCommandData(serverId = 11L)).rightOrError()
@@ -68,7 +71,8 @@ class McpRuntimeCommandExecutorImplTest {
                     discoveredToolCount = 5,
                     message = "runtime ok"
                 ).right()
-            )
+            ),
+            configStore = InMemoryMcpServerConfigStore()
         )
 
         val result = executor.testConnection(
@@ -96,7 +100,8 @@ class McpRuntimeCommandExecutorImplTest {
                         outputSchema = null
                     )
                 ).right()
-            )
+            ),
+            configStore = InMemoryMcpServerConfigStore()
         )
 
         val result = executor.discoverTools(
@@ -124,7 +129,8 @@ class McpRuntimeCommandExecutorImplTest {
         val executor = McpRuntimeCommandExecutorImpl(
             runtimeService = FakeRuntimeService(
                 startResult = McpRuntimeError.ServerConfigMissing(serverId = 20L).left()
-            )
+            ),
+            configStore = InMemoryMcpServerConfigStore()
         )
 
         val error = executor.startServer(
@@ -151,7 +157,8 @@ class McpRuntimeCommandExecutorImplTest {
         val executor = McpRuntimeCommandExecutorImpl(
             runtimeService = FakeRuntimeService(
                 getRuntimeStatusResult = status.right()
-            )
+            ),
+            configStore = InMemoryMcpServerConfigStore()
         )
 
         val result = executor.getRuntimeStatus(
@@ -174,7 +181,8 @@ class McpRuntimeCommandExecutorImplTest {
         val executor = McpRuntimeCommandExecutorImpl(
             runtimeService = FakeRuntimeService(
                 listRuntimeStatusesResult = listOf(status)
-            )
+            ),
+            configStore = InMemoryMcpServerConfigStore()
         )
 
         val result = executor.listRuntimeStatuses(
@@ -183,6 +191,78 @@ class McpRuntimeCommandExecutorImplTest {
 
         assertEquals(listOf(status), result.statuses)
     }
+
+    /**
+     * Verifies create-config sync upserts server configuration in the cache store.
+     */
+    @Test
+    fun `create server sync upserts config store`() = runTest {
+        val configStore = InMemoryMcpServerConfigStore()
+        val executor = McpRuntimeCommandExecutorImpl(
+            runtimeService = FakeRuntimeService(),
+            configStore = configStore
+        )
+        val server = testServer(serverId = 32L)
+
+        val result = executor.createServer(WorkerMcpServerCreateCommandData(server = server)).rightOrError()
+
+        assertEquals(32L, result.serverId)
+        assertEquals(server, configStore.getServer(32L))
+    }
+
+    /**
+     * Verifies update-config sync upserts server configuration in the cache store.
+     */
+    @Test
+    fun `update server sync upserts config store`() = runTest {
+        val configStore = InMemoryMcpServerConfigStore()
+        val executor = McpRuntimeCommandExecutorImpl(
+            runtimeService = FakeRuntimeService(),
+            configStore = configStore
+        )
+        val original = testServer(serverId = 33L)
+        configStore.upsertServer(original)
+        val updated = original.copy(name = "filesystem-v2")
+
+        val result = executor.updateServer(WorkerMcpServerUpdateCommandData(server = updated)).rightOrError()
+
+        assertEquals(33L, result.serverId)
+        assertEquals("filesystem-v2", configStore.getServer(33L)?.name)
+    }
+
+    /**
+     * Verifies delete-config sync removes server configuration from the cache store.
+     */
+    @Test
+    fun `delete server sync removes config store entry`() = runTest {
+        val configStore = InMemoryMcpServerConfigStore()
+        val executor = McpRuntimeCommandExecutorImpl(
+            runtimeService = FakeRuntimeService(),
+            configStore = configStore
+        )
+        configStore.upsertServer(testServer(serverId = 34L))
+
+        val result = executor.deleteServer(WorkerMcpServerDeleteCommandData(serverId = 34L)).rightOrError()
+
+        assertEquals(34L, result.serverId)
+        assertEquals(null, configStore.getServer(34L))
+    }
+
+    /**
+     * Builds a deterministic Local MCP server DTO fixture for config-sync tests.
+     *
+     * @param serverId Persisted server identifier used in the fixture.
+     * @return Deterministic Local MCP server DTO.
+     */
+    private fun testServer(serverId: Long): LocalMCPServerDto = LocalMCPServerDto(
+        id = serverId,
+        userId = 1L,
+        workerId = 2L,
+        name = "filesystem",
+        command = "npx",
+        createdAt = Instant.fromEpochMilliseconds(1_700_000_000_000),
+        updatedAt = Instant.fromEpochMilliseconds(1_700_000_100_000)
+    )
 
     /**
      * Fake runtime service with configurable command outcomes.
