@@ -24,7 +24,7 @@ fun LocalMCPToolCallRequest.toWorkerCommandRequestPayload():
     val data = encodeProtocolPayload(
         value = this@toWorkerCommandRequestPayload,
         targetType = "LocalMCPToolCallRequest"
-    ).mapLeft { it.toMappingError() }
+    ).mapLeft { it.toToolCallMappingError() }
         .bind()
 
     WorkerCommandRequestPayload(
@@ -53,7 +53,7 @@ fun WorkerCommandRequestPayload.toLocalMcpToolCallRequest(): Either<WorkerMcpToo
         decodeProtocolPayload<LocalMCPToolCallRequest>(
             payload = data,
             targetType = "LocalMCPToolCallRequest"
-        ).mapLeft { it.toMappingError() }
+        ).mapLeft { it.toToolCallMappingError() }
             .bind()
     }
 
@@ -69,7 +69,7 @@ fun LocalMCPToolCallResult.toWorkerCommandResultPayload():
     val data = encodeProtocolPayload(
         value = this@toWorkerCommandResultPayload,
         targetType = "LocalMCPToolCallResult"
-    ).mapLeft { it.toMappingError() }
+    ).mapLeft { it.toToolCallMappingError() }
         .bind()
 
     WorkerCommandResultPayload(
@@ -79,12 +79,12 @@ fun LocalMCPToolCallResult.toWorkerCommandResultPayload():
 }
 
 /**
- * Converts the generic codec error into the more specific tool-call mapping error.
+ * Converts codec failures into the tool-call-specific mapping error hierarchy.
  *
  * @receiver Generic protocol codec error.
  * @return Tool-call mapping error carrying the same diagnostic information.
  */
-private fun WorkerProtocolCodecError.toMappingError(): WorkerMcpToolCallProtocolMappingError = when (this) {
+private fun WorkerProtocolCodecError.toToolCallMappingError(): WorkerMcpToolCallProtocolMappingError = when (this) {
     is WorkerProtocolCodecError.SerializationFailed -> {
         WorkerMcpToolCallProtocolMappingError.SerializationFailed(
             operation = operation,
@@ -93,3 +93,5 @@ private fun WorkerProtocolCodecError.toMappingError(): WorkerMcpToolCallProtocol
         )
     }
 }
+
+

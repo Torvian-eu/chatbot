@@ -1,19 +1,11 @@
 package eu.torvian.chatbot.common.models.api.worker.protocol.mapping
 
 import arrow.core.Either
-import arrow.core.raise.either
-import eu.torvian.chatbot.common.models.api.worker.protocol.codec.WorkerProtocolCodecError
-import eu.torvian.chatbot.common.models.api.worker.protocol.codec.decodeProtocolPayload
-import eu.torvian.chatbot.common.models.api.worker.protocol.codec.encodeProtocolPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerCommandResultStatuses
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolCommandTypes
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRequestPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandResultPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerControlErrorResultData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerCreateCommandData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerCreateResultData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDeleteCommandData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDeleteResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerGetRuntimeStatusCommandData
@@ -26,8 +18,6 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpSer
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionResultData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerUpdateCommandData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerUpdateResultData
 
 /**
  * Maps MCP server-start command data to a typed worker command-request payload.
@@ -105,45 +95,6 @@ fun WorkerMcpServerListRuntimeStatusesCommandData.toWorkerCommandRequestPayload(
     toCommandRequestPayload(
         commandType = WorkerProtocolCommandTypes.MCP_SERVER_LIST_RUNTIME_STATUSES,
         targetType = "WorkerMcpServerListRuntimeStatusesCommandData"
-    )
-
-/**
- * Maps MCP server-create command data to a typed worker command-request payload.
- *
- * @receiver Create command request DTO.
- * @return Either a worker command-request payload or a logical mapping error.
- */
-fun WorkerMcpServerCreateCommandData.toWorkerCommandRequestPayload():
-        Either<WorkerMcpRuntimeCommandProtocolMappingError, WorkerCommandRequestPayload> =
-    toCommandRequestPayload(
-        commandType = WorkerProtocolCommandTypes.MCP_SERVER_CREATE,
-        targetType = "WorkerMcpServerCreateCommandData"
-    )
-
-/**
- * Maps MCP server-update command data to a typed worker command-request payload.
- *
- * @receiver Update command request DTO.
- * @return Either a worker command-request payload or a logical mapping error.
- */
-fun WorkerMcpServerUpdateCommandData.toWorkerCommandRequestPayload():
-        Either<WorkerMcpRuntimeCommandProtocolMappingError, WorkerCommandRequestPayload> =
-    toCommandRequestPayload(
-        commandType = WorkerProtocolCommandTypes.MCP_SERVER_UPDATE,
-        targetType = "WorkerMcpServerUpdateCommandData"
-    )
-
-/**
- * Maps MCP server-delete command data to a typed worker command-request payload.
- *
- * @receiver Delete command request DTO.
- * @return Either a worker command-request payload or a logical mapping error.
- */
-fun WorkerMcpServerDeleteCommandData.toWorkerCommandRequestPayload():
-        Either<WorkerMcpRuntimeCommandProtocolMappingError, WorkerCommandRequestPayload> =
-    toCommandRequestPayload(
-        commandType = WorkerProtocolCommandTypes.MCP_SERVER_DELETE,
-        targetType = "WorkerMcpServerDeleteCommandData"
     )
 
 /**
@@ -225,45 +176,6 @@ fun WorkerCommandRequestPayload.toWorkerMcpServerListRuntimeStatusesCommandData(
     )
 
 /**
- * Decodes worker request payload data as MCP server-create command data.
- *
- * @receiver Worker command-request payload.
- * @return Either decoded create command data or a logical mapping error.
- */
-fun WorkerCommandRequestPayload.toWorkerMcpServerCreateCommandData():
-        Either<WorkerMcpRuntimeCommandProtocolMappingError, WorkerMcpServerCreateCommandData> =
-    decodeCommandRequestData(
-        expectedCommandType = WorkerProtocolCommandTypes.MCP_SERVER_CREATE,
-        targetType = "WorkerMcpServerCreateCommandData"
-    )
-
-/**
- * Decodes worker request payload data as MCP server-update command data.
- *
- * @receiver Worker command-request payload.
- * @return Either decoded update command data or a logical mapping error.
- */
-fun WorkerCommandRequestPayload.toWorkerMcpServerUpdateCommandData():
-        Either<WorkerMcpRuntimeCommandProtocolMappingError, WorkerMcpServerUpdateCommandData> =
-    decodeCommandRequestData(
-        expectedCommandType = WorkerProtocolCommandTypes.MCP_SERVER_UPDATE,
-        targetType = "WorkerMcpServerUpdateCommandData"
-    )
-
-/**
- * Decodes worker request payload data as MCP server-delete command data.
- *
- * @receiver Worker command-request payload.
- * @return Either decoded delete command data or a logical mapping error.
- */
-fun WorkerCommandRequestPayload.toWorkerMcpServerDeleteCommandData():
-        Either<WorkerMcpRuntimeCommandProtocolMappingError, WorkerMcpServerDeleteCommandData> =
-    decodeCommandRequestData(
-        expectedCommandType = WorkerProtocolCommandTypes.MCP_SERVER_DELETE,
-        targetType = "WorkerMcpServerDeleteCommandData"
-    )
-
-/**
  * Maps MCP server-start result data to a typed worker command-result payload.
  *
  * @receiver Start command result DTO.
@@ -334,54 +246,6 @@ fun WorkerMcpServerListRuntimeStatusesResultData.toWorkerCommandResultPayload(
     status: String = WorkerCommandResultStatuses.SUCCESS
 ): Either<WorkerMcpRuntimeCommandProtocolMappingError, WorkerCommandResultPayload> =
     toCommandResultPayload(status = status, targetType = "WorkerMcpServerListRuntimeStatusesResultData")
-
-/**
- * Maps MCP server-create result data to a typed worker command-result payload.
- *
- * @receiver Create command result DTO.
- * @param status Final command-result status to encode.
- * @return Either a worker command-result payload or a logical mapping error.
- */
-fun WorkerMcpServerCreateResultData.toWorkerCommandResultPayload(
-    status: String = WorkerCommandResultStatuses.SUCCESS
-): Either<WorkerMcpRuntimeCommandProtocolMappingError, WorkerCommandResultPayload> =
-    toCommandResultPayload(status = status, targetType = "WorkerMcpServerCreateResultData")
-
-/**
- * Maps MCP server-update result data to a typed worker command-result payload.
- *
- * @receiver Update command result DTO.
- * @param status Final command-result status to encode.
- * @return Either a worker command-result payload or a logical mapping error.
- */
-fun WorkerMcpServerUpdateResultData.toWorkerCommandResultPayload(
-    status: String = WorkerCommandResultStatuses.SUCCESS
-): Either<WorkerMcpRuntimeCommandProtocolMappingError, WorkerCommandResultPayload> =
-    toCommandResultPayload(status = status, targetType = "WorkerMcpServerUpdateResultData")
-
-/**
- * Maps MCP server-delete result data to a typed worker command-result payload.
- *
- * @receiver Delete command result DTO.
- * @param status Final command-result status to encode.
- * @return Either a worker command-result payload or a logical mapping error.
- */
-fun WorkerMcpServerDeleteResultData.toWorkerCommandResultPayload(
-    status: String = WorkerCommandResultStatuses.SUCCESS
-): Either<WorkerMcpRuntimeCommandProtocolMappingError, WorkerCommandResultPayload> =
-    toCommandResultPayload(status = status, targetType = "WorkerMcpServerDeleteResultData")
-
-/**
- * Maps MCP server-control error result data to a typed worker command-result payload.
- *
- * @receiver MCP server-control error result DTO.
- * @param status Final command-result status to encode.
- * @return Either a worker command-result payload or a logical mapping error.
- */
-fun WorkerMcpServerControlErrorResultData.toWorkerCommandResultPayload(
-    status: String = WorkerCommandResultStatuses.ERROR
-): Either<WorkerMcpRuntimeCommandProtocolMappingError, WorkerCommandResultPayload> =
-    toCommandResultPayload(status = status, targetType = "WorkerMcpServerControlErrorResultData")
 
 /**
  * Decodes worker result payload data as MCP server-start result data.
@@ -480,54 +344,6 @@ fun WorkerCommandResultPayload.toWorkerMcpServerListRuntimeStatusesResultData(
     )
 
 /**
- * Decodes worker result payload data as MCP server-create result data.
- *
- * @receiver Worker command-result payload.
- * @param commandType Command type associated with the completed lifecycle.
- * @return Either decoded create result data or a logical mapping error.
- */
-fun WorkerCommandResultPayload.toWorkerMcpServerCreateResultData(
-    commandType: String
-): Either<WorkerMcpRuntimeCommandProtocolMappingError, WorkerMcpServerCreateResultData> =
-    decodeCommandResultData(
-        commandType = commandType,
-        expectedCommandType = WorkerProtocolCommandTypes.MCP_SERVER_CREATE,
-        targetType = "WorkerMcpServerCreateResultData"
-    )
-
-/**
- * Decodes worker result payload data as MCP server-update result data.
- *
- * @receiver Worker command-result payload.
- * @param commandType Command type associated with the completed lifecycle.
- * @return Either decoded update result data or a logical mapping error.
- */
-fun WorkerCommandResultPayload.toWorkerMcpServerUpdateResultData(
-    commandType: String
-): Either<WorkerMcpRuntimeCommandProtocolMappingError, WorkerMcpServerUpdateResultData> =
-    decodeCommandResultData(
-        commandType = commandType,
-        expectedCommandType = WorkerProtocolCommandTypes.MCP_SERVER_UPDATE,
-        targetType = "WorkerMcpServerUpdateResultData"
-    )
-
-/**
- * Decodes worker result payload data as MCP server-delete result data.
- *
- * @receiver Worker command-result payload.
- * @param commandType Command type associated with the completed lifecycle.
- * @return Either decoded delete result data or a logical mapping error.
- */
-fun WorkerCommandResultPayload.toWorkerMcpServerDeleteResultData(
-    commandType: String
-): Either<WorkerMcpRuntimeCommandProtocolMappingError, WorkerMcpServerDeleteResultData> =
-    decodeCommandResultData(
-        commandType = commandType,
-        expectedCommandType = WorkerProtocolCommandTypes.MCP_SERVER_DELETE,
-        targetType = "WorkerMcpServerDeleteResultData"
-    )
-
-/**
  * Decodes worker result payload data as MCP server-start error result data.
  *
  * @receiver Worker command-result payload.
@@ -623,172 +439,4 @@ fun WorkerCommandResultPayload.toWorkerMcpServerListRuntimeStatusesErrorResultDa
         targetType = "WorkerMcpServerControlErrorResultData"
     )
 
-/**
- * Decodes worker result payload data as MCP server-create error result data.
- *
- * @receiver Worker command-result payload.
- * @param commandType Command type associated with the completed lifecycle.
- * @return Either decoded create error result data or a logical mapping error.
- */
-fun WorkerCommandResultPayload.toWorkerMcpServerCreateErrorResultData(
-    commandType: String
-): Either<WorkerMcpRuntimeCommandProtocolMappingError, WorkerMcpServerControlErrorResultData> =
-    decodeCommandResultData(
-        commandType = commandType,
-        expectedCommandType = WorkerProtocolCommandTypes.MCP_SERVER_CREATE,
-        targetType = "WorkerMcpServerControlErrorResultData"
-    )
-
-/**
- * Decodes worker result payload data as MCP server-update error result data.
- *
- * @receiver Worker command-result payload.
- * @param commandType Command type associated with the completed lifecycle.
- * @return Either decoded update error result data or a logical mapping error.
- */
-fun WorkerCommandResultPayload.toWorkerMcpServerUpdateErrorResultData(
-    commandType: String
-): Either<WorkerMcpRuntimeCommandProtocolMappingError, WorkerMcpServerControlErrorResultData> =
-    decodeCommandResultData(
-        commandType = commandType,
-        expectedCommandType = WorkerProtocolCommandTypes.MCP_SERVER_UPDATE,
-        targetType = "WorkerMcpServerControlErrorResultData"
-    )
-
-/**
- * Decodes worker result payload data as MCP server-delete error result data.
- *
- * @receiver Worker command-result payload.
- * @param commandType Command type associated with the completed lifecycle.
- * @return Either decoded delete error result data or a logical mapping error.
- */
-fun WorkerCommandResultPayload.toWorkerMcpServerDeleteErrorResultData(
-    commandType: String
-): Either<WorkerMcpRuntimeCommandProtocolMappingError, WorkerMcpServerControlErrorResultData> =
-    decodeCommandResultData(
-        commandType = commandType,
-        expectedCommandType = WorkerProtocolCommandTypes.MCP_SERVER_DELETE,
-        targetType = "WorkerMcpServerControlErrorResultData"
-    )
-
-/**
- * Encodes command request data and wraps it in a worker command-request payload.
- *
- * @receiver Command request DTO.
- * @param commandType Command type written into the request payload.
- * @param targetType Human-readable type label used in mapping diagnostics.
- * @return Either encoded payload or mapping error.
- */
-private inline fun <reified T> T.toCommandRequestPayload(
-    commandType: String,
-    targetType: String
-): Either<WorkerMcpRuntimeCommandProtocolMappingError, WorkerCommandRequestPayload> = either {
-    val data = encodeProtocolPayload(value = this@toCommandRequestPayload, targetType = targetType)
-        .mapLeft { it.toMappingError() }
-        .bind()
-
-    WorkerCommandRequestPayload(
-        commandType = commandType,
-        data = data
-    )
-}
-
-/**
- * Decodes worker command-request payload data into a typed request DTO.
- *
- * @receiver Command-request payload carrying typed JSON data.
- * @param expectedCommandType Command type required for this decoding path.
- * @param targetType Human-readable type label used in mapping diagnostics.
- * @return Either decoded DTO or mapping error.
- */
-private inline fun <reified T> WorkerCommandRequestPayload.decodeCommandRequestData(
-    expectedCommandType: String,
-    targetType: String
-): Either<WorkerMcpRuntimeCommandProtocolMappingError, T> = either {
-    validateCommandType(actual = commandType, expected = expectedCommandType).bind()
-
-    decodeProtocolPayload<T>(payload = data, targetType = targetType)
-        .mapLeft { it.toMappingError() }
-        .bind()
-}
-
-/**
- * Encodes command result data and wraps it in a worker command-result payload.
- *
- * @receiver Command result DTO.
- * @param status Final command status written into the payload.
- * @param targetType Human-readable type label used in mapping diagnostics.
- * @return Either encoded payload or mapping error.
- */
-private inline fun <reified T> T.toCommandResultPayload(
-    status: String,
-    targetType: String
-): Either<WorkerMcpRuntimeCommandProtocolMappingError, WorkerCommandResultPayload> = either {
-    val data = encodeProtocolPayload(value = this@toCommandResultPayload, targetType = targetType)
-        .mapLeft { it.toMappingError() }
-        .bind()
-
-    WorkerCommandResultPayload(
-        status = status,
-        data = data
-    )
-}
-
-/**
- * Decodes worker command-result payload data into a typed result DTO.
- *
- * @receiver Command-result payload carrying typed JSON data.
- * @param commandType Command type associated with the completed lifecycle.
- * @param expectedCommandType Command type required for this decoding path.
- * @param targetType Human-readable type label used in mapping diagnostics.
- * @return Either decoded DTO or mapping error.
- */
-private inline fun <reified T> WorkerCommandResultPayload.decodeCommandResultData(
-    commandType: String,
-    expectedCommandType: String,
-    targetType: String
-): Either<WorkerMcpRuntimeCommandProtocolMappingError, T> = either {
-    validateCommandType(actual = commandType, expected = expectedCommandType).bind()
-
-    decodeProtocolPayload<T>(payload = data, targetType = targetType)
-        .mapLeft { it.toMappingError() }
-        .bind()
-}
-
-/**
- * Validates that a payload command type matches the expected mapping command type.
- *
- * @param actual Actual command type.
- * @param expected Expected command type.
- * @return Either Unit or mapping error describing the mismatch.
- */
-private fun validateCommandType(
-    actual: String,
-    expected: String
-): Either<WorkerMcpRuntimeCommandProtocolMappingError, Unit> = either {
-    if (actual != expected) {
-        raise(
-            WorkerMcpRuntimeCommandProtocolMappingError.InvalidCommandType(
-                expected = expected,
-                actual = actual
-            )
-        )
-    }
-}
-
-/**
- * Converts a generic protocol codec error to an MCP server-control mapping error.
- *
- * @receiver Generic protocol codec error.
- * @return Server-control mapping error carrying the same diagnostic context.
- */
-private fun WorkerProtocolCodecError.toMappingError(): WorkerMcpRuntimeCommandProtocolMappingError = when (this) {
-    is WorkerProtocolCodecError.SerializationFailed -> {
-        WorkerMcpRuntimeCommandProtocolMappingError.SerializationFailed(
-            operation = operation,
-            targetType = targetType,
-            details = details
-        )
-    }
-}
 
