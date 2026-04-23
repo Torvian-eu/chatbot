@@ -6,9 +6,7 @@ import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
-import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import kotlinx.coroutines.flow.Flow
-import kotlinx.serialization.json.JsonObject
 
 /**
  * High-level orchestration service for Local MCP Server workflows.
@@ -199,22 +197,4 @@ interface LocalMCPServerManager {
      */
     suspend fun deleteServer(serverId: Long): Either<DeleteServerError, Unit>
 
-    /**
-     * Executes a tool on an MCP server.
-     *
-     * This method:
-     * 1. Ensures the server is started and connected
-     * 2. Calls `mcpSdkClient.callTool(serverId, toolName, arguments)`
-     * 3. Returns the tool result or error
-     *
-     * @param serverId The unique identifier of the MCP server (needed to look up client)
-     * @param toolName The name of the tool to execute (MCP tool name)
-     * @param arguments The tool arguments as a JSON object
-     * @return Either.Right with tool result, or Either.Left with ManageCallToolError
-     */
-    suspend fun callTool(
-        serverId: Long,
-        toolName: String,
-        arguments: JsonObject
-    ): Either<ManageCallToolError, CallToolResult?>
 }

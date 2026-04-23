@@ -14,10 +14,8 @@ import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
-import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
-import kotlinx.serialization.json.JsonObject
 import kotlin.time.Clock
 
 /**
@@ -283,34 +281,6 @@ class LocalMCPServerManagerImpl(
         toolRepository.removeToolsFromCache(serverId)
 
         logger.info("Successfully deleted MCP server $serverId")
-    }
-
-    override suspend fun callTool(
-        serverId: Long,
-        toolName: String,
-        arguments: JsonObject
-    ): Either<ManageCallToolError, CallToolResult?> = either {
-        logger.info("Calling tool '$toolName' on MCP server $serverId")
-        logger.debug("Tool arguments: $arguments")
-
-        // Step 1: Ensure server is started and connected
-        val isStarted = mcpClientService.isClientRegistered(serverId)
-        if (!isStarted) {
-            val config = getServerConfig(serverId).mapLeft { error ->
-                logger.error("Failed to load config for MCP server $serverId: ${error.message}")
-                ManageCallToolError.ConfigNotFound(serverId, error)
-            }.bind()
-            mcpClientService.startAndConnect(config).mapLeft { error ->
-                logger.error("Failed to connect to MCP server $serverId: ${error.message}")
-                ManageCallToolError.StartFailed(serverId, error)
-            }.bind()
-        }
-
-        // Step 2: Call MCPClientService to execute tool
-        mcpClientService.callTool(serverId, toolName, arguments).mapLeft { error ->
-            logger.error("Failed to call tool '$toolName' on MCP server $serverId: ${error.message}")
-            ManageCallToolError.CallFailed(serverId, error)
-        }.bind()
     }
 
     /**
