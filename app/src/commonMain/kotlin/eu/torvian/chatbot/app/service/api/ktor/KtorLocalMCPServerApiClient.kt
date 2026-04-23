@@ -9,6 +9,7 @@ import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
 import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerConnectionResponse
+import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerDraftConnectionRequest
 import eu.torvian.chatbot.common.models.api.mcp.UpdateLocalMCPServerRequest
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -87,6 +88,13 @@ class KtorLocalMCPServerApiClient(client: HttpClient) : BaseApiResourceClient(cl
         client.get(LocalMCPServerResource.ById.RuntimeStatus(parent = byId(serverId))).body<LocalMcpServerRuntimeStatusDto>()
     }
 
+    override suspend fun testDraftConnection(request: TestLocalMCPServerDraftConnectionRequest): Either<ApiResourceError, TestLocalMCPServerConnectionResponse> =
+        safeApiCall {
+            client.post(LocalMCPServerResource.TestDraftConnection()) {
+                setBody(request)
+            }.body<TestLocalMCPServerConnectionResponse>()
+        }
+
     /**
      * Builds the typed by-id resource once for nested runtime-control resources.
      *
@@ -95,4 +103,3 @@ class KtorLocalMCPServerApiClient(client: HttpClient) : BaseApiResourceClient(cl
      */
     private fun byId(serverId: Long): LocalMCPServerResource.ById = LocalMCPServerResource.ById(id = serverId)
 }
-

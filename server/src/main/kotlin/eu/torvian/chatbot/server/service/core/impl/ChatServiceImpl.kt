@@ -8,8 +8,6 @@ import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import arrow.core.right
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallRequest
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallResult
 import eu.torvian.chatbot.common.models.api.tool.ToolCallApprovalResponse
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
@@ -199,8 +197,7 @@ class ChatServiceImpl(
         content: String?,
         parentMessageId: Long?,
         fileReferences: List<FileReference>,
-        mcpResponseFlow: Flow<LocalMCPToolCallResult>,
-        approvalResponseFlow: Flow<ToolCallApprovalResponse>
+        toolApprovalFlow: Flow<ToolCallApprovalResponse>
     ): Flow<Either<ProcessNewMessageError, MessageEvent>> = channelFlow {
         try {
             // 1. Save user message (only if content is provided)
@@ -313,8 +310,7 @@ class ChatServiceImpl(
                     userId,
                     pendingToolCalls,
                     llmConfig.tools,
-                    mcpResponseFlow,
-                    approvalResponseFlow
+                    toolApprovalFlow
                 )
                     .collect { event ->
                         when (event) {
@@ -327,9 +323,6 @@ class ChatServiceImpl(
                                 send(MessageEvent.ToolExecutionCompleted(event.toolCall).right())
                             }
 
-                            is ToolExecutionEvent.LocalMCPToolCallReceived -> {
-                                send(MessageEvent.LocalMCPToolCallReceived(event.request).right())
-                            }
 
                             is ToolExecutionEvent.ToolCallApprovalRequested -> {
                                 send(MessageEvent.ToolCallApprovalRequested(event.toolCall).right())
@@ -376,8 +369,7 @@ class ChatServiceImpl(
         content: String?,
         parentMessageId: Long?,
         fileReferences: List<FileReference>,
-        mcpResponseFlow: Flow<LocalMCPToolCallResult>,
-        approvalResponseFlow: Flow<ToolCallApprovalResponse>
+        toolApprovalFlow: Flow<ToolCallApprovalResponse>
     ): Flow<Either<ProcessNewMessageError, MessageStreamEvent>> = channelFlow {
         try {
             // Step 1: Save user message (only if content is provided)
@@ -495,8 +487,7 @@ class ChatServiceImpl(
                             userId,
                             pendingToolCalls,
                             llmConfig.tools,
-                            mcpResponseFlow,
-                            approvalResponseFlow
+                            toolApprovalFlow
                         )
                             .collect { event ->
                                 when (event) {
@@ -509,9 +500,6 @@ class ChatServiceImpl(
                                         send(MessageStreamEvent.ToolExecutionCompleted(event.toolCall).right())
                                     }
 
-                                    is ToolExecutionEvent.LocalMCPToolCallReceived -> {
-                                        send(MessageStreamEvent.LocalMCPToolCallReceived(event.request).right())
-                                    }
 
                                     is ToolExecutionEvent.ToolCallApprovalRequested -> {
                                         send(MessageStreamEvent.ToolCallApprovalRequested(event.toolCall).right())
@@ -575,19 +563,15 @@ class ChatServiceImpl(
 
     /**
      * Executes tool calls sequentially and updates them in the database.
-     * Returns a Flow that emits events for each tool call, which can be either a request
-     * for client-side execution or a notification of completion.
+     * Returns a Flow that emits execution-state transitions and completion records.
      * Checks user approval preferences first; if not found, requests manual approval.
      */
     private fun executeAndUpdateToolCalls(
         userId: Long,
         pendingToolCalls: List<ToolCall>,
         toolDefinitions: List<ToolDefinition>?,
-        mcpResponseFlow: Flow<LocalMCPToolCallResult>,
-        approvalResponseFlow: Flow<ToolCallApprovalResponse>
+        toolApprovalFlow: Flow<ToolCallApprovalResponse>
     ): Flow<ToolExecutionEvent> = channelFlow {
-        val mcpStartTimes = mutableMapOf<Long, Instant>()
-
         pendingToolCalls.forEach { pendingToolCall ->
             if (pendingToolCall.status != ToolCallStatus.PENDING) {
                 send(ToolExecutionEvent.ToolCallCompleted(pendingToolCall))
@@ -642,7 +626,7 @@ class ChatServiceImpl(
                 // Step 1b: Wait for approval response
                 try {
                     withTimeout(300_000) { // 5 minute timeout
-                        approvalResponseFlow.first { it.toolCallId == pendingToolCall.id }
+                        toolApprovalFlow.first { it.toolCallId == pendingToolCall.id }
                     }
                 } catch (_: TimeoutCancellationException) {
                     // Timeout - treat as denial
@@ -681,46 +665,37 @@ class ChatServiceImpl(
 
             when (toolDef) {
                 is LocalMCPToolDefinition -> {
-                    localMcpExecutor.executeTool(
+                    val startTime = Clock.System.now()
+                    when (val event = localMcpExecutor.executeTool(
                         toolDefinition = toolDef,
                         toolCallId = pendingToolCall.id,
-                        inputJson = pendingToolCall.input,
-                        responseFlow = mcpResponseFlow
-                    ).collect { event ->
-                        when (event) {
-                            is LocalMCPExecutorEvent.ToolExecutionRequest -> {
-                                mcpStartTimes[event.request.toolCallId] = Clock.System.now()
-                                send(ToolExecutionEvent.LocalMCPToolCallReceived(event.request))
+                        inputJson = pendingToolCall.input
+                    )) {
+                        is LocalMCPExecutorEvent.ToolExecutionResult -> {
+                            val durationMs = (Clock.System.now() - startTime).inWholeMilliseconds
+                            val updatedToolCall = pendingToolCall.copy(
+                                output = event.result.output,
+                                status = if (event.result.isError) ToolCallStatus.ERROR else ToolCallStatus.SUCCESS,
+                                errorMessage = event.result.errorMessage,
+                                durationMs = durationMs
+                            )
+                            toolCallDao.updateToolCall(updatedToolCall).getOrElse { error ->
+                                throw IllegalStateException("Failed to update tool call: $error")
                             }
+                            send(ToolExecutionEvent.ToolCallCompleted(updatedToolCall))
+                        }
 
-                            is LocalMCPExecutorEvent.ToolExecutionResult -> {
-                                val startTime = mcpStartTimes.remove(event.result.toolCallId) ?: Clock.System.now()
-                                val durationMs = (Clock.System.now() - startTime).inWholeMilliseconds
-                                val updatedToolCall = pendingToolCall.copy(
-                                    output = event.result.output,
-                                    status = if (event.result.isError) ToolCallStatus.ERROR else ToolCallStatus.SUCCESS,
-                                    errorMessage = event.result.errorMessage,
-                                    durationMs = durationMs
-                                )
-                                toolCallDao.updateToolCall(updatedToolCall).getOrElse { error ->
-                                    throw IllegalStateException("Failed to update tool call: $error")
-                                }
-                                send(ToolExecutionEvent.ToolCallCompleted(updatedToolCall))
+                        is LocalMCPExecutorEvent.ToolExecutionError -> {
+                            val durationMs = (Clock.System.now() - startTime).inWholeMilliseconds
+                            val updatedToolCall = pendingToolCall.copy(
+                                status = ToolCallStatus.ERROR,
+                                errorMessage = event.error.message,
+                                durationMs = durationMs
+                            )
+                            toolCallDao.updateToolCall(updatedToolCall).getOrElse { error ->
+                                throw IllegalStateException("Failed to update tool call: $error")
                             }
-
-                            is LocalMCPExecutorEvent.ToolExecutionError -> {
-                                val startTime = mcpStartTimes.remove(event.toolCallId) ?: Clock.System.now()
-                                val durationMs = (Clock.System.now() - startTime).inWholeMilliseconds
-                                val updatedToolCall = pendingToolCall.copy(
-                                    status = ToolCallStatus.ERROR,
-                                    errorMessage = event.error.message,
-                                    durationMs = durationMs
-                                )
-                                toolCallDao.updateToolCall(updatedToolCall).getOrElse { error ->
-                                    throw IllegalStateException("Failed to update tool call: $error")
-                                }
-                                send(ToolExecutionEvent.ToolCallCompleted(updatedToolCall))
-                            }
+                            send(ToolExecutionEvent.ToolCallCompleted(updatedToolCall))
                         }
                     }
                 }
@@ -1119,13 +1094,11 @@ class ChatServiceImpl(
 
     /**
      * Private sealed interface to represent events from the tool execution logic.
-     * This allows `executeAndUpdateToolCalls` to communicate different outcomes
-     * (a completed tool call vs. a request for client-side execution vs. approval request) to its caller.
+     * This allows `executeAndUpdateToolCalls` to communicate execution transitions and completion outcomes.
      */
     private sealed interface ToolExecutionEvent {
         data class ToolCallExecuting(val toolCall: ToolCall) : ToolExecutionEvent
         data class ToolCallCompleted(val toolCall: ToolCall) : ToolExecutionEvent
-        data class LocalMCPToolCallReceived(val request: LocalMCPToolCallRequest) : ToolExecutionEvent
         data class ToolCallApprovalRequested(val toolCall: ToolCall) : ToolExecutionEvent
     }
 

@@ -18,6 +18,8 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpSer
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestDraftConnectionCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestDraftConnectionResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerUpdateCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerUpdateResultData
 
@@ -119,4 +121,14 @@ interface McpRuntimeCommandExecutor {
     suspend fun deleteServer(
         request: WorkerMcpServerDeleteCommandData
     ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerDeleteResultData>
+
+    /**
+     * Executes an MCP server draft connectivity test command.
+     *
+     * @param request Typed draft test-connection command input data.
+     * @return Either typed failure data or typed success data for the command result.
+     */
+    suspend fun testDraftConnection(
+        request: WorkerMcpServerTestDraftConnectionCommandData
+    ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerTestDraftConnectionResultData>
 }

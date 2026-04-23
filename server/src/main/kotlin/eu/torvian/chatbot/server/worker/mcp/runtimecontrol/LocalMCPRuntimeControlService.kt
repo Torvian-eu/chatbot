@@ -4,6 +4,7 @@ import arrow.core.Either
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
 import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
 import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerConnectionResponse
+import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerDraftConnectionRequest
 
 /**
  * Service abstraction for server-owned runtime control operations of Local MCP servers.
@@ -74,6 +75,16 @@ interface LocalMCPRuntimeControlService {
      * @return Either runtime-control error or runtime-status DTO list.
      */
     suspend fun listRuntimeStatuses(userId: Long): Either<LocalMCPRuntimeControlError, List<LocalMcpServerRuntimeStatusDto>>
+
+    /**
+     * Tests runtime connectivity for a draft Local MCP server configuration.
+     *
+     * @param userId Authenticated user identifier.
+     * @param request Draft server configuration to test.
+     * @return Either runtime-control error or deterministic connection-test response.
+     */
+    suspend fun testDraftConnection(
+        userId: Long,
+        request: TestLocalMCPServerDraftConnectionRequest
+    ): Either<LocalMCPRuntimeControlError, TestLocalMCPServerConnectionResponse>
 }
-
-

@@ -14,11 +14,9 @@ import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
-import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
+import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerDraftConnectionRequest
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
-import kotlinx.serialization.json.JsonObject
-import kotlin.time.Clock
 
 /**
  * Desktop/Android implementation of LocalMCPServerManager.
@@ -26,7 +24,7 @@ import kotlin.time.Clock
  * This manager orchestrates MCP server workflows by coordinating between:
  * - LocalMCPServerRepository (MCP server configurations)
  * - LocalMCPToolRepository (MCP tool persistence)
- * - MCPClientService (MCP operations)
+ * - LocalMCPServerRuntimeStatusRepository (worker-backed runtime status snapshots)
  *
  * Design principles:
  * - High-level orchestration layer between UI and MCP operations
@@ -37,15 +35,11 @@ import kotlin.time.Clock
  * @property serverRepository Repository for MCP server configurations
  * @property runtimeStatusRepository Repository for worker-backed runtime status snapshots
  * @property toolRepository Repository for MCP tool persistence
- * @property mcpClientService Service for MCP operations
- * @property clock Clock instance for generating timestamps
  */
 class LocalMCPServerManagerImpl(
     private val serverRepository: LocalMCPServerRepository,
     private val runtimeStatusRepository: LocalMCPServerRuntimeStatusRepository,
-    private val toolRepository: LocalMCPToolRepository,
-    private val mcpClientService: MCPClientService,
-    private val clock: Clock = Clock.System
+    private val toolRepository: LocalMCPToolRepository
 ) : LocalMCPServerManager {
 
     companion object {
@@ -90,56 +84,34 @@ class LocalMCPServerManagerImpl(
     }
 
     override suspend fun testConnectionForNewServer(
+        workerId: Long,
         name: String,
         command: String,
         arguments: List<String>,
         environmentVariables: List<LocalMCPEnvironmentVariableDto>,
+        secretEnvironmentVariables: List<LocalMCPEnvironmentVariableDto>,
         workingDirectory: String?
     ): Either<TestConnectionError, Int> = either {
         logger.info("Testing new server: $name")
 
-        // Step 1: Create a temporary server config
-        val server = LocalMCPServerDto(
-            id = (Long.MIN_VALUE..-1L).random(),
-            userId = 1L,
-            workerId = 0L,
+        // Build the shared draft-test request so the repository can call the server-owned API.
+        val request = TestLocalMCPServerDraftConnectionRequest(
+            workerId = workerId,
             name = name,
             command = command,
             arguments = arguments,
             environmentVariables = environmentVariables,
-            secretEnvironmentVariables = emptyList(),
-            workingDirectory = workingDirectory,
-            createdAt = clock.now(),
-            updatedAt = clock.now()
+            secretEnvironmentVariables = secretEnvironmentVariables,
+            workingDirectory = workingDirectory
         )
 
-        // Step 2: Start and connect to the server
-        mcpClientService.startAndConnect(server).mapLeft { error ->
-            logger.error("Failed to connect to MCP server $name: ${error.message}")
-            TestConnectionError.ConnectionFailed(server.id, error)
+        // Delegate to repository/server API for draft testing.
+        val response = serverRepository.testConnectionForNewServer(request).mapLeft { error ->
+            logger.error("Server runtime-control draft test-connection failed for new server $name: ${error.message}")
+            TestConnectionError.DraftRuntimeControlFailed(workerId, error)
         }.bind()
 
-        try {
-            // Step 3: Discover tools
-            val numTools = mcpClientService.discoverTools(server.id)
-                .mapLeft { error ->
-                    logger.error("Failed to discover tools from MCP server $name: ${error.message}")
-                    TestConnectionError.DiscoveryFailed(server.id, error)
-                }
-                .map { tools ->
-                    tools.size
-                }
-                .bind()
-
-            // Step 4: Return result
-            logger.info("Connection test successful for new server $name: $numTools tools discovered")
-            return@either numTools
-        } finally {
-            // Step 5: Cleanup - stop the server
-            mcpClientService.stopServer(server.id).onLeft { error ->
-                logger.warn("Failed to stop MCP server $name after connection test: ${error.message}")
-            }
-        }
+        response.discoveredToolCount
     }
 
     override suspend fun createServer(
@@ -263,54 +235,17 @@ class LocalMCPServerManagerImpl(
     override suspend fun deleteServer(serverId: Long): Either<DeleteServerError, Unit> = either {
         logger.info("Deleting MCP server: $serverId")
 
-        // Step 1: Stop the server if it's running
-        if (mcpClientService.isClientRegistered(serverId)) {
-            logger.info("Stopping MCP server $serverId before deletion")
-            mcpClientService.stopServer(serverId).mapLeft { error ->
-                logger.error("Failed to stop MCP server $serverId before deletion: ${error.message}")
-                DeleteServerError.StopFailed(serverId, error)
-            }.bind()
-        }
-
-        // Step 2: Delete the server configuration (server-side will cascade delete tools)
+        // Delete the server configuration first; the backend owns the authoritative runtime state.
         logger.info("Deleting server configuration for MCP server $serverId")
         serverRepository.deleteServer(serverId).mapLeft { error ->
             logger.error("Failed to delete MCP server configuration $serverId: ${error.message}")
             DeleteServerError.ServerDeletionFailed(serverId, error)
         }.bind()
 
-        // Step 3: Remove the tools from the tool repository cache
+        // Remove the tools from the local cache so the UI no longer shows deleted server tools.
         toolRepository.removeToolsFromCache(serverId)
 
         logger.info("Successfully deleted MCP server $serverId")
-    }
-
-    override suspend fun callTool(
-        serverId: Long,
-        toolName: String,
-        arguments: JsonObject
-    ): Either<ManageCallToolError, CallToolResult?> = either {
-        logger.info("Calling tool '$toolName' on MCP server $serverId")
-        logger.debug("Tool arguments: $arguments")
-
-        // Step 1: Ensure server is started and connected
-        val isStarted = mcpClientService.isClientRegistered(serverId)
-        if (!isStarted) {
-            val config = getServerConfig(serverId).mapLeft { error ->
-                logger.error("Failed to load config for MCP server $serverId: ${error.message}")
-                ManageCallToolError.ConfigNotFound(serverId, error)
-            }.bind()
-            mcpClientService.startAndConnect(config).mapLeft { error ->
-                logger.error("Failed to connect to MCP server $serverId: ${error.message}")
-                ManageCallToolError.StartFailed(serverId, error)
-            }.bind()
-        }
-
-        // Step 2: Call MCPClientService to execute tool
-        mcpClientService.callTool(serverId, toolName, arguments).mapLeft { error ->
-            logger.error("Failed to call tool '$toolName' on MCP server $serverId: ${error.message}")
-            ManageCallToolError.CallFailed(serverId, error)
-        }.bind()
     }
 
     /**

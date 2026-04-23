@@ -6,6 +6,7 @@ import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
 import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerConnectionResponse
+import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerDraftConnectionRequest
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -153,4 +154,12 @@ interface LocalMCPServerRepository {
      * @return Either.Right with refresh summary payload on success, or Either.Left with RepositoryError on failure.
      */
     suspend fun refreshTools(serverId: Long): Either<RepositoryError, RefreshMCPToolsResponse>
+
+    /**
+     * Requests a server-owned runtime connection test for a draft Local MCP server configuration.
+     *
+     * @param request The draft server configuration to test.
+     * @return Either.Right with the test response payload on success, or Either.Left with RepositoryError on failure.
+     */
+    suspend fun testConnectionForNewServer(request: TestLocalMCPServerDraftConnectionRequest): Either<RepositoryError, TestLocalMCPServerConnectionResponse>
 }

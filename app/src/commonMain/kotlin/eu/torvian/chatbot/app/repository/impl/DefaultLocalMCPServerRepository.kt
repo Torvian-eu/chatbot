@@ -15,6 +15,7 @@ import eu.torvian.chatbot.common.models.api.mcp.CreateLocalMCPServerRequest
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
 import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerConnectionResponse
+import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerDraftConnectionRequest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -156,6 +157,14 @@ class DefaultLocalMCPServerRepository(
             apiResourceError.toRepositoryError("Failed to refresh MCP server tools")
         }) {
             api.refreshTools(serverId).bind()
+        }
+    }
+
+    override suspend fun testConnectionForNewServer(request: TestLocalMCPServerDraftConnectionRequest): Either<RepositoryError, TestLocalMCPServerConnectionResponse> = either {
+        withError({ apiResourceError ->
+            apiResourceError.toRepositoryError("Failed to test draft MCP server connection")
+        }) {
+            api.testDraftConnection(request).bind()
         }
     }
 

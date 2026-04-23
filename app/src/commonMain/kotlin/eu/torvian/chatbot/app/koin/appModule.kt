@@ -6,8 +6,11 @@ import eu.torvian.chatbot.app.repository.impl.*
 import eu.torvian.chatbot.app.service.api.*
 import eu.torvian.chatbot.app.service.api.ktor.*
 import eu.torvian.chatbot.app.service.auth.createAuthenticatedHttpClient
+import eu.torvian.chatbot.app.service.mcp.LocalMCPServerManager
+import eu.torvian.chatbot.app.service.mcp.LocalMCPServerManagerImpl
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.service.security.CertificateTrustService
+import eu.torvian.chatbot.app.viewmodel.LocalMCPServerViewModel
 import eu.torvian.chatbot.app.viewmodel.ModelConfigViewModel
 import eu.torvian.chatbot.app.viewmodel.ModelSettingsViewModel
 import eu.torvian.chatbot.app.viewmodel.ProviderConfigViewModel
@@ -213,6 +216,14 @@ fun appModule(config: AppConfiguration): Module = module {
         )
     }
 
+    single<LocalMCPServerManager> {
+        LocalMCPServerManagerImpl(
+            serverRepository = get(),
+            runtimeStatusRepository = get(),
+            toolRepository = get()
+        )
+    }
+
     // Provide shared chat state with background scope for computed state flows
     factory<ChatState> { (backgroundScope: CoroutineScope) ->
         ChatStateImpl(
@@ -262,7 +273,7 @@ fun appModule(config: AppConfiguration): Module = module {
     }
 
     factory<SendMessageUseCase> { (chatState: ChatState) ->
-        SendMessageUseCase(get<SessionRepository>(), get(), chatState, get())
+        SendMessageUseCase(get<SessionRepository>(), chatState, get())
     }
 
     factory<EditMessageUseCase> { (chatState: ChatState) ->
@@ -354,6 +365,14 @@ fun appModule(config: AppConfiguration): Module = module {
             get<UserGroupRepository>(),
             get<UserRepository>(),
             get<NotificationService>()
+        )
+    }
+    viewModel {
+        LocalMCPServerViewModel(
+            serverManager = get(),
+            mcpToolRepository = get(),
+            toolRepository = get(),
+            notificationService = get()
         )
     }
 }

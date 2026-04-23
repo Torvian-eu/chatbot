@@ -226,7 +226,7 @@ interface SessionRepository {
      * @param sessionId The ID of the session to send the message to
      * @param clientEvents A flow of events from the client to the server. The first event must be
      *                     [ChatClientEvent.ProcessNewMessage] with `isStreaming=false`. Subsequent events
-     *                     can be [ChatClientEvent.LocalMCPToolResult] for tool execution.
+     *                     are approval responses only.
      * @return Flow of Either containing ChatEvent updates or RepositoryError on failure
      */
     fun processNewMessage(
@@ -243,7 +243,7 @@ interface SessionRepository {
      * @param sessionId The ID of the session to send the message to
      * @param clientEvents A flow of events from the client to the server. The first event must be
      *                     [ChatClientEvent.ProcessNewMessage] with `isStreaming=true`. Subsequent events
-     *                     can be [ChatClientEvent.LocalMCPToolResult] for tool execution.
+     *                     are approval responses only.
      * @return Flow of Either containing ChatStreamEvent updates or RepositoryError on failure
      */
     fun processNewMessageStreaming(

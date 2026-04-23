@@ -18,6 +18,8 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpSer
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestDraftConnectionCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestDraftConnectionResultData
 
 /**
  * Maps MCP server-start command data to a typed worker command-request payload.
@@ -56,6 +58,19 @@ fun WorkerMcpServerTestConnectionCommandData.toWorkerCommandRequestPayload():
     toCommandRequestPayload(
         commandType = WorkerProtocolCommandTypes.MCP_SERVER_TEST_CONNECTION,
         targetType = "WorkerMcpServerTestConnectionCommandData"
+    )
+
+/**
+ * Maps MCP server test-draft-connection command data to a typed worker command-request payload.
+ *
+ * @receiver Test-draft-connection command request DTO.
+ * @return Either a worker command-request payload or a logical mapping error.
+ */
+fun WorkerMcpServerTestDraftConnectionCommandData.toWorkerCommandRequestPayload():
+        Either<WorkerMcpRuntimeCommandProtocolMappingError, WorkerCommandRequestPayload> =
+    toCommandRequestPayload(
+        commandType = WorkerProtocolCommandTypes.MCP_SERVER_TEST_DRAFT_CONNECTION,
+        targetType = "WorkerMcpServerTestDraftConnectionCommandData"
     )
 
 /**
@@ -137,6 +152,19 @@ fun WorkerCommandRequestPayload.toWorkerMcpServerTestConnectionCommandData():
     )
 
 /**
+ * Decodes worker request payload data as MCP server test-draft-connection command data.
+ *
+ * @receiver Worker command-request payload.
+ * @return Either decoded test-draft-connection command data or a logical mapping error.
+ */
+fun WorkerCommandRequestPayload.toWorkerMcpServerTestDraftConnectionCommandData():
+        Either<WorkerMcpRuntimeCommandProtocolMappingError, WorkerMcpServerTestDraftConnectionCommandData> =
+    decodeCommandRequestData(
+        expectedCommandType = WorkerProtocolCommandTypes.MCP_SERVER_TEST_DRAFT_CONNECTION,
+        targetType = "WorkerMcpServerTestDraftConnectionCommandData"
+    )
+
+/**
  * Decodes worker request payload data as MCP server discover-tools command data.
  *
  * @receiver Worker command-request payload.
@@ -210,6 +238,18 @@ fun WorkerMcpServerTestConnectionResultData.toWorkerCommandResultPayload(
     status: String = WorkerCommandResultStatuses.SUCCESS
 ): Either<WorkerMcpRuntimeCommandProtocolMappingError, WorkerCommandResultPayload> =
     toCommandResultPayload(status = status, targetType = "WorkerMcpServerTestConnectionResultData")
+
+/**
+ * Maps MCP server test-draft-connection result data to a typed worker command-result payload.
+ *
+ * @receiver Test-draft-connection result DTO.
+ * @param status Final command-result status to encode.
+ * @return Either a worker command-result payload or a logical mapping error.
+ */
+fun WorkerMcpServerTestDraftConnectionResultData.toWorkerCommandResultPayload(
+    status: String = WorkerCommandResultStatuses.SUCCESS
+): Either<WorkerMcpRuntimeCommandProtocolMappingError, WorkerCommandResultPayload> =
+    toCommandResultPayload(status = status, targetType = "WorkerMcpServerTestDraftConnectionResultData")
 
 /**
  * Maps MCP server discover-tools result data to a typed worker command-result payload.
@@ -293,6 +333,22 @@ fun WorkerCommandResultPayload.toWorkerMcpServerTestConnectionResultData(
         commandType = commandType,
         expectedCommandType = WorkerProtocolCommandTypes.MCP_SERVER_TEST_CONNECTION,
         targetType = "WorkerMcpServerTestConnectionResultData"
+    )
+
+/**
+ * Decodes worker result payload data as MCP server test-draft-connection result data.
+ *
+ * @receiver Worker command-result payload.
+ * @param commandType Command type associated with the completed lifecycle.
+ * @return Either decoded test-draft-connection result data or a logical mapping error.
+ */
+fun WorkerCommandResultPayload.toWorkerMcpServerTestDraftConnectionResultData(
+    commandType: String
+): Either<WorkerMcpRuntimeCommandProtocolMappingError, WorkerMcpServerTestDraftConnectionResultData> =
+    decodeCommandResultData(
+        commandType = commandType,
+        expectedCommandType = WorkerProtocolCommandTypes.MCP_SERVER_TEST_DRAFT_CONNECTION,
+        targetType = "WorkerMcpServerTestDraftConnectionResultData"
     )
 
 /**
@@ -392,6 +448,22 @@ fun WorkerCommandResultPayload.toWorkerMcpServerTestConnectionErrorResultData(
     )
 
 /**
+ * Decodes worker result payload data as MCP server test-draft-connection error result data.
+ *
+ * @receiver Worker command-result payload.
+ * @param commandType Command type associated with the completed lifecycle.
+ * @return Either decoded test-draft-connection error result data or a logical mapping error.
+ */
+fun WorkerCommandResultPayload.toWorkerMcpServerTestDraftConnectionErrorResultData(
+    commandType: String
+): Either<WorkerMcpRuntimeCommandProtocolMappingError, WorkerMcpServerControlErrorResultData> =
+    decodeCommandResultData(
+        commandType = commandType,
+        expectedCommandType = WorkerProtocolCommandTypes.MCP_SERVER_TEST_DRAFT_CONNECTION,
+        targetType = "WorkerMcpServerControlErrorResultData"
+    )
+
+/**
  * Decodes worker result payload data as MCP server discover-tools error result data.
  *
  * @receiver Worker command-result payload.
@@ -438,5 +510,4 @@ fun WorkerCommandResultPayload.toWorkerMcpServerListRuntimeStatusesErrorResultDa
         expectedCommandType = WorkerProtocolCommandTypes.MCP_SERVER_LIST_RUNTIME_STATUSES,
         targetType = "WorkerMcpServerControlErrorResultData"
     )
-
 

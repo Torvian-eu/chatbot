@@ -21,8 +21,11 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpSer
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestDraftConnectionCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestDraftConnectionResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerUpdateCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerUpdateResultData
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 
 /**
  * Runtime-backed [McpRuntimeCommandExecutor] implementation.
@@ -135,6 +138,38 @@ class McpRuntimeCommandExecutorImpl(
             configStore.removeServer(request.serverId)
             WorkerMcpServerDeleteResultData(serverId = request.serverId)
         }
+    }
+
+    override suspend fun testDraftConnection(
+        request: WorkerMcpServerTestDraftConnectionCommandData
+    ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerTestDraftConnectionResultData> {
+        // Use a temporary runtime-only identifier so draft tests do not collide with tracked servers.
+        val tempServerId = -System.currentTimeMillis()
+
+        val config = LocalMCPServerDto(
+            id = tempServerId,
+            userId = 0L,
+            workerId = 0L,
+            name = request.name,
+            command = request.command,
+            arguments = request.arguments,
+            workingDirectory = request.workingDirectory,
+            environmentVariables = request.environmentVariables,
+            secretEnvironmentVariables = request.secretEnvironmentVariables,
+            createdAt = kotlin.time.Clock.System.now(),
+            updatedAt = kotlin.time.Clock.System.now()
+        )
+
+        return runtimeService.testDraftConnection(config).fold(
+            ifLeft = { runtimeError -> runtimeError.toProtocolError(tempServerId).left() },
+            ifRight = { outcome ->
+                WorkerMcpServerTestDraftConnectionResultData(
+                    success = true,
+                    discoveredToolCount = outcome.discoveredToolCount,
+                    message = outcome.message
+                ).right()
+            }
+        )
     }
 
     /**

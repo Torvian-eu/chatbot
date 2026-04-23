@@ -366,10 +366,12 @@ class LocalMCPServerViewModel(
             }
 
             val result = serverManager.testConnectionForNewServer(
+                workerId = form.workerId,
                 name = form.name.ifBlank { "Test" },
                 command = form.command,
                 arguments = form.arguments,
-                environmentVariables = form.environmentVariables + form.secretEnvironmentVariables,
+                environmentVariables = form.environmentVariables,
+                secretEnvironmentVariables = form.secretEnvironmentVariables,
                 workingDirectory = form.workingDirectory.takeIf { it.isNotBlank() }
             )
 

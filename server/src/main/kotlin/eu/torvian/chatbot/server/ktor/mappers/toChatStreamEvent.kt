@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.ktor.mappers
 
 import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
+import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent.*
 import eu.torvian.chatbot.server.service.core.MessageStreamEvent
 
 /**
@@ -8,26 +9,26 @@ import eu.torvian.chatbot.server.service.core.MessageStreamEvent
  */
 fun MessageStreamEvent.toChatStreamEvent(): ChatStreamEvent {
     return when (this) {
-        is MessageStreamEvent.UserMessageSaved -> ChatStreamEvent.UserMessageSaved(
+        is MessageStreamEvent.UserMessageSaved -> UserMessageSaved(
             userMessage = userMessage,
             updatedParentMessage = updatedParentMessage
         )
 
-        is MessageStreamEvent.AssistantMessageStarted -> ChatStreamEvent.AssistantMessageStart(
+        is MessageStreamEvent.AssistantMessageStarted -> AssistantMessageStart(
             assistantMessage = assistantMessage,
             updatedParentMessage = updatedParentMessage
         )
 
-        is MessageStreamEvent.AssistantMessageDelta -> ChatStreamEvent.AssistantMessageDelta(
+        is MessageStreamEvent.AssistantMessageDelta -> AssistantMessageDelta(
             messageId = messageId,
             deltaContent = deltaContent
         )
 
-        is MessageStreamEvent.AssistantMessageFinished -> ChatStreamEvent.AssistantMessageEnd(
+        is MessageStreamEvent.AssistantMessageFinished -> AssistantMessageEnd(
             assistantMessage = assistantMessage
         )
 
-        is MessageStreamEvent.ToolCallDelta -> ChatStreamEvent.ToolCallDelta(
+        is MessageStreamEvent.ToolCallDelta -> ToolCallDelta(
             messageId = messageId,
             index = index,
             id = id,
@@ -35,26 +36,22 @@ fun MessageStreamEvent.toChatStreamEvent(): ChatStreamEvent {
             argumentsDelta = argumentsDelta
         )
 
-        is MessageStreamEvent.ToolCallsReceived -> ChatStreamEvent.ToolCallsReceived(
+        is MessageStreamEvent.ToolCallsReceived -> ToolCallsReceived(
             toolCalls = toolCalls
         )
 
-        is MessageStreamEvent.ToolExecutionCompleted -> ChatStreamEvent.ToolExecutionCompleted(
+        is MessageStreamEvent.ToolExecutionCompleted -> ToolExecutionCompleted(
             toolCall = toolCall
         )
 
-        is MessageStreamEvent.LocalMCPToolCallReceived -> ChatStreamEvent.LocalMCPToolCallReceived(
-            request = request
-        )
-
-        is MessageStreamEvent.ToolCallApprovalRequested -> ChatStreamEvent.ToolCallApprovalRequested(
+        is MessageStreamEvent.ToolCallApprovalRequested -> ToolCallApprovalRequested(
             toolCall = toolCall
         )
 
-        is MessageStreamEvent.ToolCallExecuting -> ChatStreamEvent.ToolCallExecuting(
+        is MessageStreamEvent.ToolCallExecuting -> ToolCallExecuting(
             toolCall = toolCall
         )
 
-        is MessageStreamEvent.StreamCompleted -> ChatStreamEvent.StreamCompleted
+        is MessageStreamEvent.StreamCompleted -> StreamCompleted
     }
 }

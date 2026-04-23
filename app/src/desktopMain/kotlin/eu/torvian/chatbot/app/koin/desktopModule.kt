@@ -5,18 +5,13 @@ import eu.torvian.chatbot.app.service.auth.FileSystemTokenStorage
 import eu.torvian.chatbot.app.service.auth.TokenStorage
 import eu.torvian.chatbot.app.service.clipboard.ClipboardService
 import eu.torvian.chatbot.app.service.clipboard.ClipboardServiceDesktop
-import eu.torvian.chatbot.app.service.mcp.*
 import eu.torvian.chatbot.app.service.security.CertificateStorage
 import eu.torvian.chatbot.app.service.security.FileSystemCertificateStorage
-import eu.torvian.chatbot.app.viewmodel.LocalMCPServerViewModel
 import eu.torvian.chatbot.common.security.AESCryptoProvider
 import eu.torvian.chatbot.common.security.CryptoProvider
 import eu.torvian.chatbot.common.security.EncryptionService
-import kotlinx.coroutines.runBlocking
 import kotlinx.io.files.Path
-import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
-import org.koin.dsl.onClose
 
 /**
  * Desktop-specific Koin module.
@@ -58,45 +53,5 @@ fun desktopModule(config: AppConfiguration) = module {
 
     single<ClipboardService> {
         ClipboardServiceDesktop()
-    }
-
-    single<LocalMCPServerProcessManager> {
-        LocalMCPServerProcessManagerDesktop(
-            clock = get()
-        )
-    }.onClose { manager ->
-        runBlocking { manager?.close() }
-    }
-
-    single<MCPClientService> {
-        MCPClientServiceImpl(
-            processManager = get()
-        )
-    }.onClose { service ->
-        runBlocking { service?.close() }
-    }
-
-    single<LocalMCPServerManager> {
-        LocalMCPServerManagerImpl(
-            serverRepository = get(),
-            runtimeStatusRepository = get(),
-            toolRepository = get(),
-            mcpClientService = get(),
-            clock = get()
-        )
-    }
-
-    single<LocalMCPToolCallMediator> {
-        LocalMCPToolCallMediatorImpl(get(), get())
-    }
-
-    // ViewModels specific to desktop (require LocalMCPServerManager)
-    viewModel {
-        LocalMCPServerViewModel(
-            serverManager = get(),
-            mcpToolRepository = get(),
-            toolRepository = get(),
-            notificationService = get()
-        )
     }
 }

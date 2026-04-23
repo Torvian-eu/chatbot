@@ -1,7 +1,6 @@
 package eu.torvian.chatbot.server.service.core
 
 import eu.torvian.chatbot.common.models.core.ChatMessage
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallRequest
 import eu.torvian.chatbot.common.models.tool.ToolCall
 
 /**
@@ -20,7 +19,6 @@ import eu.torvian.chatbot.common.models.tool.ToolCall
  * 2. Loop until LLM stops calling tools:
  *    - AssistantMessageSaved (LLM response with tool calls or final content)
  *    - ToolCallsReceived (if LLM wants to call tools)
- *    - LocalMCPToolCallReceived (for each local MCP tool)
  *    - ToolExecutionCompleted (for each tool, as it completes)
  * 3. StreamCompleted (once)
  */
@@ -71,19 +69,6 @@ sealed class MessageEvent {
      */
     data class ToolCallsReceived(
         val toolCalls: List<ToolCall>
-    ) : MessageEvent()
-
-    /**
-     * Emitted when a local MCP tool call is requested from the client.
-     *
-     * The client should handle this event by executing the specified tool on the
-     * designated local MCP server and sending a `LocalMCPToolCallResult` back to the
-     * server via the appropriate channel (e.g., WebSocket).
-     *
-     * @property request The details of the tool call request.
-     */
-    data class LocalMCPToolCallReceived(
-        val request: LocalMCPToolCallRequest
     ) : MessageEvent()
 
     /**

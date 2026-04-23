@@ -18,6 +18,7 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpS
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerStartCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerStopCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerTestConnectionCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerTestDraftConnectionCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerUpdateCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandAcceptedPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRejectedPayload
@@ -85,6 +86,13 @@ class McpRuntimeCommandInteraction(
                 execute = { command -> executor.testConnection(command) },
                 mapSuccessResult = { result -> result.toWorkerCommandResultPayload() },
                 decodeFailureMessage = "Unable to decode mcp.server.test_connection payload"
+            )
+
+            WorkerProtocolCommandTypes.MCP_SERVER_TEST_DRAFT_CONNECTION -> runOneShotCommand(
+                decodeRequest = { toWorkerMcpServerTestDraftConnectionCommandData() },
+                execute = { command -> executor.testDraftConnection(command) },
+                mapSuccessResult = { result -> result.toWorkerCommandResultPayload() },
+                decodeFailureMessage = "Unable to decode mcp.server.test_draft_connection payload"
             )
 
             WorkerProtocolCommandTypes.MCP_SERVER_DISCOVER_TOOLS -> runOneShotCommand(

@@ -221,3 +221,36 @@ data class WorkerMcpServerControlErrorResultData(
     val details: String? = null
 )
 
+/**
+ * Request data carried by `mcp.server.test_draft_connection` worker commands.
+ *
+ * @property name User-facing display name.
+ * @property command Process command used to start the MCP server.
+ * @property arguments Process argument list.
+ * @property workingDirectory Optional working directory for process execution.
+ * @property environmentVariables Non-secret environment variables.
+ * @property secretEnvironmentVariables Secret environment variables, returned in plaintext for runtime use.
+ */
+@Serializable
+data class WorkerMcpServerTestDraftConnectionCommandData(
+    val name: String,
+    val command: String,
+    val arguments: List<String> = emptyList(),
+    val workingDirectory: String? = null,
+    val environmentVariables: List<eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto> = emptyList(),
+    val secretEnvironmentVariables: List<eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto> = emptyList()
+)
+
+/**
+ * Result data emitted for `mcp.server.test_draft_connection` worker commands.
+ *
+ * @property success Whether the worker-side runtime connectivity check succeeded.
+ * @property discoveredToolCount Number of tools discovered during the test call.
+ * @property message Optional human-readable details about the test outcome.
+ */
+@Serializable
+data class WorkerMcpServerTestDraftConnectionResultData(
+    val success: Boolean,
+    val discoveredToolCount: Int,
+    val message: String? = null
+)

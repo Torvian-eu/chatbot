@@ -6,6 +6,7 @@ import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
 import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerConnectionResponse
+import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerDraftConnectionRequest
 import eu.torvian.chatbot.common.models.api.mcp.UpdateLocalMCPServerRequest
 
 /**
@@ -127,5 +128,14 @@ interface LocalMCPServerApi {
      * @return Runtime status snapshot returned by the backend.
      */
     suspend fun getRuntimeStatus(serverId: Long): Either<ApiResourceError, LocalMcpServerRuntimeStatusDto>
-}
 
+    /**
+     * Tests draft runtime connectivity for a non-persisted Local MCP server configuration.
+     *
+     * Corresponds to `POST /api/v1/local-mcp-servers/test-draft-connection`.
+     *
+     * @param request Draft server configuration to test.
+     * @return Test draft response payload returned by the backend.
+     */
+    suspend fun testDraftConnection(request: TestLocalMCPServerDraftConnectionRequest): Either<ApiResourceError, TestLocalMCPServerConnectionResponse>
+}

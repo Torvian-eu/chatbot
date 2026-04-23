@@ -5,8 +5,6 @@ import eu.torvian.chatbot.app.service.auth.FileSystemTokenStorage
 import eu.torvian.chatbot.app.service.auth.TokenStorage
 import eu.torvian.chatbot.app.service.clipboard.ClipboardService
 import eu.torvian.chatbot.app.service.clipboard.ClipboardServiceAndroid
-import eu.torvian.chatbot.app.service.mcp.LocalMCPToolCallMediator
-import eu.torvian.chatbot.app.service.mcp.LocalMCPToolCallMediatorDummy
 import eu.torvian.chatbot.app.service.security.CertificateStorage
 import eu.torvian.chatbot.app.service.security.FileSystemCertificateStorage
 import eu.torvian.chatbot.common.security.AESCryptoProvider
@@ -56,9 +54,5 @@ fun androidModule(config: AppConfiguration) = module {
 
     single<ClipboardService> {
         ClipboardServiceAndroid(androidContext())
-    }
-
-    single<LocalMCPToolCallMediator> {
-        LocalMCPToolCallMediatorDummy()
     }
 }

@@ -2,7 +2,6 @@ package eu.torvian.chatbot.common.models.api.core
 
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.models.core.ChatMessage
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallRequest
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import kotlinx.serialization.Serializable
 
@@ -57,18 +56,6 @@ sealed interface ChatEvent {
         override val eventType: String = "tool_calls_received"
     }
 
-    /**
-     * Sent when a local MCP tool call is requested from the client.
-     * The client should execute the tool and send back the result.
-     *
-     * @property request The tool call request.
-     */
-    @Serializable
-    data class LocalMCPToolCallReceived(
-        val request: LocalMCPToolCallRequest
-    ) : ChatEvent {
-        override val eventType: String = "local_mcp_tool_call_received"
-    }
 
     /**
      * Sent when a tool call requires user approval before execution.

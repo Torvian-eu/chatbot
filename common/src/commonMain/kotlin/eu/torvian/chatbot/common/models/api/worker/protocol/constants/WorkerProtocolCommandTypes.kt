@@ -30,6 +30,11 @@ object WorkerProtocolCommandTypes {
     const val MCP_SERVER_TEST_CONNECTION = "mcp.server.test_connection"
 
     /**
+     * Command type used to test MCP server runtime connectivity for a draft configuration.
+     */
+    const val MCP_SERVER_TEST_DRAFT_CONNECTION = "mcp.server.test_draft_connection"
+
+    /**
      * Command type used to discover runtime MCP tools for a server.
      */
     const val MCP_SERVER_DISCOVER_TOOLS = "mcp.server.discover_tools"

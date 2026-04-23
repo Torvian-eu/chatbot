@@ -79,6 +79,22 @@ fun LocalMCPToolCallResult.toWorkerCommandResultPayload():
 }
 
 /**
+ * Decodes a worker command result payload back into a local MCP tool-call result.
+ *
+ * @receiver Command-result payload returned by the worker command dispatcher.
+ * @return Either the local MCP result DTO or a logical mapping error.
+ */
+fun WorkerCommandResultPayload.toLocalMCPToolCallResult():
+        Either<WorkerMcpToolCallProtocolMappingError, LocalMCPToolCallResult> = either {
+
+    decodeProtocolPayload<LocalMCPToolCallResult>(
+        payload = data,
+        targetType = "LocalMCPToolCallResult"
+    ).mapLeft { it.toToolCallMappingError() }
+        .bind()
+}
+
+/**
  * Converts codec failures into the tool-call-specific mapping error hierarchy.
  *
  * @receiver Generic protocol codec error.

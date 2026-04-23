@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.worker.mcp.runtimecontrol
 import arrow.core.Either
 import arrow.core.raise.either
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
+import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerDraftConnectionRequest
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerCommandResultStatuses
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolCommandTypes
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.*
@@ -167,6 +168,29 @@ class DefaultLocalMCPRuntimeCommandDispatchService(
             },
             decodeErrorResult = { result, completedCommandType ->
                 result.toWorkerMcpServerDeleteErrorResultData(completedCommandType)
+            }
+        )
+
+    override suspend fun testDraftConnection(
+        workerId: Long,
+        request: TestLocalMCPServerDraftConnectionRequest
+    ): Either<LocalMCPRuntimeCommandDispatchError, WorkerMcpServerTestDraftConnectionResultData> =
+        dispatchAndDecode(
+            workerId = workerId,
+            commandType = WorkerProtocolCommandTypes.MCP_SERVER_TEST_DRAFT_CONNECTION,
+            requestPayload = WorkerMcpServerTestDraftConnectionCommandData(
+                name = request.name,
+                command = request.command,
+                arguments = request.arguments,
+                workingDirectory = request.workingDirectory,
+                environmentVariables = request.environmentVariables,
+                secretEnvironmentVariables = request.secretEnvironmentVariables
+            ).toWorkerCommandRequestPayload(),
+            decodeSuccessResult = { result, completedCommandType ->
+                result.toWorkerMcpServerTestDraftConnectionResultData(completedCommandType)
+            },
+            decodeErrorResult = { result, completedCommandType ->
+                result.toWorkerMcpServerTestDraftConnectionErrorResultData(completedCommandType)
             }
         )
 

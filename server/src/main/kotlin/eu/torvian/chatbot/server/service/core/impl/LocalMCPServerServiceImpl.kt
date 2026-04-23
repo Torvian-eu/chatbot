@@ -55,7 +55,7 @@ class LocalMCPServerServiceImpl(
         transactionScope.transaction {
             either {
                 validateRequest(request.name, request.command).bind()
-                validateWorkerAssignment(userId, request.workerId).bind()
+                validateWorkerOwnership(userId, request.workerId).bind()
                 val secretReferences = storeSecretEnvironmentVariables(request.secretEnvironmentVariables).bind()
                 val createdEntity = localMCPServerDao.createServer(
                     CreateLocalMCPServerEntity(
@@ -112,7 +112,7 @@ class LocalMCPServerServiceImpl(
         transactionScope.transaction {
             either {
                 validateRequest(request.name, request.command).bind()
-                validateWorkerAssignment(userId, request.workerId).bind()
+                validateWorkerOwnership(userId, request.workerId).bind()
 
                 val existingEntity = withError({ error: LocalMCPServerError.Unauthorized ->
                     LocalMCPServerUnauthorizedError(error.userId, error.serverId)
@@ -200,46 +200,7 @@ class LocalMCPServerServiceImpl(
             }
         }
 
-    @Deprecated("Use getServersByUserId")
-    override suspend fun getServerIdsByUserId(userId: Long): List<Long> =
-        localMCPServerDao.getIdsByUserId(userId)
-
-    @Deprecated("Use updateServer")
-    override suspend fun setServerEnabled(
-        serverId: Long,
-        isEnabled: Boolean
-    ): Either<LocalMCPServerServiceError, Unit> =
-        transactionScope.transaction {
-            either {
-                withError({ daoError: LocalMCPServerError.NotFound ->
-                    LocalMCPServerNotFoundError(daoError.id)
-                }) {
-                    localMCPServerDao.setEnabled(serverId, isEnabled).bind()
-                    logger.debug("Updated enabled state of server $serverId to $isEnabled")
-                }
-            }
-        }
-
-    /**
-     * Validates the request shape for full Local MCP server configuration updates.
-     *
-     * @param name Proposed Local MCP server display name.
-     * @param command Proposed process command.
-     * @return Either validation error or Unit.
-     */
-    private fun validateRequest(name: String, command: String): Either<LocalMCPServerServiceError, Unit> = either {
-        ensure(name.isNotBlank()) { LocalMCPServerValidationError("name must not be blank") }
-        ensure(command.isNotBlank()) { LocalMCPServerValidationError("command must not be blank") }
-    }
-
-    /**
-     * Ensures the assigned worker exists and is owned by the requesting user.
-     *
-     * @param userId Requesting user identifier.
-     * @param workerId Requested worker assignment.
-     * @return Either assignment error or Unit.
-     */
-    private suspend fun validateWorkerAssignment(
+    override suspend fun validateWorkerOwnership(
         userId: Long,
         workerId: Long
     ): Either<LocalMCPServerServiceError, Unit> =
@@ -254,6 +215,18 @@ class LocalMCPServerServiceImpl(
                 LocalMCPServerWorkerOwnershipMismatchError(userId, workerId, worker.ownerUserId)
             }
         }
+
+    /**
+     * Validates the request shape for full Local MCP server configuration updates.
+     *
+     * @param name Proposed Local MCP server display name.
+     * @param command Proposed process command.
+     * @return Either validation error or Unit.
+     */
+    private fun validateRequest(name: String, command: String): Either<LocalMCPServerServiceError, Unit> = either {
+        ensure(name.isNotBlank()) { LocalMCPServerValidationError("name must not be blank") }
+        ensure(command.isNotBlank()) { LocalMCPServerValidationError("command must not be blank") }
+    }
 
     /**
      * Stores plaintext secret environment variables and returns alias references.

@@ -13,7 +13,6 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.buildJsonObject
@@ -82,14 +81,10 @@ class LocalMCPServerManagerImplOverviewTest {
         val toolRepository = mockk<LocalMCPToolRepository>()
         every { toolRepository.mcpTools } returns toolState
 
-        val mcpClientService = mockk<MCPClientService>()
-        every { mcpClientService.clients } returns flowOf(emptyMap<Long, MCPClient>())
-
         val manager = LocalMCPServerManagerImpl(
             serverRepository = serverRepository,
             runtimeStatusRepository = runtimeStatusRepository,
-            toolRepository = toolRepository,
-            mcpClientService = mcpClientService
+            toolRepository = toolRepository
         )
 
         val result = manager.serverOverviews
