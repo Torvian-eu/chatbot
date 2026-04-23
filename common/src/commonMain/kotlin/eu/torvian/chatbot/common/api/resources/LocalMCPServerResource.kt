@@ -19,26 +19,12 @@ class LocalMCPServerResource(val parent: Api = Api()) {
     class RuntimeStatuses(val parent: LocalMCPServerResource = LocalMCPServerResource())
 
     /**
-     * Transitional resource retained for compatibility with the previous API shape.
-     */
-    @Deprecated("Use LocalMCPServerResource root resource")
-    @Resource("")
-    class Create(val parent: LocalMCPServerResource = LocalMCPServerResource())
-
-    /**
      * Resource for listing all Local MCP servers assigned to the authenticated worker.
      *
      * Endpoint: GET /api/v1/local-mcp-servers/assigned
      */
     @Resource("assigned")
     class Assigned(val parent: LocalMCPServerResource = LocalMCPServerResource())
-
-    /**
-     * Transitional resource retained for compatibility with the previous API shape.
-     */
-    @Deprecated("Use LocalMCPServerResource root resource")
-    @Resource("ids")
-    class Ids(val parent: LocalMCPServerResource = LocalMCPServerResource())
 
     /**
      * Resource for a specific Local MCP server by ID.
@@ -86,13 +72,6 @@ class LocalMCPServerResource(val parent: Api = Api()) {
          */
         @Resource("refresh-tools")
         class RefreshTools(val parent: ById)
-
-        /**
-         * Transitional resource retained for compatibility with the previous API shape.
-         */
-        @Deprecated("Use PUT on LocalMCPServerResource.ById")
-        @Resource("enabled")
-        class SetEnabled(val parent: ById)
     }
 
     /**
