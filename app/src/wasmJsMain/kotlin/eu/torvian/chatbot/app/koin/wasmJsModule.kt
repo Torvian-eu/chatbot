@@ -7,8 +7,6 @@ import eu.torvian.chatbot.app.service.api.ktor.BrowserWebSocketAuthSubprotocolPr
 import eu.torvian.chatbot.app.service.api.ktor.WebSocketAuthSubprotocolProvider
 import eu.torvian.chatbot.app.service.clipboard.ClipboardService
 import eu.torvian.chatbot.app.service.clipboard.ClipboardServiceWasmJs
-import eu.torvian.chatbot.app.service.mcp.LocalMCPToolCallMediator
-import eu.torvian.chatbot.app.service.mcp.LocalMCPToolCallMediatorDummy
 import eu.torvian.chatbot.app.service.security.BrowserCertificateStorage
 import eu.torvian.chatbot.app.service.security.CertificateStorage
 import eu.torvian.chatbot.common.security.CryptoProvider
@@ -47,9 +45,5 @@ fun wasmJsModule(config: AppConfiguration) = module {
 
     single<ClipboardService> {
         ClipboardServiceWasmJs()
-    }
-
-    single<LocalMCPToolCallMediator> {
-        LocalMCPToolCallMediatorDummy()
     }
 }

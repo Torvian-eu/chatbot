@@ -86,9 +86,6 @@ fun desktopModule(config: AppConfiguration) = module {
         )
     }
 
-    single<LocalMCPToolCallMediator> {
-        LocalMCPToolCallMediatorImpl(get(), get())
-    }
 
     // ViewModels specific to desktop (require LocalMCPServerManager)
     viewModel {
