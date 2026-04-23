@@ -1,18 +1,11 @@
 package eu.torvian.chatbot.server.service.mcp
 
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallRequest
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallResult
 
+/**
+ * Outcomes emitted by the Local MCP executor.
+ */
 sealed interface LocalMCPExecutorEvent {
-
-    /**
-     * Emitted when a tool execution is requested.
-     *
-     * @property request Details of the tool call request
-     */
-    data class ToolExecutionRequest(
-        val request: LocalMCPToolCallRequest
-    ) : LocalMCPExecutorEvent
 
     /**
      * Emitted when a tool execution completes.
