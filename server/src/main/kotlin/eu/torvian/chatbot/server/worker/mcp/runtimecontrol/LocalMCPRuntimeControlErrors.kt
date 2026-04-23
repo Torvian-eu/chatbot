@@ -36,6 +36,17 @@ sealed class LocalMCPRuntimeControlError {
     ) : LocalMCPRuntimeControlError()
 
     /**
+     * Draft runtime control is unavailable for the requested worker.
+     *
+     * @property workerId Requested worker identifier.
+     * @property reason Human-readable unavailability reason.
+     */
+    data class DraftRuntimeUnavailableError(
+        val workerId: Long,
+        val reason: String
+    ) : LocalMCPRuntimeControlError()
+
+    /**
      * An unexpected runtime-control failure occurred.
      *
      * @property message Human-readable diagnostic message.

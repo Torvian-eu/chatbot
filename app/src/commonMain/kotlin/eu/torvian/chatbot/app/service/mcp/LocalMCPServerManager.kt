@@ -14,21 +14,17 @@ import kotlinx.coroutines.flow.Flow
  * This manager coordinates between:
  * - LocalMCPServerRepository (MCP server configurations)
  * - LocalMCPToolRepository (MCP tool persistence)
- * - MCPClientService (MCP operations)
+ * - server-owned runtime-control APIs exposed through the repository layer
  *
  * Design principles:
  * - High-level orchestration layer between UI and MCP operations
  * - Coordinates data flow across repositories and services
  * - Handles data transformation (MCP SDK Tool â†’ LocalMCPToolDefinition)
  * - Does not manage state (that's Repository's job)
- * - Does not manage processes (that's MCPClientService's job)
+ * - Does not manage processes (that responsibility now stays on the worker/server boundary)
  * - Does not call API directly (that's Repository's job)
  * - Pure business logic and workflow coordination
  *
- * Platform availability:
- * - Desktop: ✅ Full support
- * - Android: ✅ Full support
- * - WASM: ❌ Not available (requires process management)
  */
 interface LocalMCPServerManager {
 
@@ -36,7 +32,6 @@ interface LocalMCPServerManager {
      * StateFlow providing reactive updates of the aggregate status of all MCP servers.
      *
      * This is a derived state computed from:
-     * - MCPClientService.clients (active MCP SDK client connections)
      * - LocalMCPServerRepository.servers (MCP server configurations)
      * - LocalMCPToolRepository.tools (MCP tool definitions organized by server ID)
      *
@@ -71,26 +66,28 @@ interface LocalMCPServerManager {
      * Tests connection to a new MCP server and returns the count of discovered tools.
      *
      * This operation:
-     * 1. Creates a temporary server config
-     * 2. Calls MCPClientService to start and connect
-     * 3. Discovers tools via MCPClientService
-     * 4. Stops the server (cleanup)
-     * 5. Returns success/failure with tool count
+     * 1. Builds a draft connection request from the unsaved form state.
+     * 2. Delegates the draft test to the repository, which calls the server-owned API.
+     * 3. Returns the discovered tool count from the runtime response.
      *
      * Server config is NOT persisted during testing.
      *
+     * @param workerId Worker assignment used for server-owned runtime routing.
      * @param name The name of the MCP server
      * @param command The command to start the MCP server
      * @param arguments The arguments to start the MCP server
      * @param environmentVariables The environment variables to start the MCP server
+     * @param secretEnvironmentVariables Secret environment variables to start the MCP server
      * @param workingDirectory The working directory to start the MCP server
      * @return Either.Right with tool count on success, or Either.Left with TestConnectionError on failure
      */
     suspend fun testConnectionForNewServer(
+        workerId: Long,
         name: String,
         command: String,
         arguments: List<String>,
         environmentVariables: List<LocalMCPEnvironmentVariableDto> = emptyList(),
+        secretEnvironmentVariables: List<LocalMCPEnvironmentVariableDto> = emptyList(),
         workingDirectory: String? = null
     ): Either<TestConnectionError, Int>
 
@@ -187,10 +184,8 @@ interface LocalMCPServerManager {
     /**
      * Deletes an MCP server and all its associated tools.
      *
-     * This operation:
-     * 1. Stops the server if it's running (via MCPClientService)
-     * 2. Deletes all tools for the server (via LocalMCPToolRepository)
-     * 3. Deletes the server configuration (via LocalMCPServerRepository)
+     * This operation delegates deletion to the server-owned repository/API and then clears the
+     * local tool cache so the UI no longer shows stale data.
      *
      * @param serverId The ID of the MCP server to delete
      * @return Either.Right with Unit on success, or Either.Left with DeleteServerError on failure

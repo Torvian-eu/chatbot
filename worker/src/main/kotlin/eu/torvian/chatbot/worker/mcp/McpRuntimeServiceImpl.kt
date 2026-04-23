@@ -5,6 +5,7 @@ import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import io.modelcontextprotocol.kotlin.sdk.types.Tool
 import kotlinx.serialization.json.Json
@@ -86,50 +87,7 @@ class McpRuntimeServiceImpl(
         val config = configStore.getServer(serverId)
             ?: return McpRuntimeError.ServerConfigMissing(serverId).left()
 
-        val wasConnected = clientService.isClientConnected(serverId)
-        var startedByTest = false
-
-        if (!wasConnected) {
-            val startResult = clientService.startAndConnect(config)
-            startResult.fold(
-                ifLeft = { startError ->
-                    if (startError !is McpClientStartError.AlreadyConnected) {
-                        return McpRuntimeError.StartFailed(
-                            serverId = serverId,
-                            message = startError.message,
-                            details = startError.cause?.message
-                        ).left()
-                    }
-                },
-                ifRight = { startedByTest = true }
-            )
-        }
-
-        val toolCount = clientService.discoverTools(serverId).fold(
-            ifLeft = { discoverError ->
-                return McpRuntimeError.DiscoveryFailed(
-                    serverId = serverId,
-                    message = discoverError.message,
-                    details = discoverError.cause?.message
-                ).left()
-            },
-            ifRight = { tools -> tools.size }
-        )
-
-        if (startedByTest) {
-            clientService.stopServer(serverId).fold(ifLeft = { stopError ->
-                return McpRuntimeError.CleanupFailed(
-                    serverId = serverId,
-                    message = stopError.message,
-                    details = stopError.cause?.message
-                ).left()
-            }, ifRight = { Unit })
-        }
-
-        return McpTestConnectionOutcome(
-            discoveredToolCount = toolCount,
-            message = "Connection test succeeded"
-        ).right()
+        return runConnectionTest(config)
     }
 
     override suspend fun discoverTools(
@@ -304,7 +262,67 @@ class McpRuntimeServiceImpl(
         McpProcessState.STOPPED -> LocalMcpServerRuntimeStateDto.STOPPED
         McpProcessState.ERROR -> LocalMcpServerRuntimeStateDto.ERROR
     }
+
+    override suspend fun testDraftConnection(
+        config: LocalMCPServerDto
+    ): Either<McpRuntimeError, McpTestConnectionOutcome> = runConnectionTest(config)
+
+    /**
+     * Runs the shared connection-test lifecycle for either persisted or draft server configurations.
+     *
+     * This helper starts the runtime only when required, discovers tools, and cleans up any
+     * temporary runtime it started itself.
+     *
+     * @param config Runtime configuration to test.
+     * @return Either runtime error or discovered-tool-count outcome.
+     */
+    private suspend fun runConnectionTest(
+        config: LocalMCPServerDto
+    ): Either<McpRuntimeError, McpTestConnectionOutcome> {
+        val serverId = config.id
+        val wasConnected = clientService.isClientConnected(serverId)
+        var startedByTest = false
+
+        if (!wasConnected) {
+            val startResult = clientService.startAndConnect(config)
+            startResult.fold(
+                ifLeft = { startError ->
+                    if (startError !is McpClientStartError.AlreadyConnected) {
+                        return McpRuntimeError.StartFailed(
+                            serverId = serverId,
+                            message = startError.message,
+                            details = startError.cause?.message
+                        ).left()
+                    }
+                },
+                ifRight = { startedByTest = true }
+            )
+        }
+
+        val toolCount = clientService.discoverTools(serverId).fold(
+            ifLeft = { discoverError ->
+                return McpRuntimeError.DiscoveryFailed(
+                    serverId = serverId,
+                    message = discoverError.message,
+                    details = discoverError.cause?.message
+                ).left()
+            },
+            ifRight = { tools -> tools.size }
+        )
+
+        if (startedByTest) {
+            clientService.stopServer(serverId).fold(ifLeft = { stopError ->
+                return McpRuntimeError.CleanupFailed(
+                    serverId = serverId,
+                    message = stopError.message,
+                    details = stopError.cause?.message
+                ).left()
+            }, ifRight = { Unit })
+        }
+
+        return McpTestConnectionOutcome(
+            discoveredToolCount = toolCount,
+            message = "Connection test succeeded"
+        ).right()
+    }
 }
-
-
-

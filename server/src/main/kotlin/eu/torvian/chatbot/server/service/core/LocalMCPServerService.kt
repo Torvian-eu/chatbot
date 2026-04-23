@@ -86,21 +86,11 @@ interface LocalMCPServerService {
     suspend fun validateOwnership(userId: Long, serverId: Long): Either<LocalMCPServerServiceError, Unit>
 
     /**
-     * Transitional helper retained for legacy endpoint compatibility.
+     * Validates that the given user owns the given worker.
      *
-     * @param userId User identifier.
-     * @return List of server IDs owned by the user.
+     * @param userId User identifier to validate.
+     * @param workerId Worker identifier being checked.
+     * @return Either service error or Unit when authorized.
      */
-    @Deprecated("Use getServersByUserId")
-    suspend fun getServerIdsByUserId(userId: Long): List<Long>
-
-    /**
-     * Transitional helper retained for legacy endpoint compatibility.
-     *
-     * @param serverId Server identifier to update.
-     * @param isEnabled New enabled state.
-     * @return Either service error or Unit.
-     */
-    @Deprecated("Use updateServer")
-    suspend fun setServerEnabled(serverId: Long, isEnabled: Boolean): Either<LocalMCPServerServiceError, Unit>
+    suspend fun validateWorkerOwnership(userId: Long, workerId: Long): Either<LocalMCPServerServiceError, Unit>
 }

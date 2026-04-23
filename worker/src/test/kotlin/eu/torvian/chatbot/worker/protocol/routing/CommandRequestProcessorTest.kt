@@ -1,18 +1,18 @@
 package eu.torvian.chatbot.worker.protocol.routing
 
 import arrow.core.getOrElse
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRejectedPayload
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRequestPayload
+import eu.torvian.chatbot.common.models.api.worker.protocol.codec.decodeProtocolPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolCommandTypes
-import eu.torvian.chatbot.common.models.api.worker.protocol.core.WorkerProtocolMessage
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolMessageTypes
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolRejectionReasons
-import eu.torvian.chatbot.common.models.api.worker.protocol.codec.decodeProtocolPayload
-import eu.torvian.chatbot.worker.protocol.transport.OutboundMessageEmitter
+import eu.torvian.chatbot.common.models.api.worker.protocol.core.WorkerProtocolMessage
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRejectedPayload
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRequestPayload
 import eu.torvian.chatbot.worker.protocol.factory.InteractionFactory
 import eu.torvian.chatbot.worker.protocol.ids.MessageIdProvider
 import eu.torvian.chatbot.worker.protocol.interaction.Interaction
 import eu.torvian.chatbot.worker.protocol.registry.InMemoryInteractionRegistry
+import eu.torvian.chatbot.worker.protocol.transport.OutboundMessageEmitter
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -58,6 +58,7 @@ class CommandRequestProcessorTest {
                 WorkerProtocolCommandTypes.MCP_SERVER_START to recordingFactory,
                 WorkerProtocolCommandTypes.MCP_SERVER_STOP to recordingFactory,
                 WorkerProtocolCommandTypes.MCP_SERVER_TEST_CONNECTION to recordingFactory,
+                WorkerProtocolCommandTypes.MCP_SERVER_TEST_DRAFT_CONNECTION to recordingFactory,
                 WorkerProtocolCommandTypes.MCP_SERVER_DISCOVER_TOOLS to recordingFactory
             ),
             emitter = emitter,
@@ -69,6 +70,7 @@ class CommandRequestProcessorTest {
             WorkerProtocolCommandTypes.MCP_SERVER_START,
             WorkerProtocolCommandTypes.MCP_SERVER_STOP,
             WorkerProtocolCommandTypes.MCP_SERVER_TEST_CONNECTION,
+            WorkerProtocolCommandTypes.MCP_SERVER_TEST_DRAFT_CONNECTION,
             WorkerProtocolCommandTypes.MCP_SERVER_DISCOVER_TOOLS
         )
 

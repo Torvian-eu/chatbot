@@ -81,6 +81,16 @@ class DummyMcpRuntimeCommandExecutor : McpRuntimeCommandExecutor {
         return WorkerMcpServerDeleteResultData(serverId = request.serverId).right()
     }
 
+    override suspend fun testDraftConnection(
+        request: WorkerMcpServerTestDraftConnectionCommandData
+    ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerTestDraftConnectionResultData> {
+        return WorkerMcpServerTestDraftConnectionResultData(
+            success = true,
+            discoveredToolCount = DUMMY_DISCOVERED_TOOL_COUNT,
+            message = DUMMY_TEST_CONNECTION_MESSAGE
+        ).right()
+    }
+
     companion object {
         /**
          * Stable dummy tool count returned by test-connection responses.

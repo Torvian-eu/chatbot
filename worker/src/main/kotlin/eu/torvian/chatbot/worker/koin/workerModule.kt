@@ -201,6 +201,7 @@ fun workerModule(
                 WorkerProtocolCommandTypes.MCP_SERVER_START to get<McpRuntimeCommandInteractionFactory>(),
                 WorkerProtocolCommandTypes.MCP_SERVER_STOP to get<McpRuntimeCommandInteractionFactory>(),
                 WorkerProtocolCommandTypes.MCP_SERVER_TEST_CONNECTION to get<McpRuntimeCommandInteractionFactory>(),
+                WorkerProtocolCommandTypes.MCP_SERVER_TEST_DRAFT_CONNECTION to get<McpRuntimeCommandInteractionFactory>(),
                 WorkerProtocolCommandTypes.MCP_SERVER_DISCOVER_TOOLS to get<McpRuntimeCommandInteractionFactory>(),
                 WorkerProtocolCommandTypes.MCP_SERVER_GET_RUNTIME_STATUS to get<McpRuntimeCommandInteractionFactory>(),
                 WorkerProtocolCommandTypes.MCP_SERVER_LIST_RUNTIME_STATUSES to get<McpRuntimeCommandInteractionFactory>(),

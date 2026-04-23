@@ -30,6 +30,14 @@ fun LocalMCPRuntimeControlError.toApiError(): ApiError = when (this) {
             "reason" to reason
         )
 
+    is LocalMCPRuntimeControlError.DraftRuntimeUnavailableError ->
+        apiError(
+            CommonApiErrorCodes.UNAVAILABLE,
+            "Local MCP draft runtime control is unavailable",
+            "workerId" to workerId.toString(),
+            "reason" to reason
+        )
+
     is LocalMCPRuntimeControlError.InternalError ->
         apiError(CommonApiErrorCodes.INTERNAL, "Failed to process Local MCP runtime control request", "reason" to message)
 }

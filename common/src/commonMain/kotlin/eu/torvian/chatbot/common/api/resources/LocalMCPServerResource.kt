@@ -94,5 +94,12 @@ class LocalMCPServerResource(val parent: Api = Api()) {
         @Resource("enabled")
         class SetEnabled(val parent: ById)
     }
-}
 
+    /**
+     * Resource for testing server runtime connectivity for a draft configuration.
+     *
+     * Endpoint: POST /api/v1/local-mcp-servers/test-draft-connection
+     */
+    @Resource("test-draft-connection")
+    class TestDraftConnection(val parent: LocalMCPServerResource = LocalMCPServerResource())
+}

@@ -2,6 +2,7 @@ package eu.torvian.chatbot.worker.mcp
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import kotlinx.serialization.json.JsonObject
 
 /**
@@ -73,5 +74,12 @@ interface McpRuntimeService {
         toolName: String,
         arguments: JsonObject
     ): Either<McpRuntimeError, McpToolCallOutcome?>
-}
 
+    /**
+     * Verifies MCP runtime connectivity and tool discovery for a draft server configuration.
+     *
+     * @param config Draft local MCP server configuration.
+     * @return Either runtime error or test-connection outcome.
+     */
+    suspend fun testDraftConnection(config: LocalMCPServerDto): Either<McpRuntimeError, McpTestConnectionOutcome>
+}

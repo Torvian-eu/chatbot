@@ -2,6 +2,7 @@ package eu.torvian.chatbot.worker.mcp
 
 import arrow.core.Either
 import arrow.core.right
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallRequest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -23,7 +24,8 @@ class McpToolCallExecutorImplTest {
         val runtimeService = RecordingRuntimeService(
             result = Either.Right(McpToolCallOutcome(isError = false, textContent = "ok"))
         )
-        val executor = McpToolCallExecutorImpl(runtimeService = runtimeService, json = Json { ignoreUnknownKeys = true })
+        val executor =
+            McpToolCallExecutorImpl(runtimeService = runtimeService, json = Json { ignoreUnknownKeys = true })
 
         val result = executor.execute(
             LocalMCPToolCallRequest(
@@ -35,7 +37,7 @@ class McpToolCallExecutorImplTest {
         )
 
         assertTrue(result.isError)
-        assertTrue(result.errorMessage?.contains("Malformed JSON input") == true)
+        assertEquals(result.errorMessage?.contains("Malformed JSON input"), true)
         assertEquals(0, runtimeService.callCount)
     }
 
@@ -53,7 +55,8 @@ class McpToolCallExecutorImplTest {
                 )
             )
         )
-        val executor = McpToolCallExecutorImpl(runtimeService = runtimeService, json = Json { ignoreUnknownKeys = true })
+        val executor =
+            McpToolCallExecutorImpl(runtimeService = runtimeService, json = Json { ignoreUnknownKeys = true })
 
         val result = executor.execute(validRequest())
 
@@ -75,7 +78,8 @@ class McpToolCallExecutorImplTest {
                 )
             )
         )
-        val executor = McpToolCallExecutorImpl(runtimeService = runtimeService, json = Json { ignoreUnknownKeys = true })
+        val executor =
+            McpToolCallExecutorImpl(runtimeService = runtimeService, json = Json { ignoreUnknownKeys = true })
 
         val result = executor.execute(validRequest())
 
@@ -97,7 +101,8 @@ class McpToolCallExecutorImplTest {
                 )
             )
         )
-        val executor = McpToolCallExecutorImpl(runtimeService = runtimeService, json = Json { ignoreUnknownKeys = true })
+        val executor =
+            McpToolCallExecutorImpl(runtimeService = runtimeService, json = Json { ignoreUnknownKeys = true })
 
         val result = executor.execute(validRequest())
 
@@ -140,17 +145,25 @@ class McpToolCallExecutorImplTest {
         // Stub implementations for other runtime service methods (not used in tests)
         override suspend fun startServer(serverId: Long): Either<McpRuntimeError, Unit> =
             Unit.right()
+
         override suspend fun stopServer(serverId: Long): Either<McpRuntimeError, Unit> =
             Unit.right()
+
         override suspend fun testConnection(serverId: Long): Either<McpRuntimeError, McpTestConnectionOutcome> =
             McpTestConnectionOutcome(0).right()
+
+        override suspend fun testDraftConnection(config: LocalMCPServerDto): Either<McpRuntimeError, McpTestConnectionOutcome> =
+            McpTestConnectionOutcome(0).right()
+
         override suspend fun discoverTools(serverId: Long): Either<McpRuntimeError, List<McpDiscoveredTool>> =
             emptyList<McpDiscoveredTool>().right()
+
         override suspend fun getRuntimeStatus(serverId: Long): Either<McpRuntimeError, eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto> =
             eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto(
                 serverId = serverId,
                 state = eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto.STOPPED
             ).right()
+
         override suspend fun listRuntimeStatuses(): List<eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto> =
             emptyList()
     }

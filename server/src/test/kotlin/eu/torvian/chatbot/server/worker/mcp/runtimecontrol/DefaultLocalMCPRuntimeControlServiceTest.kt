@@ -6,12 +6,15 @@ import arrow.core.right
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
+import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerDraftConnectionRequest
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpDiscoveredToolData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestDraftConnectionResultData
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import eu.torvian.chatbot.server.service.core.LocalMCPServerService
 import eu.torvian.chatbot.server.service.core.LocalMCPToolDefinitionService
 import eu.torvian.chatbot.server.service.core.RefreshResult
+import eu.torvian.chatbot.server.service.core.error.mcp.LocalMCPServerWorkerOwnershipMismatchError
 import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchError
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -124,6 +127,65 @@ class DefaultLocalMCPRuntimeControlServiceTest {
         val result = service.getRuntimeStatus(userId = 9L, serverId = 7L).requireRight()
 
         assertEquals(status, result)
+    }
+
+    /**
+     * Verifies draft connection testing delegates to the worker and reshapes the response payload.
+     */
+    @Test
+    fun `test draft connection validates ownership before dispatch`() = runTest {
+        val request = TestLocalMCPServerDraftConnectionRequest(
+            workerId = 3L,
+            name = "filesystem-draft",
+            command = "npx",
+            arguments = listOf("-y", "tool"),
+            workingDirectory = "C:/data",
+            environmentVariables = emptyList(),
+            secretEnvironmentVariables = emptyList()
+        )
+
+        coEvery { localMCPServerService.validateWorkerOwnership(userId = 9L, workerId = 3L) } returns Unit.right()
+        coEvery {
+            commandDispatchService.testDraftConnection(workerId = 3L, request = request)
+        } returns WorkerMcpServerTestDraftConnectionResultData(
+            success = true,
+            discoveredToolCount = 5,
+            message = "draft ok"
+        ).right()
+
+        val result = service.testDraftConnection(userId = 9L, request = request).requireRight()
+
+        assertEquals(true, result.success)
+        assertEquals(5, result.discoveredToolCount)
+        assertEquals("draft ok", result.message)
+        coVerify(exactly = 1) { localMCPServerService.validateWorkerOwnership(userId = 9L, workerId = 3L) }
+        coVerify(exactly = 1) {
+            commandDispatchService.testDraftConnection(workerId = 3L, request = request)
+        }
+    }
+
+    @Test
+    fun `test draft connection rejects unauthorized ownership before dispatch`() = runTest {
+        val request = TestLocalMCPServerDraftConnectionRequest(
+            workerId = 3L,
+            name = "filesystem-draft",
+            command = "npx",
+            arguments = listOf("-y", "tool"),
+            workingDirectory = "C:/data",
+            environmentVariables = emptyList(),
+            secretEnvironmentVariables = emptyList()
+        )
+
+        coEvery { localMCPServerService.validateWorkerOwnership(userId = 9L, workerId = 3L) } returns
+            LocalMCPServerWorkerOwnershipMismatchError(userId = 9L, workerId = 3L, workerOwnerUserId = 10L).left()
+
+        val result = service.testDraftConnection(userId = 9L, request = request)
+
+        assertTrue(result.isLeft())
+        coVerify(exactly = 1) { localMCPServerService.validateWorkerOwnership(userId = 9L, workerId = 3L) }
+        coVerify(exactly = 0) {
+            commandDispatchService.testDraftConnection(workerId = 3L, request = request)
+        }
     }
 
     /**

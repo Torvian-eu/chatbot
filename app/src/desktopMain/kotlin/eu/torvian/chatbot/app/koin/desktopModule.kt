@@ -68,21 +68,11 @@ fun desktopModule(config: AppConfiguration) = module {
         runBlocking { manager?.close() }
     }
 
-    single<MCPClientService> {
-        MCPClientServiceImpl(
-            processManager = get()
-        )
-    }.onClose { service ->
-        runBlocking { service?.close() }
-    }
-
     single<LocalMCPServerManager> {
         LocalMCPServerManagerImpl(
             serverRepository = get(),
             runtimeStatusRepository = get(),
-            toolRepository = get(),
-            mcpClientService = get(),
-            clock = get()
+            toolRepository = get()
         )
     }
 

@@ -11,6 +11,7 @@ import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
 import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerConnectionResponse
+import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerDraftConnectionRequest
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -154,6 +155,35 @@ class DefaultLocalMCPServerRepositoryTest {
         coVerify(exactly = 1) { api.stopServer(22L) }
         coVerify(exactly = 1) { api.testConnection(22L) }
         coVerify(exactly = 1) { api.refreshTools(22L) }
+    }
+
+    /**
+     * Verifies draft connection testing delegates to the server-owned draft-test API.
+     */
+    @Test
+    fun `testConnectionForNewServer delegates to draft test api`() = runTest {
+        val request = TestLocalMCPServerDraftConnectionRequest(
+            workerId = 77L,
+            name = "Draft Filesystem",
+            command = "npx",
+            arguments = listOf("-y", "tool"),
+            workingDirectory = "C:/data",
+            environmentVariables = listOf(LocalMCPEnvironmentVariableDto("API_URL", "https://example.test")),
+            secretEnvironmentVariables = listOf(LocalMCPEnvironmentVariableDto("TOKEN", "secret"))
+        )
+        val response = TestLocalMCPServerConnectionResponse(
+            serverId = null,
+            success = true,
+            discoveredToolCount = 4,
+            message = "draft ok"
+        )
+        coEvery { api.testDraftConnection(request) } returns Either.Right(response)
+
+        val result = repository.testConnectionForNewServer(request)
+
+        assertIs<Either.Right<TestLocalMCPServerConnectionResponse>>(result)
+        assertEquals(response, result.value)
+        coVerify(exactly = 1) { api.testDraftConnection(request) }
     }
 }
 

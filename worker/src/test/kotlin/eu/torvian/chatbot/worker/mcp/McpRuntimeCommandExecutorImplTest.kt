@@ -4,19 +4,10 @@ import arrow.core.Either
 import arrow.core.getOrElse
 import arrow.core.left
 import arrow.core.right
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpDiscoveredToolData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerCreateCommandData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDeleteCommandData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsCommandData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerGetRuntimeStatusCommandData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerListRuntimeStatusesCommandData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartCommandData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopCommandData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionCommandData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerUpdateCommandData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.*
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -83,6 +74,35 @@ class McpRuntimeCommandExecutorImplTest {
         assertEquals(true, result.success)
         assertEquals(5, result.discoveredToolCount)
         assertEquals("runtime ok", result.message)
+    }
+
+    /**
+     * Verifies runtime draft test success maps to the protocol draft result payload.
+     */
+    @Test
+    fun `test draft connection maps runtime success`() = runTest {
+        val executor = McpRuntimeCommandExecutorImpl(
+            runtimeService = FakeRuntimeService(
+                testDraftResult = McpTestConnectionOutcome(
+                    discoveredToolCount = 6,
+                    message = "draft runtime ok"
+                ).right()
+            ),
+            configStore = InMemoryMcpServerConfigStore()
+        )
+
+        val result = executor.testDraftConnection(
+            WorkerMcpServerTestDraftConnectionCommandData(
+                name = "draft-filesystem",
+                command = "npx",
+                arguments = listOf("-y", "tool"),
+                workingDirectory = "C:/data"
+            )
+        ).rightOrError()
+
+        assertEquals(true, result.success)
+        assertEquals(6, result.discoveredToolCount)
+        assertEquals("draft runtime ok", result.message)
     }
 
     /**
@@ -272,6 +292,8 @@ class McpRuntimeCommandExecutorImplTest {
         private val stopResult: Either<McpRuntimeError, Unit> = Unit.right(),
         private val testResult: Either<McpRuntimeError, McpTestConnectionOutcome> =
             McpTestConnectionOutcome(discoveredToolCount = 0, message = null).right(),
+        private val testDraftResult: Either<McpRuntimeError, McpTestConnectionOutcome> =
+            McpTestConnectionOutcome(discoveredToolCount = 0, message = null).right(),
         private val discoverResult: Either<McpRuntimeError, List<McpDiscoveredTool>> =
             emptyList<McpDiscoveredTool>().right(),
         private val getRuntimeStatusResult: Either<McpRuntimeError, LocalMcpServerRuntimeStatusDto> =
@@ -300,6 +322,14 @@ class McpRuntimeCommandExecutorImplTest {
         override suspend fun testConnection(
             serverId: Long
         ): Either<McpRuntimeError, McpTestConnectionOutcome> = testResult
+
+        /**
+         * @param config Draft local MCP server configuration.
+         * @return Configured fixture result.
+         */
+        override suspend fun testDraftConnection(
+            config: LocalMCPServerDto
+        ): Either<McpRuntimeError, McpTestConnectionOutcome> = testDraftResult
 
         /**
          * @param serverId Persisted local MCP server identifier.

@@ -1,20 +1,14 @@
 package eu.torvian.chatbot.server.ktor.routes
 
 import arrow.core.right
+import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.resources.LocalMCPServerResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.KoinDIContainer
 import eu.torvian.chatbot.common.misc.di.get
-import eu.torvian.chatbot.common.models.api.mcp.CreateLocalMCPServerRequest
-import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto
-import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
-import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
-import eu.torvian.chatbot.common.models.api.mcp.UpdateLocalMCPServerRequest
-import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerConnectionResponse
+import eu.torvian.chatbot.common.models.api.mcp.*
 import eu.torvian.chatbot.common.models.worker.WorkerDto
 import eu.torvian.chatbot.server.data.entities.UserEntity
 import eu.torvian.chatbot.server.domain.security.JwtConfig
@@ -30,20 +24,15 @@ import eu.torvian.chatbot.server.testutils.ktor.KtorTestApp
 import eu.torvian.chatbot.server.testutils.ktor.myTestApplication
 import eu.torvian.chatbot.server.worker.mcp.configsync.LocalMCPServerConfigSyncService
 import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.LocalMCPRuntimeControlService
-import io.ktor.client.call.body
-import io.ktor.client.request.get
-import io.ktor.client.request.put
-import io.ktor.client.request.post
-import io.ktor.client.request.setBody
-import io.ktor.http.ContentType
-import io.ktor.http.HttpStatusCode
-import io.ktor.http.contentType
+import io.ktor.client.call.*
+import io.ktor.client.request.*
+import io.ktor.http.*
+import io.mockk.coVerify
+import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import io.mockk.coVerify
-import io.mockk.mockk
 import org.koin.dsl.module
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -213,7 +202,7 @@ class LocalMCPServerRoutesTest {
         }
 
         assertEquals(HttpStatusCode.Forbidden, response.status)
-        val errorCode = response.body<eu.torvian.chatbot.common.api.ApiError>().code
+        val errorCode = response.body<ApiError>().code
         assertEquals(CommonApiErrorCodes.PERMISSION_DENIED.code, errorCode)
     }
 
@@ -287,6 +276,37 @@ class LocalMCPServerRoutesTest {
     }
 
     /**
+     * Verifies that draft connection testing is reachable for authenticated owners and returns
+     * a deterministic dummy payload.
+     */
+    @Test
+    fun `draft connection endpoint returns dummy success response for authenticated owner`() = app {
+        val userToken = authHelper.createUserAndGetToken(user1)
+        val worker = registerWorker(user1, "worker-draft-test")
+
+        val response = client.post(href(LocalMCPServerResource.TestDraftConnection())) {
+            authenticate(userToken)
+            contentType(ContentType.Application.Json)
+            setBody(
+                TestLocalMCPServerDraftConnectionRequest(
+                    workerId = worker.id,
+                    name = "draft-filesystem",
+                    command = "npx",
+                    arguments = listOf("-y", "@modelcontextprotocol/server-filesystem"),
+                    environmentVariables = listOf(LocalMCPEnvironmentVariableDto("LOG_LEVEL", "debug")),
+                    secretEnvironmentVariables = listOf(LocalMCPEnvironmentVariableDto("API_KEY", "secret-value")),
+                    workingDirectory = "C:/data"
+                )
+            )
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val payload = response.body<TestLocalMCPServerConnectionResponse>()
+        assertTrue(payload.success)
+        assertEquals(3, payload.discoveredToolCount)
+    }
+
+    /**
      * Registers a worker for test setup.
      *
      * @param owner Owner user entity.
@@ -329,6 +349,16 @@ class LocalMCPServerRoutesTest {
                 serverId: Long
             ) = TestLocalMCPServerConnectionResponse(
                 serverId = serverId,
+                success = true,
+                discoveredToolCount = 3,
+                message = null
+            ).right()
+
+            override suspend fun testDraftConnection(
+                userId: Long,
+                request: TestLocalMCPServerDraftConnectionRequest
+            ) = TestLocalMCPServerConnectionResponse(
+                serverId = null,
                 success = true,
                 discoveredToolCount = 3,
                 message = null

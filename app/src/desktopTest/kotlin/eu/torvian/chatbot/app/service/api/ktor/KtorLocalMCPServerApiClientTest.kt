@@ -14,6 +14,7 @@ import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
 import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerConnectionResponse
+import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerDraftConnectionRequest
 import eu.torvian.chatbot.common.models.api.mcp.UpdateLocalMCPServerRequest
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -249,6 +250,47 @@ class KtorLocalMCPServerApiClientTest {
             is Either.Right -> {
                 assertEquals(true, result.value.success)
                 assertEquals(3, result.value.discoveredToolCount)
+            }
+        }
+    }
+
+    /**
+     * Verifies parsing and routing for draft runtime connection tests.
+     */
+    @Test
+    fun `testDraftConnection - success parses draft test payload`() = runTest {
+        val payload = TestLocalMCPServerConnectionResponse(
+            serverId = null,
+            success = true,
+            discoveredToolCount = 4,
+            message = "draft ok"
+        )
+        val request = TestLocalMCPServerDraftConnectionRequest(
+            workerId = 88L,
+            name = "Draft Filesystem",
+            command = "npx",
+            arguments = listOf("-y", "tool"),
+            workingDirectory = "C:/data",
+            environmentVariables = listOf(LocalMCPEnvironmentVariableDto("API_URL", "https://example.test")),
+            secretEnvironmentVariables = listOf(LocalMCPEnvironmentVariableDto("TOKEN", "secret"))
+        )
+        val mockEngine = MockEngine { httpRequest ->
+            assertEquals(HttpMethod.Post, httpRequest.method)
+            assertEquals(href(LocalMCPServerResource.TestDraftConnection()), httpRequest.url.encodedPath)
+            respond(
+                content = json.encodeToString(payload),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+
+        val api = createTestClient(mockEngine)
+        when (val result = api.testDraftConnection(request)) {
+            is Either.Left -> fail("Expected success but got ${result.value}")
+            is Either.Right -> {
+                assertEquals(true, result.value.success)
+                assertEquals(4, result.value.discoveredToolCount)
+                assertEquals("draft ok", result.value.message)
             }
         }
     }

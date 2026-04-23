@@ -5,6 +5,7 @@ import arrow.core.raise.withError
 import eu.torvian.chatbot.common.api.resources.LocalMCPServerResource
 import eu.torvian.chatbot.common.models.api.mcp.CreateLocalMCPServerRequest
 import eu.torvian.chatbot.common.models.api.mcp.UpdateLocalMCPServerRequest
+import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerDraftConnectionRequest
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.ktor.auth.getWorkerId
@@ -150,6 +151,17 @@ fun Route.configureLocalMCPServerRoutes(
             call.respondEither(result)
         }
 
+        post<LocalMCPServerResource.TestDraftConnection> {
+            val userId = call.getUserId()
+            val request = call.receive<TestLocalMCPServerDraftConnectionRequest>()
+            val result = either {
+                withError({ error: LocalMCPRuntimeControlError -> error.toApiError() }) {
+                    localMCPRuntimeControlService.testDraftConnection(userId, request).bind()
+                }
+            }
+            call.respondEither(result)
+        }
+
         post<LocalMCPServerResource.ById.RefreshTools> { resource ->
             val userId = call.getUserId()
             val result = either {
@@ -173,5 +185,4 @@ fun Route.configureLocalMCPServerRoutes(
         }
     }
 }
-
 

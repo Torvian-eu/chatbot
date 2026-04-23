@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.worker.mcp.runtimecontrol
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
+import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerDraftConnectionRequest
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerCreateResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDeleteResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsResultData
@@ -10,6 +11,7 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpSer
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestDraftConnectionResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerUpdateResultData
 
 /**
@@ -124,6 +126,16 @@ interface LocalMCPRuntimeCommandDispatchService {
         workerId: Long,
         serverId: Long
     ): Either<LocalMCPRuntimeCommandDispatchError, WorkerMcpServerDeleteResultData>
+
+    /**
+     * Dispatches `mcp.server.test_draft_connection` to a worker and returns decoded test result data.
+     *
+     * @param workerId Worker identifier targeted for command dispatch.
+     * @param request Draft server configuration to test.
+     * @return Either orchestration error or typed test-draft-connection result data.
+     */
+    suspend fun testDraftConnection(
+        workerId: Long,
+        request: TestLocalMCPServerDraftConnectionRequest
+    ): Either<LocalMCPRuntimeCommandDispatchError, WorkerMcpServerTestDraftConnectionResultData>
 }
-
-

@@ -1,51 +1,20 @@
 package eu.torvian.chatbot.worker.protocol.interaction
 
-import arrow.core.left
-import arrow.core.getOrElse
-import arrow.core.right
 import arrow.core.Either
+import arrow.core.getOrElse
+import arrow.core.left
+import arrow.core.right
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
-import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerCommandResultStatuses
 import eu.torvian.chatbot.common.models.api.worker.protocol.codec.decodeProtocolPayload
+import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerCommandResultStatuses
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolCommandTypes
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolMessageTypes
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolRejectionReasons
 import eu.torvian.chatbot.common.models.api.worker.protocol.core.WorkerProtocolMessage
-import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerCommandRequestPayload
-import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerDiscoverToolsResultData
-import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerCreateResultData
-import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerDeleteResultData
-import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerGetRuntimeStatusResultData
-import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerListRuntimeStatusesResultData
-import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerStartErrorResultData
-import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerStartResultData
-import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerStopResultData
-import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerTestConnectionResultData
-import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpServerUpdateResultData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRejectedPayload
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRequestPayload
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandResultPayload
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerControlErrorResultData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsCommandData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsResultData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerCreateCommandData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerCreateResultData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDeleteCommandData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDeleteResultData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerGetRuntimeStatusCommandData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerGetRuntimeStatusResultData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerListRuntimeStatusesCommandData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerListRuntimeStatusesResultData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartCommandData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStartResultData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopCommandData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopResultData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionCommandData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionResultData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerUpdateCommandData
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerUpdateResultData
+import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.*
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.*
 import eu.torvian.chatbot.worker.mcp.DummyMcpRuntimeCommandExecutor
 import eu.torvian.chatbot.worker.mcp.McpRuntimeCommandExecutor
 import eu.torvian.chatbot.worker.protocol.ids.MessageIdProvider
@@ -97,6 +66,17 @@ class McpRuntimeCommandInteractionTest {
                 verifyResult = { resultPayload, commandType ->
                     val data = resultPayload.toWorkerMcpServerTestConnectionResultData(commandType).orError()
                     assertEquals(12L, data.serverId)
+                    assertEquals(true, data.success)
+                }
+            ),
+            SupportedCommandScenario(
+                commandType = WorkerProtocolCommandTypes.MCP_SERVER_TEST_DRAFT_CONNECTION,
+                requestPayload = WorkerMcpServerTestDraftConnectionCommandData(
+                    name = "draft-filesystem",
+                    command = "npx"
+                ).toWorkerCommandRequestPayload().orError(),
+                verifyResult = { resultPayload, commandType ->
+                    val data = resultPayload.toWorkerMcpServerTestDraftConnectionResultData(commandType).orError()
                     assertEquals(true, data.success)
                 }
             ),
@@ -202,6 +182,12 @@ class McpRuntimeCommandInteractionTest {
             WorkerCommandRequestPayload(
                 commandType = WorkerProtocolCommandTypes.MCP_SERVER_TEST_CONNECTION,
                 data = malformedServerIdPayload()
+            ),
+            WorkerCommandRequestPayload(
+                commandType = WorkerProtocolCommandTypes.MCP_SERVER_TEST_DRAFT_CONNECTION,
+                data = buildJsonObject {
+                    put("workerId", "not-a-number")
+                }
             ),
             WorkerCommandRequestPayload(
                 commandType = WorkerProtocolCommandTypes.MCP_SERVER_DISCOVER_TOOLS,
@@ -474,6 +460,19 @@ class McpRuntimeCommandInteractionTest {
         ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerTestConnectionResultData> =
             WorkerMcpServerTestConnectionResultData(
                 serverId = request.serverId,
+                success = true,
+                discoveredToolCount = 0,
+                message = "ok"
+            ).right()
+
+        /**
+         * @param request Typed draft test-connection command input data.
+         * @return Deterministic successful draft test result.
+         */
+        override suspend fun testDraftConnection(
+            request: WorkerMcpServerTestDraftConnectionCommandData
+        ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerTestDraftConnectionResultData> =
+            WorkerMcpServerTestDraftConnectionResultData(
                 success = true,
                 discoveredToolCount = 0,
                 message = "ok"
