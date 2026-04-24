@@ -19,6 +19,7 @@ class WebSocketTransportConfigTest {
         )
 
         assertEquals("wss://localhost:8443${workerWebSocketConnectPath()}", config.webSocketUrl)
+        assertEquals(10_000L, config.helloWelcomeTimeoutMs)
     }
 
     /**

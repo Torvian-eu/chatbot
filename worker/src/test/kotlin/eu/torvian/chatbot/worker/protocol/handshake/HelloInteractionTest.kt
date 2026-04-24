@@ -1,13 +1,13 @@
 package eu.torvian.chatbot.worker.protocol.handshake
 
+import eu.torvian.chatbot.common.models.api.worker.protocol.builders.sessionWelcome
+import eu.torvian.chatbot.common.models.api.worker.protocol.codec.decodeProtocolPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.core.WorkerProtocolMessage
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerSessionHelloPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerSessionWelcomePayload
-import eu.torvian.chatbot.common.models.api.worker.protocol.codec.decodeProtocolPayload
-import eu.torvian.chatbot.common.models.api.worker.protocol.builders.sessionWelcome
-import eu.torvian.chatbot.worker.protocol.transport.OutboundMessageEmitter
 import eu.torvian.chatbot.worker.protocol.ids.MessageIdProvider
 import eu.torvian.chatbot.worker.protocol.registry.InMemoryInteractionRegistry
+import eu.torvian.chatbot.worker.protocol.transport.OutboundMessageEmitter
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
@@ -22,14 +22,11 @@ import kotlin.test.assertIs
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class HelloInteractionTest {
-    /**
-     * Verifies that starting the interaction emits one `session.hello` envelope.
-     */
     @Test
     fun `start emits session hello envelope`() = runTest {
         val emitter = RecordingEmitter()
         val registry = InMemoryInteractionRegistry()
-        val handshakeStateStore = InMemorySessionHandshakeStateStore()
+        val handshakeContext = InMemorySessionHandshakeContext()
         val interaction = HelloInteraction(
             interactionId = "int-1",
             workerUid = "worker-1",
@@ -38,7 +35,7 @@ class HelloInteractionTest {
             workerVersion = "1.0.0",
             emitter = emitter,
             registry = registry,
-            handshakeStateStore = handshakeStateStore,
+            handshakeContext = handshakeContext,
             messageIdProvider = SequenceMessageIdProvider()
         )
         registry.register(interaction)
@@ -61,19 +58,16 @@ class HelloInteractionTest {
         assertEquals(listOf("mcp.tool.call"), helloPayload.capabilities)
         assertEquals(listOf(1), helloPayload.supportedProtocolVersions)
         assertEquals("1.0.0", helloPayload.workerVersion)
-        assertEquals(SessionHandshakeState.Pending, handshakeStateStore.get("int-1"))
+        assertEquals(SessionHandshakeState.Pending, handshakeContext.get())
 
         job.cancelAndJoin()
     }
 
-    /**
-     * Verifies that a valid welcome message completes the interaction and records success state.
-     */
     @Test
     fun `valid session welcome completes handshake`() = runTest {
         val emitter = RecordingEmitter()
         val registry = InMemoryInteractionRegistry()
-        val handshakeStateStore = InMemorySessionHandshakeStateStore()
+        val handshakeContext = InMemorySessionHandshakeContext()
         val interaction = HelloInteraction(
             interactionId = "int-1",
             workerUid = "worker-1",
@@ -82,7 +76,7 @@ class HelloInteractionTest {
             workerVersion = null,
             emitter = emitter,
             registry = registry,
-            handshakeStateStore = handshakeStateStore,
+            handshakeContext = handshakeContext,
             messageIdProvider = SequenceMessageIdProvider()
         )
         registry.register(interaction)
@@ -105,7 +99,7 @@ class HelloInteractionTest {
         )
         runCurrent()
 
-        val successState = handshakeStateStore.get("int-1")
+        val successState = handshakeContext.get()
         assertIs<SessionHandshakeState.Succeeded>(successState)
         assertEquals("worker-1", successState.welcome.workerUid)
         assertEquals(1, successState.welcome.selectedProtocolVersion)
@@ -114,14 +108,11 @@ class HelloInteractionTest {
         assertEquals(true, job.isCompleted)
     }
 
-    /**
-     * Verifies that malformed welcome messages fail the interaction without crashing.
-     */
     @Test
     fun `malformed session welcome fails interaction cleanly`() = runTest {
         val emitter = RecordingEmitter()
         val registry = InMemoryInteractionRegistry()
-        val handshakeStateStore = InMemorySessionHandshakeStateStore()
+        val handshakeContext = InMemorySessionHandshakeContext()
         val interaction = HelloInteraction(
             interactionId = "int-1",
             workerUid = "worker-1",
@@ -130,7 +121,7 @@ class HelloInteractionTest {
             workerVersion = null,
             emitter = emitter,
             registry = registry,
-            handshakeStateStore = handshakeStateStore,
+            handshakeContext = handshakeContext,
             messageIdProvider = SequenceMessageIdProvider()
         )
         registry.register(interaction)
@@ -149,48 +140,27 @@ class HelloInteractionTest {
         )
         runCurrent()
 
-        val failureState = handshakeStateStore.get("int-1")
+        val failureState = handshakeContext.get()
         assertIs<SessionHandshakeState.Failed>(failureState)
         assertEquals("session.welcome payload is missing", failureState.reason)
         assertEquals(null, registry.get("int-1"))
         assertEquals(true, job.isCompleted)
     }
 
-    /**
-     * Recording outbound emitter used for assertions.
-     */
     private class RecordingEmitter : OutboundMessageEmitter {
-        /**
-         * Collected outbound messages in send order.
-         */
         val messages: MutableList<WorkerProtocolMessage> = mutableListOf()
 
-        /**
-         * @param message Outbound protocol envelope to record.
-         */
         override suspend fun emit(message: WorkerProtocolMessage) {
             messages += message
         }
     }
 
-    /**
-     * Deterministic message-id provider for stable protocol assertions.
-     */
     private class SequenceMessageIdProvider : MessageIdProvider {
-        /**
-         * Internal counter used to produce stable increasing IDs.
-         */
         private var counter: Int = 0
 
-        /**
-         * Produces the next deterministic test message ID.
-         *
-         * @return Stable identifier in the form `msg-N`.
-         */
         override fun nextMessageId(): String {
             counter += 1
             return "msg-$counter"
         }
     }
 }
-

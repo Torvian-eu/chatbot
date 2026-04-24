@@ -45,9 +45,19 @@ object WorkerProtocolRejectionReasons {
     const val DUPLICATE_INTERACTION_ID = "duplicate_interaction_id"
 
     /**
+     * Rejection code used when a command is received before the session handshake completes.
+     */
+    const val HANDSHAKE_NOT_COMPLETE = "handshake_not_complete"
+
+    /**
      * Rejection code used when a follow-up command message targets no active interaction.
      */
     const val UNKNOWN_INTERACTION_ID = "unknown_interaction_id"
+
+    /**
+     * Rejection code used when an interaction ID is present but invalid (e.g. wrong format).
+     */
+    const val INVALID_INTERACTION_ID = "invalid_interaction_id"
 
     /**
      * Rejection code used when the peer speaks an unsupported protocol version.

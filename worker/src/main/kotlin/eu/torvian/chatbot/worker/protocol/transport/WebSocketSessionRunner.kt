@@ -2,71 +2,41 @@ package eu.torvian.chatbot.worker.protocol.transport
 
 import eu.torvian.chatbot.worker.protocol.handshake.HelloStartResult
 import eu.torvian.chatbot.worker.protocol.handshake.HelloStarter
+import eu.torvian.chatbot.worker.protocol.handshake.SessionHandshakeContext
+import eu.torvian.chatbot.worker.protocol.handshake.SessionHandshakeState
 import eu.torvian.chatbot.worker.protocol.routing.IncomingMessageProcessor
-import io.ktor.client.HttpClient
-import io.ktor.client.plugins.ResponseException
-import io.ktor.client.plugins.websocket.webSocket
-import io.ktor.client.request.bearerAuth
-import io.ktor.client.request.url
-import io.ktor.http.HttpStatusCode
-import io.ktor.websocket.Frame
-import io.ktor.websocket.readText
+import io.ktor.client.*
+import io.ktor.client.plugins.*
+import io.ktor.client.plugins.websocket.*
+import io.ktor.client.request.*
+import io.ktor.http.*
+import io.ktor.websocket.*
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 
 /**
  * Runs one authenticated worker WebSocket session lifecycle.
  *
- * Responsibility: manage one websocket connection and session frame processing.
- *
- * Does NOT handle:
- * - REST bootstrap (delegated to connection loop)
- * - auth/retry logic (delegated to authenticated request executor)
- * - reconnect/backoff (delegated to connection loop)
+ * @property client HTTP client used to open the WebSocket connection.
+ * @property transportConfig Transport configuration used to obtain the WebSocket URL and worker metadata.
+ * @property codec Codec used to encode and decode worker protocol messages.
+ * @property outboundEmitterHolder Holder for the outbound message emitter that binds the transport to the protocol layer.
+ * @property helloStarter Starter for the worker-side hello handshake interaction.
+ * @property handshakeContext Session-scoped handshake recorder used to track handshake outcome.
+ * @property incomingMessageProcessor Processor for inbound worker protocol messages received over the WebSocket.
  */
 class WebSocketSessionRunner(
-    /**
-     * Ktor client configured with WebSockets support.
-     *
-     * Used to open the WebSocket connection with bearer authentication.
-     */
     private val client: HttpClient,
-
-    /**
-     * Immutable settings for endpoint and hello payload metadata.
-     *
-     * Provides the WebSocket URL, worker UID, capabilities, protocol versions, and worker version.
-     */
     private val transportConfig: WebSocketTransportConfig,
-
-    /**
-     * Text-frame codec for worker protocol envelopes.
-     *
-     * Encodes outbound messages and decodes inbound frames.
-     */
     private val codec: WebSocketMessageCodec,
-
-    /**
-     * Mutable outbound bridge bound to the active session sender.
-     *
-     * Initialized with the websocket sender when connection opens;
-     * cleared when connection closes.
-     */
     private val outboundEmitterHolder: OutboundMessageEmitterHolder,
-
-    /**
-     * Hello interaction launcher invoked after transport binding.
-     *
-     * Starts the session handshake with server-provided metadata.
-     */
     private val helloStarter: HelloStarter,
-
-    /**
-     * Processor that handles decoded inbound envelopes.
-     *
-     * Routes incoming protocol messages to appropriate handlers.
-     */
+    private val handshakeContext: SessionHandshakeContext,
     private val incomingMessageProcessor: IncomingMessageProcessor
 ) {
     /**
@@ -82,13 +52,16 @@ class WebSocketSessionRunner(
                 url(transportConfig.webSocketUrl)
                 bearerAuth(accessToken)
             }) {
+                logger.info("Worker WebSocket session opened, starting handshake")
+                handshakeContext.reset()
+
                 logger.debug("WebSocket transport binding: setting up outbound message emitter")
                 outboundEmitterHolder.bind { message ->
                     logger.debug("Sending outbound worker protocol message (type={})", message.type)
                     send(Frame.Text(codec.encode(message)))
                 }
 
-                logger.info("Worker WebSocket connected and ready for communication")
+                logger.debug("Starting worker session hello interaction")
                 when (
                     val helloResult = helloStarter.start(
                         workerUid = transportConfig.workerUid,
@@ -97,56 +70,27 @@ class WebSocketSessionRunner(
                         workerVersion = transportConfig.workerVersion
                     )
                 ) {
-                    is HelloStartResult.Started -> {
-                        logger.info("Started worker session hello interaction (interactionId={})", helloResult.interactionId)
-                    }
-
+                    is HelloStartResult.Started -> runStartedSession(this, helloResult)
                     is HelloStartResult.NotStarted -> {
                         logger.warn(
                             "Failed to start worker session hello interaction (interactionId={}, reason={})",
                             helloResult.interactionId,
                             helloResult.reason
                         )
-                    }
-                }
-
-                for (frame in incoming) {
-                    when (frame) {
-                        is Frame.Text -> {
-                            val decoded = codec.decode(frame.readText())
-                            decoded.fold(
-                                ifLeft = { error ->
-                                    logger.warn("Failed to decode inbound worker protocol frame: {}", error)
-                                },
-                                ifRight = { message ->
-                                    try {
-                                        incomingMessageProcessor.process(message)
-                                    } catch (error: Exception) {
-                                        logger.error(
-                                            "Inbound worker protocol processing failed (id={}, type={})",
-                                            message.id,
-                                            message.type,
-                                            error
-                                        )
-                                    }
-                                }
-                            )
-                        }
-
-                        // Ping/Pong/Binary frames are not part of the first transport iteration.
-                        else -> Unit
+                        close()
+                        return@webSocket
                     }
                 }
 
                 logger.warn("Worker WebSocket closed by peer")
             }
 
-            WebSocketSessionResult(stableConnection = true, authRejected = false)
+            WebSocketSessionResult(stableConnection = handshakeContext.hasSucceeded(), authRejected = false)
         } catch (error: CancellationException) {
             throw error
         } catch (error: ResponseException) {
             val authRejected = error.response.status == HttpStatusCode.Unauthorized ||
-                error.response.status == HttpStatusCode.Forbidden
+                    error.response.status == HttpStatusCode.Forbidden
             logger.warn("Worker WebSocket handshake failed (status={})", error.response.status)
             WebSocketSessionResult(stableConnection = false, authRejected = authRejected)
         } catch (error: Exception) {
@@ -155,6 +99,107 @@ class WebSocketSessionRunner(
         } finally {
             outboundEmitterHolder.unbind()
         }
+    }
+
+    /**
+     * Runs the started hello interaction and processes inbound frames while monitoring handshake completion.
+     *
+     * @param session Active websocket session used for inbound frame iteration and close signaling.
+     * @param helloResult Successful hello start result that exposes the terminal handshake state.
+     */
+    private suspend fun runStartedSession(session: WebSocketSession, helloResult: HelloStartResult.Started) {
+        logger.info("Started worker session hello interaction (interactionId={})", helloResult.interactionId)
+        coroutineScope {
+            val handshakeMonitor = launch {
+                monitorHandshake(session)
+            }
+
+            try {
+                processInboundFrames(session)
+            } finally {
+                handshakeMonitor.cancel()
+            }
+        }
+    }
+
+    /**
+     * Waits for the handshake to reach a terminal state and reacts to success or failure.
+     *
+     * @param session Active websocket session used to close the connection on handshake failure.
+     */
+    private suspend fun monitorHandshake(session: WebSocketSession) {
+        try {
+            when (
+                val handshakeState = withTimeout(transportConfig.helloWelcomeTimeoutMs) {
+                    handshakeContext.awaitTerminalState()
+                }
+            ) {
+                is SessionHandshakeState.Failed -> {
+                    logger.warn("Handshake failed; closing worker WebSocket session (reason={})", handshakeState.reason)
+                    session.close()
+                }
+
+                is SessionHandshakeState.Succeeded -> {
+                    logger.info(
+                        "Handshake succeeded; worker session is ready for work (workerUid={}, selectedProtocolVersion={}, acceptedCapabilities={})",
+                        handshakeState.welcome.workerUid,
+                        handshakeState.welcome.selectedProtocolVersion,
+                        handshakeState.welcome.acceptedCapabilities
+                    )
+                }
+
+                SessionHandshakeState.Pending -> {
+                    logger.warn("Handshake monitor observed pending state, which should be impossible after awaiting terminal state")
+                }
+            }
+        } catch (_: TimeoutCancellationException) {
+            val reason = "Timed out waiting for session.welcome after ${transportConfig.helloWelcomeTimeoutMs}ms"
+            logger.warn(reason)
+            handshakeContext.markFailed(reason)
+            session.close()
+        }
+    }
+
+    /**
+     * Processes inbound frames until the socket closes.
+     *
+     * Text frames are decoded and routed; other frame types are ignored.
+     *
+     * @param session Active websocket session that provides inbound frames.
+     */
+    private suspend fun processInboundFrames(session: WebSocketSession) {
+        for (frame in session.incoming) {
+            when (frame) {
+                is Frame.Text -> processInboundTextFrame(frame)
+                else -> Unit
+            }
+        }
+    }
+
+    /**
+     * Decodes and routes one inbound text frame.
+     *
+     * @param frame Text frame containing a worker protocol envelope.
+     */
+    private suspend fun processInboundTextFrame(frame: Frame.Text) {
+        val decoded = codec.decode(frame.readText())
+        decoded.fold(
+            ifLeft = { error ->
+                logger.warn("Failed to decode inbound worker protocol frame: {}", error)
+            },
+            ifRight = { message ->
+                try {
+                    incomingMessageProcessor.process(message)
+                } catch (error: Exception) {
+                    logger.error(
+                        "Inbound worker protocol processing failed (id={}, type={})",
+                        message.id,
+                        message.type,
+                        error
+                    )
+                }
+            }
+        )
     }
 
     companion object {
@@ -167,6 +212,3 @@ class WebSocketSessionRunner(
         private val logger: Logger = LogManager.getLogger(WebSocketSessionRunner::class.java)
     }
 }
-
-
-

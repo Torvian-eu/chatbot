@@ -1,12 +1,12 @@
 package eu.torvian.chatbot.worker.protocol.handshake
 
-import eu.torvian.chatbot.worker.protocol.transport.OutboundMessageEmitter
-import eu.torvian.chatbot.worker.protocol.ids.UuidMessageIdProvider
 import eu.torvian.chatbot.worker.protocol.ids.InteractionIdProvider
 import eu.torvian.chatbot.worker.protocol.ids.MessageIdProvider
+import eu.torvian.chatbot.worker.protocol.ids.UuidMessageIdProvider
 import eu.torvian.chatbot.worker.protocol.registry.InteractionRegistry
-import kotlinx.coroutines.CoroutineScope
+import eu.torvian.chatbot.worker.protocol.transport.OutboundMessageEmitter
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
@@ -18,7 +18,7 @@ import org.apache.logging.log4j.Logger
  * @property registry Active-interaction registry that tracks running handshakes.
  * @property interactionIdProvider Provider used to generate new interaction identifiers.
  * @property emitter Outbound protocol emitter used by created interactions.
- * @property handshakeStateStore Handshake-state recorder used by created interactions.
+ * @property handshakeContext Session-scoped handshake recorder used to persist success/failure outcome.
  * @property messageIdProvider Message-ID provider used by created interactions.
  */
 class HelloStarter(
@@ -26,7 +26,7 @@ class HelloStarter(
     private val registry: InteractionRegistry,
     private val interactionIdProvider: InteractionIdProvider,
     private val emitter: OutboundMessageEmitter,
-    private val handshakeStateStore: SessionHandshakeStateStore,
+    private val handshakeContext: SessionHandshakeContext,
     private val messageIdProvider: MessageIdProvider = UuidMessageIdProvider()
 ) {
     companion object {
@@ -43,7 +43,7 @@ class HelloStarter(
      * @param capabilities Capability identifiers announced to the server.
      * @param supportedProtocolVersions Protocol versions accepted by the worker.
      * @param workerVersion Optional worker build/version metadata.
-     * @return Start result describing whether the interaction was launched.
+     * @return Start result containing the launched interaction identifier.
      */
     fun start(
         workerUid: String,
@@ -60,7 +60,7 @@ class HelloStarter(
             workerVersion = workerVersion,
             emitter = emitter,
             registry = registry,
-            handshakeStateStore = handshakeStateStore,
+            handshakeContext = handshakeContext,
             messageIdProvider = messageIdProvider
         )
 
@@ -82,10 +82,7 @@ class HelloStarter(
                     interactionId,
                     error
                 )
-                handshakeStateStore.markFailed(
-                    interactionId = interactionId,
-                    reason = "Session hello interaction failed unexpectedly: ${error.message ?: error::class.simpleName}"
-                )
+                handshakeContext.markFailed("Session hello interaction failed unexpectedly: ${error.message ?: error::class.simpleName}")
                 registry.remove(interactionId)
             }
         }
@@ -93,4 +90,3 @@ class HelloStarter(
         return HelloStartResult.Started(interactionId)
     }
 }
-

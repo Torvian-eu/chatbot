@@ -30,16 +30,15 @@ import eu.torvian.chatbot.worker.mcp.api.WorkerMcpServerApi
 import eu.torvian.chatbot.worker.protocol.factory.McpRuntimeCommandInteractionFactory
 import eu.torvian.chatbot.worker.protocol.factory.McpToolCallInteractionFactory
 import eu.torvian.chatbot.worker.protocol.factory.ToolCallInteractionFactory
-import eu.torvian.chatbot.worker.protocol.handshake.InMemorySessionHandshakeStateStore
-import eu.torvian.chatbot.worker.protocol.handshake.SessionHandshakeStateStore
 import eu.torvian.chatbot.worker.protocol.handshake.HelloStarter
+import eu.torvian.chatbot.worker.protocol.handshake.InMemorySessionHandshakeContext
+import eu.torvian.chatbot.worker.protocol.handshake.SessionHandshakeContext
 import eu.torvian.chatbot.worker.protocol.ids.UuidInteractionIdProvider
 import eu.torvian.chatbot.worker.protocol.ids.UuidMessageIdProvider
 import eu.torvian.chatbot.worker.protocol.ids.InteractionIdProvider
 import eu.torvian.chatbot.worker.protocol.ids.MessageIdProvider
 import eu.torvian.chatbot.worker.protocol.registry.InMemoryInteractionRegistry
 import eu.torvian.chatbot.worker.protocol.registry.InteractionRegistry
-import eu.torvian.chatbot.worker.protocol.routing.CommandMessageHandler
 import eu.torvian.chatbot.worker.protocol.routing.CommandRequestProcessor
 import eu.torvian.chatbot.worker.protocol.routing.IncomingMessageProcessor
 import eu.torvian.chatbot.worker.protocol.routing.WorkerProtocolMessageRouter
@@ -151,6 +150,7 @@ fun workerModule(
             codec = get(),
             outboundEmitterHolder = get(),
             helloStarter = get(),
+            handshakeContext = get(),
             incomingMessageProcessor = get()
         )
     }
@@ -164,14 +164,14 @@ fun workerModule(
     }
     single<TransportConnectionLoopRunner> { get<WebSocketConnectionLoop>() }
     single<InteractionRegistry> { InMemoryInteractionRegistry() }
-    single<SessionHandshakeStateStore> { InMemorySessionHandshakeStateStore() }
+    single<SessionHandshakeContext> { InMemorySessionHandshakeContext() }
     single<HelloStarter> {
         HelloStarter(
             interactionScope = get(),
             registry = get(),
             interactionIdProvider = get(),
             emitter = get(),
-            handshakeStateStore = get(),
+            handshakeContext = get(),
             messageIdProvider = get()
         )
     }
@@ -214,18 +214,11 @@ fun workerModule(
             messageIdProvider = get()
         )
     }
-    single<CommandMessageHandler> {
-        CommandMessageHandler(
-            registry = get(),
-            emitter = get(),
-            messageIdProvider = get()
-        )
-    }
     single<WorkerProtocolMessageRouter> {
         WorkerProtocolMessageRouter(
             registry = get(),
+            handshakeContext = get(),
             commandRequestProcessor = get<CommandRequestProcessor>(),
-            commandMessageHandler = get(),
             emitter = get(),
             messageIdProvider = get()
         )
