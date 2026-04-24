@@ -15,6 +15,7 @@ import java.net.URI
  * @property reconnectInitialDelayMs Initial reconnect delay in milliseconds before backoff growth.
  * @property reconnectMaxDelayMs Upper reconnect delay cap in milliseconds.
  * @property reconnectJitterRatio Random jitter ratio applied to reconnect delay in range `[0.0, 1.0]`.
+ * @property helloWelcomeTimeoutMs Maximum time allowed for the bounded session-start handshake.
  */
 data class WebSocketTransportConfig(
     val workerUid: String,
@@ -24,7 +25,8 @@ data class WebSocketTransportConfig(
     val workerVersion: String? = null,
     val reconnectInitialDelayMs: Long = 1_000L,
     val reconnectMaxDelayMs: Long = 30_000L,
-    val reconnectJitterRatio: Double = 0.2
+    val reconnectJitterRatio: Double = 0.2,
+    val helloWelcomeTimeoutMs: Long = 10_000L
 ) {
     companion object {
         /**

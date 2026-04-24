@@ -1,17 +1,17 @@
 package eu.torvian.chatbot.worker.protocol.handshake
 
 import arrow.core.getOrElse
-import eu.torvian.chatbot.common.models.api.worker.protocol.core.WorkerProtocolMessage
+import eu.torvian.chatbot.common.models.api.worker.protocol.builders.sessionHello
+import eu.torvian.chatbot.common.models.api.worker.protocol.codec.decodeProtocolPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolMessageTypes
+import eu.torvian.chatbot.common.models.api.worker.protocol.core.WorkerProtocolMessage
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerSessionHelloPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerSessionWelcomePayload
-import eu.torvian.chatbot.common.models.api.worker.protocol.codec.decodeProtocolPayload
-import eu.torvian.chatbot.common.models.api.worker.protocol.builders.sessionHello
-import eu.torvian.chatbot.worker.protocol.transport.OutboundMessageEmitter
-import eu.torvian.chatbot.worker.protocol.ids.UuidMessageIdProvider
 import eu.torvian.chatbot.worker.protocol.ids.MessageIdProvider
+import eu.torvian.chatbot.worker.protocol.ids.UuidMessageIdProvider
 import eu.torvian.chatbot.worker.protocol.interaction.ChannelBackedInteraction
 import eu.torvian.chatbot.worker.protocol.registry.InteractionRegistry
+import eu.torvian.chatbot.worker.protocol.transport.OutboundMessageEmitter
 
 /**
  * Active worker-side interaction that performs one `session.hello -> session.welcome` handshake lifecycle.
@@ -23,7 +23,7 @@ import eu.torvian.chatbot.worker.protocol.registry.InteractionRegistry
  * @property workerVersion Optional worker build/version metadata sent in hello.
  * @property emitter Outbound emitter used to send `session.hello`.
  * @property registry Active-interaction registry used for lifecycle cleanup.
- * @property handshakeStateStore Handshake-state recorder used to persist success/failure outcome.
+ * @property handshakeContext Session-scoped handshake recorder used to persist success/failure outcome.
  * @property messageIdProvider Message-ID provider used for outbound hello envelopes.
  */
 class HelloInteraction(
@@ -34,7 +34,7 @@ class HelloInteraction(
     private val workerVersion: String?,
     emitter: OutboundMessageEmitter,
     private val registry: InteractionRegistry,
-    private val handshakeStateStore: SessionHandshakeStateStore,
+    private val handshakeContext: SessionHandshakeContext,
     private val messageIdProvider: MessageIdProvider = UuidMessageIdProvider()
 ) : ChannelBackedInteraction(
     interactionId = interactionId,
@@ -46,10 +46,10 @@ class HelloInteraction(
     private var helloMessageId: String? = null
 
     /**
-     * Emits `session.hello` and waits until a valid `session.welcome` completes this interaction.
+     * Emits `session.hello` and waits for a valid `session.welcome`.
      */
     override suspend fun start() {
-        handshakeStateStore.markPending(interactionId)
+        handshakeContext.markPending()
 
         val helloId = messageIdProvider.nextMessageId()
         helloMessageId = helloId
@@ -69,7 +69,6 @@ class HelloInteraction(
         while (true) {
             val inboundMessage = awaitNextMessage()
             if (inboundMessage.type != WorkerProtocolMessageTypes.SESSION_WELCOME) {
-                // Ignore unrelated message types addressed to this interaction.
                 continue
             }
 
@@ -119,14 +118,12 @@ class HelloInteraction(
             return
         }
 
-        handshakeStateStore.markSucceeded(
-            interactionId = interactionId,
-            welcome = SessionWelcomeState(
-                workerUid = welcomePayload.workerUid,
-                selectedProtocolVersion = welcomePayload.selectedProtocolVersion,
-                acceptedCapabilities = welcomePayload.acceptedCapabilities
-            )
+        val welcomeState = SessionWelcomeState(
+            workerUid = welcomePayload.workerUid,
+            selectedProtocolVersion = welcomePayload.selectedProtocolVersion,
+            acceptedCapabilities = welcomePayload.acceptedCapabilities
         )
+        handshakeContext.markSucceeded(welcomeState)
         registry.remove(interactionId)
     }
 
@@ -136,7 +133,7 @@ class HelloInteraction(
      * @param reason Human-readable reason explaining why the interaction failed.
      */
     private fun failInteraction(reason: String) {
-        handshakeStateStore.markFailed(interactionId, reason)
+        handshakeContext.markFailed(reason)
         registry.remove(interactionId)
     }
 }
