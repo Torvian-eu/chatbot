@@ -3,10 +3,10 @@ package eu.torvian.chatbot.worker.main
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
-import eu.torvian.chatbot.worker.config.WorkerAppConfigDto
+import eu.torvian.chatbot.worker.config.AppConfigDto
+import eu.torvian.chatbot.worker.config.SetupConfigDto
 import eu.torvian.chatbot.worker.config.WorkerConfigError
 import eu.torvian.chatbot.worker.config.WorkerConfigLoader
-import eu.torvian.chatbot.worker.config.WorkerSetupConfigDto
 import eu.torvian.chatbot.worker.setup.WorkerSetupError
 import eu.torvian.chatbot.worker.setup.WorkerSetupManager
 import kotlinx.coroutines.test.runTest
@@ -30,10 +30,10 @@ class WorkerMainTest {
     fun `setup mode invokes setup manager and exits successfully`() = runTest {
         val configDir = createTempDirectory("worker-main-test")
         try {
-            val initialDto = WorkerAppConfigDto(setup = WorkerSetupConfigDto(required = true))
+            val initialDto = AppConfigDto(setup = SetupConfigDto(required = true))
             val configLoader = RecordingConfigLoader(configDir, initialDto)
             val setupManager = RecordingSetupManager(Unit.right())
-            val workerMain = WorkerMain(configLoader) { setupManager }
+            val workerMain = WorkerMain(configLoader, setupManagerFactory = { setupManager })
 
             val result = workerMain.run(
                 arrayOf(
@@ -54,13 +54,38 @@ class WorkerMainTest {
     }
 
     @Test
+    fun `automatic setup triggered by setup required exits successfully`() = runTest {
+        val configDir = createTempDirectory("worker-main-test")
+        try {
+            val initialDto = AppConfigDto(setup = SetupConfigDto(required = true))
+            val configLoader = RecordingConfigLoader(configDir, initialDto)
+            val setupManager = RecordingSetupManager(Unit.right())
+            val workerMain = WorkerMain(configLoader, setupManagerFactory = { setupManager })
+
+            val result = workerMain.run(
+                arrayOf(
+                    "--config=${configDir.absolutePathString()}"
+                )
+            )
+
+            assertTrue(result.isRight())
+            assertEquals(1, configLoader.loadCalls)
+            assertEquals(configDir, setupManager.lastConfigDir)
+            assertEquals(initialDto, setupManager.lastMergedConfig)
+            assertEquals(null, setupManager.lastServerUrlOverride)
+        } finally {
+            configDir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun `setup manager errors are wrapped as worker main setup errors`() = runTest {
         val configDir = createTempDirectory("worker-main-test")
         try {
-            val configLoader = RecordingConfigLoader(configDir, WorkerAppConfigDto())
+            val configLoader = RecordingConfigLoader(configDir, AppConfigDto())
             val setupError = WorkerSetupError.LoginFailed("invalid credentials")
             val setupManager = RecordingSetupManager(setupError.left())
-            val workerMain = WorkerMain(configLoader) { setupManager }
+            val workerMain = WorkerMain(configLoader, setupManagerFactory = { setupManager })
 
             val result = workerMain.run(
                 arrayOf(
@@ -79,7 +104,7 @@ class WorkerMainTest {
 
     private class RecordingConfigLoader(
         private val resolvedConfigDir: Path,
-        private val dtoResult: WorkerAppConfigDto
+        private val dtoResult: AppConfigDto
     ) : WorkerConfigLoader {
         var loadCalls: Int = 0
 
@@ -94,7 +119,7 @@ class WorkerMainTest {
         override fun loadAppConfigDto(
             configDir: Path,
             envProvider: (String) -> String?
-        ): Either<WorkerConfigError, WorkerAppConfigDto> {
+        ): Either<WorkerConfigError, AppConfigDto> {
             loadCalls += 1
             return dtoResult.right()
         }
@@ -102,7 +127,7 @@ class WorkerMainTest {
         override fun saveLayerDto(
             configDir: Path,
             fileName: String,
-            dto: WorkerAppConfigDto
+            dto: AppConfigDto
         ): Either<WorkerConfigError, Unit> = Unit.right()
     }
 
@@ -110,12 +135,12 @@ class WorkerMainTest {
         private val result: Either<WorkerSetupError, Unit>
     ) : WorkerSetupManager {
         var lastConfigDir: Path? = null
-        var lastMergedConfig: WorkerAppConfigDto? = null
+        var lastMergedConfig: AppConfigDto? = null
         var lastServerUrlOverride: String? = null
 
         override suspend fun run(
             configDir: Path,
-            mergedConfig: WorkerAppConfigDto,
+            mergedConfig: AppConfigDto,
             serverUrlOverride: String?
         ): Either<WorkerSetupError, Unit> {
             lastConfigDir = configDir

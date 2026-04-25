@@ -68,10 +68,10 @@ class DefaultWorkerConfigLoader : WorkerConfigLoader {
     override fun loadAppConfigDto(
         configDir: Path,
         envProvider: (String) -> String?
-    ): Either<WorkerConfigError, WorkerAppConfigDto> = either {
+    ): Either<WorkerConfigError, AppConfigDto> = either {
         val mergedConfig = loadMergedConfig(configDir, envProvider).bind()
         try {
-            json.decodeFromJsonElement(WorkerAppConfigDto.serializer(), mergedConfig)
+            json.decodeFromJsonElement(AppConfigDto.serializer(), mergedConfig)
         } catch (e: SerializationException) {
             raise(WorkerConfigError.ConfigInvalid("Failed to parse worker config: ${e.message}"))
         }
@@ -92,12 +92,12 @@ class DefaultWorkerConfigLoader : WorkerConfigLoader {
     override fun saveLayerDto(
         configDir: Path,
         fileName: String,
-        dto: WorkerAppConfigDto
+        dto: AppConfigDto
     ): Either<WorkerConfigError, Unit> = either {
         val normalizedConfigDir = normalizeAndEnsureConfigDir(configDir)
 
         val path = resolveLayerPath(normalizedConfigDir, fileName)
-        writeLayer(path, json.encodeToString(WorkerAppConfigDto.serializer(), dto))
+        writeLayer(path, json.encodeToString(AppConfigDto.serializer(), dto))
     }
 
     /**
@@ -416,7 +416,7 @@ class DefaultWorkerConfigLoader : WorkerConfigLoader {
         /**
          * Default config directory used when no explicit override is provided.
          */
-        private const val DEFAULT_CONFIG_DIR = "./worker-config"
+        private const val DEFAULT_CONFIG_DIR = "./config"
 
         /**
          * Classpath root that contains bootstrapped default worker config templates.

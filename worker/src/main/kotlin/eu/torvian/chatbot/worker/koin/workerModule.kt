@@ -11,7 +11,7 @@ import eu.torvian.chatbot.worker.auth.WorkerAuthApi
 import eu.torvian.chatbot.worker.auth.WorkerAuthManager
 import eu.torvian.chatbot.worker.auth.WorkerAuthManagerImpl
 import eu.torvian.chatbot.worker.auth.WorkerAuthenticatedRequestExecutor
-import eu.torvian.chatbot.worker.config.WorkerRuntimeConfig
+import eu.torvian.chatbot.worker.config.RuntimeConfig
 import eu.torvian.chatbot.worker.mcp.InMemoryMcpServerConfigStore
 import eu.torvian.chatbot.worker.mcp.JvmMcpProcessManager
 import eu.torvian.chatbot.worker.mcp.McpRuntimeService
@@ -78,19 +78,19 @@ import org.apache.logging.log4j.Logger as Log4jLogger
  * @param privateKeyPem Private-key PEM used for challenge signing.
  */
 fun workerModule(
-    config: WorkerRuntimeConfig,
+    config: RuntimeConfig,
     tokenPath: Path,
     privateKeyPem: String
 ) = module {
-    single<HttpClient> { createWorkerHttpClient(config.serverBaseUrl) }
+    single<HttpClient> { createWorkerHttpClient(config.server.baseUrl) }
     single<ServiceTokenStore> { FileServiceTokenStore(tokenPath) }
     single<WorkerAuthApi> { KtorWorkerAuthApi(get()) }
     single<ChallengeSigner> { PemChallengeSigner(privateKeyPem) }
     single<WorkerAuthManager> {
         WorkerAuthManagerImpl(
-            workerUid = config.workerUid,
-            certificateFingerprint = config.certificateFingerprint,
-            refreshSkew = config.refreshSkewSeconds.seconds,
+            workerUid = config.identity.uid,
+            certificateFingerprint = config.identity.certificateFingerprint,
+            refreshSkew = config.auth.refreshSkewSeconds.seconds,
             tokenStore = get(),
             authApi = get(),
             signer = get()
@@ -138,8 +138,8 @@ fun workerModule(
     single<OutboundMessageEmitter> { get<OutboundMessageEmitterHolder>() }
     single<WebSocketTransportConfig> {
         WebSocketTransportConfig.fromServerBaseUrl(
-            serverBaseUrl = config.serverBaseUrl,
-            workerUid = config.workerUid
+            serverBaseUrl = config.server.baseUrl,
+            workerUid = config.identity.uid
         )
     }
     single<WebSocketMessageCodec> { WebSocketMessageCodec() }
@@ -226,7 +226,7 @@ fun workerModule(
     single<IncomingMessageProcessor> { get<WorkerProtocolMessageRouter>() }
     single<WorkerRuntime> {
         WorkerRuntimeImpl(
-            workerUid = config.workerUid,
+            workerUid = config.identity.uid,
             connectionLoop = get(),
             mcpClientService = get()
         )

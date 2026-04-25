@@ -3,12 +3,21 @@
     "required": "CHATBOT_WORKER_SETUP_REQUIRED"
   },
   "worker": {
-    "serverBaseUrl": "WORKER_SERVER_BASE_URL",
-    "workerUid": "WORKER_UID",
-    "certificateFingerprint": "WORKER_CERTIFICATE_FINGERPRINT",
-    "secretsJsonPath": "WORKER_SECRETS_JSON_PATH",
-    "tokenFilePath": "WORKER_TOKEN_FILE_PATH",
-    "refreshSkewSeconds": "WORKER_REFRESH_SKEW_SECONDS"
+    "server": {
+      "baseUrl": "WORKER_SERVER_BASE_URL"
+    },
+    "identity": {
+      "uid": "WORKER_UID",
+      "certificateFingerprint": "WORKER_CERTIFICATE_FINGERPRINT",
+      "certificatePem": "WORKER_CERTIFICATE_PEM"
+    },
+    "storage": {
+      "secretsJsonPath": "WORKER_SECRETS_JSON_PATH",
+      "tokenFilePath": "WORKER_TOKEN_FILE_PATH"
+    },
+    "auth": {
+      "refreshSkewSeconds": "WORKER_REFRESH_SKEW_SECONDS"
+    }
   }
 }
 

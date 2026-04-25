@@ -39,21 +39,24 @@ class DefaultWorkerSetupManagerTest {
 
             val applicationJson = json.parseToJsonElement(tempDir.resolve("application.json").readText()).jsonObject
             val workerJson = applicationJson["worker"]?.jsonObject
-            assertEquals("https://localhost:8443/", workerJson?.get("serverBaseUrl")?.jsonPrimitive?.content)
-            assertEquals(api.registerWorkerUid, workerJson?.get("workerUid")?.jsonPrimitive?.content)
-            assertEquals("./secrets.json", workerJson?.get("secretsJsonPath")?.jsonPrimitive?.content)
-            assertEquals("./token.json", workerJson?.get("tokenFilePath")?.jsonPrimitive?.content)
+            val serverJson = workerJson?.get("server")?.jsonObject
+            val identityJson = workerJson?.get("identity")?.jsonObject
+            val storageJson = workerJson?.get("storage")?.jsonObject
+            val authJson = workerJson?.get("auth")?.jsonObject
+
+            assertEquals("https://localhost:8443/", serverJson?.get("baseUrl")?.jsonPrimitive?.content)
+            assertEquals(api.registerWorkerUid, identityJson?.get("uid")?.jsonPrimitive?.content)
+            assertNotNull(identityJson?.get("certificateFingerprint")?.jsonPrimitive?.content)
+            assertTrue(identityJson["certificatePem"]?.jsonPrimitive?.content.orEmpty().contains("BEGIN CERTIFICATE"))
+            assertEquals("./secrets.json", storageJson?.get("secretsJsonPath")?.jsonPrimitive?.content)
+            assertEquals("./token.json", storageJson?.get("tokenFilePath")?.jsonPrimitive?.content)
+            assertEquals("60", authJson?.get("refreshSkewSeconds")?.jsonPrimitive?.content)
 
             val setupJson = json.parseToJsonElement(tempDir.resolve("setup.json").readText()).jsonObject
             assertEquals("false", setupJson["setup"]?.jsonObject?.get("required")?.jsonPrimitive?.content)
 
             val secretsJson = json.parseToJsonElement(tempDir.resolve("secrets.json").readText()).jsonObject
-            assertTrue(secretsJson["certificatePem"]?.jsonPrimitive?.content.orEmpty().contains("BEGIN CERTIFICATE"))
             assertTrue(secretsJson["privateKeyPem"]?.jsonPrimitive?.content.orEmpty().contains("BEGIN"))
-            assertEquals(
-                secretsJson["certificateFingerprint"]?.jsonPrimitive?.content,
-                workerJson?.get("certificateFingerprint")?.jsonPrimitive?.content
-            )
         } finally {
             tempDir.toFile().deleteRecursively()
         }
@@ -67,12 +70,21 @@ class DefaultWorkerSetupManagerTest {
             """
             {
               "worker": {
-                "serverBaseUrl": "https://example.test/",
-                "workerUid": "existing-worker-uid",
-                "certificateFingerprint": "existing-fingerprint",
-                "secretsJsonPath": "./secrets.json",
-                "tokenFilePath": "./token.json",
-                "refreshSkewSeconds": 60
+                "server": {
+                  "baseUrl": "https://example.test/"
+                },
+                "identity": {
+                  "uid": "existing-worker-uid",
+                  "certificateFingerprint": "existing-fingerprint",
+                  "certificatePem": "existing-pem"
+                },
+                "storage": {
+                  "secretsJsonPath": "./secrets.json",
+                  "tokenFilePath": "./token.json"
+                },
+                "auth": {
+                  "refreshSkewSeconds": 60
+                }
               }
             }
             """.trimIndent()
@@ -91,7 +103,8 @@ class DefaultWorkerSetupManagerTest {
 
             val applicationJson = json.parseToJsonElement(tempDir.resolve("application.json").readText()).jsonObject
             val workerJson = applicationJson["worker"]?.jsonObject
-            assertEquals("existing-worker-uid", workerJson?.get("workerUid")?.jsonPrimitive?.content)
+            val identityJson = workerJson?.get("identity")?.jsonObject
+            assertEquals("existing-worker-uid", identityJson?.get("uid")?.jsonPrimitive?.content)
 
             val setupJson = json.parseToJsonElement(tempDir.resolve("setup.json").readText()).jsonObject
             assertEquals("false", setupJson["setup"]?.jsonObject?.get("required")?.jsonPrimitive?.content)
@@ -117,7 +130,6 @@ class DefaultWorkerSetupManagerTest {
             assertTrue(secretsJsonPath.toFile().exists(), "secrets.json should be written before login fails")
 
             val secretsJson = json.parseToJsonElement(secretsJsonPath.readText()).jsonObject
-            assertTrue(secretsJson["certificatePem"]?.jsonPrimitive?.content.orEmpty().contains("BEGIN CERTIFICATE"))
             assertTrue(secretsJson["privateKeyPem"]?.jsonPrimitive?.content.orEmpty().contains("BEGIN"))
         } finally {
             tempDir.toFile().deleteRecursively()
@@ -127,6 +139,7 @@ class DefaultWorkerSetupManagerTest {
     private fun createManager(api: FakeWorkerSetupApi): DefaultWorkerSetupManager {
         return DefaultWorkerSetupManager(
             configLoader = configLoader,
+            secretsStore = FileSecretsStore(),
             credentialProvider = object : WorkerSetupCredentialProvider {
                 override suspend fun resolveCredentials() = arrow.core.Either.Right(credentials)
             },

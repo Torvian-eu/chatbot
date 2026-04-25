@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.worker.setup
 
 import arrow.core.Either
-import eu.torvian.chatbot.worker.config.WorkerAppConfigDto
+import eu.torvian.chatbot.worker.config.AppConfigDto
 import java.nio.file.Path
 
 /**
@@ -13,12 +13,12 @@ interface WorkerSetupManager {
      *
      * @param configDir Target worker config directory path.
      * @param mergedConfig Merged worker configuration loaded by the caller.
-     * @param serverUrlOverride Optional setup-time override for `worker.serverBaseUrl`.
+     * @param serverUrlOverride Optional setup-time override for `worker.server.baseUrl`.
      * @return Either a logical setup error or `Unit` on successful setup.
      */
     suspend fun run(
         configDir: Path,
-        mergedConfig: WorkerAppConfigDto,
+        mergedConfig: AppConfigDto,
         serverUrlOverride: String? = null
     ): Either<WorkerSetupError, Unit>
 }

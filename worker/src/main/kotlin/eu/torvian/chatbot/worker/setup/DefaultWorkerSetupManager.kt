@@ -4,22 +4,31 @@ import arrow.core.Either
 import arrow.core.left
 import arrow.core.raise.either
 import arrow.core.right
-import eu.torvian.chatbot.worker.config.*
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
+import eu.torvian.chatbot.worker.config.AppConfigDto
+import eu.torvian.chatbot.worker.config.AuthConfigDto
+import eu.torvian.chatbot.worker.config.DefaultWorkerConfigLoader
+import eu.torvian.chatbot.worker.config.IdentityConfigDto
+import eu.torvian.chatbot.worker.config.PathResolver
+import eu.torvian.chatbot.worker.config.RuntimeConfigDto
+import eu.torvian.chatbot.worker.config.ServerConfigDto
+import eu.torvian.chatbot.worker.config.SetupConfigDto
+import eu.torvian.chatbot.worker.config.StorageConfigDto
+import eu.torvian.chatbot.worker.config.WorkerConfigError
+import eu.torvian.chatbot.worker.config.WorkerConfigLoader
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
-import java.nio.file.*
-import java.util.*
+import java.nio.file.Path
+import java.util.UUID
 
 /**
  * Default implementation of the worker setup flow.
  *
  * This manager coordinates initial worker provisioning by reading the merged worker config,
- * generating or validating `secrets.json`, registering the worker with the server,
+ * generating or validating identity material, registering the worker with the server,
  * and updating setup configuration files.
  *
+ * @property configLoader Loader used to read and write layered config files.
+ * @property secretsStore Store used to persist the private key in `secrets.json`.
  * @property certificateService Certificate helper used to generate and validate
  * worker identity material.
  * @property credentialProvider Source used to resolve setup-time user credentials.
@@ -27,344 +36,256 @@ import java.util.*
  */
 class DefaultWorkerSetupManager(
     private val configLoader: WorkerConfigLoader = DefaultWorkerConfigLoader(),
+    private val secretsStore: SecretsStore = FileSecretsStore(),
     private val certificateService: WorkerCertificateService = WorkerCertificateService(),
     private val credentialProvider: WorkerSetupCredentialProvider = DefaultWorkerSetupCredentialProvider(),
+    private val pathResolver: PathResolver = PathResolver(),
     private val setupApiFactory: (String) -> WorkerSetupApi = { serverUrl ->
         KtorWorkerSetupApi(createWorkerSetupHttpClient(serverUrl))
     }
 ) : WorkerSetupManager {
-    /**
-     * JSON configuration shared by setup file read/write operations.
-     */
-    private val json = Json {
-        allowComments = true
-        ignoreUnknownKeys = true
-        prettyPrint = true
-        encodeDefaults = true
-    }
 
     /**
-     * Creates or updates the worker setup files.
+     * Executes the setup flow for a worker configuration directory.
      *
-     * The setup flow performs the following steps:
-     * 1. Use the merged worker config provided by the caller.
-     * 2. Resolve setup credentials (environment variables or interactive prompt).
-     * 3. Login to the server.
-     * 4. Generate or reuse a valid `secrets.json` file containing the certificate and private key.
-     * 5. Register the worker certificate and logout.
-     * 6. Persist the resolved server URL, fingerprint, and path settings to `application.json`.
-     * 7. Persist `setup.json` with `setup.required = false` so startup skips setup next time.
+     * Generates or validates identity material, logs in to the server,
+     * registers the worker, and persists updated configuration layers.
      *
      * @param configDir Target worker config directory path.
      * @param mergedConfig Merged worker configuration loaded by the caller.
-     * @param serverUrlOverride Optional setup-time CLI override for `worker.serverBaseUrl`.
+     * @param serverUrlOverride Optional setup-time override for `worker.server.baseUrl`.
      * @return Either a logical setup error or `Unit` on successful setup.
      */
     override suspend fun run(
         configDir: Path,
-        mergedConfig: WorkerAppConfigDto,
+        mergedConfig: AppConfigDto,
         serverUrlOverride: String?
-    ): Either<WorkerSetupError, Unit> =
-        either {
-            val normalizedConfigDir = configDir.toAbsolutePath().normalize()
-            logger.info("Worker setup started (configDir={})", normalizedConfigDir)
+    ): Either<WorkerSetupError, Unit> = either {
+        val normalizedConfigDir = configDir.toAbsolutePath().normalize()
+        logger.info("Worker setup started (configDir={})", normalizedConfigDir)
 
-            val serverUrl = resolveServerUrl(serverUrlOverride, mergedConfig, normalizedConfigDir).bind()
-            val workerUid = resolveWorkerUid(mergedConfig).bind()
-            val secretsPathValue = mergedConfig.worker?.secretsJsonPath?.takeIf { it.isNotBlank() }
-                ?: DEFAULT_SECRETS_JSON_PATH
-            val tokenPathValue = mergedConfig.worker?.tokenFilePath?.takeIf { it.isNotBlank() }
-                ?: DEFAULT_TOKEN_FILE_PATH
-            logger.info("Resolved setup target (serverUrl={}, workerUid={})", serverUrl, workerUid)
-            logger.debug(
-                "Resolved setup paths (secretsJsonPath={}, tokenFilePath={})",
-                secretsPathValue,
-                tokenPathValue
-            )
+        val serverUrl = resolveServerUrl(serverUrlOverride, mergedConfig, normalizedConfigDir).bind()
+        val uid = resolveWorkerUid(mergedConfig).bind()
+        val storage = mergedConfig.worker?.storage
+        val auth = mergedConfig.worker?.auth
 
-            val secretsPath = resolvePath(normalizedConfigDir, secretsPathValue)
-            val secrets = loadOrGenerateSecrets(secretsPath).bind()
-            logger.info(
-                "Worker identity material ready (secretsPath={}, fingerprintSuffix={})",
-                secretsPath,
-                secrets.certificateFingerprint.takeLast(8)
-            )
+        val secretsPathValue = storage?.secretsJsonPath?.takeIf { it.isNotBlank() } ?: DEFAULT_SECRETS_JSON_PATH
+        val tokenPathValue = storage?.tokenFilePath?.takeIf { it.isNotBlank() } ?: DEFAULT_TOKEN_FILE_PATH
 
-            val credentials = credentialProvider.resolveCredentials().bind()
-            logger.info("Setup credentials resolved for worker registration")
+        val secretsPath = pathResolver.resolvePath(normalizedConfigDir, secretsPathValue)
 
-            val setupApi = setupApiFactory(serverUrl)
-            var accessToken: String? = null
-            var logoutError: WorkerSetupError? = null
+        val preparedIdentity = loadOrGenerateIdentity(
+            mergedConfig = mergedConfig,
+            secretsPath = secretsPath
+        ).bind()
 
-            try {
-                logger.info("Logging in to server for setup registration")
-                accessToken = setupApi.login(credentials.username, credentials.password).bind()
-                logger.info("Login successful; registering worker {}", workerUid)
+        val credentials = credentialProvider.resolveCredentials().bind()
+        val setupApi = setupApiFactory(serverUrl)
 
-                setupApi.registerWorker(
-                    accessToken = accessToken,
-                    workerUid = workerUid,
-                    certificatePem = secrets.certificatePem
-                ).bind()
-                logger.info("Worker registration completed for {}", workerUid)
+        var accessToken: String? = null
+        var logoutError: WorkerSetupError? = null
 
-            } finally {
-                accessToken?.let { token ->
-                    logger.debug("Attempting setup logout")
-                    setupApi.logout(token).onLeft { error ->
-                        logoutError = error
-                        logger.warn("Setup logout failed: {}", error)
-                    }
-                }
-                setupApi.close()
-                logger.debug("Setup API client closed")
+        try {
+            accessToken = setupApi.login(credentials.username, credentials.password).bind()
+
+            setupApi.registerWorker(
+                accessToken = accessToken,
+                workerUid = uid,
+                certificatePem = preparedIdentity.certificatePem
+            ).bind()
+        } finally {
+            accessToken?.let { token ->
+                setupApi.logout(token).onLeft { logoutError = it }
             }
-
-            logoutError?.let { error ->
-                logger.error("Worker setup failed during logout phase: {}", error)
-                raise(error)
-            }
-
-            val updatedApplicationConfig = buildUpdatedApplicationConfig(
-                existingConfig = mergedConfig,
-                serverUrl = serverUrl,
-                workerUid = workerUid,
-                secretsPathValue = secretsPathValue,
-                tokenPathValue = tokenPathValue,
-                fingerprint = secrets.certificateFingerprint
-            )
-            configLoader.saveLayerDto(
-                normalizedConfigDir,
-                DefaultWorkerConfigLoader.APPLICATION_FILE_NAME,
-                updatedApplicationConfig
-            ).mapLeft { mapConfigError(it, normalizedConfigDir) }
-                .onLeft { logger.error("Failed to persist application setup config: {}", it) }
-                .bind()
-            logger.info("Persisted worker application setup config")
-
-            val completedSetupConfig = buildCompletedSetupConfig()
-            configLoader.saveLayerDto(
-                normalizedConfigDir,
-                DefaultWorkerConfigLoader.SETUP_FILE_NAME,
-                completedSetupConfig
-            ).mapLeft { mapConfigError(it, normalizedConfigDir) }
-                .onLeft { logger.error("Failed to persist setup completion marker: {}", it) }
-                .bind()
-            logger.info("Worker setup completed successfully")
+            setupApi.close()
         }
 
+        logoutError?.let { raise(it) }
+
+        val updatedApplicationConfig = buildUpdatedApplicationConfig(
+            existingConfig = mergedConfig,
+            serverUrl = serverUrl,
+            uid = uid,
+            certificateFingerprint = preparedIdentity.certificateFingerprint,
+            certificatePem = preparedIdentity.certificatePem,
+            secretsPathValue = secretsPathValue,
+            tokenPathValue = tokenPathValue,
+            refreshSkewSeconds = auth?.refreshSkewSeconds ?: 60L
+        )
+
+        configLoader.saveLayerDto(
+            normalizedConfigDir,
+            DefaultWorkerConfigLoader.APPLICATION_FILE_NAME,
+            updatedApplicationConfig
+        ).mapLeft { mapConfigError(it, normalizedConfigDir) }.bind()
+
+        configLoader.saveLayerDto(
+            normalizedConfigDir,
+            DefaultWorkerConfigLoader.SETUP_FILE_NAME,
+            buildCompletedSetupConfig()
+        ).mapLeft { mapConfigError(it, normalizedConfigDir) }.bind()
+    }
+
     /**
-     * Resolves the server URL for setup using CLI override first and then merged config.
+     * Loads an existing identity from config and secrets, or generates a fresh one.
      *
-     * @param serverUrlOverride Optional CLI-provided server URL.
+     * Behavior:
+     * - If the secrets store is absent ([SecretsStoreError.NotFound]), a new identity is generated.
+     * - If the secrets store is unreadable or invalid, setup fails so the operator
+     *   can diagnose the issue rather than silently overwriting existing material.
+     * - If existing certificate/private-key material is present but does not validate
+     *   as a matching identity, setup generates a fresh identity.
+     *
      * @param mergedConfig Parsed merged worker config JSON.
-     * @param configDir Config directory used for missing-value error context.
-     * @return Either a logical setup error or the resolved server URL.
+     * @param secretsPath Absolute path to the secrets JSON file.
+     * @return Either a logical setup error or the resolved/generated identity.
      */
+    private suspend fun loadOrGenerateIdentity(
+        mergedConfig: AppConfigDto,
+        secretsPath: Path
+    ): Either<WorkerSetupError, GeneratedIdentity> = either {
+        val configuredIdentity = mergedConfig.worker?.identity
+        val existingPrivateKey = when (val readResult = secretsStore.read(secretsPath)) {
+            is Either.Left -> when (val error = readResult.value) {
+                is SecretsStoreError.NotFound -> null
+                is SecretsStoreError.ReadFailed -> raise(
+                    WorkerSetupError.ConfigReadFailed(error.path, error.reason)
+                )
+                is SecretsStoreError.Invalid -> raise(
+                    WorkerSetupError.SecretsInvalid(error.path, error.reason)
+                )
+                is SecretsStoreError.WriteFailed -> raise(
+                    // Defensive: read() should not normally produce WriteFailed, but handle it explicitly.
+                    WorkerSetupError.ConfigReadFailed(
+                        error.path,
+                        "Unexpected write error during read: ${error.reason}"
+                    )
+                )
+            }
+            is Either.Right -> readResult.value.privateKeyPem
+        }
+
+        val existingCertificatePem = configuredIdentity?.certificatePem?.takeIf { it.isNotBlank() }
+        val existingFingerprint = configuredIdentity?.certificateFingerprint?.takeIf { it.isNotBlank() }
+
+        if (existingPrivateKey != null && existingCertificatePem != null && existingFingerprint != null) {
+            val validation = certificateService.validateIdentity(
+                certificatePem = existingCertificatePem,
+                certificateFingerprint = existingFingerprint,
+                privateKeyPem = existingPrivateKey,
+                path = secretsPath.toString()
+            )
+            if (validation.isRight()) {
+                return@either GeneratedIdentity(
+                    certificatePem = existingCertificatePem,
+                    certificateFingerprint = existingFingerprint,
+                    privateKeyPem = existingPrivateKey
+                )
+            }
+        }
+
+        val generated = certificateService.generateIdentity().bind()
+
+        secretsStore.write(
+            secretsPath,
+            Secrets(privateKeyPem = generated.privateKeyPem)
+        ).mapLeft { error ->
+            when (error) {
+                is SecretsStoreError.NotFound -> WorkerSetupError.FileWriteFailed(error.path, "Path not found")
+                is SecretsStoreError.ReadFailed -> WorkerSetupError.FileWriteFailed(error.path, error.reason)
+                is SecretsStoreError.Invalid -> WorkerSetupError.FileWriteFailed(error.path, error.reason)
+                is SecretsStoreError.WriteFailed -> WorkerSetupError.FileWriteFailed(error.path, error.reason)
+            }
+        }.bind()
+
+        generated
+    }
+
     private fun resolveServerUrl(
         serverUrlOverride: String?,
-        mergedConfig: WorkerAppConfigDto,
+        mergedConfig: AppConfigDto,
         configDir: Path
     ): Either<WorkerSetupError, String> {
         val override = serverUrlOverride?.trim()?.takeIf { it.isNotBlank() }
-        if (override != null) {
-            return override.right()
-        }
+        if (override != null) return override.right()
 
-        val configured = mergedConfig.worker?.serverBaseUrl?.trim()?.takeIf { it.isNotBlank() }
-        if (configured != null) {
-            return configured.right()
-        }
+        val configured = mergedConfig.worker?.server?.baseUrl?.trim()?.takeIf { it.isNotBlank() }
+        if (configured != null) return configured.right()
 
         return WorkerSetupError.ServerUrlMissing(configDir.toString()).left()
     }
 
-    /**
-     * Resolves the worker UID for setup from the merged config, generating one when absent.
-     *
-     * @param mergedConfig Parsed merged worker config JSON.
-     * @return Either a logical setup error or the resolved worker UID.
-     */
-    private fun resolveWorkerUid(mergedConfig: WorkerAppConfigDto): Either<WorkerSetupError, String> {
-        val configured = mergedConfig.worker?.workerUid?.trim()?.takeIf { it.isNotBlank() }
+    private fun resolveWorkerUid(mergedConfig: AppConfigDto): Either<WorkerSetupError, String> {
+        val configured = mergedConfig.worker?.identity?.uid?.trim()?.takeIf { it.isNotBlank() }
         return configured?.right() ?: UUID.randomUUID().toString().right()
     }
 
     /**
-     * Reuses valid worker secrets when available or generates and persists a fresh set.
+     * Builds an updated application config DTO that patches only the fields owned by setup,
+     * preserving any existing nested values that setup does not touch.
      *
-     * @param path Secrets file path to load or create.
-     * @return Either a logical setup error or usable worker secrets.
-     */
-    private suspend fun loadOrGenerateSecrets(path: Path): Either<WorkerSetupError, WorkerSecrets> = either {
-        val existing = readSecretsIfValid(path).bind()
-        if (existing != null) {
-            logger.info("Using existing worker secrets at {}", path)
-            existing
-        } else {
-            logger.info("Generating new worker secrets at {}", path)
-            val generated = certificateService.generateSecrets().bind()
-            writeJson(path, generated).bind()
-            generated
-        }
-    }
-
-    /**
-     * Reads `secrets.json` and returns the parsed secrets only when the certificate and
-     * private key still form a valid pair.
-     *
-     * @param path Secrets file path to inspect.
-     * @return Either a logical setup error or validated secrets when available.
-     */
-    private suspend fun readSecretsIfValid(path: Path): Either<WorkerSetupError, WorkerSecrets?> =
-        withContext(Dispatchers.IO) {
-            if (!Files.exists(path)) {
-                null.right()
-            } else {
-                try {
-                    val raw = Files.readString(path)
-                    val secrets = json.decodeFromString<WorkerSecrets>(raw)
-                    certificateService.validateSecrets(secrets, path.toString()).fold(
-                        { null.right() },
-                        { secrets.right() }
-                    )
-                } catch (_: Exception) {
-                    logger.warn("Worker secrets are missing or invalid at {}; regenerating", path)
-                    null.right()
-                }
-            }
-        }
-
-    /**
-     * Writes worker secrets JSON to disk using the atomic file-write helper.
-     *
-     * @param path Target secrets file path.
-     * @param value Secrets payload to serialize.
-     * @return Either a logical setup error or `Unit` on successful write.
-     */
-    private suspend fun writeJson(path: Path, value: WorkerSecrets): Either<WorkerSetupError, Unit> =
-        withContext(Dispatchers.IO) {
-            writeJsonContent(path, json.encodeToString(WorkerSecrets.serializer(), value))
-        }
-
-    /**
-     * Persists JSON content atomically by writing to a temporary file and moving it into place.
-     *
-     * @param path Final destination path for the JSON content.
-     * @param content Serialized JSON text to persist.
-     * @return Either a logical setup error or `Unit` on successful write.
-     */
-    private suspend fun writeJsonContent(path: Path, content: String): Either<WorkerSetupError, Unit> =
-        withContext(Dispatchers.IO) {
-            var tempFile: Path? = null
-            try {
-                val targetPath = path.toAbsolutePath().normalize()
-                val targetDirectory = targetPath.parent ?: return@withContext WorkerSetupError.FileWriteFailed(
-                    targetPath.toString(),
-                    "Unable to resolve parent directory"
-                ).left()
-
-                Files.createDirectories(targetDirectory)
-                tempFile = Files.createTempFile(targetDirectory, "${targetPath.fileName}.", ".tmp")
-                Files.writeString(tempFile, content)
-
-                try {
-                    Files.move(
-                        tempFile,
-                        targetPath,
-                        StandardCopyOption.REPLACE_EXISTING,
-                        StandardCopyOption.ATOMIC_MOVE
-                    )
-                } catch (_: AtomicMoveNotSupportedException) {
-                    Files.move(tempFile, targetPath, StandardCopyOption.REPLACE_EXISTING)
-                }
-
-                Unit.right()
-            } catch (e: Exception) {
-                WorkerSetupError.FileWriteFailed(path.toString(), e.message ?: e::class.simpleName.orEmpty()).left()
-            } finally {
-                if (tempFile != null && Files.exists(tempFile)) {
-                    runCatching { Files.delete(tempFile) }
-                        .onFailure { cleanupError ->
-                            logger.debug(
-                                "Failed to clean up temp setup file {}",
-                                tempFile,
-                                cleanupError
-                            )
-                        }
-                }
-            }
-        }
-
-    /**
-     * Rebuilds the application-layer DTO values for `application.json` after setup.
-     *
-     * The resulting DTO keeps worker runtime values in the application layer while leaving
-     * setup state out of the application file.
-     *
-     * @param existingConfig Existing merged config loaded from disk.
-     * @param serverUrl Resolved server URL chosen for the completed setup.
-     * @param workerUid Resolved worker UID used for the completed setup.
-     * @param secretsPathValue Relative or absolute path to the worker secrets file.
-     * @param tokenPathValue Relative or absolute path to the worker token file.
-     * @param fingerprint Certificate fingerprint generated during setup.
-     * @return A DTO ready to be persisted to `application.json`.
+     * @param existingConfig Previously merged application configuration.
+     * @param serverUrl Resolved server base URL to persist.
+     * @param uid Resolved or generated worker unique identifier.
+     * @param certificateFingerprint Generated certificate fingerprint to persist.
+     * @param certificatePem Generated public certificate PEM to persist.
+     * @param secretsPathValue Path value for the secrets JSON file.
+     * @param tokenPathValue Path value for the token cache file.
+     * @param refreshSkewSeconds Token refresh skew in seconds.
+     * @return Patched [AppConfigDto] ready to be written as `application.json`.
      */
     private fun buildUpdatedApplicationConfig(
-        existingConfig: WorkerAppConfigDto,
+        existingConfig: AppConfigDto,
         serverUrl: String,
-        workerUid: String,
+        uid: String,
+        certificateFingerprint: String,
+        certificatePem: String,
         secretsPathValue: String,
         tokenPathValue: String,
-        fingerprint: String
-    ): WorkerAppConfigDto {
-        val existingWorker = existingConfig.worker ?: WorkerRuntimeConfigDto()
+        refreshSkewSeconds: Long
+    ): AppConfigDto {
+        val existingWorker = existingConfig.worker ?: RuntimeConfigDto()
+        val existingServer = existingWorker.server ?: ServerConfigDto()
+        val existingIdentity = existingWorker.identity ?: IdentityConfigDto()
+        val existingStorage = existingWorker.storage ?: StorageConfigDto()
+        val existingAuth = existingWorker.auth ?: AuthConfigDto()
 
         return existingConfig.copy(
             worker = existingWorker.copy(
-                serverBaseUrl = serverUrl,
-                workerUid = workerUid,
-                certificateFingerprint = fingerprint,
-                secretsJsonPath = secretsPathValue,
-                tokenFilePath = tokenPathValue
+                server = existingServer.copy(
+                    baseUrl = serverUrl
+                ),
+                identity = existingIdentity.copy(
+                    uid = uid,
+                    certificateFingerprint = certificateFingerprint,
+                    certificatePem = certificatePem
+                ),
+                storage = existingStorage.copy(
+                    secretsJsonPath = secretsPathValue,
+                    tokenFilePath = tokenPathValue
+                ),
+                auth = existingAuth.copy(
+                    refreshSkewSeconds = refreshSkewSeconds
+                )
             ),
             setup = null
         )
     }
 
-    /**
-     * Builds the completion marker written to `setup.json` after a successful setup.
-     *
-     * The setup file intentionally contains only the `setup` section so the next startup can
-     * see that setup has already completed and skip re-entering setup mode.
-     *
-     * @return A DTO ready to be persisted to `setup.json`.
-     */
-    private fun buildCompletedSetupConfig(): WorkerAppConfigDto {
-        return WorkerAppConfigDto(
-            setup = WorkerSetupConfigDto(required = false)
+    private fun buildCompletedSetupConfig(): AppConfigDto {
+        return AppConfigDto(
+            setup = SetupConfigDto(required = false)
         )
     }
 
-    /**
-     * Resolves an absolute path directly or a relative path against the config directory.
-     *
-     * @param baseDirectory Base directory used for relative resolution.
-     * @param configuredPath Configured path value.
-     * @return Resolved normalized path.
-     */
-    private fun resolvePath(baseDirectory: Path, configuredPath: String): Path {
-        val targetPath = Paths.get(configuredPath)
-        return if (targetPath.isAbsolute) targetPath else baseDirectory.resolve(targetPath).normalize()
-    }
+
 
     /**
-     * Maps low-level configuration loader errors into setup-specific logical errors.
+     * Maps a [WorkerConfigError] into the [WorkerSetupError] sealed hierarchy.
      *
-     * @param error Configuration loader error returned by [WorkerConfigLoader].
-     * @param configDir Active worker configuration directory used for path resolution.
-     * @return Logical setup error suitable for surfacing to the caller.
+     * @param error Config loader error to translate.
+     * @param configDir Config directory used to build a contextual path for validation errors.
+     * @return Semantically matching setup error.
      */
     private fun mapConfigError(error: WorkerConfigError, configDir: Path): WorkerSetupError {
         return when (error) {
@@ -382,19 +303,8 @@ class DefaultWorkerSetupManager(
     }
 
     companion object {
-        /**
-         * Default relative path used for setup-generated worker secrets.
-         */
         private const val DEFAULT_SECRETS_JSON_PATH = "./secrets.json"
-
-        /**
-         * Default relative path used for worker token cache persistence.
-         */
         private const val DEFAULT_TOKEN_FILE_PATH = "./token.json"
-
-        /**
-         * Logger used by worker setup orchestration.
-         */
         private val logger: Logger = LogManager.getLogger(DefaultWorkerSetupManager::class.java)
     }
 }

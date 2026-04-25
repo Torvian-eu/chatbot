@@ -39,6 +39,29 @@ dependencies {
     testImplementation(libs.mockk)
 }
 
+// Define the main application entry point
 application {
     mainClass.set("eu.torvian.chatbot.worker.main.WorkerMain")
+    applicationDefaultJvmArgs = listOf(
+        "-Xmx2G", // Max heap size
+        "-Xms512M" // Initial heap size
+    )
+}
+
+// Configure Tasks
+tasks {
+    // Custom task to clean the installDist directory before each installDist execution
+    register<Delete>("cleanInstallDistDir") {
+        delete(layout.buildDirectory.dir("install/worker"))
+    }
+
+    // Ensure the installDist task depends on cleaning the install directory first
+    named("installDist") {
+        dependsOn("cleanInstallDistDir")
+    }
+
+    // Disable the default start scripts generation
+    named<CreateStartScripts>("startScripts") {
+        enabled = false
+    }
 }

@@ -32,23 +32,40 @@ import java.util.Calendar
 import java.util.Date
 
 /**
- * Generates and validates worker setup secrets.
+ * Result of generating a new worker identity, containing both public and private material.
+ *
+ * @property certificatePem PEM-encoded self-signed certificate.
+ * @property certificateFingerprint SHA-256 fingerprint derived from the certificate.
+ * @property privateKeyPem PEM-encoded private key paired with the certificate.
+ */
+data class GeneratedIdentity(
+    val certificatePem: String,
+    val certificateFingerprint: String,
+    val privateKeyPem: String
+)
+
+/**
+ * Generates and validates worker identity (certificate / private key) material.
  */
 class WorkerCertificateService {
 
     /**
      * Generates a new self-signed certificate and matching private key.
      *
-     * @return Either a logical setup error or freshly generated worker secrets.
+     * @return Either a logical setup error or a freshly generated [GeneratedIdentity].
      */
-    fun generateSecrets(): Either<WorkerSetupError, WorkerSecrets> {
+    fun generateIdentity(): Either<WorkerSetupError, GeneratedIdentity> {
         return try {
             val keyPair = generateRsaKeyPair()
             val certificate = generateSelfSignedCertificate(keyPair, DEFAULT_SUBJECT_DN)
-            WorkerSecrets(
-                certificatePem = certificateToPem(certificate),
-                privateKeyPem = privateKeyToPem(keyPair.private),
-                certificateFingerprint = computeCertificateFingerprint(certificate)
+            val certificatePem = certificateToPem(certificate)
+            val privateKeyPem = privateKeyToPem(keyPair.private)
+            val fingerprint = computeCertificateFingerprint(certificate)
+
+            GeneratedIdentity(
+                certificatePem = certificatePem,
+                certificateFingerprint = fingerprint,
+                privateKeyPem = privateKeyPem
             ).right()
         } catch (e: Exception) {
             WorkerSetupError.CertificateGenerationFailed(e.message ?: e::class.simpleName.orEmpty()).left()
@@ -56,20 +73,27 @@ class WorkerCertificateService {
     }
 
     /**
-     * Validates an existing secrets payload by checking PEM parseability, fingerprint consistency,
+     * Validates an existing identity by checking PEM parseability, fingerprint consistency,
      * and that the private key actually matches the certificate.
      *
-     * @param secrets Worker secrets candidate.
+     * @param certificatePem PEM-encoded public certificate.
+     * @param certificateFingerprint Expected SHA-256 fingerprint of the certificate.
+     * @param privateKeyPem PEM-encoded private key.
      * @param path Source file path used in error details.
-     * @return Either a logical validation error or the validated secrets.
+     * @return Either a logical validation error or [Unit] on success.
      */
-    fun validateSecrets(secrets: WorkerSecrets, path: String): Either<WorkerSetupError, WorkerSecrets> {
+    fun validateIdentity(
+        certificatePem: String,
+        certificateFingerprint: String,
+        privateKeyPem: String,
+        path: String
+    ): Either<WorkerSetupError, Unit> {
         return try {
-            val certificate = parseCertificate(secrets.certificatePem)
-            val privateKey = parsePrivateKey(secrets.privateKeyPem)
+            val certificate = parseCertificate(certificatePem)
+            val privateKey = parsePrivateKey(privateKeyPem)
             val expectedFingerprint = computeCertificateFingerprint(certificate)
 
-            if (secrets.certificateFingerprint != expectedFingerprint) {
+            if (certificateFingerprint != expectedFingerprint) {
                 return WorkerSetupError.SecretsInvalid(path, "certificate fingerprint does not match certificate PEM").left()
             }
 
@@ -90,7 +114,7 @@ class WorkerCertificateService {
                 return WorkerSetupError.SecretsInvalid(path, "certificate public key does not match private key").left()
             }
 
-            secrets.right()
+            Unit.right()
         } catch (e: Exception) {
             WorkerSetupError.SecretsInvalid(path, e.message ?: e::class.simpleName.orEmpty()).left()
         }
