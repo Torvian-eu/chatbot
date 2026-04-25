@@ -19,6 +19,7 @@ class WorkerConfigLoaderTest {
             serverBaseUrl = "https://example.test",
             workerUid = "worker-7",
             certificateFingerprint = "fingerprint-1",
+            certificatePem = "pem-1",
             secretsJsonPath = "./secrets.json",
             tokenFilePath = "./token.json",
             refreshSkewSeconds = 75
@@ -26,12 +27,13 @@ class WorkerConfigLoaderTest {
 
         assertTrue(result.isRight())
         val config = result.getOrNull()
-        assertEquals("https://example.test", config?.worker?.serverBaseUrl)
-        assertEquals("worker-7", config?.worker?.workerUid)
-        assertEquals("fingerprint-1", config?.worker?.certificateFingerprint)
-        assertEquals("./secrets.json", config?.worker?.secretsJsonPath)
-        assertEquals("./token.json", config?.worker?.tokenFilePath)
-        assertEquals(75, config?.worker?.refreshSkewSeconds)
+        assertEquals("https://example.test", config?.worker?.server?.baseUrl)
+        assertEquals("worker-7", config?.worker?.identity?.uid)
+        assertEquals("fingerprint-1", config?.worker?.identity?.certificateFingerprint)
+        assertEquals("pem-1", config?.worker?.identity?.certificatePem)
+        assertEquals("./secrets.json", config?.worker?.storage?.secretsJsonPath)
+        assertEquals("./token.json", config?.worker?.storage?.tokenFilePath)
+        assertEquals(75, config?.worker?.auth?.refreshSkewSeconds)
     }
 
     @Test
@@ -66,8 +68,12 @@ class WorkerConfigLoaderTest {
             """
             {
               "worker": {
-                "serverBaseUrl": "https://example.test"
-                "workerUid": "worker-7"
+                "server": {
+                  "baseUrl": "https://example.test"
+                }
+                "identity": {
+                  "uid": "worker-7"
+                }
               }
             }
             """.trimIndent()
@@ -89,27 +95,27 @@ class WorkerConfigLoaderTest {
     }
 
     @Test
-    fun `rejects blank serverBaseUrl`() {
+    fun `rejects blank server baseUrl`() {
         val result = loadConfigWithOverrides(serverBaseUrl = "   ")
 
         assertTrue(result.isLeft())
         val error = result.swap().getOrNull() as? WorkerConfigError.ConfigInvalid
         assertTrue(error != null)
-        assertTrue(error.description.contains("serverBaseUrl must not be blank"))
+        assertTrue(error.description.contains("worker.server.baseUrl must not be blank"))
     }
 
     @Test
-    fun `rejects blank workerUid`() {
+    fun `rejects blank worker uid`() {
         val result = loadConfigWithOverrides(workerUid = "")
 
         assertTrue(result.isLeft())
         val error = result.swap().getOrNull() as? WorkerConfigError.ConfigInvalid
         assertTrue(error != null)
-        assertTrue(error.description.contains("worker.workerUid must not be blank"))
+        assertTrue(error.description.contains("worker.identity.uid must not be blank"))
     }
 
     @Test
-    fun `rejects malformed or unsupported serverBaseUrl`() {
+    fun `rejects malformed or unsupported server baseUrl`() {
         val malformed = loadConfigWithOverrides(serverBaseUrl = "example.test")
         assertTrue(malformed.isLeft())
         val malformedError = malformed.swap().getOrNull() as? WorkerConfigError.ConfigInvalid
@@ -129,7 +135,7 @@ class WorkerConfigLoaderTest {
         assertTrue(result.isLeft())
         val error = result.swap().getOrNull() as? WorkerConfigError.ConfigInvalid
         assertTrue(error != null)
-        assertTrue(error.description.contains("worker.refreshSkewSeconds must be >= 0"))
+        assertTrue(error.description.contains("worker.auth.refreshSkewSeconds must be >= 0"))
     }
 
     @Test
@@ -139,7 +145,17 @@ class WorkerConfigLoaderTest {
         assertTrue(result.isLeft())
         val error = result.swap().getOrNull() as? WorkerConfigError.ConfigInvalid
         assertTrue(error != null)
-        assertTrue(error.description.contains("worker.certificateFingerprint must not be blank"))
+        assertTrue(error.description.contains("worker.identity.certificateFingerprint must not be blank"))
+    }
+
+    @Test
+    fun `rejects blank certificate pem`() {
+        val result = loadConfigWithOverrides(certificatePem = "")
+
+        assertTrue(result.isLeft())
+        val error = result.swap().getOrNull() as? WorkerConfigError.ConfigInvalid
+        assertTrue(error != null)
+        assertTrue(error.description.contains("worker.identity.certificatePem must not be blank"))
     }
 
     @Test
@@ -149,7 +165,7 @@ class WorkerConfigLoaderTest {
         assertTrue(result.isLeft())
         val error = result.swap().getOrNull() as? WorkerConfigError.ConfigInvalid
         assertTrue(error != null)
-        assertTrue(error.description.contains("worker.secretsJsonPath must not be blank"))
+        assertTrue(error.description.contains("worker.storage.secretsJsonPath must not be blank"))
     }
 
     @Test
@@ -160,7 +176,9 @@ class WorkerConfigLoaderTest {
             """
             {
               "worker": {
-                "workerUid": "worker-setup"
+                "identity": {
+                  "uid": "worker-setup"
+                }
               }
             }
             """.trimIndent()
@@ -173,8 +191,8 @@ class WorkerConfigLoaderTest {
                 dto.toDomain().bind()
             }
             assertTrue(result.isRight())
-            assertEquals("worker-setup", result.getOrNull()?.worker?.workerUid)
-            assertEquals("https://base.test", result.getOrNull()?.worker?.serverBaseUrl)
+            assertEquals("worker-setup", result.getOrNull()?.worker?.identity?.uid)
+            assertEquals("https://base.test", result.getOrNull()?.worker?.server?.baseUrl)
         } finally {
             configDir.toFile().deleteRecursively()
         }
@@ -188,7 +206,9 @@ class WorkerConfigLoaderTest {
             """
             {
               "worker": {
-                "serverBaseUrl": "https://setup.test"
+                "server": {
+                  "baseUrl": "https://setup.test"
+                }
               }
             }
             """.trimIndent()
@@ -197,7 +217,9 @@ class WorkerConfigLoaderTest {
             """
             {
               "worker": {
-                "serverBaseUrl": "WORKER_SERVER_BASE_URL"
+                "server": {
+                  "baseUrl": "WORKER_SERVER_BASE_URL"
+                }
               }
             }
             """.trimIndent()
@@ -212,7 +234,7 @@ class WorkerConfigLoaderTest {
                 dto.toDomain().bind()
             }
             assertTrue(result.isRight())
-            assertEquals("https://env.test", result.getOrNull()?.worker?.serverBaseUrl)
+            assertEquals("https://env.test", result.getOrNull()?.worker?.server?.baseUrl)
         } finally {
             configDir.toFile().deleteRecursively()
         }
@@ -227,7 +249,9 @@ class WorkerConfigLoaderTest {
             """
             {
               "worker": {
-                "workerUid": "WORKER_UID"
+                "identity": {
+                  "uid": "WORKER_UID"
+                }
               }
             }
             """.trimIndent()
@@ -239,8 +263,8 @@ class WorkerConfigLoaderTest {
                 dto.toDomain().bind()
             }
             assertTrue(result.isRight())
-            assertEquals("worker-base", result.getOrNull()?.worker?.workerUid)
-            assertEquals("https://base.test", result.getOrNull()?.worker?.serverBaseUrl)
+            assertEquals("worker-base", result.getOrNull()?.worker?.identity?.uid)
+            assertEquals("https://base.test", result.getOrNull()?.worker?.server?.baseUrl)
         } finally {
             configDir.toFile().deleteRecursively()
         }
@@ -278,7 +302,7 @@ class WorkerConfigLoaderTest {
             envProvider = { null },
             propertyProvider = { null }
         )
-        assertEquals(Path("./worker-config"), fromDefault)
+        assertEquals(Path("./config"), fromDefault)
     }
 
     @Test
@@ -304,8 +328,8 @@ class WorkerConfigLoaderTest {
             assertTrue(result.isRight())
             val config = result.getOrNull()
             assertEquals(false, config?.setupRequired)
-            assertEquals("worker-root", config?.worker?.workerUid)
-            assertEquals("https://root.test", config?.worker?.serverBaseUrl)
+            assertEquals("worker-root", config?.worker?.identity?.uid)
+            assertEquals("https://root.test", config?.worker?.server?.baseUrl)
         } finally {
             configDir.toFile().deleteRecursively()
         }
@@ -315,16 +339,18 @@ class WorkerConfigLoaderTest {
         serverBaseUrl: String = "https://example.test",
         workerUid: String = "worker-7",
         certificateFingerprint: String = "fp",
+        certificatePem: String = "pem",
         secretsJsonPath: String = "./secrets.json",
         tokenFilePath: String = "./token.json",
         refreshSkewSeconds: Long = 60
-    ): Either<WorkerConfigError, WorkerConfiguration> {
+    ): Either<WorkerConfigError, Configuration> {
         val tempDir = createTempDirectory("worker-config-test")
         writeBaseConfig(
             tempDir,
             serverBaseUrl = serverBaseUrl,
             workerUid = workerUid,
             certificateFingerprint = certificateFingerprint,
+            certificatePem = certificatePem,
             secretsJsonPath = secretsJsonPath,
             tokenFilePath = tokenFilePath,
             refreshSkewSeconds = refreshSkewSeconds
@@ -347,6 +373,7 @@ class WorkerConfigLoaderTest {
         serverBaseUrl: String,
         workerUid: String,
         certificateFingerprint: String = "fp",
+        certificatePem: String = "pem",
         secretsJsonPath: String = "./secrets.json",
         tokenFilePath: String = "./token.json",
         refreshSkewSeconds: Long = 60
@@ -355,12 +382,21 @@ class WorkerConfigLoaderTest {
             """
             {
               "worker": {
-                "serverBaseUrl": "$serverBaseUrl",
-                "workerUid": "$workerUid",
-                "certificateFingerprint": "$certificateFingerprint",
-                "secretsJsonPath": "$secretsJsonPath",
-                "tokenFilePath": "$tokenFilePath",
-                "refreshSkewSeconds": $refreshSkewSeconds
+                "server": {
+                  "baseUrl": "$serverBaseUrl"
+                },
+                "identity": {
+                  "uid": "$workerUid",
+                  "certificateFingerprint": "$certificateFingerprint",
+                  "certificatePem": "$certificatePem"
+                },
+                "storage": {
+                  "secretsJsonPath": "$secretsJsonPath",
+                  "tokenFilePath": "$tokenFilePath"
+                },
+                "auth": {
+                  "refreshSkewSeconds": $refreshSkewSeconds
+                }
               }
             }
             """.trimIndent()

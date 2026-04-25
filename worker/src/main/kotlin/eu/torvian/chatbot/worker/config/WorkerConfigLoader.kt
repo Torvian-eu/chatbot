@@ -45,7 +45,7 @@ interface WorkerConfigLoader {
     fun loadAppConfigDto(
         configDir: Path,
         envProvider: (String) -> String? = { key -> System.getenv(key) }
-    ): Either<WorkerConfigError, WorkerAppConfigDto>
+    ): Either<WorkerConfigError, AppConfigDto>
 
     /**
      * Saves a root DTO into a specific config layer file.
@@ -62,7 +62,7 @@ interface WorkerConfigLoader {
     fun saveLayerDto(
         configDir: Path,
         fileName: String,
-        dto: WorkerAppConfigDto
+        dto: AppConfigDto
     ): Either<WorkerConfigError, Unit>
 }
 
