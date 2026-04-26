@@ -140,6 +140,11 @@ class WorkerServiceImpl(
             }
         }
 
+    override suspend fun listWorkersByOwner(ownerUserId: Long): List<WorkerDto> =
+        transactionScope.transaction {
+            workerDao.getWorkersByOwnerId(ownerUserId).map { it.toWorkerDto() }
+        }
+
     /**
      * @param workerId Worker identifier.
      * @param workerUid Public worker UID.

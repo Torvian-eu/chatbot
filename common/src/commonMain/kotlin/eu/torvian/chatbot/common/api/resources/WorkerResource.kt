@@ -5,7 +5,7 @@ import io.ktor.resources.Resource
 /**
  * Resource definitions for worker lifecycle endpoints.
  *
- * This resource intentionally includes registration only.
+ * This resource includes registration and listing of workers owned by the authenticated user.
  * Delegation/job endpoints are deferred for a later phase.
  *
  * @property parent Parent API resource (`/api/v1`).

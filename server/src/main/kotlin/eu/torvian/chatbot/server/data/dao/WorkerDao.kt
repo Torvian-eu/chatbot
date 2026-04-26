@@ -99,5 +99,13 @@ interface WorkerDao {
      * @return Either invalid-challenge error or Unit when consumed.
      */
     suspend fun consumeChallenge(challengeId: String): Either<WorkerError.InvalidChallenge, Unit>
+
+    /**
+     * Retrieves all workers owned by the specified user.
+     *
+     * @param ownerUserId Owning user identifier.
+     * @return List of [WorkerEntity] objects; empty list if none exist.
+     */
+    suspend fun getWorkersByOwnerId(ownerUserId: Long): List<WorkerEntity>
 }
 

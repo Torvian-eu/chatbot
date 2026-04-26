@@ -154,6 +154,12 @@ class WorkerDaoExposed(
                 ensure(updated > 0) { WorkerError.InvalidChallenge(challengeId) }
             }
         }
+
+    override suspend fun getWorkersByOwnerId(ownerUserId: Long): List<WorkerEntity> =
+        transactionScope.transaction {
+            WorkersTable.selectAll().where { WorkersTable.ownerUserId eq ownerUserId }
+                .map { it.toWorkerEntity() }
+        }
 }
 
 

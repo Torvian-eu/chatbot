@@ -29,6 +29,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class WorkerRoutesTest {
     private lateinit var container: DIContainer
@@ -176,6 +177,83 @@ class WorkerRoutesTest {
         val error = secondResponse.body<ApiError>()
         assertEquals(CommonApiErrorCodes.ALREADY_EXISTS.code, error.code)
         assertEquals("Certificate already registered", error.message)
+    }
+
+    @Test
+    fun `GET workers - authenticated user sees only their own workers`() = workerTestApplication {
+        val userA = testUser.copy(id = 1L, username = "owner-a", email = "owner-a@example.com")
+        val userB = testUser.copy(id = 2L, username = "owner-b", email = "owner-b@example.com")
+        val sessionA = authHelper.createTestSession(id = 1L, userId = userA.id)
+        val sessionB = authHelper.createTestSession(id = 2L, userId = userB.id)
+        val tokenA = authHelper.createUserAndGetToken(userA, sessionA)
+        val tokenB = authHelper.createUserAndGetToken(userB, sessionB)
+        val fixtureA = createCertificateFixture()
+        val fixtureB = createCertificateFixture()
+        val fixtureA2 = createCertificateFixture()
+
+        // Register two workers for user A
+        client.post(href(WorkerResource.Register())) {
+            authenticate(tokenA)
+            contentType(ContentType.Application.Json)
+            setBody(
+                RegisterWorkerRequest(
+                    workerUid = "worker-a-1",
+                    displayName = "worker-a-1",
+                    certificatePem = fixtureA.certificatePem,
+                    allowedScopes = listOf("messages:read")
+                )
+            )
+        }
+        client.post(href(WorkerResource.Register())) {
+            authenticate(tokenA)
+            contentType(ContentType.Application.Json)
+            setBody(
+                RegisterWorkerRequest(
+                    workerUid = "worker-a-2",
+                    displayName = "worker-a-2",
+                    certificatePem = fixtureA2.certificatePem,
+                    allowedScopes = listOf("messages:read")
+                )
+            )
+        }
+
+        // Register one worker for user B
+        client.post(href(WorkerResource.Register())) {
+            authenticate(tokenB)
+            contentType(ContentType.Application.Json)
+            setBody(
+                RegisterWorkerRequest(
+                    workerUid = "worker-b-1",
+                    displayName = "worker-b-1",
+                    certificatePem = fixtureB.certificatePem,
+                    allowedScopes = listOf("messages:read")
+                )
+            )
+        }
+
+        // User A should see exactly 2 workers
+        val listResponseA = client.get(href(WorkerResource())) {
+            authenticate(tokenA)
+        }
+        assertEquals(HttpStatusCode.OK, listResponseA.status)
+        val workersA = listResponseA.body<List<eu.torvian.chatbot.common.models.worker.WorkerDto>>()
+        assertEquals(2, workersA.size)
+        assertTrue(workersA.all { it.ownerUserId == userA.id })
+
+        // User B should see exactly 1 worker
+        val listResponseB = client.get(href(WorkerResource())) {
+            authenticate(tokenB)
+        }
+        assertEquals(HttpStatusCode.OK, listResponseB.status)
+        val workersB = listResponseB.body<List<eu.torvian.chatbot.common.models.worker.WorkerDto>>()
+        assertEquals(1, workersB.size)
+        assertEquals(userB.id, workersB.single().ownerUserId)
+    }
+
+    @Test
+    fun `GET workers - unauthenticated request returns 401`() = workerTestApplication {
+        val response = client.get(href(WorkerResource()))
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
     }
 
     private data class CertificateFixture(

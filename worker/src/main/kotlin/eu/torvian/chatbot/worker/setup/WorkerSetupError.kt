@@ -12,6 +12,13 @@ sealed interface WorkerSetupError {
     data class CredentialsUnavailable(val reason: String) : WorkerSetupError
 
     /**
+     * Raised when setup cannot obtain a display name from environment variables or interactive prompt.
+     *
+     * @property reason Human-readable explanation for why the display name could not be resolved.
+     */
+    data class DisplayNameUnavailable(val reason: String) : WorkerSetupError
+
+    /**
      * Raised when the worker setup is started without a server URL, but the merged worker config cannot supply one.
      *
      * @property configPath Config directory that would have been used.

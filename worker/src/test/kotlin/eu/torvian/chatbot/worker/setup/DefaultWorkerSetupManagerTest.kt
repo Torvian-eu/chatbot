@@ -34,6 +34,7 @@ class DefaultWorkerSetupManagerTest {
             assertEquals(credentials.username, api.loginUsername)
             assertEquals(credentials.password, api.loginPassword)
             assertNotNull(api.registerWorkerUid)
+            assertNotNull(api.registerDisplayName)
             assertNotNull(api.registerCertificatePem)
             assertEquals(api.loginIssuedToken, api.logoutAccessToken)
 
@@ -46,6 +47,7 @@ class DefaultWorkerSetupManagerTest {
 
             assertEquals("https://localhost:8443/", serverJson?.get("baseUrl")?.jsonPrimitive?.content)
             assertEquals(api.registerWorkerUid, identityJson?.get("uid")?.jsonPrimitive?.content)
+            assertEquals("my-worker", identityJson?.get("displayName")?.jsonPrimitive?.content)
             assertNotNull(identityJson?.get("certificateFingerprint")?.jsonPrimitive?.content)
             assertTrue(identityJson["certificatePem"]?.jsonPrimitive?.content.orEmpty().contains("BEGIN CERTIFICATE"))
             assertEquals("./secrets.json", storageJson?.get("secretsJsonPath")?.jsonPrimitive?.content)
@@ -75,6 +77,7 @@ class DefaultWorkerSetupManagerTest {
                 },
                 "identity": {
                   "uid": "existing-worker-uid",
+                  "displayName": "existing-display",
                   "certificateFingerprint": "existing-fingerprint",
                   "certificatePem": "existing-pem"
                 },
@@ -99,12 +102,14 @@ class DefaultWorkerSetupManagerTest {
             val result = createManager(api).run(tempDir, mergedConfig)
             assertTrue(result.isRight())
             assertEquals("existing-worker-uid", api.registerWorkerUid)
+            assertEquals("existing-display", api.registerDisplayName)
             assertEquals(api.loginIssuedToken, api.logoutAccessToken)
 
             val applicationJson = json.parseToJsonElement(tempDir.resolve("application.json").readText()).jsonObject
             val workerJson = applicationJson["worker"]?.jsonObject
             val identityJson = workerJson?.get("identity")?.jsonObject
             assertEquals("existing-worker-uid", identityJson?.get("uid")?.jsonPrimitive?.content)
+            assertEquals("existing-display", identityJson?.get("displayName")?.jsonPrimitive?.content)
 
             val setupJson = json.parseToJsonElement(tempDir.resolve("setup.json").readText()).jsonObject
             assertEquals("false", setupJson["setup"]?.jsonObject?.get("required")?.jsonPrimitive?.content)
@@ -136,13 +141,51 @@ class DefaultWorkerSetupManagerTest {
         }
     }
 
-    private fun createManager(api: FakeWorkerSetupApi): DefaultWorkerSetupManager {
+    @Test
+    fun `uses display name from provider when overridden`() = runTest {
+        val tempDir = createTempDirectory("worker-setup-test")
+        val api = FakeWorkerSetupApi()
+        val customDisplayName = "custom-worker-name"
+        val manager = createManager(
+            api = api,
+            displayNameProvider = object : WorkerSetupDisplayNameProvider {
+                override suspend fun resolveDisplayName(defaultDisplayName: String) =
+                    arrow.core.Either.Right(customDisplayName)
+            }
+        )
+
+        try {
+            val mergedConfig = configLoader.loadAppConfigDto(tempDir).getOrNull()
+            assertTrue(mergedConfig != null)
+
+            val result = manager.run(tempDir, mergedConfig, "https://localhost:8443/")
+            assertTrue(result.isRight(), "setup failed: ${result.swap().getOrNull()}")
+
+            assertEquals(customDisplayName, api.registerDisplayName)
+
+            val applicationJson = json.parseToJsonElement(tempDir.resolve("application.json").readText()).jsonObject
+            val workerJson = applicationJson["worker"]?.jsonObject
+            val identityJson = workerJson?.get("identity")?.jsonObject
+            assertEquals(customDisplayName, identityJson?.get("displayName")?.jsonPrimitive?.content)
+        } finally {
+            tempDir.toFile().deleteRecursively()
+        }
+    }
+
+    private fun createManager(
+        api: FakeWorkerSetupApi,
+        displayNameProvider: WorkerSetupDisplayNameProvider = object : WorkerSetupDisplayNameProvider {
+            override suspend fun resolveDisplayName(defaultDisplayName: String) =
+                arrow.core.Either.Right(defaultDisplayName)
+        }
+    ): DefaultWorkerSetupManager {
         return DefaultWorkerSetupManager(
             configLoader = configLoader,
             secretsStore = FileSecretsStore(),
             credentialProvider = object : WorkerSetupCredentialProvider {
                 override suspend fun resolveCredentials() = arrow.core.Either.Right(credentials)
             },
+            displayNameProvider = displayNameProvider,
             setupApiFactory = { api }
         )
     }
@@ -153,6 +196,7 @@ class DefaultWorkerSetupManagerTest {
         var loginUsername: String? = null
         var loginPassword: String? = null
         var registerWorkerUid: String? = null
+        var registerDisplayName: String? = null
         var registerCertificatePem: String? = null
         var logoutAccessToken: String? = null
         val loginIssuedToken: String = "setup-login-token"
@@ -169,12 +213,14 @@ class DefaultWorkerSetupManagerTest {
         override suspend fun registerWorker(
             accessToken: String,
             workerUid: String,
+            displayName: String,
             certificatePem: String
         ): arrow.core.Either<WorkerSetupError, Unit> {
             if (accessToken != loginIssuedToken) {
                 return arrow.core.Either.Left(WorkerSetupError.WorkerRegistrationFailed("unexpected token"))
             }
             registerWorkerUid = workerUid
+            registerDisplayName = displayName
             registerCertificatePem = certificatePem
             return arrow.core.Either.Right(Unit)
         }

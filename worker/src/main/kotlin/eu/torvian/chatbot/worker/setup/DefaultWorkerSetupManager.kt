@@ -32,6 +32,7 @@ import java.util.UUID
  * @property certificateService Certificate helper used to generate and validate
  * worker identity material.
  * @property credentialProvider Source used to resolve setup-time user credentials.
+ * @property displayNameProvider Source used to resolve the worker display name during setup.
  * @property setupApiFactory Factory that creates the server API client for a given server URL.
  */
 class DefaultWorkerSetupManager(
@@ -39,6 +40,7 @@ class DefaultWorkerSetupManager(
     private val secretsStore: SecretsStore = FileSecretsStore(),
     private val certificateService: WorkerCertificateService = WorkerCertificateService(),
     private val credentialProvider: WorkerSetupCredentialProvider = DefaultWorkerSetupCredentialProvider(),
+    private val displayNameProvider: WorkerSetupDisplayNameProvider = DefaultWorkerSetupDisplayNameProvider(),
     private val pathResolver: PathResolver = PathResolver(),
     private val setupApiFactory: (String) -> WorkerSetupApi = { serverUrl ->
         KtorWorkerSetupApi(createWorkerSetupHttpClient(serverUrl))
@@ -66,6 +68,8 @@ class DefaultWorkerSetupManager(
 
         val serverUrl = resolveServerUrl(serverUrlOverride, mergedConfig, normalizedConfigDir).bind()
         val uid = resolveWorkerUid(mergedConfig).bind()
+        val defaultDisplayName = mergedConfig.worker?.identity?.displayName?.trim()?.takeIf { it.isNotBlank() } ?: "my-worker"
+        val displayName = displayNameProvider.resolveDisplayName(defaultDisplayName).bind()
         val storage = mergedConfig.worker?.storage
         val auth = mergedConfig.worker?.auth
 
@@ -91,6 +95,7 @@ class DefaultWorkerSetupManager(
             setupApi.registerWorker(
                 accessToken = accessToken,
                 workerUid = uid,
+                displayName = displayName,
                 certificatePem = preparedIdentity.certificatePem
             ).bind()
         } finally {
@@ -106,6 +111,7 @@ class DefaultWorkerSetupManager(
             existingConfig = mergedConfig,
             serverUrl = serverUrl,
             uid = uid,
+            displayName = displayName,
             certificateFingerprint = preparedIdentity.certificateFingerprint,
             certificatePem = preparedIdentity.certificatePem,
             secretsPathValue = secretsPathValue,
@@ -238,6 +244,7 @@ class DefaultWorkerSetupManager(
         existingConfig: AppConfigDto,
         serverUrl: String,
         uid: String,
+        displayName: String,
         certificateFingerprint: String,
         certificatePem: String,
         secretsPathValue: String,
@@ -257,6 +264,7 @@ class DefaultWorkerSetupManager(
                 ),
                 identity = existingIdentity.copy(
                     uid = uid,
+                    displayName = displayName,
                     certificateFingerprint = certificateFingerprint,
                     certificatePem = certificatePem
                 ),

@@ -22,12 +22,16 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import eu.torvian.chatbot.app.compose.common.ConfigDropdown
+import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.viewmodel.DialogTestResult
 import eu.torvian.chatbot.app.viewmodel.LocalMCPServerDialogState
 import eu.torvian.chatbot.app.viewmodel.LocalMCPServerFormState
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
 import eu.torvian.chatbot.app.viewmodel.LocalMCPToolFormState
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
+import eu.torvian.chatbot.common.models.worker.WorkerDto
 
 /**
  * Handles all dialog states for MCP server management.
@@ -36,6 +40,7 @@ import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 @Composable
 fun LocalMCPServerDialogs(
     dialogState: LocalMCPServerDialogState,
+    workersState: DataState<RepositoryError, List<WorkerDto>>,
     onUpdateForm: (update: (LocalMCPServerFormState) -> LocalMCPServerFormState) -> Unit,
     onSaveServer: () -> Unit,
     onTestServer: () -> Unit,
@@ -43,6 +48,7 @@ fun LocalMCPServerDialogs(
     onUpdateToolForm: (update: (LocalMCPToolFormState) -> LocalMCPToolFormState) -> Unit,
     onSaveTool: () -> Unit,
     onDismiss: () -> Unit,
+    onReloadWorkers: () -> Unit,
     isServerRunning: Boolean = false
 ) {
     when (dialogState) {
@@ -57,10 +63,12 @@ fun LocalMCPServerDialogs(
                 isSaving = dialogState.isSaving,
                 isTesting = dialogState.isTesting,
                 testResult = dialogState.testResult,
+                workersState = workersState,
                 onUpdateForm = onUpdateForm,
                 onConfirm = onSaveServer,
                 onTestServer = onTestServer,
-                onDismiss = onDismiss
+                onDismiss = onDismiss,
+                onReloadWorkers = onReloadWorkers
             )
         }
 
@@ -71,11 +79,13 @@ fun LocalMCPServerDialogs(
                 isSaving = dialogState.isSaving,
                 isTesting = dialogState.isTesting,
                 testResult = dialogState.testResult,
+                workersState = workersState,
                 isServerRunning = isServerRunning,
                 onUpdateForm = onUpdateForm,
                 onConfirm = onSaveServer,
                 onTestServer = onTestServer,
-                onDismiss = onDismiss
+                onDismiss = onDismiss,
+                onReloadWorkers = onReloadWorkers
             )
         }
 
@@ -146,10 +156,12 @@ fun LocalMCPServerConfigDialog(
     isTesting: Boolean = false,
     testResult: DialogTestResult? = null,
     isServerRunning: Boolean = false,
+    workersState: DataState<RepositoryError, List<WorkerDto>>,
     onUpdateForm: (update: (LocalMCPServerFormState) -> LocalMCPServerFormState) -> Unit,
     onConfirm: () -> Unit,
     onTestServer: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onReloadWorkers: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -178,26 +190,68 @@ fun LocalMCPServerConfigDialog(
                     }
                 }
 
-                // Name (required)
-                OutlinedTextField(
-                    value = if (formState.workerId > 0L) formState.workerId.toString() else "",
-                    onValueChange = { value ->
-                        onUpdateForm {
-                            it.copy(
-                                workerId = value.toLongOrNull() ?: 0L,
-                                workerIdError = null
+                // Worker selection dropdown (required)
+                when (workersState) {
+                    is DataState.Loading, is DataState.Idle -> {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Text(
+                                text = "Loading workers...",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                    },
-                    label = { Text("Worker ID *") },
-                    placeholder = { Text("1") },
-                    singleLine = true,
-                    enabled = !isSaving,
-                    isError = formState.workerIdError != null,
-                    supportingText = formState.workerIdError?.let { { Text(it) } },
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                )
+                    }
+
+                    is DataState.Error -> {
+                        Column {
+                            Text(
+                                text = "Could not load workers",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            TextButton(
+                                onClick = onReloadWorkers,
+                                enabled = !isSaving
+                            ) {
+                                Text("Retry")
+                            }
+                        }
+                    }
+
+                    is DataState.Success -> {
+                        val workers = workersState.data
+                        if (workers.isEmpty()) {
+                            Text(
+                                text = "No workers registered. Register a worker first.",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        } else {
+                            val selectedWorker = workers.find { it.id == formState.workerId }
+                            ConfigDropdown(
+                                selectedItem = selectedWorker,
+                                onItemSelected = { worker ->
+                                    onUpdateForm {
+                                        it.copy(workerId = worker.id, workerIdError = null)
+                                    }
+                                },
+                                items = workers,
+                                label = "Worker *",
+                                itemText = { it.displayName },
+                                isError = formState.workerIdError != null,
+                                errorMessage = formState.workerIdError
+                            )
+                        }
+                    }
+                }
 
                 // Name (required)
                 OutlinedTextField(

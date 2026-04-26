@@ -35,6 +35,7 @@ fun AppConfigDto.toDomain(): Either<WorkerConfigError, Configuration> = either {
 
     val baseUrl = required("worker.server.baseUrl", serverDto.baseUrl)
     val uid = required("worker.identity.uid", identityDto.uid)
+    val displayName = identityDto.displayName?.takeIf { it.isNotBlank() } ?: "my-worker"
     val certificateFingerprint = required("worker.identity.certificateFingerprint", identityDto.certificateFingerprint)
     val certificatePem = required("worker.identity.certificatePem", identityDto.certificatePem)
     val secretsJsonPath = required("worker.storage.secretsJsonPath", storageDto.secretsJsonPath)
@@ -44,6 +45,9 @@ fun AppConfigDto.toDomain(): Either<WorkerConfigError, Configuration> = either {
     validateServerBaseUrl(baseUrl)
     ensure(uid.isNotBlank()) {
         WorkerConfigError.ConfigInvalid("worker.identity.uid must not be blank")
+    }
+    ensure(displayName.isNotBlank()) {
+        WorkerConfigError.ConfigInvalid("worker.identity.displayName must not be blank")
     }
     ensure(certificateFingerprint.isNotBlank()) {
         WorkerConfigError.ConfigInvalid("worker.identity.certificateFingerprint must not be blank")
@@ -69,6 +73,7 @@ fun AppConfigDto.toDomain(): Either<WorkerConfigError, Configuration> = either {
             ),
             identity = IdentityConfig(
                 uid = uid,
+                displayName = displayName,
                 certificateFingerprint = certificateFingerprint,
                 certificatePem = certificatePem
             ),

@@ -29,6 +29,7 @@ class WorkerConfigLoaderTest {
         val config = result.getOrNull()
         assertEquals("https://example.test", config?.worker?.server?.baseUrl)
         assertEquals("worker-7", config?.worker?.identity?.uid)
+        assertEquals("my-worker", config?.worker?.identity?.displayName)
         assertEquals("fingerprint-1", config?.worker?.identity?.certificateFingerprint)
         assertEquals("pem-1", config?.worker?.identity?.certificatePem)
         assertEquals("./secrets.json", config?.worker?.storage?.secretsJsonPath)
@@ -372,6 +373,7 @@ class WorkerConfigLoaderTest {
         configDir: java.nio.file.Path,
         serverBaseUrl: String,
         workerUid: String,
+        displayName: String = "my-worker",
         certificateFingerprint: String = "fp",
         certificatePem: String = "pem",
         secretsJsonPath: String = "./secrets.json",
@@ -387,6 +389,7 @@ class WorkerConfigLoaderTest {
                 },
                 "identity": {
                   "uid": "$workerUid",
+                  "displayName": "$displayName",
                   "certificateFingerprint": "$certificateFingerprint",
                   "certificatePem": "$certificatePem"
                 },

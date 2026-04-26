@@ -13,7 +13,9 @@ import eu.torvian.chatbot.server.service.core.error.worker.RegisterWorkerError
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.auth.authenticate
 import io.ktor.server.request.receive
+import io.ktor.server.resources.get
 import io.ktor.server.resources.post
+import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 
 /**
@@ -28,6 +30,11 @@ fun Route.configureWorkerRoutes(
 ) {
     // Registration is user-initiated and creates a worker identity.
     authenticate(AuthSchemes.USER_JWT) {
+        get<WorkerResource> {
+            val ownerUserId = call.getUserId()
+            call.respond(workerService.listWorkersByOwner(ownerUserId))
+        }
+
         post<WorkerResource.Register> {
             val request = call.receive<RegisterWorkerRequest>()
             val ownerUserId = call.getUserId()
