@@ -8,26 +8,21 @@ import eu.torvian.chatbot.common.api.resources.WorkerResource
 import eu.torvian.chatbot.common.models.api.auth.LoginRequest
 import eu.torvian.chatbot.common.models.api.auth.LoginResponse
 import eu.torvian.chatbot.common.models.api.worker.RegisterWorkerRequest
-import io.ktor.client.HttpClient
-import io.ktor.client.call.body
-import io.ktor.client.engine.okhttp.OkHttp
-import io.ktor.client.plugins.ResponseException
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.plugins.defaultRequest
-import io.ktor.client.plugins.logging.LogLevel
-import io.ktor.client.plugins.logging.Logger as KtorLogger
-import io.ktor.client.plugins.logging.Logging
-import io.ktor.client.plugins.resources.Resources
-import io.ktor.client.plugins.resources.post
-import io.ktor.client.request.bearerAuth
-import io.ktor.client.request.setBody
-import io.ktor.client.statement.bodyAsText
-import io.ktor.http.ContentType
-import io.ktor.http.contentType
-import io.ktor.serialization.kotlinx.json.json
+import io.ktor.client.*
+import io.ktor.client.call.*
+import io.ktor.client.engine.okhttp.*
+import io.ktor.client.plugins.*
+import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.client.plugins.logging.*
+import io.ktor.client.plugins.resources.*
+import io.ktor.client.request.*
+import io.ktor.client.statement.*
+import io.ktor.http.*
+import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
+import io.ktor.client.plugins.logging.Logger as KtorLogger
 
 /**
  * Ktor-backed setup API implementation.
@@ -65,16 +60,17 @@ class KtorWorkerSetupApi(
     override suspend fun registerWorker(
         accessToken: String,
         workerUid: String,
+        displayName: String,
         certificatePem: String
     ): Either<WorkerSetupError, Unit> {
-        logger.debug("Registering worker during setup (workerUid={})", workerUid)
+        logger.debug("Registering worker during setup (workerUid={}, displayName={})", workerUid, displayName)
         return execute("register worker") {
             client.post(WorkerResource.Register()) {
                 bearerAuth(accessToken)
                 setBody(
                     RegisterWorkerRequest(
                         workerUid = workerUid,
-                        displayName = workerUid,
+                        displayName = displayName,
                         certificatePem = certificatePem
                     )
                 )

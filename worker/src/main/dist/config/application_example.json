@@ -13,6 +13,7 @@
     },
     "identity": {
       "uid": "",
+      "displayName": "my-worker",
       "certificateFingerprint": "",
       "certificatePem": ""
     },

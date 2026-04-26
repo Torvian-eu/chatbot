@@ -8,6 +8,7 @@
     },
     "identity": {
       "uid": "WORKER_UID",
+      "displayName": "WORKER_DISPLAY_NAME",
       "certificateFingerprint": "WORKER_CERTIFICATE_FINGERPRINT",
       "certificatePem": "WORKER_CERTIFICATE_PEM"
     },

@@ -39,11 +39,13 @@ data class ServerConfig(
  * Worker identity configuration.
  *
  * @property uid Unique identifier for this worker instance.
+ * @property displayName Human-readable label for this worker shown in management UIs.
  * @property certificateFingerprint SHA-256 fingerprint of the worker certificate.
  * @property certificatePem PEM-encoded public certificate.
  */
 data class IdentityConfig(
     val uid: String,
+    val displayName: String,
     val certificateFingerprint: String,
     val certificatePem: String
 )

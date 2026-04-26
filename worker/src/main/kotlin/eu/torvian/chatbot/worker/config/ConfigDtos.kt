@@ -64,12 +64,14 @@ data class ServerConfigDto(
  * DTO for worker identity configuration.
  *
  * @property uid Unique identifier for this worker instance.
+ * @property displayName Human-readable label for this worker shown in management UIs.
  * @property certificateFingerprint SHA-256 fingerprint of the worker certificate.
  * @property certificatePem PEM-encoded public certificate for the worker identity.
  */
 @Serializable
 data class IdentityConfigDto(
     val uid: String? = null,
+    val displayName: String? = null,
     val certificateFingerprint: String? = null,
     val certificatePem: String? = null
 )

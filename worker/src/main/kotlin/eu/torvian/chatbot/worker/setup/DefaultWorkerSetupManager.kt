@@ -66,6 +66,7 @@ class DefaultWorkerSetupManager(
 
         val serverUrl = resolveServerUrl(serverUrlOverride, mergedConfig, normalizedConfigDir).bind()
         val uid = resolveWorkerUid(mergedConfig).bind()
+        val displayName = resolveDisplayName(mergedConfig)
         val storage = mergedConfig.worker?.storage
         val auth = mergedConfig.worker?.auth
 
@@ -91,6 +92,7 @@ class DefaultWorkerSetupManager(
             setupApi.registerWorker(
                 accessToken = accessToken,
                 workerUid = uid,
+                displayName = displayName,
                 certificatePem = preparedIdentity.certificatePem
             ).bind()
         } finally {
@@ -106,6 +108,7 @@ class DefaultWorkerSetupManager(
             existingConfig = mergedConfig,
             serverUrl = serverUrl,
             uid = uid,
+            displayName = displayName,
             certificateFingerprint = preparedIdentity.certificateFingerprint,
             certificatePem = preparedIdentity.certificatePem,
             secretsPathValue = secretsPathValue,
@@ -220,6 +223,10 @@ class DefaultWorkerSetupManager(
         return configured?.right() ?: UUID.randomUUID().toString().right()
     }
 
+    private fun resolveDisplayName(mergedConfig: AppConfigDto): String {
+        return mergedConfig.worker?.identity?.displayName?.trim()?.takeIf { it.isNotBlank() } ?: "my-worker"
+    }
+
     /**
      * Builds an updated application config DTO that patches only the fields owned by setup,
      * preserving any existing nested values that setup does not touch.
@@ -238,6 +245,7 @@ class DefaultWorkerSetupManager(
         existingConfig: AppConfigDto,
         serverUrl: String,
         uid: String,
+        displayName: String,
         certificateFingerprint: String,
         certificatePem: String,
         secretsPathValue: String,
@@ -257,6 +265,7 @@ class DefaultWorkerSetupManager(
                 ),
                 identity = existingIdentity.copy(
                     uid = uid,
+                    displayName = displayName,
                     certificateFingerprint = certificateFingerprint,
                     certificatePem = certificatePem
                 ),

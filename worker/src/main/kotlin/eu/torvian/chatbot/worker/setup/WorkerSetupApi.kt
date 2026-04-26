@@ -23,10 +23,16 @@ interface WorkerSetupApi : AutoCloseable {
      *
      * @param accessToken Bearer access token obtained from [login].
      * @param workerUid Worker identifier to register.
+     * @param displayName Human-readable label for the worker shown in management UIs.
      * @param certificatePem PEM-encoded public certificate for the worker identity.
      * @return Either a logical setup error or `Unit` on success.
      */
-    suspend fun registerWorker(accessToken: String, workerUid: String, certificatePem: String): Either<WorkerSetupError, Unit>
+    suspend fun registerWorker(
+        accessToken: String,
+        workerUid: String,
+        displayName: String,
+        certificatePem: String
+    ): Either<WorkerSetupError, Unit>
 
     /**
      * Logs out the setup session that was used to register the worker.
