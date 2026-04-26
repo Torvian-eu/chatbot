@@ -141,13 +141,51 @@ class DefaultWorkerSetupManagerTest {
         }
     }
 
-    private fun createManager(api: FakeWorkerSetupApi): DefaultWorkerSetupManager {
+    @Test
+    fun `uses display name from provider when overridden`() = runTest {
+        val tempDir = createTempDirectory("worker-setup-test")
+        val api = FakeWorkerSetupApi()
+        val customDisplayName = "custom-worker-name"
+        val manager = createManager(
+            api = api,
+            displayNameProvider = object : WorkerSetupDisplayNameProvider {
+                override suspend fun resolveDisplayName(defaultDisplayName: String) =
+                    arrow.core.Either.Right(customDisplayName)
+            }
+        )
+
+        try {
+            val mergedConfig = configLoader.loadAppConfigDto(tempDir).getOrNull()
+            assertTrue(mergedConfig != null)
+
+            val result = manager.run(tempDir, mergedConfig, "https://localhost:8443/")
+            assertTrue(result.isRight(), "setup failed: ${result.swap().getOrNull()}")
+
+            assertEquals(customDisplayName, api.registerDisplayName)
+
+            val applicationJson = json.parseToJsonElement(tempDir.resolve("application.json").readText()).jsonObject
+            val workerJson = applicationJson["worker"]?.jsonObject
+            val identityJson = workerJson?.get("identity")?.jsonObject
+            assertEquals(customDisplayName, identityJson?.get("displayName")?.jsonPrimitive?.content)
+        } finally {
+            tempDir.toFile().deleteRecursively()
+        }
+    }
+
+    private fun createManager(
+        api: FakeWorkerSetupApi,
+        displayNameProvider: WorkerSetupDisplayNameProvider = object : WorkerSetupDisplayNameProvider {
+            override suspend fun resolveDisplayName(defaultDisplayName: String) =
+                arrow.core.Either.Right(defaultDisplayName)
+        }
+    ): DefaultWorkerSetupManager {
         return DefaultWorkerSetupManager(
             configLoader = configLoader,
             secretsStore = FileSecretsStore(),
             credentialProvider = object : WorkerSetupCredentialProvider {
                 override suspend fun resolveCredentials() = arrow.core.Either.Right(credentials)
             },
+            displayNameProvider = displayNameProvider,
             setupApiFactory = { api }
         )
     }

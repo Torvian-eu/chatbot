@@ -32,6 +32,7 @@ import java.util.UUID
  * @property certificateService Certificate helper used to generate and validate
  * worker identity material.
  * @property credentialProvider Source used to resolve setup-time user credentials.
+ * @property displayNameProvider Source used to resolve the worker display name during setup.
  * @property setupApiFactory Factory that creates the server API client for a given server URL.
  */
 class DefaultWorkerSetupManager(
@@ -39,6 +40,7 @@ class DefaultWorkerSetupManager(
     private val secretsStore: SecretsStore = FileSecretsStore(),
     private val certificateService: WorkerCertificateService = WorkerCertificateService(),
     private val credentialProvider: WorkerSetupCredentialProvider = DefaultWorkerSetupCredentialProvider(),
+    private val displayNameProvider: WorkerSetupDisplayNameProvider = DefaultWorkerSetupDisplayNameProvider(),
     private val pathResolver: PathResolver = PathResolver(),
     private val setupApiFactory: (String) -> WorkerSetupApi = { serverUrl ->
         KtorWorkerSetupApi(createWorkerSetupHttpClient(serverUrl))
@@ -66,7 +68,8 @@ class DefaultWorkerSetupManager(
 
         val serverUrl = resolveServerUrl(serverUrlOverride, mergedConfig, normalizedConfigDir).bind()
         val uid = resolveWorkerUid(mergedConfig).bind()
-        val displayName = resolveDisplayName(mergedConfig)
+        val defaultDisplayName = mergedConfig.worker?.identity?.displayName?.trim()?.takeIf { it.isNotBlank() } ?: "my-worker"
+        val displayName = displayNameProvider.resolveDisplayName(defaultDisplayName).bind()
         val storage = mergedConfig.worker?.storage
         val auth = mergedConfig.worker?.auth
 
@@ -221,10 +224,6 @@ class DefaultWorkerSetupManager(
     private fun resolveWorkerUid(mergedConfig: AppConfigDto): Either<WorkerSetupError, String> {
         val configured = mergedConfig.worker?.identity?.uid?.trim()?.takeIf { it.isNotBlank() }
         return configured?.right() ?: UUID.randomUUID().toString().right()
-    }
-
-    private fun resolveDisplayName(mergedConfig: AppConfigDto): String {
-        return mergedConfig.worker?.identity?.displayName?.trim()?.takeIf { it.isNotBlank() } ?: "my-worker"
     }
 
     /**
