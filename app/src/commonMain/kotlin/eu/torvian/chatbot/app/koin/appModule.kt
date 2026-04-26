@@ -170,6 +170,9 @@ fun appModule(config: AppConfiguration): Module = module {
     single<LocalMCPToolApi> {
         KtorLocalMCPToolApiClient(get())
     }
+    single<WorkerApi> {
+        KtorWorkerApiClient(get())
+    }
 
     // Provide Repository implementations, injecting the API clients
     single<ModelRepository> {
@@ -208,6 +211,9 @@ fun appModule(config: AppConfiguration): Module = module {
         DefaultLocalMCPServerRuntimeStatusRepository(
             api = get()
         )
+    }
+    single<WorkerRepository> {
+        DefaultWorkerRepository(get())
     }
     single<LocalMCPToolRepository> {
         DefaultLocalMCPToolRepository(
@@ -372,6 +378,7 @@ fun appModule(config: AppConfiguration): Module = module {
             serverManager = get(),
             mcpToolRepository = get(),
             toolRepository = get(),
+            workerRepository = get(),
             notificationService = get()
         )
     }

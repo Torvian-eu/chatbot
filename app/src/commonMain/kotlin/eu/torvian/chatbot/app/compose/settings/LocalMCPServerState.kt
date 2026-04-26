@@ -10,14 +10,23 @@ import eu.torvian.chatbot.app.viewmodel.LocalMCPServerOperation
 import eu.torvian.chatbot.app.viewmodel.LocalMCPToolFormState
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import eu.torvian.chatbot.common.models.tool.UserToolApprovalPreference
+import eu.torvian.chatbot.common.models.worker.WorkerDto
 
 /**
  * UI state for the MCP Servers tab.
+ *
+ * @property serverOverviews Aggregate status information for all MCP servers.
+ * @property selectedServerOverview Currently selected server in the master-detail UI.
+ * @property selectedServerToolApprovalPreferences Tool approval preferences for the selected server.
+ * @property workers Workers registered by the authenticated user, used for dropdown selection.
+ * @property dialogState Current dialog state for the MCP servers tab.
+ * @property operationInProgress Current operation in progress (test connection, refresh tools, etc.)
  */
 data class LocalMCPServersTabState(
     val serverOverviews: DataState<RepositoryError, List<LocalMCPServerOverview>>,
     val selectedServerOverview: LocalMCPServerOverview?,
     val selectedServerToolApprovalPreferences: DataState<RepositoryError, List<UserToolApprovalPreference>>,
+    val workers: DataState<RepositoryError, List<WorkerDto>>,
     val dialogState: LocalMCPServerDialogState,
     val operationInProgress: LocalMCPServerOperation?
 )
@@ -48,4 +57,5 @@ interface LocalMCPServersTabActions {
     fun onUpdateToolForm(update: (LocalMCPToolFormState) -> LocalMCPToolFormState)
     fun onSaveTool()
     fun onDeleteToolApprovalPreference(toolDefinitionId: Long)
+    fun onReloadWorkers()
 }

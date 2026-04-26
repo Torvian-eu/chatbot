@@ -53,6 +53,14 @@ interface WorkerService {
         workerUid: String,
         certificateFingerprint: String
     ): Either<AuthenticateWorkerError, WorkerChallengeDto>
+
+    /**
+     * Lists all workers registered by the specified owner.
+     *
+     * @param ownerUserId Owning user identifier.
+     * @return List of [WorkerDto] objects; empty list if none exist.
+     */
+    suspend fun listWorkersByOwner(ownerUserId: Long): List<WorkerDto>
 }
 
 

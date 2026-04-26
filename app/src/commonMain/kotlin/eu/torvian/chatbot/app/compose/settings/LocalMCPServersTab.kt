@@ -106,6 +106,7 @@ fun LocalMCPServersTab(
         // Dialog handling based on dialog state
         LocalMCPServerDialogs(
             dialogState = state.dialogState,
+            workersState = state.workers,
             onUpdateForm = actions::onUpdateServerForm,
             onSaveServer = actions::onSaveServer,
             onTestServer = actions::onTestServerInDialog,
@@ -113,6 +114,7 @@ fun LocalMCPServersTab(
             onUpdateToolForm = actions::onUpdateToolForm,
             onSaveTool = actions::onSaveTool,
             onDismiss = actions::onCancelDialog,
+            onReloadWorkers = actions::onReloadWorkers,
             isServerRunning = state.selectedServerOverview?.isConnected == true
         )
     }

@@ -13,6 +13,8 @@ import eu.torvian.chatbot.app.service.mcp.LocalMCPServerOverview
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import eu.torvian.chatbot.common.models.tool.UserToolApprovalPreference
+import eu.torvian.chatbot.common.models.worker.WorkerDto
+import eu.torvian.chatbot.app.repository.WorkerRepository
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
@@ -29,11 +31,13 @@ import kotlinx.coroutines.launch
  * - Starting/stopping MCP servers
  * - Discovering and refreshing tools from servers
  * - Managing individual tool settings (enable/disable, edit, approval preferences)
+ * - Loading registered workers for server configuration dropdown selection
  * - Communicating with the backend via [LocalMCPServerManager]
  *
  * @property serverManager Manager for orchestrating server operations (test, start, stop, etc.)
  * @property mcpToolRepository Repository for managing MCP tool definitions
  * @property toolRepository Repository for managing tool approval preferences and general tool operations
+ * @property workerRepository Repository for managing registered workers
  * @property notificationService Service for handling and notifying about notifications
  * @property uiDispatcher Dispatcher for UI-related coroutines
  */
@@ -41,6 +45,7 @@ class LocalMCPServerViewModel(
     private val serverManager: LocalMCPServerManager,
     private val mcpToolRepository: LocalMCPToolRepository,
     private val toolRepository: ToolRepository,
+    private val workerRepository: WorkerRepository,
     private val notificationService: NotificationService,
     private val uiDispatcher: CoroutineDispatcher = Dispatchers.Main
 ) : ViewModel() {
@@ -103,6 +108,12 @@ class LocalMCPServerViewModel(
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), DataState.Idle)
 
     /**
+     * Workers registered by the authenticated user, exposed for dropdown selection
+     * in the MCP server configuration dialog.
+     */
+    val workers: StateFlow<DataState<RepositoryError, List<WorkerDto>>> = workerRepository.workers
+
+    /**
      * The current dialog state for the MCP servers tab.
      */
     val dialogState: StateFlow<LocalMCPServerDialogState> = _dialogState.asStateFlow()
@@ -148,19 +159,50 @@ class LocalMCPServerViewModel(
 
     /**
      * Opens the dialog to add a new MCP server.
+     * Ensures the worker list is loaded so the dropdown can be populated.
      */
     fun startAddingNewServer() {
         _dialogState.value = LocalMCPServerDialogState.AddNewServer()
+        loadWorkersIfNeeded()
     }
 
     /**
      * Opens the dialog to edit an existing MCP server.
+     * Ensures the worker list is loaded so the dropdown can be populated.
      */
     fun startEditingServer(server: LocalMCPServerDto) {
         _dialogState.value = LocalMCPServerDialogState.EditServer(
             server = server,
             formState = LocalMCPServerFormState.fromServer(server)
         )
+        loadWorkersIfNeeded()
+    }
+
+    /**
+     * Reloads the list of workers from the server.
+     * Used when the dropdown encounters an error or needs a manual refresh.
+     */
+    fun reloadWorkers() {
+        viewModelScope.launch(uiDispatcher) {
+            workerRepository.loadWorkers()
+                .onLeft { repoError ->
+                    notificationService.repositoryError(
+                        error = repoError,
+                        shortMessage = "Failed to load workers"
+                    )
+                }
+        }
+    }
+
+    /**
+     * Triggers a worker load if the current state is Idle or Error,
+     * so the dropdown has data without unnecessary network calls.
+     */
+    private fun loadWorkersIfNeeded() {
+        val currentState = workerRepository.workers.value
+        if (currentState.isIdle || currentState.isError) {
+            reloadWorkers()
+        }
     }
 
     /**
