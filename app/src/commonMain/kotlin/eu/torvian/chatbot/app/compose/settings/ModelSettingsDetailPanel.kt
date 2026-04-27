@@ -20,11 +20,23 @@ import eu.torvian.chatbot.common.models.llm.EmbeddingModelSettings
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 
 /**
- * Detail panel for the Settings Config tab.
- * Shows details of the currently selected settings profile.
+ * Reusable body for the Model Settings details view.
+ *
+ * The body contains the profile-specific controls and information without any
+ * outer container so it can be embedded in both the legacy split-view panel and
+ * the new full-width details page.
+ *
+ * @param settingsDetails The currently opened settings profile, or null when the
+ * selection is unavailable.
+ * @param onEdit Callback used to start editing the current settings profile.
+ * @param onDelete Callback used to start deleting the current settings profile.
+ * @param onMakePublic Callback used to make the current settings profile public.
+ * @param onMakePrivate Callback used to make the current settings profile private.
+ * @param onManageAccess Callback used to open the manage-access dialog.
+ * @param modifier Modifier applied to the body container.
  */
 @Composable
-fun ModelSettingsDetailPanel(
+fun ModelSettingsDetailsBody(
     settingsDetails: ModelSettingsDetails?,
     onEdit: (ModelSettings) -> Unit,
     onDelete: (ModelSettings) -> Unit,
@@ -33,210 +45,208 @@ fun ModelSettingsDetailPanel(
     onManageAccess: (ModelSettingsDetails) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(modifier = modifier) {
-        if (settingsDetails == null) {
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                Text("Select a settings profile to view details")
-            }
-        } else {
-            val settings = settingsDetails.settings
-            Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                // Header with actions and badge
+    if (settingsDetails == null) {
+        Box(contentAlignment = Alignment.Center, modifier = modifier.fillMaxSize()) {
+            Text("Select a settings profile to view details")
+        }
+    } else {
+        val settings = settingsDetails.settings
+        Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
+            // Header with actions and badge.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(
-                            text = settings.name,
-                            style = MaterialTheme.typography.headlineSmall
+                    Text(
+                        text = settings.name,
+                        style = MaterialTheme.typography.headlineSmall
+                    )
+
+                    // The publication badge mirrors the split-view version so the new page keeps the same affordance.
+                    if (settingsDetails.isPublic()) {
+                        AssistChip(
+                            onClick = {},
+                            label = { Text("Public") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Public,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            },
+                            colors = AssistChipDefaults.assistChipColors(
+                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                labelColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                                leadingIconContentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                            ),
+                            border = null
                         )
-
-                        // Public/Private badge
-                        if (settingsDetails.isPublic()) {
-                            AssistChip(
-                                onClick = {},
-                                label = { Text("Public") },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.Public,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                },
-                                colors = AssistChipDefaults.assistChipColors(
-                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                    labelColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                                    leadingIconContentColor = MaterialTheme.colorScheme.onTertiaryContainer
-                                ),
-                                border = null
-                            )
-                        } else {
-                            AssistChip(
-                                onClick = {},
-                                label = { Text("Private") },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.Lock,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                },
-                                colors = AssistChipDefaults.assistChipColors(
-                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                    labelColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                                    leadingIconContentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                                ),
-                                border = null
-                            )
-                        }
+                    } else {
+                        AssistChip(
+                            onClick = {},
+                            label = { Text("Private") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Lock,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            },
+                            colors = AssistChipDefaults.assistChipColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                labelColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                                leadingIconContentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                            ),
+                            border = null
+                        )
                     }
+                }
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        IconButton(onClick = { onEdit(settings) }) {
-                            Icon(Icons.Default.Edit, "Edit settings")
-                        }
-                        IconButton(onClick = { onDelete(settings) }) {
-                            Icon(Icons.Default.Delete, "Delete settings", tint = MaterialTheme.colorScheme.error)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    IconButton(onClick = { onEdit(settings) }) {
+                        Icon(Icons.Default.Edit, "Edit settings")
+                    }
+                    IconButton(onClick = { onDelete(settings) }) {
+                        Icon(Icons.Default.Delete, "Delete settings", tint = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+            // Details section.
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Owner information card.
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "Owner",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Text(
+                                text = settingsDetails.getOwner() ?: "Unknown",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
                         }
                     }
                 }
-                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
-                // Details Section
-                LazyColumn(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    // Owner information card
-                    item {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer
-                            )
+                // Access control card.
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Column(
-                                modifier = Modifier.padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Text(
-                                    text = "Owner",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                                Text(
-                                    text = settingsDetails.getOwner() ?: "Unknown",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                            }
-                        }
-                    }
-
-                    // Access control card
-                    item {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                            Text(
+                                text = "Access Control",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
                             )
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Text(
-                                    text = "Access Control",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.onTertiaryContainer
-                                )
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    if (settingsDetails.isPublic()) {
-                                        OutlinedButton(
-                                            onClick = { onMakePrivate(settingsDetails) },
-                                            modifier = Modifier.weight(1f),
-                                            colors = ButtonDefaults.outlinedButtonColors(
-                                                contentColor = MaterialTheme.colorScheme.onTertiaryContainer
-                                            )
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Lock,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text("Make Private")
-                                        }
-                                    } else {
-                                        Button(
-                                            onClick = { onMakePublic(settingsDetails) },
-                                            modifier = Modifier.weight(1f),
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = MaterialTheme.colorScheme.primary,
-                                                contentColor = MaterialTheme.colorScheme.onPrimary
-                                            )
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Public,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text("Make Public")
-                                        }
-                                    }
-
+                                if (settingsDetails.isPublic()) {
                                     OutlinedButton(
-                                        onClick = { onManageAccess(settingsDetails) },
+                                        onClick = { onMakePrivate(settingsDetails) },
                                         modifier = Modifier.weight(1f),
                                         colors = ButtonDefaults.outlinedButtonColors(
                                             contentColor = MaterialTheme.colorScheme.onTertiaryContainer
                                         )
                                     ) {
                                         Icon(
-                                            Icons.Default.Group,
+                                            Icons.Default.Lock,
                                             contentDescription = null,
                                             modifier = Modifier.size(18.dp)
                                         )
                                         Spacer(modifier = Modifier.width(8.dp))
-                                        Text("Manage Access")
+                                        Text("Make Private")
+                                    }
+                                } else {
+                                    Button(
+                                        onClick = { onMakePublic(settingsDetails) },
+                                        modifier = Modifier.weight(1f),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = MaterialTheme.colorScheme.primary,
+                                            contentColor = MaterialTheme.colorScheme.onPrimary
+                                        )
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Public,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("Make Public")
                                     }
                                 }
 
-                                // Show current access summary
-                                if (settingsDetails.accessDetails.accessList.isNotEmpty()) {
-                                    HorizontalDivider()
-                                    Text(
-                                        text = "Shared with ${settingsDetails.accessDetails.accessList.size} group(s)",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                                OutlinedButton(
+                                    onClick = { onManageAccess(settingsDetails) },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer
                                     )
+                                ) {
+                                    Icon(
+                                        Icons.Default.Group,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Manage Access")
                                 }
+                            }
+
+                            // Show the current access summary so the page remains self-contained after the migration.
+                            if (settingsDetails.accessDetails.accessList.isNotEmpty()) {
+                                HorizontalDivider()
+                                Text(
+                                    text = "Shared with ${settingsDetails.accessDetails.accessList.size} group(s)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                                )
                             }
                         }
                     }
+                }
 
-                    item { DetailRow("Profile Name", settings.name) }
-                    item { DetailRow("Profile ID", settings.id.toString()) }
-                    item { DetailRow("Model Type", settings.modelType.name) }
+                item { DetailRow("Profile Name", settings.name) }
+                item { DetailRow("Profile ID", settings.id.toString()) }
+                item { DetailRow("Model Type", settings.modelType.name) }
 
-                    // Type-specific details
-                    when (settings) {
-                        is ChatModelSettings -> ChatSettingsDetails(settings)
-                        is EmbeddingModelSettings -> EmbeddingSettingsDetails(settings)
-                        // Add cases for other settings types as they are implemented
-                        else -> item { Text("Details for this settings type are not yet implemented.") }
-                    }
+                // Type-specific details.
+                when (settings) {
+                    is ChatModelSettings -> ChatSettingsDetails(settings)
+                    is EmbeddingModelSettings -> EmbeddingSettingsDetails(settings)
+                    // Add cases for other settings types as they are implemented.
+                    else -> item { Text("Details for this settings type are not yet implemented.") }
                 }
             }
         }

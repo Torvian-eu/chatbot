@@ -33,5 +33,7 @@ data class ModelSettingsConfigTabState(
     val settingsListForSelectedModel: List<ModelSettingsDetails>?,
     val selectedModel: LLMModel?,
     val selectedSettings: ModelSettingsDetails?,
+    val selectedSettingsDetailId: Long?,
     val dialogState: ModelSettingsDialogState
 )
+

@@ -64,7 +64,9 @@ fun SettingsScreen(
                     SettingsCategory.Models -> ModelsTabRoute(authState = authState) { breadcrumbs ->
                         breadcrumbSegments = breadcrumbs
                     }
-                    SettingsCategory.ModelSettings -> ModelSettingsConfigTabRoute(authState = authState)
+                    SettingsCategory.ModelSettings -> ModelSettingsConfigTabRoute(authState = authState) { breadcrumbs ->
+                        breadcrumbSegments = breadcrumbs
+                    }
                     SettingsCategory.McpServers -> LocalMCPServersTabRoute(authState = authState)
                 }
             }
