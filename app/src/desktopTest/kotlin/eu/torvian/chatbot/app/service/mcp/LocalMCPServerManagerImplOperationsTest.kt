@@ -6,24 +6,24 @@ import eu.torvian.chatbot.app.repository.LocalMCPServerRepository
 import eu.torvian.chatbot.app.repository.LocalMCPServerRuntimeStatusRepository
 import eu.torvian.chatbot.app.repository.LocalMCPToolRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
-import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerConnectionResponse
-import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerDraftConnectionRequest
+import eu.torvian.chatbot.common.models.api.mcp.*
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.BeforeEach
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
-import org.junit.jupiter.api.BeforeEach
+import kotlin.time.Instant
 
 /**
- * Verifies the app-side manager delegates draft testing and deletion to server-owned repository paths.
+ * Verifies the app-side manager delegates operations to server-owned repository paths
+ * and refreshes local caches where appropriate.
  */
-class LocalMCPServerManagerImplRefactorTest {
+class LocalMCPServerManagerImplOperationsTest {
     private val serverRepository: LocalMCPServerRepository = mockk()
     private val runtimeStatusRepository: LocalMCPServerRuntimeStatusRepository = mockk()
     private val toolRepository: LocalMCPToolRepository = mockk(relaxed = true)
@@ -99,7 +99,80 @@ class LocalMCPServerManagerImplRefactorTest {
         coVerify(exactly = 1) { serverRepository.deleteServer(44L) }
         coVerify(exactly = 1) { toolRepository.removeToolsFromCache(44L) }
     }
+
+    /**
+     * Verifies startServer delegates to the repository and refreshes the runtime status.
+     */
+    @Test
+    fun `startServer delegates to repository and loads runtime status`() = runTest {
+        coEvery { serverRepository.startServer(55L) } returns Either.Right(Unit)
+        coEvery { runtimeStatusRepository.loadRuntimeStatus(55L) } returns Either.Right(
+            LocalMcpServerRuntimeStatusDto(
+                serverId = 55L,
+                state = LocalMcpServerRuntimeStateDto.RUNNING,
+                connectedAt = Instant.fromEpochMilliseconds(1_700_000_000_000)
+            )
+        )
+
+        val result = manager.startServer(55L)
+
+        assertIs<Either.Right<Unit>>(result)
+        coVerify(exactly = 1) { serverRepository.startServer(55L) }
+        coVerify(exactly = 1) { runtimeStatusRepository.loadRuntimeStatus(55L) }
+    }
+
+    /**
+     * Verifies startServer still succeeds when runtime status refresh fails.
+     */
+    @Test
+    fun `startServer returns success even when runtime status load fails`() = runTest {
+        coEvery { serverRepository.startServer(55L) } returns Either.Right(Unit)
+        coEvery { runtimeStatusRepository.loadRuntimeStatus(55L) } returns Either.Left(
+            RepositoryError.OtherError("network error")
+        )
+
+        val result = manager.startServer(55L)
+
+        assertIs<Either.Right<Unit>>(result)
+        coVerify(exactly = 1) { serverRepository.startServer(55L) }
+        coVerify(exactly = 1) { runtimeStatusRepository.loadRuntimeStatus(55L) }
+    }
+
+    /**
+     * Verifies stopServer delegates to the repository and refreshes the runtime status.
+     */
+    @Test
+    fun `stopServer delegates to repository and loads runtime status`() = runTest {
+        coEvery { serverRepository.stopServer(66L) } returns Either.Right(Unit)
+        coEvery { runtimeStatusRepository.loadRuntimeStatus(66L) } returns Either.Right(
+            LocalMcpServerRuntimeStatusDto(
+                serverId = 66L,
+                state = LocalMcpServerRuntimeStateDto.STOPPED,
+                stoppedAt = Instant.fromEpochMilliseconds(1_700_000_000_000)
+            )
+        )
+
+        val result = manager.stopServer(66L)
+
+        assertIs<Either.Right<Unit>>(result)
+        coVerify(exactly = 1) { serverRepository.stopServer(66L) }
+        coVerify(exactly = 1) { runtimeStatusRepository.loadRuntimeStatus(66L) }
+    }
+
+    /**
+     * Verifies stopServer still succeeds when runtime status refresh fails.
+     */
+    @Test
+    fun `stopServer returns success even when runtime status load fails`() = runTest {
+        coEvery { serverRepository.stopServer(66L) } returns Either.Right(Unit)
+        coEvery { runtimeStatusRepository.loadRuntimeStatus(66L) } returns Either.Left(
+            RepositoryError.OtherError("network error")
+        )
+
+        val result = manager.stopServer(66L)
+
+        assertIs<Either.Right<Unit>>(result)
+        coVerify(exactly = 1) { serverRepository.stopServer(66L) }
+        coVerify(exactly = 1) { runtimeStatusRepository.loadRuntimeStatus(66L) }
+    }
 }
-
-
-
