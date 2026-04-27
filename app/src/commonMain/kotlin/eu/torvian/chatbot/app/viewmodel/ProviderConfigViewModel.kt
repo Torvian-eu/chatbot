@@ -319,7 +319,10 @@ class ProviderConfigViewModel(
                     )
                 },
                 ifRight = { models ->
-                    val providerName = selectedProvider.value?.provider?.takeIf { it.id == providerId }?.name
+                    val providerName = providersState.value.dataOrNull
+                        ?.firstOrNull { it.provider.id == providerId }
+                        ?.provider
+                        ?.name
                         ?: "Provider #$providerId"
                     val rawJson = prettyJson.encodeToString(
                         ListSerializer(DiscoveredProviderModel.serializer()),
@@ -530,9 +533,8 @@ class ProviderConfigViewModel(
                             shortMessage = "Failed to add provider"
                         )
                     },
-                    ifRight = { newProviderDetails ->
+                    ifRight = {
                         cancelDialog()
-                        selectProvider(newProviderDetails)
                     }
                 )
         }

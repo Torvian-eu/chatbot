@@ -21,6 +21,7 @@ fun SettingsScreen(
     authState: AuthState.Authenticated
 ) {
     var selectedCategory by rememberSaveable { mutableStateOf(SettingsCategory.Providers) }
+    var breadcrumbSegments by remember { mutableStateOf(listOf("Settings", selectedCategory.displayLabel)) }
 
     Row(
         modifier = Modifier
@@ -29,7 +30,10 @@ fun SettingsScreen(
     ) {
         SettingsSidebar(
             selectedCategory = selectedCategory,
-            onCategorySelected = { selectedCategory = it }
+            onCategorySelected = { category ->
+                selectedCategory = category
+                breadcrumbSegments = listOf("Settings", category.displayLabel)
+            }
         )
 
         VerticalDivider(
@@ -43,7 +47,7 @@ fun SettingsScreen(
                 .fillMaxHeight()
         ) {
             SettingsBreadcrumbs(
-                segments = listOf("Settings", selectedCategory.displayLabel)
+                segments = breadcrumbSegments
             )
 
             Box(
@@ -52,7 +56,11 @@ fun SettingsScreen(
                     .padding(16.dp)
             ) {
                 when (selectedCategory) {
-                    SettingsCategory.Providers -> ProvidersTabRoute(authState = authState)
+                    SettingsCategory.Providers -> ProvidersTabRoute(
+                        authState = authState,
+                    ) { breadcrumbs ->
+                        breadcrumbSegments = breadcrumbs
+                    }
                     SettingsCategory.Models -> ModelsTabRoute(authState = authState)
                     SettingsCategory.ModelSettings -> ModelSettingsConfigTabRoute(authState = authState)
                     SettingsCategory.McpServers -> LocalMCPServersTabRoute(authState = authState)
