@@ -197,6 +197,10 @@ class LocalMCPServerManagerImpl(
             logger.error("Server runtime-control start failed for MCP server $serverId: ${error.message}")
             ManageStartServerError.RuntimeControlFailed(serverId, error)
         }.bind()
+
+        runtimeStatusRepository.loadRuntimeStatus(serverId).onLeft { error ->
+            logger.error("Failed to load runtime status after start for MCP server $serverId: ${error.message}")
+        }
     }
 
     override suspend fun stopServer(serverId: Long): Either<ManageStopServerError, Unit> = either {
@@ -206,6 +210,10 @@ class LocalMCPServerManagerImpl(
             logger.error("Server runtime-control stop failed for MCP server $serverId: ${error.message}")
             ManageStopServerError.RuntimeControlFailed(serverId, error)
         }.bind()
+
+        runtimeStatusRepository.loadRuntimeStatus(serverId).onLeft { error ->
+            logger.error("Failed to load runtime status after stop for MCP server $serverId: ${error.message}")
+        }
     }
 
     override suspend fun updateServer(server: LocalMCPServerDto): Either<UpdateServerError, Unit> = either {
