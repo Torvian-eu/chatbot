@@ -3,6 +3,7 @@ package eu.torvian.chatbot.app.compose.settings
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -125,80 +126,104 @@ private fun ModelListItem(
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(
-                text = model.displayName?.takeIf { it.isNotBlank() } ?: model.name,
-                style = MaterialTheme.typography.titleMedium,
-                color = contentColor
-            )
-
-            if (model.displayName?.isNotBlank() == true && model.displayName != model.name) {
-                Text(
-                    text = model.name,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = contentColor.copy(alpha = 0.72f)
-                )
-            }
-
-            AssistChip(
-                onClick = {},
-                label = { Text(if (modelDetails.isPublic()) "Public" else "Private", style = MaterialTheme.typography.labelSmall) },
-                leadingIcon = {
-                    Icon(
-                        imageVector = if (modelDetails.isPublic()) Icons.Default.Public else Icons.Default.Lock,
-                        contentDescription = null,
-                        modifier = Modifier.padding(start = 2.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = model.displayName?.takeIf { it.isNotBlank() } ?: model.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = contentColor
                     )
-                },
-                colors = AssistChipDefaults.assistChipColors(
-                    containerColor = if (modelDetails.isPublic()) {
-                        MaterialTheme.colorScheme.tertiaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.secondaryContainer
-                    },
-                    labelColor = if (modelDetails.isPublic()) {
-                        MaterialTheme.colorScheme.onTertiaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSecondaryContainer
-                    },
-                    leadingIconContentColor = if (modelDetails.isPublic()) {
-                        MaterialTheme.colorScheme.onTertiaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSecondaryContainer
+
+                    if (model.displayName?.isNotBlank() == true && model.displayName != model.name) {
+                        Text(
+                            text = model.name,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = contentColor.copy(alpha = 0.72f)
+                        )
                     }
-                ),
-                border = null
-            )
+                }
 
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                shape = RoundedCornerShape(999.dp)
-            ) {
-                Text(
-                    text = model.type.name,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                )
-            }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    AssistChip(
+                        onClick = {},
+                        label = {
+                            Text(
+                                if (modelDetails.isPublic()) "Public" else "Private",
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = if (modelDetails.isPublic()) Icons.Default.Public else Icons.Default.Lock,
+                                contentDescription = null,
+                                modifier = Modifier.padding(start = 2.dp)
+                            )
+                        },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = if (modelDetails.isPublic()) {
+                                MaterialTheme.colorScheme.tertiaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.secondaryContainer
+                            },
+                            labelColor = if (modelDetails.isPublic()) {
+                                MaterialTheme.colorScheme.onTertiaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSecondaryContainer
+                            },
+                            leadingIconContentColor = if (modelDetails.isPublic()) {
+                                MaterialTheme.colorScheme.onTertiaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSecondaryContainer
+                            }
+                        ),
+                        border = null
+                    )
 
-            Surface(
-                color = if (model.active) {
-                    MaterialTheme.colorScheme.primaryContainer
-                } else {
-                    MaterialTheme.colorScheme.surfaceVariant
-                },
-                shape = RoundedCornerShape(999.dp)
-            ) {
-                Text(
-                    text = if (model.active) "Active" else "Inactive",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (model.active) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                )
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        shape = RoundedCornerShape(999.dp)
+                    ) {
+                        Text(
+                            text = model.type.name,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+
+                    Surface(
+                        color = if (model.active) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        },
+                        shape = RoundedCornerShape(999.dp)
+                    ) {
+                        Text(
+                            text = if (model.active) "Active" else "Inactive",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (model.active) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
             }
         }
     }

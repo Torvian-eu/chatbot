@@ -73,7 +73,14 @@ fun ProviderListItem(
                     if (providerDetails.isPublic()) {
                         AssistChip(
                             onClick = {},
-                            label = { Text("Public", style = MaterialTheme.typography.labelSmall) },
+                            label = {
+                                Text(
+                                    text = "Public",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                )
+                            },
                             leadingIcon = {
                                 Icon(
                                     imageVector = Icons.Default.Public,
@@ -91,7 +98,14 @@ fun ProviderListItem(
                     } else {
                         AssistChip(
                             onClick = {},
-                            label = { Text("Private", style = MaterialTheme.typography.labelSmall) },
+                            label = {
+                                Text(
+                                    text = "Private",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            },
                             leadingIcon = {
                                 Icon(
                                     imageVector = Icons.Default.Lock,
@@ -129,7 +143,9 @@ fun ProviderListItem(
                     MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant
-                }
+                },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
 
             if (provider.description.isNotBlank()) {
