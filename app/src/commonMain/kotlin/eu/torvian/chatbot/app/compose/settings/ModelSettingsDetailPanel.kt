@@ -33,6 +33,7 @@ import eu.torvian.chatbot.common.models.llm.ModelSettings
  * @param onMakePublic Callback used to make the current settings profile public.
  * @param onMakePrivate Callback used to make the current settings profile private.
  * @param onManageAccess Callback used to open the manage-access dialog.
+ * @param showHeader Whether the page-style header and divider should be rendered.
  * @param modifier Modifier applied to the body container.
  */
 @Composable
@@ -43,6 +44,7 @@ fun ModelSettingsDetailsBody(
     onMakePublic: (ModelSettingsDetails) -> Unit,
     onMakePrivate: (ModelSettingsDetails) -> Unit,
     onManageAccess: (ModelSettingsDetails) -> Unit,
+    showHeader: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     if (settingsDetails == null) {
@@ -52,76 +54,80 @@ fun ModelSettingsDetailsBody(
     } else {
         val settings = settingsDetails.settings
         Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
-            // Header with actions and badge.
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            if (showHeader) {
+                // The page shell now owns the shared navigation bar, so this header only remains for legacy callers.
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = settings.name,
-                        style = MaterialTheme.typography.headlineSmall
-                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = settings.name,
+                            style = MaterialTheme.typography.headlineSmall
+                        )
 
-                    // The publication badge mirrors the split-view version so the new page keeps the same affordance.
-                    if (settingsDetails.isPublic()) {
-                        AssistChip(
-                            onClick = {},
-                            label = { Text("Public") },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Default.Public,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            },
-                            colors = AssistChipDefaults.assistChipColors(
-                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                labelColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                                leadingIconContentColor = MaterialTheme.colorScheme.onTertiaryContainer
-                            ),
-                            border = null
-                        )
-                    } else {
-                        AssistChip(
-                            onClick = {},
-                            label = { Text("Private") },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Default.Lock,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            },
-                            colors = AssistChipDefaults.assistChipColors(
-                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                labelColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                                leadingIconContentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                            ),
-                            border = null
-                        )
+                        // The publication badge mirrors the split-view version so the legacy entry point keeps the same affordance.
+                        if (settingsDetails.isPublic()) {
+                            AssistChip(
+                                onClick = {},
+                                label = { Text("Public") },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Public,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                colors = AssistChipDefaults.assistChipColors(
+                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                    labelColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    leadingIconContentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                ),
+                                border = null
+                            )
+                        } else {
+                            AssistChip(
+                                onClick = {},
+                                label = { Text("Private") },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Lock,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                colors = AssistChipDefaults.assistChipColors(
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                    labelColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    leadingIconContentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                ),
+                                border = null
+                            )
+                        }
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        IconButton(onClick = { onEdit(settings) }) {
+                            Icon(Icons.Default.Edit, "Edit settings")
+                        }
+                        IconButton(onClick = { onDelete(settings) }) {
+                            Icon(Icons.Default.Delete, "Delete settings", tint = MaterialTheme.colorScheme.error)
+                        }
                     }
                 }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    IconButton(onClick = { onEdit(settings) }) {
-                        Icon(Icons.Default.Edit, "Edit settings")
-                    }
-                    IconButton(onClick = { onDelete(settings) }) {
-                        Icon(Icons.Default.Delete, "Delete settings", tint = MaterialTheme.colorScheme.error)
-                    }
-                }
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
             }
-            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
             // Details section.
             LazyColumn(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // Owner information card.

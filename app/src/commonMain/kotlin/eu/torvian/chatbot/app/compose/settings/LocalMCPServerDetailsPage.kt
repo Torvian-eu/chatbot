@@ -2,19 +2,14 @@ package eu.torvian.chatbot.app.compose.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -30,9 +25,9 @@ import eu.torvian.chatbot.common.models.tool.UserToolApprovalPreference
 /**
  * Full-width details page for a single MCP server.
  *
- * The page owns the back navigation chrome and delegates the actual server
- * management actions to the existing detail panel so dialog and repository flows
- * stay unchanged.
+ * The page now delegates its shared navigation chrome to [SettingsDetailPage] and
+ * keeps the server management body in the existing detail panel so dialog and
+ * repository flows stay unchanged.
  *
  * @param serverOverview The selected server overview, or null while data is still
  * synchronising after a selection change.
@@ -73,80 +68,63 @@ fun LocalMCPServerDetailsPage(
     operationInProgress: LocalMCPServerOperation?,
     modifier: Modifier = Modifier
 ) {
-    Surface(
+    SettingsDetailPage(
+        categoryName = "MCP Servers",
+        itemName = serverOverview?.serverConfig?.name ?: "Loading MCP server details...",
+        onBackToList = onBackToList,
+        backContentDescription = "Back to MCP servers list",
         modifier = modifier,
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 1.dp
-    ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                IconButton(onClick = onBackToList) {
+        actions = {
+            if (serverOverview != null) {
+                IconButton(onClick = { onEditServer(serverOverview) }) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back to MCP servers list"
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Edit Server"
                     )
                 }
 
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "MCP Servers",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = serverOverview?.serverConfig?.name ?: "Loading MCP server details...",
-                        style = MaterialTheme.typography.headlineSmall
+                IconButton(onClick = { onDeleteServer(serverOverview) }) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete Server",
+                        tint = MaterialTheme.colorScheme.error
                     )
                 }
             }
-
-            HorizontalDivider()
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            if (serverOverview == null) {
-                // Keep the page shell visible while the selection is synchronising or a reload is in flight.
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Text(
-                        text = "Loading MCP server details...",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            } else {
-                LocalMCPServerDetailPanel(
-                    serverOverview = serverOverview,
-                    toolApprovalPreferences = toolApprovalPreferences,
-                    onEditServer = onEditServer,
-                    onDeleteServer = onDeleteServer,
-                    onTestConnection = onTestConnection,
-                    onRefreshTools = onRefreshTools,
-                    onStartServer = onStartServer,
-                    onStopServer = onStopServer,
-                    onToggleEnabled = onToggleEnabled,
-                    onToggleToolEnabled = onToggleToolEnabled,
-                    onEditTool = onEditTool,
-                    onEnableAllTools = onEnableAllTools,
-                    onDisableAllTools = onDisableAllTools,
-                    onDeleteToolApprovalPreference = onDeleteToolApprovalPreference,
-                    operationInProgress = operationInProgress,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
+        }
+    ) {
+        if (serverOverview == null) {
+            // Keep the page shell visible while the selection is synchronising or a reload is in flight.
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "Loading MCP server details...",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        } else {
+            LocalMCPServerDetailPanel(
+                serverOverview = serverOverview,
+                toolApprovalPreferences = toolApprovalPreferences,
+                onTestConnection = onTestConnection,
+                onRefreshTools = onRefreshTools,
+                onStartServer = onStartServer,
+                onStopServer = onStopServer,
+                onToggleEnabled = onToggleEnabled,
+                onToggleToolEnabled = onToggleToolEnabled,
+                onEditTool = onEditTool,
+                onEnableAllTools = onEnableAllTools,
+                onDisableAllTools = onDisableAllTools,
+                onDeleteToolApprovalPreference = onDeleteToolApprovalPreference,
+                operationInProgress = operationInProgress,
+                modifier = Modifier.fillMaxSize()
+            )
         }
     }
 }
