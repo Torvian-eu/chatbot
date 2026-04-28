@@ -5,16 +5,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -51,7 +51,7 @@ fun ModelDetailsContent(
     val model = modelDetails.model
 
     Column(
-        modifier = modifier.verticalScroll(rememberScrollState()),
+        modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // Owner information is a stable read-only summary, so it stays in the body.
@@ -103,12 +103,12 @@ fun ModelDetailsContent(
                     if (modelDetails.isPublic()) {
                         Button(
                             onClick = { onMakePrivate(modelDetails) },
-                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                            colors = ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.secondary,
                                 contentColor = MaterialTheme.colorScheme.onSecondary
                             )
                         ) {
-                            androidx.compose.material3.Icon(
+                            Icon(
                                 imageVector = Icons.Default.Lock,
                                 contentDescription = null,
                                 modifier = Modifier.padding(end = 8.dp)
@@ -119,7 +119,7 @@ fun ModelDetailsContent(
                         Button(
                             onClick = { onMakePublic(modelDetails) },
                         ) {
-                            androidx.compose.material3.Icon(
+                            Icon(
                                 imageVector = Icons.Default.Public,
                                 contentDescription = null,
                                 modifier = Modifier.padding(end = 8.dp)
@@ -131,7 +131,7 @@ fun ModelDetailsContent(
                     OutlinedButton(
                         onClick = { onManageAccess(modelDetails) },
                     ) {
-                        androidx.compose.material3.Icon(
+                        Icon(
                             imageVector = Icons.Default.Group,
                             contentDescription = null,
                             modifier = Modifier.padding(end = 8.dp)

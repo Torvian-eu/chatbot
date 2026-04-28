@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.HorizontalDivider
@@ -53,7 +55,13 @@ fun SettingsDetailPage(
         modifier = modifier.fillMaxSize(),
         tonalElevation = 1.dp
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        val scrollState = rememberScrollState()
+
+        val columnModifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState)
+
+        Column(modifier = columnModifier) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -100,7 +108,7 @@ fun SettingsDetailPage(
 
             HorizontalDivider()
 
-            Box(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.fillMaxWidth()) {
                 content()
             }
         }
