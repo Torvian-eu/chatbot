@@ -34,15 +34,16 @@ fun ProviderListItem(
             containerColor = if (isSelected) {
                 MaterialTheme.colorScheme.primaryContainer
             } else {
-                MaterialTheme.colorScheme.surface
+                MaterialTheme.colorScheme.surfaceContainerLow
             }
         ),
+        shape = MaterialTheme.shapes.large,
         elevation = CardDefaults.cardElevation(
-            defaultElevation = if (isSelected) 4.dp else 2.dp
+            defaultElevation = if (isSelected) 4.dp else 1.dp
         )
     ) {
         Column(
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier.padding(14.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -125,7 +126,7 @@ fun ProviderListItem(
                 text = provider.type.name,
                 style = MaterialTheme.typography.labelMedium,
                 color = if (isSelected) {
-                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant
                 }
@@ -137,7 +138,7 @@ fun ProviderListItem(
                     text = provider.description,
                     style = MaterialTheme.typography.bodySmall,
                     color = if (isSelected) {
-                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.82f)
                     } else {
                         MaterialTheme.colorScheme.onSurfaceVariant
                     },

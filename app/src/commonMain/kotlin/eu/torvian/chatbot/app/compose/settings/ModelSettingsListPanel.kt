@@ -1,30 +1,49 @@
 package eu.torvian.chatbot.app.compose.settings
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Public
-import androidx.compose.material3.*
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ConfigDropdown
-import eu.torvian.chatbot.app.compose.permissions.RequiresAnyPermission
-import eu.torvian.chatbot.app.repository.AuthState
-import eu.torvian.chatbot.common.api.CommonPermissions
 import eu.torvian.chatbot.common.models.api.access.ModelSettingsDetails
 import eu.torvian.chatbot.common.models.llm.LLMModel
 
 /**
- * Master panel for the Model Settings Config tab.
- * Contains model selection dropdown and settings list.
+ * Body content for the model settings list page.
+ *
+ * The shared list-page shell now owns the page title and add action, so this
+ * composable focuses on the model selector, settings rows, and empty-state copy.
+ *
+ * @param models Available models loaded for the tab.
+ * @param selectedModel The currently selected model context, if any.
+ * @param settingsList Settings profiles that belong to the selected model.
+ * @param selectedSettings The currently selected settings profile, used for row highlighting.
+ * @param onModelSelected Callback used when the model context changes.
+ * @param onSettingsSelected Callback used when a settings profile is opened.
+ * @param modifier Modifier applied to the body container.
  */
 @Composable
 fun ModelSettingsListPanel(
@@ -34,59 +53,81 @@ fun ModelSettingsListPanel(
     selectedSettings: ModelSettingsDetails?,
     onModelSelected: (LLMModel?) -> Unit,
     onSettingsSelected: (ModelSettingsDetails) -> Unit,
-    onAddNewSettings: () -> Unit,
-    authState: AuthState.Authenticated,
     modifier: Modifier = Modifier
 ) {
-    Card(modifier = modifier) {
-        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-            // Header
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(4.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+            shape = MaterialTheme.shapes.large
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text("Settings Profiles", style = MaterialTheme.typography.headlineSmall)
-                if (selectedModel != null) {
-                    RequiresAnyPermission(
-                        authState = authState,
-                        permissions = listOf(CommonPermissions.CREATE_LLM_MODEL_SETTINGS, CommonPermissions.MANAGE_LLM_MODEL_SETTINGS)
-                    ) {
-                        FloatingActionButton(
-                            onClick = onAddNewSettings,
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(Icons.Default.Add, "Add new settings profile")
-                        }
-                    }
-                }
+                Text(
+                    text = "Model context",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                ConfigDropdown(
+                    label = "Select Model",
+                    items = models,
+                    selectedItem = selectedModel,
+                    onItemSelected = onModelSelected,
+                    itemText = { it.displayName ?: it.name }
+                )
             }
-            Spacer(modifier = Modifier.height(16.dp))
+        }
 
-            // Model Selector
-            ConfigDropdown(
-                label = "Select Model",
-                items = models,
-                selectedItem = selectedModel,
-                onItemSelected = onModelSelected,
-                itemText = { it.displayName ?: it.name }
-            )
-            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-
-            // Settings List
-            if (selectedModel == null) {
-                Text("Select a model to see its settings profiles.", textAlign = TextAlign.Center)
-            } else if (settingsList.isEmpty()) {
-                Text("No settings profiles found for this model.", textAlign = TextAlign.Center)
-            } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(settingsList) { settingsDetails ->
-                        ModelSettingsListItem(
-                            settingsDetails = settingsDetails,
-                            isSelected = selectedSettings?.settings?.id == settingsDetails.settings.id,
-                            onClick = { onSettingsSelected(settingsDetails) }
-                        )
-                    }
+        if (selectedModel == null) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(vertical = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "Select a model to view its settings profiles.",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        } else if (settingsList.isEmpty()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(vertical = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "No settings profiles found for this model.",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Use the add action in the header to create one.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                settingsList.forEach { settingsDetails ->
+                    ModelSettingsListItem(
+                        settingsDetails = settingsDetails,
+                        isSelected = selectedSettings?.settings?.id == settingsDetails.settings.id,
+                        onClick = { onSettingsSelected(settingsDetails) }
+                    )
                 }
             }
         }
@@ -94,7 +135,11 @@ fun ModelSettingsListPanel(
 }
 
 /**
- * Individual item in the settings list.
+ * Compact card used for a single settings profile row.
+ *
+ * @param settingsDetails Settings profile shown in the row.
+ * @param isSelected Whether the row is visually focused.
+ * @param onClick Callback invoked when the row is activated.
  */
 @Composable
 private fun ModelSettingsListItem(
@@ -105,20 +150,39 @@ private fun ModelSettingsListItem(
     val settings = settingsDetails.settings
 
     Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer
-            else MaterialTheme.colorScheme.surfaceVariant
-        )
+            containerColor = if (isSelected) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerLow
+            }
+        ),
+        elevation = if (isSelected) {
+            CardDefaults.cardElevation(defaultElevation = 4.dp)
+        } else {
+            CardDefaults.cardElevation(defaultElevation = 1.dp)
+        }
     ) {
-        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             Text(
                 text = settings.name,
                 style = MaterialTheme.typography.titleMedium,
+                color = if (isSelected) {
+                    MaterialTheme.colorScheme.onPrimaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
                 modifier = Modifier.weight(1f)
             )
 
-            // Public/Private badge (matches ProviderListItem/ModelsListPanel style)
             if (settingsDetails.isPublic()) {
                 AssistChip(
                     onClick = {},
@@ -127,7 +191,7 @@ private fun ModelSettingsListItem(
                         Icon(
                             imageVector = Icons.Default.Public,
                             contentDescription = null,
-                            modifier = Modifier.size(14.dp)
+                            modifier = Modifier.padding(start = 2.dp)
                         )
                     },
                     colors = AssistChipDefaults.assistChipColors(
@@ -145,7 +209,7 @@ private fun ModelSettingsListItem(
                         Icon(
                             imageVector = Icons.Default.Lock,
                             contentDescription = null,
-                            modifier = Modifier.size(14.dp)
+                            modifier = Modifier.padding(start = 2.dp)
                         )
                     },
                     colors = AssistChipDefaults.assistChipColors(
@@ -157,16 +221,15 @@ private fun ModelSettingsListItem(
                 )
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
-
             Surface(
-                color = MaterialTheme.colorScheme.secondaryContainer,
-                shape = RoundedCornerShape(12.dp)
+                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                shape = RoundedCornerShape(999.dp)
             ) {
                 Text(
                     text = settings.modelType.name,
                     style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                 )
             }
         }
