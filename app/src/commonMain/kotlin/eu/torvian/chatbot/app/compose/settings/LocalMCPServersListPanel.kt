@@ -1,6 +1,5 @@
 package eu.torvian.chatbot.app.compose.settings
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -94,15 +93,14 @@ fun LocalMCPServerListItem(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
+        modifier = modifier.fillMaxWidth(),
+        onClick = onClick,
         color = if (isSelected) {
             MaterialTheme.colorScheme.primaryContainer
         } else {
             MaterialTheme.colorScheme.surfaceContainerLow
         },
-        tonalElevation = if (isSelected) 3.dp else 0.dp,
+        shadowElevation = if (isSelected) 3.dp else 1.dp,
         shape = MaterialTheme.shapes.large
     ) {
         Column(

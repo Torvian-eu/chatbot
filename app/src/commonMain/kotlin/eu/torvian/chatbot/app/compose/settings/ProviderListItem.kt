@@ -31,12 +31,11 @@ fun ProviderListItem(
         onClick = onClick,
         shape = shape,
         color = if (isSelected) {
-            MaterialTheme.colorScheme.primaryContainer
+            MaterialTheme.colorScheme.surfaceContainerHigh
         } else {
             MaterialTheme.colorScheme.surfaceContainerLow
         },
-        tonalElevation = 0.dp,
-        shadowElevation = if (isSelected) 4.dp else 2.dp
+        shadowElevation = if (isSelected) 4.dp else 1.dp
     ) {
         Column(
             modifier = Modifier.padding(14.dp)

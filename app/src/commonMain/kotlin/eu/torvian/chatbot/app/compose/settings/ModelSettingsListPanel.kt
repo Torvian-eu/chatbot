@@ -1,6 +1,5 @@
 package eu.torvian.chatbot.app.compose.settings
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -15,8 +14,6 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -24,7 +21,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ConfigDropdown
@@ -148,24 +144,18 @@ private fun ModelSettingsListItem(
     onClick: () -> Unit
 ) {
     val settings = settingsDetails.settings
+    val shape = MaterialTheme.shapes.large
 
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerLow
-            }
-        ),
-        elevation = if (isSelected) {
-            CardDefaults.cardElevation(defaultElevation = 4.dp)
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick,
+        shape = shape,
+        color = if (isSelected) {
+            MaterialTheme.colorScheme.primaryContainer
         } else {
-            CardDefaults.cardElevation(defaultElevation = 1.dp)
-        }
+            MaterialTheme.colorScheme.surfaceContainerLow
+        },
+        shadowElevation = if (isSelected) 4.dp else 1.dp
     ) {
         Row(
             modifier = Modifier.padding(14.dp),

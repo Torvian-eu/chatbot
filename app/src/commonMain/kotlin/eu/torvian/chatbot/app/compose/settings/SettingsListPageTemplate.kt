@@ -1,13 +1,6 @@
 package eu.torvian.chatbot.app.compose.settings
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
@@ -88,19 +81,13 @@ fun SettingsListPageTemplate(
 
                 HorizontalDivider()
 
-//                Surface(
-//                    modifier = Modifier.fillMaxWidth(),
-//                    color = MaterialTheme.colorScheme.surfaceContainerLow,
-//                    shape = MaterialTheme.shapes.extraLarge
-//                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                        content = content
-                    )
-//                }
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    content = content
+                )
             }
         }
     }
