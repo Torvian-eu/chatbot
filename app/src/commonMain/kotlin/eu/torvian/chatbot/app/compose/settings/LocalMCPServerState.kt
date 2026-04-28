@@ -16,7 +16,7 @@ import eu.torvian.chatbot.common.models.worker.WorkerDto
  * UI state for the MCP Servers tab.
  *
  * @property serverOverviews Aggregate status information for all MCP servers.
- * @property selectedServerOverview Currently selected server in the master-detail UI.
+ * @property selectedServerOverview Currently selected server in the list/details UI.
  * @property selectedServerToolApprovalPreferences Tool approval preferences for the selected server.
  * @property workers Workers registered by the authenticated user, used for dropdown selection.
  * @property dialogState Current dialog state for the MCP servers tab.
