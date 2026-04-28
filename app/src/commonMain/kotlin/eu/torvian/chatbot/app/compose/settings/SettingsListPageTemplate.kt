@@ -88,11 +88,11 @@ fun SettingsListPageTemplate(
 
                 HorizontalDivider()
 
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.surfaceContainerLow,
-                    shape = MaterialTheme.shapes.extraLarge
-                ) {
+//                Surface(
+//                    modifier = Modifier.fillMaxWidth(),
+//                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+//                    shape = MaterialTheme.shapes.extraLarge
+//                ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -100,7 +100,7 @@ fun SettingsListPageTemplate(
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                         content = content
                     )
-                }
+//                }
             }
         }
     }

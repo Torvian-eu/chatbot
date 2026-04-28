@@ -39,7 +39,7 @@ fun ProviderListItem(
         ),
         shape = MaterialTheme.shapes.large,
         elevation = CardDefaults.cardElevation(
-            defaultElevation = if (isSelected) 4.dp else 1.dp
+            defaultElevation = if (isSelected) 4.dp else 2.dp
         )
     ) {
         Column(
@@ -68,7 +68,12 @@ fun ProviderListItem(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false)
                     )
+                }
 
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     // Public/Private badge
                     if (providerDetails.isPublic()) {
                         AssistChip(
@@ -85,7 +90,7 @@ fun ProviderListItem(
                                 Icon(
                                     imageVector = Icons.Default.Public,
                                     contentDescription = null,
-                                    modifier = Modifier.size(14.dp)
+                                    modifier = Modifier.padding(start = 2.dp)
                                 )
                             },
                             colors = AssistChipDefaults.assistChipColors(
@@ -110,7 +115,7 @@ fun ProviderListItem(
                                 Icon(
                                     imageVector = Icons.Default.Lock,
                                     contentDescription = null,
-                                    modifier = Modifier.size(14.dp)
+                                    modifier = Modifier.padding(start = 2.dp)
                                 )
                             },
                             colors = AssistChipDefaults.assistChipColors(
@@ -121,16 +126,15 @@ fun ProviderListItem(
                             border = null
                         )
                     }
-                }
 
-                // API Key status indicator (E5.S4)
-                if (provider.apiKeyId != null) {
-                    Icon(
-                        imageVector = Icons.Default.Key,
-                        contentDescription = "API Key Configured",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
+                    // API Key status indicator (E5.S4)
+                    if (provider.apiKeyId != null) {
+                        Icon(
+                            imageVector = Icons.Default.Key,
+                            contentDescription = "API Key Configured",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
 
