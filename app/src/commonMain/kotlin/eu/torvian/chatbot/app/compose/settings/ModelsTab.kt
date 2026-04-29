@@ -12,16 +12,28 @@ import eu.torvian.chatbot.app.compose.common.ErrorStateDisplay
 import eu.torvian.chatbot.app.compose.common.LoadingStateDisplay
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.AuthState
+import eu.torvian.chatbot.common.models.api.access.LLMModelDetails
 
 /**
- * Models management tab with master-detail layout.
- * Implements Epic 4 user stories: E4.S1-S4.
+ * Models management tab with separate list and details pages.
+ *
+ * The tab remains presentational: it switches between page-sized content while the
+ * route keeps page navigation state and the ViewModel continues to own dialog state.
+ *
+ * @param state Current Models tab state from the route.
+ * @param actions ViewModel-forwarding actions for model CRUD and access flows.
+ * @param authState Authentication state used to gate model creation.
+ * @param onOpenModelDetails Callback invoked when the user opens a model details page.
+ * @param onBackToModelList Callback invoked when the user returns to the model list.
+ * @param modifier Modifier applied to the tab container.
  */
 @Composable
 fun ModelsTab(
     state: ModelsTabState,
     actions: ModelsTabActions,
     authState: AuthState.Authenticated,
+    onOpenModelDetails: (LLMModelDetails) -> Unit,
+    onBackToModelList: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxSize()) {
@@ -46,35 +58,30 @@ fun ModelsTab(
                 val configData = uiState.data
                 val models = configData.models
                 val providers = configData.providers
+                val activeModelDetails = state.selectedModel
 
-                Row(modifier = Modifier.fillMaxSize()) {
-                    // Master: Models List
-                    ModelsListPanel(
-                        models = models,
-                        selectedModel = state.selectedModel,
-                        onModelSelected = { actions.onSelectModel(it) },
-                        onAddNewModel = { actions.onStartAddingNewModel() },
-                        authState = authState,
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                    )
-
-                    // Detail: Model Details/Edit
-                    ModelDetailPanel(
-                        modelDetails = state.selectedModel,
+                if (activeModelDetails != null) {
+                    ModelDetailsPage(
+                        modelDetails = activeModelDetails,
+                        onBackToList = onBackToModelList,
                         onEditModel = { actions.onStartEditingModel(it) },
-                        onDeleteModel = { model ->
-                            actions.onStartDeletingModel(model)
-                        },
+                        onDeleteModel = { actions.onStartDeletingModel(it) },
                         onMakePublic = { actions.onMakeModelPublic(it) },
                         onMakePrivate = { actions.onMakeModelPrivate(it) },
                         onManageAccess = { actions.onOpenManageAccessDialog(it) },
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .padding(start = 16.dp),
-                        providers = providers
+                        providers = providers,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    ModelsListPage(
+                        models = models,
+                        selectedModel = activeModelDetails,
+                        onModelSelected = { modelDetails ->
+                            onOpenModelDetails(modelDetails)
+                        },
+                        onAddNewModel = { actions.onStartAddingNewModel() },
+                        authState = authState,
+                        modifier = Modifier.fillMaxSize()
                     )
                 }
             }
