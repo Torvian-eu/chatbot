@@ -2,85 +2,55 @@ package eu.torvian.chatbot.app.compose.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import eu.torvian.chatbot.app.compose.common.EmptyStateDisplay
-import eu.torvian.chatbot.app.compose.permissions.RequiresAnyPermission
-import eu.torvian.chatbot.app.repository.AuthState
-import eu.torvian.chatbot.common.api.CommonPermissions
 import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
 
 /**
- * Master panel showing the list of providers with selection support.
+ * Body content for the providers list page.
+ *
+ * The shared list-page shell now owns the page title and add action, so this
+ * composable focuses on the provider rows and empty-state presentation only.
+ *
+ * @param providers Providers to render in the list.
+ * @param selectedProvider Currently focused provider, used only for row highlighting.
+ * @param onProviderSelected Callback invoked when the user opens a provider detail page.
+ * @param modifier Modifier applied to the body container.
  */
 @Composable
 fun ProvidersListPanel(
     providers: List<LLMProviderDetails>,
     selectedProvider: LLMProviderDetails?,
     onProviderSelected: (LLMProviderDetails) -> Unit,
-    onAddNewProvider: () -> Unit,
-    authState: AuthState,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier) {
-        // Header with Add button
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Providers (${providers.size})",
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-
-            RequiresAnyPermission(
-                authState = authState,
-                permissions = listOf(CommonPermissions.CREATE_LLM_PROVIDER, CommonPermissions.MANAGE_LLM_PROVIDERS)
-            ) {
-                FloatingActionButton(
-                    onClick = onAddNewProvider,
-                    modifier = Modifier.size(40.dp),
-                    containerColor = MaterialTheme.colorScheme.primary
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "Add new provider",
-                        tint = MaterialTheme.colorScheme.onPrimary
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
+    Column(modifier = modifier.fillMaxSize()) {
         if (providers.isEmpty()) {
-            EmptyStateDisplay(
-                message = "No providers configured yet.\nClick the + button to add your first provider.",
-                modifier = Modifier.fillMaxSize()
-            )
-        } else {
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.Center
             ) {
-                items(providers) { provider ->
+                Text(
+                    text = "No providers configured yet.",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Use the add action in the header to create your first provider.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                providers.forEach { provider ->
                     ProviderListItem(
                         providerDetails = provider,
                         isSelected = selectedProvider?.provider?.id == provider.provider.id,

@@ -1,6 +1,5 @@
 package eu.torvian.chatbot.app.compose.settings
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Key
@@ -26,23 +25,20 @@ fun ProviderListItem(
     modifier: Modifier = Modifier
 ) {
     val provider = providerDetails.provider
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable { onClick() },
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surface
-            }
-        ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = if (isSelected) 4.dp else 2.dp
-        )
+    val shape = MaterialTheme.shapes.large
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        onClick = onClick,
+        shape = shape,
+        color = if (isSelected) {
+            MaterialTheme.colorScheme.surfaceContainerHigh
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        },
+        shadowElevation = if (isSelected) 4.dp else 1.dp
     ) {
         Column(
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier.padding(14.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -67,17 +63,29 @@ fun ProviderListItem(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false)
                     )
+                }
 
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     // Public/Private badge
                     if (providerDetails.isPublic()) {
                         AssistChip(
                             onClick = {},
-                            label = { Text("Public", style = MaterialTheme.typography.labelSmall) },
+                            label = {
+                                Text(
+                                    text = "Public",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                )
+                            },
                             leadingIcon = {
                                 Icon(
                                     imageVector = Icons.Default.Public,
                                     contentDescription = null,
-                                    modifier = Modifier.size(14.dp)
+                                    modifier = Modifier.padding(start = 2.dp)
                                 )
                             },
                             colors = AssistChipDefaults.assistChipColors(
@@ -90,12 +98,19 @@ fun ProviderListItem(
                     } else {
                         AssistChip(
                             onClick = {},
-                            label = { Text("Private", style = MaterialTheme.typography.labelSmall) },
+                            label = {
+                                Text(
+                                    text = "Private",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            },
                             leadingIcon = {
                                 Icon(
                                     imageVector = Icons.Default.Lock,
                                     contentDescription = null,
-                                    modifier = Modifier.size(14.dp)
+                                    modifier = Modifier.padding(start = 2.dp)
                                 )
                             },
                             colors = AssistChipDefaults.assistChipColors(
@@ -106,16 +121,15 @@ fun ProviderListItem(
                             border = null
                         )
                     }
-                }
 
-                // API Key status indicator (E5.S4)
-                if (provider.apiKeyId != null) {
-                    Icon(
-                        imageVector = Icons.Default.Key,
-                        contentDescription = "API Key Configured",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
+                    // API Key status indicator (E5.S4)
+                    if (provider.apiKeyId != null) {
+                        Icon(
+                            imageVector = Icons.Default.Key,
+                            contentDescription = "API Key Configured",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
 
@@ -125,10 +139,12 @@ fun ProviderListItem(
                 text = provider.type.name,
                 style = MaterialTheme.typography.labelMedium,
                 color = if (isSelected) {
-                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant
-                }
+                },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
 
             if (provider.description.isNotBlank()) {
@@ -137,7 +153,7 @@ fun ProviderListItem(
                     text = provider.description,
                     style = MaterialTheme.typography.bodySmall,
                     color = if (isSelected) {
-                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.82f)
                     } else {
                         MaterialTheme.colorScheme.onSurfaceVariant
                     },

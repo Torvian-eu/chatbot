@@ -4,8 +4,6 @@ import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -32,8 +30,6 @@ import kotlinx.datetime.toLocalDateTime
 fun LocalMCPServerDetailPanel(
     serverOverview: LocalMCPServerOverview?,
     toolApprovalPreferences: DataState<RepositoryError, List<UserToolApprovalPreference>>,
-    onEditServer: (LocalMCPServerOverview) -> Unit,
-    onDeleteServer: (LocalMCPServerOverview) -> Unit,
     onTestConnection: (LocalMCPServerOverview) -> Unit,
     onRefreshTools: (LocalMCPServerOverview) -> Unit,
     onStartServer: (LocalMCPServerOverview) -> Unit,
@@ -77,12 +73,7 @@ fun LocalMCPServerDetailPanel(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(16.dp)
-                    .verticalScroll(rememberScrollState())
             ) {
-                ServerHeader(serverOverview = serverOverview, onEdit = onEditServer, onDelete = onDeleteServer)
-
-                Spacer(modifier = Modifier.height(16.dp))
-
                 ServerDescription(server = server)
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -122,35 +113,6 @@ fun LocalMCPServerDetailPanel(
                     toolApprovalPreferences = toolApprovalPreferences,
                     onDelete = onDeleteToolApprovalPreference
                 )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ServerHeader(
-    serverOverview: LocalMCPServerOverview,
-    onEdit: (LocalMCPServerOverview) -> Unit,
-    onDelete: (LocalMCPServerOverview) -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = serverOverview.serverConfig.name,
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.weight(1f)
-        )
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            IconButton(onClick = { onEdit(serverOverview) }) {
-                Icon(imageVector = Icons.Default.Edit, contentDescription = "Edit Server")
-            }
-            IconButton(onClick = { onDelete(serverOverview) }) {
-                Icon(imageVector = Icons.Default.Delete, contentDescription = "Delete Server", tint = MaterialTheme.colorScheme.error)
             }
         }
     }
