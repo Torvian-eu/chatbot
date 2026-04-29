@@ -1,5 +1,8 @@
 package eu.torvian.chatbot.app.compose.settings
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
@@ -8,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import eu.torvian.chatbot.app.compose.topbar.TopBarContentProvider
 import eu.torvian.chatbot.app.repository.AuthState
 
 /**
@@ -30,24 +34,49 @@ fun SettingsScreen(
     // Incremented on every sidebar click so routes can reset to list view on re-selection.
     var categoryResetSignal by rememberSaveable { mutableStateOf(0) }
 
+    // --- Local UI State for Sidebar Collapse ---
+    var isSidebarCollapsed by rememberSaveable { mutableStateOf(false) }
+
+    // Set top bar content when this screen is active using the provider
+    TopBarContentProvider(
+        content = { userMenu, navItems ->
+            SettingsTopBarContent(
+                userMenu = userMenu,
+                navItems = navItems,
+                isSidebarCollapsed = isSidebarCollapsed,
+                onToggleSidebar = { isSidebarCollapsed = !isSidebarCollapsed }
+            )
+        }
+    )
+
     Row(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        SettingsSidebar(
-            selectedCategory = selectedCategory,
-            onCategorySelected = { category ->
-                selectedCategory = category
-                categoryResetSignal++ // bump signal even when the same category is tapped
-                breadcrumbSegments = listOf("Settings", category.displayLabel)
-            }
-        )
+        // Collapsible sidebar with AnimatedVisibility
+        AnimatedVisibility(
+            modifier = Modifier.weight(0.30f),
+            visible = !isSidebarCollapsed,
+            enter = slideInHorizontally(),
+            exit = slideOutHorizontally()
+        ) {
+            Row(modifier = Modifier.fillMaxHeight()) {
+                SettingsSidebar(
+                    selectedCategory = selectedCategory,
+                    onCategorySelected = { category ->
+                        selectedCategory = category
+                        categoryResetSignal++ // bump signal even when the same category is tapped
+                        breadcrumbSegments = listOf("Settings", category.displayLabel)
+                    }
+                )
 
-        VerticalDivider(
-            modifier = Modifier.fillMaxHeight(),
-            thickness = 1.dp
-        )
+                VerticalDivider(
+                    modifier = Modifier.fillMaxHeight(),
+                    thickness = 1.dp
+                )
+            }
+        }
 
         Column(
             modifier = Modifier
