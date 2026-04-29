@@ -20,15 +20,18 @@ typealias TopBarContent = @Composable RowScope.(
  */
 interface TopBarContentController {
     /**
-     * Set the content to display in the top bar actions area.
+     * Sets the content and returns a generation handle.
+     * Store this handle to later clear content only if still current.
      * @param content A composable lambda with RowScope receiver for top bar actions.
+     * @return A generation ID that can be used to verify this content is still current.
      */
-    fun setContent(content: TopBarContent)
+    fun setContent(content: TopBarContent): Int
 
     /**
-     * Clear the top bar content (show nothing in the actions area).
+     * Clears content only if the provided generation matches the current content's generation.
+     * @param generation The generation ID returned by setContent.
      */
-    fun clearContent()
+    fun clearContent(generation: Int)
 }
 
 /**
