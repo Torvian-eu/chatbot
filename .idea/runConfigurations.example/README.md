@@ -1,0 +1,1 @@
+Edit these files to your liking and copy them to .idea/runConfigurations/ to create your own run configurations for the server, worker, and desktop application. You can then run these configurations directly from IntelliJ IDEA for easier development and debugging.
