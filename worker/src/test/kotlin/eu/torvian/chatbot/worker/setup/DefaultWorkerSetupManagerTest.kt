@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.worker.setup
 
+import arrow.core.Either
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -150,7 +151,7 @@ class DefaultWorkerSetupManagerTest {
             api = api,
             displayNameProvider = object : WorkerSetupDisplayNameProvider {
                 override suspend fun resolveDisplayName(defaultDisplayName: String) =
-                    arrow.core.Either.Right(customDisplayName)
+                    Either.Right(customDisplayName)
             }
         )
 
@@ -176,16 +177,21 @@ class DefaultWorkerSetupManagerTest {
         api: FakeWorkerSetupApi,
         displayNameProvider: WorkerSetupDisplayNameProvider = object : WorkerSetupDisplayNameProvider {
             override suspend fun resolveDisplayName(defaultDisplayName: String) =
-                arrow.core.Either.Right(defaultDisplayName)
+                Either.Right(defaultDisplayName)
+        },
+        serverUrlProvider: WorkerSetupServerUrlProvider = object : WorkerSetupServerUrlProvider {
+            override suspend fun resolveServerUrl(defaultServerUrl: String) =
+                Either.Right(defaultServerUrl)
         }
     ): DefaultWorkerSetupManager {
         return DefaultWorkerSetupManager(
             configLoader = configLoader,
             secretsStore = FileSecretsStore(),
             credentialProvider = object : WorkerSetupCredentialProvider {
-                override suspend fun resolveCredentials() = arrow.core.Either.Right(credentials)
+                override suspend fun resolveCredentials() = Either.Right(credentials)
             },
             displayNameProvider = displayNameProvider,
+            serverUrlProvider = serverUrlProvider,
             setupApiFactory = { api }
         )
     }
@@ -201,13 +207,13 @@ class DefaultWorkerSetupManagerTest {
         var logoutAccessToken: String? = null
         val loginIssuedToken: String = "setup-login-token"
 
-        override suspend fun login(username: String, password: String): arrow.core.Either<WorkerSetupError, String> {
+        override suspend fun login(username: String, password: String): Either<WorkerSetupError, String> {
             loginUsername = username
             loginPassword = password
             if (loginShouldFail) {
-                return arrow.core.Either.Left(WorkerSetupError.LoginFailed("invalid credentials"))
+                return Either.Left(WorkerSetupError.LoginFailed("invalid credentials"))
             }
-            return arrow.core.Either.Right(loginIssuedToken)
+            return Either.Right(loginIssuedToken)
         }
 
         override suspend fun registerWorker(
@@ -215,19 +221,19 @@ class DefaultWorkerSetupManagerTest {
             workerUid: String,
             displayName: String,
             certificatePem: String
-        ): arrow.core.Either<WorkerSetupError, Unit> {
+        ): Either<WorkerSetupError, Unit> {
             if (accessToken != loginIssuedToken) {
-                return arrow.core.Either.Left(WorkerSetupError.WorkerRegistrationFailed("unexpected token"))
+                return Either.Left(WorkerSetupError.WorkerRegistrationFailed("unexpected token"))
             }
             registerWorkerUid = workerUid
             registerDisplayName = displayName
             registerCertificatePem = certificatePem
-            return arrow.core.Either.Right(Unit)
+            return Either.Right(Unit)
         }
 
-        override suspend fun logout(accessToken: String): arrow.core.Either<WorkerSetupError, Unit> {
+        override suspend fun logout(accessToken: String): Either<WorkerSetupError, Unit> {
             logoutAccessToken = accessToken
-            return arrow.core.Either.Right(Unit)
+            return Either.Right(Unit)
         }
     }
 }

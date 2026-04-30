@@ -19,11 +19,11 @@ sealed interface WorkerSetupError {
     data class DisplayNameUnavailable(val reason: String) : WorkerSetupError
 
     /**
-     * Raised when the worker setup is started without a server URL, but the merged worker config cannot supply one.
+     * Raised when setup cannot obtain a server URL from environment variables or interactive prompt.
      *
-     * @property configPath Config directory that would have been used.
+     * @property reason Human-readable explanation for why the server URL could not be resolved.
      */
-    data class ServerUrlMissing(val configPath: String) : WorkerSetupError
+    data class ServerUrlUnavailable(val reason: String) : WorkerSetupError
 
     /**
      * Raised when the setup config layer exists but cannot be read.
@@ -106,4 +106,3 @@ sealed interface WorkerSetupError {
      */
     data class FileWriteFailed(val path: String, val reason: String) : WorkerSetupError
 }
-
