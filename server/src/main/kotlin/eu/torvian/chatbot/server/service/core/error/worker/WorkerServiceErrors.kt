@@ -19,4 +19,42 @@ sealed interface AuthenticateWorkerError {
     data class InvalidSignature(val reason: String) : AuthenticateWorkerError
 }
 
+/**
+ * Logical errors for worker update operations.
+ */
+sealed interface UpdateWorkerError {
+    /**
+     * The worker was not found.
+     *
+     * @property workerId Missing worker identifier.
+     */
+    data class NotFound(val workerId: Long) : UpdateWorkerError
 
+    /**
+     * The authenticated user does not own this worker.
+     *
+     * @property workerId Target worker identifier.
+     * @property ownerUserId Actual owner of the worker.
+     */
+    data class Forbidden(val workerId: Long, val ownerUserId: Long) : UpdateWorkerError
+}
+
+/**
+ * Logical errors for worker delete operations.
+ */
+sealed interface DeleteWorkerError {
+    /**
+     * The worker was not found.
+     *
+     * @property workerId Missing worker identifier.
+     */
+    data class NotFound(val workerId: Long) : DeleteWorkerError
+
+    /**
+     * The authenticated user does not own this worker.
+     *
+     * @property workerId Target worker identifier.
+     * @property ownerUserId Actual owner of the worker.
+     */
+    data class Forbidden(val workerId: Long, val ownerUserId: Long) : DeleteWorkerError
+}

@@ -63,6 +63,30 @@ interface WorkerDao {
     suspend fun updateLastSeen(workerId: Long, lastSeenAtEpochMs: Long): Either<WorkerError.NotFound, Unit>
 
     /**
+     * Updates a worker's display name and allowed scopes.
+     *
+     * Note: workerUid and certificateFingerprint are immutable after creation.
+     *
+     * @param id Worker identifier.
+     * @param displayName New display name.
+     * @param allowedScopes New list of allowed scopes.
+     * @return Either not-found error or the updated [WorkerEntity].
+     */
+    suspend fun updateWorker(
+        id: Long,
+        displayName: String,
+        allowedScopes: List<String>
+    ): Either<WorkerError.NotFound, WorkerEntity>
+
+    /**
+     * Deletes a worker by identifier.
+     *
+     * @param id Worker identifier.
+     * @return Either not-found error or Unit when deleted.
+     */
+    suspend fun deleteWorker(id: Long): Either<WorkerError.NotFound, Unit>
+
+    /**
      * Persists a one-time challenge used for proof-of-possession.
      *
      * @param workerId Worker identifier.
@@ -108,4 +132,3 @@ interface WorkerDao {
      */
     suspend fun getWorkersByOwnerId(ownerUserId: Long): List<WorkerEntity>
 }
-

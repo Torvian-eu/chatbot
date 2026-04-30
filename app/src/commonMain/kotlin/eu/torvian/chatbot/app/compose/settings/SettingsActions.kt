@@ -4,12 +4,14 @@ import eu.torvian.chatbot.app.domain.contracts.GrantAccessFormState
 import eu.torvian.chatbot.app.domain.contracts.ProviderFormState
 import eu.torvian.chatbot.app.domain.contracts.ModelFormState
 import eu.torvian.chatbot.app.domain.contracts.ModelSettingsFormState
+import eu.torvian.chatbot.app.domain.contracts.WorkersFormState
 import eu.torvian.chatbot.common.models.api.access.LLMModelDetails
 import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
 import eu.torvian.chatbot.common.models.api.access.ModelSettingsDetails
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.ModelSettings
+import eu.torvian.chatbot.common.models.worker.WorkerDto
 
 /**
  * Action callbacks for the Providers tab.
@@ -88,4 +90,17 @@ interface ModelSettingsConfigTabActions {
     fun onUpdateGrantAccessForm(form: GrantAccessFormState)
     fun onGrantSettingsAccess(settingsId: Long, groupId: Long, accessMode: String)
     fun onRevokeSettingsAccess(settingsId: Long, groupId: Long, accessMode: String)
+}
+
+/**
+ * Action callbacks for the Workers tab.
+ */
+interface WorkersTabActions {
+    fun onLoadWorkers()
+    fun onStartEditingWorker(worker: WorkerDto)
+    fun onStartDeletingWorker(worker: WorkerDto)
+    fun onUpdateWorkerForm(update: (WorkersFormState) -> WorkersFormState)
+    fun onSaveWorker()
+    fun onDeleteWorker(workerId: Long)
+    fun onCancelDialog()
 }

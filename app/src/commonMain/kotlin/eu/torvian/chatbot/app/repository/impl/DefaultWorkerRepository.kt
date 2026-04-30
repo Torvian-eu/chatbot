@@ -55,4 +55,30 @@ class DefaultWorkerRepository(
             }
         )
     }
+
+    override suspend fun updateWorker(
+        id: Long,
+        displayName: String,
+        allowedScopes: List<String>
+    ): Either<RepositoryError, Unit> {
+        return workerApi.updateWorker(id, displayName, allowedScopes)
+            .mapLeft { apiResourceError ->
+                apiResourceError.toRepositoryError("Failed to update worker")
+            }
+            .map { _ ->
+                // Refresh the worker list to reflect the changes
+                loadWorkers()
+            }
+    }
+
+    override suspend fun deleteWorker(id: Long): Either<RepositoryError, Unit> {
+        return workerApi.deleteWorker(id)
+            .mapLeft { apiResourceError ->
+                apiResourceError.toRepositoryError("Failed to delete worker")
+            }
+            .onRight {
+                // Refresh the worker list to reflect the removal
+                loadWorkers()
+            }
+    }
 }

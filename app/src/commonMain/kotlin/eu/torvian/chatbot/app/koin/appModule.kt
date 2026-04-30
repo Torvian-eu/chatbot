@@ -15,6 +15,7 @@ import eu.torvian.chatbot.app.viewmodel.ModelConfigViewModel
 import eu.torvian.chatbot.app.viewmodel.ModelSettingsViewModel
 import eu.torvian.chatbot.app.viewmodel.ProviderConfigViewModel
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
+import eu.torvian.chatbot.app.viewmodel.WorkersViewModel
 import eu.torvian.chatbot.app.viewmodel.admin.UserGroupManagementViewModel
 import eu.torvian.chatbot.app.viewmodel.admin.UserManagementViewModel
 import eu.torvian.chatbot.app.viewmodel.auth.AuthViewModel
@@ -378,6 +379,12 @@ fun appModule(config: AppConfiguration): Module = module {
             serverManager = get(),
             mcpToolRepository = get(),
             toolRepository = get(),
+            workerRepository = get(),
+            notificationService = get()
+        )
+    }
+    viewModel {
+        WorkersViewModel(
             workerRepository = get(),
             notificationService = get()
         )
