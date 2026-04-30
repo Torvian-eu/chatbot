@@ -536,9 +536,6 @@ app/src/commonMain/kotlin/eu/torvian/chatbot/app/  # Common code for all app tar
 │   │   ├── LocalMCPServerManagerImpl.kt # Implementation for local MCP server manager
 │   │   ├── LocalMCPServerOverview.kt # Data class for aggregate server status
 │   │   ├── LocalMCPServerProcessManager.kt # Interface for platform-independent process control
-│   │   ├── LocalMCPToolCallMediator.kt # Interface for LLM-to-MCP tool call mediation
-│   │   ├── LocalMCPToolCallMediatorDummy.kt # Dummy implementation for platforms not supporting local MCP tool calls
-│   │   ├── LocalMCPToolCallMediatorImpl.kt # Implementation for local MCP tool call mediation
 │   │   ├── MCPClient.kt # Data class representing active MCP client connections
 │   │   ├── MCPClientService.kt # Interface for managing MCP client connections
 │   │   ├── MCPClientServiceError.kt # Error hierarchy for MCP client service operations
