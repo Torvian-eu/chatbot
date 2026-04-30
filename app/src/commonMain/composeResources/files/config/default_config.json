@@ -9,7 +9,7 @@
 
   "network": {
     // The base URL of the Chatbot Server (e.g. https://yourserver.com:8443)
-    "serverUrl": "https://localhost:8443"
+    "serverUrl": "http://localhost:8080"
   },
 
   "storage": {

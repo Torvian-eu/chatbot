@@ -5,7 +5,7 @@
     and contains settings specific to the local development environment.
   */
   "network": {
-    "serverUrl": "https://localhost:8443"
+    "serverUrl": "http://localhost:8080"
   },
   "storage": {
     "dataDir": "data-dev",

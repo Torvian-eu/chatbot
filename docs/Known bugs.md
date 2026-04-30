@@ -37,3 +37,6 @@ Suggested fix: Remove the tab for WasmJs target.
 
 ## MCP Server connection timeout after 60 seconds
 - Write test case that reproduces the issue and fix it.
+
+## Updating LLM provider API key can cause issues
+- observed behavior: When the user updates the API key for an LLM provider, it can cause the old key to stay in the database. Need to investigate further and fix the issue.

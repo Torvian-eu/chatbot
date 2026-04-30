@@ -2,28 +2,14 @@
 
 This module runs the standalone worker process that authenticates against the server using worker service tokens.
 
-## What phase 3 includes
-
-- tries an existing persisted access token first;
-- when no valid token is available, performs certificate-based challenge-response;
-- persists newly issued token;
-- automatically refreshes token before expiry.
-
-## What phase 6 adds
-
-- a `--setup` mode for initial worker provisioning;
-- automatic generation of a self-signed certificate and private key into `secrets.json` when needed;
-- writing setup overrides to `setup.json`;
-- register the worker with the server during setup, using the generated certificate for authentication.
-
 ## Configuration
 
-Use a layered config directory, similar to the server module:
+Uses a layered config directory, similar to the server module:
 
 - `application.json` (required): base defaults and non-secret settings.
 - `setup.json` (optional): setup/runtime overrides written by `--setup`.
 - `env-mapping.json` (optional): maps config keys to environment variable names.
-- `secrets.json`: certificate and private key material used by worker auth.
+- `secrets.json`: certificate private key used by worker auth.
 
 See `worker/dev-config-sample/` for an example set.
 
@@ -42,23 +28,22 @@ Layer precedence (highest wins):
 
 All worker fields can be supplied via environment variables through `env-mapping.json`.
 
-For setup mode, pass `--setup` and, when merged config does not already provide a server URL, also pass `--server-url=<server-base-url>`.
-
 ## Run
 
 ```powershell
-./gradlew worker:run --args="--config=./worker/dev-config-sample --once"
+./gradlew worker:run --args="--config=./worker/dev-config-sample"
 ```
-
-Use `--once` to authenticate and exit, or run without `--once` to keep refreshing tokens in a loop.
+For setup mode, pass `--setup`.
 
 ### Initial setup
-Set the `CHATBOT_WORKER_SETUP_USERNAME` and `CHATBOT_WORKER_SETUP_PASSWORD` environment variables to the credentials of an existing user with permissions to register workers, then run with `--setup`:
-```powershell
-$env:CHATBOT_WORKER_SETUP_USERNAME="admin"
-$env:CHATBOT_WORKER_SETUP_PASSWORD="Qazxsw321!"
-./gradlew worker:run --args="--setup --config=./worker/dev-config-sample --server-url=https://localhost:8443/"
-```
+
+The setup process is required to register the worker with the server and generate the necessary credentials for authentication. This only needs to be done once per worker instance.
+The setup process can be run with manual user input from the command line, or it can be automated using environment variables. The following environment variables can be used to for automated setup:
+- CHATBOT_WORKER_CONFIG_DIR: The directory to write the generated credentials and config overrides to (e.g., ./config).
+- CHATBOT_WORKER_SETUP_SERVER_URL: The URL of the server to register with (e.g., http://localhost:8080/).
+- CHATBOT_WORKER_SETUP_USERNAME: The username of an existing user with permissions to register workers.
+- CHATBOT_WORKER_SETUP_PASSWORD: The password of the user.
+- CHATBOT_WORKER_SETUP_DISPLAY_NAME: The display name for the worker to register (e.g., "My Worker").
 
 ## Test
 

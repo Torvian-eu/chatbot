@@ -1,7 +1,6 @@
 package eu.torvian.chatbot.worker.setup
 
 import arrow.core.Either
-import arrow.core.left
 import arrow.core.raise.either
 import arrow.core.right
 import eu.torvian.chatbot.worker.config.AppConfigDto
@@ -33,6 +32,7 @@ import java.util.UUID
  * worker identity material.
  * @property credentialProvider Source used to resolve setup-time user credentials.
  * @property displayNameProvider Source used to resolve the worker display name during setup.
+ * @property serverUrlProvider Source used to resolve the server URL during setup.
  * @property setupApiFactory Factory that creates the server API client for a given server URL.
  */
 class DefaultWorkerSetupManager(
@@ -41,6 +41,7 @@ class DefaultWorkerSetupManager(
     private val certificateService: WorkerCertificateService = WorkerCertificateService(),
     private val credentialProvider: WorkerSetupCredentialProvider = DefaultWorkerSetupCredentialProvider(),
     private val displayNameProvider: WorkerSetupDisplayNameProvider = DefaultWorkerSetupDisplayNameProvider(),
+    private val serverUrlProvider: WorkerSetupServerUrlProvider = DefaultWorkerSetupServerUrlProvider(),
     private val pathResolver: PathResolver = PathResolver(),
     private val setupApiFactory: (String) -> WorkerSetupApi = { serverUrl ->
         KtorWorkerSetupApi(createWorkerSetupHttpClient(serverUrl))
@@ -66,7 +67,7 @@ class DefaultWorkerSetupManager(
         val normalizedConfigDir = configDir.toAbsolutePath().normalize()
         logger.info("Worker setup started (configDir={})", normalizedConfigDir)
 
-        val serverUrl = resolveServerUrl(serverUrlOverride, mergedConfig, normalizedConfigDir).bind()
+        val serverUrl = resolveServerUrl(serverUrlOverride, mergedConfig).bind()
         val uid = resolveWorkerUid(mergedConfig).bind()
         val defaultDisplayName = mergedConfig.worker?.identity?.displayName?.trim()?.takeIf { it.isNotBlank() } ?: "my-worker"
         val displayName = displayNameProvider.resolveDisplayName(defaultDisplayName).bind()
@@ -207,18 +208,17 @@ class DefaultWorkerSetupManager(
         generated
     }
 
-    private fun resolveServerUrl(
+    private suspend fun resolveServerUrl(
         serverUrlOverride: String?,
-        mergedConfig: AppConfigDto,
-        configDir: Path
+        mergedConfig: AppConfigDto
     ): Either<WorkerSetupError, String> {
+        // Determine default: override takes precedence, then configured value, then a sensible fallback
         val override = serverUrlOverride?.trim()?.takeIf { it.isNotBlank() }
-        if (override != null) return override.right()
-
         val configured = mergedConfig.worker?.server?.baseUrl?.trim()?.takeIf { it.isNotBlank() }
-        if (configured != null) return configured.right()
+        val defaultServerUrl = override ?: configured ?: "http://localhost:8080/"
 
-        return WorkerSetupError.ServerUrlMissing(configDir.toString()).left()
+        // Always call the provider so user can edit the default on the command line
+        return serverUrlProvider.resolveServerUrl(defaultServerUrl)
     }
 
     private fun resolveWorkerUid(mergedConfig: AppConfigDto): Either<WorkerSetupError, String> {

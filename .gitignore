@@ -9,6 +9,8 @@ build/
 .idea/jarRepositories.xml
 .idea/compiler.xml
 .idea/libraries/
+.idea/runConfigurations
+.idea/artifacts
 *.iws
 *.iml
 *.ipr
@@ -61,3 +63,9 @@ deploy/server/dist
 deploy/wasm-client
 deploy/caddy/Caddyfile
 deploy/server/docker-compose.yml
+
+### Custom ignore rules
+/.github/copilot-instructions.md
+/.github/git-commit-instructions.md
+/.junie
+/.serena
