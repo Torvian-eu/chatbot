@@ -120,6 +120,13 @@ fun SettingsScreen(
                     ) { breadcrumbs ->
                         breadcrumbSegments = breadcrumbs
                     }
+
+                    SettingsCategory.Workers -> WorkersTabRoute(
+                        authState = authState,
+                        categoryResetSignal = categoryResetSignal
+                    ) { breadcrumbs ->
+                        breadcrumbSegments = breadcrumbs
+                    }
                 }
             }
         }
