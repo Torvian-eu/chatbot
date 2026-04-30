@@ -20,6 +20,7 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.greaterEq
 import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
@@ -106,6 +107,36 @@ class WorkerDaoExposed(
             }
         }
 
+    override suspend fun updateWorker(
+        id: Long,
+        displayName: String,
+        allowedScopes: List<String>
+    ): Either<WorkerError.NotFound, WorkerEntity> =
+        transactionScope.transaction {
+            either {
+                val allowedScopesJson = Json.encodeToString(allowedScopes.distinct())
+                val updated = WorkersTable.update({ WorkersTable.id eq id }) {
+                    it[WorkersTable.displayName] = displayName
+                    it[WorkersTable.allowedScopesJson] = allowedScopesJson
+                }
+                ensure(updated > 0) { WorkerError.NotFound(id) }
+
+                // Fetch and return the updated entity
+                WorkersTable.selectAll().where { WorkersTable.id eq id }
+                    .singleOrNull()
+                    ?.toWorkerEntity()
+                    ?: throw IllegalStateException("Worker not found after update")
+            }
+        }
+
+    override suspend fun deleteWorker(id: Long): Either<WorkerError.NotFound, Unit> =
+        transactionScope.transaction {
+            either {
+                val deleted = WorkersTable.deleteWhere { WorkersTable.id eq id }
+                ensure(deleted > 0) { WorkerError.NotFound(id) }
+            }
+        }
+
     override suspend fun createChallenge(
         workerId: Long,
         challengeId: String,
@@ -161,5 +192,4 @@ class WorkerDaoExposed(
                 .map { it.toWorkerEntity() }
         }
 }
-
 

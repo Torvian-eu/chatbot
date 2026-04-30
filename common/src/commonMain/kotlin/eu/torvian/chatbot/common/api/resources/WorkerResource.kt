@@ -19,4 +19,15 @@ class WorkerResource(val parent: Api = Api()) {
      */
     @Resource("register")
     class Register(val parent: WorkerResource = WorkerResource())
+
+    /**
+     * Resource for a specific worker by ID.
+     *
+     * Endpoint: /api/v1/workers/{id}
+     *
+     * @property parent Parent worker resource.
+     * @property id Worker identifier.
+     */
+    @Resource("{id}")
+    class Id(val parent: WorkerResource = WorkerResource(), val id: Long)
 }

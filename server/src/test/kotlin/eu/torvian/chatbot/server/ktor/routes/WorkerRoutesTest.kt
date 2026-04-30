@@ -8,6 +8,7 @@ import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.api.worker.RegisterWorkerRequest
 import eu.torvian.chatbot.common.models.api.worker.RegisterWorkerResponse
+import eu.torvian.chatbot.common.models.api.worker.UpdateWorkerRequest
 import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.server.data.entities.UserEntity
 import eu.torvian.chatbot.server.service.security.CertificateService
@@ -256,6 +257,196 @@ class WorkerRoutesTest {
         assertEquals(HttpStatusCode.Unauthorized, response.status)
     }
 
+    @Test
+    fun `PATCH workers id - owner can update their worker`() = workerTestApplication {
+        val authToken = authHelper.createUserAndGetToken(testUser)
+        val fixture = createCertificateFixture()
+
+        // Register a worker first
+        val registerResponse = client.post(href(WorkerResource.Register())) {
+            authenticate(authToken)
+            contentType(ContentType.Application.Json)
+            setBody(
+                RegisterWorkerRequest(
+                    workerUid = "worker-update-test",
+                    displayName = "original-name",
+                    certificatePem = fixture.certificatePem,
+                    allowedScopes = listOf("messages:read")
+                )
+            )
+        }
+        assertEquals(HttpStatusCode.Created, registerResponse.status)
+        val createdWorker = registerResponse.body<RegisterWorkerResponse>().worker
+
+        // Update the worker
+        val updateResponse = client.patch(href(WorkerResource.Id(id = createdWorker.id))) {
+            authenticate(authToken)
+            contentType(ContentType.Application.Json)
+            setBody(
+                UpdateWorkerRequest(
+                    displayName = "updated-name",
+                    allowedScopes = listOf("messages:read", "messages:write")
+                )
+            )
+        }
+
+        assertEquals(HttpStatusCode.OK, updateResponse.status)
+        val updatedWorker = updateResponse.body<eu.torvian.chatbot.common.models.worker.WorkerDto>()
+        assertEquals("updated-name", updatedWorker.displayName)
+        assertEquals(listOf("messages:read", "messages:write"), updatedWorker.allowedScopes)
+        // Immutable fields should remain unchanged
+        assertEquals(createdWorker.workerUid, updatedWorker.workerUid)
+        assertEquals(createdWorker.certificateFingerprint, updatedWorker.certificateFingerprint)
+    }
+
+    @Test
+    fun `PATCH workers id - non-owner returns 403`() = workerTestApplication {
+        // Use different user IDs to avoid conflict with testUser (id=1L) from setUp
+        val userA = testUser.copy(id = 2L, username = "owner-a", email = "owner-a@example.com")
+        val userB = testUser.copy(id = 3L, username = "owner-b", email = "owner-b@example.com")
+        val sessionA = authHelper.createTestSession(id = 2L, userId = userA.id)
+        val sessionB = authHelper.createTestSession(id = 3L, userId = userB.id)
+        val tokenA = authHelper.createUserAndGetToken(userA, sessionA)
+        val tokenB = authHelper.createUserAndGetToken(userB, sessionB)
+        val fixture = createCertificateFixture()
+
+        // User A registers a worker
+        val registerResponse = client.post(href(WorkerResource.Register())) {
+            authenticate(tokenA)
+            contentType(ContentType.Application.Json)
+            setBody(
+                RegisterWorkerRequest(
+                    workerUid = "worker-owned-by-a",
+                    displayName = "worker-a",
+                    certificatePem = fixture.certificatePem,
+                    allowedScopes = listOf("messages:read")
+                )
+            )
+        }
+        val workerId = registerResponse.body<RegisterWorkerResponse>().worker.id
+
+        // User B tries to update User A's worker
+        val updateResponse = client.patch(href(WorkerResource.Id(id = workerId))) {
+            authenticate(tokenB)
+            contentType(ContentType.Application.Json)
+            setBody(
+                UpdateWorkerRequest(
+                    displayName = "hacked-name",
+                    allowedScopes = listOf("admin")
+                )
+            )
+        }
+
+        assertEquals(HttpStatusCode.Forbidden, updateResponse.status)
+        val error = updateResponse.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.PERMISSION_DENIED.code, error.code)
+    }
+
+    @Test
+    fun `PATCH workers id - not found returns 404`() = workerTestApplication {
+        val authToken = authHelper.createUserAndGetToken(testUser)
+
+        val response = client.patch(href(WorkerResource.Id(id = 9999L))) {
+            authenticate(authToken)
+            contentType(ContentType.Application.Json)
+            setBody(
+                UpdateWorkerRequest(
+                    displayName = "some-name",
+                    allowedScopes = emptyList()
+                )
+            )
+        }
+
+        assertEquals(HttpStatusCode.NotFound, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
+    }
+
+    @Test
+    fun `DELETE workers id - owner can delete their worker`() = workerTestApplication {
+        val authToken = authHelper.createUserAndGetToken(testUser)
+        val fixture = createCertificateFixture()
+
+        // Register a worker first
+        val registerResponse = client.post(href(WorkerResource.Register())) {
+            authenticate(authToken)
+            contentType(ContentType.Application.Json)
+            setBody(
+                RegisterWorkerRequest(
+                    workerUid = "worker-delete-test",
+                    displayName = "to-be-deleted",
+                    certificatePem = fixture.certificatePem,
+                    allowedScopes = listOf("messages:read")
+                )
+            )
+        }
+        assertEquals(HttpStatusCode.Created, registerResponse.status)
+        val workerId = registerResponse.body<RegisterWorkerResponse>().worker.id
+
+        // Delete the worker
+        val deleteResponse = client.delete(href(WorkerResource.Id(id = workerId))) {
+            authenticate(authToken)
+        }
+
+        assertEquals(HttpStatusCode.NoContent, deleteResponse.status)
+
+        // Verify worker is gone
+        val listResponse = client.get(href(WorkerResource())) {
+            authenticate(authToken)
+        }
+        val workers = listResponse.body<List<eu.torvian.chatbot.common.models.worker.WorkerDto>>()
+        assertTrue(workers.none { it.id == workerId })
+    }
+
+    @Test
+    fun `DELETE workers id - non-owner returns 403`() = workerTestApplication {
+        // Use different user IDs to avoid conflict with testUser (id=1L) from setUp
+        val userA = testUser.copy(id = 4L, username = "owner-a-del", email = "owner-a-del@example.com")
+        val userB = testUser.copy(id = 5L, username = "owner-b-del", email = "owner-b-del@example.com")
+        val sessionA = authHelper.createTestSession(id = 4L, userId = userA.id)
+        val sessionB = authHelper.createTestSession(id = 5L, userId = userB.id)
+        val tokenA = authHelper.createUserAndGetToken(userA, sessionA)
+        val tokenB = authHelper.createUserAndGetToken(userB, sessionB)
+        val fixture = createCertificateFixture()
+
+        // User A registers a worker
+        val registerResponse = client.post(href(WorkerResource.Register())) {
+            authenticate(tokenA)
+            contentType(ContentType.Application.Json)
+            setBody(
+                RegisterWorkerRequest(
+                    workerUid = "worker-owned-by-a-delete",
+                    displayName = "worker-a",
+                    certificatePem = fixture.certificatePem,
+                    allowedScopes = listOf("messages:read")
+                )
+            )
+        }
+        val workerId = registerResponse.body<RegisterWorkerResponse>().worker.id
+
+        // User B tries to delete User A's worker
+        val deleteResponse = client.delete(href(WorkerResource.Id(id = workerId))) {
+            authenticate(tokenB)
+        }
+
+        assertEquals(HttpStatusCode.Forbidden, deleteResponse.status)
+        val error = deleteResponse.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.PERMISSION_DENIED.code, error.code)
+    }
+
+    @Test
+    fun `DELETE workers id - not found returns 404`() = workerTestApplication {
+        val authToken = authHelper.createUserAndGetToken(testUser)
+
+        val response = client.delete(href(WorkerResource.Id(id = 9999L))) {
+            authenticate(authToken)
+        }
+
+        assertEquals(HttpStatusCode.NotFound, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
+    }
+
     private data class CertificateFixture(
         val certificatePem: String,
         val fingerprint: String
@@ -273,5 +464,3 @@ class WorkerRoutesTest {
         )
     }
 }
-
-

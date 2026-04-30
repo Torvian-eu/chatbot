@@ -12,7 +12,9 @@ import eu.torvian.chatbot.server.data.dao.error.WorkerError
 import eu.torvian.chatbot.server.data.entities.mappers.toWorkerDto
 import eu.torvian.chatbot.server.service.core.WorkerService
 import eu.torvian.chatbot.server.service.core.error.worker.AuthenticateWorkerError
+import eu.torvian.chatbot.server.service.core.error.worker.DeleteWorkerError
 import eu.torvian.chatbot.server.service.core.error.worker.RegisterWorkerError
+import eu.torvian.chatbot.server.service.core.error.worker.UpdateWorkerError
 import eu.torvian.chatbot.server.service.security.CertificateService
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
@@ -145,6 +147,69 @@ class WorkerServiceImpl(
             workerDao.getWorkersByOwnerId(ownerUserId).map { it.toWorkerDto() }
         }
 
+    override suspend fun updateWorker(
+        ownerUserId: Long,
+        workerId: Long,
+        displayName: String,
+        allowedScopes: List<String>
+    ): Either<UpdateWorkerError, WorkerDto> = transactionScope.transaction {
+        either {
+            logger.debug("Updating worker (workerId={}, ownerUserId={})", workerId, ownerUserId)
+
+            // Fetch the worker first to verify ownership
+            val worker = withError({ _: WorkerError.NotFound -> UpdateWorkerError.NotFound(workerId) }) {
+                workerDao.getWorkerById(workerId).bind()
+            }
+
+            // Verify ownership
+            ensure(worker.ownerUserId == ownerUserId) {
+                logger.warn("Worker update failed: ownership mismatch (workerId={}, requestedOwner={}, actualOwner={})",
+                    workerId, ownerUserId, worker.ownerUserId)
+                UpdateWorkerError.Forbidden(workerId, worker.ownerUserId)
+            }
+
+            // Update the worker
+            val updatedWorker = withError({ _: WorkerError.NotFound -> UpdateWorkerError.NotFound(workerId) }) {
+                workerDao.updateWorker(
+                    id = workerId,
+                    displayName = displayName.trim(),
+                    allowedScopes = allowedScopes.distinct()
+                ).bind()
+            }
+
+            logger.info("Worker updated successfully (workerId={})", workerId)
+            updatedWorker.toWorkerDto()
+        }
+    }
+
+    override suspend fun deleteWorker(
+        ownerUserId: Long,
+        workerId: Long
+    ): Either<DeleteWorkerError, Unit> = transactionScope.transaction {
+        either {
+            logger.debug("Deleting worker (workerId={}, ownerUserId={})", workerId, ownerUserId)
+
+            // Fetch the worker first to verify ownership
+            val worker = withError({ _: WorkerError.NotFound -> DeleteWorkerError.NotFound(workerId) }) {
+                workerDao.getWorkerById(workerId).bind()
+            }
+
+            // Verify ownership
+            ensure(worker.ownerUserId == ownerUserId) {
+                logger.warn("Worker deletion failed: ownership mismatch (workerId={}, requestedOwner={}, actualOwner={})",
+                    workerId, ownerUserId, worker.ownerUserId)
+                DeleteWorkerError.Forbidden(workerId, worker.ownerUserId)
+            }
+
+            // Delete the worker
+            withError({ _: WorkerError.NotFound -> DeleteWorkerError.NotFound(workerId) }) {
+                workerDao.deleteWorker(workerId).bind()
+            }
+
+            logger.info("Worker deleted successfully (workerId={})", workerId)
+        }
+    }
+
     /**
      * @param workerId Worker identifier.
      * @param workerUid Public worker UID.
@@ -194,5 +259,4 @@ class WorkerServiceImpl(
         private val CHALLENGE_TTL = 10.minutes
     }
 }
-
 
