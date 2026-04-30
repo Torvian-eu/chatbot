@@ -174,6 +174,20 @@ Not completed:
 - The user should be able to queue multiple messages while a request is in progress. The queue should be processed in the order they were received.
 - A queue message button should appear in the input area when a request is in progress. Clicking the button should add the current message to the queue. The button should be visible for the duration of the request.
 
+### Memory spaces
+Allow users to create multiple memory spaces, which are separate knowledge bases that can be loaded into the LLM context. This allows users to organize their knowledge base into different topics or projects, and only load the relevant information for each chat session. For instance, a user could have a "Work" memory space with information about their job, and a "Personal" memory space with information about their personal life. When starting a new chat session, the user can choose which memory space(s) to load into the LLM context.
+- Each memory space has an AGENTS.md file, which is loaded into the LLM context when the memory space is loaded. This file contains instructions for the LLM on how to use the information in the memory space, as well as general information about the topic of the memory space.
+- A memory space can contain both structured and unstructured information. Structured data may be stored as entities and relationships in a graph database or in a relational SQL database (depending on access and query patterns). Unstructured information is stored as text documents. The LLM can query the structured store for relevant entities/relations and consult the text documents for detailed context.
+- The agent can add/remove items to/from the memory space, and update the AGENTS.md file as needed. This allows the memory space to evolve over time, and for the LLM to learn from its interactions with the user and the environment.
+
+### Skill spaces
+Allow users to create multiple skill spaces, which are separate collections of SKILL folders. This allows users to organize their skills into different topics or projects, and only load the relevant skills for each chat session. For instance, a user could have a "Programming" skill space with skills related to programming tasks, and a "Cooking" skill space with skills related to cooking tasks. When starting a new chat session, the user can choose which skill space(s) to load into the LLM context.
+- Each skill space has an AGENTS.md file, which is loaded into the LLM context when the skill space is loaded. This file contains instructions for the LLM on when and how to use the skills in the skill space, as well as general information about the topic of the skill space.
+- The agent can add/remove skills to/from the skill space, and update the AGENTS.md file as needed. This allows the skill space to evolve over time, and for the LLM to learn from its interactions with the user and the environment.
+
+### Workspaces
+Combine memory spaces and skill spaces into workspaces. A workspace is a collection of memory spaces and skill spaces that are relevant for a specific topic or project. When starting a new chat session, the user can choose which workspace to load into the LLM context, which will load all the memory spaces and skill spaces associated with that workspace.
+
 ---
 
 ## Advanced features
@@ -258,6 +272,8 @@ Open questions:
   - a short summary of the chat session
 - The LLM agent can then query this index to find relevant information from previous chat sessions, and use it to answer questions or provide suggestions.
 - alternative: use [Graphify](https://github.com/safishamsi/graphify) SKILL.
+
+### Role-playing mode
 
 ---
 

@@ -6,11 +6,15 @@
 3. [Using MCP servers](#using-mcp-servers)
 
 ## Introduction
-This guide provides information on how to configure and use MCP servers with the chatbot.
+This guide provides information on how to configure and use MCP servers with the chatbot. MCP servers allow you to extend the capabilities of the chatbot by providing additional tools that can be called from the chat sessions. These tools can be used to perform various tasks, such as executing shell commands, doing local file operations, fetching data from external APIs, or interacting with other services.
+
+## Worker installation
+Local (or 'stdio') MCP servers require a worker to execute the tools from the server. A worker is a separate process that can be run from any (virtual) machine you like, local or remote. A single worker instance can operate multiple MCP servers, running locally on the same machine as the worker. To set up a worker, you can follow the instructions in the [README](../../README.md).
 
 ## MCP server configuration
 A new MCP server can be added by clicking on the `+` button in the MCP servers section of the settings page.
 The following information is required to add a new MCP server:
+* Worker: The worker to use for the MCP server.
 * Name: A name for the MCP server
 * Description: A description for the MCP server (optional)
 * Tool name prefix: A prefix for the tool names (optional)
