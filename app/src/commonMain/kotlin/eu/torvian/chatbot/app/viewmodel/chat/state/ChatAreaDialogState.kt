@@ -5,6 +5,7 @@ import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.core.ChatMessage
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import kotlinx.coroutines.flow.StateFlow
@@ -77,7 +78,7 @@ sealed class ChatAreaDialogState {
     data class ToolConfig(
         val enabledToolsFlow: StateFlow<DataState<RepositoryError, List<ToolDefinition>>>,
         val availableToolsFlow: StateFlow<DataState<RepositoryError, List<ToolDefinition>>>,
-        val mcpServersFlow: StateFlow<DataState<RepositoryError, List<eu.torvian.chatbot.app.domain.models.LocalMCPServer>>>,
+        val mcpServersFlow: StateFlow<DataState<RepositoryError, List<LocalMCPServerDto>>>,
         val onToggleTool: (ToolDefinition, Boolean) -> Unit,
         val onToggleTools: (List<ToolDefinition>, Boolean) -> Unit,
         val onDismiss: () -> Unit

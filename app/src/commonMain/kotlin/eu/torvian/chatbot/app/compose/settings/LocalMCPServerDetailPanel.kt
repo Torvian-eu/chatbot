@@ -4,8 +4,6 @@ import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -15,7 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.domain.contracts.DataState
-import eu.torvian.chatbot.app.domain.models.LocalMCPServer
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.service.mcp.LocalMCPServerOverview
 import eu.torvian.chatbot.app.viewmodel.LocalMCPServerOperation
@@ -32,8 +30,6 @@ import kotlinx.datetime.toLocalDateTime
 fun LocalMCPServerDetailPanel(
     serverOverview: LocalMCPServerOverview?,
     toolApprovalPreferences: DataState<RepositoryError, List<UserToolApprovalPreference>>,
-    onEditServer: (LocalMCPServerOverview) -> Unit,
-    onDeleteServer: (LocalMCPServerOverview) -> Unit,
     onTestConnection: (LocalMCPServerOverview) -> Unit,
     onRefreshTools: (LocalMCPServerOverview) -> Unit,
     onStartServer: (LocalMCPServerOverview) -> Unit,
@@ -77,12 +73,7 @@ fun LocalMCPServerDetailPanel(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(16.dp)
-                    .verticalScroll(rememberScrollState())
             ) {
-                ServerHeader(serverOverview = serverOverview, onEdit = onEditServer, onDelete = onDeleteServer)
-
-                Spacer(modifier = Modifier.height(16.dp))
-
                 ServerDescription(server = server)
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -128,39 +119,10 @@ fun LocalMCPServerDetailPanel(
 }
 
 @Composable
-private fun ServerHeader(
-    serverOverview: LocalMCPServerOverview,
-    onEdit: (LocalMCPServerOverview) -> Unit,
-    onDelete: (LocalMCPServerOverview) -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = serverOverview.serverConfig.name,
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.weight(1f)
-        )
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            IconButton(onClick = { onEdit(serverOverview) }) {
-                Icon(imageVector = Icons.Default.Edit, contentDescription = "Edit Server")
-            }
-            IconButton(onClick = { onDelete(serverOverview) }) {
-                Icon(imageVector = Icons.Default.Delete, contentDescription = "Delete Server", tint = MaterialTheme.colorScheme.error)
-            }
-        }
-    }
-}
-
-@Composable
-private fun ServerDescription(server: LocalMCPServer) {
+private fun ServerDescription(server: LocalMCPServerDto) {
     if (!server.description.isNullOrBlank()) {
         Text(
-            text = server.description,
+            text = server.description.orEmpty(),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -188,13 +150,23 @@ private fun ServerStatusSection(serverOverview: LocalMCPServerOverview, isOperat
                 }
             )
 
-            serverOverview.processStatus?.let { status -> DetailRow(label = "Process", value = status.toString()) }
+            serverOverview.runtimeStatus?.let { status ->
+                DetailRow(label = "Process", value = status.state.name)
+                status.errorMessage?.let { errorMessage ->
+                    DetailRow(label = "Runtime Error", value = errorMessage)
+                }
+            }
 
             serverOverview.tools?.let { tools -> DetailRow(label = "Tools", value = "${tools.size} discovered") }
 
-            serverOverview.connectedAt?.let { timestamp ->
+            serverOverview.runtimeStatus?.connectedAt?.let { timestamp ->
                 val localDateTime = timestamp.toLocalDateTime(TimeZone.currentSystemDefault())
                 DetailRow(label = "Connected At", value = localDateTime.toString())
+            }
+
+            serverOverview.runtimeStatus?.lastActivityAt?.let { timestamp ->
+                val localDateTime = timestamp.toLocalDateTime(TimeZone.currentSystemDefault())
+                DetailRow(label = "Last Activity", value = localDateTime.toString())
             }
         }
     }
@@ -259,7 +231,7 @@ private fun ServerActionsSection(
 }
 
 @Composable
-private fun ServerConfigurationSection(server: LocalMCPServer) {
+private fun ServerConfigurationSection(server: LocalMCPServerDto) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -271,7 +243,13 @@ private fun ServerConfigurationSection(server: LocalMCPServer) {
 
             if (server.arguments.isNotEmpty()) DetailRow(label = "Arguments", value = server.arguments.joinToString(" "))
 
-            if (server.environmentVariables.isNotEmpty()) DetailRow(label = "Env Vars", value = "${server.environmentVariables.size} configured")
+            if (server.environmentVariables.isNotEmpty()) {
+                DetailRow(label = "Regular Env Vars", value = "${server.environmentVariables.size} configured")
+            }
+
+            if (server.secretEnvironmentVariables.isNotEmpty()) {
+                DetailRow(label = "Secret Env Vars", value = "${server.secretEnvironmentVariables.size} configured")
+            }
 
             server.workingDirectory?.let { dir -> DetailRow(label = "Working Dir", value = dir) }
 

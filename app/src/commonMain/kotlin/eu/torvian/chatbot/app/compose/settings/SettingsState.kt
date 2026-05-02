@@ -6,6 +6,7 @@ import eu.torvian.chatbot.common.models.api.access.LLMModelDetails
 import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
 import eu.torvian.chatbot.common.models.api.access.ModelSettingsDetails
 import eu.torvian.chatbot.common.models.llm.LLMModel
+import eu.torvian.chatbot.common.models.worker.WorkerDto
 
 /**
  * State contract for the Providers tab.
@@ -34,4 +35,12 @@ data class ModelSettingsConfigTabState(
     val selectedModel: LLMModel?,
     val selectedSettings: ModelSettingsDetails?,
     val dialogState: ModelSettingsDialogState
+)
+
+/**
+ * State contract for the Workers tab.
+ */
+data class WorkersTabState(
+    val workersUiState: DataState<RepositoryError, List<WorkerDto>>,
+    val dialogState: WorkersDialogState
 )

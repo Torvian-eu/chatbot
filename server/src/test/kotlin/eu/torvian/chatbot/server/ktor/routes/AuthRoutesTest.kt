@@ -11,10 +11,16 @@ import eu.torvian.chatbot.common.models.api.auth.LoginRequest
 import eu.torvian.chatbot.common.models.api.auth.LoginResponse
 import eu.torvian.chatbot.common.models.api.auth.RefreshTokenRequest
 import eu.torvian.chatbot.common.models.api.auth.RegisterRequest
+import eu.torvian.chatbot.common.models.api.auth.ServiceTokenChallengeRequest
+import eu.torvian.chatbot.common.models.api.auth.ServiceTokenChallengeResponse
+import eu.torvian.chatbot.common.models.api.auth.ServiceTokenRequest
+import eu.torvian.chatbot.common.models.api.auth.ServiceTokenResponse
 import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.server.data.entities.UserEntity
 import eu.torvian.chatbot.server.service.core.UserGroupService
+import eu.torvian.chatbot.server.service.core.WorkerService
+import eu.torvian.chatbot.server.service.security.CertificateService
 import eu.torvian.chatbot.server.service.security.PasswordService
 import eu.torvian.chatbot.server.testutils.auth.TestAuthHelper
 import eu.torvian.chatbot.server.testutils.auth.authenticate
@@ -25,6 +31,7 @@ import eu.torvian.chatbot.server.testutils.data.TestDefaults
 import eu.torvian.chatbot.server.testutils.koin.defaultTestContainer
 import eu.torvian.chatbot.server.testutils.ktor.KtorTestApp
 import eu.torvian.chatbot.server.testutils.ktor.myTestApplication
+import com.auth0.jwt.JWT
 import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.http.*
@@ -32,9 +39,13 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.security.PrivateKey
+import java.security.Signature
+import java.util.Base64
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 /**
  * Integration tests for Authentication API routes.
@@ -50,6 +61,8 @@ class AuthRoutesTest {
     private lateinit var authTestApplication: KtorTestApp
     private lateinit var testDataManager: TestDataManager
     private lateinit var authHelper: TestAuthHelper
+    private lateinit var certificateService: CertificateService
+    private lateinit var workerService: WorkerService
 
     // Test data
     private val testUser = UserEntity(
@@ -78,6 +91,8 @@ class AuthRoutesTest {
 
         testDataManager = container.get()
         authHelper = TestAuthHelper(container)
+        certificateService = container.get()
+        workerService = container.get()
 
         // Setup required tables
         testDataManager.createTables(
@@ -90,7 +105,9 @@ class AuthRoutesTest {
                 Table.ROLES,
                 Table.USER_ROLE_ASSIGNMENTS,
                 Table.USER_GROUPS,
-                Table.USER_GROUP_MEMBERSHIPS
+                Table.USER_GROUP_MEMBERSHIPS,
+                Table.WORKERS,
+                Table.WORKER_AUTH_CHALLENGES
             )
         )
 
@@ -291,6 +308,10 @@ class AuthRoutesTest {
         assertEquals(testUser.email, loginResponse.user.email)
         assertNotNull(loginResponse.accessToken)
         assertNotNull(loginResponse.expiresAt)
+        val accessExpiryMs = JWT.decode(loginResponse.accessToken).expiresAt.time
+        val loginExpiryMs = loginResponse.expiresAt.toEpochMilliseconds()
+        assertTrue(loginExpiryMs >= accessExpiryMs)
+        assertTrue(loginExpiryMs - accessExpiryMs < 1000)
     }
 
     @Test
@@ -529,6 +550,154 @@ class AuthRoutesTest {
 
     // ========== Get Current User Tests ==========
 
+    // ========== Worker Service Token Tests ==========
+
+    @Test
+    fun `POST auth service-token challenge - successful issuance returns 200`() = authTestApplication {
+        val fixture = registerWorkerForServiceToken()
+
+        val response = client.post(href(AuthResource.ServiceTokenChallenge())) {
+            contentType(ContentType.Application.Json)
+            setBody(
+                ServiceTokenChallengeRequest(
+                    workerUid = fixture.workerUid,
+                    certificateFingerprint = fixture.fingerprint
+                )
+            )
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val body = response.body<ServiceTokenChallengeResponse>()
+        assertEquals(fixture.workerUid, body.workerUid)
+        assertTrue(body.challenge.challengeId.isNotBlank())
+        assertTrue(body.challenge.challenge.startsWith("worker:${fixture.workerUid}:"))
+    }
+
+    @Test
+    fun `POST auth service-token challenge - mismatched worker id returns 404`() = authTestApplication {
+        val fixture = registerWorkerForServiceToken()
+
+        val response = client.post(href(AuthResource.ServiceTokenChallenge())) {
+            contentType(ContentType.Application.Json)
+            setBody(
+                ServiceTokenChallengeRequest(
+                    workerUid = "${fixture.workerUid}-other",
+                    certificateFingerprint = fixture.fingerprint
+                )
+            )
+        }
+
+        assertEquals(HttpStatusCode.NotFound, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
+        assertEquals("Worker not found", error.message)
+    }
+
+    @Test
+    fun `POST auth service-token - successful exchange returns 200 with service jwt`() = authTestApplication {
+        val fixture = registerWorkerForServiceToken()
+
+        val challengeResponse = client.post(href(AuthResource.ServiceTokenChallenge())) {
+            contentType(ContentType.Application.Json)
+            setBody(
+                ServiceTokenChallengeRequest(
+                    workerUid = fixture.workerUid,
+                    certificateFingerprint = fixture.fingerprint
+                )
+            )
+        }
+        assertEquals(HttpStatusCode.OK, challengeResponse.status)
+        val challengeBody = challengeResponse.body<ServiceTokenChallengeResponse>()
+        val signatureBase64 = signChallenge(challengeBody.challenge.challenge, fixture.privateKey)
+
+        val response = client.post(href(AuthResource.ServiceToken())) {
+            contentType(ContentType.Application.Json)
+            setBody(
+                ServiceTokenRequest(
+                    workerUid = fixture.workerUid,
+                    challengeId = challengeBody.challenge.challengeId,
+                    signatureBase64 = signatureBase64
+                )
+            )
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val tokenBody = response.body<ServiceTokenResponse>()
+        assertEquals(fixture.workerUid, tokenBody.worker.workerUid)
+        assertEquals(testUser.id, tokenBody.worker.ownerUserId)
+        assertEquals(listOf("messages:read"), tokenBody.worker.allowedScopes)
+
+        val decoded = JWT.decode(tokenBody.accessToken)
+        assertEquals("service", decoded.getClaim("principalType").asString())
+        assertEquals("access", decoded.getClaim("tokenType").asString())
+        assertEquals(fixture.workerId, decoded.getClaim("workerId").asLong())
+        assertEquals(fixture.workerUid, decoded.getClaim("workerUid").asString())
+        assertEquals(testUser.id, decoded.getClaim("ownerUserId").asLong())
+        assertEquals(listOf("messages:read"), decoded.getClaim("scope").asList(String::class.java))
+
+        val tokenExpiryMs = decoded.expiresAt.time
+        val responseExpiryMs = tokenBody.expiresAt.toEpochMilliseconds()
+        assertTrue(responseExpiryMs >= tokenExpiryMs)
+        assertTrue(responseExpiryMs - tokenExpiryMs < 1000)
+    }
+
+    @Test
+    fun `POST auth service-token - invalid signature returns 401`() = authTestApplication {
+        val fixture = registerWorkerForServiceToken()
+
+        val challengeResponse = client.post(href(AuthResource.ServiceTokenChallenge())) {
+            contentType(ContentType.Application.Json)
+            setBody(
+                ServiceTokenChallengeRequest(
+                    workerUid = fixture.workerUid,
+                    certificateFingerprint = fixture.fingerprint
+                )
+            )
+        }
+        assertEquals(HttpStatusCode.OK, challengeResponse.status)
+        val challengeBody = challengeResponse.body<ServiceTokenChallengeResponse>()
+
+        val invalidSignature = signChallenge(
+            challengeBody.challenge.challenge,
+            certificateService.generateRSAKeyPair().private
+        )
+
+        val response = client.post(href(AuthResource.ServiceToken())) {
+            contentType(ContentType.Application.Json)
+            setBody(
+                ServiceTokenRequest(
+                    workerUid = fixture.workerUid,
+                    challengeId = challengeBody.challenge.challengeId,
+                    signatureBase64 = invalidSignature
+                )
+            )
+        }
+
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.INVALID_CREDENTIALS.code, error.code)
+        assertEquals("Invalid worker authentication", error.message)
+    }
+
+    @Test
+    fun `POST auth service-token - unknown worker returns 404`() = authTestApplication {
+        val response = client.post(href(AuthResource.ServiceToken())) {
+            contentType(ContentType.Application.Json)
+            setBody(
+                ServiceTokenRequest(
+                    workerUid = "missing-worker",
+                    challengeId = "missing",
+                    signatureBase64 = "invalid"
+                )
+            )
+        }
+
+        assertEquals(HttpStatusCode.NotFound, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
+        assertEquals("Worker not found", error.message)
+    }
+
     @Test
     fun `GET auth me - returns current user profile`() = authTestApplication {
         // Arrange
@@ -621,5 +790,47 @@ class AuthRoutesTest {
 
         // Assert
         assertEquals(HttpStatusCode.Unauthorized, response.status)
+    }
+
+    private data class WorkerCredentialFixture(
+        val workerId: Long,
+        val workerUid: String,
+        val fingerprint: String,
+        val privateKey: PrivateKey
+    )
+
+    private suspend fun registerWorkerForServiceToken(ownerUserId: Long = testUser.id): WorkerCredentialFixture {
+        testDataManager.insertUser(testUser.copy(id = ownerUserId))
+
+        val keyPair = certificateService.generateRSAKeyPair()
+        val certificate = certificateService.generateSelfSignedCertificate(
+            keyPair = keyPair,
+            subjectDN = "CN=worker-route-test"
+        )
+        val certificatePem = certificateService.certificateToPem(certificate)
+        val fingerprint = certificateService.computeCertificateFingerprint(certificate)
+
+        val worker = workerService.registerWorker(
+            ownerUserId = ownerUserId,
+            workerUid = "worker-route-test",
+            displayName = "route-test-worker",
+            certificatePem = certificatePem,
+            allowedScopes = listOf("messages:read")
+        ).getOrNull()
+        assertNotNull(worker)
+
+        return WorkerCredentialFixture(
+            workerId = worker.id,
+            workerUid = worker.workerUid,
+            fingerprint = fingerprint,
+            privateKey = keyPair.private
+        )
+    }
+
+    private fun signChallenge(challenge: String, privateKey: PrivateKey): String {
+        val signer = Signature.getInstance("SHA256withRSA")
+        signer.initSign(privateKey)
+        signer.update(challenge.toByteArray())
+        return Base64.getEncoder().encodeToString(signer.sign())
     }
 }

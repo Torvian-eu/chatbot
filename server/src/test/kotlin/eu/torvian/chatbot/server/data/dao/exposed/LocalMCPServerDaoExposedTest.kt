@@ -2,9 +2,13 @@ package eu.torvian.chatbot.server.data.dao.exposed
 
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
 import eu.torvian.chatbot.server.data.dao.LocalMCPServerDao
 import eu.torvian.chatbot.server.data.dao.error.DeleteLocalMCPServerError
 import eu.torvian.chatbot.server.data.dao.error.LocalMCPServerError
+import eu.torvian.chatbot.server.data.entities.CreateLocalMCPServerEntity
+import eu.torvian.chatbot.server.data.entities.LocalMCPSecretEnvironmentVariableReference
+import eu.torvian.chatbot.server.data.entities.UpdateLocalMCPServerEntity
 import eu.torvian.chatbot.server.testutils.data.Table
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
 import eu.torvian.chatbot.server.testutils.data.TestDataSet
@@ -216,6 +220,80 @@ class LocalMCPServerDaoExposedTest {
             result.leftOrNull() is LocalMCPServerError.Unauthorized,
             "Should be Unauthorized error"
         )
+    }
+
+    @Test
+    fun `createServer with full payload should persist env vars and secret aliases`() = runTest {
+        val created = dao.createServer(
+            CreateLocalMCPServerEntity(
+                userId = testUser1.id,
+                workerId = 12L,
+                name = "filesystem",
+                description = "test",
+                command = "npx",
+                arguments = listOf("-y", "server"),
+                workingDirectory = "C:/tools",
+                isEnabled = true,
+                autoStartOnEnable = true,
+                autoStartOnLaunch = false,
+                autoStopAfterInactivitySeconds = 120,
+                toolNamePrefix = "fs_",
+                environmentVariables = listOf(LocalMCPEnvironmentVariableDto("LOG_LEVEL", "debug")),
+                secretEnvironmentVariables = listOf(LocalMCPSecretEnvironmentVariableReference("API_KEY", "alias-123"))
+            )
+        )
+
+        assertEquals("filesystem", created.name)
+        assertEquals(12L, created.workerId)
+        assertEquals("debug", created.environmentVariables.single().value)
+        assertEquals("alias-123", created.secretEnvironmentVariables.single().alias)
+    }
+
+    @Test
+    fun `updateServer should update assigned worker and return worker filtered results`() = runTest {
+        val created = dao.createServer(
+            CreateLocalMCPServerEntity(
+                userId = testUser1.id,
+                workerId = 100L,
+                name = "initial",
+                description = null,
+                command = "cmd",
+                arguments = emptyList(),
+                workingDirectory = null,
+                isEnabled = true,
+                autoStartOnEnable = false,
+                autoStartOnLaunch = false,
+                autoStopAfterInactivitySeconds = null,
+                toolNamePrefix = null,
+                environmentVariables = emptyList(),
+                secretEnvironmentVariables = emptyList()
+            )
+        )
+
+        val updateResult = dao.updateServer(
+            userId = testUser1.id,
+            serverId = created.id,
+            server = UpdateLocalMCPServerEntity(
+                workerId = 101L,
+                name = "updated",
+                description = "updated",
+                command = "npx",
+                arguments = listOf("server"),
+                workingDirectory = "C:/updated",
+                isEnabled = false,
+                autoStartOnEnable = true,
+                autoStartOnLaunch = true,
+                autoStopAfterInactivitySeconds = 90,
+                toolNamePrefix = "updated_",
+                environmentVariables = listOf(LocalMCPEnvironmentVariableDto("A", "1")),
+                secretEnvironmentVariables = listOf(LocalMCPSecretEnvironmentVariableReference("B", "alias-b"))
+            )
+        )
+
+        assertTrue(updateResult.isRight())
+        assertEquals("updated", updateResult.getOrNull()!!.name)
+        assertEquals(1, dao.getServersByWorkerId(101L).size)
+        assertEquals(0, dao.getServersByWorkerId(100L).size)
     }
 }
 

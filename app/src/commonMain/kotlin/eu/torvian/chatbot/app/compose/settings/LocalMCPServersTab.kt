@@ -12,14 +12,20 @@ import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.AuthState
 
 /**
- * MCP Servers management tab with master-detail layout.
- * Implements US6.4 - Local MCP Server Management UI.
+ * MCP Servers management tab with separate list and detail pages.
+ *
+ * The tab keeps the page branch presentational while the route owns the
+ * category-local page id and the ViewModel continues to own dialogs, loading,
+ * and server-management operations.
  */
 @Composable
 fun LocalMCPServersTab(
     state: LocalMCPServersTabState,
     actions: LocalMCPServersTabActions,
     authState: AuthState.Authenticated,
+    selectedServerId: Long?,
+    onOpenServerDetails: (Long) -> Unit,
+    onBackToServerList: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxSize()) {
@@ -43,23 +49,11 @@ fun LocalMCPServersTab(
             is DataState.Success -> {
                 val serverOverviews = overviewsState.data
 
-                Row(modifier = Modifier.fillMaxSize()) {
-                    // Master: Servers List
-                    LocalMCPServersListPanel(
-                        serverOverviews = serverOverviews,
-                        selectedServerId = state.selectedServerOverview?.serverId,
-                        onServerSelected = { serverId -> actions.onSelectServer(serverId) },
-                        onAddNewServer = { actions.onStartAddingNewServer() },
-                        operationInProgress = state.operationInProgress,
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                    )
-
-                    // Detail: Server Details/Actions
-                    LocalMCPServerDetailPanel(
+                if (selectedServerId != null) {
+                    LocalMCPServerDetailsPage(
                         serverOverview = state.selectedServerOverview,
                         toolApprovalPreferences = state.selectedServerToolApprovalPreferences,
+                        onBackToList = onBackToServerList,
                         onEditServer = { actions.onStartEditingServer(it.serverConfig) },
                         onDeleteServer = { actions.onStartDeletingServer(it.serverConfig) },
                         onTestConnection = { actions.onTestConnection(it.serverId) },
@@ -73,10 +67,16 @@ fun LocalMCPServersTab(
                         onDisableAllTools = { actions.onDisableAllTools(it) },
                         onDeleteToolApprovalPreference = { actions.onDeleteToolApprovalPreference(it) },
                         operationInProgress = state.operationInProgress,
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .padding(start = 16.dp)
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    LocalMCPServersListPage(
+                        serverOverviews = serverOverviews,
+                        selectedServerId = selectedServerId,
+                        onServerSelected = { serverId -> onOpenServerDetails(serverId) },
+                        onAddNewServer = { actions.onStartAddingNewServer() },
+                        operationInProgress = state.operationInProgress,
+                        modifier = Modifier.fillMaxSize()
                     )
                 }
             }
@@ -106,6 +106,7 @@ fun LocalMCPServersTab(
         // Dialog handling based on dialog state
         LocalMCPServerDialogs(
             dialogState = state.dialogState,
+            workersState = state.workers,
             onUpdateForm = actions::onUpdateServerForm,
             onSaveServer = actions::onSaveServer,
             onTestServer = actions::onTestServerInDialog,
@@ -113,6 +114,7 @@ fun LocalMCPServersTab(
             onUpdateToolForm = actions::onUpdateToolForm,
             onSaveTool = actions::onSaveTool,
             onDismiss = actions::onCancelDialog,
+            onReloadWorkers = actions::onReloadWorkers,
             isServerRunning = state.selectedServerOverview?.isConnected == true
         )
     }

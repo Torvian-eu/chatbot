@@ -27,11 +27,7 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.Route
 import io.ktor.websocket.*
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
-import kotlinx.coroutines.flow.filterIsInstance
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.receiveAsFlow
-import kotlinx.coroutines.flow.shareIn
-import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.Json
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
@@ -269,12 +265,7 @@ fun Route.configureSessionRoutes(
                     .map { frame -> json.decodeFromString<ChatClientEvent>(frame.readText()) }
                     .shareIn(this, SharingStarted.Eagerly)
 
-                // Step 3a: Create flow for MCP tool results
-                val mcpResponseFlow = clientEventFlow
-                    .filterIsInstance<ChatClientEvent.LocalMCPToolResult>()
-                    .map { event -> event.result }
-
-                // Step 3b: Create flow for tool call approval responses
+                // Step 3a: Create flow for tool call approval responses
                 val approvalResponseFlow = clientEventFlow
                     .filterIsInstance<ChatClientEvent.ToolCallApproval>()
                     .map { event -> event.response }
@@ -288,7 +279,6 @@ fun Route.configureSessionRoutes(
                         request.content,
                         request.parentMessageId,
                         request.fileReferences,
-                        mcpResponseFlow,
                         approvalResponseFlow
                     )
                 } else {
@@ -299,7 +289,6 @@ fun Route.configureSessionRoutes(
                         request.content,
                         request.parentMessageId,
                         request.fileReferences,
-                        mcpResponseFlow,
                         approvalResponseFlow
                     )
                 }

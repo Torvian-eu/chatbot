@@ -6,12 +6,16 @@ import eu.torvian.chatbot.app.repository.impl.*
 import eu.torvian.chatbot.app.service.api.*
 import eu.torvian.chatbot.app.service.api.ktor.*
 import eu.torvian.chatbot.app.service.auth.createAuthenticatedHttpClient
+import eu.torvian.chatbot.app.service.mcp.LocalMCPServerManager
+import eu.torvian.chatbot.app.service.mcp.LocalMCPServerManagerImpl
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.service.security.CertificateTrustService
+import eu.torvian.chatbot.app.viewmodel.LocalMCPServerViewModel
 import eu.torvian.chatbot.app.viewmodel.ModelConfigViewModel
 import eu.torvian.chatbot.app.viewmodel.ModelSettingsViewModel
 import eu.torvian.chatbot.app.viewmodel.ProviderConfigViewModel
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
+import eu.torvian.chatbot.app.viewmodel.WorkersViewModel
 import eu.torvian.chatbot.app.viewmodel.admin.UserGroupManagementViewModel
 import eu.torvian.chatbot.app.viewmodel.admin.UserManagementViewModel
 import eu.torvian.chatbot.app.viewmodel.auth.AuthViewModel
@@ -167,6 +171,9 @@ fun appModule(config: AppConfiguration): Module = module {
     single<LocalMCPToolApi> {
         KtorLocalMCPToolApiClient(get())
     }
+    single<WorkerApi> {
+        KtorWorkerApiClient(get())
+    }
 
     // Provide Repository implementations, injecting the API clients
     single<ModelRepository> {
@@ -195,6 +202,33 @@ fun appModule(config: AppConfiguration): Module = module {
     }
     single<ToolRepository> {
         DefaultToolRepository(get())
+    }
+    single<LocalMCPServerRepository> {
+        DefaultLocalMCPServerRepository(
+            api = get()
+        )
+    }
+    single<LocalMCPServerRuntimeStatusRepository> {
+        DefaultLocalMCPServerRuntimeStatusRepository(
+            api = get()
+        )
+    }
+    single<WorkerRepository> {
+        DefaultWorkerRepository(get())
+    }
+    single<LocalMCPToolRepository> {
+        DefaultLocalMCPToolRepository(
+            localMCPToolApi = get(),
+            toolRepository = get()
+        )
+    }
+
+    single<LocalMCPServerManager> {
+        LocalMCPServerManagerImpl(
+            serverRepository = get(),
+            runtimeStatusRepository = get(),
+            toolRepository = get()
+        )
     }
 
     // Provide shared chat state with background scope for computed state flows
@@ -246,7 +280,7 @@ fun appModule(config: AppConfiguration): Module = module {
     }
 
     factory<SendMessageUseCase> { (chatState: ChatState) ->
-        SendMessageUseCase(get<SessionRepository>(), get(), chatState, get())
+        SendMessageUseCase(get<SessionRepository>(), chatState, get())
     }
 
     factory<EditMessageUseCase> { (chatState: ChatState) ->
@@ -338,6 +372,21 @@ fun appModule(config: AppConfiguration): Module = module {
             get<UserGroupRepository>(),
             get<UserRepository>(),
             get<NotificationService>()
+        )
+    }
+    viewModel {
+        LocalMCPServerViewModel(
+            serverManager = get(),
+            mcpToolRepository = get(),
+            toolRepository = get(),
+            workerRepository = get(),
+            notificationService = get()
+        )
+    }
+    viewModel {
+        WorkersViewModel(
+            workerRepository = get(),
+            notificationService = get()
         )
     }
 }

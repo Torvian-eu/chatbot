@@ -18,7 +18,7 @@
     "host": "localhost",
     "port": 8080,                   // HTTP port (if HTTP connector used)
     "path": "",
-    "connectorType": "HTTPS"        // Use HTTPS for dev to mimic production
+    "connectorType": "HTTP"
   },
 
   "cors": {
@@ -48,7 +48,8 @@
 
   "jwt": {
     "issuer": "chatbot-server-dev",
-    "audience": "chatbot-users",
+    "userAudience": "chatbot-users",
+    "workerAudience": "chatbot-workers",
     "realm": "chatbot-realm",
     "tokenExpirationMs": 86400000,
     "refreshExpirationMs": 604800000

@@ -3,93 +3,185 @@ package eu.torvian.chatbot.server.ktor.routes
 import arrow.core.raise.either
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.api.resources.LocalMCPServerResource
-import eu.torvian.chatbot.common.models.api.mcp.CreateServerRequest
-import eu.torvian.chatbot.common.models.api.mcp.CreateServerResponse
-import eu.torvian.chatbot.common.models.api.mcp.SetServerEnabledRequest
-import eu.torvian.chatbot.common.models.api.mcp.ServerIdsResponse
+import eu.torvian.chatbot.common.models.api.mcp.CreateLocalMCPServerRequest
+import eu.torvian.chatbot.common.models.api.mcp.UpdateLocalMCPServerRequest
+import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerDraftConnectionRequest
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
+import eu.torvian.chatbot.server.ktor.auth.getWorkerId
 import eu.torvian.chatbot.server.service.core.LocalMCPServerService
-import eu.torvian.chatbot.server.service.core.error.mcp.DeleteServerError
-import eu.torvian.chatbot.server.service.core.error.mcp.ValidateOwnershipError
+import eu.torvian.chatbot.server.service.core.error.mcp.LocalMCPServerServiceError
 import eu.torvian.chatbot.server.service.core.error.mcp.toApiError
+import eu.torvian.chatbot.server.worker.mcp.configsync.LocalMCPServerConfigSyncService
+import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.LocalMCPRuntimeControlError
+import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.LocalMCPRuntimeControlService
+import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.toApiError
 import io.ktor.http.*
 import io.ktor.server.auth.*
 import io.ktor.server.request.*
 import io.ktor.server.resources.*
-import io.ktor.server.response.*
 import io.ktor.server.routing.Route
 
 /**
  * Configures routes related to Local MCP Server management (/api/v1/local-mcp-servers)
  * using Ktor Resources.
  *
- * This function sets up the following endpoints:
- * - POST /api/v1/local-mcp-servers - Create new server
- * - GET /api/v1/local-mcp-servers/ids - List all server IDs for user
- * - DELETE /api/v1/local-mcp-servers/{id} - Delete server
- * - PUT /api/v1/local-mcp-servers/{id}/enabled - Update enabled state
- *
- * Note: The server manages ID generation, ownership tracking, and enabled state.
- * Full MCP server configurations are stored client-side. The client drives all
- * creation and updates via endpoints.
+ * User JWT routes expose full CRUD for server-owned Local MCP configuration.
+ * Worker JWT routes expose read-only retrieval for worker-assigned servers.
  *
  * @param localMCPServerService The service handling Local MCP Server business logic
+ * @param localMCPRuntimeControlService The service handling runtime control operations
+ * @param localMCPServerConfigSyncService The service handling best-effort worker config synchronization
  */
 fun Route.configureLocalMCPServerRoutes(
     localMCPServerService: LocalMCPServerService,
+    localMCPRuntimeControlService: LocalMCPRuntimeControlService,
+    localMCPServerConfigSyncService: LocalMCPServerConfigSyncService,
 ) {
     authenticate(AuthSchemes.USER_JWT) {
-        // POST /api/v1/local-mcp-servers - Create new server
-        post<LocalMCPServerResource.Create> {
+        post<LocalMCPServerResource> {
             val userId = call.getUserId()
-            val request = call.receive<CreateServerRequest>()
-            val serverId = localMCPServerService.createServer(userId, request.isEnabled)
-            call.respond(HttpStatusCode.Created, CreateServerResponse(id = serverId, userId = userId, isEnabled = request.isEnabled))
+            val request = call.receive<CreateLocalMCPServerRequest>()
+            val result = either {
+                withError({ error: LocalMCPServerServiceError -> error.toApiError() }) {
+                    val server = localMCPServerService.createServer(userId, request).bind()
+                    localMCPServerConfigSyncService.syncCreated(server)
+                    server
+                }
+            }
+            call.respondEither(result, HttpStatusCode.Created)
         }
 
-        // GET /api/v1/local-mcp-servers/ids - List all server IDs for user
-        get<LocalMCPServerResource.Ids> {
+        get<LocalMCPServerResource> {
             val userId = call.getUserId()
-            val serverIds = localMCPServerService.getServerIdsByUserId(userId)
-            call.respond(ServerIdsResponse(ids = serverIds, userId = userId))
+            val result = either {
+                withError({ error: LocalMCPServerServiceError -> error.toApiError() }) {
+                    localMCPServerService.getServersByUserId(userId).bind()
+                }
+            }
+            call.respondEither(result)
         }
 
-        // DELETE /api/v1/local-mcp-servers/{id} - Delete server
+        get<LocalMCPServerResource.ById> { resource ->
+            val userId = call.getUserId()
+            val result = either {
+                withError({ error: LocalMCPServerServiceError -> error.toApiError() }) {
+                    localMCPServerService.getServerById(userId, resource.id).bind()
+                }
+            }
+            call.respondEither(result)
+        }
+
+        get<LocalMCPServerResource.RuntimeStatuses> {
+            val userId = call.getUserId()
+            val result = either {
+                withError({ error: LocalMCPRuntimeControlError -> error.toApiError() }) {
+                    localMCPRuntimeControlService.listRuntimeStatuses(userId).bind()
+                }
+            }
+            call.respondEither(result)
+        }
+
+        get<LocalMCPServerResource.ById.RuntimeStatus> { resource ->
+            val userId = call.getUserId()
+            val result = either {
+                withError({ error: LocalMCPRuntimeControlError -> error.toApiError() }) {
+                    localMCPRuntimeControlService.getRuntimeStatus(userId, resource.parent.id).bind()
+                }
+            }
+            call.respondEither(result)
+        }
+
+        put<LocalMCPServerResource.ById> { resource ->
+            val userId = call.getUserId()
+            val request = call.receive<UpdateLocalMCPServerRequest>()
+            val result = either {
+                withError({ error: LocalMCPServerServiceError -> error.toApiError() }) {
+                    val oldServer = localMCPServerService.getServerById(userId, resource.id).bind()
+                    val updatedServer = localMCPServerService.updateServer(userId, resource.id, request).bind()
+                    localMCPServerConfigSyncService.syncUpdated(
+                        previousWorkerId = oldServer.workerId,
+                        server = updatedServer
+                    )
+                    updatedServer
+                }
+            }
+            call.respondEither(result)
+        }
+
         delete<LocalMCPServerResource.ById> { resource ->
             val userId = call.getUserId()
-            val serverId = resource.id
-
             val result = either {
-                // Validate ownership before deletion
-                withError({ e: ValidateOwnershipError -> e.toApiError() }) {
-                    localMCPServerService.validateOwnership(userId, serverId).bind()
-                }
-
-                withError({ e: DeleteServerError -> e.toApiError() }) {
-                    localMCPServerService.deleteServer(serverId).bind()
+                withError({ error: LocalMCPServerServiceError -> error.toApiError() }) {
+                    val server = localMCPServerService.getServerById(userId, resource.id).bind()
+                    localMCPServerService.deleteServer(userId, resource.id).bind()
+                    localMCPServerConfigSyncService.syncDeleted(workerId = server.workerId, serverId = server.id)
                 }
             }
             call.respondEither(result, HttpStatusCode.NoContent)
         }
 
-        // PUT /api/v1/local-mcp-servers/{id}/enabled - Update enabled state
-        put<LocalMCPServerResource.ById.SetEnabled> { resource ->
+        post<LocalMCPServerResource.ById.Start> { resource ->
             val userId = call.getUserId()
-            val serverId = resource.parent.id
-            val request = call.receive<SetServerEnabledRequest>()
-
             val result = either {
-                // Validate ownership before update
-                withError({ e: ValidateOwnershipError -> e.toApiError() }) {
-                    localMCPServerService.validateOwnership(userId, serverId).bind()
-                }
-
-                withError({ e: DeleteServerError -> e.toApiError() }) {
-                    localMCPServerService.setServerEnabled(serverId, request.isEnabled).bind()
+                withError({ error: LocalMCPRuntimeControlError -> error.toApiError() }) {
+                    localMCPRuntimeControlService.startServer(userId, resource.parent.id).bind()
                 }
             }
-            call.respondEither(result, HttpStatusCode.NoContent)
+            call.respondEither(result)
+        }
+
+        post<LocalMCPServerResource.ById.Stop> { resource ->
+            val userId = call.getUserId()
+            val result = either {
+                withError({ error: LocalMCPRuntimeControlError -> error.toApiError() }) {
+                    localMCPRuntimeControlService.stopServer(userId, resource.parent.id).bind()
+                }
+            }
+            call.respondEither(result)
+        }
+
+        post<LocalMCPServerResource.ById.TestConnection> { resource ->
+            val userId = call.getUserId()
+            val result = either {
+                withError({ error: LocalMCPRuntimeControlError -> error.toApiError() }) {
+                    localMCPRuntimeControlService.testConnection(userId, resource.parent.id).bind()
+                }
+            }
+            call.respondEither(result)
+        }
+
+        post<LocalMCPServerResource.TestDraftConnection> {
+            val userId = call.getUserId()
+            val request = call.receive<TestLocalMCPServerDraftConnectionRequest>()
+            val result = either {
+                withError({ error: LocalMCPRuntimeControlError -> error.toApiError() }) {
+                    localMCPRuntimeControlService.testDraftConnection(userId, request).bind()
+                }
+            }
+            call.respondEither(result)
+        }
+
+        post<LocalMCPServerResource.ById.RefreshTools> { resource ->
+            val userId = call.getUserId()
+            val result = either {
+                withError({ error: LocalMCPRuntimeControlError -> error.toApiError() }) {
+                    localMCPRuntimeControlService.refreshTools(userId, resource.parent.id).bind()
+                }
+            }
+            call.respondEither(result)
+        }
+    }
+
+    authenticate(AuthSchemes.WORKER_JWT) {
+        get<LocalMCPServerResource.Assigned> {
+            val workerId = call.getWorkerId()
+            val result = either {
+                withError({ error: LocalMCPServerServiceError -> error.toApiError() }) {
+                    localMCPServerService.getServersByWorkerId(workerId).bind()
+                }
+            }
+            call.respondEither(result)
         }
     }
 }

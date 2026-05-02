@@ -22,11 +22,16 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import eu.torvian.chatbot.app.compose.common.ConfigDropdown
+import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.viewmodel.DialogTestResult
 import eu.torvian.chatbot.app.viewmodel.LocalMCPServerDialogState
 import eu.torvian.chatbot.app.viewmodel.LocalMCPServerFormState
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
 import eu.torvian.chatbot.app.viewmodel.LocalMCPToolFormState
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
+import eu.torvian.chatbot.common.models.worker.WorkerDto
 
 /**
  * Handles all dialog states for MCP server management.
@@ -35,6 +40,7 @@ import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 @Composable
 fun LocalMCPServerDialogs(
     dialogState: LocalMCPServerDialogState,
+    workersState: DataState<RepositoryError, List<WorkerDto>>,
     onUpdateForm: (update: (LocalMCPServerFormState) -> LocalMCPServerFormState) -> Unit,
     onSaveServer: () -> Unit,
     onTestServer: () -> Unit,
@@ -42,6 +48,7 @@ fun LocalMCPServerDialogs(
     onUpdateToolForm: (update: (LocalMCPToolFormState) -> LocalMCPToolFormState) -> Unit,
     onSaveTool: () -> Unit,
     onDismiss: () -> Unit,
+    onReloadWorkers: () -> Unit,
     isServerRunning: Boolean = false
 ) {
     when (dialogState) {
@@ -56,10 +63,12 @@ fun LocalMCPServerDialogs(
                 isSaving = dialogState.isSaving,
                 isTesting = dialogState.isTesting,
                 testResult = dialogState.testResult,
+                workersState = workersState,
                 onUpdateForm = onUpdateForm,
                 onConfirm = onSaveServer,
                 onTestServer = onTestServer,
-                onDismiss = onDismiss
+                onDismiss = onDismiss,
+                onReloadWorkers = onReloadWorkers
             )
         }
 
@@ -70,11 +79,13 @@ fun LocalMCPServerDialogs(
                 isSaving = dialogState.isSaving,
                 isTesting = dialogState.isTesting,
                 testResult = dialogState.testResult,
+                workersState = workersState,
                 isServerRunning = isServerRunning,
                 onUpdateForm = onUpdateForm,
                 onConfirm = onSaveServer,
                 onTestServer = onTestServer,
-                onDismiss = onDismiss
+                onDismiss = onDismiss,
+                onReloadWorkers = onReloadWorkers
             )
         }
 
@@ -145,10 +156,12 @@ fun LocalMCPServerConfigDialog(
     isTesting: Boolean = false,
     testResult: DialogTestResult? = null,
     isServerRunning: Boolean = false,
+    workersState: DataState<RepositoryError, List<WorkerDto>>,
     onUpdateForm: (update: (LocalMCPServerFormState) -> LocalMCPServerFormState) -> Unit,
     onConfirm: () -> Unit,
     onTestServer: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onReloadWorkers: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -174,6 +187,69 @@ fun LocalMCPServerConfigDialog(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSecondaryContainer
                         )
+                    }
+                }
+
+                // Worker selection dropdown (required)
+                when (workersState) {
+                    is DataState.Loading, is DataState.Idle -> {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Text(
+                                text = "Loading workers...",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    is DataState.Error -> {
+                        Column {
+                            Text(
+                                text = "Could not load workers",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            TextButton(
+                                onClick = onReloadWorkers,
+                                enabled = !isSaving
+                            ) {
+                                Text("Retry")
+                            }
+                        }
+                    }
+
+                    is DataState.Success -> {
+                        val workers = workersState.data
+                        if (workers.isEmpty()) {
+                            Text(
+                                text = "No workers registered. Register a worker first.",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        } else {
+                            val selectedWorker = workers.find { it.id == formState.workerId }
+                            ConfigDropdown(
+                                selectedItem = selectedWorker,
+                                onItemSelected = { worker ->
+                                    onUpdateForm {
+                                        it.copy(workerId = worker.id, workerIdError = null)
+                                    }
+                                },
+                                items = workers,
+                                label = "Worker *",
+                                itemText = { it.displayName },
+                                isError = formState.workerIdError != null,
+                                errorMessage = formState.workerIdError
+                            )
+                        }
                     }
                 }
 
@@ -290,8 +366,28 @@ fun LocalMCPServerConfigDialog(
                 EnvironmentVariablesSection(
                     envVars = formState.environmentVariables,
                     enabled = !isSaving,
+                    title = "Regular Environment Variables",
+                    subtitle = "Visible variables sent to server persistence and runtime startup",
+                    placeholders = EnvVarPlaceholders(
+                        key = "API_URL",
+                        value = "https://api.example.com"
+                    ),
                     onEnvVarsChange = { envVars ->
                         onUpdateForm { it.copy(environmentVariables = envVars) }
+                    }
+                )
+
+                EnvironmentVariablesSection(
+                    envVars = formState.secretEnvironmentVariables,
+                    enabled = !isSaving,
+                    title = "Secret Environment Variables",
+                    subtitle = "Masked by default; use for credentials and tokens",
+                    placeholders = EnvVarPlaceholders(
+                        key = "GITHUB_TOKEN",
+                        value = "ghp_..."
+                    ),
+                    onEnvVarsChange = { envVars ->
+                        onUpdateForm { it.copy(secretEnvironmentVariables = envVars) }
                     }
                 )
 
@@ -531,12 +627,23 @@ fun ArgumentsSection(
 
 /**
  * Section for managing environment variables as key-value pairs.
+ *
+ * @param envVars Current environment variable list represented as [LocalMCPEnvironmentVariableDto].
+ * @param enabled Whether row inputs and actions are enabled.
+ * @param title Section title displayed above the rows.
+ * @param subtitle Explanatory helper text shown below the title.
+ * @param placeholders Placeholder labels used by each row editor.
+ * @param onEnvVarsChange Callback invoked with the new list after edits.
+ * @param modifier Optional layout modifier.
  */
 @Composable
 fun EnvironmentVariablesSection(
-    envVars: Map<String, String>,
+    envVars: List<LocalMCPEnvironmentVariableDto>,
     enabled: Boolean,
-    onEnvVarsChange: (Map<String, String>) -> Unit,
+    title: String,
+    subtitle: String,
+    placeholders: EnvVarPlaceholders,
+    onEnvVarsChange: (List<LocalMCPEnvironmentVariableDto>) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
@@ -546,11 +653,11 @@ fun EnvironmentVariablesSection(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Environment Variables",
+                text = title,
                 style = MaterialTheme.typography.titleSmall
             )
             IconButton(
-                onClick = { onEnvVarsChange(envVars + ("" to "")) },
+                onClick = { onEnvVarsChange(envVars + LocalMCPEnvironmentVariableDto("", "")) },
                 enabled = enabled
             ) {
                 Icon(
@@ -561,33 +668,33 @@ fun EnvironmentVariablesSection(
         }
 
         Text(
-            text = "Environment variables are encrypted before storage",
+            text = subtitle,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        envVars.entries.toList().forEachIndexed { index, (key, value) ->
+        envVars.forEachIndexed { index, dto ->
             EnvVarRow(
-                envKey = key,
-                envValue = value,
+                envKey = dto.key,
+                envValue = dto.value,
+                placeholders = placeholders,
                 enabled = enabled,
                 onKeyChange = { newKey ->
-                    val newMap = envVars.toMutableMap()
-                    newMap.remove(key)
-                    newMap[newKey] = value
-                    onEnvVarsChange(newMap)
+                    val newList = envVars.toMutableList()
+                    newList[index] = LocalMCPEnvironmentVariableDto(newKey, dto.value)
+                    onEnvVarsChange(newList)
                 },
                 onValueChange = { newValue ->
-                    val newMap = envVars.toMutableMap()
-                    newMap[key] = newValue
-                    onEnvVarsChange(newMap)
+                    val newList = envVars.toMutableList()
+                    newList[index] = LocalMCPEnvironmentVariableDto(dto.key, newValue)
+                    onEnvVarsChange(newList)
                 },
                 onRemove = {
-                    val newMap = envVars.toMutableMap()
-                    newMap.remove(key)
-                    onEnvVarsChange(newMap)
+                    val newList = envVars.toMutableList()
+                    newList.removeAt(index)
+                    onEnvVarsChange(newList)
                 }
             )
             if (index < envVars.size - 1) {
@@ -608,11 +715,20 @@ fun EnvironmentVariablesSection(
 
 /**
  * A single environment variable row with key, hidden-by-default value, and a visibility toggle.
+ *
+ * @param envKey Current key value.
+ * @param envValue Current value.
+ * @param placeholders Placeholder labels for key/value input fields.
+ * @param enabled Whether controls are enabled.
+ * @param onKeyChange Callback for key changes.
+ * @param onValueChange Callback for value changes.
+ * @param onRemove Callback invoked when deleting this row.
  */
 @Composable
 private fun EnvVarRow(
     envKey: String,
     envValue: String,
+    placeholders: EnvVarPlaceholders,
     enabled: Boolean,
     onKeyChange: (String) -> Unit,
     onValueChange: (String) -> Unit,
@@ -632,7 +748,7 @@ private fun EnvVarRow(
                     value = envKey,
                     onValueChange = onKeyChange,
                     label = { Text("Key") },
-                    placeholder = { Text("GITHUB_TOKEN") },
+                    placeholder = { Text(placeholders.key) },
                     singleLine = true,
                     enabled = enabled,
                     modifier = Modifier.fillMaxWidth()
@@ -643,7 +759,7 @@ private fun EnvVarRow(
                     value = envValue,
                     onValueChange = onValueChange,
                     label = { Text("Value") },
-                    placeholder = { Text("ghp_...") },
+                    placeholder = { Text(placeholders.value) },
                     singleLine = true,
                     enabled = enabled,
                     visualTransformation = if (valueVisible) VisualTransformation.None else PasswordVisualTransformation(),
@@ -673,6 +789,17 @@ private fun EnvVarRow(
         }
     }
 }
+
+/**
+ * Placeholder labels used by [EnvironmentVariablesSection] input rows.
+ *
+ * @property key Placeholder text for the environment variable key field.
+ * @property value Placeholder text for the environment variable value field.
+ */
+data class EnvVarPlaceholders(
+    val key: String,
+    val value: String
+)
 
 /**
  * Dialog for editing an MCP tool's properties.

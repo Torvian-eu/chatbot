@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.service.security
 import arrow.core.Either
 import eu.torvian.chatbot.server.domain.security.LoginResult
 import eu.torvian.chatbot.server.domain.security.UserContext
+import eu.torvian.chatbot.server.domain.security.WorkerContext
 import eu.torvian.chatbot.server.service.security.error.LoginError
 import eu.torvian.chatbot.server.service.security.error.LogoutError
 import eu.torvian.chatbot.server.service.security.error.LogoutAllError
@@ -67,6 +68,14 @@ interface AuthenticationService {
      * @return A [UserContext] on success, or null if validation fails.
      */
     suspend fun validateCredential(credential: JWTCredential): UserContext?
+
+    /**
+     * Validates JWT credentials for worker/service principals.
+     *
+     * @param credential The validated JWT credential from Ktor for a worker/service token.
+     * @return A [WorkerContext] on success, or null if validation fails.
+     */
+    suspend fun validateWorkerCredential(credential: JWTCredential): WorkerContext?
 
     /**
      * Refreshes an access token using a refresh token.

@@ -91,6 +91,16 @@ enum class Table {
      */
     USER_GROUP_MEMBERSHIPS,
 
+    /**
+     * Table for storing worker identities.
+     */
+    WORKERS,
+
+    /**
+     * Table for storing one-time worker authentication challenges.
+     */
+    WORKER_AUTH_CHALLENGES,
+
     // Ownership tables
     /**
      * Table for linking chat sessions to their owners.
@@ -155,7 +165,7 @@ enum class Table {
     SESSION_TOOL_CONFIG,
 
     /**
-     * Table for storing local MCP server configurations (server-side ID generation).
+     * Table for storing full local MCP server configurations.
      */
     LOCAL_MCP_SERVERS,
 

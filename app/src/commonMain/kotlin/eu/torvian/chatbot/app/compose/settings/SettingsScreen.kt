@@ -1,73 +1,133 @@
 package eu.torvian.chatbot.app.compose.settings
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Tab
-import androidx.compose.material3.PrimaryTabRow
-import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import eu.torvian.chatbot.app.compose.topbar.TopBarContentProvider
 import eu.torvian.chatbot.app.repository.AuthState
 
 /**
- * A tabbed interface for the Settings screen UI.
+ * A sidebar-based settings shell with category-local breadcrumbs.
  *
- * This screen provides a tabbed interface for managing:
- * - LLM Providers (E4.S8-S12, E5.S4) - Handled by ProvidersTabRoute
- * - LLM Models (E4.S1-S4) - Handled by ModelsTabRoute
- * - Model Settings Profiles (E4.S5-S6) - Handled by ModelSettingsConfigTabRoute
- * - Local MCP Servers (US6.4, US6.5) - Handled by LocalMCPServersTabRoute
+ * Category selection is local to this shell, while each route composable keeps
+ * ownership of its own loading, dialog, and business logic.
  *
- * Each tab is now managed by its own Route component following the Route pattern
- * for better modularity, testability, and separation of concerns.
+ * A reset signal is incremented on every sidebar click (including re-selecting
+ * the already active category) so that tab routes can clear their selected item
+ * and return to the list view. Selection state lives in the ViewModels, not in
+ * local {@code rememberSaveable} state.
  */
 @Composable
 fun SettingsScreen(
     authState: AuthState.Authenticated
 ) {
-    // Tab state management
-    var selectedTabIndex by remember { mutableIntStateOf(0) }
-    val tabTitles = listOf("Providers", "Models", "Model Settings", "MCP Servers")
+    var selectedCategory by rememberSaveable { mutableStateOf(SettingsCategory.Providers) }
+    var breadcrumbSegments by remember { mutableStateOf(listOf("Settings", selectedCategory.displayLabel)) }
+    // Incremented on every sidebar click so routes can reset to list view on re-selection.
+    var categoryResetSignal by rememberSaveable { mutableStateOf(0) }
 
-    Column(
+    // --- Local UI State for Sidebar Collapse ---
+    var isSidebarCollapsed by rememberSaveable { mutableStateOf(false) }
+
+    // Set top bar content when this screen is active using the provider
+    TopBarContentProvider(
+        content = { userMenu, navItems ->
+            SettingsTopBarContent(
+                userMenu = userMenu,
+                navItems = navItems,
+                isSidebarCollapsed = isSidebarCollapsed,
+                onToggleSidebar = { isSidebarCollapsed = !isSidebarCollapsed }
+            )
+        }
+    )
+
+    Row(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // Tab navigation
-        PrimaryTabRow(
-            selectedTabIndex = selectedTabIndex,
-            modifier = Modifier.fillMaxWidth(),
-            containerColor = MaterialTheme.colorScheme.surface,
-            contentColor = MaterialTheme.colorScheme.onSurface
+        // Collapsible sidebar with AnimatedVisibility
+        AnimatedVisibility(
+            modifier = Modifier.weight(0.30f),
+            visible = !isSidebarCollapsed,
+            enter = slideInHorizontally(),
+            exit = slideOutHorizontally()
         ) {
-            tabTitles.forEachIndexed { index, title ->
-                Tab(
-                    selected = selectedTabIndex == index,
-                    onClick = { selectedTabIndex = index },
-                    text = {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.titleMedium
-                        )
+            Row(modifier = Modifier.fillMaxHeight()) {
+                SettingsSidebar(
+                    selectedCategory = selectedCategory,
+                    onCategorySelected = { category ->
+                        selectedCategory = category
+                        categoryResetSignal++ // bump signal even when the same category is tapped
+                        breadcrumbSegments = listOf("Settings", category.displayLabel)
                     }
+                )
+
+                VerticalDivider(
+                    modifier = Modifier.fillMaxHeight(),
+                    thickness = 1.dp
                 )
             }
         }
 
-        // Tab content - each route handles its own ViewModel and state management
-        Box(
+        Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp)
+                .weight(1f)
+                .fillMaxHeight()
         ) {
-            when (selectedTabIndex) {
-                0 -> ProvidersTabRoute(authState = authState)
-                1 -> ModelsTabRoute(authState = authState)
-                2 -> ModelSettingsConfigTabRoute(authState = authState)
-                3 -> LocalMCPServersTabRoute(authState = authState)
+            SettingsBreadcrumbs(
+                segments = breadcrumbSegments
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp)
+            ) {
+                when (selectedCategory) {
+                    SettingsCategory.Providers -> ProvidersTabRoute(
+                        authState = authState,
+                        categoryResetSignal = categoryResetSignal
+                    ) { breadcrumbs ->
+                        breadcrumbSegments = breadcrumbs
+                    }
+
+                    SettingsCategory.Models -> ModelsTabRoute(
+                        authState = authState,
+                        categoryResetSignal = categoryResetSignal
+                    ) { breadcrumbs ->
+                        breadcrumbSegments = breadcrumbs
+                    }
+
+                    SettingsCategory.ModelSettings -> ModelSettingsConfigTabRoute(
+                        authState = authState,
+                        categoryResetSignal = categoryResetSignal
+                    ) { breadcrumbs ->
+                        breadcrumbSegments = breadcrumbs
+                    }
+
+                    SettingsCategory.McpServers -> LocalMCPServersTabRoute(
+                        authState = authState,
+                        categoryResetSignal = categoryResetSignal
+                    ) { breadcrumbs ->
+                        breadcrumbSegments = breadcrumbs
+                    }
+
+                    SettingsCategory.Workers -> WorkersTabRoute(
+                        authState = authState,
+                        categoryResetSignal = categoryResetSignal
+                    ) { breadcrumbs ->
+                        breadcrumbSegments = breadcrumbs
+                    }
+                }
             }
         }
     }

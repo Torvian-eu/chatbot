@@ -39,7 +39,7 @@ fun Application.configureKtor(jwtConfig: JwtConfig, authService: AuthenticationS
     install(Authentication) {
         jwt(AuthSchemes.USER_JWT) {
             realm = jwtConfig.realm
-            verifier(jwtConfig.verifier)
+            verifier(jwtConfig.userVerifier)
             // Browser WebSocket clients cannot set Authorization headers directly.
             // This extractor keeps normal Bearer auth and adds subprotocol fallback for WS handshakes.
             authHeader { call ->
@@ -47,6 +47,14 @@ fun Application.configureKtor(jwtConfig: JwtConfig, authService: AuthenticationS
             }
             validate { credential ->
                 authService.validateCredential(credential)
+            }
+        }
+
+        jwt(AuthSchemes.WORKER_JWT) {
+            realm = jwtConfig.realm
+            verifier(jwtConfig.workerVerifier)
+            validate { credential ->
+                authService.validateWorkerCredential(credential)
             }
         }
     }

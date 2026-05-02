@@ -26,12 +26,13 @@ class JwtConfigTest {
         assertTrue(token.isNotEmpty())
 
         // Verify token can be decoded
-        val decodedJWT = jwtConfig.verifier.verify(token)
+        val decodedJWT = jwtConfig.userVerifier.verify(token)
         assertEquals(userId.toString(), decodedJWT.subject)
         assertEquals(sessionId, decodedJWT.getClaim("sessionId").asLong())
+        assertEquals("user", decodedJWT.getClaim("principalType").asString())
         assertEquals("access", decodedJWT.getClaim("tokenType").asString())
         assertEquals(jwtConfig.issuer, decodedJWT.issuer)
-        assertEquals(jwtConfig.audience, decodedJWT.audience.first())
+        assertEquals(jwtConfig.userAudience, decodedJWT.audience.first())
     }
 
     @Test
@@ -47,12 +48,38 @@ class JwtConfigTest {
         assertTrue(token.isNotEmpty())
 
         // Verify token can be decoded
-        val decodedJWT = jwtConfig.verifier.verify(token)
+        val decodedJWT = jwtConfig.userVerifier.verify(token)
         assertEquals(userId.toString(), decodedJWT.subject)
         assertEquals(sessionId, decodedJWT.getClaim("sessionId").asLong())
+        assertEquals("user", decodedJWT.getClaim("principalType").asString())
         assertEquals("refresh", decodedJWT.getClaim("tokenType").asString())
         assertEquals(jwtConfig.issuer, decodedJWT.issuer)
-        assertEquals(jwtConfig.audience, decodedJWT.audience.first())
+        assertEquals(jwtConfig.userAudience, decodedJWT.audience.first())
+    }
+
+    @Test
+    fun `generateServiceAccessToken should create valid worker token`() {
+        // Given
+        val workerId = 42L
+        val workerUid = "worker-42"
+        val ownerUserId = 7L
+        val scopes = listOf("messages:read", "messages:write")
+
+        // When
+        val token = jwtConfig.generateServiceAccessToken(workerId, workerUid, ownerUserId, scopes)
+
+        // Then
+        assertTrue(token.isNotEmpty())
+
+        val decodedJWT = jwtConfig.workerVerifier.verify(token)
+        assertEquals("worker:$workerId", decodedJWT.subject)
+        assertEquals("service", decodedJWT.getClaim("principalType").asString())
+        assertEquals("access", decodedJWT.getClaim("tokenType").asString())
+        assertEquals(workerId, decodedJWT.getClaim("workerId").asLong())
+        assertEquals(workerUid, decodedJWT.getClaim("workerUid").asString())
+        assertEquals(ownerUserId, decodedJWT.getClaim("ownerUserId").asLong())
+        assertEquals(scopes, decodedJWT.getClaim("scope").asList(String::class.java))
+        assertEquals(jwtConfig.workerAudience, decodedJWT.audience.first())
     }
 
     @Test
@@ -78,7 +105,7 @@ class JwtConfigTest {
 
         // When & Then
         assertThrows<JWTVerificationException> {
-            jwtConfig.verifier.verify(token)
+            jwtConfig.userVerifier.verify(token)
         }
     }
 
@@ -93,22 +120,31 @@ class JwtConfigTest {
 
         // When & Then
         assertThrows<JWTVerificationException> {
-            jwtConfig.verifier.verify(token)
+            jwtConfig.userVerifier.verify(token)
         }
     }
 
     @Test
     fun `verifier should reject token with wrong audience`() {
         // Given
-        val wrongConfig = JwtConfig(
-            secret = jwtConfig.secret,
-            audience = "wrong-audience"
-        )
+        val wrongConfig = JwtConfig(secret = jwtConfig.secret, userAudience = "wrong-audience")
         val token = wrongConfig.generateAccessToken(123L, 456L)
 
         // When & Then
         assertThrows<JWTVerificationException> {
-            jwtConfig.verifier.verify(token)
+            jwtConfig.userVerifier.verify(token)
+        }
+    }
+
+    @Test
+    fun `worker verifier should reject token with wrong audience`() {
+        // Given
+        val wrongConfig = JwtConfig(secret = jwtConfig.secret, workerAudience = "wrong-worker-audience")
+        val token = wrongConfig.generateServiceAccessToken(42L, "worker-42", 7L, emptyList())
+
+        // When & Then
+        assertThrows<JWTVerificationException> {
+            jwtConfig.workerVerifier.verify(token)
         }
     }
 
@@ -136,7 +172,8 @@ class JwtConfigTest {
 
         // Then
         assertEquals("chatbot-server", defaultConfig.issuer)
-        assertEquals("chatbot-users", defaultConfig.audience)
+        assertEquals("chatbot-users", defaultConfig.userAudience)
+        assertEquals("chatbot-workers", defaultConfig.workerAudience)
         assertEquals("chatbot-realm", defaultConfig.realm)
         assertEquals(24 * 60 * 60 * 1000L, defaultConfig.tokenExpirationMs) // 24 hours
     }

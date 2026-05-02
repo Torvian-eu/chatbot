@@ -25,10 +25,6 @@ fun MessageEvent.toChatEvent(): ChatEvent {
 
         is MessageEvent.StreamCompleted -> ChatEvent.StreamCompleted
 
-        is MessageEvent.LocalMCPToolCallReceived -> ChatEvent.LocalMCPToolCallReceived(
-            request = request
-        )
-
         is MessageEvent.ToolCallApprovalRequested -> ChatEvent.ToolCallApprovalRequested(
             toolCall = toolCall
         )

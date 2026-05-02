@@ -1,14 +1,18 @@
 package eu.torvian.chatbot.server.ktor.routes
 
 import eu.torvian.chatbot.server.service.core.*
+import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.service.security.AuthenticationService
 import eu.torvian.chatbot.server.service.security.AuthorizationService
+import eu.torvian.chatbot.server.worker.mcp.configsync.LocalMCPServerConfigSyncService
+import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.LocalMCPRuntimeControlService
 import io.ktor.server.routing.*
 import kotlinx.serialization.json.Json
 
 /**
  * Ktor route configuration using type-safe Resources plugin.
  * Implements the ApiRoutes interface and uses injected dependencies.
+ * Local MCP configuration sync is delegated to a dedicated service so HTTP routes stay transport-focused.
  */
 class ApiRoutesKtor(
     private val sessionService: SessionService,
@@ -21,12 +25,16 @@ class ApiRoutesKtor(
     private val toolService: ToolService,
     private val toolCallService: ToolCallService,
     private val localMCPServerService: LocalMCPServerService,
+    private val localMCPRuntimeControlService: LocalMCPRuntimeControlService,
+    private val localMCPServerConfigSyncService: LocalMCPServerConfigSyncService,
     private val localMCPToolDefinitionService: LocalMCPToolDefinitionService,
     private val authenticationService: AuthenticationService,
     private val userService: UserService,
     private val userGroupService: UserGroupService,
     private val roleService: RoleService,
     private val authorizationService: AuthorizationService,
+    private val workerService: WorkerService,
+    private val jwtConfig: JwtConfig,
     private val json: Json
 ) {
     /**
@@ -35,6 +43,7 @@ class ApiRoutesKtor(
      */
     fun configureAllRoutes(route: Route) {
         configureAuthRoutes(route)
+        configureWorkerRoutes(route)
         configureUserRoutes(route)
         configureUserGroupRoutes(route)
         configureRoleRoutes(route)
@@ -53,8 +62,16 @@ class ApiRoutesKtor(
      * Configures routes related to Authentication (/api/v1/auth).
      */
     fun configureAuthRoutes(route: Route) {
-        route.configureAuthRoutes(authenticationService, userService)
+        route.configureAuthRoutes(authenticationService, userService, workerService, jwtConfig)
     }
+
+    /**
+     * Configures routes related to Worker Management (/api/v1/workers).
+     */
+    fun configureWorkerRoutes(route: Route) {
+        route.configureWorkerRoutes(workerService)
+    }
+
 
     /**
      * Configures routes related to User Management (/api/v1/users).
@@ -134,10 +151,14 @@ class ApiRoutesKtor(
     }
 
     /**
-     * Configures routes related to Local MCP Server ID management (/api/v1/mcp-servers).
+     * Configures routes related to Local MCP server configuration management (/api/v1/local-mcp-servers).
      */
     fun configureLocalMCPServerRoutes(route: Route) {
-        route.configureLocalMCPServerRoutes(localMCPServerService)
+        route.configureLocalMCPServerRoutes(
+            localMCPServerService = localMCPServerService,
+            localMCPRuntimeControlService = localMCPRuntimeControlService,
+            localMCPServerConfigSyncService = localMCPServerConfigSyncService
+        )
     }
 
     /**

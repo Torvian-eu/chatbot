@@ -1,0 +1,28 @@
+{
+  /*
+    Production/application.json (template)
+    - Copy/edit this into config/application.json on the worker.
+    - Do NOT place secrets (passwords, keys) here; put them in config/secrets.json or provide via environment vars.
+    - This template intentionally omits sensitive values so the loader will require them from secrets.json or env.
+    - The data directory (token cache) is always a sibling of the config directory.
+  */
+
+  "worker": {
+    "server": {
+      "baseUrl": "http://localhost:8080"
+    },
+    "identity": {
+      "uid": "",
+      "displayName": "my-worker",
+      "certificateFingerprint": "",
+      "certificatePem": ""
+    },
+    "storage": {
+      "secretsJsonPath": "./secrets.json",
+      "tokenFilePath": "./token.json"
+    },
+    "auth": {
+      "refreshSkewSeconds": 300
+    }
+  }
+}

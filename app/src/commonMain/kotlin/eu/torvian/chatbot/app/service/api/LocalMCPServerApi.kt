@@ -1,80 +1,141 @@
 package eu.torvian.chatbot.app.service.api
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.api.mcp.CreateServerResponse
-import eu.torvian.chatbot.common.models.api.mcp.ServerIdsResponse
+import eu.torvian.chatbot.common.models.api.mcp.CreateLocalMCPServerRequest
+import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
+import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
+import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerConnectionResponse
+import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerDraftConnectionRequest
+import eu.torvian.chatbot.common.models.api.mcp.UpdateLocalMCPServerRequest
 
 /**
  * Frontend API interface for interacting with Local MCP Server endpoints.
  *
- * This interface defines the operations for managing MCP server creation, deletion,
- * and state synchronization. Implementations use the internal HTTP API. All methods
- * are suspend functions and return [Either<ApiResourceError, T>].
- *
- * **Note**: This API handles server ID management and enabled state. Full MCP server
- * configurations are stored client-side using SQLDelight. Tool operations are handled
- * by [ToolApi]. The client drives all creation and updates via endpoints.
+ * This interface defines full CRUD operations against the server-owned Local MCP server
+ * configuration model. Implementations use the internal HTTP API and return
+ * [Either<ApiResourceError, T>] for explicit error handling.
  */
 interface LocalMCPServerApi {
     /**
-     * Creates a new Local MCP Server with initial enabled state.
-     *
-     * The server generates a new ID and stores it with the userId and isEnabled flag.
-     * The client then stores the full MCP server configuration locally using this ID.
+     * Creates a fully configured Local MCP server record on the backend.
      *
      * Corresponds to `POST /api/v1/local-mcp-servers`.
      *
-     * @param isEnabled The initial enabled state for the server
-     * @return [Either.Right] containing [CreateServerResponse] with the generated ID on success,
-     *         or [Either.Left] containing a [ApiResourceError] on failure.
+     * @param request Full create payload for server-side persistence.
+     * @return Created server as returned by the server API.
      */
-    suspend fun createServer(isEnabled: Boolean): Either<ApiResourceError, CreateServerResponse>
+    suspend fun createServer(request: CreateLocalMCPServerRequest): Either<ApiResourceError, LocalMCPServerDto>
 
     /**
-     * Retrieves all MCP server IDs for the current user.
+     * Lists all Local MCP servers for the authenticated user.
      *
-     * This endpoint returns only the IDs that exist on the server. The client must reconcile
-     * this with locally stored configurations.
+     * Corresponds to `GET /api/v1/local-mcp-servers`.
      *
-     * Corresponds to `GET /api/v1/local-mcp-servers/ids`.
-     *
-     * @return [Either.Right] containing [ServerIdsResponse] with the list of IDs on success,
-     *         or [Either.Left] containing a [ApiResourceError] on failure.
+     * @return Local MCP server configurations returned by the backend.
      */
-    suspend fun getServerIds(): Either<ApiResourceError, ServerIdsResponse>
+    suspend fun getServers(): Either<ApiResourceError, List<LocalMCPServerDto>>
 
     /**
-     * Deletes an MCP server from the server.
+     * Retrieves one Local MCP server by its identifier.
      *
-     * This operation:
-     * - Deletes the ID record from LocalMCPServerTable
-     * - Triggers CASCADE delete on LocalMCPToolDefinitionTable (removes tool linkages)
-     * - Triggers CASCADE delete on ToolDefinitionTable (removes associated tools)
+     * Corresponds to `GET /api/v1/local-mcp-servers/{id}`.
      *
-     * The client must separately delete the local configuration from SQLDelight.
+     * @param serverId Identifier of the Local MCP server to load.
+     * @return Loaded Local MCP server.
+     */
+    suspend fun getServerById(serverId: Long): Either<ApiResourceError, LocalMCPServerDto>
+
+    /**
+     * Updates a fully configured Local MCP server record.
+     *
+     * Corresponds to `PUT /api/v1/local-mcp-servers/{id}`.
+     *
+     * @param serverId Server identifier to update.
+     * @param request Full update payload for server-side persistence.
+     * @return Updated server returned by the backend.
+     */
+    suspend fun updateServer(
+        serverId: Long,
+        request: UpdateLocalMCPServerRequest
+    ): Either<ApiResourceError, LocalMCPServerDto>
+
+    /**
+     * Deletes a Local MCP server from the backend.
      *
      * Corresponds to `DELETE /api/v1/local-mcp-servers/{id}`.
      *
-     * @param serverId The unique identifier of the MCP server to delete.
-     * @return [Either.Right] with [Unit] on successful deletion (typically HTTP 204 No Content),
-     *         or [Either.Left] containing a [ApiResourceError] on failure (e.g., not found, unauthorized).
+     * @param serverId Identifier of the server to delete.
+     * @return [Unit] when deletion succeeds.
      */
-    suspend fun deleteServerId(serverId: Long): Either<ApiResourceError, Unit>
+    suspend fun deleteServer(serverId: Long): Either<ApiResourceError, Unit>
 
     /**
-     * Updates the enabled state of an MCP server on the server.
+     * Starts runtime execution for a persisted Local MCP server.
      *
-     * This synchronizes the server-side enabled flag with the client-side
-     * LocalMCPServerLocalTable.isEnabled flag. When disabled, all tools from this
-     * server become unavailable.
+     * Corresponds to `POST /api/v1/local-mcp-servers/{id}/start`.
      *
-     * Corresponds to `PUT /api/v1/local-mcp-servers/{id}/enabled`.
-     *
-     * @param serverId The unique identifier of the MCP server
-     * @param isEnabled The new enabled/disabled state
-     * @return [Either.Right] with [Unit] on successful update (typically HTTP 204 No Content),
-     *         or [Either.Left] containing a [ApiResourceError] on failure
+     * @param serverId Identifier of the server to start.
+     * @return [Unit] when the runtime-control request succeeds.
      */
-    suspend fun setServerEnabled(serverId: Long, isEnabled: Boolean): Either<ApiResourceError, Unit>
-}
+    suspend fun startServer(serverId: Long): Either<ApiResourceError, Unit>
 
+    /**
+     * Stops runtime execution for a persisted Local MCP server.
+     *
+     * Corresponds to `POST /api/v1/local-mcp-servers/{id}/stop`.
+     *
+     * @param serverId Identifier of the server to stop.
+     * @return [Unit] when the runtime-control request succeeds.
+     */
+    suspend fun stopServer(serverId: Long): Either<ApiResourceError, Unit>
+
+    /**
+     * Tests runtime connectivity for a persisted Local MCP server.
+     *
+     * Corresponds to `POST /api/v1/local-mcp-servers/{id}/test-connection`.
+     *
+     * @param serverId Identifier of the server to test.
+     * @return Test response payload returned by the backend.
+     */
+    suspend fun testConnection(serverId: Long): Either<ApiResourceError, TestLocalMCPServerConnectionResponse>
+
+    /**
+     * Refreshes tools through server-owned runtime control for a persisted Local MCP server.
+     *
+     * Corresponds to `POST /api/v1/local-mcp-servers/{id}/refresh-tools`.
+     *
+     * @param serverId Identifier of the server to refresh.
+     * @return Refresh summary payload returned by the backend.
+     */
+    suspend fun refreshTools(serverId: Long): Either<ApiResourceError, RefreshMCPToolsResponse>
+
+    /**
+     * Lists runtime statuses for all persisted Local MCP servers owned by the current user.
+     *
+     * Corresponds to `GET /api/v1/local-mcp-servers/runtime-statuses`.
+     *
+     * @return Runtime status snapshots returned by the backend.
+     */
+    suspend fun listRuntimeStatuses(): Either<ApiResourceError, List<LocalMcpServerRuntimeStatusDto>>
+
+    /**
+     * Reads runtime status for one persisted Local MCP server.
+     *
+     * Corresponds to `GET /api/v1/local-mcp-servers/{id}/runtime-status`.
+     *
+     * @param serverId Identifier of the server whose runtime status should be fetched.
+     * @return Runtime status snapshot returned by the backend.
+     */
+    suspend fun getRuntimeStatus(serverId: Long): Either<ApiResourceError, LocalMcpServerRuntimeStatusDto>
+
+    /**
+     * Tests draft runtime connectivity for a non-persisted Local MCP server configuration.
+     *
+     * Corresponds to `POST /api/v1/local-mcp-servers/test-draft-connection`.
+     *
+     * @param request Draft server configuration to test.
+     * @return Test draft response payload returned by the backend.
+     */
+    suspend fun testDraftConnection(request: TestLocalMCPServerDraftConnectionRequest): Either<ApiResourceError, TestLocalMCPServerConnectionResponse>
+}

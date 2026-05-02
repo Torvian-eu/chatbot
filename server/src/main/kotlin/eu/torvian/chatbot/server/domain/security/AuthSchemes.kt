@@ -22,4 +22,9 @@ object AuthSchemes {
      * with different token validation rules or expiration times.
      */
     const val ADMIN_JWT = "admin-jwt"
+
+    /**
+     * JWT authentication scheme for worker service principals.
+     */
+    const val WORKER_JWT = "worker-jwt"
 }

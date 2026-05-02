@@ -10,6 +10,8 @@
 - Add one-click installers for the desktop client application.
 - Add all-in-one installer for desktop that includes the server and the client, for simple local setup (without Docker).
 - Allow admin to add new users through the admin panel.
+- When adding a new model in the LLM configuration screen, add a default settings profile for that model automatically, to avoid the situation where a user selects a model in the chat area but no settings profiles are available for that model.
+- Add support for OpenAI Response API: https://platform.openai.com/docs/guides/migrate-to-responses
 
 ## UI/UX
 - After deleting a message, set scroll position to bottom of the parent message. (or top of child message)
@@ -25,6 +27,7 @@
 - [x] When the user selects a model in the chat area, the first available settings profile for that model should be selected automatically.
 - MCP tools for chat session should be collapsed by default in the tool selection dialog. 
 - Add back button to navigation bar, for desktop and web platforms only.
+- Add a running clock when submitting a message to the assistant, so that the user can time how long the assistant takes to respond. This can be implemented as a simple timer that starts when the user submits the message and stops when the assistant finishes responding. The elapsed time can be displayed next to the assistant's response.
 
 ## Security
 - User account will be locked after a certain number of failed login attempts.
@@ -39,6 +42,7 @@
 ## Android
 - Use the Android keystore for storing encryption keys on Android. See KeyGenerator.android.kt.
 - Add support for different screen sizes, in order to support portrait mode on mobile devices.
+- For smaller width screen devices (e.g. phones), display sidebars on chat screen and settings screen as overlapping the main content, instead of the default two-column layout.
 
 ## WASM
 

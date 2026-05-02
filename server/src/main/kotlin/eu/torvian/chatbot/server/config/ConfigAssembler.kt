@@ -133,6 +133,8 @@ private fun mergeEncryption(base: EncryptionConfigDto?, overlay: EncryptionConfi
  */
 private fun mergeJwt(base: JwtConfigDto?, overlay: JwtConfigDto?) = JwtConfigDto(
     issuer = overlay?.issuer ?: base?.issuer,
+    userAudience = overlay?.userAudience ?: base?.userAudience,
+    workerAudience = overlay?.workerAudience ?: base?.workerAudience,
     audience = overlay?.audience ?: base?.audience,
     realm = overlay?.realm ?: base?.realm,
     secret = overlay?.secret ?: base?.secret,
@@ -351,7 +353,8 @@ private fun Raise<ConfigError.ValidationError>.parseEncryption(dto: EncryptionCo
  */
 private fun Raise<ConfigError.ValidationError>.parseJwt(dto: JwtConfigDto?) = JwtConfig(
     issuer = required("jwt.issuer", dto?.issuer),
-    audience = required("jwt.audience", dto?.audience),
+    userAudience = required("jwt.userAudience", dto?.userAudience ?: dto?.audience),
+    workerAudience = required("jwt.workerAudience", dto?.workerAudience ?: dto?.audience),
     realm = required("jwt.realm", dto?.realm),
     secret = required("jwt.secret", dto?.secret),
     tokenExpirationMs = required("jwt.tokenExpirationMs", dto?.tokenExpirationMs),

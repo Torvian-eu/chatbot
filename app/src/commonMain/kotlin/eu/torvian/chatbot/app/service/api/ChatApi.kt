@@ -27,7 +27,7 @@ interface ChatApi {
      * @param sessionId The ID of the session to send the message to.
      * @param clientEvents A flow of events from the client to the server. The first event must be
      *                     [ChatClientEvent.ProcessNewMessage] with `isStreaming=false`. Subsequent events
-     *                     can be [ChatClientEvent.LocalMCPToolResult] for tool execution.
+     *                     are approval responses only.
      * @return A [Flow] of [Either<ApiResourceError, ChatEvent>] representing discrete events from the server.
      *         The flow will emit various [ChatEvent] types until the connection is closed.
      */
@@ -41,7 +41,7 @@ interface ChatApi {
      * @param sessionId The ID of the session to send the message to.
      * @param clientEvents A flow of events from the client to the server. The first event must be
      *                     [ChatClientEvent.ProcessNewMessage] with `isStreaming=true`. Subsequent events
-     *                     can be [ChatClientEvent.LocalMCPToolResult] for tool execution.
+     *                     are approval responses only.
      * @return A [Flow] of [Either<ApiResourceError, ChatStreamEvent>] representing the stream of updates from the server.
      *         The flow will emit various [ChatStreamEvent] types until the connection is closed.
      */

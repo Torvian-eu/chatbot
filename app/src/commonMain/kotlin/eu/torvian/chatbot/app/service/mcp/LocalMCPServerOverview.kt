@@ -1,28 +1,31 @@
 package eu.torvian.chatbot.app.service.mcp
 
-import eu.torvian.chatbot.app.domain.models.LocalMCPServer
+import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto
+import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
-import kotlin.time.Instant
 
 /**
  * Data class representing the aggregate status of a Local MCP Server.
  *
- * @property serverConfig The full LocalMCPServer configuration
+ * @property serverConfig The full LocalMCPServerDto configuration
  * @property tools List of tools discovered from the server (null if not discovered)
- * @property isConnected Whether the server is currently connected
- * @property processStatus The last known process status from the ProcessManager
- * @property connectedAt When the client was connected
- * @property lastActivityAt Timestamp of the last operation on this connection
- * @property isResponsive Result of a recent ping check
+ * @property runtimeStatus Worker-backed runtime status snapshot for this server
+ * @property isConnected Whether runtime status indicates an active worker client connection
  */
 data class LocalMCPServerOverview(
-    val serverConfig: LocalMCPServer,
+    val serverConfig: LocalMCPServerDto,
     val tools: List<LocalMCPToolDefinition>?,
-    val isConnected: Boolean,
-    val processStatus: ProcessStatus?,
-    val connectedAt: Instant?,
-    val lastActivityAt: Instant?,
-    val isResponsive: Boolean?,
+    val runtimeStatus: LocalMcpServerRuntimeStatusDto?
 ) {
+    /**
+     * The server identifier derived from [serverConfig].
+     */
     val serverId: Long get() = serverConfig.id
+
+    /**
+     * Indicates whether worker runtime status currently reports this server as running and connected.
+     */
+    val isConnected: Boolean
+        get() = runtimeStatus?.state == LocalMcpServerRuntimeStateDto.RUNNING && runtimeStatus.connectedAt != null
 }

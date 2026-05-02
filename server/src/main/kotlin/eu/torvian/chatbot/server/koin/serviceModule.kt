@@ -8,8 +8,18 @@ import eu.torvian.chatbot.server.service.core.impl.*
 import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutor
 import eu.torvian.chatbot.server.service.security.*
 import eu.torvian.chatbot.server.service.security.authorizer.*
-import eu.torvian.chatbot.server.service.setup.*
+import eu.torvian.chatbot.server.service.setup.InitializationCoordinator
+import eu.torvian.chatbot.server.service.setup.ToolDefinitionInitializer
+import eu.torvian.chatbot.server.service.setup.UserAccountInitializer
 import eu.torvian.chatbot.server.service.tool.ToolExecutorFactory
+import eu.torvian.chatbot.server.worker.mcp.configsync.DefaultLocalMCPServerConfigSyncService
+import eu.torvian.chatbot.server.worker.mcp.configsync.LocalMCPServerConfigSyncService
+import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.DefaultLocalMCPRuntimeCommandDispatchService
+import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.DefaultLocalMCPRuntimeControlService
+import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.LocalMCPRuntimeCommandDispatchService
+import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.LocalMCPRuntimeControlService
+import eu.torvian.chatbot.server.worker.mcp.toolcall.DefaultLocalMCPToolCallDispatchService
+import eu.torvian.chatbot.server.worker.mcp.toolcall.LocalMCPToolCallDispatchService
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
@@ -29,12 +39,32 @@ fun serviceModule() = module {
     single<ModelSettingsService> { ModelSettingsServiceImpl(get(), get(), get(), get(), get(), get(), get()) }
     single<LLMProviderService> { LLMProviderServiceImpl(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     single<MessageService> { MessageServiceImpl(get(), get(), get()) }
-    single<ChatService> { ChatServiceImpl(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
+    single<ChatService> {
+        ChatServiceImpl(
+            get(),
+            get(),
+            get(),
+            get(),
+            get(),
+            get(),
+            get(),
+            get(),
+            get(),
+            get(),
+            get(),
+            get(),
+            get()
+        )
+    }
     single<ToolService> { ToolServiceImpl(get(), get(), get(), get(), get()) }
     single<ToolCallService> { ToolCallServiceImpl(get(), get()) }
-    single<LocalMCPServerService> { LocalMCPServerServiceImpl(get(), get(), get()) }
+    single<LocalMCPServerService> { LocalMCPServerServiceImpl(get(), get(), get(), get(), get()) }
+    single<LocalMCPRuntimeCommandDispatchService> { DefaultLocalMCPRuntimeCommandDispatchService(get()) }
+    single<LocalMCPRuntimeControlService> { DefaultLocalMCPRuntimeControlService(get(), get(), get()) }
+    single<LocalMCPServerConfigSyncService> { DefaultLocalMCPServerConfigSyncService(get()) }
     single<LocalMCPToolDefinitionService> { LocalMCPToolDefinitionServiceImpl(get(), get(), get(), get(), get()) }
-    single<LocalMCPExecutor> { LocalMCPExecutor() }
+    single<LocalMCPToolCallDispatchService> { DefaultLocalMCPToolCallDispatchService(get()) }
+    single<LocalMCPExecutor> { LocalMCPExecutor(get(), get()) }
 
     single<RoleService> { RoleServiceImpl(get(), get(), get()) }
     single<UserGroupService> { UserGroupServiceImpl(get(), get(), get()) }
@@ -43,11 +73,13 @@ fun serviceModule() = module {
     single<CryptoProvider> { AESCryptoProvider(get()) }
     single<EncryptionService> { EncryptionService(get()) }
     single<CredentialManager> { DbEncryptedCredentialManager(get(), get()) }
+    single<CertificateService> { DefaultCertificateService() }
 
     // --- Authentication Services ---
     single<PasswordService> { BCryptPasswordService() }
     single<UserService> { UserServiceImpl(get(), get(), get(), get(), get(), get()) }
-    single<AuthenticationService> { AuthenticationServiceImpl(get(), get(), get(), get(), get(), get(), get()) }
+    single<AuthenticationService> { AuthenticationServiceImpl(get(), get(), get(), get(), get(), get(), get(), get()) }
+    single<WorkerService> { WorkerServiceImpl(get(), get(), get()) }
 
     // --- Authorizers (resource-level access) ---
     single<ResourceAuthorizer>(named(ResourceType.GROUP.key)) { GroupResourceAuthorizer(get()) }

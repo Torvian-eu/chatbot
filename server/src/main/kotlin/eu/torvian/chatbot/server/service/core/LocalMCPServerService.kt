@@ -1,73 +1,96 @@
 package eu.torvian.chatbot.server.service.core
 
 import arrow.core.Either
-import eu.torvian.chatbot.server.service.core.error.mcp.DeleteServerError
-import eu.torvian.chatbot.server.service.core.error.mcp.ValidateOwnershipError
+import eu.torvian.chatbot.common.models.api.mcp.CreateLocalMCPServerRequest
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
+import eu.torvian.chatbot.common.models.api.mcp.UpdateLocalMCPServerRequest
+import eu.torvian.chatbot.server.service.core.error.mcp.LocalMCPServerServiceError
 
 /**
- * Service interface for managing Local MCP Server IDs and state.
- *
- * This service handles server-side operations for Local MCP Servers, which includes
- * server creation, ownership tracking, and enabled state synchronization. Full MCP
- * server configurations are stored client-side.
- *
- * Note: The client drives all creation and updates via endpoints.
+ * Service interface for full Local MCP server configuration management.
  */
 interface LocalMCPServerService {
     /**
-     * Creates a new Local MCP Server with initial enabled state.
+     * Creates a fully configured Local MCP server.
      *
-     * The server generates and stores the ID, userId, and isEnabled state.
-     * The client drives creation and provides the initial isEnabled flag.
-     * The client will store the full configuration locally using this ID.
-     *
-     * @param userId The ID of the user who owns this MCP server configuration
-     * @param isEnabled The initial enabled/disabled state (from client)
-     * @return A generated server ID
+     * @param userId Owning user identifier.
+     * @param request Full create payload.
+     * @return Either service error or created server payload.
      */
-    suspend fun createServer(userId: Long, isEnabled: Boolean): Long
+    suspend fun createServer(
+        userId: Long,
+        request: CreateLocalMCPServerRequest
+    ): Either<LocalMCPServerServiceError, LocalMCPServerDto>
 
     /**
-     * Retrieves all server IDs owned by a specific user.
+     * Lists all Local MCP servers owned by a user.
      *
-     * @param userId The ID of the user
-     * @return A list of server IDs
+     * @param userId Owning user identifier.
+     * @return Either service error or user-owned server list.
      */
-    suspend fun getServerIdsByUserId(userId: Long): List<Long>
+    suspend fun getServersByUserId(userId: Long): Either<LocalMCPServerServiceError, List<LocalMCPServerDto>>
 
     /**
-     * Deletes a LocalMCPServer entry by ID.
+     * Fetches a specific user-owned Local MCP server.
      *
-     * This operation will cascade delete any tool linkages in LocalMCPToolDefinitionTable.
-     *
-     * Note: This does NOT delete the client-side configuration - that's managed by
-     * the client application. Authorization should be verified at the route level before
-     * calling this method.
-     *
-     * @param serverId The ID of the server to delete
-     * @return Either a [DeleteServerError] if deletion fails, or Unit on success
+     * @param userId Owning user identifier.
+     * @param serverId Target server identifier.
+     * @return Either service error or matching server payload.
      */
-    suspend fun deleteServer(serverId: Long): Either<DeleteServerError, Unit>
+    suspend fun getServerById(
+        userId: Long,
+        serverId: Long
+    ): Either<LocalMCPServerServiceError, LocalMCPServerDto>
+
+    /**
+     * Updates a fully configured user-owned Local MCP server.
+     *
+     * @param userId Owning user identifier.
+     * @param serverId Target server identifier.
+     * @param request Full update payload.
+     * @return Either service error or updated server payload.
+     */
+    suspend fun updateServer(
+        userId: Long,
+        serverId: Long,
+        request: UpdateLocalMCPServerRequest
+    ): Either<LocalMCPServerServiceError, LocalMCPServerDto>
+
+    /**
+     * Deletes a user-owned Local MCP server and linked tools.
+     *
+     * @param userId Owning user identifier.
+     * @param serverId Target server identifier.
+     * @return Either service error or Unit.
+     */
+    suspend fun deleteServer(
+        userId: Long,
+        serverId: Long
+    ): Either<LocalMCPServerServiceError, Unit>
+
+    /**
+     * Lists Local MCP servers assigned to a specific worker.
+     *
+     * @param workerId Worker identifier.
+     * @return Either service error or worker-assigned server list.
+     */
+    suspend fun getServersByWorkerId(workerId: Long): Either<LocalMCPServerServiceError, List<LocalMCPServerDto>>
 
     /**
      * Validates that the given user owns the given server.
      *
-     * @param userId the user to validate
-     * @param serverId the server being checked
-     * @return Either a [ValidateOwnershipError] or Unit when authorized
+     * @param userId User identifier to validate.
+     * @param serverId Server identifier being checked.
+     * @return Either service error or Unit when authorized.
      */
-    suspend fun validateOwnership(userId: Long, serverId: Long): Either<ValidateOwnershipError, Unit>
+    suspend fun validateOwnership(userId: Long, serverId: Long): Either<LocalMCPServerServiceError, Unit>
 
     /**
-     * Updates the enabled state of a LocalMCPServer.
+     * Validates that the given user owns the given worker.
      *
-     * This is called when the client syncs the enabled state from the client-side
-     * LocalMCPServerLocalTable.isEnabled flag. Authorization (ownership) should be
-     * verified at the route level before calling this method.
-     *
-     * @param serverId The ID of the server to update
-     * @param isEnabled The new enabled state
-     * @return Either a [DeleteServerError] if the server is not found, or Unit on success
+     * @param userId User identifier to validate.
+     * @param workerId Worker identifier being checked.
+     * @return Either service error or Unit when authorized.
      */
-    suspend fun setServerEnabled(serverId: Long, isEnabled: Boolean): Either<DeleteServerError, Unit>
+    suspend fun validateWorkerOwnership(userId: Long, workerId: Long): Either<LocalMCPServerServiceError, Unit>
 }

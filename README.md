@@ -1,45 +1,87 @@
 # Torvian Chatbot
 
-## Project Purpose
-The project is a multi-platform chatbot application with AI/LLM integration. It features a central server and multiple client options (Desktop, Web, Android). It supports various LLM providers (OpenAI, Ollama) and has a plugin system for MCP tools.
+## Why Torvian Chatbot
+Torvian Chatbot is a self-hosted AI workspace for users who want control over data, model providers, and tool execution. You run the server, bring your own LLM setup, and keep humans in the loop for agentic actions.
 
-- **Server Module**: Ktor-based backend with SQLite database, user authentication, and LLM provider integration
-- **Desktop Client**: Compose Multiplatform desktop application (Linux, Windows, macOS)
-- **Web Client**: WASM-based web application (planned)
-- **Android Client**: Android application (planned)
-- **Common Module**: Shared business logic and models
+### Key Features
+- 🧠 Bring your own LLM providers: OpenAI-compatible APIs and local Ollama models.
+- 📡 Stream model responses in real time, with support for concurrent responses from different chat sessions.
+- 🧵 Organize long conversations with threaded/branched message flows.
+- 🛡️ Keep control of tool execution: tool calls require approval by default, with optional per-tool auto-approve or auto-deny preferences.
+- 🔁 Easily restart agentic conversations from any previous message, with full context and tool state restoration.
+- 👥🔐 Manage multi-user access with authentication plus role/permission-based authorization.
+- 💻📱🌐 Multi-platform clients for desktop, web, and Android, all connecting to the same server.
+- ⚙️⏰ Run tools 24/7 on any machine (local, remote, VM), independent from where the client apps are running.
 
-## Tech Stack
-- **Languages**: Kotlin 2.3.10
-- **UI Framework**: Compose Multiplatform 1.10.2 (with Material 3 1.9.0)
-- **Server**: Ktor 3.4.1
-- **Database**: SQLite with Exposed ORM 1.1.1 (Server) and SQLDelight 2.2.1 (App)
-- **Dependency Injection**: Koin 4.1.1
-- **Functional Programming**: Arrow 2.2.2
-- **Logic**: kotlinx.serialization
-- **Build Tool**: Gradle 9.4.0
+## Live Demo
+For a live demonstration of the Torvian Chatbot, please visit our [demo page](https://chatbot.torvian.eu/demo.html).
 
-## Features
-- User authentication and session management
-- Chat sessions with message threading
-- LLM provider configuration and model selection. Allows using your own API keys from any OpenAI compatible provider (e.g. OpenAI, Gemini, OpenRouter). Also supports using Ollama for local models.
-- Tool execution with local (stdio) MCP server integration. Remote (http) MCP server integration is planned.
-- Agentic LLM responses with tool calling. All tool calls need to be user approved before execution. Automatic approval can be configured on a per-tool basis. Allows streaming multiple LLM responses in parallel (from different chat sessions).
-- File attachment and reference in messages
-- (WIP) Multi-platform support (Desktop, Web, Android)
+## Platform Architecture
+- **Server**: Core API and orchestration layer for authentication/authorization, chat sessions, message processing, LLM integration, tool lifecycle, and persistence.
+- **Client apps**: Compose Multiplatform UI for Desktop, Web (WASM), and Android to chat, configure providers/models, and manage tools.
+- **Worker (optional)**: Standalone process for tool execution, useful for workspace isolation and always-on availability.
+
+## System Architecture
+For a detailed explanation of the system architecture, including the LLM chat loop, remote tool execution flows, worker registration, and security context, see the [System Architecture Flows](docs/onboarding/Torvian%20Chatbot%20System%20Architecture%20Flows.md) document.
+
+### High-Level Architecture
+
+```mermaid
+flowchart TB
+    subgraph Clients["Client Applications"]
+        direction TB
+        Desktop["Desktop App<br/>(Kotlin Compose)"]
+        Android["Android App<br/>(Kotlin Compose)"]
+        Web["Web App<br/>(WASM/JS)"]
+    end
+
+    subgraph Server["Torvian Server"]
+        direction TB
+        API["Ktor HTTP Server<br/>(REST + WebSocket)"]
+        Business["Chat Service<br/>(Business Logic)"]
+        DB["SQLite Database<br/>(Exposed ORM)"]
+    end
+
+    subgraph Workers["Worker Processes"]
+        Worker1["Worker 1<br/>(MCP Executor)"]
+        Worker2["Worker 2<br/>(MCP Executor)"]
+        WorkerN["Worker N<br/>(MCP Executor)"]
+    end
+
+    subgraph External["External Services"]
+        OpenAI["OpenAI<br/>(GPT Models)"]
+        Ollama["Ollama<br/>(Local Models)"]
+        OpenRouter["OpenRouter<br/>(Multi-Provider)"]
+    end
+
+    Clients -->|"HTTPS + SSE<br/>WebSocket"| Server
+    Server -->|"WebSocket<br/>(Custom JSON Protocol)"| Workers
+    Server -->|"HTTPS REST API<br/>(Streaming SSE)"| External
+    Server -->|"JDBC/SQLite"| DB
+
+    style Clients fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    style Server fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    style Workers fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style External fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+```
 
 ## Project Status
-The project is in active development. The server and desktop client are feature complete in terms of their core functionality. The desktop client is currently the most stable and useable version available. The web client is partially useable, though MCP server integration is not yet functional. The Android client is the least useable, primarily due to its layout being optimized for landscape mode (not portrait), and it includes elements that require mouse hover to be visible, making them inaccessible on touchscreens.
+This project is in active development.
+
+- **Server + Desktop**: Most complete and stable combination for daily use.
+- **Web (WASM)**: Stable with some limitations
+- **Android**: Early-stage usability with known UX limitations.
 
 ## Getting Started
 
-### Use pre-built packages
+### 1. Download pre-built packages
 Pre-built packages are available from the [Releases page](https://github.com/Torvian-eu/chatbot/releases):
-- **Server**: Available for all platforms. Use Docker (recommended) or JDK 21+ to run it locally.
+- **Server**: Optional; Use this package only if you want to run the server directly using Java. Otherwise, use the prebuilt Docker image from ghcr.io or build it locally from source.
+- **Worker**: Optional; Use this package only if you want to run the worker directly using Java. Otherwise, use the prebuilt Docker image from ghcr.io or build it locally from source.
 - **Desktop Client**: Available for Windows and Linux.
 - **Web Client**: Available as a static web app. It must be served over HTTP(S).
 
-### Run the server
+### 2. Run the server
 ```bash
 # Linux/Mac
 <install-path>/start-server.sh
@@ -48,23 +90,24 @@ Pre-built packages are available from the [Releases page](https://github.com/Tor
 ```
 
 **Docker quick start:**
-
 ```bash
 docker run -d \
   --name chatbot-server \
   -p 8080:8080 \
-  -v chatbot-config:/app/config \
-  -v chatbot-data:/app/data \
-  -v chatbot-logs:/app/logs \
   -e SERVER_HOST=0.0.0.0 \
   -e SERVER_CONNECTOR_TYPE=HTTP \
+  -v chatbot-server-config:/app/config \
+  -v chatbot-server-data:/app/data \
+  -v chatbot-server-logs:/app/logs \
   --restart unless-stopped \
   ghcr.io/torvian-eu/chatbot-server:latest
 ```
 
-For full deployment options and configuration details (including Docker Compose + Caddy), see [deploy/README.md](deploy/README.md).
+Notes:
+- For powershell, replace `\` with `` ` ``
+- For full deployment options and configuration details (including Docker Compose + Caddy), see [deploy/README.md](deploy/README.md).
 
-### Run the desktop application
+### 3a. Run the desktop application (recommended)
 ```bash
 # Windows
 <install-path>/Chatbot-with-logs.bat
@@ -72,7 +115,7 @@ For full deployment options and configuration details (including Docker Compose 
 <install-path>/Chatbot-with-logs.sh
 ```
 
-### Serve the web client
+### 3b. Serve the web client (optional, not recommended)
 The web client is a static web application and must be served over HTTP(S). Opening `index.html` directly via `file://` will not work, because browsers block loading WASM and related assets from local files.
 
 For local testing, you can use any simple static file server.
@@ -88,10 +131,50 @@ Then open your browser and navigate to:
 http://localhost:4000
 ```
 
-For production or VPS deployments, serve the same files using a regular web server such as Caddy or nginx.
+Notes:
+- For production or VPS deployments, serve the same files using a regular web server such as Caddy or nginx.
+- The address of the web client will need to be added to the CORS allowed origins in the server configuration to allow the web client to connect. (see `application.json` -> `corsAllowedOrigins`, or use environment variables to set `SERVER_CORS_ALLOWED_ORIGIN_1` etc.)
 
-### Login
+### 4. Login
 Login with username `admin` and password `admin123`. You will be asked to change the password on first login.
+
+### 5. Run the worker (required for MCP tool execution)
+```bash
+# Linux/Mac
+<install-path>/start-worker.sh
+# Windows
+<install-path>/start-worker.bat
+```
+
+Notes:
+- The server must be running before starting the worker.
+- An **active** user (or admin) account is required to start the worker, because the worker needs to authenticate with the server.
+- On first startup, the worker will prompt you to enter the server URL and user credentials to connect. An SSL certificate will be generated during setup. On subsequent startups, the stored SSL certificate (and private key) will be used for authentication.
+
+**Docker quick start:**
+```bash
+docker run -it \
+  --name chatbot-worker \
+  -e CHATBOT_WORKER_SETUP_SERVER_URL=http://host.docker.internal:8080 \
+  -e CHATBOT_WORKER_SETUP_AUTO_START=true \
+  -e PUID=1000 \
+  -e PGID=1000 \
+  -v chatbot-worker-config:/app/config \
+  -v chatbot-worker-data:/app/data \
+  -v chatbot-worker-logs:/app/logs \
+  -v chatbot-worker-npm-cache:/app/cache/npm \
+  -v chatbot-worker-uv-cache:/app/cache/uv \
+  --restart unless-stopped \
+  ghcr.io/torvian-eu/chatbot-worker:latest
+```
+
+Notes:
+- For powershell, replace `\` with `` ` ``
+- The switch `-it` is used to allow interactive input during the worker setup process. After the initial setup, you can remove `-it` and add `-d` for subsequent runs if you prefer to run the worker in detached mode.
+- We use `host.docker.internal` to allow the worker to reach the server running on the host machine.
+- For full deployment options and configuration details (including Docker Compose + Caddy), see [deploy/README.md](deploy/README.md).
+- When using the prebuilt Docker image, the usable commands for starting an MCP server are limited to `uvx` and `npx`.
+- The main benefit of using Docker for the worker is that it offers better isolation and therefore better security for tool execution. Malicious or buggy tools that are executed by the worker will not be able to access the host system or other processes, and will be limited in their ability to cause harm. Mounted volumes for config, data, and logs allow the worker to persist necessary information while still maintaining isolation.
 
 ## Build from Source
 
@@ -124,6 +207,12 @@ The files will be installed to `app/build/compose/binaries/main/app/Chatbot`. Yo
 ```
 The files will be installed to `app/build/dist/wasmJs/productionExecutable`. You can serve the web client using any static file server, as described in the "Serve the web client" section above.
 
+### Build & Install Worker application
+```bash
+./gradlew worker:installDist
+```
+The files will be installed to `worker/build/install/worker/`. You can run the worker using the scripts in that folder.
+
 ## Guides
 These guides provide information on how to configure and use specific features of the chatbot.
 - [LLM configuration guide](docs/user%20guides/LLM%20configuration%20guide.md) - How to configure LLM providers, models and model settings. And how to use them in the chatbot.
@@ -144,16 +233,27 @@ Additional deployment-related documentation:
 ## Project Structure
 ```
 chatbot/
-├── app/                    # Desktop client module
 ├── server/                 # Server module
+├── worker/                 # Worker module for MCP tool execution
+├── app/                    # Client application module (Desktop, Web, Android)
 ├── common/                 # Shared code
 ├── build-logic/            # Gradle convention plugins
 ├── docs/                   # Documentation
 └── gradle/                 # Gradle wrapper and dependencies
 ```
 
+## Tech Stack
+- **Languages**: Kotlin 2.3.10
+- **UI Framework**: Compose Multiplatform 1.10.2 (with Material 3 1.9.0)
+- **Server**: Ktor 3.4.1
+- **Database**: SQLite with Exposed ORM 1.1.1 (Server) and SQLDelight 2.2.1 (App)
+- **Dependency Injection**: Koin 4.1.1
+- **Functional Programming**: Arrow 2.2.2
+- **Logic**: kotlinx.serialization
+- **Build Tool**: Gradle 9.4.0
+
 ## Additional Documentation
-- [Project Structure](docs/Project%20and%20Package%20Structure.md)
+- [Project Directory Tree](docs/project-directory-tree.md)
 - [Known Issues](docs/Known%20bugs.md)
 - [TODO List](docs/Todos.md)
 - [New feature ideas](docs/New%20feature%20ideas.md)

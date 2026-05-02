@@ -2,12 +2,11 @@ package eu.torvian.chatbot.app.service.mcp
 
 import arrow.core.Either
 import eu.torvian.chatbot.app.domain.contracts.DataState
-import eu.torvian.chatbot.app.domain.models.LocalMCPServer
 import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
-import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import kotlinx.coroutines.flow.Flow
-import kotlinx.serialization.json.JsonObject
 
 /**
  * High-level orchestration service for Local MCP Server workflows.
@@ -15,21 +14,17 @@ import kotlinx.serialization.json.JsonObject
  * This manager coordinates between:
  * - LocalMCPServerRepository (MCP server configurations)
  * - LocalMCPToolRepository (MCP tool persistence)
- * - MCPClientService (MCP operations)
+ * - server-owned runtime-control APIs exposed through the repository layer
  *
  * Design principles:
  * - High-level orchestration layer between UI and MCP operations
  * - Coordinates data flow across repositories and services
- * - Handles data transformation (MCP SDK Tool → LocalMCPToolDefinition)
+ * - Handles data transformation (MCP SDK Tool â†’ LocalMCPToolDefinition)
  * - Does not manage state (that's Repository's job)
- * - Does not manage processes (that's MCPClientService's job)
+ * - Does not manage processes (that responsibility now stays on the worker/server boundary)
  * - Does not call API directly (that's Repository's job)
  * - Pure business logic and workflow coordination
  *
- * Platform availability:
- * - Desktop: ✅ Full support
- * - Android: ✅ Full support
- * - WASM: ❌ Not available (requires process management)
  */
 interface LocalMCPServerManager {
 
@@ -37,7 +32,6 @@ interface LocalMCPServerManager {
      * StateFlow providing reactive updates of the aggregate status of all MCP servers.
      *
      * This is a derived state computed from:
-     * - MCPClientService.clients (active MCP SDK client connections)
      * - LocalMCPServerRepository.servers (MCP server configurations)
      * - LocalMCPToolRepository.tools (MCP tool definitions organized by server ID)
      *
@@ -72,32 +66,34 @@ interface LocalMCPServerManager {
      * Tests connection to a new MCP server and returns the count of discovered tools.
      *
      * This operation:
-     * 1. Creates a temporary server config
-     * 2. Calls MCPClientService to start and connect
-     * 3. Discovers tools via MCPClientService
-     * 4. Stops the server (cleanup)
-     * 5. Returns success/failure with tool count
+     * 1. Builds a draft connection request from the unsaved form state.
+     * 2. Delegates the draft test to the repository, which calls the server-owned API.
+     * 3. Returns the discovered tool count from the runtime response.
      *
      * Server config is NOT persisted during testing.
      *
+     * @param workerId Worker assignment used for server-owned runtime routing.
      * @param name The name of the MCP server
      * @param command The command to start the MCP server
      * @param arguments The arguments to start the MCP server
      * @param environmentVariables The environment variables to start the MCP server
+     * @param secretEnvironmentVariables Secret environment variables to start the MCP server
      * @param workingDirectory The working directory to start the MCP server
      * @return Either.Right with tool count on success, or Either.Left with TestConnectionError on failure
      */
     suspend fun testConnectionForNewServer(
+        workerId: Long,
         name: String,
         command: String,
         arguments: List<String>,
-        environmentVariables: Map<String, String> = emptyMap(),
+        environmentVariables: List<LocalMCPEnvironmentVariableDto> = emptyList(),
+        secretEnvironmentVariables: List<LocalMCPEnvironmentVariableDto> = emptyList(),
         workingDirectory: String? = null
     ): Either<TestConnectionError, Int>
 
 
     /**
-     * Creates a new MCP server configuration and persists it to the database.
+     * Creates a new MCP server configuration and persists it through the server API.
      *
      * This operation only saves the configuration. No process is started,
      * no connection is made, and no tools are discovered. Use [testConnectionForNewServer]
@@ -106,9 +102,11 @@ interface LocalMCPServerManager {
      *
      * @param name The name of the MCP server
      * @param description Optional description of the MCP server
+     * @param workerId Worker assignment used by server-side MCP execution routing
      * @param command The command to start the MCP server
      * @param arguments The arguments to start the MCP server
-     * @param environmentVariables The environment variables to start the MCP server
+     * @param environmentVariables Non-secret environment variables
+     * @param secretEnvironmentVariables Secret environment variables
      * @param workingDirectory The working directory to start the MCP server
      * @param isEnabled Whether the server is globally enabled (if false, tools cannot be enabled for any session)
      * @param autoStartOnEnable Whether the server should be started when a tool is enabled for a session
@@ -119,28 +117,24 @@ interface LocalMCPServerManager {
     suspend fun createServer(
         name: String,
         description: String? = null,
+        workerId: Long,
         command: String,
         arguments: List<String>,
-        environmentVariables: Map<String, String> = emptyMap(),
+        environmentVariables: List<LocalMCPEnvironmentVariableDto> = emptyList(),
+        secretEnvironmentVariables: List<LocalMCPEnvironmentVariableDto> = emptyList(),
         workingDirectory: String? = null,
         isEnabled: Boolean = true,
         autoStartOnEnable: Boolean = false,
         autoStartOnLaunch: Boolean = false,
         autoStopAfterInactivitySeconds: Int? = null,
         toolNamePrefix: String? = null
-    ): Either<CreateServerError, LocalMCPServer>
+    ): Either<CreateServerError, LocalMCPServerDto>
 
     /**
-     * Tests connection to an existing MCP server and returns the count of discovered tools.
+     * Tests connection to an existing MCP server through server-owned runtime control.
      *
-     * This operation:
-     * 1. Gets config from LocalMCPServerRepository
-     * 2. Calls MCPClientService to start and connect (if not already connected)
-     * 3. Discovers tools via MCPClientService
-     * 4. Stops the server (if started by this operation)
-     * 5. Returns success/failure with tool count
-     *
-     * Tools are NOT persisted during testing.
+     * Runtime execution ownership for this operation is server-side; this manager delegates
+     * to repository/API wiring and returns the discovered tool count from the server response.
      *
      * @param serverId The ID of the MCP server to test
      * @return Either.Right with tool count on success, or Either.Left with TestConnectionError on failure
@@ -148,15 +142,10 @@ interface LocalMCPServerManager {
     suspend fun testConnection(serverId: Long): Either<TestConnectionError, Int>
 
     /**
-     * Refreshes tools from an MCP server by comparing with existing tools.
+     * Refreshes tools for an MCP server through server-owned runtime control.
      *
-     * This operation:
-     * 1. Gets config from LocalMCPServerRepository
-     * 2. Calls MCPClientService to start and connect (if not already connected)
-     * 3. Discovers tools via MCPClientService
-     * 4. Calls LocalMCPToolRepository to refresh tools (repository handles comparison and API call)
-     * 5. Stops the server (if started by this operation)
-     * 6. Returns refresh summary
+     * Runtime execution ownership for this operation is server-side; this manager delegates
+     * to repository/API wiring and returns the server response.
      *
      * @param serverId The ID of the MCP server
      * @return Either.Right with refresh summary on success, or Either.Left with RefreshToolsError on failure
@@ -164,14 +153,7 @@ interface LocalMCPServerManager {
     suspend fun refreshTools(serverId: Long): Either<RefreshToolsError, RefreshMCPToolsResponse>
 
     /**
-     * Starts an MCP server process and connects the MCP SDK client.
-     *
-     * This operation:
-     * 1. Gets config from LocalMCPServerRepository
-     * 2. Calls MCPClientService to start and connect
-     * 3. If no tools exist yet for this server, automatically triggers [refreshTools]
-     *    to populate the tool list (e.g. for newly created servers that have never been started).
-     *    A failure in this auto-discovery step is logged as a warning but does not fail the start.
+     * Starts MCP runtime execution through server-owned runtime control.
      *
      * @param serverId The ID of the MCP server to start
      * @return Either.Right with Unit on success, or Either.Left with ManageStartServerError on failure
@@ -179,10 +161,7 @@ interface LocalMCPServerManager {
     suspend fun startServer(serverId: Long): Either<ManageStartServerError, Unit>
 
     /**
-     * Stops an MCP server process and disconnects the MCP SDK client.
-     *
-     * This operation:
-     * 1. Calls MCPClientService to stop
+     * Stops MCP runtime execution through server-owned runtime control.
      *
      * @param serverId The ID of the MCP server to stop
      * @return Either.Right with Unit on success, or Either.Left with ManageStopServerError on failure
@@ -195,42 +174,22 @@ interface LocalMCPServerManager {
      * This operation only saves the configuration. If the server is currently running,
      * it will continue with its old configuration until it is restarted.
      * No restart, reconnection, or tool rediscovery is performed automatically.
-     * If the [LocalMCPServer.isEnabled] state changed, the enabled tools cache is invalidated.
+     * If the [LocalMCPServerDto.isEnabled] state changed, the enabled tools cache is invalidated.
      *
      * @param server The updated MCP server configuration
      * @return Either.Right with Unit on success, or Either.Left with UpdateServerError on failure
      */
-    suspend fun updateServer(server: LocalMCPServer): Either<UpdateServerError, Unit>
+    suspend fun updateServer(server: LocalMCPServerDto): Either<UpdateServerError, Unit>
 
     /**
      * Deletes an MCP server and all its associated tools.
      *
-     * This operation:
-     * 1. Stops the server if it's running (via MCPClientService)
-     * 2. Deletes all tools for the server (via LocalMCPToolRepository)
-     * 3. Deletes the server configuration (via LocalMCPServerRepository)
+     * This operation delegates deletion to the server-owned repository/API and then clears the
+     * local tool cache so the UI no longer shows stale data.
      *
      * @param serverId The ID of the MCP server to delete
      * @return Either.Right with Unit on success, or Either.Left with DeleteServerError on failure
      */
     suspend fun deleteServer(serverId: Long): Either<DeleteServerError, Unit>
 
-    /**
-     * Executes a tool on an MCP server.
-     *
-     * This method:
-     * 1. Ensures the server is started and connected
-     * 2. Calls `mcpSdkClient.callTool(serverId, toolName, arguments)`
-     * 3. Returns the tool result or error
-     *
-     * @param serverId The unique identifier of the MCP server (needed to look up client)
-     * @param toolName The name of the tool to execute (MCP tool name)
-     * @param arguments The tool arguments as a JSON object
-     * @return Either.Right with tool result, or Either.Left with ManageCallToolError
-     */
-    suspend fun callTool(
-        serverId: Long,
-        toolName: String,
-        arguments: JsonObject
-    ): Either<ManageCallToolError, CallToolResult?>
 }

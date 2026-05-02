@@ -6,11 +6,17 @@ import eu.torvian.chatbot.common.api.resources.AuthResource
 import eu.torvian.chatbot.common.models.api.auth.LoginRequest
 import eu.torvian.chatbot.common.models.api.auth.RefreshTokenRequest
 import eu.torvian.chatbot.common.models.api.auth.RegisterRequest
+import eu.torvian.chatbot.common.models.api.auth.ServiceTokenChallengeRequest
+import eu.torvian.chatbot.common.models.api.auth.ServiceTokenChallengeResponse
+import eu.torvian.chatbot.common.models.api.auth.ServiceTokenRequest
+import eu.torvian.chatbot.common.models.api.auth.ServiceTokenResponse
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.domain.security.mappers.toLoginResponse
 import eu.torvian.chatbot.server.ktor.auth.getUserContext
 import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.service.core.UserService
+import eu.torvian.chatbot.server.service.core.WorkerService
+import eu.torvian.chatbot.server.service.core.error.worker.AuthenticateWorkerError
 import eu.torvian.chatbot.server.service.core.error.auth.RegisterUserError
 import eu.torvian.chatbot.server.service.security.AuthenticationService
 import eu.torvian.chatbot.server.service.security.error.LoginError
@@ -23,13 +29,16 @@ import io.ktor.server.request.*
 import io.ktor.server.resources.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.Route
+import kotlin.time.Instant.Companion.fromEpochMilliseconds
 
 /**
  * Configures routes related to Authentication (/api/v1/auth) using Ktor Resources.
  */
 fun Route.configureAuthRoutes(
     authenticationService: AuthenticationService,
-    userService: UserService
+    userService: UserService,
+    workerService: WorkerService,
+    jwtConfig: eu.torvian.chatbot.server.domain.security.JwtConfig
 ) {
     // POST /api/v1/auth/register - User registration
     post<AuthResource.Register> {
@@ -143,6 +152,57 @@ fun Route.configureAuthRoutes(
     authenticate(AuthSchemes.USER_JWT) {
         get<AuthResource.Me> {
             call.respond(call.getUserContext().user)
+        }
+    }
+
+    post<AuthResource.ServiceTokenChallenge> {
+        val request = call.receive<ServiceTokenChallengeRequest>()
+        call.respondEither(
+            workerService.createServiceTokenChallenge(request.workerUid, request.certificateFingerprint)
+                .map { ServiceTokenChallengeResponse(request.workerUid, it) }
+        ) { error ->
+            when (error) {
+                is AuthenticateWorkerError.WorkerNotFound ->
+                    apiError(CommonApiErrorCodes.NOT_FOUND, "Worker not found")
+
+                is AuthenticateWorkerError.InvalidChallenge,
+                is AuthenticateWorkerError.InvalidSignature ->
+                    apiError(CommonApiErrorCodes.INVALID_CREDENTIALS, "Invalid worker challenge")
+            }
+        }
+    }
+
+    post<AuthResource.ServiceToken> {
+        val request = call.receive<ServiceTokenRequest>()
+        call.respondEither(
+            workerService.authenticateWorker(request.workerUid, request.challengeId, request.signatureBase64)
+                .map { worker ->
+                    val currentTime = System.currentTimeMillis()
+                    val serviceTokenTtlMs = 15 * 60 * 1000L
+                    val token = jwtConfig.generateServiceAccessToken(
+                        workerId = worker.id,
+                        workerUid = worker.workerUid,
+                        ownerUserId = worker.ownerUserId,
+                        scopes = worker.allowedScopes,
+                        currentTime = currentTime,
+                        ttlMs = serviceTokenTtlMs
+                    )
+                    ServiceTokenResponse(
+                        accessToken = token,
+                        expiresAt = fromEpochMilliseconds(currentTime + serviceTokenTtlMs),
+                        worker = worker
+                    )
+                }
+        ) { error ->
+            when (error) {
+                is AuthenticateWorkerError.WorkerNotFound ->
+                    apiError(CommonApiErrorCodes.NOT_FOUND, "Worker not found")
+
+
+                is AuthenticateWorkerError.InvalidChallenge,
+                is AuthenticateWorkerError.InvalidSignature ->
+                    apiError(CommonApiErrorCodes.INVALID_CREDENTIALS, "Invalid worker authentication")
+            }
         }
     }
 }

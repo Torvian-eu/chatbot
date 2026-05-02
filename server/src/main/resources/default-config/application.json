@@ -18,7 +18,7 @@
     "host": "localhost",
     "port": 8080,
     "path": "",
-    "connectorType": "HTTPS"   /* production default: HTTPS */
+    "connectorType": "HTTP"
   },
 
   "cors": {
@@ -52,7 +52,8 @@
 
   "jwt": {
     "issuer": "chatbot-server",
-    "audience": "chatbot-users",
+    "userAudience": "chatbot-users",
+    "workerAudience": "chatbot-workers",
     "realm": "chatbot-realm",
     "tokenExpirationMs": 86400000,
     "refreshExpirationMs": 604800000

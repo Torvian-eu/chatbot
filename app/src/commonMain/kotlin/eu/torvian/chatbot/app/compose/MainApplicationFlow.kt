@@ -98,18 +98,30 @@ fun MainApplicationFlow(
 
 /**
  * Creates and remembers a TopBarContentController instance.
+ *
+ * @param onContentChange Callback invoked whenever the top bar content changes, providing the new content or null if cleared.
+ * @return A TopBarContentController that can be used to set or clear the top bar content.
  */
 @Composable
 private fun rememberTopBarController(
     onContentChange: (TopBarContent?) -> Unit
 ): TopBarContentController = remember {
     object : TopBarContentController {
-        override fun setContent(content: TopBarContent) {
+        var currentGeneration: Int = 0
+        var currentContent: TopBarContent? = null
+
+        override fun setContent(content: TopBarContent): Int {
+            currentGeneration++
+            currentContent = content
             onContentChange(content)
+            return currentGeneration
         }
 
-        override fun clearContent() {
-            onContentChange(null)
+        override fun clearContent(generation: Int) {
+            if (generation == currentGeneration) {
+                currentContent = null
+                onContentChange(null)
+            }
         }
     }
 }

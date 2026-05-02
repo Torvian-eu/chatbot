@@ -8,10 +8,12 @@ import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.UserSessionDao
+import eu.torvian.chatbot.server.data.dao.WorkerDao
 import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.dao.error.UserSessionError
 import eu.torvian.chatbot.server.data.entities.UserEntity
 import eu.torvian.chatbot.server.data.entities.UserSessionEntity
+import eu.torvian.chatbot.server.data.entities.WorkerEntity
 import eu.torvian.chatbot.server.data.entities.mappers.toUser
 import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.service.core.UserService
@@ -26,6 +28,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -37,15 +40,25 @@ class AuthenticationServiceImplTest {
     private val passwordService = mockk<PasswordService>()
     private val userSessionDao = mockk<UserSessionDao>()
     private val userDao = mockk<UserDao>()
+    private val workerDao = mockk<WorkerDao>()
     private val authorizationService = mockk<AuthorizationService>()
     private val transactionScope = mockk<TransactionScope>()
 
     private val jwtConfig = JwtConfig(
-        secret = "test-secret-key-for-testing-purposes-only"
+        secret = "test-secret-key-for-testing-purposes-only",
+        tokenExpirationMs = 15 * 60 * 1000L,
+        refreshExpirationMs = 7 * 24 * 60 * 60 * 1000L
     )
 
     private val authService = AuthenticationServiceImpl(
-        userService, passwordService, jwtConfig, userSessionDao, userDao, authorizationService, transactionScope
+        userService,
+        passwordService,
+        jwtConfig,
+        userSessionDao,
+        userDao,
+        workerDao,
+        authorizationService,
+        transactionScope
     )
 
     private val testUser = UserEntity(
@@ -69,7 +82,7 @@ class AuthenticationServiceImplTest {
 
     @BeforeEach
     fun setUp() {
-        clearMocks(userService, passwordService, userSessionDao, userDao, authorizationService, transactionScope)
+        clearMocks(userService, passwordService, userSessionDao, userDao, workerDao, authorizationService, transactionScope)
 
         coEvery { transactionScope.transaction<Any>(any()) } coAnswers {
             val block = firstArg<suspend () -> Any>()
@@ -100,12 +113,100 @@ class AuthenticationServiceImplTest {
         assertTrue(loginResult.accessToken.isNotEmpty())
         assertEquals(loginResult.refreshToken.isNotEmpty(), true)
         assertEquals(emptyList(), loginResult.permissions)
-
         coVerify { userDao.getUserByUsername(username) }
         verify { passwordService.verifyPassword(password, testUser.passwordHash) }
         coVerify { userSessionDao.insertSession(testUser.id, any()) }
         coVerify { userService.updateLastLogin(testUser.id) }
         coVerify { authorizationService.getUserPermissions(testUser.id) }
+        val accessExpiryMs = JWT.decode(loginResult.accessToken).expiresAt.time
+        val loginExpiryMs = loginResult.expiresAt.toEpochMilliseconds()
+        assertTrue(loginExpiryMs >= accessExpiryMs)
+        assertTrue(loginExpiryMs - accessExpiryMs < 1000)
+        assertNotEquals(testSession.expiresAt.toEpochMilliseconds(), loginResult.expiresAt.toEpochMilliseconds())
+    }
+
+    @Test
+    fun `validateWorkerCredential should successfully validate valid worker token`() = runTest {
+        // Given
+        val worker = WorkerEntity(
+            id = 200L,
+            workerUid = "worker-200",
+            ownerUserId = testUser.id,
+            displayName = "worker-1",
+            certificatePem = "pem",
+            certificateFingerprint = "fingerprint",
+            allowedScopes = listOf("messages:read"),
+            createdAt = Instant.fromEpochMilliseconds(System.currentTimeMillis()),
+            lastSeenAt = null
+        )
+        val token = jwtConfig.generateServiceAccessToken(worker.id, worker.workerUid, worker.ownerUserId, listOf("messages:read"))
+        val decodedJWT = JWT.decode(token)
+        val credential = JWTCredential(decodedJWT)
+
+        coEvery { workerDao.getWorkerById(worker.id) } returns worker.right()
+
+        // When
+        val result = authService.validateWorkerCredential(credential)
+
+        // Then
+        assertNotNull(result)
+        assertEquals(worker.id, result.workerId)
+        assertEquals(worker.workerUid, result.workerUid)
+        assertEquals(worker.ownerUserId, result.ownerUserId)
+        assertEquals(listOf("messages:read"), result.scopes)
+        assertEquals("service", decodedJWT.getClaim("principalType").asString())
+        assertEquals("access", decodedJWT.getClaim("tokenType").asString())
+        coVerify { workerDao.getWorkerById(worker.id) }
+    }
+
+    @Test
+    fun `validateWorkerCredential should return null when token type is refresh`() = runTest {
+        // Given
+        val token = JWT.create()
+            .withIssuer(jwtConfig.issuer)
+            .withAudience(jwtConfig.workerAudience)
+            .withSubject("worker:200")
+            .withClaim("principalType", "service")
+            .withClaim("tokenType", "refresh")
+            .withClaim("workerId", 200L)
+            .withClaim("ownerUserId", testUser.id)
+            .withArrayClaim("scope", arrayOf("messages:read"))
+            .withIssuedAt(java.util.Date())
+            .withExpiresAt(java.util.Date(System.currentTimeMillis() + 3600000))
+            .sign(Algorithm.HMAC256(jwtConfig.secret))
+        val credential = JWTCredential(JWT.decode(token))
+
+        // When
+        val result = authService.validateWorkerCredential(credential)
+
+        // Then
+        assertNull(result)
+        coVerify(exactly = 0) { workerDao.getWorkerById(any()) }
+    }
+
+    @Test
+    fun `validateWorkerCredential should return null when principal type is user`() = runTest {
+        // Given
+        val token = JWT.create()
+            .withIssuer(jwtConfig.issuer)
+            .withAudience(jwtConfig.workerAudience)
+            .withSubject("worker:200")
+            .withClaim("principalType", "user")
+            .withClaim("tokenType", "access")
+            .withClaim("workerId", 200L)
+            .withClaim("ownerUserId", testUser.id)
+            .withArrayClaim("scope", arrayOf("messages:read"))
+            .withIssuedAt(java.util.Date())
+            .withExpiresAt(java.util.Date(System.currentTimeMillis() + 3600000))
+            .sign(Algorithm.HMAC256(jwtConfig.secret))
+        val credential = JWTCredential(JWT.decode(token))
+
+        // When
+        val result = authService.validateWorkerCredential(credential)
+
+        // Then
+        assertNull(result)
+        coVerify(exactly = 0) { workerDao.getWorkerById(any()) }
     }
 
     @Test
@@ -322,6 +423,27 @@ class AuthenticationServiceImplTest {
     fun `validateCredential should return null when token type is refresh`() = runTest {
         // Given
         val token = jwtConfig.generateRefreshToken(testUser.id, testSession.id)
+        val decodedJWT = JWT.decode(token)
+        val credential = JWTCredential(decodedJWT)
+
+        // When
+        val result = authService.validateCredential(credential)
+
+        // Then
+        assertNull(result)
+        coVerify(exactly = 0) { userSessionDao.getSessionById(any()) }
+        coVerify(exactly = 0) { userService.getUserById(any()) }
+    }
+
+    @Test
+    fun `validateCredential should return null when token is a worker service token`() = runTest {
+        // Given
+        val token = jwtConfig.generateServiceAccessToken(
+            workerId = 200L,
+            workerUid = "worker-200",
+            ownerUserId = testUser.id,
+            scopes = listOf("messages:read")
+        )
         val decodedJWT = JWT.decode(token)
         val credential = JWTCredential(decodedJWT)
 

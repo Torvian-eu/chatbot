@@ -16,9 +16,13 @@ import eu.torvian.chatbot.app.compose.settings.dialogs.ManageAccessDialog
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.contracts.ProvidersDialogState
 import eu.torvian.chatbot.app.repository.AuthState
+import eu.torvian.chatbot.common.models.api.access.LLMProviderDetails
 
 /**
- * Providers management tab with master-detail layout.
+ * Providers management tab with list and detail pages.
+ *
+ * The tab still owns only presentational branching; page navigation state lives in
+ * the route so dialog state and item-detail navigation stay separate.
  * Implements Epic 4 user stories: E4.S8-S12 and Epic 5: E5.S4.
  */
 @Composable
@@ -26,6 +30,9 @@ fun ProvidersTab(
     state: ProvidersTabState,
     actions: ProvidersTabActions,
     authState: AuthState.Authenticated,
+    selectedProviderId: Long?,
+    onOpenProviderDetails: (LLMProviderDetails) -> Unit,
+    onBackToProviderList: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxSize()) {
@@ -48,33 +55,31 @@ fun ProvidersTab(
 
             is DataState.Success -> {
                 val providers = uiState.data
+                val activeProviderDetails = providers.firstOrNull { it.provider.id == selectedProviderId }
 
-                Row(modifier = Modifier.fillMaxSize()) {
-                    // Master: Providers List
-                    ProvidersListPanel(
-                        providers = providers,
-                        selectedProvider = state.selectedProvider,
-                        onProviderSelected = { actions.onSelectProvider(it) },
-                        onAddNewProvider = { actions.onStartAddingNewProvider() },
-                        authState = authState,
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                    )
-
-                    // Detail: Provider Details/Edit
-                    ProviderDetailPanel(
-                        providerDetails = state.selectedProvider,
+                if (activeProviderDetails != null) {
+                    ProviderDetailsPage(
+                        providerDetails = activeProviderDetails,
+                        onBackToList = onBackToProviderList,
                         onEditProvider = { actions.onStartEditingProvider(it) },
                         onDeleteProvider = { actions.onStartDeletingProvider(it) },
                         onListModels = { actions.onListProviderModels(it.provider.id) },
                         onMakePublic = { actions.onMakeProviderPublic(it) },
                         onMakePrivate = { actions.onMakeProviderPrivate(it) },
                         onManageAccess = { actions.onOpenManageAccessDialog(it) },
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .padding(start = 16.dp)
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    ProvidersListPage(
+                        providers = providers,
+                        selectedProvider = state.selectedProvider,
+                        onProviderSelected = { providerDetails ->
+                            actions.onSelectProvider(providerDetails)
+                            onOpenProviderDetails(providerDetails)
+                        },
+                        onAddNewProvider = { actions.onStartAddingNewProvider() },
+                        authState = authState,
+                        modifier = Modifier.fillMaxSize()
                     )
                 }
             }

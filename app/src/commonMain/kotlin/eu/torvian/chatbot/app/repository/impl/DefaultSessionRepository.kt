@@ -498,10 +498,6 @@ class DefaultSessionRepository(
                 updateToolCallsInCache(sessionId, event.toolCalls)
             }
 
-            is ChatEvent.LocalMCPToolCallReceived -> {
-                logger.debug("Local MCP tool call received: ${event.request.toolName}")
-            }
-
             is ChatEvent.ToolCallApprovalRequested -> {
                 logger.debug("Tool call approval requested: ${event.toolCall.toolName}")
                 // Update cache with tool call in AWAITING_APPROVAL status so UI can display it
@@ -619,9 +615,6 @@ class DefaultSessionRepository(
                 updateToolCallsInCache(sessionId, event.toolCalls)
             }
 
-            is ChatStreamEvent.LocalMCPToolCallReceived -> {
-                logger.debug("Local MCP tool call received: ${event.request.toolName}")
-            }
 
             is ChatStreamEvent.ToolCallApprovalRequested -> {
                 logger.debug("Tool call approval requested: ${event.toolCall.toolName}")

@@ -408,7 +408,6 @@ class ChatServiceImplTest {
             content,
             null,
             emptyList(),
-            emptyFlow(),
             emptyFlow()
         )
             .collect { event -> events.add(event) }
@@ -517,7 +516,6 @@ class ChatServiceImplTest {
             content,
             parentMessageId,
             emptyList(),
-            emptyFlow(),
             emptyFlow()
         )
             .collect { event -> events.add(event) }
@@ -597,7 +595,6 @@ class ChatServiceImplTest {
             content,
             null,
             emptyList(),
-            emptyFlow(),
             emptyFlow()
         )
             .collect { event -> events.add(event) }

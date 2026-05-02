@@ -13,14 +13,16 @@ import kotlin.time.Instant
  * token expiration, and provides utilities for token generation and verification.
  * 
  * @property issuer The JWT issuer claim (identifies who issued the token)
- * @property audience The JWT audience claim (identifies who the token is intended for)
+ * @property userAudience The JWT audience for user access/refresh tokens.
+ * @property workerAudience The JWT audience for worker/service access tokens.
  * @property realm The authentication realm for Ktor
  * @property secret The secret key used for HMAC signing (should be kept secure)
  * @property tokenExpirationMs Token expiration time in milliseconds
  */
 data class JwtConfig(
     val issuer: String = "chatbot-server",
-    val audience: String = "chatbot-users",
+    val userAudience: String = "chatbot-users",
+    val workerAudience: String = "chatbot-workers",
     val realm: String = "chatbot-realm",
     val secret: String,
     val tokenExpirationMs: Long = 24 * 60 * 60 * 1000L, // 24 hours
@@ -32,9 +34,14 @@ data class JwtConfig(
      * JWT verifier configured with this instance's settings.
      * Used by Ktor authentication to validate incoming tokens.
      */
-    val verifier: JWTVerifier = JWT.require(algorithm)
+    val userVerifier: JWTVerifier = JWT.require(algorithm)
         .withIssuer(issuer)
-        .withAudience(audience)
+        .withAudience(userAudience)
+        .build()
+
+    val workerVerifier: JWTVerifier = JWT.require(algorithm)
+        .withIssuer(issuer)
+        .withAudience(workerAudience)
         .build()
 
     /**
@@ -52,8 +59,9 @@ data class JwtConfig(
     ): String {
         return JWT.create()
             .withIssuer(issuer)
-            .withAudience(audience)
+            .withAudience(userAudience)
             .withSubject(userId.toString())
+            .withClaim("principalType", "user")
             .withClaim("sessionId", sessionId)
             .withClaim("tokenType", "access")
             .withIssuedAt(Date(currentTime))
@@ -78,12 +86,47 @@ data class JwtConfig(
     ): String {
         return JWT.create()
             .withIssuer(issuer)
-            .withAudience(audience)
+            .withAudience(userAudience)
             .withSubject(userId.toString())
+            .withClaim("principalType", "user")
             .withClaim("sessionId", sessionId)
             .withClaim("tokenType", "refresh")
             .withIssuedAt(Date(currentTime))
             .withExpiresAt(Date(currentTime + refreshExpirationMs))
+            .sign(algorithm)
+    }
+
+    /**
+     * Generates a JWT access token for an authenticated worker service principal.
+     *
+     * @param workerId Durable worker identifier bound to the token subject.
+     * @param workerUid Stable public worker UID bound to the authenticated worker.
+     * @param ownerUserId Owning user identifier linked to the worker.
+     * @param scopes Service scopes granted to the worker token.
+     * @param currentTime The current timestamp (epoch milliseconds).
+     * @param ttlMs Token lifetime in milliseconds.
+     * @return A signed JWT service access token string.
+     */
+    fun generateServiceAccessToken(
+        workerId: Long,
+        workerUid: String,
+        ownerUserId: Long,
+        scopes: List<String>,
+        currentTime: Long = System.currentTimeMillis(),
+        ttlMs: Long = 15 * 60 * 1000L
+    ): String {
+        return JWT.create()
+            .withIssuer(issuer)
+            .withAudience(workerAudience)
+            .withSubject("worker:$workerId")
+            .withClaim("principalType", "service")
+            .withClaim("tokenType", "access")
+            .withClaim("workerId", workerId)
+            .withClaim("workerUid", workerUid)
+            .withClaim("ownerUserId", ownerUserId)
+            .withArrayClaim("scope", scopes.toTypedArray())
+            .withIssuedAt(Date(currentTime))
+            .withExpiresAt(Date(currentTime + ttlMs))
             .sign(algorithm)
     }
 

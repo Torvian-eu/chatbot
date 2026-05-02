@@ -26,39 +26,27 @@ sealed interface LocalMCPServerManagerError {
  */
 sealed class TestConnectionError : LocalMCPServerManagerError {
     /**
-     * Failed to retrieve server configuration from repository.
+     * Failed to execute server-owned runtime-control connection testing.
      */
-    data class ConfigNotFound(
+    data class RuntimeControlFailed(
         val serverId: Long,
         val repositoryError: RepositoryError
     ) : TestConnectionError() {
         override val message: String =
-            "Failed to retrieve MCP server configuration (ID: $serverId): ${repositoryError.message}"
+            "Failed to test MCP server connection through server runtime control (ID: $serverId): ${repositoryError.message}"
         override val cause: Any = repositoryError
     }
 
     /**
-     * Failed to start and connect to the MCP server.
+     * Failed to execute a draft worker-scoped runtime-control connection test.
      */
-    data class ConnectionFailed(
-        val serverId: Long,
-        val startError: StartAndConnectError
+    data class DraftRuntimeControlFailed(
+        val workerId: Long,
+        val repositoryError: RepositoryError
     ) : TestConnectionError() {
         override val message: String =
-            "Failed to connect to MCP server (ID: $serverId): ${startError.message}"
-        override val cause: Any = startError
-    }
-
-    /**
-     * Failed to discover tools from the MCP server.
-     */
-    data class DiscoveryFailed(
-        val serverId: Long,
-        val discoverError: DiscoverToolsError
-    ) : TestConnectionError() {
-        override val message: String =
-            "Failed to discover tools from MCP server (ID: $serverId): ${discoverError.message}"
-        override val cause: Any = discoverError
+            "Failed to test draft MCP server connection through server runtime control (worker ID: $workerId): ${repositoryError.message}"
+        override val cause: Any = repositoryError
     }
 }
 
@@ -82,42 +70,6 @@ sealed class CreateServerError : LocalMCPServerManagerError {
  */
 sealed class RefreshToolsError : LocalMCPServerManagerError {
     /**
-     * Failed to retrieve server configuration from repository.
-     */
-    data class ConfigNotFound(
-        val serverId: Long,
-        val repositoryError: RepositoryError
-    ) : RefreshToolsError() {
-        override val message: String =
-            "Failed to retrieve MCP server configuration (ID: $serverId): ${repositoryError.message}"
-        override val cause: Any = repositoryError
-    }
-
-    /**
-     * Failed to connect to the MCP server.
-     */
-    data class ConnectionFailed(
-        val serverId: Long,
-        val startError: StartAndConnectError
-    ) : RefreshToolsError() {
-        override val message: String =
-            "Failed to connect to MCP server (ID: $serverId): ${startError.message}"
-        override val cause: Any = startError
-    }
-
-    /**
-     * Failed to discover current tools via MCP client.
-     */
-    data class DiscoveryFailed(
-        val serverId: Long,
-        val discoverError: DiscoverToolsError
-    ) : RefreshToolsError() {
-        override val message: String =
-            "Failed to discover current tools from MCP server (ID: $serverId): ${discoverError.message}"
-        override val cause: Any = discoverError
-    }
-
-    /**
      * Failed to persist tool changes to repository.
      */
     data class RefreshPersistFailed(
@@ -132,41 +84,29 @@ sealed class RefreshToolsError : LocalMCPServerManagerError {
 
 sealed class ManageStartServerError : LocalMCPServerManagerError {
     /**
-     * Failed to retrieve server configuration from repository.
+     * Failed to execute server-owned runtime-control start operation.
      */
-    data class ConfigNotFound(
+    data class RuntimeControlFailed(
         val serverId: Long,
         val repositoryError: RepositoryError
     ) : ManageStartServerError() {
         override val message: String =
-            "Failed to retrieve MCP server configuration (ID: $serverId): ${repositoryError.message}"
+            "Failed to start MCP server through server runtime control (ID: $serverId): ${repositoryError.message}"
         override val cause: Any = repositoryError
-    }
-
-    /**
-     * Failed to start and connect to the MCP server.
-     */
-    data class StartFailed(
-        val serverId: Long,
-        val startError: StartAndConnectError
-    ) : ManageStartServerError() {
-        override val message: String =
-            "Failed to start MCP server (ID: $serverId): ${startError.message}"
-        override val cause: Any = startError
     }
 }
 
 sealed class ManageStopServerError : LocalMCPServerManagerError {
     /**
-     * Failed to stop the MCP server.
+     * Failed to execute server-owned runtime-control stop operation.
      */
-    data class StopFailed(
+    data class RuntimeControlFailed(
         val serverId: Long,
-        val stopError: MCPStopServerError
+        val repositoryError: RepositoryError
     ) : ManageStopServerError() {
         override val message: String =
-            "Failed to stop MCP server (ID: $serverId): ${stopError.message}"
-        override val cause: Any = stopError
+            "Failed to stop MCP server through server runtime control (ID: $serverId): ${repositoryError.message}"
+        override val cause: Any = repositoryError
     }
 }
 
@@ -176,18 +116,6 @@ sealed class ManageStopServerError : LocalMCPServerManagerError {
  * Used by: deleteServer()
  */
 sealed class DeleteServerError : LocalMCPServerManagerError {
-    /**
-     * Failed to stop the MCP server before deletion.
-     */
-    data class StopFailed(
-        val serverId: Long,
-        val stopError: MCPStopServerError
-    ) : DeleteServerError() {
-        override val message: String =
-            "Failed to stop MCP server before deletion (ID: $serverId): ${stopError.message}"
-        override val cause: Any = stopError
-    }
-
     /**
      * Failed to delete server configuration from repository.
      * Note: Server-side deletion automatically handles associated tool deletion.
@@ -199,44 +127,6 @@ sealed class DeleteServerError : LocalMCPServerManagerError {
         override val message: String =
             "Failed to delete MCP server configuration (ID: $serverId): ${repositoryError.message}"
         override val cause: Any = repositoryError
-    }
-}
-
-sealed class ManageCallToolError : LocalMCPServerManagerError {
-    /**
-     * Failed to retrieve server configuration from repository.
-     */
-    data class ConfigNotFound(
-        val serverId: Long,
-        val repositoryError: RepositoryError
-    ) : ManageCallToolError() {
-        override val message: String =
-            "Failed to retrieve MCP server configuration (ID: $serverId): ${repositoryError.message}"
-        override val cause: Any = repositoryError
-    }
-
-    /**
-     * Failed to start and connect to the MCP server.
-     */
-    data class StartFailed(
-        val serverId: Long,
-        val startError: StartAndConnectError
-    ) : ManageCallToolError() {
-        override val message: String =
-            "Failed to start MCP server (ID: $serverId): ${startError.message}"
-        override val cause: Any = startError
-    }
-
-    /**
-     * Failed to call the tool on the MCP server.
-     */
-    data class CallFailed(
-        val serverId: Long,
-        val callError: CallToolError
-    ) : ManageCallToolError() {
-        override val message: String =
-            "Failed to call tool on MCP server (ID: $serverId): ${callError.message}"
-        override val cause: Any = callError
     }
 }
 

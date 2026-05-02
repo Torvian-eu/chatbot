@@ -167,7 +167,8 @@ class ConfigAssemblerSslSanTest {
         ),
         jwt = JwtConfigDto(
             issuer = "chatbot-server",
-            audience = "chatbot-users",
+            userAudience = "chatbot-users",
+            workerAudience = "chatbot-workers",
             realm = "chatbot-realm",
             secret = "jwt-secret",
             tokenExpirationMs = 60_000,
