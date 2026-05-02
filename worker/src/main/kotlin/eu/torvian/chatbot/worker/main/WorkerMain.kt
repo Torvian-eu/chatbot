@@ -47,6 +47,8 @@ class WorkerMain(
         fun main(args: Array<String>) {
             WorkerMain().start(args)
         }
+
+        const val SETUP_AUTO_START_ENV_VAR = "CHATBOT_WORKER_SETUP_AUTO_START"
     }
 
     /**
@@ -107,17 +109,30 @@ class WorkerMain(
         logger.info("Resolved worker config directory: {}", configDir)
 
         // Phase 1: Load the DTO (nullable/partial).
-        val currentDto = configLoader.loadAppConfigDto(configDir)
+        var currentDto = configLoader.loadAppConfigDto(configDir)
             .mapLeft { WorkerMainError.Config(it) }
             .bind()
         logger.info("Initial worker configuration DTO loaded.")
 
         // Phase 2: Setup (explicit via --setup, or automatic when setup.required=true).
         // After successful setup the process exits cleanly so that provisioning and runtime remain distinct phases.
+        // Exception: If CHATBOT_WORKER_SETUP_AUTO_START=true, transition directly to normal operation.
         if (options.setup || currentDto.setup?.required == true) {
             runWorkerSetup(configDir, currentDto, options.serverUrlOverride).bind()
-            logger.info("Worker setup completed successfully. Start the worker again to begin normal operation.")
-            return@either
+
+            // Check if we should auto-start after successful setup
+            val autoStartAfterSetup = System.getenv(SETUP_AUTO_START_ENV_VAR)?.lowercase() == "true"
+
+            if (autoStartAfterSetup) {
+                logger.info("Reloading configuration after setup...")
+                currentDto = configLoader.loadAppConfigDto(configDir)
+                    .mapLeft { WorkerMainError.Config(it) }
+                    .bind()
+                logger.info("Worker setup completed successfully. Starting normal operation...")
+            } else {
+                logger.info("Worker setup completed successfully. Start the worker again to begin normal operation.")
+                return@either
+            }
         }
 
         // Phase 3: Strict assembly and validation.
