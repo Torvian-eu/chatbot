@@ -1,0 +1,27 @@
+# This is an example docker-compose file for deploying the chatbot worker on a VPS.
+# On first run, use this command for setting up the worker:
+# docker compose -f docker-compose.example-vps.yml run -it --rm chatbot-worker
+# It will ask you to enter credentials for the chatbot server and will register the worker. After that, you can start the worker in detached mode:
+# docker compose -f docker-compose.example-vps.yml up -d
+
+name: chatbot-worker
+
+services:
+  chatbot-worker:
+    image: ghcr.io/torvian-eu/chatbot-worker:latest
+    container_name: chatbot-worker
+    environment:
+      - CHATBOT_WORKER_SETUP_SERVER_URL=https://chatbot-server.yourdomain.com # Change to the actual URL of your chatbot server
+      - PUID=1000  # Change to your actual host UID (run 'id -u')
+      - PGID=1000  # Change to your actual host GID (run 'id -g')
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - npm-cache:/app/cache/npm
+      - uv-cache:/app/cache/uv
+    restart: unless-stopped
+
+volumes:
+  npm-cache:
+  uv-cache:

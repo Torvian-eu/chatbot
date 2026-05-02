@@ -1,3 +1,5 @@
+name: caddy
+
 services:
   caddy:
     image: caddy:2

@@ -1,3 +1,5 @@
+name: chatbot-server
+
 services:
   chatbot-server:
     image: ghcr.io/torvian-eu/chatbot-server:latest
@@ -7,12 +9,12 @@ services:
       SERVER_HOST: "0.0.0.0"
       SERVER_PORT: "8080"
       SERVER_CONNECTOR_TYPE: "HTTP"
-      SERVER_CORS_ALLOWED_ORIGIN_1: "https://chat.example.com"
+      SERVER_CORS_ALLOWED_ORIGIN_1: "https://chatbot-client.yourdomain.com" # Change to the actual URL of your chatbot client
     #      JAVA_TOOL_OPTIONS: "-Dlog4j.configurationFile=/app/config/log4j2-debug.xml"
     volumes:
-      - chatbot-config:/app/config
-      - chatbot-data:/app/data
-      - chatbot-logs:/app/logs
+      - ./config:/app/config
+      - ./data:/app/data
+      - ./logs:/app/logs
     expose:
       - "8080"
     networks:
@@ -23,8 +25,3 @@ services:
 networks:
   chatbot-network:
     external: true
-
-volumes:
-  chatbot-config:
-  chatbot-data:
-  chatbot-logs:
