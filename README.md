@@ -13,13 +13,15 @@ Torvian Chatbot is a self-hosted AI workspace for users who want control over da
 - 💻📱🌐 Multi-platform clients for desktop, web, and Android, all connecting to the same server.
 - ⚙️⏰ Run tools 24/7 on any machine (local, remote, VM), independent from where the client apps are running.
 
+## Live Demo
+For a live demonstration of the Torvian Chatbot, please visit our [demo page](https://chatbot.torvian.eu/demo.html).
+
 ## Platform Architecture
 - **Server**: Core API and orchestration layer for authentication/authorization, chat sessions, message processing, LLM integration, tool lifecycle, and persistence.
 - **Client apps**: Compose Multiplatform UI for Desktop, Web (WASM), and Android to chat, configure providers/models, and manage tools.
 - **Worker (optional)**: Standalone process for tool execution, useful for workspace isolation and always-on availability.
 
 ## System Architecture
-
 For a detailed explanation of the system architecture, including the LLM chat loop, remote tool execution flows, worker registration, and security context, see the [System Architecture Flows](docs/onboarding/Torvian%20Chatbot%20System%20Architecture%20Flows.md) document.
 
 ### High-Level Architecture
@@ -72,13 +74,14 @@ This project is in active development.
 
 ## Getting Started
 
-### Use pre-built packages
+### 1. Download pre-built packages
 Pre-built packages are available from the [Releases page](https://github.com/Torvian-eu/chatbot/releases):
-- **Server**: Available for all platforms. Use Docker (recommended) or JDK 21+ to run it locally.
+- **Server**: Optional; Use this package only if you want to run the server directly using Java. Otherwise, use the prebuilt Docker image from ghcr.io or build it locally from source.
+- **Worker**: Optional; Use this package only if you want to run the worker directly using Java. Otherwise, use the prebuilt Docker image from ghcr.io or build it locally from source.
 - **Desktop Client**: Available for Windows and Linux.
 - **Web Client**: Available as a static web app. It must be served over HTTP(S).
 
-### Run the server (required)
+### 2. Run the server
 ```bash
 # Linux/Mac
 <install-path>/start-server.sh
@@ -87,23 +90,24 @@ Pre-built packages are available from the [Releases page](https://github.com/Tor
 ```
 
 **Docker quick start:**
-
 ```bash
 docker run -d \
   --name chatbot-server \
   -p 8080:8080 \
-  -v chatbot-config:/app/config \
-  -v chatbot-data:/app/data \
-  -v chatbot-logs:/app/logs \
   -e SERVER_HOST=0.0.0.0 \
   -e SERVER_CONNECTOR_TYPE=HTTP \
+  -v chatbot-server-config:/app/config \
+  -v chatbot-server-data:/app/data \
+  -v chatbot-server-logs:/app/logs \
   --restart unless-stopped \
   ghcr.io/torvian-eu/chatbot-server:latest
 ```
 
-For full deployment options and configuration details (including Docker Compose + Caddy), see [deploy/README.md](deploy/README.md).
+Notes:
+- For powershell, replace `\` with `` ` ``
+- For full deployment options and configuration details (including Docker Compose + Caddy), see [deploy/README.md](deploy/README.md).
 
-### Run the desktop application (recommended)
+### 3a. Run the desktop application (recommended)
 ```bash
 # Windows
 <install-path>/Chatbot-with-logs.bat
@@ -111,7 +115,7 @@ For full deployment options and configuration details (including Docker Compose 
 <install-path>/Chatbot-with-logs.sh
 ```
 
-### Serve the web client (optional, not recommended)
+### 3b. Serve the web client (optional, not recommended)
 The web client is a static web application and must be served over HTTP(S). Opening `index.html` directly via `file://` will not work, because browsers block loading WASM and related assets from local files.
 
 For local testing, you can use any simple static file server.
@@ -129,9 +133,12 @@ http://localhost:4000
 
 Notes:
 - For production or VPS deployments, serve the same files using a regular web server such as Caddy or nginx.
-- The address of the web client will need to be added to the CORS allowed origins in the server configuration to allow the web client to connect.
+- The address of the web client will need to be added to the CORS allowed origins in the server configuration to allow the web client to connect. (see `application.json` -> `corsAllowedOrigins`, or use environment variables to set `SERVER_CORS_ALLOWED_ORIGIN_1` etc.)
 
-### Run the worker (required for MCP tool execution)
+### 4. Login
+Login with username `admin` and password `admin123`. You will be asked to change the password on first login.
+
+### 5. Run the worker (required for MCP tool execution)
 ```bash
 # Linux/Mac
 <install-path>/start-worker.sh
@@ -139,13 +146,35 @@ Notes:
 <install-path>/start-worker.bat
 ```
 
-Notes: 
+Notes:
 - The server must be running before starting the worker.
 - An **active** user (or admin) account is required to start the worker, because the worker needs to authenticate with the server.
 - On first startup, the worker will prompt you to enter the server URL and user credentials to connect. An SSL certificate will be generated during setup. On subsequent startups, the stored SSL certificate (and private key) will be used for authentication.
 
-### Login
-Login with username `admin` and password `admin123`. You will be asked to change the password on first login.
+**Docker quick start:**
+```bash
+docker run -it \
+  --name chatbot-worker \
+  -e CHATBOT_WORKER_SETUP_SERVER_URL=http://host.docker.internal:8080 \
+  -e CHATBOT_WORKER_SETUP_AUTO_START=true \
+  -e PUID=1000 \
+  -e PGID=1000 \
+  -v chatbot-worker-config:/app/config \
+  -v chatbot-worker-data:/app/data \
+  -v chatbot-worker-logs:/app/logs \
+  -v chatbot-worker-npm-cache:/app/cache/npm \
+  -v chatbot-worker-uv-cache:/app/cache/uv \
+  --restart unless-stopped \
+  ghcr.io/torvian-eu/chatbot-worker:latest
+```
+
+Notes:
+- For powershell, replace `\` with `` ` ``
+- The switch `-it` is used to allow interactive input during the worker setup process. After the initial setup, you can remove `-it` and add `-d` for subsequent runs if you prefer to run the worker in detached mode.
+- We use `host.docker.internal` to allow the worker to reach the server running on the host machine.
+- For full deployment options and configuration details (including Docker Compose + Caddy), see [deploy/README.md](deploy/README.md).
+- When using the prebuilt Docker image, the usable commands for starting an MCP server are limited to `uvx` and `npx`.
+- The main benefit of using Docker for the worker is that it offers better isolation and therefore better security for tool execution. Malicious or buggy tools that are executed by the worker will not be able to access the host system or other processes, and will be limited in their ability to cause harm. Mounted volumes for config, data, and logs allow the worker to persist necessary information while still maintaining isolation.
 
 ## Build from Source
 
@@ -177,6 +206,12 @@ The files will be installed to `app/build/compose/binaries/main/app/Chatbot`. Yo
 ./gradlew app:wasmJsBrowserDistribution
 ```
 The files will be installed to `app/build/dist/wasmJs/productionExecutable`. You can serve the web client using any static file server, as described in the "Serve the web client" section above.
+
+### Build & Install Worker application
+```bash
+./gradlew worker:installDist
+```
+The files will be installed to `worker/build/install/worker/`. You can run the worker using the scripts in that folder.
 
 ## Guides
 These guides provide information on how to configure and use specific features of the chatbot.

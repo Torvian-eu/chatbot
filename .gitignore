@@ -60,6 +60,7 @@ app/src/commonMain/sqldelight/databases/
 
 ### Build output directories
 deploy/server/dist
+deploy/worker/dist
 deploy/wasm-client
 deploy/caddy/Caddyfile
 deploy/server/docker-compose.yml

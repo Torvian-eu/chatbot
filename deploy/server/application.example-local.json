@@ -18,14 +18,12 @@
     "host": "0.0.0.0", /* listen on all interfaces; for use in a Docker container */
     "port": 8080,
     "path": "",
-    "connectorType": "HTTPS" /* production default: HTTPS */
+    "connectorType": "HTTP"
   },
 
   "cors": {
     /* Origins must be full origins (scheme + host + optional port) */
-    "allowedOrigins": [
-        "https://pc1.local"
-    ]
+    "allowedOrigins": []
   },
 
   "ssl": {
