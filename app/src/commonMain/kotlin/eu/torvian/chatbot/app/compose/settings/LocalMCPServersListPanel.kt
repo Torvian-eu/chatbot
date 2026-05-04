@@ -125,6 +125,18 @@ fun LocalMCPServerListItem(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // Worker badge
+                overview?.worker?.let { worker ->
+                    Badge(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    ) {
+                        Text(
+                            text = worker.displayName,
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                }
+
                 Badge(
                     containerColor = if (server.isEnabled) {
                         MaterialTheme.colorScheme.tertiaryContainer

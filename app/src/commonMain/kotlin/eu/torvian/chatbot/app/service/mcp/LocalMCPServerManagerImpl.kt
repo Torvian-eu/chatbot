@@ -10,6 +10,7 @@ import eu.torvian.chatbot.app.repository.LocalMCPServerRepository
 import eu.torvian.chatbot.app.repository.LocalMCPServerRuntimeStatusRepository
 import eu.torvian.chatbot.app.repository.LocalMCPToolRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.app.repository.WorkerRepository
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
@@ -25,21 +26,24 @@ import kotlinx.coroutines.flow.combine
  * - LocalMCPServerRepository (MCP server configurations)
  * - LocalMCPToolRepository (MCP tool persistence)
  * - LocalMCPServerRuntimeStatusRepository (worker-backed runtime status snapshots)
+ * - WorkerRepository (worker metadata for display)
  *
  * Design principles:
  * - High-level orchestration layer between UI and MCP operations
  * - Coordinates data flow across repositories and services
- * - Handles data transformation (MCP SDK Tool â†’ LocalMCPToolDefinition)
+ * - Handles data transformation (MCP SDK Tool â†' LocalMCPToolDefinition)
  * - Pure business logic and workflow coordination
  *
  * @property serverRepository Repository for MCP server configurations
  * @property runtimeStatusRepository Repository for worker-backed runtime status snapshots
  * @property toolRepository Repository for MCP tool persistence
+ * @property workerRepository Repository for worker metadata
  */
 class LocalMCPServerManagerImpl(
     private val serverRepository: LocalMCPServerRepository,
     private val runtimeStatusRepository: LocalMCPServerRuntimeStatusRepository,
-    private val toolRepository: LocalMCPToolRepository
+    private val toolRepository: LocalMCPToolRepository,
+    private val workerRepository: WorkerRepository
 ) : LocalMCPServerManager {
 
     companion object {
@@ -49,18 +53,27 @@ class LocalMCPServerManagerImpl(
     override val serverOverviews: Flow<DataState<RepositoryError, List<LocalMCPServerOverview>>> = combine(
         serverRepository.servers,
         runtimeStatusRepository.runtimeStatuses,
-        toolRepository.mcpTools
-    ) { serversState, runtimeStatusesState, toolsState ->
+        toolRepository.mcpTools,
+        workerRepository.workers
+    ) { serversState, runtimeStatusesState, toolsState, workersState ->
+        // Extract workers list from the workers state, defaulting to empty if not loaded
+        val workers = when (workersState) {
+            is DataState.Success -> workersState.data
+            else -> emptyList()
+        }
+
         serversState
             .zipWith(runtimeStatusesState) { servers, statusesByServerId ->
                 servers to statusesByServerId
             }
             .zipWith(toolsState) { (servers, statusesByServerId), toolsByServerId ->
                 servers.map { server ->
+                    val worker = workers.find { it.id == server.workerId }
                     LocalMCPServerOverview(
                         serverConfig = server,
                         tools = toolsByServerId[server.id],
-                        runtimeStatus = statusesByServerId[server.id]
+                        runtimeStatus = statusesByServerId[server.id],
+                        worker = worker
                     )
                 }
             }
@@ -81,6 +94,11 @@ class LocalMCPServerManagerImpl(
         toolRepository.loadMCPTools().onLeft { repoErr ->
             logger.error("Failed to load MCP tools for user $userId: ${repoErr.message}")
         }.bind()
+
+        // Load workers for display name lookup.
+        workerRepository.loadWorkers().onLeft { repoErr ->
+            logger.error("Failed to load workers for user $userId: ${repoErr.message}")
+        }
     }
 
     override suspend fun testConnectionForNewServer(

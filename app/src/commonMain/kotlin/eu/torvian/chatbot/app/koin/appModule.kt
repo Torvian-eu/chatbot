@@ -227,7 +227,8 @@ fun appModule(config: AppConfiguration): Module = module {
         LocalMCPServerManagerImpl(
             serverRepository = get(),
             runtimeStatusRepository = get(),
-            toolRepository = get()
+            toolRepository = get(),
+            workerRepository = get()
         )
     }
 

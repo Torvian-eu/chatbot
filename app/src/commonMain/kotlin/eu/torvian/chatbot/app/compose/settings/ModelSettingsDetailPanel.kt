@@ -182,26 +182,6 @@ fun ModelSettingsDetailsBody(
     }
 }
 
-
-/**
- * Helper composable for displaying a detail row.
- */
-@Composable
-private fun DetailRow(label: String, value: String) {
-    Column {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.padding(top = 4.dp)
-        )
-    }
-}
-
 /**
  * Chat-specific settings details.
  */

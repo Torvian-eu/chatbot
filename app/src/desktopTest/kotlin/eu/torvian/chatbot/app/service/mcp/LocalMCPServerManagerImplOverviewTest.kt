@@ -5,10 +5,12 @@ import eu.torvian.chatbot.app.repository.LocalMCPServerRepository
 import eu.torvian.chatbot.app.repository.LocalMCPServerRuntimeStatusRepository
 import eu.torvian.chatbot.app.repository.LocalMCPToolRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.app.repository.WorkerRepository
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
+import eu.torvian.chatbot.common.models.worker.WorkerDto
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -61,6 +63,16 @@ class LocalMCPServerManagerImplOverviewTest {
             connectedAt = now,
             lastActivityAt = now
         )
+        val worker = WorkerDto(
+            id = 2L,
+            workerUid = "worker-uid-2",
+            ownerUserId = 1L,
+            displayName = "Test Worker",
+            certificateFingerprint = "abc123",
+            allowedScopes = emptyList(),
+            createdAt = now,
+            lastSeenAt = now
+        )
 
         val serverState = MutableStateFlow<DataState<RepositoryError, List<LocalMCPServerDto>>>(
             DataState.Success(listOf(server))
@@ -70,6 +82,9 @@ class LocalMCPServerManagerImplOverviewTest {
         )
         val toolState = MutableStateFlow<DataState<RepositoryError, Map<Long, List<LocalMCPToolDefinition>>>>(
             DataState.Success(mapOf(server.id to listOf(tool)))
+        )
+        val workerState = MutableStateFlow<DataState<RepositoryError, List<WorkerDto>>>(
+            DataState.Success(listOf(worker))
         )
 
         val serverRepository = mockk<LocalMCPServerRepository>()
@@ -81,10 +96,14 @@ class LocalMCPServerManagerImplOverviewTest {
         val toolRepository = mockk<LocalMCPToolRepository>()
         every { toolRepository.mcpTools } returns toolState
 
+        val workerRepository = mockk<WorkerRepository>()
+        every { workerRepository.workers } returns workerState
+
         val manager = LocalMCPServerManagerImpl(
             serverRepository = serverRepository,
             runtimeStatusRepository = runtimeStatusRepository,
-            toolRepository = toolRepository
+            toolRepository = toolRepository,
+            workerRepository = workerRepository
         )
 
         val result = manager.serverOverviews
@@ -99,6 +118,8 @@ class LocalMCPServerManagerImplOverviewTest {
         assertEquals(runtimeStatus, overview.runtimeStatus)
         assertEquals(1, overview.tools?.size)
         assertTrue(overview.isConnected)
+        assertEquals(worker, overview.worker)
+        assertEquals("Test Worker", overview.worker?.displayName)
 
         runtimeStatusState.value = DataState.Success(
             mapOf(server.id to runtimeStatus.copy(state = LocalMcpServerRuntimeStateDto.STOPPED, connectedAt = null))
@@ -112,6 +133,3 @@ class LocalMCPServerManagerImplOverviewTest {
         assertFalse(disconnected)
     }
 }
-
-
-

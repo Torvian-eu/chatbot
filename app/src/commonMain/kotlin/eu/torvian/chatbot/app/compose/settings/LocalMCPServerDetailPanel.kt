@@ -139,6 +139,11 @@ private fun ServerStatusSection(serverOverview: LocalMCPServerOverview, isOperat
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text(text = "Status", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
+            // Worker display name
+            serverOverview.worker?.let { worker ->
+                DetailRow(label = "Worker", value = worker.displayName)
+            }
+
             DetailRow(label = "Enabled", value = if (server.isEnabled) "Yes" else "No")
 
             DetailRow(

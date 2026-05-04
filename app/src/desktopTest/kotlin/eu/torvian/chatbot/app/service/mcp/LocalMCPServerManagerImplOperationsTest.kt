@@ -6,7 +6,9 @@ import eu.torvian.chatbot.app.repository.LocalMCPServerRepository
 import eu.torvian.chatbot.app.repository.LocalMCPServerRuntimeStatusRepository
 import eu.torvian.chatbot.app.repository.LocalMCPToolRepository
 import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.app.repository.WorkerRepository
 import eu.torvian.chatbot.common.models.api.mcp.*
+import eu.torvian.chatbot.common.models.worker.WorkerDto
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -27,25 +29,30 @@ class LocalMCPServerManagerImplOperationsTest {
     private val serverRepository: LocalMCPServerRepository = mockk()
     private val runtimeStatusRepository: LocalMCPServerRuntimeStatusRepository = mockk()
     private val toolRepository: LocalMCPToolRepository = mockk(relaxed = true)
+    private val workerRepository: WorkerRepository = mockk(relaxed = true)
 
     private lateinit var manager: LocalMCPServerManagerImpl
 
     @BeforeEach
     fun setUp() {
-        every { serverRepository.servers } returns MutableStateFlow<DataState<RepositoryError, List<eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto>>>(
+        every { serverRepository.servers } returns MutableStateFlow<DataState<RepositoryError, List<LocalMCPServerDto>>>(
             DataState.Success(emptyList())
         )
-        every { runtimeStatusRepository.runtimeStatuses } returns MutableStateFlow<DataState<RepositoryError, Map<Long, eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto>>>(
+        every { runtimeStatusRepository.runtimeStatuses } returns MutableStateFlow<DataState<RepositoryError, Map<Long, LocalMcpServerRuntimeStatusDto>>>(
             DataState.Success(emptyMap())
         )
         every { toolRepository.mcpTools } returns MutableStateFlow<DataState<RepositoryError, Map<Long, List<eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition>>>>(
             DataState.Success(emptyMap())
         )
+        every { workerRepository.workers } returns MutableStateFlow<DataState<RepositoryError, List<WorkerDto>>>(
+            DataState.Success(emptyList())
+        )
 
         manager = LocalMCPServerManagerImpl(
             serverRepository = serverRepository,
             runtimeStatusRepository = runtimeStatusRepository,
-            toolRepository = toolRepository
+            toolRepository = toolRepository,
+            workerRepository = workerRepository
         )
     }
 
