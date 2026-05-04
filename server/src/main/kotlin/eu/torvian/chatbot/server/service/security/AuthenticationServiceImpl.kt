@@ -56,7 +56,7 @@ class AuthenticationServiceImpl(
         private val logger: Logger = LogManager.getLogger(AuthenticationServiceImpl::class.java)
     }
 
-    override suspend fun login(username: String, password: String): Either<LoginError, LoginResult> =
+    override suspend fun login(username: String, password: String, ipAddress: String?): Either<LoginError, LoginResult> =
         transactionScope.transaction {
             either {
                 logger.info("Attempting login for user: $username")
@@ -86,7 +86,7 @@ class AuthenticationServiceImpl(
                 val session: UserSessionEntity = withError({ _: UserSessionError.ForeignKeyViolation ->
                     LoginError.UserNotFound
                 }) {
-                    userSessionDao.insertSession(userEntity.id, sessionExpiresAt).bind()
+                    userSessionDao.insertSession(userEntity.id, sessionExpiresAt, ipAddress).bind()
                 }
 
                 // Generate tokens
@@ -154,7 +154,7 @@ class AuthenticationServiceImpl(
             }
         }
 
-    override suspend fun refreshToken(refreshToken: String): Either<RefreshTokenError, LoginResult> =
+    override suspend fun refreshToken(refreshToken: String, ipAddress: String?): Either<RefreshTokenError, LoginResult> =
         transactionScope.transaction {
             either {
                 // First, decode and verify the refresh token (non-suspend operations)
@@ -226,7 +226,7 @@ class AuthenticationServiceImpl(
                 val newSession = withError({ _: UserSessionError.ForeignKeyViolation ->
                     RefreshTokenError.InvalidSession("User not found")
                 }) {
-                    userSessionDao.insertSession(userId, newSessionExpiresAt).bind()
+                    userSessionDao.insertSession(userId, newSessionExpiresAt, ipAddress).bind()
                 }
 
                 // Generate new tokens

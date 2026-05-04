@@ -234,7 +234,8 @@ object TestDefaults {
         userId = user1.id,
         expiresAt = Instant.fromEpochMilliseconds(System.currentTimeMillis() + (24 * 60 * 60 * 1000)), // 24 hours from now
         createdAt = Instant.fromEpochMilliseconds(DEFAULT_INSTANT_MILLIS),
-        lastAccessed = Instant.fromEpochMilliseconds(DEFAULT_INSTANT_MILLIS)
+        lastAccessed = Instant.fromEpochMilliseconds(DEFAULT_INSTANT_MILLIS),
+        ipAddress = "127.0.0.1"
     )
 
     val userGroup1 = UserGroupEntity(

@@ -14,6 +14,7 @@ fun ResultRow.toUserSessionEntity(): UserSessionEntity {
         userId = this[UserSessionsTable.userId].value,
         expiresAt = Instant.fromEpochMilliseconds(this[UserSessionsTable.expiresAt]),
         createdAt = Instant.fromEpochMilliseconds(this[UserSessionsTable.createdAt]),
-        lastAccessed = Instant.fromEpochMilliseconds(this[UserSessionsTable.lastAccessed])
+        lastAccessed = Instant.fromEpochMilliseconds(this[UserSessionsTable.lastAccessed]),
+        ipAddress = this[UserSessionsTable.ipAddress]
     )
 }

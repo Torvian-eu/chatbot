@@ -77,7 +77,8 @@ class AuthenticationServiceImplTest {
         userId = testUser.id,
         createdAt = Instant.fromEpochMilliseconds(System.currentTimeMillis()),
         lastAccessed = Instant.fromEpochMilliseconds(System.currentTimeMillis()),
-        expiresAt = Instant.fromEpochMilliseconds(System.currentTimeMillis() + 24 * 60 * 60 * 1000) // 24 hours
+        expiresAt = Instant.fromEpochMilliseconds(System.currentTimeMillis() + 24 * 60 * 60 * 1000), // 24 hours
+        ipAddress = "127.0.0.1"
     )
 
     @BeforeEach
@@ -99,12 +100,12 @@ class AuthenticationServiceImplTest {
         coEvery { userDao.getUserByUsername(username) } returns testUser.right()
         every { passwordService.verifyPassword(password, testUser.passwordHash) } returns true
 
-        coEvery { userSessionDao.insertSession(testUser.id, any()) } returns testSession.right()
+        coEvery { userSessionDao.insertSession(testUser.id, any(), any()) } returns testSession.right()
         coEvery { userService.updateLastLogin(testUser.id) } returns Unit.right()
         coEvery { authorizationService.getUserPermissions(testUser.id) } returns emptyList()
 
         // When
-        val result = authService.login(username, password)
+        val result = authService.login(username, password, "127.0.0.1")
 
         // Then
         assertTrue(result.isRight())
@@ -115,7 +116,7 @@ class AuthenticationServiceImplTest {
         assertEquals(emptyList(), loginResult.permissions)
         coVerify { userDao.getUserByUsername(username) }
         verify { passwordService.verifyPassword(password, testUser.passwordHash) }
-        coVerify { userSessionDao.insertSession(testUser.id, any()) }
+        coVerify { userSessionDao.insertSession(testUser.id, any(), any()) }
         coVerify { userService.updateLastLogin(testUser.id) }
         coVerify { authorizationService.getUserPermissions(testUser.id) }
         val accessExpiryMs = JWT.decode(loginResult.accessToken).expiresAt.time
@@ -218,7 +219,7 @@ class AuthenticationServiceImplTest {
         coEvery { userDao.getUserByUsername(username) } returns UserError.UserNotFoundByUsername(username).left()
 
         // When
-        val result = authService.login(username, password)
+        val result = authService.login(username, password, null)
 
         // Then
         assertTrue(result.isLeft())
@@ -235,7 +236,7 @@ class AuthenticationServiceImplTest {
         every { passwordService.verifyPassword(password, testUser.passwordHash) } returns false
 
         // When
-        val result = authService.login(username, password)
+        val result = authService.login(username, password, null)
 
         // Then
         assertTrue(result.isLeft())
@@ -252,7 +253,7 @@ class AuthenticationServiceImplTest {
         coEvery { userDao.getUserByUsername(username) } returns disabledUser.right()
 
         // When
-        val result = authService.login(username, password)
+        val result = authService.login(username, password, null)
 
         // Then
         assertTrue(result.isLeft())
@@ -272,11 +273,11 @@ class AuthenticationServiceImplTest {
         coEvery { userDao.getUserByUsername(username) } returns testUser.right()
         every { passwordService.verifyPassword(password, testUser.passwordHash) } returns true
 
-        coEvery { userSessionDao.insertSession(testUser.id, any()) } returns
+        coEvery { userSessionDao.insertSession(testUser.id, any(), any()) } returns
                 UserSessionError.ForeignKeyViolation("User not found").left()
 
         // When
-        val result = authService.login(username, password)
+        val result = authService.login(username, password, null)
 
         // Then
         assertTrue(result.isLeft())
@@ -506,11 +507,11 @@ class AuthenticationServiceImplTest {
         coEvery { userService.getUserById(testUser.id) } returns testUser.toUser().right()
         coEvery { userSessionDao.updateLastAccessed(testSession.id, any()) } returns Unit.right()
         coEvery { userSessionDao.deleteSession(testSession.id) } returns Unit.right()
-        coEvery { userSessionDao.insertSession(testUser.id, any()) } returns testSession.right()
+        coEvery { userSessionDao.insertSession(testUser.id, any(), any()) } returns testSession.right()
         coEvery { authorizationService.getUserPermissions(testUser.id) } returns emptyList()
 
         // When
-        val result = authService.refreshToken(refreshToken)
+        val result = authService.refreshToken(refreshToken, "127.0.0.1")
 
         // Then
         assertTrue(result.isRight())
@@ -527,7 +528,7 @@ class AuthenticationServiceImplTest {
         val accessToken = jwtConfig.generateAccessToken(testUser.id, testSession.id)
 
         // When
-        val result = authService.refreshToken(accessToken)
+        val result = authService.refreshToken(accessToken, null)
 
         // Then
         assertTrue(result.isLeft())
@@ -540,7 +541,7 @@ class AuthenticationServiceImplTest {
         val invalidToken = "not.a.valid.refresh.token"
 
         // When
-        val result = authService.refreshToken(invalidToken)
+        val result = authService.refreshToken(invalidToken, null)
 
         // Then
         assertTrue(result.isLeft())

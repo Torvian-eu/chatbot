@@ -25,6 +25,7 @@ import eu.torvian.chatbot.server.service.security.error.LogoutAllError
 import eu.torvian.chatbot.server.service.security.error.RefreshTokenError
 import io.ktor.http.*
 import io.ktor.server.auth.*
+import io.ktor.server.plugins.origin
 import io.ktor.server.request.*
 import io.ktor.server.resources.*
 import io.ktor.server.response.*
@@ -73,8 +74,10 @@ fun Route.configureAuthRoutes(
     // POST /api/v1/auth/login - User login
     post<AuthResource.Login> {
         val request = call.receive<LoginRequest>()
+        // Extract client IP address for session tracking (supports proxy via X-Forwarded-For header)
+        val ipAddress = call.request.origin.remoteAddress
         call.respondEither(
-            authenticationService.login(request.username, request.password)
+            authenticationService.login(request.username, request.password, ipAddress)
                 .map { it.toLoginResponse() }
         ) { error ->
             when (error) {
@@ -96,8 +99,10 @@ fun Route.configureAuthRoutes(
     // POST /api/v1/auth/refresh - Refresh access token
     post<AuthResource.Refresh> {
         val request = call.receive<RefreshTokenRequest>()
+        // Extract client IP address for session tracking (supports proxy via X-Forwarded-For header)
+        val ipAddress = call.request.origin.remoteAddress
         call.respondEither(
-            authenticationService.refreshToken(request.refreshToken)
+            authenticationService.refreshToken(request.refreshToken, ipAddress)
                 .map { it.toLoginResponse() }
         ) { error ->
             when (error) {

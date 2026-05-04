@@ -10,6 +10,7 @@ import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.auth.jwt.*
 import io.ktor.server.plugins.contentnegotiation.*
+import io.ktor.server.plugins.forwardedheaders.*
 import io.ktor.server.resources.*
 import io.ktor.server.sse.*
 import io.ktor.server.websocket.*
@@ -19,6 +20,16 @@ import kotlinx.serialization.json.Json
  * Configures the Ktor server with necessary plugins and settings. (shared with tests)
  */
 fun Application.configureKtor(jwtConfig: JwtConfig, authService: AuthenticationService) {
+    // Install ForwardedHeaders support for proxy compatibility (e.g., X-Forwarded-For)
+    // This enables call.request.origin.remoteHost to return the correct client IP
+    install(ForwardedHeaders)
+
+    // Install XForwardedHeaders to support both X-Forwarded-For and Forwarded headers for client IP extraction
+    install(XForwardedHeaders)
+    // Important Note: When the server is not behind a reverse proxy (such as Nginx, or Caddy), a malicious client
+    // could spoof their IP address using X-Forwarded-For. In production, ensure that the server is properly configured
+    // behind a trusted reverse proxy that strips untrusted headers.
+
     // Install the ContentNegotiation plugin for JSON serialization
     install(ContentNegotiation) {
         json(Json)

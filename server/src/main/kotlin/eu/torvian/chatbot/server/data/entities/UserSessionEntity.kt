@@ -11,11 +11,13 @@ import kotlin.time.Instant
  * @property expiresAt Timestamp when the session expires.
  * @property createdAt Timestamp when the session was created.
  * @property lastAccessed Timestamp when the session was last accessed.
+ * @property ipAddress IP address of the client that created the session (null if unavailable).
  */
 data class UserSessionEntity(
     val id: Long,
     val userId: Long,
     val expiresAt: Instant,
     val createdAt: Instant,
-    val lastAccessed: Instant
+    val lastAccessed: Instant,
+    val ipAddress: String?
 )

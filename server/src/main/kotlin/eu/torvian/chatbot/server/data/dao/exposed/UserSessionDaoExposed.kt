@@ -44,7 +44,8 @@ class UserSessionDaoExposed(
 
     override suspend fun insertSession(
         userId: Long,
-        expiresAt: Long
+        expiresAt: Long,
+        ipAddress: String?
     ): Either<UserSessionError.ForeignKeyViolation, UserSessionEntity> =
         transactionScope.transaction {
             either {
@@ -55,6 +56,7 @@ class UserSessionDaoExposed(
                         it[UserSessionsTable.expiresAt] = expiresAt
                         it[createdAt] = currentTime
                         it[lastAccessed] = currentTime
+                        it[UserSessionsTable.ipAddress] = ipAddress
                     }
 
                     insertStatement.resultedValues?.first()?.toUserSessionEntity()

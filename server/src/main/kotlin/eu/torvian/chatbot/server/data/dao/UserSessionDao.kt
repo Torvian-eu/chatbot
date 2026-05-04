@@ -33,12 +33,14 @@ interface UserSessionDao {
      * 
      * @param userId The ID of the user for whom to create the session.
      * @param expiresAt Timestamp when the session should expire (epoch milliseconds).
+     * @param ipAddress Optional IP address of the client creating the session.
      * @return Either [UserSessionError.ForeignKeyViolation] if the user doesn't exist,
      *         or the newly created [UserSessionEntity] on success.
      */
     suspend fun insertSession(
         userId: Long,
-        expiresAt: Long
+        expiresAt: Long,
+        ipAddress: String?
     ): Either<UserSessionError.ForeignKeyViolation, UserSessionEntity>
 
     /**

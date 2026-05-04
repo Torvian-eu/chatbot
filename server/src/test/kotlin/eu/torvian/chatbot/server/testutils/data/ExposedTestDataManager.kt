@@ -519,6 +519,7 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
                 it[expiresAt] = userSession.expiresAt.toEpochMilliseconds()
                 it[createdAt] = userSession.createdAt.toEpochMilliseconds()
                 it[lastAccessed] = userSession.lastAccessed.toEpochMilliseconds()
+                it[ipAddress] = userSession.ipAddress
             }
             return@transaction
         }

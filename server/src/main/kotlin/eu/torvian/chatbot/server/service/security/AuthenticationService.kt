@@ -29,9 +29,10 @@ interface AuthenticationService {
      *
      * @param username The username to authenticate
      * @param password The plaintext password to verify
+     * @param ipAddress Optional IP address of the client for session tracking
      * @return Either [LoginError] if authentication fails, or [LoginResult] on success
      */
-    suspend fun login(username: String, password: String): Either<LoginError, LoginResult>
+    suspend fun login(username: String, password: String, ipAddress: String?): Either<LoginError, LoginResult>
 
     /**
      * Logs out a user from their current session.
@@ -87,7 +88,8 @@ interface AuthenticationService {
      * 4. Deletes the old session and creates a new one
      *
      * @param refreshToken The JWT refresh token
+     * @param ipAddress Optional IP address of the client for session tracking
      * @return Either [RefreshTokenError] if refresh fails, or [LoginResult] with new tokens
      */
-    suspend fun refreshToken(refreshToken: String): Either<RefreshTokenError, LoginResult>
+    suspend fun refreshToken(refreshToken: String, ipAddress: String?): Either<RefreshTokenError, LoginResult>
 }

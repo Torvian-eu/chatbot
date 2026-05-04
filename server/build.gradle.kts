@@ -30,6 +30,7 @@ dependencies {
     implementation(libs.ktor.server.jetty)            // Ktor Jetty engine for server
     implementation(libs.ktor.serialization.json)      // Ktor JSON serialization support
     implementation(libs.ktor.network.tls.certificates) // Ktor TLS certificates for SSL/HTTPS
+    implementation(libs.ktor.server.forwarded.header) // Ktor plugin for handling forwarded headers (X-Forwarded-For, etc.)
     implementation(libs.sqlite.jdbc)                  // SQLite JDBC Driver
     implementation(libs.jbcrypt)                      // Password hashing library
     implementation(libs.typesafe.config)              // Typesafe Config for configuration
