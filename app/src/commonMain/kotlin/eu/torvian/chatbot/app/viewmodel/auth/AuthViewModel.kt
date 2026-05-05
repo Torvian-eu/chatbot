@@ -23,7 +23,7 @@ import kotlinx.coroutines.launch
  * - Authentication state management (delegated to AuthRepository)
  * - Login and registration form state
  * - Form validation and error handling
- * - User authentication operations
+ * - User authentication operations, including logout and logout-all flows
  * - Multi-account management (listing, switching, removing accounts)
  *
  * @param authRepository Repository for authentication operations
@@ -225,6 +225,25 @@ class AuthViewModel(
                 notificationService.repositoryError(
                     error = error,
                     shortMessage = "Logout failed"
+                )
+            }.onRight {
+                clearAllForms()
+            }
+        }
+    }
+
+    /**
+     * Logs the current user out from all sessions.
+     *
+     * The repository is responsible for clearing local authentication state, and the view model
+     * only reacts to the outcome by surfacing errors or resetting local forms.
+     */
+    fun logoutAll() {
+        viewModelScope.launch {
+            authRepository.logoutAll().onLeft { error ->
+                notificationService.repositoryError(
+                    error = error,
+                    shortMessage = "Logout all sessions failed"
                 )
             }.onRight {
                 clearAllForms()

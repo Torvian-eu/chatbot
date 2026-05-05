@@ -154,6 +154,34 @@ class DefaultAuthRepository(
         logger.info("Logout successful")
     }
 
+    /**
+     * Logs the current user out from every server-side session and clears the local active account.
+     *
+     * The local cleanup intentionally runs before the API result is bound so the client always
+     * drops the active tokens once the logout-all flow has been initiated.
+     */
+    override suspend fun logoutAll(): Either<RepositoryError, Unit> = either {
+        logger.info("Logging out from all sessions")
+        val result = authApi.logoutAll()
+
+        // Clear local auth data so the app stops using credentials from the active account.
+        tokenStorage.clearAuthData()
+            .onLeft { logger.warn("Failed to clear auth data on logout-all: ${it.message}") }
+
+        // Refresh available accounts list so the UI reflects the cleared active account.
+        refreshAvailableAccounts()
+
+        // Reset the app to the unauthenticated state after logout-all.
+        _authState.value = AuthState.Unauthenticated
+
+        withError({ apiError ->
+            apiError.toRepositoryError("Logout all sessions failed")
+        }) {
+            result.bind()
+        }
+        logger.info("Logout from all sessions successful")
+    }
+
     override suspend fun isAuthenticated(): Boolean {
         return _authState.value is AuthState.Authenticated
     }

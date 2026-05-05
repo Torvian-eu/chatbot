@@ -65,6 +65,13 @@ interface AuthRepository {
     suspend fun logout(): Either<RepositoryError, Unit>
 
     /**
+     * Logs the current user out from all server-side sessions and clears local auth data.
+     *
+     * @return Either a [RepositoryError] on failure or Unit on success
+     */
+    suspend fun logoutAll(): Either<RepositoryError, Unit>
+
+    /**
      * Checks if the user is currently authenticated by checking the auth state.
      *
      * @return true if the user has valid authentication tokens, false otherwise

@@ -332,6 +332,45 @@ class AuthViewModelTest {
         coVerify { mockNotificationService.repositoryError(error, "Logout failed") }
     }
 
+    @Test
+    fun `logoutAll should succeed and clear all forms`() = runTest(testDispatcher) {
+        // Arrange
+        coEvery { mockAuthRepository.logoutAll() } returns Unit.right()
+
+        // Set some form data first
+        authViewModel.updateLoginForm("testuser", "password")
+        authViewModel.updateRegisterForm("newuser", "test@example.com", "pass", "pass")
+
+        // Act
+        authViewModel.logoutAll()
+        advanceUntilIdle()
+
+        // Assert
+        val loginState = authViewModel.loginFormState.value
+        val registerState = authViewModel.registerFormState.value
+
+        assertEquals("", loginState.username)
+        assertEquals("", loginState.password)
+        assertEquals("", registerState.username)
+        assertEquals("", registerState.email)
+
+        coVerify { mockAuthRepository.logoutAll() }
+    }
+
+    @Test
+    fun `logoutAll failure should notify error`() = runTest(testDispatcher) {
+        // Arrange
+        val error = RepositoryError.OtherError("Network error", RuntimeException())
+        coEvery { mockAuthRepository.logoutAll() } returns error.left()
+
+        // Act
+        authViewModel.logoutAll()
+        advanceUntilIdle()
+
+        // Assert
+        coVerify { mockNotificationService.repositoryError(error, "Logout all sessions failed") }
+    }
+
     // --- Form State Management Tests ---
 
     @Test

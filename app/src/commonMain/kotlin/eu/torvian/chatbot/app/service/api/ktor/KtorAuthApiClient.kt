@@ -22,7 +22,7 @@ import io.ktor.client.request.*
  * This implementation handles authentication operations with the backend server.
  * It uses two different HttpClient instances:
  * - unauthenticatedClient: For login, register, and refresh operations (to prevent infinite loops)
- * - authenticatedClient: For logout operation (requires valid authentication)
+ * - authenticatedClient: For logout operations (requires valid authentication)
  *
  * @property unauthenticatedClient HttpClient without authentication for auth operations
  * @property authenticatedClient HttpClient with authentication for logout operations
@@ -62,6 +62,18 @@ class KtorAuthApiClient(
         return safeApiCall {
             authenticatedClient.post(AuthResource.Logout()).body<Unit>()
             authenticatedClient.authProvider<BearerAuthProvider>()?.clearToken()
+        }
+    }
+
+    override suspend fun logoutAll(): Either<ApiResourceError, Unit> {
+        return safeApiCall {
+            try {
+                authenticatedClient.post(AuthResource.LogoutAll()).body<Unit>()
+            } finally {
+                // The in-memory bearer token is cleared even if the server call fails so the client
+                // does not keep using credentials that have just been invalidated.
+                authenticatedClient.authProvider<BearerAuthProvider>()?.clearToken()
+            }
         }
     }
 

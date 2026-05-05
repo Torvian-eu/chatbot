@@ -306,4 +306,53 @@ class DefaultAuthRepositoryAccountManagementTest {
         assertTrue(result.isRight()) // API logout succeeded
         assertTrue(repository.authState.value is AuthState.Unauthenticated)
     }
+
+    @Test
+    fun `logoutAll should clear local auth data and set Unauthenticated`() = runTest {
+        // Arrange - set up user 1 as active
+        coEvery { tokenStorage.switchAccount(1L) } returns Unit.right()
+        coEvery { tokenStorage.getAccountData(1L) } returns AccountData(testUser1, testPermissions, Clock.System.now()).right()
+        coEvery { tokenStorage.listStoredAccounts() } returns listOf(
+            AccountData(testUser1, testPermissions, Clock.System.now())
+        ).right()
+        coEvery { authApi.clearToken() } returns Unit
+        repository.switchAccount(1L)
+        assertTrue(repository.authState.value is AuthState.Authenticated)
+
+        coEvery { authApi.logoutAll() } returns Unit.right()
+        coEvery { tokenStorage.clearAuthData() } returns Unit.right()
+
+        // Act
+        val result = repository.logoutAll()
+
+        // Assert
+        assertTrue(result.isRight())
+        assertTrue(repository.authState.value is AuthState.Unauthenticated)
+        coVerify { tokenStorage.clearAuthData() }
+        coVerify { authApi.logoutAll() }
+    }
+
+    @Test
+    fun `logoutAll should still set Unauthenticated even if storage fails`() = runTest {
+        // Arrange - set up user 1 as active
+        coEvery { tokenStorage.switchAccount(1L) } returns Unit.right()
+        coEvery { tokenStorage.getAccountData(1L) } returns AccountData(testUser1, testPermissions, Clock.System.now()).right()
+        coEvery { tokenStorage.listStoredAccounts() } returns listOf(
+            AccountData(testUser1, testPermissions, Clock.System.now())
+        ).right()
+        coEvery { authApi.clearToken() } returns Unit
+        repository.switchAccount(1L)
+        assertTrue(repository.authState.value is AuthState.Authenticated)
+
+        coEvery { authApi.logoutAll() } returns Unit.right()
+        coEvery { tokenStorage.clearAuthData() } returns TokenStorageError.IOError("Storage error").left()
+        coEvery { tokenStorage.listStoredAccounts() } returns emptyList<AccountData>().right()
+
+        // Act
+        val result = repository.logoutAll()
+
+        // Assert
+        assertTrue(result.isRight())
+        assertTrue(repository.authState.value is AuthState.Unauthenticated)
+    }
 }

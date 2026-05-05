@@ -48,6 +48,13 @@ interface AuthApi {
     suspend fun logout(): Either<ApiResourceError, Unit>
 
     /**
+     * Logs the current user out from every active session on the server.
+     *
+     * @return Either an [ApiResourceError] on failure or Unit on success
+     */
+    suspend fun logoutAll(): Either<ApiResourceError, Unit>
+
+    /**
      * Gets the current authenticated user details.
      * Used to validate tokens and restore authentication state.
      *
