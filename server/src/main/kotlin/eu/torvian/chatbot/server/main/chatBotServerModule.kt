@@ -4,6 +4,7 @@ import eu.torvian.chatbot.common.misc.di.KoinDIContainer
 import eu.torvian.chatbot.common.security.EncryptionConfig
 import eu.torvian.chatbot.server.domain.config.CorsConfig
 import eu.torvian.chatbot.server.domain.config.DatabaseConfig
+import eu.torvian.chatbot.server.domain.config.ReverseProxyConfig
 import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.koin.*
 import eu.torvian.chatbot.server.ktor.configureKtor
@@ -35,18 +36,21 @@ private val logger: Logger = LogManager.getLogger("chatBotServerModule")
  * @param databaseConfig Database configuration
  * @param encryptionConfig Encryption configuration
  * @param jwtConfig JWT configuration
+ * @param corsConfig CORS configuration
+ * @param reverseProxyConfig Reverse proxy configuration for forwarded headers support
  */
 fun Application.chatBotServerModule(
     databaseConfig: DatabaseConfig,
     encryptionConfig: EncryptionConfig,
     jwtConfig: JwtConfig,
-    corsConfig: CorsConfig
+    corsConfig: CorsConfig,
+    reverseProxyConfig: ReverseProxyConfig
 ) {
     // Configure Koin DI FIRST, as plugins and routing will depend on it
     configureKoin(databaseConfig, encryptionConfig, jwtConfig)
 
     // Configure Ktor (general plugins like content negotiation, status pages, etc.)
-    configureKtor(get(), get())
+    configureKtor(get(), get(), reverseProxyConfig)
 
     // Configure CORS from explicit allowlist.
     install(CORS) {

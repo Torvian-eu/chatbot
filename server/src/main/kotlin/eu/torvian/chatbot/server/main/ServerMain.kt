@@ -400,7 +400,8 @@ object ServerMain {
             databaseConfig = config.database,
             encryptionConfig = config.encryption,
             jwtConfig = config.jwt,
-            corsConfig = config.cors
+            corsConfig = config.cors,
+            reverseProxyConfig = config.reverseProxy
         )
     }
 

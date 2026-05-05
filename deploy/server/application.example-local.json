@@ -55,5 +55,12 @@
     "tokenExpirationMs": 86400000,
     "refreshExpirationMs": 604800000
     /* jwt.secret must be set in secrets.json or via environment variable */
+  },
+
+  "reverseProxy": {
+    "enabled": false,
+    "proxyCount": 1,
+    "useXForwardedHeaders": true,
+    "useForwardedHeaders": false
   }
 }

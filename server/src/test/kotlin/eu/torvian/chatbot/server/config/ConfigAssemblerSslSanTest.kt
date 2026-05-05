@@ -173,7 +173,12 @@ class ConfigAssemblerSslSanTest {
             secret = "jwt-secret",
             tokenExpirationMs = 60_000,
             refreshExpirationMs = 120_000
+        ),
+        reverseProxy = ReverseProxyConfigDto(
+            enabled = false,
+            proxyCount = 1,
+            useXForwardedHeaders = true,
+            useForwardedHeaders = false
         )
     )
 }
-

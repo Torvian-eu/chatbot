@@ -36,7 +36,8 @@ fun AppConfigDto.merge(other: AppConfigDto?): AppConfigDto = AppConfigDto(
     ssl = mergeSsl(ssl, other?.ssl),
     database = mergeDatabase(database, other?.database),
     encryption = mergeEncryption(encryption, other?.encryption),
-    jwt = mergeJwt(jwt, other?.jwt)
+    jwt = mergeJwt(jwt, other?.jwt),
+    reverseProxy = mergeReverseProxy(reverseProxy, other?.reverseProxy)
 )
 
 /**
@@ -143,6 +144,20 @@ private fun mergeJwt(base: JwtConfigDto?, overlay: JwtConfigDto?) = JwtConfigDto
 )
 
 /**
+ * Merge helper for reverse proxy DTOs.
+ *
+ * @param base Base reverse proxy DTO
+ * @param overlay Overlay reverse proxy DTO (takes precedence)
+ * @return merged [ReverseProxyConfigDto]
+ */
+private fun mergeReverseProxy(base: ReverseProxyConfigDto?, overlay: ReverseProxyConfigDto?) = ReverseProxyConfigDto(
+    enabled = overlay?.enabled ?: base?.enabled,
+    proxyCount = overlay?.proxyCount ?: base?.proxyCount,
+    useXForwardedHeaders = overlay?.useXForwardedHeaders ?: base?.useXForwardedHeaders,
+    useForwardedHeaders = overlay?.useForwardedHeaders ?: base?.useForwardedHeaders
+)
+
+/**
  * Convert the merged [AppConfigDto] to a strict domain [AppConfiguration].
  *
  * @param baseApplicationPath The parent directory of the config directory, used as the base for
@@ -160,7 +175,8 @@ fun AppConfigDto.toDomain(baseApplicationPath: String): Either<ConfigError.Valid
         ssl = parseSsl(ssl, network?.connectorType, storageConfig),
         database = parseDatabase(database, storageConfig),
         encryption = parseEncryption(encryption),
-        jwt = parseJwt(jwt)
+        jwt = parseJwt(jwt),
+        reverseProxy = parseReverseProxy(reverseProxy)
     )
 }
 
@@ -359,6 +375,19 @@ private fun Raise<ConfigError.ValidationError>.parseJwt(dto: JwtConfigDto?) = Jw
     secret = required("jwt.secret", dto?.secret),
     tokenExpirationMs = required("jwt.tokenExpirationMs", dto?.tokenExpirationMs),
     refreshExpirationMs = required("jwt.refreshExpirationMs", dto?.refreshExpirationMs)
+)
+
+/**
+ * Parse and validate reverse proxy DTO into domain [ReverseProxyConfig].
+ *
+ * @param dto Nullable DTO for reverse proxy.
+ * @return The parsed reverse proxy configuration.
+ */
+private fun Raise<ConfigError.ValidationError>.parseReverseProxy(dto: ReverseProxyConfigDto?) = ReverseProxyConfig(
+    enabled = required("reverseProxy.enabled", dto?.enabled),
+    proxyCount = required("reverseProxy.proxyCount", dto?.proxyCount),
+    useXForwardedHeaders = required("reverseProxy.useXForwardedHeaders", dto?.useXForwardedHeaders),
+    useForwardedHeaders = required("reverseProxy.useForwardedHeaders", dto?.useForwardedHeaders)
 )
 
 /**

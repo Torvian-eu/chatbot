@@ -25,7 +25,8 @@ data class AppConfigDto(
     val ssl: SslConfigDto? = null,
     val database: DatabaseConfigDto? = null,
     val encryption: EncryptionConfigDto? = null,
-    val jwt: JwtConfigDto? = null
+    val jwt: JwtConfigDto? = null,
+    val reverseProxy: ReverseProxyConfigDto? = null
 )
 
 /**
@@ -166,4 +167,20 @@ data class JwtConfigDto(
     val secret: String? = null,
     val tokenExpirationMs: Long? = null,
     val refreshExpirationMs: Long? = null
+)
+
+/**
+ * DTO for reverse proxy (forwarded headers) configuration.
+ *
+ * @property enabled Whether forwarded headers should be trusted and processed.
+ * @property proxyCount The number of trusted proxies in front of the server.
+ * @property useXForwardedHeaders Whether to trust X-Forwarded-* headers.
+ * @property useForwardedHeaders Whether to trust RFC 7239 Forwarded header.
+ */
+@Serializable
+data class ReverseProxyConfigDto(
+    val enabled: Boolean? = null,
+    val proxyCount: Int? = null,
+    val useXForwardedHeaders: Boolean? = null,
+    val useForwardedHeaders: Boolean? = null
 )

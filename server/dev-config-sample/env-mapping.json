@@ -64,5 +64,12 @@
     "secret": "JWT_SECRET",
     "tokenExpirationMs": "JWT_TOKEN_EXPIRATION_MS",
     "refreshExpirationMs": "JWT_REFRESH_EXPIRATION_MS"
+  },
+
+  "reverseProxy": {
+    "enabled": "REVERSE_PROXY_ENABLED",
+    "proxyCount": "REVERSE_PROXY_COUNT",
+    "useXForwardedHeaders": "REVERSE_PROXY_USE_X_FORWARDED",
+    "useForwardedHeaders": "REVERSE_PROXY_USE_RFC_FORWARDED"
   }
 }

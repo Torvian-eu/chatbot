@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.server.ktor
 
+import eu.torvian.chatbot.server.domain.config.ReverseProxyConfig
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.ktor.auth.extractJwtAuthHeader
@@ -18,17 +19,35 @@ import kotlinx.serialization.json.Json
 
 /**
  * Configures the Ktor server with necessary plugins and settings. (shared with tests)
+ *
+ * @param jwtConfig JWT configuration for authentication.
+ * @param authService Authentication service for credential validation.
+ * @param reverseProxyConfig Reverse proxy configuration for forwarded headers support.
  */
-fun Application.configureKtor(jwtConfig: JwtConfig, authService: AuthenticationService) {
-    // Install ForwardedHeaders support for proxy compatibility (e.g., X-Forwarded-For)
-    // This enables call.request.origin.remoteHost to return the correct client IP
-    install(ForwardedHeaders)
+fun Application.configureKtor(
+    jwtConfig: JwtConfig,
+    authService: AuthenticationService,
+    reverseProxyConfig: ReverseProxyConfig
+) {
+    // Install forwarded headers plugins only when reverse proxy is enabled.
+    // This prevents IP spoofing attacks when the server is directly exposed to the internet.
+    if (reverseProxyConfig.enabled) {
+        // Install RFC 7239 Forwarded header support if enabled.
+        // This is less common but more standardized. Disabled by default for security.
+        if (reverseProxyConfig.useForwardedHeaders) {
+            install(ForwardedHeaders) {
+                skipLastProxies(reverseProxyConfig.proxyCount)
+            }
+        }
 
-    // Install XForwardedHeaders to support both X-Forwarded-For and Forwarded headers for client IP extraction
-    install(XForwardedHeaders)
-    // Important Note: When the server is not behind a reverse proxy (such as Nginx, or Caddy), a malicious client
-    // could spoof their IP address using X-Forwarded-For. In production, ensure that the server is properly configured
-    // behind a trusted reverse proxy that strips untrusted headers.
+        // Install X-Forwarded-* headers support if enabled.
+        // Most reverse proxies (Caddy, Nginx, etc.) use these. Enabled by default.
+        if (reverseProxyConfig.useXForwardedHeaders) {
+            install(XForwardedHeaders) {
+                skipLastProxies(reverseProxyConfig.proxyCount)
+            }
+        }
+    }
 
     // Install the ContentNegotiation plugin for JSON serialization
     install(ContentNegotiation) {
