@@ -15,6 +15,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -44,7 +45,6 @@ class SessionDaoExposedTest {
     private val testSession1 = TestDefaults.chatSession1
     private val testSession2 = TestDefaults.chatSession2
     private val testSessionLeaf1 = TestDefaults.sessionCurrentLeaf1
-    private val testSessionLeaf2 = TestDefaults.sessionCurrentLeaf2
 
     @BeforeEach
     fun setUp() = runTest {
@@ -141,8 +141,8 @@ class SessionDaoExposedTest {
         assertTrue(result.isLeft(), "Expected Left result for non-existent session")
         val error = result.leftOrNull()
         assertNotNull(error, "Expected non-null error")
-        assertTrue(error is SessionError.SessionNotFound, "Expected SessionNotFound error")
-        assertEquals(999, (error as SessionError.SessionNotFound).id, "Expected error with correct ID")
+        assertIs<SessionError.SessionNotFound>(error, "Expected SessionNotFound error")
+        assertEquals(999, error.id, "Expected error with correct ID")
     }
 
     @Test
@@ -212,8 +212,8 @@ class SessionDaoExposedTest {
         // Verify
         val error = result.leftOrNull()
         assertNotNull(error, "Expected Left result for non-existent session")
-        assertTrue(error is SessionError.SessionNotFound, "Expected SessionNotFound error")
-        assertEquals(999, (error as SessionError.SessionNotFound).id, "Expected error with correct ID")
+        assertIs<SessionError.SessionNotFound>(error, "Expected SessionNotFound error")
+        assertEquals(999, error.id, "Expected error with correct ID")
     }
 
     @Test
@@ -355,8 +355,8 @@ class SessionDaoExposedTest {
         // Verify
         val error = result.leftOrNull()
         assertNotNull(error, "Expected Left result for non-existent session")
-        assertTrue(error is SessionError.SessionNotFound, "Expected SessionNotFound error")
-        assertEquals(999, (error as SessionError.SessionNotFound).id, "Expected error with correct ID")
+        assertIs<SessionError.SessionNotFound>(error, "Expected SessionNotFound error")
+        assertEquals(999, error.id, "Expected error with correct ID")
     }
 
     @Test

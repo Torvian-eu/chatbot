@@ -26,6 +26,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.*
+import kotlin.test.assertIs
 
 /**
  * Unit tests for [LLMModelServiceImpl].
@@ -181,8 +182,8 @@ class LLMModelServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for non-existent model")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is GetModelError.ModelNotFound, "Should be ModelNotFound error")
-        assertEquals(modelId, (error as GetModelError.ModelNotFound).id)
+        assertIs<GetModelError.ModelNotFound>(error, "Should be ModelNotFound error")
+        assertEquals(modelId, error.id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { modelDao.getModelById(modelId) }
     }
@@ -260,8 +261,8 @@ class LLMModelServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for blank name")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is AddModelError.InvalidInput, "Should be InvalidInput error")
-        assertEquals("Model name cannot be blank.", (error as AddModelError.InvalidInput).reason)
+        assertIs<AddModelError.InvalidInput>(error, "Should be InvalidInput error")
+        assertEquals("Model name cannot be blank.", error.reason)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 0) { modelDao.insertModel(any(), any(), any(), any(), any(), any()) }
         coVerify(exactly = 0) { modelOwnershipDao.setOwner(any(), any()) }
@@ -284,8 +285,8 @@ class LLMModelServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for non-existent provider")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is AddModelError.ProviderNotFound, "Should be ProviderNotFound error")
-        assertEquals(providerId, (error as AddModelError.ProviderNotFound).providerId)
+        assertIs<AddModelError.ProviderNotFound>(error, "Should be ProviderNotFound error")
+        assertEquals(providerId, error.providerId)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { modelDao.insertModel(name, providerId, type, true, null, null) }
         coVerify(exactly = 0) { modelOwnershipDao.setOwner(any(), any()) }
@@ -308,8 +309,8 @@ class LLMModelServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for duplicate name")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is AddModelError.ModelNameAlreadyExists, "Should be ModelNameAlreadyExists error")
-        assertEquals(name, (error as AddModelError.ModelNameAlreadyExists).name)
+        assertIs<AddModelError.ModelNameAlreadyExists>(error, "Should be ModelNameAlreadyExists error")
+        assertEquals(name, error.name)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { modelDao.insertModel(name, providerId, type, true, null, null) }
         coVerify(exactly = 0) { modelOwnershipDao.setOwner(any(), any()) }
@@ -344,8 +345,8 @@ class LLMModelServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for blank name")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is UpdateModelError.InvalidInput, "Should be InvalidInput error")
-        assertEquals("Model name cannot be blank.", (error as UpdateModelError.InvalidInput).reason)
+        assertIs<UpdateModelError.InvalidInput>(error, "Should be InvalidInput error")
+        assertEquals("Model name cannot be blank.", error.reason)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 0) { modelDao.updateModel(any()) }
     }
@@ -365,8 +366,8 @@ class LLMModelServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for non-existent model")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is UpdateModelError.ModelNotFound, "Should be ModelNotFound error")
-        assertEquals(modelId, (error as UpdateModelError.ModelNotFound).id)
+        assertIs<UpdateModelError.ModelNotFound>(error, "Should be ModelNotFound error")
+        assertEquals(modelId, error.id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { modelDao.updateModel(updatedModel) }
     }
@@ -402,8 +403,8 @@ class LLMModelServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for non-existent model")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is DeleteModelError.ModelNotFound, "Should be ModelNotFound error")
-        assertEquals(modelId, (error as DeleteModelError.ModelNotFound).id)
+        assertIs<DeleteModelError.ModelNotFound>(error, "Should be ModelNotFound error")
+        assertEquals(modelId, error.id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { modelDao.deleteModel(modelId) }
     }

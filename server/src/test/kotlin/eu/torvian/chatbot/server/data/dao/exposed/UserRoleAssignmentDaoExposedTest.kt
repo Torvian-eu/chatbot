@@ -17,6 +17,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -175,10 +176,9 @@ class UserRoleAssignmentDaoExposedTest {
 
         assertTrue(result.isLeft(), "Expected Left result for duplicate assignment")
         val error = result.leftOrNull()
-        assertTrue(error is UserRoleAssignmentError.AssignmentAlreadyExists, "Expected AssignmentAlreadyExists error")
-        val duplicateError = error as UserRoleAssignmentError.AssignmentAlreadyExists
-        assertEquals(testUser1.id, duplicateError.userId, "Expected matching user ID in error")
-        assertEquals(testRole1.id, duplicateError.roleId, "Expected matching role ID in error")
+        assertIs<UserRoleAssignmentError.AssignmentAlreadyExists>(error, "Expected AssignmentAlreadyExists error")
+        assertEquals(testUser1.id, error.userId, "Expected matching user ID in error")
+        assertEquals(testRole1.id, error.roleId, "Expected matching role ID in error")
     }
 
     @Test
@@ -187,7 +187,7 @@ class UserRoleAssignmentDaoExposedTest {
 
         assertTrue(result.isLeft(), "Expected Left result for non-existing user")
         val error = result.leftOrNull()
-        assertTrue(error is UserRoleAssignmentError.ForeignKeyViolation, "Expected ForeignKeyViolation error")
+        assertIs<UserRoleAssignmentError.ForeignKeyViolation>(error, "Expected ForeignKeyViolation error")
     }
 
     @Test
@@ -196,7 +196,7 @@ class UserRoleAssignmentDaoExposedTest {
 
         assertTrue(result.isLeft(), "Expected Left result for non-existing role")
         val error = result.leftOrNull()
-        assertTrue(error is UserRoleAssignmentError.ForeignKeyViolation, "Expected ForeignKeyViolation error")
+        assertIs<UserRoleAssignmentError.ForeignKeyViolation>(error, "Expected ForeignKeyViolation error")
     }
 
     @Test
@@ -221,10 +221,9 @@ class UserRoleAssignmentDaoExposedTest {
 
         assertTrue(result.isLeft(), "Expected Left result for non-existing assignment")
         val error = result.leftOrNull()
-        assertTrue(error is UserRoleAssignmentError.AssignmentNotFound, "Expected AssignmentNotFound error")
-        val notFoundError = error as UserRoleAssignmentError.AssignmentNotFound
-        assertEquals(testUser1.id, notFoundError.userId, "Expected matching user ID in error")
-        assertEquals(testRole1.id, notFoundError.roleId, "Expected matching role ID in error")
+        assertIs<UserRoleAssignmentError.AssignmentNotFound>(error, "Expected AssignmentNotFound error")
+        assertEquals(testUser1.id, error.userId, "Expected matching user ID in error")
+        assertEquals(testRole1.id, error.roleId, "Expected matching role ID in error")
     }
 
     @Test

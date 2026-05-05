@@ -15,6 +15,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -127,10 +128,7 @@ class UserGroupServiceImplTest {
 
         assertTrue(deleteResult.isLeft(), "Expected deletion to fail")
         val error = deleteResult.leftOrNull()
-        assertTrue(
-            error is DeleteGroupError.InvalidOperation,
-            "Expected InvalidOperation error"
-        )
+        assertIs<DeleteGroupError.InvalidOperation>(error, "Expected InvalidOperation error")
     }
 
     @Test
@@ -151,10 +149,7 @@ class UserGroupServiceImplTest {
 
         assertTrue(updateResult.isLeft(), "Expected update to fail")
         val error = updateResult.leftOrNull()
-        assertTrue(
-            error is UpdateGroupError.InvalidOperation,
-            "Expected InvalidOperation error"
-        )
+        assertIs<UpdateGroupError.InvalidOperation>(error, "Expected InvalidOperation error")
     }
 
     @Test
@@ -208,10 +203,7 @@ class UserGroupServiceImplTest {
 
         assertTrue(removeResult.isLeft(), "Expected removal to fail")
         val error = removeResult.leftOrNull()
-        assertTrue(
-            error is RemoveUserFromGroupError.InvalidOperation,
-            "Expected InvalidOperation error"
-        )
+        assertIs<RemoveUserFromGroupError.InvalidOperation>(error, "Expected InvalidOperation error")
     }
 
     @Test

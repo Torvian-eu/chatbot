@@ -6,6 +6,7 @@ import eu.torvian.chatbot.server.service.llm.GenericHttpMethod
 import eu.torvian.chatbot.server.service.llm.ModelDiscoveryError
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
+import kotlin.test.assertIs
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -43,7 +44,7 @@ class OpenRouterModelDiscoveryStrategyTest {
         val result = strategy.prepareRequest(provider, null)
 
         assertTrue(result.isLeft())
-        assertTrue(result.leftOrNull() is ModelDiscoveryError.ConfigurationError)
+        assertIs<ModelDiscoveryError.ConfigurationError>(result.leftOrNull())
     }
 
     @Test

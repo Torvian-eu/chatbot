@@ -19,6 +19,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Instant
@@ -137,8 +138,8 @@ class MessageServiceImplDeleteTest {
         assertTrue(result.isLeft(), "Should return Left for non-existent message")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is DeleteMessageError.MessageNotFound, "Should be MessageNotFound error")
-        assertEquals(messageId, (error as DeleteMessageError.MessageNotFound).id)
+        assertIs<DeleteMessageError.MessageNotFound>(error, "Should be MessageNotFound error")
+        assertEquals(messageId, error.id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { messageDao.getMessageById(messageId) }
         coVerify(exactly = 0) { messageDao.deleteMessageRecursively(any()) }
@@ -448,8 +449,8 @@ class MessageServiceImplDeleteTest {
         assertTrue(result.isLeft(), "Should return Left for session retrieval failure")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is DeleteMessageError.SessionUpdateFailed, "Should be SessionUpdateFailed error")
-        assertEquals(sessionId, (error as DeleteMessageError.SessionUpdateFailed).sessionId)
+        assertIs<DeleteMessageError.SessionUpdateFailed>(error, "Should be SessionUpdateFailed error")
+        assertEquals(sessionId, error.sessionId)
 
         coVerify(exactly = 1) { messageDao.getMessageById(messageId) }
         coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
@@ -493,8 +494,8 @@ class MessageServiceImplDeleteTest {
         assertTrue(result.isLeft(), "Should return Left for session update failure")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is DeleteMessageError.SessionUpdateFailed, "Should be SessionUpdateFailed error")
-        assertEquals(sessionId, (error as DeleteMessageError.SessionUpdateFailed).sessionId)
+        assertIs<DeleteMessageError.SessionUpdateFailed>(error, "Should be SessionUpdateFailed error")
+        assertEquals(sessionId, error.sessionId)
 
         coVerify(exactly = 1) { messageDao.deleteMessageRecursively(messageId) }
         coVerify(exactly = 1) { sessionDao.updateSessionLeafMessageId(sessionId, parentId) }
@@ -520,8 +521,8 @@ class MessageServiceImplDeleteTest {
         assertTrue(result.isLeft(), "Should return Left for deletion failure")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is DeleteMessageError.MessageNotFound, "Should be MessageNotFound error")
-        assertEquals(messageId, (error as DeleteMessageError.MessageNotFound).id)
+        assertIs<DeleteMessageError.MessageNotFound>(error, "Should be MessageNotFound error")
+        assertEquals(messageId, error.id)
 
         coVerify(exactly = 1) { messageDao.getMessageById(messageId) }
         coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }

@@ -19,6 +19,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlin.time.Instant
 
@@ -118,7 +119,8 @@ class MessageServiceImplSingleDeleteTest {
         val result = messageService.deleteMessage(messageId)
 
         assertTrue(result.isLeft())
-        val err = (result as arrow.core.Either.Left).value as DeleteMessageError.MessageNotFound
+        val err = result.leftOrNull()
+        assertIs<DeleteMessageError.MessageNotFound>(err)
         assertEquals(messageId, err.id)
         coVerify(exactly = 1) { messageDao.getMessageById(messageId) }
         coVerify(exactly = 0) { messageDao.deleteMessage(any()) }
@@ -238,7 +240,8 @@ class MessageServiceImplSingleDeleteTest {
         val result = messageService.deleteMessage(messageId)
 
         assertTrue(result.isLeft())
-        val err = (result as arrow.core.Either.Left).value as DeleteMessageError.SessionUpdateFailed
+        val err = result.leftOrNull()
+        assertIs<DeleteMessageError.SessionUpdateFailed>(err)
         assertEquals(sessionId, err.sessionId)
         coVerify(exactly = 1) { messageDao.getMessageById(messageId) }
         coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
@@ -270,7 +273,8 @@ class MessageServiceImplSingleDeleteTest {
         val result = messageService.deleteMessage(a)
 
         assertTrue(result.isLeft())
-        val err = (result as arrow.core.Either.Left).value as DeleteMessageError.SessionUpdateFailed
+        val err = result.leftOrNull()
+        assertIs<DeleteMessageError.SessionUpdateFailed>(err)
         assertEquals(sessionId, err.sessionId)
     }
 
@@ -288,7 +292,8 @@ class MessageServiceImplSingleDeleteTest {
         val result = messageService.deleteMessage(messageId)
 
         assertTrue(result.isLeft())
-        val err = (result as arrow.core.Either.Left).value as DeleteMessageError.MessageNotFound
+        val err = result.leftOrNull()
+        assertIs<DeleteMessageError.MessageNotFound>(err)
         assertEquals(messageId, err.id)
     }
 }

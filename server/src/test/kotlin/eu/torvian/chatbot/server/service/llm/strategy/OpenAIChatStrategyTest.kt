@@ -12,6 +12,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import kotlin.test.*
+import kotlin.test.assertIs
 
 @DisplayName("OpenAIChatStrategy Tests")
 class OpenAIChatStrategyTest {
@@ -149,7 +150,7 @@ class OpenAIChatStrategyTest {
         // Then
         assertTrue(result.isLeft(), "Expected error result")
         val error = result.leftOrNull()
-        assertTrue(error is LLMCompletionError.ConfigurationError, "Expected ConfigurationError")
+        assertIs<LLMCompletionError.ConfigurationError>(error, "Expected ConfigurationError")
         assertTrue(
             error.message.contains("requires an API key"),
             "Error message should indicate missing API key"
@@ -373,7 +374,7 @@ class OpenAIChatStrategyTest {
         // Then
         assertTrue(result.isLeft(), "Expected error result")
         val error = result.leftOrNull()
-        assertTrue(error is LLMCompletionError.InvalidResponseError, "Expected InvalidResponseError")
+        assertIs<LLMCompletionError.InvalidResponseError>(error, "Expected InvalidResponseError")
         assertTrue(
             error.message.contains("Failed to parse OpenAI success response body"),
             "Error message should indicate parsing failure"
@@ -400,7 +401,7 @@ class OpenAIChatStrategyTest {
         // Then
         assertTrue(result.isLeft(), "Expected error result")
         val error = result.leftOrNull()
-        assertTrue(error is LLMCompletionError.InvalidResponseError, "Expected InvalidResponseError")
+        assertIs<LLMCompletionError.InvalidResponseError>(error, "Expected InvalidResponseError")
         assertTrue(
             error.message.contains("Failed to parse OpenAI success response body"),
             "Error message should indicate parsing failure"
@@ -430,7 +431,7 @@ class OpenAIChatStrategyTest {
         val error = strategy.processErrorResponse(statusCode, errorBody)
 
         // Then
-        assertTrue(error is LLMCompletionError.AuthenticationError, "Expected AuthenticationError")
+        assertIs<LLMCompletionError.AuthenticationError>(error, "Expected AuthenticationError")
         assertTrue(
             error.message.contains("Incorrect API key provided."),
             "Error message should contain API error detail"
@@ -457,7 +458,7 @@ class OpenAIChatStrategyTest {
         val error = strategy.processErrorResponse(statusCode, errorBody)
 
         // Then
-        assertTrue(error is LLMCompletionError.ApiError, "Expected ApiError")
+        assertIs<LLMCompletionError.ApiError>(error, "Expected ApiError")
         assertEquals(statusCode, error.statusCode)
         assertEquals(
             error.message?.contains("Invalid value for 'messages[0].role'"),
@@ -487,7 +488,7 @@ class OpenAIChatStrategyTest {
         val error = strategy.processErrorResponse(statusCode, errorBody)
 
         // Then
-        assertTrue(error is LLMCompletionError.ApiError, "Expected ApiError")
+        assertIs<LLMCompletionError.ApiError>(error, "Expected ApiError")
         assertEquals(statusCode, error.statusCode)
         assertEquals(
             error.message?.contains("You exceeded your current quota"),
@@ -517,7 +518,7 @@ class OpenAIChatStrategyTest {
         val error = strategy.processErrorResponse(statusCode, errorBody)
 
         // Then
-        assertTrue(error is LLMCompletionError.ApiError, "Expected ApiError")
+        assertIs<LLMCompletionError.ApiError>(error, "Expected ApiError")
         assertEquals(statusCode, error.statusCode)
         assertEquals(
             error.message?.contains("The server had an error"),
@@ -538,7 +539,7 @@ class OpenAIChatStrategyTest {
         val error = strategy.processErrorResponse(statusCode, errorBody)
 
         // Then
-        assertTrue(error is LLMCompletionError.ApiError, "Expected ApiError")
+        assertIs<LLMCompletionError.ApiError>(error, "Expected ApiError")
         assertEquals(statusCode, error.statusCode)
         assertEquals(
             error.message?.contains("OpenAI API returned error $statusCode"),
@@ -634,7 +635,7 @@ class OpenAIChatStrategyTest {
         // Second chunk should be an error
         assertTrue(result[1].isLeft())
         val error = result[1].leftOrNull()
-        assertTrue(error is LLMCompletionError.InvalidResponseError)
+        assertIs<LLMCompletionError.InvalidResponseError>(error)
         assertTrue(error.message.contains("Failed to parse OpenAI streaming JSON chunk"))
 
         // Third chunk should be successful

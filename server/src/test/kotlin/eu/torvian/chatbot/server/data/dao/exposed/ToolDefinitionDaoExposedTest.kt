@@ -16,6 +16,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -130,8 +131,8 @@ class ToolDefinitionDaoExposedTest {
         // Verify
         assertTrue(result.isLeft(), "Expected Left (error)")
         result.onLeft { error ->
-            assertTrue(error is ToolDefinitionError.NotFound, "Expected NotFound error")
-            assertEquals(999L, (error as ToolDefinitionError.NotFound).id)
+            assertIs<ToolDefinitionError.NotFound>(error, "Expected NotFound error")
+            assertEquals(999L, error.id)
         }
     }
 
@@ -157,8 +158,8 @@ class ToolDefinitionDaoExposedTest {
         // Verify
         assertTrue(result.isLeft(), "Expected Left (error)")
         result.onLeft { error ->
-            assertTrue(error is ToolDefinitionError.NameNotFound, "Expected NameNotFound error")
-            assertEquals("nonexistent", (error as ToolDefinitionError.NameNotFound).name)
+            assertIs<ToolDefinitionError.NameNotFound>(error, "Expected NameNotFound error")
+            assertEquals("nonexistent", error.name)
         }
     }
 
@@ -299,7 +300,7 @@ class ToolDefinitionDaoExposedTest {
         val result = toolDefinitionDao.updateToolDefinition(nonExistentTool)
 
         // Verify
-        assertTrue(result.leftOrNull() is ToolDefinitionError.NotFound, "Expected NotFound error")
+        assertIs<ToolDefinitionError.NotFound>(result.leftOrNull(), "Expected NotFound error")
     }
 
     @Test
@@ -348,7 +349,7 @@ class ToolDefinitionDaoExposedTest {
         val result = toolDefinitionDao.deleteToolDefinition(999L)
 
         // Verify
-        assertTrue(result.leftOrNull() is ToolDefinitionError.NotFound, "Expected NotFound error")
+        assertIs<ToolDefinitionError.NotFound>(result.leftOrNull(), "Expected NotFound error")
     }
 
     @Test

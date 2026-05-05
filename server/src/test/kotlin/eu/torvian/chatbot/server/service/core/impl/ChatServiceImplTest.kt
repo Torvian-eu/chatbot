@@ -33,6 +33,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Instant
@@ -215,9 +216,9 @@ class ChatServiceImplTest {
             assertTrue(result.isLeft(), "Should return Left when content is null and parentMessageId is null")
             val error = result.leftOrNull()
             assertNotNull(error, "Error should not be null")
-            assertTrue(error is ValidateNewMessageError.ModelConfigurationError, "Should be ModelConfigurationError")
+            assertIs<ValidateNewMessageError.ModelConfigurationError>(error, "Should be ModelConfigurationError")
             assertTrue(
-                (error as ValidateNewMessageError.ModelConfigurationError).message.contains("Branch & Continue"),
+                error.message.contains("Branch & Continue"),
                 "Error message should mention Branch & Continue mode"
             )
             coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
@@ -237,8 +238,8 @@ class ChatServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for non-existent session")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is ValidateNewMessageError.SessionNotFound, "Should be SessionNotFound error")
-        assertEquals(sessionId, (error as ValidateNewMessageError.SessionNotFound).sessionId)
+        assertIs<ValidateNewMessageError.SessionNotFound>(error, "Should be SessionNotFound error")
+        assertEquals(sessionId, error.sessionId)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
     }
@@ -257,10 +258,10 @@ class ChatServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left when no model is selected")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is ValidateNewMessageError.ModelConfigurationError, "Should be ModelConfigurationError")
+        assertIs<ValidateNewMessageError.ModelConfigurationError>(error, "Should be ModelConfigurationError")
         assertEquals(
             "No model selected for session $sessionId",
-            (error as ValidateNewMessageError.ModelConfigurationError).message
+            error.message
         )
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
@@ -282,10 +283,10 @@ class ChatServiceImplTest {
             assertTrue(result.isLeft(), "Should return Left when no settings are selected")
             val error = result.leftOrNull()
             assertNotNull(error, "Error should not be null")
-            assertTrue(error is ValidateNewMessageError.ModelConfigurationError, "Should be ModelConfigurationError")
+            assertIs<ValidateNewMessageError.ModelConfigurationError>(error, "Should be ModelConfigurationError")
             assertEquals(
                 "No settings selected for session $sessionId",
-                (error as ValidateNewMessageError.ModelConfigurationError).message
+                error.message
             )
             coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
             coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
@@ -309,8 +310,8 @@ class ChatServiceImplTest {
             assertTrue(result.isLeft(), "Should return Left for parent not found")
             val error = result.leftOrNull()
             assertNotNull(error, "Error should not be null")
-            assertTrue(error is ValidateNewMessageError.ParentNotInSession, "Should be ParentNotInSession error")
-            assertEquals(sessionId, (error as ValidateNewMessageError.ParentNotInSession).sessionId)
+            assertIs<ValidateNewMessageError.ParentNotInSession>(error, "Should be ParentNotInSession error")
+            assertEquals(sessionId, error.sessionId)
             assertEquals(parentMessageId, error.parentId)
 
             coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
@@ -610,7 +611,7 @@ class ChatServiceImplTest {
         assertTrue(events[1].isLeft(), "Second event should be Left (error)")
         val error = events[1].leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is ProcessNewMessageError.ExternalServiceError, "Should be ExternalServiceError")
+        assertIs<ProcessNewMessageError.ExternalServiceError>(error, "Should be ExternalServiceError")
         assertEquals(llmError, error.llmError)
 
         // Third event: StreamCompleted

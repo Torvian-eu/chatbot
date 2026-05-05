@@ -12,6 +12,7 @@ import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
+import kotlin.test.assertIs
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -132,8 +133,8 @@ class ProviderResourceAuthorizerTest {
 
         assertTrue(result.isLeft())
         result.onLeft { error ->
-            assertTrue(error is ResourceAuthorizerError.AccessDenied)
-            assertTrue((error as ResourceAuthorizerError.AccessDenied).reason.contains("does not have read access"))
+            assertIs<ResourceAuthorizerError.AccessDenied>(error)
+            assertTrue(error.reason.contains("does not have read access"))
         }
     }
 
@@ -161,7 +162,7 @@ class ProviderResourceAuthorizerTest {
 
         assertTrue(result.isLeft())
         result.onLeft { error ->
-            assertTrue(error is ResourceAuthorizerError.AccessDenied)
+            assertIs<ResourceAuthorizerError.AccessDenied>(error)
         }
     }
 
@@ -204,7 +205,7 @@ class ProviderResourceAuthorizerTest {
 
         assertTrue(result.isLeft())
         result.onLeft { error ->
-            assertTrue(error is ResourceAuthorizerError.AccessDenied)
+            assertIs<ResourceAuthorizerError.AccessDenied>(error)
         }
     }
 
@@ -224,8 +225,8 @@ class ProviderResourceAuthorizerTest {
 
         assertTrue(result.isLeft())
         result.onLeft { error ->
-            assertTrue(error is ResourceAuthorizerError.ResourceNotFound)
-            assertEquals(providerId, (error as ResourceAuthorizerError.ResourceNotFound).id)
+            assertIs<ResourceAuthorizerError.ResourceNotFound>(error)
+            assertEquals(providerId, error.id)
         }
     }
 

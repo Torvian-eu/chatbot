@@ -13,6 +13,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -106,8 +107,8 @@ class RoleDaoExposedTest {
 
         assertTrue(result.isLeft(), "Expected Left result for non-existing role")
         val error = result.leftOrNull()
-        assertTrue(error is RoleError.RoleNotFound, "Expected RoleNotFound error")
-        assertEquals(999L, (error as RoleError.RoleNotFound).id, "Expected matching ID in error")
+        assertIs<RoleError.RoleNotFound>(error, "Expected RoleNotFound error")
+        assertEquals(999L, error.id, "Expected matching ID in error")
     }
 
     @Test
@@ -135,8 +136,8 @@ class RoleDaoExposedTest {
 
         assertTrue(result.isLeft(), "Expected Left result for non-existing role")
         val error = result.leftOrNull()
-        assertTrue(error is RoleError.RoleNotFoundByName, "Expected RoleNotFoundByName error")
-        assertEquals("nonexistent", (error as RoleError.RoleNotFoundByName).name, "Expected matching name in error")
+        assertIs<RoleError.RoleNotFoundByName>(error, "Expected RoleNotFoundByName error")
+        assertEquals("nonexistent", error.name, "Expected matching name in error")
     }
 
     @Test
@@ -174,8 +175,8 @@ class RoleDaoExposedTest {
 
         assertTrue(result.isLeft(), "Expected Left result for duplicate role name")
         val error = result.leftOrNull()
-        assertTrue(error is RoleError.RoleNameAlreadyExists, "Expected RoleNameAlreadyExists error")
-        assertEquals(testRoleName, (error as RoleError.RoleNameAlreadyExists).name, "Expected matching name in error")
+        assertIs<RoleError.RoleNameAlreadyExists>(error, "Expected RoleNameAlreadyExists error")
+        assertEquals(testRoleName, error.name, "Expected matching name in error")
     }
 
     @Test
@@ -215,8 +216,8 @@ class RoleDaoExposedTest {
 
         assertTrue(result.isLeft(), "Expected Left result for non-existing role")
         val error = result.leftOrNull()
-        assertTrue(error is RoleError.RoleNotFound, "Expected RoleNotFound error")
-        assertEquals(999L, (error as RoleError.RoleNotFound).id, "Expected matching ID in error")
+        assertIs<RoleError.RoleNotFound>(error, "Expected RoleNotFound error")
+        assertEquals(999L, error.id, "Expected matching ID in error")
     }
 
     @Test
@@ -233,8 +234,8 @@ class RoleDaoExposedTest {
 
         assertTrue(result.isLeft(), "Expected Left result for duplicate role name")
         val error = result.leftOrNull()
-        assertTrue(error is RoleError.RoleNameAlreadyExists, "Expected RoleNameAlreadyExists error")
-        assertEquals(testRoleName, (error as RoleError.RoleNameAlreadyExists).name, "Expected matching name in error")
+        assertIs<RoleError.RoleNameAlreadyExists>(error, "Expected RoleNameAlreadyExists error")
+        assertEquals(testRoleName, error.name, "Expected matching name in error")
     }
 
     @Test
@@ -253,7 +254,7 @@ class RoleDaoExposedTest {
         val fetchResult = roleDao.getRoleById(role.id)
         assertTrue(fetchResult.isLeft(), "Expected role to be deleted")
         val error = fetchResult.leftOrNull()
-        assertTrue(error is RoleError.RoleNotFound, "Expected RoleNotFound error after deletion")
+        assertIs<RoleError.RoleNotFound>(error, "Expected RoleNotFound error after deletion")
     }
 
     @Test
@@ -262,8 +263,8 @@ class RoleDaoExposedTest {
 
         assertTrue(result.isLeft(), "Expected Left result for non-existing role")
         val error = result.leftOrNull()
-        assertTrue(error is RoleError.RoleNotFound, "Expected RoleNotFound error")
-        assertEquals(999L, (error as RoleError.RoleNotFound).id, "Expected matching ID in error")
+        assertIs<RoleError.RoleNotFound>(error, "Expected RoleNotFound error")
+        assertEquals(999L, error.id, "Expected matching ID in error")
     }
 
     @Test

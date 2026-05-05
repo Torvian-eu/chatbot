@@ -16,6 +16,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /**
@@ -95,10 +96,7 @@ class ApiSecretDaoExposedTest {
 
         // Assert
         assertTrue(result.isLeft(), "Should return Left for existing alias")
-        assertTrue(
-            result.leftOrNull() is ApiSecretError.SecretAlreadyExists,
-            "Error should be SecretAlreadyExists"
-        )
+        assertIs<ApiSecretError.SecretAlreadyExists>(result.leftOrNull(), "Error should be SecretAlreadyExists")
         assertEquals(
             apiSecret1.alias, (result.leftOrNull() as ApiSecretError.SecretAlreadyExists).alias,
             "Error should contain the correct alias"
@@ -146,10 +144,7 @@ class ApiSecretDaoExposedTest {
 
         // Assert
         assertTrue(result.isLeft(), "Finding a non-existent alias should return Left")
-        assertTrue(
-            result.leftOrNull() is ApiSecretError.SecretNotFound,
-            "Error should be SecretNotFound"
-        )
+        assertIs<ApiSecretError.SecretNotFound>(result.leftOrNull(), "Error should be SecretNotFound")
         assertEquals(
             "non-existent-alias", (result.leftOrNull() as ApiSecretError.SecretNotFound).alias,
             "Error should contain the queried alias"
@@ -184,9 +179,6 @@ class ApiSecretDaoExposedTest {
 
         // Assert
         assertTrue(result.isLeft(), "Deleting a non-existent alias should return Left")
-        assertTrue(
-            result.leftOrNull() is ApiSecretError.SecretNotFound,
-            "Error should be SecretNotFound"
-        )
+        assertIs<ApiSecretError.SecretNotFound>(result.leftOrNull(), "Error should be SecretNotFound")
     }
 }

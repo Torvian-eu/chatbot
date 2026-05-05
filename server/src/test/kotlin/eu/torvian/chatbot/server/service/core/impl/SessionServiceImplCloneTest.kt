@@ -559,7 +559,7 @@ class SessionServiceImplCloneTest {
         assertTrue(result.isLeft())
         val error = result.leftOrNull()
         assertIs<CloneSessionError.InvalidName>(error)
-        assertEquals("Session name cannot be blank.", (error as CloneSessionError.InvalidName).reason)
+        assertEquals("Session name cannot be blank.", error.reason)
 
         // Verify no DAO calls were made
         coVerify(exactly = 0) { sessionDao.getSessionById(any()) }
@@ -577,7 +577,7 @@ class SessionServiceImplCloneTest {
         assertTrue(result.isLeft())
         val error = result.leftOrNull()
         assertIs<CloneSessionError.SessionNotFound>(error)
-        assertEquals(testSessionId, (error as CloneSessionError.SessionNotFound).id)
+        assertEquals(testSessionId, error.id)
     }
 
     @Test
@@ -593,7 +593,7 @@ class SessionServiceImplCloneTest {
         assertTrue(result.isLeft())
         val error = result.leftOrNull()
         assertIs<CloneSessionError.InternalError>(error)
-        assertTrue((error as CloneSessionError.InternalError).message.contains("Failed to get session ownership"))
+        assertTrue(error.message.contains("Failed to get session ownership"))
     }
 
     @Test
@@ -611,7 +611,7 @@ class SessionServiceImplCloneTest {
         assertTrue(result.isLeft())
         val error = result.leftOrNull()
         assertIs<CloneSessionError.InternalError>(error)
-        assertTrue((error as CloneSessionError.InternalError).message.contains("Failed to create cloned session"))
+        assertTrue(error.message.contains("Failed to create cloned session"))
     }
 
     @Test
@@ -632,7 +632,7 @@ class SessionServiceImplCloneTest {
         assertTrue(result.isLeft())
         val error = result.leftOrNull()
         assertIs<CloneSessionError.InternalError>(error)
-        assertTrue((error as CloneSessionError.InternalError).message.contains("Failed to set session ownership"))
+        assertTrue(error.message.contains("Failed to set session ownership"))
     }
 }
 

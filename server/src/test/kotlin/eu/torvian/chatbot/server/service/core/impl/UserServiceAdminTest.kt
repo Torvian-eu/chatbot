@@ -24,6 +24,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlin.time.Instant
 
@@ -109,8 +110,8 @@ class UserServiceAdminTest {
         // Then
         assertTrue(result.isLeft())
         val error = result.leftOrNull()
-        assertTrue(error is UpdateUserError.UserNotFound)
-        assertEquals(userId, (error as UpdateUserError.UserNotFound).userId)
+        assertIs<UpdateUserError.UserNotFound>(error)
+        assertEquals(userId, error.userId)
     }
 
     @Test
@@ -140,8 +141,8 @@ class UserServiceAdminTest {
         // Then
         assertTrue(result.isLeft())
         val error = result.leftOrNull()
-        assertTrue(error is UpdateUserError.UsernameAlreadyExists)
-        assertEquals(existingUsername, (error as UpdateUserError.UsernameAlreadyExists).username)
+        assertIs<UpdateUserError.UsernameAlreadyExists>(error)
+        assertEquals(existingUsername, error.username)
     }
 
     @Test
@@ -152,7 +153,7 @@ class UserServiceAdminTest {
         // Then
         assertTrue(result.isLeft())
         val error = result.leftOrNull()
-        assertTrue(error is UpdateUserError.InvalidInput)
+        assertIs<UpdateUserError.InvalidInput>(error)
     }
 
     // --- deleteUser Tests ---
@@ -218,8 +219,8 @@ class UserServiceAdminTest {
         // Then
         assertTrue(result.isLeft())
         val error = result.leftOrNull()
-        assertTrue(error is DeleteUserError.CannotDeleteLastAdmin)
-        assertEquals(userId, (error as DeleteUserError.CannotDeleteLastAdmin).userId)
+        assertIs<DeleteUserError.CannotDeleteLastAdmin>(error)
+        assertEquals(userId, error.userId)
 
         coVerify(exactly = 0) { userDao.deleteUser(any()) }
     }
@@ -237,7 +238,7 @@ class UserServiceAdminTest {
         // Then
         assertTrue(result.isLeft())
         val error = result.leftOrNull()
-        assertTrue(error is DeleteUserError.UserNotFound)
+        assertIs<DeleteUserError.UserNotFound>(error)
     }
 
     // --- assignRoleToUser Tests ---
@@ -273,7 +274,7 @@ class UserServiceAdminTest {
         // Then
         assertTrue(result.isLeft())
         val error = result.leftOrNull()
-        assertTrue(error is AssignRoleError.RoleAlreadyAssigned)
+        assertIs<AssignRoleError.RoleAlreadyAssigned>(error)
     }
 
     // --- revokeRoleFromUser Tests ---
@@ -316,7 +317,7 @@ class UserServiceAdminTest {
         // Then
         assertTrue(result.isLeft())
         val error = result.leftOrNull()
-        assertTrue(error is RevokeRoleError.CannotRevokeLastAdminRole)
+        assertIs<RevokeRoleError.CannotRevokeLastAdminRole>(error)
 
         coVerify(exactly = 0) { userRoleAssignmentDao.revokeRoleFromUser(any(), any()) }
     }
@@ -371,7 +372,7 @@ class UserServiceAdminTest {
         // Then
         assertTrue(result.isLeft())
         val error = result.leftOrNull()
-        assertTrue(error is ChangePasswordError.InvalidPassword)
+        assertIs<ChangePasswordError.InvalidPassword>(error)
     }
 
     @Test
@@ -402,7 +403,7 @@ class UserServiceAdminTest {
         // Then
         assertTrue(result.isLeft())
         val error = result.leftOrNull()
-        assertTrue(error is ChangePasswordError.SameAsCurrentPassword)
+        assertIs<ChangePasswordError.SameAsCurrentPassword>(error)
     }
 
     // --- getUserRoles Tests ---

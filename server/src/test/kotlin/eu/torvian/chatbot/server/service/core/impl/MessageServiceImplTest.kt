@@ -17,6 +17,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Instant
@@ -158,8 +159,8 @@ class MessageServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for non-existent message")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is UpdateMessageContentError.MessageNotFound, "Should be MessageNotFound error")
-        assertEquals(messageId, (error as UpdateMessageContentError.MessageNotFound).id)
+        assertIs<UpdateMessageContentError.MessageNotFound>(error, "Should be MessageNotFound error")
+        assertEquals(messageId, error.id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { messageDao.updateMessageContent(messageId, newContent) }
     }

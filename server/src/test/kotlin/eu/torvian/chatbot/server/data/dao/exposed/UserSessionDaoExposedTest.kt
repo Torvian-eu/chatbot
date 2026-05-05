@@ -15,6 +15,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -91,8 +92,8 @@ class UserSessionDaoExposedTest {
 
         assertTrue(result.isLeft(), "Expected Left result for non-existing session")
         val error = result.leftOrNull()
-        assertTrue(error is UserSessionError.SessionNotFound, "Expected SessionNotFound error")
-        assertEquals(999L, (error as UserSessionError.SessionNotFound).id, "Expected matching ID in error")
+        assertIs<UserSessionError.SessionNotFound>(error, "Expected SessionNotFound error")
+        assertEquals(999L, error.id, "Expected matching ID in error")
     }
 
     @Test
@@ -135,7 +136,7 @@ class UserSessionDaoExposedTest {
 
         assertTrue(result.isLeft(), "Expected Left result for non-existing user")
         val error = result.leftOrNull()
-        assertTrue(error is UserSessionError.ForeignKeyViolation, "Expected ForeignKeyViolation error")
+        assertIs<UserSessionError.ForeignKeyViolation>(error, "Expected ForeignKeyViolation error")
     }
 
     @Test
@@ -168,8 +169,8 @@ class UserSessionDaoExposedTest {
 
         assertTrue(result.isLeft(), "Expected Left result for non-existing session")
         val error = result.leftOrNull()
-        assertTrue(error is UserSessionError.SessionNotFound, "Expected SessionNotFound error")
-        assertEquals(999L, (error as UserSessionError.SessionNotFound).id, "Expected matching ID in error")
+        assertIs<UserSessionError.SessionNotFound>(error, "Expected SessionNotFound error")
+        assertEquals(999L, error.id, "Expected matching ID in error")
     }
 
     @Test
@@ -188,7 +189,7 @@ class UserSessionDaoExposedTest {
         val fetchResult = userSessionDao.getSessionById(session.id)
         assertTrue(fetchResult.isLeft(), "Expected session to be deleted")
         val error = fetchResult.leftOrNull()
-        assertTrue(error is UserSessionError.SessionNotFound, "Expected SessionNotFound error after deletion")
+        assertIs<UserSessionError.SessionNotFound>(error, "Expected SessionNotFound error after deletion")
     }
 
     @Test
@@ -197,8 +198,8 @@ class UserSessionDaoExposedTest {
 
         assertTrue(result.isLeft(), "Expected Left result for non-existing session")
         val error = result.leftOrNull()
-        assertTrue(error is UserSessionError.SessionNotFound, "Expected SessionNotFound error")
-        assertEquals(999L, (error as UserSessionError.SessionNotFound).id, "Expected matching ID in error")
+        assertIs<UserSessionError.SessionNotFound>(error, "Expected SessionNotFound error")
+        assertEquals(999L, error.id, "Expected matching ID in error")
     }
 
     @Test

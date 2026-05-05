@@ -19,6 +19,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -43,6 +44,44 @@ class LocalMCPServerDaoExposedTest {
     // Test data
     private val testUser1 = TestDefaults.user1
     private val testUser2 = TestDefaults.user2
+
+    /**
+     * Builds a minimal create payload for tests that only care about the generated row ID.
+     *
+     * The old `createServer(userId, isEnabled)` shortcut is deprecated, so these tests now
+     * exercise the supported payload-based API while keeping the same intent.
+     */
+    private fun createServerEntity(
+        userId: Long,
+        isEnabled: Boolean,
+        workerId: Long = 1L,
+        name: String = "Test MCP Server",
+        description: String? = null,
+        command: String = "npx",
+        arguments: List<String> = listOf("server"),
+        workingDirectory: String? = null,
+        autoStartOnEnable: Boolean = false,
+        autoStartOnLaunch: Boolean = false,
+        autoStopAfterInactivitySeconds: Int? = null,
+        toolNamePrefix: String? = null,
+        environmentVariables: List<LocalMCPEnvironmentVariableDto> = emptyList(),
+        secretEnvironmentVariables: List<LocalMCPSecretEnvironmentVariableReference> = emptyList()
+    ): CreateLocalMCPServerEntity = CreateLocalMCPServerEntity(
+        userId = userId,
+        workerId = workerId,
+        name = name,
+        description = description,
+        command = command,
+        arguments = arguments,
+        workingDirectory = workingDirectory,
+        isEnabled = isEnabled,
+        autoStartOnEnable = autoStartOnEnable,
+        autoStartOnLaunch = autoStartOnLaunch,
+        autoStopAfterInactivitySeconds = autoStopAfterInactivitySeconds,
+        toolNamePrefix = toolNamePrefix,
+        environmentVariables = environmentVariables,
+        secretEnvironmentVariables = secretEnvironmentVariables
+    )
 
     @BeforeEach
     fun setUp() = runTest {
@@ -76,38 +115,38 @@ class LocalMCPServerDaoExposedTest {
     @Test
     fun `createServer should create new entry with enabled state and return ID`() = runTest {
         // Act
-        val serverId = dao.createServer(testUser1.id, isEnabled = true)
+        val server = dao.createServer(createServerEntity(testUser1.id, isEnabled = true))
 
         // Assert
-        assertTrue(serverId > 0, "Generated ID should be positive")
-        assertTrue(dao.existsById(serverId), "Server should exist")
+        assertTrue(server.id > 0, "Generated ID should be positive")
+        assertTrue(dao.existsById(server.id), "Server should exist")
     }
 
     @Test
     fun `createServer should create multiple IDs for same user`() = runTest {
         // Act
-        val serverId1 = dao.createServer(testUser1.id, isEnabled = true)
-        val serverId2 = dao.createServer(testUser1.id, isEnabled = false)
+        val server1 = dao.createServer(createServerEntity(testUser1.id, isEnabled = true))
+        val server2 = dao.createServer(createServerEntity(testUser1.id, isEnabled = false))
 
         // Assert
-        assertTrue(serverId1 > 0, "First generated ID should be positive")
-        assertTrue(serverId2 > 0, "Second generated ID should be positive")
-        assertTrue(serverId1 != serverId2, "Generated IDs should be unique")
-        assertTrue(dao.existsById(serverId1), "First server should exist")
-        assertTrue(dao.existsById(serverId2), "Second server should exist")
+        assertTrue(server1.id > 0, "First generated ID should be positive")
+        assertTrue(server2.id > 0, "Second generated ID should be positive")
+        assertTrue(server1.id != server2.id, "Generated IDs should be unique")
+        assertTrue(dao.existsById(server1.id), "First server should exist")
+        assertTrue(dao.existsById(server2.id), "Second server should exist")
     }
 
     @Test
     fun `deleteById should delete existing server`() = runTest {
         // Arrange
-        val serverId = dao.createServer(testUser1.id, isEnabled = true)
+        val server = dao.createServer(createServerEntity(testUser1.id, isEnabled = true))
 
         // Act
-        val result = dao.deleteById(serverId)
+        val result = dao.deleteById(server.id)
 
         // Assert
         assertTrue(result.isRight(), "Deletion should succeed")
-        assertFalse(dao.existsById(serverId), "Server should not exist after deletion")
+        assertFalse(dao.existsById(server.id), "Server should not exist after deletion")
     }
 
     @Test
@@ -117,50 +156,47 @@ class LocalMCPServerDaoExposedTest {
 
         // Assert
         assertTrue(result.isLeft(), "Should return error")
-        assertTrue(
-            result.leftOrNull() is DeleteLocalMCPServerError.NotFound,
-            "Should be NotFound error"
-        )
+        assertIs<DeleteLocalMCPServerError.NotFound>(result.leftOrNull(), "Should be NotFound error")
     }
 
     @Test
     fun `getIdsByUserId should return all server IDs for user`() = runTest {
         // Arrange
-        val serverId1 = dao.createServer(testUser1.id, isEnabled = true)
-        val serverId2 = dao.createServer(testUser1.id, isEnabled = false)
+        val server1 = dao.createServer(createServerEntity(testUser1.id, isEnabled = true))
+        val server2 = dao.createServer(createServerEntity(testUser1.id, isEnabled = false))
 
         // Act
-        val serverIds = dao.getIdsByUserId(testUser1.id)
+        val serverIds = dao.getServersByUserId(testUser1.id).map { it.id }
 
         // Assert
         assertEquals(2, serverIds.size)
-        assertTrue(serverIds.contains(serverId1))
-        assertTrue(serverIds.contains(serverId2))
+        assertTrue(serverIds.contains(server1.id))
+        assertTrue(serverIds.contains(server2.id))
     }
 
     @Test
     fun `getIdsByUserId should return only servers for specified user`() = runTest {
         // Arrange
-        val user1ServerId = dao.createServer(testUser1.id, isEnabled = true)
-        val user2ServerId = dao.createServer(testUser2.id, isEnabled = true)
+        val user1Server = dao.createServer(createServerEntity(testUser1.id, isEnabled = true))
+        val user2Server = dao.createServer(createServerEntity(testUser2.id, isEnabled = true))
 
         // Act
-        val user1ServerIds = dao.getIdsByUserId(testUser1.id)
-        val user2ServerIds = dao.getIdsByUserId(testUser2.id)
+        val user1ServerIds = dao.getServersByUserId(testUser1.id).map { it.id }
+        val user2ServerIds = dao.getServersByUserId(testUser2.id).map { it.id }
 
         // Assert
         assertEquals(1, user1ServerIds.size)
         assertEquals(1, user2ServerIds.size)
-        assertTrue(user1ServerIds.contains(user1ServerId))
-        assertFalse(user1ServerIds.contains(user2ServerId))
-        assertTrue(user2ServerIds.contains(user2ServerId))
-        assertFalse(user2ServerIds.contains(user1ServerId))
+        assertTrue(user1ServerIds.contains(user1Server.id))
+        assertFalse(user1ServerIds.contains(user2Server.id))
+        assertTrue(user2ServerIds.contains(user2Server.id))
+        assertFalse(user2ServerIds.contains(user1Server.id))
     }
 
     @Test
     fun `getIdsByUserId should return empty list when user has no servers`() = runTest {
         // Act
-        val serverIds = dao.getIdsByUserId(testUser1.id)
+        val serverIds = dao.getServersByUserId(testUser1.id).map { it.id }
 
         // Assert
         assertEquals(0, serverIds.size)
@@ -169,10 +205,10 @@ class LocalMCPServerDaoExposedTest {
     @Test
     fun `existsById should return true when server exists`() = runTest {
         // Arrange
-        val serverId = dao.createServer(testUser1.id, isEnabled = true)
+        val server = dao.createServer(createServerEntity(testUser1.id, isEnabled = true))
 
         // Act & Assert
-        assertTrue(dao.existsById(serverId))
+        assertTrue(dao.existsById(server.id))
     }
 
     @Test
@@ -184,10 +220,10 @@ class LocalMCPServerDaoExposedTest {
     @Test
     fun `validateOwnership should succeed when user owns server`() = runTest {
         // Arrange
-        val serverId = dao.createServer(testUser1.id, isEnabled = true)
+        val server = dao.createServer(createServerEntity(testUser1.id, isEnabled = true))
 
         // Act
-        val result = dao.validateOwnership(testUser1.id, serverId)
+        val result = dao.validateOwnership(testUser1.id, server.id)
 
         // Assert
         assertTrue(result.isRight(), "Validation should succeed")
@@ -196,17 +232,14 @@ class LocalMCPServerDaoExposedTest {
     @Test
     fun `validateOwnership should return Unauthorized when user doesn't own server`() = runTest {
         // Arrange
-        val serverId = dao.createServer(testUser1.id, isEnabled = true)
+        val server = dao.createServer(createServerEntity(testUser1.id, isEnabled = true))
 
         // Act
-        val result = dao.validateOwnership(testUser2.id, serverId)
+        val result = dao.validateOwnership(testUser2.id, server.id)
 
         // Assert
         assertTrue(result.isLeft(), "Should return error")
-        assertTrue(
-            result.leftOrNull() is LocalMCPServerError.Unauthorized,
-            "Should be Unauthorized error"
-        )
+        assertIs<LocalMCPServerError.Unauthorized>(result.leftOrNull(), "Should be Unauthorized error")
     }
 
     @Test
@@ -216,10 +249,7 @@ class LocalMCPServerDaoExposedTest {
 
         // Assert
         assertTrue(result.isLeft(), "Should return error")
-        assertTrue(
-            result.leftOrNull() is LocalMCPServerError.Unauthorized,
-            "Should be Unauthorized error"
-        )
+        assertIs<LocalMCPServerError.Unauthorized>(result.leftOrNull(), "Should be Unauthorized error")
     }
 
     @Test

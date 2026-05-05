@@ -16,6 +16,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /**
@@ -134,10 +135,9 @@ class RolePermissionDaoExposedTest {
 
         assertTrue(result.isLeft(), "Expected Left result for duplicate assignment")
         val error = result.leftOrNull()
-        assertTrue(error is RolePermissionError.AssignmentAlreadyExists, "Expected AssignmentAlreadyExists error")
-        val duplicateError = error as RolePermissionError.AssignmentAlreadyExists
-        assertEquals(testRole1.id, duplicateError.roleId, "Expected matching role ID in error")
-        assertEquals(testPermission1.id, duplicateError.permissionId, "Expected matching permission ID in error")
+        assertIs<RolePermissionError.AssignmentAlreadyExists>(error, "Expected AssignmentAlreadyExists error")
+        assertEquals(testRole1.id, error.roleId, "Expected matching role ID in error")
+        assertEquals(testPermission1.id, error.permissionId, "Expected matching permission ID in error")
     }
 
     @Test
@@ -146,7 +146,7 @@ class RolePermissionDaoExposedTest {
 
         assertTrue(result.isLeft(), "Expected Left result for non-existing role")
         val error = result.leftOrNull()
-        assertTrue(error is RolePermissionError.ForeignKeyViolation, "Expected ForeignKeyViolation error")
+        assertIs<RolePermissionError.ForeignKeyViolation>(error, "Expected ForeignKeyViolation error")
     }
 
     @Test
@@ -155,7 +155,7 @@ class RolePermissionDaoExposedTest {
 
         assertTrue(result.isLeft(), "Expected Left result for non-existing permission")
         val error = result.leftOrNull()
-        assertTrue(error is RolePermissionError.ForeignKeyViolation, "Expected ForeignKeyViolation error")
+        assertIs<RolePermissionError.ForeignKeyViolation>(error, "Expected ForeignKeyViolation error")
     }
 
     @Test
@@ -217,10 +217,9 @@ class RolePermissionDaoExposedTest {
 
         assertTrue(result.isLeft(), "Expected Left result for non-existing assignment")
         val error = result.leftOrNull()
-        assertTrue(error is RolePermissionError.AssignmentNotFound, "Expected AssignmentNotFound error")
-        val notFoundError = error as RolePermissionError.AssignmentNotFound
-        assertEquals(testRole1.id, notFoundError.roleId, "Expected matching role ID in error")
-        assertEquals(testPermission1.id, notFoundError.permissionId, "Expected matching permission ID in error")
+        assertIs<RolePermissionError.AssignmentNotFound>(error, "Expected AssignmentNotFound error")
+        assertEquals(testRole1.id, error.roleId, "Expected matching role ID in error")
+        assertEquals(testPermission1.id, error.permissionId, "Expected matching permission ID in error")
     }
 
     @Test
@@ -229,7 +228,7 @@ class RolePermissionDaoExposedTest {
 
         assertTrue(result.isLeft(), "Expected Left result for non-existing role")
         val error = result.leftOrNull()
-        assertTrue(error is RolePermissionError.AssignmentNotFound, "Expected AssignmentNotFound error")
+        assertIs<RolePermissionError.AssignmentNotFound>(error, "Expected AssignmentNotFound error")
     }
 
     @Test
@@ -238,6 +237,6 @@ class RolePermissionDaoExposedTest {
 
         assertTrue(result.isLeft(), "Expected Left result for non-existing permission")
         val error = result.leftOrNull()
-        assertTrue(error is RolePermissionError.AssignmentNotFound, "Expected AssignmentNotFound error")
+        assertIs<RolePermissionError.AssignmentNotFound>(error, "Expected AssignmentNotFound error")
     }
 }
