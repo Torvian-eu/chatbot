@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.service.security
 
 import arrow.core.Either
+import eu.torvian.chatbot.server.data.entities.UserTrustedIpEntity
 import eu.torvian.chatbot.server.domain.security.LoginResult
 import eu.torvian.chatbot.server.domain.security.UserContext
 import eu.torvian.chatbot.server.domain.security.WorkerContext
@@ -69,6 +70,17 @@ interface AuthenticationService {
     suspend fun getUserSessions(userId: Long): Either<Nothing, List<UserSessionEntity>>
 
     /**
+     * Retrieves unacknowledged security alerts for a user.
+     *
+     * Returns detailed information about unrecognized IP logins that have not been
+     * acknowledged by the user yet.
+     *
+     * @param userId The unique identifier of the authenticated user.
+     * @return A right-biased [Either] containing the list of unacknowledged security alerts.
+     */
+    suspend fun getSecurityAlerts(userId: Long): Either<Nothing, List<UserTrustedIpEntity>>
+
+    /**
      * Validates JWT credentials from Ktor's auth pipeline.
      *
      * This method is called after Ktor has verified the token's signature and basic claims.
@@ -104,4 +116,14 @@ interface AuthenticationService {
      * @return Either [RefreshTokenError] if refresh fails, or [LoginResult] with new tokens
      */
     suspend fun refreshToken(refreshToken: String, ipAddress: String?): Either<RefreshTokenError, LoginResult>
+
+    /**
+     * Marks every unacknowledged trusted-IP record for a user as acknowledged.
+     *
+     * This is the server-side confirmation step used after the UI shows a security warning.
+     *
+     * @param userId The unique identifier of the authenticated user.
+     * @return A successful [Either] because acknowledgement is a best-effort state transition.
+     */
+    suspend fun acknowledgeTrustedIps(userId: Long): Either<Nothing, Unit>
 }

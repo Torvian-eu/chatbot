@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.main
 import eu.torvian.chatbot.common.security.EncryptionConfig
 import eu.torvian.chatbot.server.domain.config.CorsConfig
 import eu.torvian.chatbot.server.domain.config.DatabaseConfig
+import eu.torvian.chatbot.server.domain.config.IpSecurityMode
 import eu.torvian.chatbot.server.domain.config.NetworkConfig
 import eu.torvian.chatbot.server.domain.config.ReverseProxyConfig
 import eu.torvian.chatbot.server.domain.config.ServerConnectorType
@@ -36,6 +37,7 @@ private const val SERVER_STARTUP_TIMEOUT_MILLIS = 15_000L // 15 seconds
  * @property databaseConfig Database configuration passed to the application module.
  * @property encryptionConfig Encryption configuration passed to the application module.
  * @property jwtConfig JWT configuration passed to the application module.
+ * @property ipSecurityMode IP policy passed to the application module.
  * @property corsConfig CORS configuration passed to the application module.
  * @property reverseProxyConfig Reverse proxy configuration passed to the application module.
  */
@@ -46,6 +48,7 @@ class ServerControlServiceImpl(
     private val databaseConfig: DatabaseConfig,
     private val encryptionConfig: EncryptionConfig,
     private val jwtConfig: JwtConfig,
+    private val ipSecurityMode: IpSecurityMode,
     private val corsConfig: CorsConfig,
     private val reverseProxyConfig: ReverseProxyConfig
 ) : ServerControlService {
@@ -257,7 +260,7 @@ class ServerControlServiceImpl(
             this.monitor.subscribe(ApplicationStopped) { onStopped(it) }
 
             // Apply the main application module
-            chatBotServerModule(databaseConfig, encryptionConfig, jwtConfig, corsConfig, reverseProxyConfig)
+            chatBotServerModule(databaseConfig, encryptionConfig, jwtConfig, ipSecurityMode, corsConfig, reverseProxyConfig)
         }
     }
 }

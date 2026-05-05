@@ -49,7 +49,19 @@ class AuthResource(val parent: Api = Api()) {
      */
     @Resource("me")
     class Me(val parent: AuthResource = AuthResource())
-    
+
+    /**
+     * Resource for retrieving unacknowledged security alerts: /api/v1/auth/security-alerts
+     */
+    @Resource("security-alerts")
+    class SecurityAlerts(val parent: AuthResource = AuthResource())
+
+    /**
+     * Resource for acknowledging unrecognized IP logins: /api/v1/auth/acknowledge-ips
+     */
+    @Resource("acknowledge-ips")
+    class AcknowledgeIps(val parent: AuthResource = AuthResource())
+
     /**
      * Resource for refreshing tokens: /api/v1/auth/refresh
      */

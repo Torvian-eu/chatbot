@@ -15,6 +15,7 @@ import kotlinx.serialization.Serializable
  * @property database Optional [DatabaseConfigDto] for database connection parameters.
  * @property encryption Optional [EncryptionConfigDto] for data encryption settings.
  * @property jwt Optional [JwtConfigDto] for JSON Web Token authentication settings.
+ * @property ipSecurityMode Optional policy name for IP-based login handling.
  */
 @Serializable
 data class AppConfigDto(
@@ -26,6 +27,7 @@ data class AppConfigDto(
     val database: DatabaseConfigDto? = null,
     val encryption: EncryptionConfigDto? = null,
     val jwt: JwtConfigDto? = null,
+    val ipSecurityMode: String? = null,
     val reverseProxy: ReverseProxyConfigDto? = null
 )
 

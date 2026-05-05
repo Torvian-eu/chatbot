@@ -6,6 +6,7 @@ import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.user.UserStatus
+import eu.torvian.chatbot.server.data.dao.UserTrustedIpDao
 import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.UserSessionDao
 import eu.torvian.chatbot.server.data.dao.WorkerDao
@@ -13,7 +14,9 @@ import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.dao.error.UserSessionError
 import eu.torvian.chatbot.server.data.entities.UserEntity
 import eu.torvian.chatbot.server.data.entities.UserSessionEntity
+import eu.torvian.chatbot.server.data.entities.UserTrustedIpEntity
 import eu.torvian.chatbot.server.data.entities.WorkerEntity
+import eu.torvian.chatbot.server.domain.config.IpSecurityMode
 import eu.torvian.chatbot.server.data.entities.mappers.toUser
 import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.service.core.UserService
@@ -39,6 +42,7 @@ class AuthenticationServiceImplTest {
     private val userService = mockk<UserService>()
     private val passwordService = mockk<PasswordService>()
     private val userSessionDao = mockk<UserSessionDao>()
+    private val userTrustedIpDao = mockk<UserTrustedIpDao>()
     private val userDao = mockk<UserDao>()
     private val workerDao = mockk<WorkerDao>()
     private val authorizationService = mockk<AuthorizationService>()
@@ -50,16 +54,20 @@ class AuthenticationServiceImplTest {
         refreshExpirationMs = 7 * 24 * 60 * 60 * 1000L
     )
 
-    private val authService = AuthenticationServiceImpl(
+    private fun createAuthService(ipSecurityMode: IpSecurityMode = IpSecurityMode.DISABLED) = AuthenticationServiceImpl(
         userService,
         passwordService,
         jwtConfig,
         userSessionDao,
+        userTrustedIpDao,
         userDao,
         workerDao,
         authorizationService,
-        transactionScope
+        transactionScope,
+        ipSecurityMode
     )
+
+    private val authService = createAuthService()
 
     private val testUser = UserEntity(
         id = 1L,
@@ -81,9 +89,28 @@ class AuthenticationServiceImplTest {
         ipAddress = "127.0.0.1"
     )
 
+    private val testTrustedIp = UserTrustedIpEntity(
+        id = 300L,
+        userId = testUser.id,
+        ipAddress = "10.0.0.1",
+        isTrusted = true,
+        isAcknowledged = false,
+        firstUsedAt = Instant.fromEpochMilliseconds(System.currentTimeMillis()),
+        lastUsedAt = Instant.fromEpochMilliseconds(System.currentTimeMillis())
+    )
+
     @BeforeEach
     fun setUp() {
-        clearMocks(userService, passwordService, userSessionDao, userDao, workerDao, authorizationService, transactionScope)
+        clearMocks(
+            userService,
+            passwordService,
+            userSessionDao,
+            userTrustedIpDao,
+            userDao,
+            workerDao,
+            authorizationService,
+            transactionScope
+        )
 
         coEvery { transactionScope.transaction<Any>(any()) } coAnswers {
             val block = firstArg<suspend () -> Any>()
@@ -124,6 +151,74 @@ class AuthenticationServiceImplTest {
         assertTrue(loginExpiryMs >= accessExpiryMs)
         assertTrue(loginExpiryMs - accessExpiryMs < 1000)
         assertNotEquals(testSession.expiresAt.toEpochMilliseconds(), loginResult.expiresAt.toEpochMilliseconds())
+    }
+
+    @Test
+    fun `login should allow a new ip in warning mode and flag the user`() = runTest {
+        val warningAuthService = createAuthService(IpSecurityMode.WARNING)
+        val username = "testuser"
+        val password = "correctpassword"
+        val ipAddress = "10.0.0.1"
+
+        coEvery { userDao.getUserByUsername(username) } returns testUser.right()
+        every { passwordService.verifyPassword(password, testUser.passwordHash) } returns true
+        coEvery { userTrustedIpDao.getTrustedIp(testUser.id, ipAddress) } returns null
+        coEvery {
+            userTrustedIpDao.insertTrustedIp(
+                testUser.id,
+                ipAddress,
+                true,
+                false,
+                any(),
+                any()
+            )
+        } returns testTrustedIp
+        coEvery { userSessionDao.insertSession(testUser.id, any(), ipAddress) } returns testSession.right()
+        coEvery { userService.updateLastLogin(testUser.id) } returns Unit.right()
+        coEvery { authorizationService.getUserPermissions(testUser.id) } returns emptyList()
+
+        val result = warningAuthService.login(username, password, ipAddress)
+
+        assertTrue(result.isRight())
+        coVerify { userTrustedIpDao.insertTrustedIp(testUser.id, ipAddress, true, false, any(), any()) }
+    }
+
+    @Test
+    fun `login should block a new ip in strict mode with verification required`() = runTest {
+        val strictAuthService = createAuthService(IpSecurityMode.STRICT)
+        val username = "testuser"
+        val password = "correctpassword"
+        val ipAddress = "10.0.0.2"
+
+        coEvery { userDao.getUserByUsername(username) } returns testUser.right()
+        every { passwordService.verifyPassword(password, testUser.passwordHash) } returns true
+        coEvery { userTrustedIpDao.getTrustedIp(testUser.id, ipAddress) } returns null
+        coEvery {
+            userTrustedIpDao.insertTrustedIp(
+                testUser.id,
+                ipAddress,
+                false,
+                true,
+                any(),
+                any()
+            )
+        } returns testTrustedIp.copy(ipAddress = ipAddress, isTrusted = false, isAcknowledged = true)
+
+        val result = strictAuthService.login(username, password, ipAddress)
+
+        assertTrue(result.isLeft())
+        assertEquals(LoginError.VerificationRequired, result.leftOrNull())
+        coVerify(exactly = 0) { userSessionDao.insertSession(any(), any(), any()) }
+    }
+
+    @Test
+    fun `acknowledgeTrustedIps should return success`() = runTest {
+        coEvery { userTrustedIpDao.acknowledgeTrustedIps(testUser.id) } returns 2
+
+        val result = authService.acknowledgeTrustedIps(testUser.id)
+
+        assertTrue(result.isRight())
+        coVerify { userTrustedIpDao.acknowledgeTrustedIps(testUser.id) }
     }
 
     @Test

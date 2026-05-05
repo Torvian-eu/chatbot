@@ -6,6 +6,7 @@ import eu.torvian.chatbot.common.api.resources.AuthResource
 import eu.torvian.chatbot.common.models.api.auth.LoginRequest
 import eu.torvian.chatbot.common.models.api.auth.RefreshTokenRequest
 import eu.torvian.chatbot.common.models.api.auth.RegisterRequest
+import eu.torvian.chatbot.common.models.api.auth.UserSecurityAlert
 import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
 import eu.torvian.chatbot.common.models.api.auth.ServiceTokenChallengeRequest
 import eu.torvian.chatbot.common.models.api.auth.ServiceTokenChallengeResponse
@@ -90,6 +91,9 @@ fun Route.configureAuthRoutes(
 
                 is LoginError.AccountLocked ->
                     apiError(CommonApiErrorCodes.PERMISSION_DENIED, "Account locked", "reason" to error.reason)
+
+                is LoginError.VerificationRequired ->
+                    apiError(CommonApiErrorCodes.VERIFICATION_REQUIRED, "Verification required")
 
                 is LoginError.SessionCreationFailed ->
                     apiError(CommonApiErrorCodes.INTERNAL, "Failed to create session", "reason" to error.reason)
@@ -199,6 +203,35 @@ fun Route.configureAuthRoutes(
     authenticate(AuthSchemes.USER_JWT) {
         get<AuthResource.Me> {
             call.respond(call.getUserContext().user)
+        }
+    }
+
+    // GET /api/v1/auth/security-alerts - Get unacknowledged security alerts for the current user
+    authenticate(AuthSchemes.USER_JWT) {
+        get<AuthResource.SecurityAlerts> {
+            val userId = call.getUserId()
+            val result = authenticationService.getSecurityAlerts(userId).map { alerts ->
+                alerts.map { alert ->
+                    UserSecurityAlert(
+                        id = alert.id,
+                        ipAddress = alert.ipAddress,
+                        firstSeenAt = alert.firstUsedAt,
+                        lastSeenAt = alert.lastUsedAt
+                    )
+                }
+            }
+            call.respondEither(result)
+        }
+    }
+
+    // POST /api/v1/auth/acknowledge-ips - Clear pending security alerts for the current user
+    authenticate(AuthSchemes.USER_JWT) {
+        post<AuthResource.AcknowledgeIps> {
+            val userId = call.getUserId()
+            call.respondEither(
+                authenticationService.acknowledgeTrustedIps(userId),
+                HttpStatusCode.NoContent
+            )
         }
     }
 

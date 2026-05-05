@@ -110,6 +110,7 @@ class AuthRoutesTest {
                 Table.USER_ROLE_ASSIGNMENTS,
                 Table.USER_GROUPS,
                 Table.USER_GROUP_MEMBERSHIPS,
+                Table.USER_TRUSTED_IPS,
                 Table.WORKERS,
                 Table.WORKER_AUTH_CHALLENGES
             )

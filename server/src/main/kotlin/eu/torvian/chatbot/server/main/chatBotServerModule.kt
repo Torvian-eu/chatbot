@@ -4,6 +4,7 @@ import eu.torvian.chatbot.common.misc.di.KoinDIContainer
 import eu.torvian.chatbot.common.security.EncryptionConfig
 import eu.torvian.chatbot.server.domain.config.CorsConfig
 import eu.torvian.chatbot.server.domain.config.DatabaseConfig
+import eu.torvian.chatbot.server.domain.config.IpSecurityMode
 import eu.torvian.chatbot.server.domain.config.ReverseProxyConfig
 import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.koin.*
@@ -36,6 +37,7 @@ private val logger: Logger = LogManager.getLogger("chatBotServerModule")
  * @param databaseConfig Database configuration
  * @param encryptionConfig Encryption configuration
  * @param jwtConfig JWT configuration
+ * @param ipSecurityMode IP security policy used by authentication services
  * @param corsConfig CORS configuration
  * @param reverseProxyConfig Reverse proxy configuration for forwarded headers support
  */
@@ -43,11 +45,12 @@ fun Application.chatBotServerModule(
     databaseConfig: DatabaseConfig,
     encryptionConfig: EncryptionConfig,
     jwtConfig: JwtConfig,
+    ipSecurityMode: IpSecurityMode,
     corsConfig: CorsConfig,
     reverseProxyConfig: ReverseProxyConfig
 ) {
     // Configure Koin DI FIRST, as plugins and routing will depend on it
-    configureKoin(databaseConfig, encryptionConfig, jwtConfig)
+    configureKoin(databaseConfig, encryptionConfig, jwtConfig, ipSecurityMode)
 
     // Configure Ktor (general plugins like content negotiation, status pages, etc.)
     configureKtor(get(), get(), reverseProxyConfig)
@@ -89,16 +92,18 @@ fun Application.chatBotServerModule(
  * @param databaseConfig Database configuration
  * @param encryptionConfig Encryption configuration
  * @param jwtConfig JWT configuration
+ * @param ipSecurityMode IP security policy used by authentication services
  */
 fun Application.configureKoin(
     databaseConfig: DatabaseConfig,
     encryptionConfig: EncryptionConfig,
-    jwtConfig: JwtConfig
+    jwtConfig: JwtConfig,
+    ipSecurityMode: IpSecurityMode
 ) {
     // Initialize Koin plugin with defined modules
     install(Koin) {
         modules(
-            configModule(databaseConfig, encryptionConfig, jwtConfig),
+            configModule(databaseConfig, encryptionConfig, jwtConfig, ipSecurityMode),
             databaseModule(),
             miscModule(),
             daoModule(),

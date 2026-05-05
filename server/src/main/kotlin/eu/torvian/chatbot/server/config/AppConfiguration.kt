@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.config
 import eu.torvian.chatbot.common.security.EncryptionConfig
 import eu.torvian.chatbot.server.domain.config.CorsConfig
 import eu.torvian.chatbot.server.domain.config.DatabaseConfig
+import eu.torvian.chatbot.server.domain.config.IpSecurityMode
 import eu.torvian.chatbot.server.domain.config.NetworkConfig
 import eu.torvian.chatbot.server.domain.config.ReverseProxyConfig
 import eu.torvian.chatbot.server.domain.config.SslConfig
@@ -23,6 +24,7 @@ import eu.torvian.chatbot.server.domain.security.JwtConfig
  * @property database Settings for the persistence layer (SQLite).
  * @property encryption Settings for data-at-rest encryption and master keys.
  * @property jwt Settings for authentication and token validation.
+ * @property ipSecurityMode IP-based login policy used to decide whether unknown client IPs are allowed.
  * @property reverseProxy Settings for reverse proxy (forwarded headers) support.
  */
 data class AppConfiguration(
@@ -34,5 +36,6 @@ data class AppConfiguration(
     val database: DatabaseConfig,
     val encryption: EncryptionConfig,
     val jwt: JwtConfig,
+    val ipSecurityMode: IpSecurityMode = IpSecurityMode.DISABLED,
     val reverseProxy: ReverseProxyConfig = ReverseProxyConfig()
 )

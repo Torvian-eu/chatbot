@@ -95,6 +95,13 @@ object CommonApiErrorCodes {
     val INVALID_CREDENTIALS = ApiErrorCode("invalid-credentials", 401)
 
     /**
+     * Indicates that authentication was blocked until the user verifies a new client IP.
+     *
+     * Corresponds to HTTP Status Code 401 Unauthorized.
+     */
+    val VERIFICATION_REQUIRED = ApiErrorCode("verification-required", 401)
+
+    /**
      * Indicates that the authentication token provided is invalid, expired,
      * revoked, or malformed.
      *

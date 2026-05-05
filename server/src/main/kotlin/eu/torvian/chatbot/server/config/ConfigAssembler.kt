@@ -6,6 +6,7 @@ import arrow.core.raise.either
 import arrow.core.raise.ensure
 import eu.torvian.chatbot.common.security.EncryptionConfig
 import eu.torvian.chatbot.server.domain.config.*
+import eu.torvian.chatbot.server.domain.config.IpSecurityMode
 import eu.torvian.chatbot.server.domain.security.JwtConfig
 import java.net.URI
 
@@ -37,6 +38,7 @@ fun AppConfigDto.merge(other: AppConfigDto?): AppConfigDto = AppConfigDto(
     database = mergeDatabase(database, other?.database),
     encryption = mergeEncryption(encryption, other?.encryption),
     jwt = mergeJwt(jwt, other?.jwt),
+    ipSecurityMode = other?.ipSecurityMode ?: ipSecurityMode,
     reverseProxy = mergeReverseProxy(reverseProxy, other?.reverseProxy)
 )
 
@@ -176,8 +178,24 @@ fun AppConfigDto.toDomain(baseApplicationPath: String): Either<ConfigError.Valid
         database = parseDatabase(database, storageConfig),
         encryption = parseEncryption(encryption),
         jwt = parseJwt(jwt),
+        ipSecurityMode = parseIpSecurityMode(ipSecurityMode),
         reverseProxy = parseReverseProxy(reverseProxy)
     )
+}
+
+/**
+ * Parse the optional top-level IP security mode from text into the strict domain enum.
+ *
+ * Missing or blank values fall back to [IpSecurityMode.DISABLED] so the feature is opt-in.
+ */
+private fun Raise<ConfigError.ValidationError>.parseIpSecurityMode(value: String?): IpSecurityMode {
+    val normalized = value?.trim().orEmpty()
+    if (normalized.isEmpty()) return IpSecurityMode.DISABLED
+
+    return runCatching { IpSecurityMode.valueOf(normalized.uppercase()) }
+        .getOrElse {
+            raise(ConfigError.ValidationError.InvalidValue("ipSecurityMode", "Allowed: DISABLED, WARNING, STRICT"))
+        }
 }
 
 /**

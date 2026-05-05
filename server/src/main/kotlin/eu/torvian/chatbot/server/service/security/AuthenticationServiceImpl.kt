@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.service.security
 
 import arrow.core.Either
 import arrow.core.getOrElse
+import arrow.core.raise.Raise
 import arrow.core.raise.catch
 import arrow.core.raise.either
 import arrow.core.raise.ensure
@@ -13,12 +14,15 @@ import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.UserSessionDao
+import eu.torvian.chatbot.server.data.dao.UserTrustedIpDao
 import eu.torvian.chatbot.server.data.dao.WorkerDao
 import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.dao.error.UserSessionError
 import eu.torvian.chatbot.server.data.dao.error.WorkerError
 import eu.torvian.chatbot.server.data.entities.UserSessionEntity
+import eu.torvian.chatbot.server.data.entities.UserTrustedIpEntity
 import eu.torvian.chatbot.server.data.entities.mappers.toUser
+import eu.torvian.chatbot.server.domain.config.IpSecurityMode
 import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.domain.security.LoginResult
 import eu.torvian.chatbot.server.domain.security.UserContext
@@ -47,10 +51,12 @@ class AuthenticationServiceImpl(
     private val passwordService: PasswordService,
     private val jwtConfig: JwtConfig,
     private val userSessionDao: UserSessionDao,
+    private val userTrustedIpDao: UserTrustedIpDao,
     private val userDao: UserDao,
     private val workerDao: WorkerDao,
     private val authorizationService: AuthorizationService,
-    private val transactionScope: TransactionScope
+    private val transactionScope: TransactionScope,
+    private val ipSecurityMode: IpSecurityMode
 ) : AuthenticationService {
 
     companion object {
@@ -73,16 +79,19 @@ class AuthenticationServiceImpl(
                     LoginError.AccountLocked("Account is disabled")
                 }
 
-                // Verify password
-                if (!passwordService.verifyPassword(password, userEntity.passwordHash)) {
+                ensure(passwordService.verifyPassword(password, userEntity.passwordHash)) {
                     logger.warn("Invalid password for user: $username")
                     raise(LoginError.InvalidCredentials)
                 }
 
-                // Create new session
+                // Handle IP security - raises LoginError.VerificationRequired in STRICT mode if needed.
+                handleClientIpSecurity(userEntity.id, ipAddress, Clock.System.now())
+
+                // Create session.
                 val currentTime = Clock.System.now()
+                val currentTimeMillis = currentTime.toEpochMilliseconds()
                 val sessionExpirationMs = jwtConfig.refreshExpirationMs
-                val sessionExpiresAt = currentTime.toEpochMilliseconds() + sessionExpirationMs
+                val sessionExpiresAt = currentTimeMillis + sessionExpirationMs
                 val accessTokenExpiresAt = currentTime.plus(jwtConfig.tokenExpirationMs.milliseconds)
                 val session: UserSessionEntity = withError({ _: UserSessionError.ForeignKeyViolation ->
                     LoginError.UserNotFound
@@ -94,12 +103,12 @@ class AuthenticationServiceImpl(
                 val accessToken = jwtConfig.generateAccessToken(
                     userId = userEntity.id,
                     sessionId = session.id,
-                    currentTime = currentTime.toEpochMilliseconds()
+                    currentTime = currentTimeMillis
                 )
                 val refreshToken = jwtConfig.generateRefreshToken(
                     userId = userEntity.id,
                     sessionId = session.id,
-                    currentTime = currentTime.toEpochMilliseconds()
+                    currentTime = currentTimeMillis  // Update last login
                 )
 
                 // Update last login
@@ -121,6 +130,66 @@ class AuthenticationServiceImpl(
                 )
             }
         }
+
+    /**
+     * Validates and updates trusted-IP state after successful credential check.
+     *
+     * Uses [Raise] context to signal success (Unit) or failure ([LoginError.VerificationRequired]).
+     * In STRICT mode, raises [LoginError.VerificationRequired] when the IP is not trusted.
+     * In WARNING mode, records new IPs as trusted.
+     * In DISABLED mode, this is a no-op.
+     */
+    private suspend fun Raise<LoginError>.handleClientIpSecurity(
+        userId: Long,
+        ipAddress: String?,
+        currentTime: Instant
+    ) {
+        val normalizedIp = ipAddress?.trim()?.takeIf { it.isNotEmpty() } ?: return
+        if (ipSecurityMode == IpSecurityMode.DISABLED) return
+
+        val currentTimeMillis = currentTime.toEpochMilliseconds()
+        val trustedIp = userTrustedIpDao.getTrustedIp(userId, normalizedIp)
+
+        // A record with isTrusted=false represents a blocked strict-mode attempt until the
+        // verification flow can promote it later.
+        if (trustedIp != null && !trustedIp.isTrusted) {
+            userTrustedIpDao.updateLastUsedAt(trustedIp.id, currentTimeMillis)
+            ensure(ipSecurityMode != IpSecurityMode.STRICT) { LoginError.VerificationRequired }
+            return
+        }
+
+        when (ipSecurityMode) {
+            IpSecurityMode.WARNING -> {
+                if (trustedIp == null) {
+                    userTrustedIpDao.insertTrustedIp(
+                        userId = userId,
+                        ipAddress = normalizedIp,
+                        isTrusted = true,
+                        isAcknowledged = false,
+                        firstUsedAt = currentTimeMillis,
+                        lastUsedAt = currentTimeMillis
+                    )
+                } else {
+                    userTrustedIpDao.updateLastUsedAt(trustedIp.id, currentTimeMillis)
+                }
+            }
+            IpSecurityMode.STRICT -> {
+                if (trustedIp == null) {
+                    userTrustedIpDao.insertTrustedIp(
+                        userId = userId,
+                        ipAddress = normalizedIp,
+                        isTrusted = false,
+                        isAcknowledged = true,
+                        firstUsedAt = currentTimeMillis,
+                        lastUsedAt = currentTimeMillis
+                    )
+                    raise(LoginError.VerificationRequired)
+                } else {
+                    userTrustedIpDao.updateLastUsedAt(trustedIp.id, currentTimeMillis)
+                }
+            }
+        }
+    }
 
     override suspend fun logout(sessionId: Long): Either<LogoutError, Unit> =
         transactionScope.transaction {
@@ -146,7 +215,7 @@ class AuthenticationServiceImpl(
                 // Delete all sessions for the user
                 val deletedCount = userSessionDao.deleteSessionsByUserId(userId)
 
-                if (deletedCount == 0) {
+                ensure(deletedCount > 0) {
                     logger.warn("No sessions found for user: $userId")
                     raise(LogoutAllError.NoSessionsFound(userId))
                 }
@@ -159,6 +228,17 @@ class AuthenticationServiceImpl(
         transactionScope.transaction {
             // The DAO already scopes the query by user ID, so this remains a pure read operation.
             userSessionDao.getSessionsByUserId(userId).right()
+        }
+
+    override suspend fun getSecurityAlerts(userId: Long): Either<Nothing, List<UserTrustedIpEntity>> =
+        transactionScope.transaction {
+            userTrustedIpDao.getUnacknowledgedByUserId(userId).right()
+        }
+
+    override suspend fun acknowledgeTrustedIps(userId: Long): Either<Nothing, Unit> =
+        transactionScope.transaction {
+            userTrustedIpDao.acknowledgeTrustedIps(userId)
+            Unit.right()
         }
 
     override suspend fun refreshToken(refreshToken: String, ipAddress: String?): Either<RefreshTokenError, LoginResult> =

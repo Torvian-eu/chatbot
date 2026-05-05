@@ -60,6 +60,8 @@
     /* jwt.secret must be set in secrets.json or via environment variable */
   },
 
+  "ipSecurityMode": "DISABLED",
+
   "reverseProxy": {
     "enabled": false,
     "proxyCount": 1,

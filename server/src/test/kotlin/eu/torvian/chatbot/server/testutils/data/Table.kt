@@ -82,6 +82,11 @@ enum class Table {
     USER_SESSIONS,
 
     /**
+     * Table for storing user trusted-IP records.
+     */
+    USER_TRUSTED_IPS,
+
+    /**
      * Table for storing user-defined groups.
      */
     USER_GROUPS,

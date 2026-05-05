@@ -20,7 +20,12 @@ sealed interface LoginError {
      * @property reason Description of why the account is locked
      */
     data class AccountLocked(val reason: String) : LoginError
-    
+
+    /**
+     * Login was blocked because the client connected from an unrecognized IP address.
+     */
+    data object VerificationRequired : LoginError
+
     /**
      * Session creation failed after successful authentication.
      * 

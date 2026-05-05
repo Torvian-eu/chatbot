@@ -66,6 +66,8 @@
     "refreshExpirationMs": "JWT_REFRESH_EXPIRATION_MS"
   },
 
+  "ipSecurityMode": "CHATBOT_IP_SECURITY_MODE",
+
   "reverseProxy": {
     "enabled": "REVERSE_PROXY_ENABLED",
     "proxyCount": "REVERSE_PROXY_COUNT",

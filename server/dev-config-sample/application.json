@@ -56,6 +56,8 @@
     /* jwt.secret is provided in secrets.json for dev */
   },
 
+  "ipSecurityMode": "DISABLED",
+
   "reverseProxy": {
     "enabled": false,
     "proxyCount": 1,

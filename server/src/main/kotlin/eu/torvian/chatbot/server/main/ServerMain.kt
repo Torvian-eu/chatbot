@@ -401,7 +401,8 @@ object ServerMain {
             encryptionConfig = config.encryption,
             jwtConfig = config.jwt,
             corsConfig = config.cors,
-            reverseProxyConfig = config.reverseProxy
+            reverseProxyConfig = config.reverseProxy,
+            ipSecurityMode = config.ipSecurityMode
         )
     }
 
