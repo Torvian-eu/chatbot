@@ -253,7 +253,7 @@ private fun UserMenuButton(
             availableAccounts = availableAccounts,
             accountSwitchInProgress = accountSwitchInProgress,
             onSwitchAccount = { authViewModel.openAccountSwitcher() },
-            onAddAccount = { authViewModel.openAddAccount() },
+            onActiveSessions = { authViewModel.openActiveSessions() },
             onLogout = { scope.launch { authViewModel.logout() } },
             onLogoutAll = { scope.launch { authViewModel.logoutAll() } },
             onLogin = { navController.navigateToTop(Login) }

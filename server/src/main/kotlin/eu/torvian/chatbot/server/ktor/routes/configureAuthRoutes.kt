@@ -124,8 +124,26 @@ fun Route.configureAuthRoutes(
 
     // POST /api/v1/auth/logout - User logout from current session only
     authenticate(AuthSchemes.USER_JWT) {
-        post<AuthResource.Logout> {
-            val sessionId = call.getUserContext().sessionId
+        post<AuthResource.Logout> { resource ->
+            val userContext = call.getUserContext()
+            val sessionId = resource.sessionId ?: userContext.sessionId
+
+            if (resource.sessionId != null) {
+                val ownsTargetSession = authenticationService.getUserSessions(userContext.user.id)
+                    .fold(
+                        ifLeft = { false },
+                        ifRight = { sessions -> sessions.any { it.id == sessionId } }
+                    )
+
+                if (!ownsTargetSession) {
+                    call.respond(
+                        HttpStatusCode.NotFound,
+                        apiError(CommonApiErrorCodes.NOT_FOUND, "Session not found")
+                    )
+                    return@post
+                }
+            }
+
             call.respondEither(
                 authenticationService.logout(sessionId),
                 HttpStatusCode.NoContent

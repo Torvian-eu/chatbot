@@ -9,6 +9,7 @@ import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.auth.AccountData
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.api.ApiError
+import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
 import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.user.UserStatus
 import io.mockk.coEvery
@@ -369,6 +370,68 @@ class AuthViewModelTest {
 
         // Assert
         coVerify { mockNotificationService.repositoryError(error, "Logout all sessions failed") }
+    }
+
+    @Test
+    fun `refreshSessions should populate active sessions from repository`() = runTest(testDispatcher) {
+        // Arrange
+        val now = Instant.fromEpochMilliseconds(System.currentTimeMillis())
+        val sessions = listOf(
+            UserSessionInfo(
+                sessionId = 10L,
+                ipAddress = "10.0.0.2",
+                createdAt = now,
+                lastAccessed = now,
+                expiresAt = now,
+                isCurrentSession = true
+            )
+        )
+        coEvery { mockAuthRepository.getActiveSessions() } returns sessions.right()
+
+        // Act
+        authViewModel.refreshSessions()
+        advanceUntilIdle()
+
+        // Assert
+        assertEquals(sessions, authViewModel.activeSessions.value)
+        coVerify { mockAuthRepository.getActiveSessions() }
+    }
+
+    @Test
+    fun `revokeSession should revoke and refresh the sessions list`() = runTest(testDispatcher) {
+        // Arrange
+        val sessionId = 42L
+        val now = Instant.fromEpochMilliseconds(System.currentTimeMillis())
+        val refreshedSessions = listOf(
+            UserSessionInfo(
+                sessionId = sessionId,
+                ipAddress = "10.0.0.3",
+                createdAt = now,
+                lastAccessed = now,
+                expiresAt = now,
+                isCurrentSession = false
+            )
+        )
+        coEvery { mockAuthRepository.revokeSession(sessionId) } returns Unit.right()
+        coEvery { mockAuthRepository.getActiveSessions() } returns refreshedSessions.right()
+
+        // Act
+        authViewModel.revokeSession(sessionId)
+        advanceUntilIdle()
+
+        // Assert
+        assertEquals(refreshedSessions, authViewModel.activeSessions.value)
+        coVerify { mockAuthRepository.revokeSession(sessionId) }
+        coVerify { mockAuthRepository.getActiveSessions() }
+    }
+
+    @Test
+    fun `openActiveSessions should switch dialog state`() {
+        // Act
+        authViewModel.openActiveSessions()
+
+        // Assert
+        assertTrue(authViewModel.dialogState.value is AuthDialogState.ActiveSessions)
     }
 
     // --- Form State Management Tests ---

@@ -16,6 +16,7 @@ import eu.torvian.chatbot.app.service.auth.AuthenticationFailureEvent
 import eu.torvian.chatbot.app.service.auth.TokenStorage
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
+import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
 import eu.torvian.chatbot.common.models.user.User
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -130,6 +131,28 @@ class DefaultAuthRepository(
         }
 
         logger.info("Password changed successfully for user: $userId")
+    }
+
+    override suspend fun getActiveSessions(): Either<RepositoryError, List<UserSessionInfo>> = either {
+        logger.info("Fetching active sessions for the current authenticated user")
+
+        withError({ apiError ->
+            apiError.toRepositoryError("Failed to load active sessions")
+        }) {
+            authApi.getActiveSessions().bind()
+        }
+    }
+
+    override suspend fun revokeSession(sessionId: Long): Either<RepositoryError, Unit> = either {
+        logger.info("Revoking session with sessionId: $sessionId")
+
+        withError({ apiError ->
+            apiError.toRepositoryError("Failed to revoke session")
+        }) {
+            authApi.logout(sessionId).bind()
+        }
+
+        logger.info("Successfully revoked session with sessionId: $sessionId")
     }
 
     override suspend fun logout(): Either<RepositoryError, Unit> = either {

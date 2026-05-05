@@ -8,6 +8,7 @@ import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.service.auth.AccountData
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
+import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -64,6 +65,11 @@ class AuthViewModel(
      * List of all stored user accounts available for switching.
      */
     val availableAccounts: StateFlow<List<AccountData>> = authRepository.availableAccounts
+
+    /**
+     * The active sessions currently fetched from the server for the security dialog.
+     */
+    val activeSessions = MutableStateFlow<List<UserSessionInfo>>(emptyList())
 
     /**
      * Indicates whether an account switch operation is currently in progress.
@@ -227,6 +233,7 @@ class AuthViewModel(
                     shortMessage = "Logout failed"
                 )
             }.onRight {
+                activeSessions.value = emptyList()
                 clearAllForms()
             }
         }
@@ -246,8 +253,47 @@ class AuthViewModel(
                     shortMessage = "Logout all sessions failed"
                 )
             }.onRight {
+                activeSessions.value = emptyList()
                 clearAllForms()
             }
+        }
+    }
+
+    /**
+     * Fetches the authenticated user's current active sessions from the repository.
+     */
+    fun refreshSessions() {
+        viewModelScope.launch {
+            authRepository.getActiveSessions()
+                .onLeft { error ->
+                    notificationService.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to load active sessions"
+                    )
+                }
+                .onRight { sessions ->
+                    activeSessions.value = sessions
+                }
+        }
+    }
+
+    /**
+     * Revokes one of the authenticated user's active sessions and refreshes the list afterwards.
+     *
+     * @param sessionId The server session identifier to revoke.
+     */
+    fun revokeSession(sessionId: Long) {
+        viewModelScope.launch {
+            authRepository.revokeSession(sessionId)
+                .onLeft { error ->
+                    notificationService.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to revoke session"
+                    )
+                }
+                .onRight {
+                    refreshSessions()
+                }
         }
     }
 
@@ -388,10 +434,10 @@ class AuthViewModel(
     }
 
     /**
-     * Opens the add account dialog.
+     * Opens the active sessions security dialog.
      */
-    fun openAddAccount() {
-        _dialogState.value = AuthDialogState.AddAccount
+    fun openActiveSessions() {
+        _dialogState.value = AuthDialogState.ActiveSessions
     }
 
     /**

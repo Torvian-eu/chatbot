@@ -8,6 +8,7 @@ import eu.torvian.chatbot.common.models.api.auth.LoginRequest
 import eu.torvian.chatbot.common.models.api.auth.LoginResponse
 import eu.torvian.chatbot.common.models.api.auth.RefreshTokenRequest
 import eu.torvian.chatbot.common.models.api.auth.RegisterRequest
+import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
 import eu.torvian.chatbot.common.models.user.User
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -58,10 +59,27 @@ class KtorAuthApiClient(
         }
     }
 
-    override suspend fun logout(): Either<ApiResourceError, Unit> {
+    override suspend fun getActiveSessions(): Either<ApiResourceError, List<UserSessionInfo>> {
         return safeApiCall {
-            authenticatedClient.post(AuthResource.Logout()).body<Unit>()
-            authenticatedClient.authProvider<BearerAuthProvider>()?.clearToken()
+            authenticatedClient.get(AuthResource.Sessions()).body<List<UserSessionInfo>>()
+        }
+    }
+
+    override suspend fun logout(sessionId: Long?): Either<ApiResourceError, Unit> {
+        return safeApiCall {
+            val resource = if (sessionId == null) {
+                AuthResource.Logout()
+            } else {
+                AuthResource.Logout(sessionId = sessionId)
+            }
+
+            authenticatedClient.post(resource).body<Unit>()
+
+            // Only clear the cached bearer token when the current session was revoked; revoking a
+            // different session must not log the user out locally.
+            if (sessionId == null) {
+                authenticatedClient.authProvider<BearerAuthProvider>()?.clearToken()
+            }
         }
     }
 

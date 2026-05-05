@@ -415,6 +415,41 @@ class AuthRoutesTest {
         assertEquals(HttpStatusCode.Unauthorized, response.status)
     }
 
+    @Test
+    fun `POST auth logout with sessionId revokes only the targeted session`() = authTestApplication {
+        // Arrange
+        testDataManager.setup(
+            TestDataSet(
+                chatGroups = listOf(testGroup)
+            )
+        )
+
+        testDataManager.insertUser(testUser)
+        val currentSession = authHelper.createTestSession(id = 1L, userId = testUser.id)
+        val targetSession = authHelper.createTestSession(id = 2L, userId = testUser.id)
+        testDataManager.insertUserSession(currentSession)
+        testDataManager.insertUserSession(targetSession)
+
+        val authToken = authHelper.generateToken(testUser.id, currentSession.id)
+
+        // Act
+        val response = client.post(href(AuthResource.Logout(sessionId = targetSession.id))) {
+            authenticate(authToken)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.NoContent, response.status)
+
+        val sessionsResponse = client.get(href(AuthResource.Sessions())) {
+            authenticate(authToken)
+        }
+        assertEquals(HttpStatusCode.OK, sessionsResponse.status)
+        val sessions = sessionsResponse.body<List<UserSessionInfo>>()
+        assertEquals(1, sessions.size)
+        assertEquals(currentSession.id, sessions.single().sessionId)
+        assertTrue(sessions.single().isCurrentSession)
+    }
+
     // ========== Logout All Tests ==========
 
     @Test

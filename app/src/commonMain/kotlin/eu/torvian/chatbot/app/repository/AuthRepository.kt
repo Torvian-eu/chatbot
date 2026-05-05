@@ -2,6 +2,7 @@ package eu.torvian.chatbot.app.repository
 
 import arrow.core.Either
 import eu.torvian.chatbot.app.service.auth.AccountData
+import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
 import eu.torvian.chatbot.common.models.user.User
 import kotlinx.coroutines.flow.StateFlow
 
@@ -55,6 +56,24 @@ interface AuthRepository {
      * @return Either a [RepositoryError] on failure or Unit on success
      */
     suspend fun changePassword(userId: Long, newPassword: String): Either<RepositoryError, Unit>
+
+    /**
+     * Loads the authenticated user's active sessions from the server.
+     *
+     * @return Either a [RepositoryError] on failure or the current session list on success
+     */
+    suspend fun getActiveSessions(): Either<RepositoryError, List<UserSessionInfo>>
+
+    /**
+     * Revokes a specific session belonging to the authenticated user.
+     *
+     * This is intended for security management UI where the user can remove a session from
+     * another device without logging out the current browser or app instance.
+     *
+     * @param sessionId The session identifier to revoke
+     * @return Either a [RepositoryError] on failure or Unit on success
+     */
+    suspend fun revokeSession(sessionId: Long): Either<RepositoryError, Unit>
 
     /**
      * Logs out the current user by clearing tokens and updating auth state.

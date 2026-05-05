@@ -15,6 +15,9 @@ sealed interface AuthDialogState {
     /** Add account dialog is shown */
     data object AddAccount : AuthDialogState
 
+    /** Active sessions dialog is shown */
+    data object ActiveSessions : AuthDialogState
+
     /**
      * Remove account confirmation dialog is shown.
      *

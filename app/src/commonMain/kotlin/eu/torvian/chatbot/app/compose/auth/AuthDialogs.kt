@@ -3,6 +3,7 @@ package eu.torvian.chatbot.app.compose.auth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.app.service.auth.AccountData
 import eu.torvian.chatbot.app.viewmodel.auth.AuthDialogState
@@ -21,6 +22,8 @@ fun AuthDialogs(
     accountSwitchInProgress: Boolean,
     authViewModel: AuthViewModel
 ) {
+    val activeSessions by authViewModel.activeSessions.collectAsState()
+
     when (dialogState) {
         is AuthDialogState.SwitchAccount -> {
             SwitchAccountDialog(
@@ -45,6 +48,19 @@ fun AuthDialogs(
                 onUsernameChange = { username -> authViewModel.updateLoginForm(username = username) },
                 onPasswordChange = { password -> authViewModel.updateLoginForm(password = password) },
                 onLogin = { authViewModel.login() }
+            )
+        }
+
+        is AuthDialogState.ActiveSessions -> {
+            LaunchedEffect(dialogState) {
+                authViewModel.refreshSessions()
+            }
+
+            ActiveSessionsDialog(
+                sessions = activeSessions,
+                currentAuthState = currentAuthState,
+                onDismiss = { authViewModel.closeDialog() },
+                onRevokeSession = { sessionId: Long -> authViewModel.revokeSession(sessionId) }
             )
         }
 

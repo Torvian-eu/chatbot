@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.app.service.api
 
 import arrow.core.Either
+import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
 import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.api.auth.LoginResponse
 
@@ -41,11 +42,23 @@ interface AuthApi {
     suspend fun register(username: String, password: String, email: String? = null): Either<ApiResourceError, User>
 
     /**
-     * Logs out the current user by invalidating tokens on the server.
+     * Lists the authenticated user's active sessions.
      *
+     * @return Either an [ApiResourceError] on failure or the ordered list of sessions on success
+     */
+    suspend fun getActiveSessions(): Either<ApiResourceError, List<UserSessionInfo>>
+
+    /**
+     * Logs out the current user or revokes a specific session on the server.
+     *
+     * When [sessionId] is `null`, the current bearer-backed session is invalidated and the
+     * client can safely clear its cached token. When a value is provided, only that server-side
+     * session is revoked.
+     *
+     * @param sessionId Optional session identifier to revoke instead of the current session
      * @return Either an [ApiResourceError] on failure or Unit on success
      */
-    suspend fun logout(): Either<ApiResourceError, Unit>
+    suspend fun logout(sessionId: Long? = null): Either<ApiResourceError, Unit>
 
     /**
      * Logs the current user out from every active session on the server.

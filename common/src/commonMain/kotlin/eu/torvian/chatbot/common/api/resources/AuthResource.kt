@@ -21,11 +21,17 @@ class AuthResource(val parent: Api = Api()) {
     class Login(val parent: AuthResource = AuthResource())
     
     /**
-     * Resource for user logout (current session only): /api/v1/auth/logout
+     * Resource for user logout and session revocation: /api/v1/auth/logout
+     *
+     * When [sessionId] is omitted, the server logs out the current authenticated session.
+     * When a value is provided, the server revokes that specific session for the authenticated user.
      */
     @Resource("logout")
-    class Logout(val parent: AuthResource = AuthResource())
-    
+    class Logout(
+        val parent: AuthResource = AuthResource(),
+        val sessionId: Long? = null
+    )
+
     /**
      * Resource for user logout from all sessions: /api/v1/auth/logout-all
      */

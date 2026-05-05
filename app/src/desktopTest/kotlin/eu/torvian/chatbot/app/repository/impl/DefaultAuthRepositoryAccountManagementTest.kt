@@ -10,6 +10,7 @@ import eu.torvian.chatbot.app.service.api.UserApi
 import eu.torvian.chatbot.app.service.auth.TokenStorage
 import eu.torvian.chatbot.app.service.auth.TokenStorageError
 import eu.torvian.chatbot.app.service.misc.EventBus
+import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
 import eu.torvian.chatbot.common.models.user.Permission
 import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.user.UserStatus
@@ -354,5 +355,45 @@ class DefaultAuthRepositoryAccountManagementTest {
         // Assert
         assertTrue(result.isRight())
         assertTrue(repository.authState.value is AuthState.Unauthenticated)
+    }
+
+    // ===== active sessions Tests =====
+
+    @Test
+    fun `getActiveSessions should return sessions from auth api`() = runTest {
+        // Arrange
+        val sessions = listOf(
+            UserSessionInfo(
+                sessionId = 1L,
+                ipAddress = "10.0.0.1",
+                createdAt = Clock.System.now(),
+                lastAccessed = Clock.System.now(),
+                expiresAt = Clock.System.now(),
+                isCurrentSession = true
+            )
+        )
+        coEvery { authApi.getActiveSessions() } returns sessions.right()
+
+        // Act
+        val result = repository.getActiveSessions()
+
+        // Assert
+        assertTrue(result.isRight())
+        assertEquals(sessions, result.getOrNull())
+        coVerify { authApi.getActiveSessions() }
+    }
+
+    @Test
+    fun `revokeSession should call logout for the requested session id`() = runTest {
+        // Arrange
+        val sessionId = 7L
+        coEvery { authApi.logout(sessionId) } returns Unit.right()
+
+        // Act
+        val result = repository.revokeSession(sessionId)
+
+        // Assert
+        assertTrue(result.isRight())
+        coVerify { authApi.logout(sessionId) }
     }
 }
