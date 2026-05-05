@@ -341,6 +341,25 @@ class AuthenticationServiceImplTest {
     }
 
     @Test
+    fun `getUserSessions should return sessions from the DAO`() = runTest {
+        // Given
+        val userId = testUser.id
+        val sessions = listOf(
+            testSession,
+            testSession.copy(id = 101L, lastAccessed = Instant.fromEpochMilliseconds(testSession.lastAccessed.toEpochMilliseconds() + 1_000))
+        )
+        coEvery { userSessionDao.getSessionsByUserId(userId) } returns sessions
+
+        // When
+        val result = authService.getUserSessions(userId)
+
+        // Then
+        assertTrue(result.isRight())
+        assertEquals(sessions, result.getOrNull())
+        coVerify { userSessionDao.getSessionsByUserId(userId) }
+    }
+
+    @Test
     fun `validateCredential should successfully validate valid credential`() = runTest {
         // Given
         val token = jwtConfig.generateAccessToken(testUser.id, testSession.id)

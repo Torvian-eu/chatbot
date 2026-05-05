@@ -4,6 +4,7 @@ import arrow.core.Either
 import eu.torvian.chatbot.server.domain.security.LoginResult
 import eu.torvian.chatbot.server.domain.security.UserContext
 import eu.torvian.chatbot.server.domain.security.WorkerContext
+import eu.torvian.chatbot.server.data.entities.UserSessionEntity
 import eu.torvian.chatbot.server.service.security.error.LoginError
 import eu.torvian.chatbot.server.service.security.error.LogoutError
 import eu.torvian.chatbot.server.service.security.error.LogoutAllError
@@ -55,6 +56,17 @@ interface AuthenticationService {
      * @return Either [LogoutAllError] if logout fails, or Unit on success
      */
     suspend fun logoutAll(userId: Long): Either<LogoutAllError, Unit>
+
+    /**
+     * Retrieves the stored sessions for a user so they can inspect active logins.
+     *
+     * The returned list is owned exclusively by the requested user and is intended for
+     * presentation in account-security views, not for cross-user administration.
+     *
+     * @param userId The unique identifier of the authenticated user.
+     * @return A right-biased [Either] containing the user's session rows.
+     */
+    suspend fun getUserSessions(userId: Long): Either<Nothing, List<UserSessionEntity>>
 
     /**
      * Validates JWT credentials from Ktor's auth pipeline.

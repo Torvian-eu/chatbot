@@ -6,6 +6,7 @@ import eu.torvian.chatbot.common.api.resources.AuthResource
 import eu.torvian.chatbot.common.models.api.auth.LoginRequest
 import eu.torvian.chatbot.common.models.api.auth.RefreshTokenRequest
 import eu.torvian.chatbot.common.models.api.auth.RegisterRequest
+import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
 import eu.torvian.chatbot.common.models.api.auth.ServiceTokenChallengeRequest
 import eu.torvian.chatbot.common.models.api.auth.ServiceTokenChallengeResponse
 import eu.torvian.chatbot.common.models.api.auth.ServiceTokenRequest
@@ -134,6 +135,29 @@ fun Route.configureAuthRoutes(
                         apiError(CommonApiErrorCodes.NOT_FOUND, "Session not found")
                 }
             }
+        }
+    }
+
+    // GET /api/v1/auth/sessions - List authenticated user's sessions
+    authenticate(AuthSchemes.USER_JWT) {
+        get<AuthResource.Sessions> {
+            val userContext = call.getUserContext()
+            val result = authenticationService.getUserSessions(userContext.user.id).map { sessions ->
+                // Most recently used sessions are shown first so the active device is easy to spot.
+                sessions
+                    .sortedByDescending { it.lastAccessed }
+                    .map { session ->
+                        UserSessionInfo(
+                            sessionId = session.id,
+                            ipAddress = session.ipAddress,
+                            createdAt = session.createdAt,
+                            lastAccessed = session.lastAccessed,
+                            expiresAt = session.expiresAt,
+                            isCurrentSession = session.id == userContext.sessionId
+                        )
+                    }
+            }
+            call.respondEither(result)
         }
     }
 

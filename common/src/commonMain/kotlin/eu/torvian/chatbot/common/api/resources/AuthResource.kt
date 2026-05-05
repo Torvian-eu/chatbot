@@ -33,6 +33,12 @@ class AuthResource(val parent: Api = Api()) {
     class LogoutAll(val parent: AuthResource = AuthResource())
 
     /**
+     * Resource for listing the authenticated user's active sessions: /api/v1/auth/sessions
+     */
+    @Resource("sessions")
+    class Sessions(val parent: AuthResource = AuthResource())
+
+    /**
      * Resource for getting current user profile: /api/v1/auth/me
      */
     @Resource("me")

@@ -6,6 +6,7 @@ import arrow.core.raise.catch
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.raise.withError
+import arrow.core.right
 import com.auth0.jwt.exceptions.JWTDecodeException
 import com.auth0.jwt.exceptions.JWTVerificationException
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
@@ -152,6 +153,12 @@ class AuthenticationServiceImpl(
 
                 logger.info("Successfully logged out user: $userId (deleted $deletedCount sessions)")
             }
+        }
+
+    override suspend fun getUserSessions(userId: Long): Either<Nothing, List<UserSessionEntity>> =
+        transactionScope.transaction {
+            // The DAO already scopes the query by user ID, so this remains a pure read operation.
+            userSessionDao.getSessionsByUserId(userId).right()
         }
 
     override suspend fun refreshToken(refreshToken: String, ipAddress: String?): Either<RefreshTokenError, LoginResult> =
