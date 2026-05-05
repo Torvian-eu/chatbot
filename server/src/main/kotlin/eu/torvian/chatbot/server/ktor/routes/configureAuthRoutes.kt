@@ -227,9 +227,22 @@ fun Route.configureAuthRoutes(
     // POST /api/v1/auth/acknowledge-ips - Clear pending security alerts for the current user
     authenticate(AuthSchemes.USER_JWT) {
         post<AuthResource.AcknowledgeIps> {
-            val userId = call.getUserId()
+            val userContext = call.getUserContext()
+
+            // Restricted sessions cannot acknowledge IPs - prevents self-acknowledgement of untrusted IPs
+            if (userContext.isRestricted) {
+                call.respond(
+                    HttpStatusCode.Forbidden,
+                    apiError(
+                        CommonApiErrorCodes.PERMISSION_DENIED,
+                        "Action requires a trusted session. Please verify via email or another device."
+                    )
+                )
+                return@post
+            }
+
             call.respondEither(
-                authenticationService.acknowledgeTrustedIps(userId),
+                authenticationService.acknowledgeTrustedIps(userContext.user.id),
                 HttpStatusCode.NoContent
             )
         }

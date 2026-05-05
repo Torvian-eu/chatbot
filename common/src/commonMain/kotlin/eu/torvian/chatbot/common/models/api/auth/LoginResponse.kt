@@ -13,6 +13,7 @@ import kotlin.time.Instant
  * @property refreshToken The JWT refresh token for obtaining new access tokens
  * @property expiresAt When the access token expires
  * @property permissions The list of permissions granted to the user (aggregated from all their roles)
+ * @property isRestricted Whether the session is restricted (created from an unacknowledged IP)
  */
 @Serializable
 data class LoginResponse(
@@ -20,5 +21,6 @@ data class LoginResponse(
     val accessToken: String,
     val refreshToken: String,
     val expiresAt: Instant,
-    val permissions: List<Permission> = emptyList()
+    val permissions: List<Permission> = emptyList(),
+    val isRestricted: Boolean = false
 )

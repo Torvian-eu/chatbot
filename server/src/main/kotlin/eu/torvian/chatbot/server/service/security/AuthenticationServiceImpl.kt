@@ -85,7 +85,8 @@ class AuthenticationServiceImpl(
                 }
 
                 // Handle IP security - raises LoginError.VerificationRequired in STRICT mode if needed.
-                handleClientIpSecurity(userEntity.id, ipAddress, Clock.System.now())
+                // Also determines if the session should be restricted based on IP acknowledgment status.
+                val isRestricted = handleClientIpSecurityAndDetermineRestriction(userEntity.id, ipAddress, Clock.System.now())
 
                 // Create session.
                 val currentTime = Clock.System.now()
@@ -96,13 +97,14 @@ class AuthenticationServiceImpl(
                 val session: UserSessionEntity = withError({ _: UserSessionError.ForeignKeyViolation ->
                     LoginError.UserNotFound
                 }) {
-                    userSessionDao.insertSession(userEntity.id, sessionExpiresAt, ipAddress).bind()
+                    userSessionDao.insertSession(userEntity.id, sessionExpiresAt, ipAddress, isRestricted).bind()
                 }
 
                 // Generate tokens
                 val accessToken = jwtConfig.generateAccessToken(
                     userId = userEntity.id,
                     sessionId = session.id,
+                    isRestricted = isRestricted,
                     currentTime = currentTimeMillis
                 )
                 val refreshToken = jwtConfig.generateRefreshToken(
@@ -126,26 +128,30 @@ class AuthenticationServiceImpl(
                     accessToken = accessToken,
                     refreshToken = refreshToken,
                     expiresAt = accessTokenExpiresAt,
-                    permissions = permissions
+                    permissions = permissions,
+                    isRestricted = isRestricted
                 )
             }
         }
 
     /**
      * Validates and updates trusted-IP state after successful credential check.
+     * Also determines if the session should be restricted based on IP acknowledgment status.
      *
      * Uses [Raise] context to signal success (Unit) or failure ([LoginError.VerificationRequired]).
      * In STRICT mode, raises [LoginError.VerificationRequired] when the IP is not trusted.
-     * In WARNING mode, records new IPs as trusted.
-     * In DISABLED mode, this is a no-op.
+     * In WARNING mode, records new IPs as trusted but session is restricted until acknowledged.
+     * In DISABLED mode, this is a no-op and returns false (not restricted).
+     *
+     * @return true if the session should be restricted, false otherwise
      */
-    private suspend fun Raise<LoginError>.handleClientIpSecurity(
+    private suspend fun Raise<LoginError>.handleClientIpSecurityAndDetermineRestriction(
         userId: Long,
         ipAddress: String?,
         currentTime: Instant
-    ) {
-        val normalizedIp = ipAddress?.trim()?.takeIf { it.isNotEmpty() } ?: return
-        if (ipSecurityMode == IpSecurityMode.DISABLED) return
+    ): Boolean {
+        val normalizedIp = ipAddress?.trim()?.takeIf { it.isNotEmpty() } ?: return false
+        if (ipSecurityMode == IpSecurityMode.DISABLED) return false
 
         val currentTimeMillis = currentTime.toEpochMilliseconds()
         val trustedIp = userTrustedIpDao.getTrustedIp(userId, normalizedIp)
@@ -155,7 +161,7 @@ class AuthenticationServiceImpl(
         if (trustedIp != null && !trustedIp.isTrusted) {
             userTrustedIpDao.updateLastUsedAt(trustedIp.id, currentTimeMillis)
             ensure(ipSecurityMode != IpSecurityMode.STRICT) { LoginError.VerificationRequired }
-            return
+            return trustedIp.isAcknowledged.not()  // WARNING mode: restrict if not acknowledged
         }
 
         when (ipSecurityMode) {
@@ -169,8 +175,16 @@ class AuthenticationServiceImpl(
                         firstUsedAt = currentTimeMillis,
                         lastUsedAt = currentTimeMillis
                     )
-                } else {
+                    // New IP in WARNING mode - session is restricted until acknowledged
+                    return true
+                } else if (!trustedIp.isAcknowledged) {
+                    // Existing unacknowledged IP in WARNING mode - session is restricted
                     userTrustedIpDao.updateLastUsedAt(trustedIp.id, currentTimeMillis)
+                    return true
+                } else {
+                    // Acknowledged IP in WARNING mode - session is not restricted
+                    userTrustedIpDao.updateLastUsedAt(trustedIp.id, currentTimeMillis)
+                    return false
                 }
             }
             IpSecurityMode.STRICT -> {
@@ -189,6 +203,7 @@ class AuthenticationServiceImpl(
                 }
             }
         }
+        return false
     }
 
     override suspend fun logout(sessionId: Long): Either<LogoutError, Unit> =
@@ -307,19 +322,20 @@ class AuthenticationServiceImpl(
                     userSessionDao.deleteSession(sessionId).bind()
                 }
 
-                // Create new session
+                // Create new session, preserving the restricted status from the old session
                 val newSessionExpirationMs = jwtConfig.refreshExpirationMs
                 val newSessionExpiresAt = currentTime.toEpochMilliseconds() + newSessionExpirationMs
                 val newSession = withError({ _: UserSessionError.ForeignKeyViolation ->
                     RefreshTokenError.InvalidSession("User not found")
                 }) {
-                    userSessionDao.insertSession(userId, newSessionExpiresAt, ipAddress).bind()
+                    userSessionDao.insertSession(userId, newSessionExpiresAt, ipAddress, session.isRestricted).bind()
                 }
 
-                // Generate new tokens
+                // Generate new tokens, preserving the restricted status
                 val newAccessToken = jwtConfig.generateAccessToken(
                     userId = userId,
                     sessionId = newSession.id,
+                    isRestricted = session.isRestricted,
                     currentTime = currentTime.toEpochMilliseconds()
                 )
                 val newRefreshToken = jwtConfig.generateRefreshToken(
@@ -339,7 +355,8 @@ class AuthenticationServiceImpl(
                     accessToken = newAccessToken,
                     refreshToken = newRefreshToken,
                     expiresAt = tokenExpiresAt,
-                    permissions = permissions
+                    permissions = permissions,
+                    isRestricted = session.isRestricted
                 )
             }
         }
@@ -399,7 +416,8 @@ class AuthenticationServiceImpl(
                 user = user,
                 sessionId = sessionId,
                 tokenIssuedAt = issuedAt,
-                tokenExpiresAt = expiresAt
+                tokenExpiresAt = expiresAt,
+                isRestricted = session.isRestricted
             )
 
             logger.debug("Credential validation successful for user: ${user.username}")

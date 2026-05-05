@@ -173,7 +173,7 @@ class AuthenticationServiceImplTest {
                 any()
             )
         } returns testTrustedIp
-        coEvery { userSessionDao.insertSession(testUser.id, any(), ipAddress) } returns testSession.right()
+        coEvery { userSessionDao.insertSession(testUser.id, any(), ipAddress, any()) } returns testSession.right()
         coEvery { userService.updateLastLogin(testUser.id) } returns Unit.right()
         coEvery { authorizationService.getUserPermissions(testUser.id) } returns emptyList()
 

@@ -13,10 +13,12 @@ import kotlin.time.Instant
  * @property sessionId The ID of the user's current session
  * @property tokenIssuedAt When the current token was issued
  * @property tokenExpiresAt When the current token expires
+ * @property isRestricted Whether the session is restricted (created from an unacknowledged IP)
  */
 data class UserContext(
     val user: User,
     val sessionId: Long,
     val tokenIssuedAt: Instant,
-    val tokenExpiresAt: Instant
+    val tokenExpiresAt: Instant,
+    val isRestricted: Boolean = false
 )

@@ -12,6 +12,7 @@ import kotlin.time.Instant
  * @property createdAt Timestamp when the session was created.
  * @property lastAccessed Timestamp when the session was last accessed.
  * @property ipAddress IP address of the client that created the session (null if unavailable).
+ * @property isRestricted Whether the session is restricted (created from an unacknowledged IP).
  */
 data class UserSessionEntity(
     val id: Long,
@@ -19,5 +20,6 @@ data class UserSessionEntity(
     val expiresAt: Instant,
     val createdAt: Instant,
     val lastAccessed: Instant,
-    val ipAddress: String?
+    val ipAddress: String?,
+    val isRestricted: Boolean = false
 )

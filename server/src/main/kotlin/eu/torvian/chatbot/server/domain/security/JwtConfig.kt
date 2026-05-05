@@ -49,12 +49,14 @@ data class JwtConfig(
      * 
      * @param userId The unique identifier of the user
      * @param sessionId The unique identifier of the user session (for token revocation)
+     * @param isRestricted Whether the session is restricted (created from an unacknowledged IP)
      * @param currentTime The current timestamp (epoch milliseconds)
      * @return A signed JWT token string
      */
     fun generateAccessToken(
         userId: Long,
         sessionId: Long,
+        isRestricted: Boolean = false,
         currentTime: Long = System.currentTimeMillis()
     ): String {
         return JWT.create()
@@ -64,6 +66,7 @@ data class JwtConfig(
             .withClaim("principalType", "user")
             .withClaim("sessionId", sessionId)
             .withClaim("tokenType", "access")
+            .withClaim("restricted", isRestricted)
             .withIssuedAt(Date(currentTime))
             .withExpiresAt(Date(currentTime + tokenExpirationMs))
             .sign(algorithm)
