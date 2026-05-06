@@ -152,6 +152,20 @@ fun Route.configureAuthRoutes(
     authenticate(AuthSchemes.USER_JWT) {
         get<AuthResource.Sessions> {
             val userContext = call.getUserContext()
+
+            // Restricted sessions (unacknowledged devices) cannot view other sessions
+            // to prevent enumeration attacks on unverified devices.
+            if (userContext.isRestricted) {
+                call.respond(
+                    HttpStatusCode.Forbidden,
+                    apiError(
+                        CommonApiErrorCodes.PERMISSION_DENIED,
+                        "Action requires a trusted session"
+                    )
+                )
+                return@get
+            }
+
             val result = authenticationService.getUserSessions(userContext.user.id).map { sessions ->
                 // Most recently used sessions are shown first so the active device is easy to spot.
                 sessions

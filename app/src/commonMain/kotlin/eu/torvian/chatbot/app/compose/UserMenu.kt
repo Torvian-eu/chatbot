@@ -79,6 +79,7 @@ fun UserMenu(
             HorizontalDivider()
 
             // Active session management opens a dedicated dialog instead of navigating away.
+            // Disabled for restricted sessions (Device not verified) to prevent security issues.
             DropdownMenuItem(
                 text = { Text("Active Sessions") },
                 onClick = {
@@ -87,7 +88,8 @@ fun UserMenu(
                 },
                 leadingIcon = {
                     Icon(Icons.Default.Security, contentDescription = null)
-                }
+                },
+                enabled = !isCurrentSessionRestricted
             )
 
             // Logout all sessions affects every device, so keep it grouped with the security actions.
