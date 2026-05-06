@@ -7,6 +7,7 @@ import kotlin.time.Instant
  * Public session summary returned to authenticated users when listing their active sessions.
  *
  * @property sessionId Unique identifier of the session.
+ * @property deviceId Unique identifier of the device (client-side UUID) that created this session.
  * @property ipAddress IP address captured when the session was created or refreshed, if available.
  * @property createdAt Timestamp when the session was created.
  * @property lastAccessed Timestamp when the session was last used.
@@ -16,6 +17,7 @@ import kotlin.time.Instant
 @Serializable
 data class UserSessionInfo(
     val sessionId: Long,
+    val deviceId: String,
     val ipAddress: String?,
     val createdAt: Instant,
     val lastAccessed: Instant,

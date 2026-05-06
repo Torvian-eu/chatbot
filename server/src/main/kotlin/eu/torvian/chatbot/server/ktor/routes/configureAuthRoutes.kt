@@ -174,6 +174,7 @@ fun Route.configureAuthRoutes(
                     .map { session ->
                         UserSessionInfo(
                             sessionId = session.id,
+                            deviceId = session.deviceId,
                             ipAddress = session.ipAddress,
                             createdAt = session.createdAt,
                             lastAccessed = session.lastAccessed,

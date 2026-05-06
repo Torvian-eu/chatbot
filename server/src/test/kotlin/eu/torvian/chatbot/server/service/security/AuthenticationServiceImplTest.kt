@@ -87,6 +87,7 @@ class AuthenticationServiceImplTest {
     private val testSession = UserSessionEntity(
         id = 100L,
         userId = testUser.id,
+        deviceId = "test-device-id",
         createdAt = Instant.fromEpochMilliseconds(System.currentTimeMillis()),
         lastAccessed = Instant.fromEpochMilliseconds(System.currentTimeMillis()),
         expiresAt = Instant.fromEpochMilliseconds(System.currentTimeMillis() + 24 * 60 * 60 * 1000), // 24 hours
@@ -180,7 +181,7 @@ class AuthenticationServiceImplTest {
                 createdAt = any()
             )
         } returns mockk()
-        coEvery { userSessionDao.insertSession(testUser.id, any(), ipAddress, any()) } returns testSession.right()
+        coEvery { userSessionDao.insertSession(testUser.id, deviceId, any(), ipAddress, any()) } returns testSession.right()
         coEvery { userService.updateLastLogin(testUser.id) } returns Unit.right()
         coEvery { authorizationService.getUserPermissions(testUser.id) } returns emptyList()
 
@@ -241,7 +242,7 @@ class AuthenticationServiceImplTest {
                 lastUsedAt = any()
             )
         } returns testTrustedDevice
-        coEvery { userSessionDao.insertSession(testUser.id, any(), ipAddress, false) } returns testSession.right()
+        coEvery { userSessionDao.insertSession(testUser.id, deviceId, any(), ipAddress, false) } returns testSession.right()
         coEvery { userService.updateLastLogin(testUser.id) } returns Unit.right()
         coEvery { authorizationService.getUserPermissions(testUser.id) } returns emptyList()
 
@@ -275,7 +276,7 @@ class AuthenticationServiceImplTest {
                 lastUsedAt = any()
             )
         } returns testTrustedDevice
-        coEvery { userSessionDao.insertSession(testUser.id, any(), ipAddress, false) } returns testSession.right()
+        coEvery { userSessionDao.insertSession(testUser.id, deviceId, any(), ipAddress, false) } returns testSession.right()
         coEvery { userService.updateLastLogin(testUser.id) } returns Unit.right()
         coEvery { authorizationService.getUserPermissions(testUser.id) } returns emptyList()
 

@@ -232,6 +232,7 @@ object TestDefaults {
     val userSession1 = UserSessionEntity(
         id = 1L,
         userId = user1.id,
+        deviceId = "test-device-id",
         expiresAt = Instant.fromEpochMilliseconds(System.currentTimeMillis() + (24 * 60 * 60 * 1000)), // 24 hours from now
         createdAt = Instant.fromEpochMilliseconds(DEFAULT_INSTANT_MILLIS),
         lastAccessed = Instant.fromEpochMilliseconds(DEFAULT_INSTANT_MILLIS),

@@ -32,6 +32,7 @@ interface UserSessionDao {
      * Creates a new user session.
      * 
      * @param userId The ID of the user for whom to create the session.
+     * @param deviceId Unique identifier of the device (client-side UUID) that created this session.
      * @param expiresAt Timestamp when the session should expire (epoch milliseconds).
      * @param ipAddress Optional IP address of the client creating the session.
      * @param isRestricted Whether the session is restricted (created from an unacknowledged device).
@@ -40,6 +41,7 @@ interface UserSessionDao {
      */
     suspend fun insertSession(
         userId: Long,
+        deviceId: String,
         expiresAt: Long,
         ipAddress: String?,
         isRestricted: Boolean = false

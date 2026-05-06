@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material3.Card
@@ -26,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -47,6 +49,7 @@ import kotlin.time.Instant
  * @param isCurrentSessionRestricted Whether the current session is restricted (IP not verified).
  * @param onDismiss Called when the dialog should be closed.
  * @param onRevokeDevice Called when the user requests revocation of a non-current device.
+ * @param onCopyToClipboard Called when the user wants to copy text to the clipboard.
  */
 @Composable
 fun TrustedDevicesDialog(
@@ -54,7 +57,8 @@ fun TrustedDevicesDialog(
     currentDeviceId: String?,
     isCurrentSessionRestricted: Boolean,
     onDismiss: () -> Unit,
-    onRevokeDevice: (String) -> Unit
+    onRevokeDevice: (String) -> Unit,
+    onCopyToClipboard: (String) -> Unit
 ) {
     Dialog(
         onDismissRequest = onDismiss,
@@ -115,7 +119,8 @@ fun TrustedDevicesDialog(
                                 device = device,
                                 isCurrentDevice = device.deviceId == currentDeviceId,
                                 isRevokeDisabled = isCurrentSessionRestricted,
-                                onRevokeDevice = { onRevokeDevice(device.deviceId) }
+                                onRevokeDevice = { onRevokeDevice(device.deviceId) },
+                                onCopyToClipboard = onCopyToClipboard
                             )
                         }
                     }
@@ -139,13 +144,15 @@ fun TrustedDevicesDialog(
  * @param isCurrentDevice Whether this device matches the current session's device.
  * @param isRevokeDisabled Whether the revoke action should be disabled (for restricted sessions).
  * @param onRevokeDevice Called when the user wants to revoke this device.
+ * @param onCopyToClipboard Called when the user wants to copy text to the clipboard.
  */
 @Composable
 private fun TrustedDeviceCard(
     device: UserTrustedDeviceInfo,
     isCurrentDevice: Boolean,
     isRevokeDisabled: Boolean,
-    onRevokeDevice: () -> Unit
+    onRevokeDevice: () -> Unit,
+    onCopyToClipboard: (String) -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -190,26 +197,66 @@ private fun TrustedDeviceCard(
                     }
                 }
 
-                // Show delete button only for non-current devices and when not disabled
-                if (!isCurrentDevice) {
-                    IconButton(
-                        onClick = onRevokeDevice,
-                        enabled = !isRevokeDisabled
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = if (isRevokeDisabled) {
-                                "Revoke device (disabled in restricted sessions)"
-                            } else {
-                                "Revoke device"
-                            },
-                            tint = if (isRevokeDisabled) {
-                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                            } else {
-                                MaterialTheme.colorScheme.error
-                            }
-                        )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Show delete button only for non-current devices and when not disabled
+                    if (!isCurrentDevice) {
+                        IconButton(
+                            onClick = onRevokeDevice,
+                            enabled = !isRevokeDisabled
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = if (isRevokeDisabled) {
+                                    "Revoke device (disabled in restricted sessions)"
+                                } else {
+                                    "Revoke device"
+                                },
+                                tint = if (isRevokeDisabled) {
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                } else {
+                                    MaterialTheme.colorScheme.error
+                                }
+                            )
+                        }
                     }
+                }
+            }
+
+            // Device ID row with copy button
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = "Device ID: ",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = device.deviceId.take(8) + "...",
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                IconButton(
+                    onClick = { onCopyToClipboard(device.deviceId) },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ContentCopy,
+                        contentDescription = "Copy device ID to clipboard",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
             }
 

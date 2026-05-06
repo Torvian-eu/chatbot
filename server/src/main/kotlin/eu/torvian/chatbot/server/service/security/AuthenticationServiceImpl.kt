@@ -102,7 +102,7 @@ class AuthenticationServiceImpl(
                 val session: UserSessionEntity = withError({ _: UserSessionError.ForeignKeyViolation ->
                     LoginError.UserNotFound
                 }) {
-                    userSessionDao.insertSession(userEntity.id, sessionExpiresAt, ipAddress, isRestricted).bind()
+                    userSessionDao.insertSession(userEntity.id, deviceId, sessionExpiresAt, ipAddress, isRestricted).bind()
                 }
 
                 // Generate tokens
@@ -417,7 +417,7 @@ class AuthenticationServiceImpl(
                 val newSession = withError({ _: UserSessionError.ForeignKeyViolation ->
                     RefreshTokenError.InvalidSession("User not found")
                 }) {
-                    userSessionDao.insertSession(userId, newSessionExpiresAt, ipAddress, session.isRestricted).bind()
+                    userSessionDao.insertSession(userId, session.deviceId, newSessionExpiresAt, ipAddress, session.isRestricted).bind()
                 }
 
                 // Generate new tokens, preserving the restricted status

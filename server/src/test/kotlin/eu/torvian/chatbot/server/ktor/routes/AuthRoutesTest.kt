@@ -836,6 +836,7 @@ class AuthRoutesTest {
         val recentSession = UserSessionEntity(
             id = 2L,
             userId = testUser.id,
+            deviceId = "recent-device-id",
             expiresAt = Instant.fromEpochMilliseconds(System.currentTimeMillis() + (48 * 60 * 60 * 1000)),
             createdAt = Instant.fromEpochMilliseconds(System.currentTimeMillis() - 60_000),
             lastAccessed = Instant.fromEpochMilliseconds(System.currentTimeMillis() + 5_000),

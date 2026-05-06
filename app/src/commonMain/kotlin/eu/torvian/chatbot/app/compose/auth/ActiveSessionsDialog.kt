@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.Card
@@ -26,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -48,6 +50,7 @@ import kotlin.time.Instant
  * @param isCurrentSessionRestricted Whether the current session is restricted (IP not verified).
  * @param onDismiss Called when the dialog should be closed.
  * @param onRevokeSession Called when the user requests revocation of a non-current session.
+ * @param onCopyToClipboard Called when the user wants to copy text to the clipboard.
  */
 @Composable
 fun ActiveSessionsDialog(
@@ -55,7 +58,8 @@ fun ActiveSessionsDialog(
     currentAuthState: AuthState,
     isCurrentSessionRestricted: Boolean,
     onDismiss: () -> Unit,
-    onRevokeSession: (Long) -> Unit
+    onRevokeSession: (Long) -> Unit,
+    onCopyToClipboard: (String) -> Unit
 ) {
     val currentSessionId = if (currentAuthState is AuthState.Authenticated) {
         sessions.firstOrNull { session -> session.isCurrentSession }?.sessionId
@@ -122,7 +126,8 @@ fun ActiveSessionsDialog(
                                 session = session,
                                 isCurrentSession = session.isCurrentSession || session.sessionId == currentSessionId,
                                 isRevokeDisabled = isCurrentSessionRestricted,
-                                onRevokeSession = { onRevokeSession(session.sessionId) }
+                                onRevokeSession = { onRevokeSession(session.sessionId) },
+                                onCopyToClipboard = onCopyToClipboard
                             )
                         }
                     }
@@ -146,13 +151,15 @@ fun ActiveSessionsDialog(
  * @param isCurrentSession Whether the session matches the currently authenticated request.
  * @param isRevokeDisabled Whether the revoke action should be disabled (for restricted sessions).
  * @param onRevokeSession Called when the user wants to revoke this session.
+ * @param onCopyToClipboard Called when the user wants to copy text to the clipboard.
  */
 @Composable
 private fun ActiveSessionCard(
     session: UserSessionInfo,
     isCurrentSession: Boolean,
     isRevokeDisabled: Boolean,
-    onRevokeSession: () -> Unit
+    onRevokeSession: () -> Unit,
+    onCopyToClipboard: (String) -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -197,26 +204,66 @@ private fun ActiveSessionCard(
                     }
                 }
 
-                // Show delete button only for non-current sessions and when not disabled
-                if (!isCurrentSession) {
-                    IconButton(
-                        onClick = onRevokeSession,
-                        enabled = !isRevokeDisabled
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = if (isRevokeDisabled) {
-                                "Revoke session (disabled in restricted sessions)"
-                            } else {
-                                "Revoke session"
-                            },
-                            tint = if (isRevokeDisabled) {
-                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                            } else {
-                                MaterialTheme.colorScheme.error
-                            }
-                        )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Show delete button only for non-current sessions and when not disabled
+                    if (!isCurrentSession) {
+                        IconButton(
+                            onClick = onRevokeSession,
+                            enabled = !isRevokeDisabled
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = if (isRevokeDisabled) {
+                                    "Revoke session (disabled in restricted sessions)"
+                                } else {
+                                    "Revoke session"
+                                },
+                                tint = if (isRevokeDisabled) {
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                } else {
+                                    MaterialTheme.colorScheme.error
+                                }
+                            )
+                        }
                     }
+                }
+            }
+
+            // Device ID row with copy button
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = "Device ID: ",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = session.deviceId.take(8) + "...",
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                IconButton(
+                    onClick = { onCopyToClipboard(session.deviceId) },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ContentCopy,
+                        contentDescription = "Copy device ID to clipboard",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
             }
 

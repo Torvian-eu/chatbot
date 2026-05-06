@@ -517,6 +517,7 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
             UserSessionsTable.insert {
                 it[id] = userSession.id
                 it[userId] = userSession.userId
+                it[deviceId] = userSession.deviceId
                 it[expiresAt] = userSession.expiresAt.toEpochMilliseconds()
                 it[createdAt] = userSession.createdAt.toEpochMilliseconds()
                 it[lastAccessed] = userSession.lastAccessed.toEpochMilliseconds()

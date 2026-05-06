@@ -5,9 +5,10 @@ import eu.torvian.chatbot.app.repository.*
 import eu.torvian.chatbot.app.repository.impl.*
 import eu.torvian.chatbot.app.service.api.*
 import eu.torvian.chatbot.app.service.api.ktor.*
-import eu.torvian.chatbot.app.service.auth.createAuthenticatedHttpClient
 import eu.torvian.chatbot.app.service.auth.DefaultDeviceIdentityService
 import eu.torvian.chatbot.app.service.auth.DeviceIdentityService
+import eu.torvian.chatbot.app.service.auth.createAuthenticatedHttpClient
+import eu.torvian.chatbot.app.service.clipboard.ClipboardService
 import eu.torvian.chatbot.app.service.mcp.LocalMCPServerManager
 import eu.torvian.chatbot.app.service.mcp.LocalMCPServerManagerImpl
 import eu.torvian.chatbot.app.service.misc.EventBus
@@ -340,7 +341,7 @@ fun appModule(config: AppConfiguration): Module = module {
     viewModel {
         val scopeProvider = get<CoroutineScopeProvider>()
         val normalScope = scopeProvider.createNormalScope()
-        AuthViewModel(get<AuthRepository>(), get<NotificationService>(), normalScope)
+        AuthViewModel(get<AuthRepository>(), get<NotificationService>(), get<ClipboardService>(), normalScope)
     }
     viewModel { SessionListViewModel(get<SessionRepository>(), get<GroupRepository>(), get<EventBus>(), get()) }
     viewModel {

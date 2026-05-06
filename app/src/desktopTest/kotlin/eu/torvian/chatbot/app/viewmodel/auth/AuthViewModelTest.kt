@@ -7,6 +7,7 @@ import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.auth.AccountData
+import eu.torvian.chatbot.app.service.clipboard.ClipboardService
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.models.api.auth.UserSecurityAlert
@@ -39,6 +40,7 @@ class AuthViewModelTest {
 
     private lateinit var mockAuthRepository: AuthRepository
     private lateinit var mockNotificationService: NotificationService
+    private lateinit var mockClipboardService: ClipboardService
     private val testDispatcher = StandardTestDispatcher()
     private val normalScope = CoroutineScope(testDispatcher + SupervisorJob())
     private lateinit var authViewModel: AuthViewModel
@@ -55,10 +57,12 @@ class AuthViewModelTest {
             coEvery { acknowledgeSecurityAlerts() } returns Unit.right()
         }
         mockNotificationService = mockk(relaxed = true)
+        mockClipboardService = mockk(relaxed = true)
 
         authViewModel = AuthViewModel(
             authRepository = mockAuthRepository,
             notificationService = mockNotificationService,
+            clipboardService = mockClipboardService,
             normalScope = normalScope
         )
     }
@@ -383,6 +387,7 @@ class AuthViewModelTest {
         val sessions = listOf(
             UserSessionInfo(
                 sessionId = 10L,
+                deviceId = "test-device-id",
                 ipAddress = "10.0.0.2",
                 createdAt = now,
                 lastAccessed = now,
@@ -409,6 +414,7 @@ class AuthViewModelTest {
         val refreshedSessions = listOf(
             UserSessionInfo(
                 sessionId = sessionId,
+                deviceId = "test-device-id",
                 ipAddress = "10.0.0.3",
                 createdAt = now,
                 lastAccessed = now,

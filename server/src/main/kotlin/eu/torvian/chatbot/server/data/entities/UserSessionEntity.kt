@@ -8,6 +8,7 @@ import kotlin.time.Instant
  *
  * @property id Unique identifier for the user session.
  * @property userId ID of the user who owns this session.
+ * @property deviceId Unique identifier of the device (client-side UUID) that created this session.
  * @property expiresAt Timestamp when the session expires.
  * @property createdAt Timestamp when the session was created.
  * @property lastAccessed Timestamp when the session was last accessed.
@@ -17,6 +18,7 @@ import kotlin.time.Instant
 data class UserSessionEntity(
     val id: Long,
     val userId: Long,
+    val deviceId: String,
     val expiresAt: Instant,
     val createdAt: Instant,
     val lastAccessed: Instant,

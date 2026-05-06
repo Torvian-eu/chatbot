@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.data.tables
 
 import eu.torvian.chatbot.server.data.tables.UserSessionsTable.createdAt
+import eu.torvian.chatbot.server.data.tables.UserSessionsTable.deviceId
 import eu.torvian.chatbot.server.data.tables.UserSessionsTable.expiresAt
 import eu.torvian.chatbot.server.data.tables.UserSessionsTable.ipAddress
 import eu.torvian.chatbot.server.data.tables.UserSessionsTable.isRestricted
@@ -17,6 +18,7 @@ import org.jetbrains.exposed.v1.core.dao.id.LongIdTable
  * JWT tokens themselves are not stored in the database.
  * 
  * @property userId Reference to the user who owns this session
+ * @property deviceId Unique identifier of the device (client-side UUID) that created this session
  * @property expiresAt Timestamp when the session expires (epoch milliseconds)
  * @property createdAt Timestamp when the session was created (epoch milliseconds)
  * @property lastAccessed Timestamp when the session was last accessed (epoch milliseconds)
@@ -25,6 +27,7 @@ import org.jetbrains.exposed.v1.core.dao.id.LongIdTable
  */
 object UserSessionsTable : LongIdTable("user_sessions") {
     val userId = reference("user_id", UsersTable, onDelete = ReferenceOption.CASCADE)
+    val deviceId = varchar("device_id", 36) // UUID format
     val expiresAt = long("expires_at")
     val createdAt = long("created_at")
     val lastAccessed = long("last_accessed")

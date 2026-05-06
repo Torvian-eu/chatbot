@@ -371,6 +371,7 @@ class DefaultAuthRepositoryAccountManagementTest {
         val sessions = listOf(
             UserSessionInfo(
                 sessionId = 1L,
+                deviceId = "test-device-id",
                 ipAddress = "10.0.0.1",
                 createdAt = Clock.System.now(),
                 lastAccessed = Clock.System.now(),

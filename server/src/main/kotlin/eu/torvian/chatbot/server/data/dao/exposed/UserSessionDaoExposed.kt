@@ -44,6 +44,7 @@ class UserSessionDaoExposed(
 
     override suspend fun insertSession(
         userId: Long,
+        deviceId: String,
         expiresAt: Long,
         ipAddress: String?,
         isRestricted: Boolean
@@ -54,6 +55,7 @@ class UserSessionDaoExposed(
                     val currentTime = System.currentTimeMillis()
                     val insertStatement = UserSessionsTable.insert {
                         it[UserSessionsTable.userId] = userId
+                        it[UserSessionsTable.deviceId] = deviceId
                         it[UserSessionsTable.expiresAt] = expiresAt
                         it[createdAt] = currentTime
                         it[lastAccessed] = currentTime

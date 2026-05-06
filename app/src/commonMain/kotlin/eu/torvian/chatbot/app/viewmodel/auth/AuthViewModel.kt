@@ -6,6 +6,7 @@ import eu.torvian.chatbot.app.repository.AuthRepository
 import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.service.auth.AccountData
+import eu.torvian.chatbot.app.service.clipboard.ClipboardService
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.models.api.auth.UserSecurityAlert
@@ -37,6 +38,7 @@ import kotlinx.coroutines.launch
 class AuthViewModel(
     private val authRepository: AuthRepository,
     private val notificationService: NotificationService,
+    private val clipboardService: ClipboardService,
     private val normalScope: CoroutineScope
 ) : ViewModel(normalScope) {
 
@@ -565,6 +567,28 @@ class AuthViewModel(
      */
     fun closeDialog() {
         _dialogState.value = AuthDialogState.None
+    }
+
+    // --- Clipboard Operations ---
+
+    /**
+     * Copies the given text to the system clipboard and shows a success notification.
+     *
+     * @param text The text to copy to the clipboard.
+     */
+    fun copyToClipboard(text: String) {
+        viewModelScope.launch {
+            try {
+                clipboardService.copyToClipboard(text)
+                notificationService.genericSuccess("Copied to clipboard")
+            } catch (e: Exception) {
+                logger.warn("Failed to copy to clipboard: ${e.message}")
+                notificationService.genericError(
+                    shortMessage = "Failed to copy to clipboard",
+                    detailedMessage = e.message
+                )
+            }
+        }
     }
 
     // --- Form State Updates ---

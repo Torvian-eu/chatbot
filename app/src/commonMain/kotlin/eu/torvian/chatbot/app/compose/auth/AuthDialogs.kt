@@ -63,7 +63,8 @@ fun AuthDialogs(
                 currentAuthState = currentAuthState,
                 isCurrentSessionRestricted = isCurrentSessionRestricted,
                 onDismiss = { authViewModel.closeDialog() },
-                onRevokeSession = { sessionId: Long -> authViewModel.revokeSession(sessionId) }
+                onRevokeSession = { sessionId: Long -> authViewModel.revokeSession(sessionId) },
+                onCopyToClipboard = authViewModel::copyToClipboard
             )
         }
 
@@ -90,7 +91,8 @@ fun AuthDialogs(
                 currentDeviceId = currentDeviceId,
                 isCurrentSessionRestricted = isCurrentSessionRestricted,
                 onDismiss = { authViewModel.closeDialog() },
-                onRevokeDevice = { deviceId -> authViewModel.revokeTrustedDevice(deviceId) }
+                onRevokeDevice = { deviceId -> authViewModel.revokeTrustedDevice(deviceId) },
+                onCopyToClipboard = authViewModel::copyToClipboard
             )
         }
 
