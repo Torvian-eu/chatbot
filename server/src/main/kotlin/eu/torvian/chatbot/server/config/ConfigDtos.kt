@@ -15,6 +15,7 @@ import kotlinx.serialization.Serializable
  * @property database Optional [DatabaseConfigDto] for database connection parameters.
  * @property encryption Optional [EncryptionConfigDto] for data encryption settings.
  * @property jwt Optional [JwtConfigDto] for JSON Web Token authentication settings.
+ * @property accountSecurityMode Optional policy name for device-based login handling.
  */
 @Serializable
 data class AppConfigDto(
@@ -26,6 +27,7 @@ data class AppConfigDto(
     val database: DatabaseConfigDto? = null,
     val encryption: EncryptionConfigDto? = null,
     val jwt: JwtConfigDto? = null,
+    val accountSecurityMode: String? = null,
     val reverseProxy: ReverseProxyConfigDto? = null
 )
 
@@ -57,7 +59,7 @@ data class SetupConfigDto(val required: Boolean? = null)
  * @property dataDir The subdirectory name within the base application path for runtime data. Typically "data".
  * @property databaseFilename The filename of the database within the data directory. Typically "chatbot.db".
  * @property keystoreFilename The filename of the SSL keystore within the data directory. Typically "keystore.jks".
- * @property logsDir Optional subdirectory name within the base application path for log files.
+ * @property logsDir: Optional subdirectory name within the base application path for log files.
  */
 @Serializable
 data class StorageConfigDto(

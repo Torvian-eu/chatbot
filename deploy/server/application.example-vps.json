@@ -59,6 +59,8 @@
     /* jwt.secret must be set in secrets.json or via environment variable */
   },
 
+  "accountSecurityMode" : "WARNING",
+
   "reverseProxy": {
     /*
       Enable this if the server is behind a reverse proxy (e.g., Caddy, Nginx, Cloudflare).

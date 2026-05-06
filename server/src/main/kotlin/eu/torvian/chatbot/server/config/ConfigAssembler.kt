@@ -37,6 +37,7 @@ fun AppConfigDto.merge(other: AppConfigDto?): AppConfigDto = AppConfigDto(
     database = mergeDatabase(database, other?.database),
     encryption = mergeEncryption(encryption, other?.encryption),
     jwt = mergeJwt(jwt, other?.jwt),
+    accountSecurityMode = other?.accountSecurityMode ?: accountSecurityMode,
     reverseProxy = mergeReverseProxy(reverseProxy, other?.reverseProxy)
 )
 
@@ -176,8 +177,24 @@ fun AppConfigDto.toDomain(baseApplicationPath: String): Either<ConfigError.Valid
         database = parseDatabase(database, storageConfig),
         encryption = parseEncryption(encryption),
         jwt = parseJwt(jwt),
+        accountSecurityMode = parseAccountSecurityMode(accountSecurityMode),
         reverseProxy = parseReverseProxy(reverseProxy)
     )
+}
+
+/**
+ * Parse the optional top-level account security mode from text into the strict domain enum.
+ *
+ * Missing or blank values fall back to [AccountSecurityMode.DISABLED] so the feature is opt-in.
+ */
+private fun Raise<ConfigError.ValidationError>.parseAccountSecurityMode(value: String?): AccountSecurityMode {
+    val normalized = value?.trim().orEmpty()
+    if (normalized.isEmpty()) return AccountSecurityMode.DISABLED
+
+    return runCatching { AccountSecurityMode.valueOf(normalized.uppercase()) }
+        .getOrElse {
+            raise(ConfigError.ValidationError.InvalidValue("accountSecurityMode", "Allowed: DISABLED, WARNING, STRICT"))
+        }
 }
 
 /**
