@@ -206,26 +206,59 @@ class AuthenticationServiceImpl(
         return false
     }
 
-    override suspend fun logout(sessionId: Long): Either<LogoutError, Unit> =
+    override suspend fun logout(
+        userId: Long,
+        targetSessionId: Long,
+        requesterSessionId: Long,
+        requesterIsRestricted: Boolean
+    ): Either<LogoutError, Unit> =
         transactionScope.transaction {
             either {
-                logger.info("Logging out session: $sessionId")
+                logger.info("Logging out session: $targetSessionId, user: $userId, requester: $requesterSessionId, restricted: $requesterIsRestricted")
+
+                // Fetch the target session to validate ownership
+                val targetSession = withError({ _: UserSessionError.SessionNotFound ->
+                    LogoutError.SessionNotFound(targetSessionId)
+                }) {
+                    userSessionDao.getSessionById(targetSessionId).bind()
+                }
+
+                // Validate that the session belongs to the requesting user (ownership check)
+                // This prevents users from logging out sessions belonging to other users
+                ensure(targetSession.userId == userId) {
+                    logger.warn("Session $targetSessionId does not belong to user $userId")
+                    raise(LogoutError.SessionNotFound(targetSessionId))
+                }
+
+                // Restricted sessions can only log out themselves, not other sessions
+                if (targetSessionId != requesterSessionId) {
+                    ensure(!requesterIsRestricted) {
+                        logger.warn("Restricted session attempted to revoke another session: $targetSessionId")
+                        raise(LogoutError.InsufficientPermissions)
+                    }
+                }
 
                 // Delete the specific session
                 withError({ _: UserSessionError.SessionNotFound ->
-                    LogoutError.SessionNotFound(sessionId)
+                    LogoutError.SessionNotFound(targetSessionId)
                 }) {
-                    userSessionDao.deleteSession(sessionId).bind()
+                    userSessionDao.deleteSession(targetSessionId).bind()
                 }
 
-                logger.info("Successfully logged out session: $sessionId")
+                logger.info("Successfully logged out session: $targetSessionId")
             }
         }
 
-    override suspend fun logoutAll(userId: Long): Either<LogoutAllError, Unit> =
+    override suspend fun logoutAll(userId: Long, requesterIsRestricted: Boolean): Either<LogoutAllError, Unit> =
         transactionScope.transaction {
             either {
-                logger.info("Logging out all sessions for user: $userId")
+                logger.info("Logging out all sessions for user: $userId, restricted: $requesterIsRestricted")
+
+                // Restricted sessions cannot log out from all sessions
+                ensure(!requesterIsRestricted) {
+                    logger.warn("Restricted session attempted to log out from all sessions")
+                    raise(LogoutAllError.InsufficientPermissions)
+                }
 
                 // Delete all sessions for the user
                 val deletedCount = userSessionDao.deleteSessionsByUserId(userId)

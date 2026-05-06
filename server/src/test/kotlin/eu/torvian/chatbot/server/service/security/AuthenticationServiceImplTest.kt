@@ -167,10 +167,10 @@ class AuthenticationServiceImplTest {
             userTrustedIpDao.insertTrustedIp(
                 testUser.id,
                 ipAddress,
-                true,
-                false,
-                any(),
-                any()
+                isTrusted = true,
+                isAcknowledged = false,
+                firstUsedAt = any(),
+                lastUsedAt = any()
             )
         } returns testTrustedIp
         coEvery { userSessionDao.insertSession(testUser.id, any(), ipAddress, any()) } returns testSession.right()
@@ -180,7 +180,12 @@ class AuthenticationServiceImplTest {
         val result = warningAuthService.login(username, password, ipAddress)
 
         assertTrue(result.isRight())
-        coVerify { userTrustedIpDao.insertTrustedIp(testUser.id, ipAddress, true, false, any(), any()) }
+        coVerify { userTrustedIpDao.insertTrustedIp(testUser.id, ipAddress,
+            isTrusted = true,
+            isAcknowledged = false,
+            firstUsedAt = any(),
+            lastUsedAt = any()
+        ) }
     }
 
     @Test
@@ -197,10 +202,10 @@ class AuthenticationServiceImplTest {
             userTrustedIpDao.insertTrustedIp(
                 testUser.id,
                 ipAddress,
-                false,
-                true,
-                any(),
-                any()
+                isTrusted = false,
+                isAcknowledged = true,
+                firstUsedAt = any(),
+                lastUsedAt = any()
             )
         } returns testTrustedIp.copy(ipAddress = ipAddress, isTrusted = false, isAcknowledged = true)
 
@@ -382,29 +387,66 @@ class AuthenticationServiceImplTest {
     @Test
     fun `logout should successfully delete specific session`() = runTest {
         // Given
+        val userId = 1L
         val sessionId = 100L
+        val requesterSessionId = sessionId // Same session - user logging out themselves
+        coEvery { userSessionDao.getSessionById(sessionId) } returns testSession.copy(userId = userId).right()
         coEvery { userSessionDao.deleteSession(sessionId) } returns Unit.right()
 
         // When
-        val result = authService.logout(sessionId)
+        val result = authService.logout(userId, sessionId, requesterSessionId, requesterIsRestricted = false)
 
         // Then
         assertTrue(result.isRight())
+        coVerify { userSessionDao.getSessionById(sessionId) }
         coVerify { userSessionDao.deleteSession(sessionId) }
     }
 
     @Test
     fun `logout should return SessionNotFound when session does not exist`() = runTest {
         // Given
+        val userId = 1L
         val sessionId = 100L
-        coEvery { userSessionDao.deleteSession(sessionId) } returns UserSessionError.SessionNotFound(sessionId).left()
+        coEvery { userSessionDao.getSessionById(sessionId) } returns UserSessionError.SessionNotFound(sessionId).left()
 
         // When
-        val result = authService.logout(sessionId)
+        val result = authService.logout(userId, sessionId, sessionId, requesterIsRestricted = false)
 
         // Then
         assertTrue(result.isLeft())
         assertEquals(LogoutError.SessionNotFound(sessionId), result.leftOrNull())
+    }
+
+    @Test
+    fun `logout should return SessionNotFound when session belongs to different user`() = runTest {
+        // Given
+        val userId = 1L
+        val sessionId = 100L
+        // Session belongs to a different user (userId = 999)
+        coEvery { userSessionDao.getSessionById(sessionId) } returns testSession.copy(userId = 999L).right()
+
+        // When
+        val result = authService.logout(userId, sessionId, sessionId, requesterIsRestricted = false)
+
+        // Then
+        assertTrue(result.isLeft())
+        assertEquals(LogoutError.SessionNotFound(sessionId), result.leftOrNull())
+    }
+
+    @Test
+    fun `logout should return InsufficientPermissions when restricted session tries to revoke other session`() = runTest {
+        // Given
+        val userId = 1L
+        val sessionId = 100L
+        val requesterSessionId = 200L // Different session
+        coEvery { userSessionDao.getSessionById(sessionId) } returns testSession.copy(userId = userId).right()
+
+        // When
+        val result = authService.logout(userId, sessionId, requesterSessionId, requesterIsRestricted = true)
+
+        // Then
+        assertTrue(result.isLeft())
+        assertEquals(LogoutError.InsufficientPermissions, result.leftOrNull())
     }
 
     @Test
@@ -414,7 +456,7 @@ class AuthenticationServiceImplTest {
         coEvery { userSessionDao.deleteSessionsByUserId(userId) } returns 2
 
         // When
-        val result = authService.logoutAll(userId)
+        val result = authService.logoutAll(userId, requesterIsRestricted = false)
 
         // Then
         assertTrue(result.isRight())
@@ -428,7 +470,7 @@ class AuthenticationServiceImplTest {
         coEvery { userSessionDao.deleteSessionsByUserId(userId) } returns 0
 
         // When
-        val result = authService.logoutAll(userId)
+        val result = authService.logoutAll(userId, requesterIsRestricted = false)
 
         // Then
         assertTrue(result.isLeft())

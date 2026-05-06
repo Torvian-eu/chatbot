@@ -39,13 +39,22 @@ interface AuthenticationService {
     /**
      * Logs out a user from their current session.
      *
-     * This method invalidates only the user's current session (from which the request originates),
-     * allowing other sessions on different devices to remain active.
+     * This method invalidates only the specified session, allowing other sessions on different
+     * devices to remain active. The method performs ownership validation to ensure the
+     * requester can only log out sessions they own.
      *
-     * @param sessionId The unique identifier of the session to log out
+     * @param userId The unique identifier of the authenticated user making the request
+     * @param targetSessionId The unique identifier of the session to log out
+     * @param requesterSessionId The session ID of the user making the request (for authorization)
+     * @param requesterIsRestricted Whether the requester's session is restricted (IP not verified)
      * @return Either [LogoutError] if logout fails, or Unit on success
      */
-    suspend fun logout(sessionId: Long): Either<LogoutError, Unit>
+    suspend fun logout(
+        userId: Long,
+        targetSessionId: Long,
+        requesterSessionId: Long,
+        requesterIsRestricted: Boolean
+    ): Either<LogoutError, Unit>
 
     /**
      * Logs out a user from all their active sessions.
@@ -54,9 +63,10 @@ interface AuthenticationService {
      * from all devices and applications.
      *
      * @param userId The unique identifier of the user to log out from all sessions
+     * @param requesterIsRestricted Whether the requester's session is restricted (IP not verified)
      * @return Either [LogoutAllError] if logout fails, or Unit on success
      */
-    suspend fun logoutAll(userId: Long): Either<LogoutAllError, Unit>
+    suspend fun logoutAll(userId: Long, requesterIsRestricted: Boolean): Either<LogoutAllError, Unit>
 
     /**
      * Retrieves the stored sessions for a user so they can inspect active logins.

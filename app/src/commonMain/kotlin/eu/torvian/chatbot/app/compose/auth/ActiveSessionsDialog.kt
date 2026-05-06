@@ -45,6 +45,7 @@ import kotlin.time.Instant
  *
  * @param sessions The sessions loaded from the backend in newest-first order.
  * @param currentAuthState The current authentication state used to identify the active session.
+ * @param isCurrentSessionRestricted Whether the current session is restricted (IP not verified).
  * @param onDismiss Called when the dialog should be closed.
  * @param onRevokeSession Called when the user requests revocation of a non-current session.
  */
@@ -52,6 +53,7 @@ import kotlin.time.Instant
 fun ActiveSessionsDialog(
     sessions: List<UserSessionInfo>,
     currentAuthState: AuthState,
+    isCurrentSessionRestricted: Boolean,
     onDismiss: () -> Unit,
     onRevokeSession: (Long) -> Unit
 ) {
@@ -119,6 +121,7 @@ fun ActiveSessionsDialog(
                             ActiveSessionCard(
                                 session = session,
                                 isCurrentSession = session.isCurrentSession || session.sessionId == currentSessionId,
+                                isRevokeDisabled = isCurrentSessionRestricted,
                                 onRevokeSession = { onRevokeSession(session.sessionId) }
                             )
                         }
@@ -141,12 +144,14 @@ fun ActiveSessionsDialog(
  *
  * @param session The session to display.
  * @param isCurrentSession Whether the session matches the currently authenticated request.
+ * @param isRevokeDisabled Whether the revoke action should be disabled (for restricted sessions).
  * @param onRevokeSession Called when the user wants to revoke this session.
  */
 @Composable
 private fun ActiveSessionCard(
     session: UserSessionInfo,
     isCurrentSession: Boolean,
+    isRevokeDisabled: Boolean,
     onRevokeSession: () -> Unit
 ) {
     Card(
@@ -192,12 +197,24 @@ private fun ActiveSessionCard(
                     }
                 }
 
+                // Show delete button only for non-current sessions and when not disabled
                 if (!isCurrentSession) {
-                    IconButton(onClick = onRevokeSession) {
+                    IconButton(
+                        onClick = onRevokeSession,
+                        enabled = !isRevokeDisabled
+                    ) {
                         Icon(
                             imageVector = Icons.Default.Delete,
-                            contentDescription = "Revoke session",
-                            tint = MaterialTheme.colorScheme.error
+                            contentDescription = if (isRevokeDisabled) {
+                                "Revoke session (disabled in restricted sessions)"
+                            } else {
+                                "Revoke session"
+                            },
+                            tint = if (isRevokeDisabled) {
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                            } else {
+                                MaterialTheme.colorScheme.error
+                            }
                         )
                     }
                 }
@@ -257,5 +274,3 @@ private fun formatRelativeTime(instant: Instant): String {
  * @return An empty string for singular values, otherwise "s".
  */
 private fun pluralSuffix(value: Long): String = if (value == 1L) "" else "s"
-
-

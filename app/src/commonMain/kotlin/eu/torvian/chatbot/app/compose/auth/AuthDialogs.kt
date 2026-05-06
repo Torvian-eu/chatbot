@@ -56,9 +56,12 @@ fun AuthDialogs(
                 authViewModel.refreshSessions()
             }
 
+            val isCurrentSessionRestricted = currentAuthState is AuthState.Authenticated && currentAuthState.isRestricted
+
             ActiveSessionsDialog(
                 sessions = activeSessions,
                 currentAuthState = currentAuthState,
+                isCurrentSessionRestricted = isCurrentSessionRestricted,
                 onDismiss = { authViewModel.closeDialog() },
                 onRevokeSession = { sessionId: Long -> authViewModel.revokeSession(sessionId) }
             )

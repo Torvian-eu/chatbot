@@ -25,12 +25,23 @@ import eu.torvian.chatbot.app.service.auth.AccountData
  *
  * The menu exposes account switching, account creation, active-session management, and logout
  * actions that are driven by the surrounding authentication flow.
+ *
+ * @param username The username to display in the menu header
+ * @param availableAccounts List of all stored user accounts available for switching
+ * @param accountSwitchInProgress Whether an account switch operation is in progress
+ * @param isCurrentSessionRestricted Whether the current session is restricted (IP not verified)
+ * @param onSwitchAccount Callback to open the account switcher dialog
+ * @param onActiveSessions Callback to open the active sessions dialog
+ * @param onLogout Callback to log out the current session
+ * @param onLogoutAll Callback to log out from all sessions
+ * @param onLogin Callback to navigate to login/add account
  */
 @Composable
 fun UserMenu(
     username: String,
     availableAccounts: List<AccountData>,
     accountSwitchInProgress: Boolean,
+    isCurrentSessionRestricted: Boolean,
     onSwitchAccount: () -> Unit,
     onActiveSessions: () -> Unit,
     onLogout: () -> Unit,
@@ -80,6 +91,7 @@ fun UserMenu(
             )
 
             // Logout all sessions affects every device, so keep it grouped with the security actions.
+            // Disabled for restricted sessions (IP not verified) to prevent account lockout.
             DropdownMenuItem(
                 text = { Text("Logout all sessions") },
                 onClick = {
@@ -89,7 +101,7 @@ fun UserMenu(
                 leadingIcon = {
                     Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
                 },
-                enabled = !accountSwitchInProgress
+                enabled = !accountSwitchInProgress && !isCurrentSessionRestricted
             )
 
             // Switch Account option (only show if multiple accounts available)

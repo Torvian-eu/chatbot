@@ -282,6 +282,7 @@ private fun UserMenuButton(
             username = authState.username,
             availableAccounts = availableAccounts,
             accountSwitchInProgress = accountSwitchInProgress,
+            isCurrentSessionRestricted = authState.isRestricted,
             onSwitchAccount = { authViewModel.openAccountSwitcher() },
             onActiveSessions = { authViewModel.openActiveSessions() },
             onLogout = { scope.launch { authViewModel.logout() } },
