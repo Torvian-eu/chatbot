@@ -285,6 +285,7 @@ private fun UserMenuButton(
             isCurrentSessionRestricted = authState.isRestricted,
             onSwitchAccount = { authViewModel.openAccountSwitcher() },
             onActiveSessions = { authViewModel.openActiveSessions() },
+            onTrustedDevices = { authViewModel.openTrustedDevices() },
             onLogout = { scope.launch { authViewModel.logout() } },
             onLogoutAll = { scope.launch { authViewModel.logoutAll() } },
             onLogin = { navController.navigateToTop(Login) }

@@ -18,6 +18,9 @@ sealed interface AuthDialogState {
     /** Active sessions dialog is shown */
     data object ActiveSessions : AuthDialogState
 
+    /** Trusted devices dialog is shown */
+    data object TrustedDevices : AuthDialogState
+
     /**
      * Remove account confirmation dialog is shown.
      *

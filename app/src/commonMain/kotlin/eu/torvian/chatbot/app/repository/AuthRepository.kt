@@ -4,6 +4,7 @@ import arrow.core.Either
 import eu.torvian.chatbot.app.service.auth.AccountData
 import eu.torvian.chatbot.common.models.api.auth.UserSecurityAlert
 import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
+import eu.torvian.chatbot.common.models.api.auth.UserTrustedDeviceInfo
 import eu.torvian.chatbot.common.models.user.User
 import kotlinx.coroutines.flow.StateFlow
 
@@ -145,4 +146,23 @@ interface AuthRepository {
      * @return Either a [RepositoryError] on failure or Unit on success
      */
     suspend fun acknowledgeSecurityAlerts(): Either<RepositoryError, Unit>
+
+    /**
+     * Retrieves the list of trusted devices for the current user.
+     * These are devices that have been trusted through first use or security alert acknowledgement.
+     *
+     * Note: This operation is not available for restricted sessions.
+     * @return Either a [RepositoryError] on failure or the list of trusted devices on success
+     */
+    suspend fun getTrustedDevices(): Either<RepositoryError, List<UserTrustedDeviceInfo>>
+
+    /**
+     * Revokes (deletes) a specific trusted device for the current user.
+     * This removes the device from the trusted devices list.
+     *
+     * Note: This operation is not available for restricted sessions.
+     * @param deviceId The device identifier to revoke
+     * @return Either a [RepositoryError] on failure or Unit on success
+     */
+    suspend fun revokeTrustedDevice(deviceId: String): Either<RepositoryError, Unit>
 }

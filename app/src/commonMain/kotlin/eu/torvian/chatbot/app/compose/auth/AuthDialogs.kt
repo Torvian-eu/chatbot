@@ -76,6 +76,24 @@ fun AuthDialogs(
             )
         }
 
+        is AuthDialogState.TrustedDevices -> {
+            LaunchedEffect(dialogState) {
+                authViewModel.refreshTrustedDevices()
+            }
+
+            val trustedDevices by authViewModel.trustedDevices.collectAsState()
+            val currentDeviceId = (currentAuthState as? AuthState.Authenticated)?.deviceId
+            val isCurrentSessionRestricted = currentAuthState is AuthState.Authenticated && currentAuthState.isRestricted
+
+            TrustedDevicesDialog(
+                devices = trustedDevices,
+                currentDeviceId = currentDeviceId,
+                isCurrentSessionRestricted = isCurrentSessionRestricted,
+                onDismiss = { authViewModel.closeDialog() },
+                onRevokeDevice = { deviceId -> authViewModel.revokeTrustedDevice(deviceId) }
+            )
+        }
+
         AuthDialogState.None -> {
             // No dialog to show
         }

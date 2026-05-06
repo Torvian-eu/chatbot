@@ -1,16 +1,15 @@
 package eu.torvian.chatbot.server.service.security
 
 import arrow.core.Either
+import eu.torvian.chatbot.common.models.api.auth.UserTrustedDeviceInfo
 import eu.torvian.chatbot.server.data.entities.SecurityAuditEntity
+import eu.torvian.chatbot.server.data.entities.UserSessionEntity
 import eu.torvian.chatbot.server.domain.security.LoginResult
 import eu.torvian.chatbot.server.domain.security.UserContext
 import eu.torvian.chatbot.server.domain.security.WorkerContext
-import eu.torvian.chatbot.server.data.entities.UserSessionEntity
-import eu.torvian.chatbot.server.service.security.error.LoginError
-import eu.torvian.chatbot.server.service.security.error.LogoutError
-import eu.torvian.chatbot.server.service.security.error.LogoutAllError
-import eu.torvian.chatbot.server.service.security.error.RefreshTokenError
-import eu.torvian.chatbot.server.service.security.error.AcknowledgeAlertsError
+import eu.torvian.chatbot.server.service.security.error.*
+import eu.torvian.chatbot.server.service.security.error.RevokeTrustedDeviceError.DeviceNotFound
+import eu.torvian.chatbot.server.service.security.error.RevokeTrustedDeviceError.InsufficientPermissions
 import io.ktor.server.auth.jwt.*
 
 /**
@@ -36,7 +35,12 @@ interface AuthenticationService {
      * @param deviceId Client-side UUID that persists across logins for device-based trust
      * @return Either [LoginError] if authentication fails, or [LoginResult] on success
      */
-    suspend fun login(username: String, password: String, ipAddress: String?, deviceId: String): Either<LoginError, LoginResult>
+    suspend fun login(
+        username: String,
+        password: String,
+        ipAddress: String?,
+        deviceId: String
+    ): Either<LoginError, LoginResult>
 
     /**
      * Logs out a user from their current session.
@@ -143,5 +147,46 @@ interface AuthenticationService {
      * @param requesterIsRestricted Whether the requester's session is restricted (device not verified)
      * @return Either [AcknowledgeAlertsError] if acknowledgement fails, or Unit on success
      */
-    suspend fun acknowledgeSecurityAlerts(userId: Long, requesterIsRestricted: Boolean): Either<AcknowledgeAlertsError, Unit>
+    suspend fun acknowledgeSecurityAlerts(
+        userId: Long,
+        requesterIsRestricted: Boolean
+    ): Either<AcknowledgeAlertsError, Unit>
+
+    /**
+     * Retrieves the list of trusted devices for a user.
+     *
+     * Returns all devices that have been trusted for the user, either through
+     * Trust on First Use (first device) or by acknowledging security alerts.
+     *
+     * Restricted sessions cannot list trusted devices - this prevents enumeration
+     * attacks on unverified devices.
+     *
+     * @param userId The unique identifier of the authenticated user.
+     * @param requesterIsRestricted Whether the requester's session is restricted (device not verified)
+     * @return Either [InsufficientPermissions] if restricted, or the list of trusted devices on success
+     */
+    suspend fun getTrustedDevices(
+        userId: Long,
+        requesterIsRestricted: Boolean
+    ): Either<RevokeTrustedDeviceError, List<UserTrustedDeviceInfo>>
+
+    /**
+     * Revokes (deletes) a specific trusted device for a user.
+     *
+     * This removes the device from the trusted devices list, causing future logins
+     * from that device to require verification (if security mode is WARNING or STRICT).
+     *
+     * Restricted sessions cannot revoke devices - this prevents malicious actors on
+     * unverified devices from removing trust from other devices.
+     *
+     * @param userId The unique identifier of the authenticated user.
+     * @param deviceId The device identifier to revoke.
+     * @param requesterIsRestricted Whether the requester's session is restricted (device not verified)
+     * @return Either an error ([InsufficientPermissions] or [DeviceNotFound]) or Unit on success
+     */
+    suspend fun revokeTrustedDevice(
+        userId: Long,
+        deviceId: String,
+        requesterIsRestricted: Boolean
+    ): Either<RevokeTrustedDeviceError, Unit>
 }

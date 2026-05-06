@@ -17,6 +17,7 @@ import kotlin.time.Instant
  * @property expiresAt When the access token expires
  * @property permissions The list of permissions granted to the user (aggregated from all their roles)
  * @property isRestricted Whether the session is restricted (created from an unacknowledged device)
+ * @property deviceId The ID of the device used for login
  */
 data class LoginResult(
     val user: User,
@@ -24,5 +25,6 @@ data class LoginResult(
     val refreshToken: String,
     val expiresAt: Instant,
     val permissions: List<Permission>,
-    val isRestricted: Boolean = false
+    val isRestricted: Boolean = false,
+    val deviceId: String? = null
 )

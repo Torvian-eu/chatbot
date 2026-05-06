@@ -56,4 +56,21 @@ interface UserTrustedDeviceDao {
      * @return The count of trusted devices for the user.
      */
     suspend fun getTrustedDevicesCount(userId: Long): Int
+
+    /**
+     * Retrieves all trusted devices for a specific user.
+     *
+     * @param userId The owning user identifier.
+     * @return The list of trusted device entities for the user.
+     */
+    suspend fun getTrustedDevices(userId: Long): List<UserTrustedDeviceEntity>
+
+    /**
+     * Deletes a specific trusted device for a user.
+     *
+     * @param userId The owning user identifier.
+     * @param deviceId The client-side UUID of the device to remove.
+     * @return The number of rows deleted (0 or 1).
+     */
+    suspend fun deleteTrustedDevice(userId: Long, deviceId: String): Int
 }

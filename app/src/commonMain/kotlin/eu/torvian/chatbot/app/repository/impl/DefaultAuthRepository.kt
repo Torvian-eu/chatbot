@@ -20,6 +20,7 @@ import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.models.api.auth.UserSecurityAlert
 import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
+import eu.torvian.chatbot.common.models.api.auth.UserTrustedDeviceInfo
 import eu.torvian.chatbot.common.models.user.User
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -117,7 +118,8 @@ class DefaultAuthRepository(
             username = loginResponse.user.username,
             permissions = loginResponse.permissions,
             requiresPasswordChange = loginResponse.user.requiresPasswordChange,
-            isRestricted = loginResponse.isRestricted
+            isRestricted = loginResponse.isRestricted,
+            deviceId = loginResponse.deviceId
         )
 
         // Refresh available accounts list
@@ -248,7 +250,8 @@ class DefaultAuthRepository(
                 username = accountData.user.username,
                 permissions = accountData.permissions,
                 requiresPasswordChange = accountData.user.requiresPasswordChange,
-                isRestricted = accountData.isRestricted
+                isRestricted = accountData.isRestricted,
+                deviceId = deviceIdentityService.getOrCreateDeviceId().getOrNull()
             )
 
             logger.info("Initial authentication state check complete")
@@ -291,7 +294,8 @@ class DefaultAuthRepository(
             username = accountData.user.username,
             permissions = accountData.permissions,
             requiresPasswordChange = accountData.user.requiresPasswordChange,
-            isRestricted = accountData.isRestricted
+            isRestricted = accountData.isRestricted,
+            deviceId = deviceIdentityService.getOrCreateDeviceId().getOrNull()
         )
 
         // Emit account switched event
@@ -346,6 +350,28 @@ class DefaultAuthRepository(
         }
 
         logger.info("Successfully acknowledged security alerts")
+    }
+
+    override suspend fun getTrustedDevices(): Either<RepositoryError, List<UserTrustedDeviceInfo>> = either {
+        logger.info("Fetching trusted devices for the current user")
+
+        withError({ apiError ->
+            apiError.toRepositoryError("Failed to load trusted devices")
+        }) {
+            authApi.getTrustedDevices().bind()
+        }
+    }
+
+    override suspend fun revokeTrustedDevice(deviceId: String): Either<RepositoryError, Unit> = either {
+        logger.info("Revoking trusted device with deviceId: $deviceId")
+
+        withError({ apiError ->
+            apiError.toRepositoryError("Failed to revoke trusted device")
+        }) {
+            authApi.revokeTrustedDevice(deviceId).bind()
+        }
+
+        logger.info("Successfully revoked trusted device with deviceId: $deviceId")
     }
 
     private suspend fun refreshAvailableAccounts() {

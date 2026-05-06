@@ -10,6 +10,7 @@ import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.models.api.auth.UserSecurityAlert
 import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
+import eu.torvian.chatbot.common.models.api.auth.UserTrustedDeviceInfo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -78,6 +79,12 @@ class AuthViewModel(
      * These represent login attempts from unrecognized devices.
      */
     val securityAlerts = MutableStateFlow<List<UserSecurityAlert>>(emptyList())
+
+    /**
+     * Trusted devices for the current user.
+     * These are devices that have been trusted through first use or security alert acknowledgement.
+     */
+    val trustedDevices = MutableStateFlow<List<UserTrustedDeviceInfo>>(emptyList())
 
     /**
      * Indicates whether an account switch operation is currently in progress.
@@ -351,6 +358,44 @@ class AuthViewModel(
     }
 
     /**
+     * Fetches the authenticated user's trusted devices from the repository.
+     */
+    fun refreshTrustedDevices() {
+        viewModelScope.launch {
+            authRepository.getTrustedDevices()
+                .onLeft { error ->
+                    notificationService.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to load trusted devices"
+                    )
+                }
+                .onRight { devices ->
+                    trustedDevices.value = devices
+                }
+        }
+    }
+
+    /**
+     * Revokes one of the authenticated user's trusted devices and refreshes the list afterwards.
+     *
+     * @param deviceId The device identifier to revoke.
+     */
+    fun revokeTrustedDevice(deviceId: String) {
+        viewModelScope.launch {
+            authRepository.revokeTrustedDevice(deviceId)
+                .onLeft { error ->
+                    notificationService.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to revoke trusted device"
+                    )
+                }
+                .onRight {
+                    refreshTrustedDevices()
+                }
+        }
+    }
+
+    /**
      * Changes the password for the currently authenticated user.
      * Used when the user is forced to change their password on first login.
      */
@@ -497,6 +542,13 @@ class AuthViewModel(
      */
     fun openActiveSessions() {
         _dialogState.value = AuthDialogState.ActiveSessions
+    }
+
+    /**
+     * Opens the trusted devices dialog.
+     */
+    fun openTrustedDevices() {
+        _dialogState.value = AuthDialogState.TrustedDevices
     }
 
     /**

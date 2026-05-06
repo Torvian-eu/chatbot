@@ -76,4 +76,19 @@ class AuthResource(val parent: Api = Api()) {
 
     @Resource("service-token/challenge")
     class ServiceTokenChallenge(val parent: AuthResource = AuthResource())
+
+    /**
+     * Resource for listing trusted devices: /api/v1/auth/trusted-devices
+     */
+    @Resource("trusted-devices")
+    class TrustedDevices(val parent: AuthResource = AuthResource())
+
+    /**
+     * Resource for revoking a specific trusted device: /api/v1/auth/trusted-devices/{deviceId}
+     *
+     * @property parent Parent trusted devices resource.
+     * @property deviceId The device identifier to revoke.
+     */
+    @Resource("{deviceId}")
+    class RevokeTrustedDevice(val parent: TrustedDevices = TrustedDevices(), val deviceId: String)
 }

@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.DropdownMenu
@@ -32,6 +33,7 @@ import eu.torvian.chatbot.app.service.auth.AccountData
  * @param isCurrentSessionRestricted Whether the current session is restricted (IP not verified)
  * @param onSwitchAccount Callback to open the account switcher dialog
  * @param onActiveSessions Callback to open the active sessions dialog
+ * @param onTrustedDevices Callback to open the trusted devices dialog
  * @param onLogout Callback to log out the current session
  * @param onLogoutAll Callback to log out from all sessions
  * @param onLogin Callback to navigate to login/add account
@@ -44,6 +46,7 @@ fun UserMenu(
     isCurrentSessionRestricted: Boolean,
     onSwitchAccount: () -> Unit,
     onActiveSessions: () -> Unit,
+    onTrustedDevices: () -> Unit,
     onLogout: () -> Unit,
     onLogoutAll: () -> Unit,
     onLogin: () -> Unit
@@ -120,6 +123,19 @@ fun UserMenu(
                     enabled = !accountSwitchInProgress
                 )
             }
+
+            // Trusted Devices option (navigates to device management screen)
+            DropdownMenuItem(
+                text = { Text("Trusted Devices") },
+                onClick = {
+                    expanded = false
+                    onTrustedDevices()
+                },
+                leadingIcon = {
+                    Icon(Icons.Default.Devices, contentDescription = null)
+                },
+                enabled = !accountSwitchInProgress
+            )
 
             HorizontalDivider()
 

@@ -7,6 +7,7 @@ import eu.torvian.chatbot.server.data.tables.UserTrustedDevicesTable
 import eu.torvian.chatbot.server.data.tables.mappers.toUserTrustedDeviceEntity
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
@@ -63,5 +64,19 @@ class UserTrustedDeviceDaoExposed(
                 .where { UserTrustedDevicesTable.userId eq userId }
                 .count()
                 .toInt()
+        }
+
+    override suspend fun getTrustedDevices(userId: Long): List<UserTrustedDeviceEntity> =
+        transactionScope.transaction {
+            UserTrustedDevicesTable.selectAll()
+                .where { UserTrustedDevicesTable.userId eq userId }
+                .map { it.toUserTrustedDeviceEntity() }
+        }
+
+    override suspend fun deleteTrustedDevice(userId: Long, deviceId: String): Int =
+        transactionScope.transaction {
+            UserTrustedDevicesTable.deleteWhere {
+                (UserTrustedDevicesTable.userId eq userId) and (UserTrustedDevicesTable.deviceId eq deviceId)
+            }
         }
 }

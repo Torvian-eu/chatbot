@@ -18,6 +18,7 @@ import eu.torvian.chatbot.server.service.security.error.LogoutAllError
 import eu.torvian.chatbot.server.service.security.error.LogoutError
 import eu.torvian.chatbot.server.service.security.error.RefreshTokenError
 import eu.torvian.chatbot.server.service.security.error.AcknowledgeAlertsError
+import eu.torvian.chatbot.server.service.security.error.RevokeTrustedDeviceError
 import io.ktor.http.*
 import io.ktor.server.auth.*
 import io.ktor.server.plugins.origin
@@ -249,6 +250,51 @@ fun Route.configureAuthRoutes(
                             CommonApiErrorCodes.PERMISSION_DENIED,
                             "Action requires a trusted session. Please verify via email or another device."
                         )
+                }
+            }
+        }
+    }
+
+    // GET /api/v1/auth/trusted-devices - List trusted devices for the current user
+    authenticate(AuthSchemes.USER_JWT) {
+        get<AuthResource.TrustedDevices> {
+            val userContext = call.getUserContext()
+
+            call.respondEither(
+                authenticationService.getTrustedDevices(userContext.user.id, userContext.isRestricted)
+            ) { error ->
+                when (error) {
+                    is RevokeTrustedDeviceError.InsufficientPermissions ->
+                        apiError(
+                            CommonApiErrorCodes.PERMISSION_DENIED,
+                            "Action requires a trusted session. Please verify via email or another device."
+                        )
+
+                    is RevokeTrustedDeviceError.DeviceNotFound ->
+                        apiError(CommonApiErrorCodes.NOT_FOUND, "Device not found")
+                }
+            }
+        }
+    }
+
+    // DELETE /api/v1/auth/trusted-devices/{deviceId} - Revoke a specific trusted device
+    authenticate(AuthSchemes.USER_JWT) {
+        delete<AuthResource.RevokeTrustedDevice> { resource ->
+            val userContext = call.getUserContext()
+
+            call.respondEither(
+                authenticationService.revokeTrustedDevice(userContext.user.id, resource.deviceId, userContext.isRestricted),
+                HttpStatusCode.NoContent
+            ) { error ->
+                when (error) {
+                    is RevokeTrustedDeviceError.InsufficientPermissions ->
+                        apiError(
+                            CommonApiErrorCodes.PERMISSION_DENIED,
+                            "Action requires a trusted session. Please verify via email or another device."
+                        )
+
+                    is RevokeTrustedDeviceError.DeviceNotFound ->
+                        apiError(CommonApiErrorCodes.NOT_FOUND, "Device not found")
                 }
             }
         }

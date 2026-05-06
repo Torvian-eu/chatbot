@@ -10,6 +10,7 @@ import eu.torvian.chatbot.common.models.api.auth.RefreshTokenRequest
 import eu.torvian.chatbot.common.models.api.auth.RegisterRequest
 import eu.torvian.chatbot.common.models.api.auth.UserSecurityAlert
 import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
+import eu.torvian.chatbot.common.models.api.auth.UserTrustedDeviceInfo
 import eu.torvian.chatbot.common.models.user.User
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -115,6 +116,18 @@ class KtorAuthApiClient(
     override suspend fun acknowledgeSecurityAlerts(): Either<ApiResourceError, Unit> {
         return safeApiCall {
             authenticatedClient.post(AuthResource.AcknowledgeAlerts()).body<Unit>()
+        }
+    }
+
+    override suspend fun getTrustedDevices(): Either<ApiResourceError, List<UserTrustedDeviceInfo>> {
+        return safeApiCall {
+            authenticatedClient.get(AuthResource.TrustedDevices()).body<List<UserTrustedDeviceInfo>>()
+        }
+    }
+
+    override suspend fun revokeTrustedDevice(deviceId: String): Either<ApiResourceError, Unit> {
+        return safeApiCall {
+            authenticatedClient.delete(AuthResource.RevokeTrustedDevice(deviceId = deviceId)).body<Unit>()
         }
     }
 }

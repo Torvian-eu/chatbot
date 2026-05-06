@@ -8,6 +8,7 @@ import com.auth0.jwt.exceptions.JWTDecodeException
 import com.auth0.jwt.exceptions.JWTVerificationException
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.user.UserStatus
+import eu.torvian.chatbot.common.models.api.auth.UserTrustedDeviceInfo
 import eu.torvian.chatbot.server.data.dao.*
 import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.dao.error.UserSessionError
@@ -133,7 +134,8 @@ class AuthenticationServiceImpl(
                     refreshToken = refreshToken,
                     expiresAt = accessTokenExpiresAt,
                     permissions = permissions,
-                    isRestricted = isRestricted
+                    isRestricted = isRestricted,
+                    deviceId = deviceId
                 )
             }
         }
@@ -443,7 +445,8 @@ class AuthenticationServiceImpl(
                     refreshToken = newRefreshToken,
                     expiresAt = tokenExpiresAt,
                     permissions = permissions,
-                    isRestricted = session.isRestricted
+                    isRestricted = session.isRestricted,
+                    deviceId = null // Device ID not available during token refresh; client uses its own device ID
                 )
             }
         }
@@ -571,6 +574,51 @@ class AuthenticationServiceImpl(
             }.getOrElse {
                 logger.debug("Worker credential validation failed: {}", it)
                 null
+            }
+        }
+
+    override suspend fun getTrustedDevices(userId: Long, requesterIsRestricted: Boolean): Either<RevokeTrustedDeviceError, List<UserTrustedDeviceInfo>> =
+        transactionScope.transaction {
+            either {
+                // Restricted sessions cannot list trusted devices - prevents enumeration attacks
+                ensure(!requesterIsRestricted) {
+                    logger.warn("Restricted session attempted to list trusted devices")
+                    raise(RevokeTrustedDeviceError.InsufficientPermissions())
+                }
+
+                // Fetch all trusted devices for the user
+                val devices = userTrustedDeviceDao.getTrustedDevices(userId)
+
+                // Map to API response DTO
+                devices.map { device ->
+                    UserTrustedDeviceInfo(
+                        deviceId = device.deviceId,
+                        lastIpAddress = device.lastIpAddress,
+                        firstSeenAt = device.firstSeenAt,
+                        lastUsedAt = device.lastUsedAt
+                    )
+                }
+            }
+        }
+
+    override suspend fun revokeTrustedDevice(userId: Long, deviceId: String, requesterIsRestricted: Boolean): Either<RevokeTrustedDeviceError, Unit> =
+        transactionScope.transaction {
+            either {
+                // Restricted sessions cannot revoke devices - prevents malicious actions from unverified devices
+                ensure(!requesterIsRestricted) {
+                    logger.warn("Restricted session attempted to revoke trusted device: $deviceId")
+                    raise(RevokeTrustedDeviceError.InsufficientPermissions())
+                }
+
+                // Delete the trusted device
+                val deletedCount = userTrustedDeviceDao.deleteTrustedDevice(userId, deviceId)
+
+                ensure(deletedCount > 0) {
+                    logger.warn("Device not found for revocation: $deviceId, user: $userId")
+                    raise(RevokeTrustedDeviceError.DeviceNotFound(deviceId))
+                }
+
+                logger.info("Successfully revoked trusted device: $deviceId for user: $userId")
             }
         }
 }
