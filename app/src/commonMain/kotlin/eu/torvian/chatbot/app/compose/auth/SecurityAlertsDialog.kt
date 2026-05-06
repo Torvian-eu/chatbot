@@ -10,9 +10,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -29,8 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import eu.torvian.chatbot.app.repository.AuthState
-import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
+import eu.torvian.chatbot.common.models.api.auth.UserSecurityAlert
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
@@ -38,31 +38,24 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
 
 /**
- * Dialog that shows the authenticated user's server-side sessions and allows revoking older devices.
+ * Dialog that displays unacknowledged security alerts for the current user.
  *
- * The dialog intentionally keeps the current session non-revocable so the user can inspect their
- * login footprint without risking immediate self-lockout.
+ * This dialog shows login attempts from unrecognized IP addresses and allows
+ * the user to acknowledge them. In restricted sessions (new location login),
+ * the acknowledge button is disabled with an explanatory message.
  *
- * @param sessions The sessions loaded from the backend in newest-first order.
- * @param currentAuthState The current authentication state used to identify the active session.
- * @param isCurrentSessionRestricted Whether the current session is restricted (IP not verified).
+ * @param alerts The list of unacknowledged security alerts to display.
+ * @param isRestricted Whether the current session is restricted (created from an unacknowledged device).
  * @param onDismiss Called when the dialog should be closed.
- * @param onRevokeSession Called when the user requests revocation of a non-current session.
+ * @param onAcknowledge Called when the user clicks the acknowledge button (only enabled for non-restricted sessions).
  */
 @Composable
-fun ActiveSessionsDialog(
-    sessions: List<UserSessionInfo>,
-    currentAuthState: AuthState,
-    isCurrentSessionRestricted: Boolean,
+fun SecurityAlertsDialog(
+    alerts: List<UserSecurityAlert>,
+    isRestricted: Boolean,
     onDismiss: () -> Unit,
-    onRevokeSession: (Long) -> Unit
+    onAcknowledge: () -> Unit
 ) {
-    val currentSessionId = if (currentAuthState is AuthState.Authenticated) {
-        sessions.firstOrNull { session -> session.isCurrentSession }?.sessionId
-    } else {
-        null
-    }
-
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
@@ -71,8 +64,7 @@ fun ActiveSessionsDialog(
         )
     ) {
         Card(
-            modifier = Modifier
-                .fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth(),
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
         ) {
             Column(
@@ -86,11 +78,11 @@ fun ActiveSessionsDialog(
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = "Active Sessions",
+                            text = "Security Alerts",
                             style = MaterialTheme.typography.headlineSmall
                         )
                         Text(
-                            text = "Review where your account is signed in and revoke anything unfamiliar.",
+                            text = "Review unrecognized login attempts from new locations.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -99,16 +91,52 @@ fun ActiveSessionsDialog(
                     IconButton(onClick = onDismiss) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = "Close active sessions dialog"
+                            contentDescription = "Close security alerts dialog"
                         )
+                    }
+                }
+
+                // Show restricted session warning if applicable
+                if (isRestricted) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    text = "Restricted Session",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                                Text(
+                                    text = "This session is restricted because you logged in from a new location. To clear this alert, please verify your IP via the link sent to your email or approve it from a trusted device.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                        }
                     }
                 }
 
                 HorizontalDivider()
 
-                if (sessions.isEmpty()) {
+                if (alerts.isEmpty()) {
                     Text(
-                        text = "No active sessions were returned by the server.",
+                        text = "No security alerts to display.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -117,22 +145,34 @@ fun ActiveSessionsDialog(
                         modifier = Modifier.heightIn(max = 420.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        items(sessions, key = { it.sessionId }) { session ->
-                            ActiveSessionCard(
-                                session = session,
-                                isCurrentSession = session.isCurrentSession || session.sessionId == currentSessionId,
-                                isRevokeDisabled = isCurrentSessionRestricted,
-                                onRevokeSession = { onRevokeSession(session.sessionId) }
-                            )
+                        items(alerts, key = { it.id }) { alert ->
+                            SecurityAlertCard(alert = alert)
                         }
                     }
                 }
 
-                TextButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.align(Alignment.End)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
                 ) {
-                    Text("Close")
+                    TextButton(onClick = onDismiss) {
+                        Text("Close")
+                    }
+
+                    Button(
+                        onClick = onAcknowledge,
+                        enabled = !isRestricted && alerts.isNotEmpty()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = if (isRestricted) "Cannot Acknowledge" else "It was me",
+                            modifier = Modifier.padding(start = 4.dp)
+                        )
+                    }
                 }
             }
         }
@@ -140,27 +180,17 @@ fun ActiveSessionsDialog(
 }
 
 /**
- * Renders a single active session row with status, timing, and revocation controls.
+ * Renders a single security alert card showing IP address and login time.
  *
- * @param session The session to display.
- * @param isCurrentSession Whether the session matches the currently authenticated request.
- * @param isRevokeDisabled Whether the revoke action should be disabled (for restricted sessions).
- * @param onRevokeSession Called when the user wants to revoke this session.
+ * @param alert The security alert to display.
  */
 @Composable
-private fun ActiveSessionCard(
-    session: UserSessionInfo,
-    isCurrentSession: Boolean,
-    isRevokeDisabled: Boolean,
-    onRevokeSession: () -> Unit
-) {
+private fun SecurityAlertCard(alert: UserSecurityAlert) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = if (isCurrentSession) {
-            CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-        } else {
-            CardDefaults.cardColors()
-        }
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -176,70 +206,53 @@ private fun ActiveSessionCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Security,
+                        imageVector = Icons.Default.Warning,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = MaterialTheme.colorScheme.error,
                         modifier = Modifier.size(28.dp)
                     )
 
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = session.ipAddress ?: "Unknown IP address",
+                            text = alert.ipAddress ?: "Unknown IP",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                            color = MaterialTheme.colorScheme.primary
+                            color = MaterialTheme.colorScheme.error
                         )
 
                         Text(
-                            text = "Last accessed ${formatRelativeTime(session.lastAccessed)}",
+                            text = "First seen ${formatRelativeTime(alert.firstSeenAt)}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    }
-                }
 
-                // Show delete button only for non-current sessions and when not disabled
-                if (!isCurrentSession) {
-                    IconButton(
-                        onClick = onRevokeSession,
-                        enabled = !isRevokeDisabled
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = if (isRevokeDisabled) {
-                                "Revoke session (disabled in restricted sessions)"
-                            } else {
-                                "Revoke session"
-                            },
-                            tint = if (isRevokeDisabled) {
-                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                            } else {
-                                MaterialTheme.colorScheme.error
-                            }
-                        )
+                        if (alert.lastSeenAt != alert.firstSeenAt) {
+                            Text(
+                                text = "Last seen ${formatRelativeTime(alert.lastSeenAt)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (isCurrentSession) {
-                    SessionBadge(text = "Current Session")
-                }
-                SessionBadge(text = "Session #${session.sessionId}")
+                AlertBadge(text = "Unacknowledged")
             }
         }
     }
 }
 
 /**
- * Displays a lightweight status badge for session metadata.
+ * Displays a lightweight status badge for alert metadata.
  *
  * @param text The label shown inside the badge.
  */
 @Composable
-private fun SessionBadge(text: String) {
+private fun AlertBadge(text: String) {
     Surface(
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
         shape = MaterialTheme.shapes.small
     ) {
         Text(

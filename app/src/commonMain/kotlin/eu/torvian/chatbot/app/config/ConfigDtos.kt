@@ -42,12 +42,14 @@ data class NetworkConfigDto(val serverUrl: String? = null)
  *                   (database, logs, etc.) will be stored. Typically "data".
  * @property tokenStorageDir The subdirectory within [dataDir] for storing authentication tokens.
  * @property certificateStorageDir The subdirectory within [dataDir] for storing certificates.
+ * @property deviceIdentityStorageDir The subdirectory within [dataDir] for storing device identity.
  */
 @Serializable
 data class StorageConfigDto(
     val dataDir: String? = null,
     val tokenStorageDir: String? = null,
-    val certificateStorageDir: String? = null
+    val certificateStorageDir: String? = null,
+    val deviceIdentityStorageDir: String? = null
 )
 
 /**

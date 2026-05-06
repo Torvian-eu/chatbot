@@ -97,7 +97,8 @@ private fun Raise<ConfigError.ValidationError>.parseStorage(
         baseApplicationPath = baseDir,
         dataDir = dataDir,
         tokenStorageDir = d.tokenStorageDir ?: "tokens",
-        certificateStorageDir = d.certificateStorageDir ?: "certs"
+        certificateStorageDir = d.certificateStorageDir ?: "certs",
+        deviceIdentityStorageDir = d.deviceIdentityStorageDir ?: "device"
     )
 }
 

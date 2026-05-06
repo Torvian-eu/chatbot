@@ -13,9 +13,12 @@ import eu.torvian.chatbot.app.service.api.AuthApi
 import eu.torvian.chatbot.app.service.api.UserApi
 import eu.torvian.chatbot.app.service.auth.AccountData
 import eu.torvian.chatbot.app.service.auth.AuthenticationFailureEvent
+import eu.torvian.chatbot.app.service.auth.DeviceIdentityError
+import eu.torvian.chatbot.app.service.auth.DeviceIdentityService
 import eu.torvian.chatbot.app.service.auth.TokenStorage
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
+import eu.torvian.chatbot.common.models.api.auth.UserSecurityAlert
 import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
 import eu.torvian.chatbot.common.models.user.User
 import kotlinx.coroutines.CoroutineScope
@@ -34,12 +37,14 @@ import kotlinx.coroutines.launch
  * @property authApi The API client for authentication operations
  * @property userApi The API client for user management operations
  * @property tokenStorage The storage for managing authentication tokens
+ * @property deviceIdentityService The service for managing persistent device identity
  */
 class DefaultAuthRepository(
     private val authApi: AuthApi,
     private val userApi: UserApi,
     private val tokenStorage: TokenStorage,
-    private val eventBus: EventBus
+    private val eventBus: EventBus,
+    private val deviceIdentityService: DeviceIdentityService
 ) : AuthRepository {
 
     companion object {
@@ -71,12 +76,24 @@ class DefaultAuthRepository(
 
         _authState.value = AuthState.Loading
 
+        // Resolve device ID before login - this is the key change that moves device ID handling to the repository layer
+        val deviceId = withError({ error ->
+            _authState.value = AuthState.Unauthenticated
+            val errorMessage = when (error) {
+                is DeviceIdentityError.PersistenceFailure -> error.message
+                is DeviceIdentityError.ReadFailure -> error.message
+            }
+            RepositoryError.OtherError("Failed to resolve device identity: $errorMessage")
+        }) {
+            deviceIdentityService.getOrCreateDeviceId().bind()
+        }
+
         // Perform login API call
         val loginResponse = withError({ apiError ->
             _authState.value = AuthState.Unauthenticated
             apiError.toRepositoryError("Login failed")
         }) {
-            authApi.login(username, password).bind()
+            authApi.login(username, password, deviceId).bind()
         }
 
         // Save authentication data (tokens, user, and permissions)
@@ -89,7 +106,8 @@ class DefaultAuthRepository(
                 refreshToken = loginResponse.refreshToken,
                 expiresAt = loginResponse.expiresAt,
                 user = loginResponse.user,
-                permissions = loginResponse.permissions
+                permissions = loginResponse.permissions,
+                isRestricted = loginResponse.isRestricted
             ).bind()
         }
 
@@ -98,7 +116,8 @@ class DefaultAuthRepository(
             userId = loginResponse.user.id,
             username = loginResponse.user.username,
             permissions = loginResponse.permissions,
-            requiresPasswordChange = loginResponse.user.requiresPasswordChange
+            requiresPasswordChange = loginResponse.user.requiresPasswordChange,
+            isRestricted = loginResponse.isRestricted
         )
 
         // Refresh available accounts list
@@ -228,7 +247,8 @@ class DefaultAuthRepository(
                 userId = accountData.user.id,
                 username = accountData.user.username,
                 permissions = accountData.permissions,
-                requiresPasswordChange = accountData.user.requiresPasswordChange
+                requiresPasswordChange = accountData.user.requiresPasswordChange,
+                isRestricted = accountData.isRestricted
             )
 
             logger.info("Initial authentication state check complete")
@@ -270,7 +290,8 @@ class DefaultAuthRepository(
             userId = accountData.user.id,
             username = accountData.user.username,
             permissions = accountData.permissions,
-            requiresPasswordChange = accountData.user.requiresPasswordChange
+            requiresPasswordChange = accountData.user.requiresPasswordChange,
+            isRestricted = accountData.isRestricted
         )
 
         // Emit account switched event
@@ -303,6 +324,28 @@ class DefaultAuthRepository(
         refreshAvailableAccounts()
 
         logger.info("Successfully removed account with userId: $userId")
+    }
+
+    override suspend fun getSecurityAlerts(): Either<RepositoryError, List<UserSecurityAlert>> = either {
+        logger.info("Fetching security alerts for the current user")
+
+        withError({ apiError ->
+            apiError.toRepositoryError("Failed to load security alerts")
+        }) {
+            authApi.getSecurityAlerts().bind()
+        }
+    }
+
+    override suspend fun acknowledgeSecurityAlerts(): Either<RepositoryError, Unit> = either {
+        logger.info("Acknowledging security alerts for the current user")
+
+        withError({ apiError ->
+            apiError.toRepositoryError("Failed to acknowledge security alerts")
+        }) {
+            authApi.acknowledgeSecurityAlerts().bind()
+        }
+
+        logger.info("Successfully acknowledged security alerts")
     }
 
     private suspend fun refreshAvailableAccounts() {

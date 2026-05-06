@@ -10,6 +10,7 @@
   "storage": {
     "dataDir": "data-dev",
     "tokenStorageDir": "tokens-dev",
-    "certificateStorageDir": "certs-dev"
+    "certificateStorageDir": "certs-dev",
+    "deviceIdentityStorageDir": "device-dev"
   }
 }

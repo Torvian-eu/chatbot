@@ -16,6 +16,7 @@
     // The subdirectory name within the application directory for user data (database, logs, etc.)
     "dataDir": "data",
     "tokenStorageDir": "tokens",
-    "certificateStorageDir": "certs"
+    "certificateStorageDir": "certs",
+    "deviceIdentityStorageDir": "device"
   }
 }

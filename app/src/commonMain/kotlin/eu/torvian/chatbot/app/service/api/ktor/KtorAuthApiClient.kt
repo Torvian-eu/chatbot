@@ -8,6 +8,7 @@ import eu.torvian.chatbot.common.models.api.auth.LoginRequest
 import eu.torvian.chatbot.common.models.api.auth.LoginResponse
 import eu.torvian.chatbot.common.models.api.auth.RefreshTokenRequest
 import eu.torvian.chatbot.common.models.api.auth.RegisterRequest
+import eu.torvian.chatbot.common.models.api.auth.UserSecurityAlert
 import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
 import eu.torvian.chatbot.common.models.user.User
 import io.ktor.client.*
@@ -42,11 +43,11 @@ class KtorAuthApiClient(
         }
     }
 
-    override suspend fun login(username: String, password: String): Either<ApiResourceError, LoginResponse> {
+    override suspend fun login(username: String, password: String, deviceId: String): Either<ApiResourceError, LoginResponse> {
         return safeApiCall {
             authenticatedClient.authProvider<BearerAuthProvider>()?.clearToken()
             unauthenticatedClient.post(AuthResource.Login()) {
-                setBody(LoginRequest(username = username, password = password))
+                setBody(LoginRequest(username = username, password = password, deviceId = deviceId))
             }.body<LoginResponse>()
         }
     }
@@ -103,5 +104,17 @@ class KtorAuthApiClient(
 
     override suspend fun clearToken() {
         authenticatedClient.authProvider<BearerAuthProvider>()?.clearToken()
+    }
+
+    override suspend fun getSecurityAlerts(): Either<ApiResourceError, List<UserSecurityAlert>> {
+        return safeApiCall {
+            authenticatedClient.get(AuthResource.SecurityAlerts()).body<List<UserSecurityAlert>>()
+        }
+    }
+
+    override suspend fun acknowledgeSecurityAlerts(): Either<ApiResourceError, Unit> {
+        return safeApiCall {
+            authenticatedClient.post(AuthResource.AcknowledgeAlerts()).body<Unit>()
+        }
     }
 }

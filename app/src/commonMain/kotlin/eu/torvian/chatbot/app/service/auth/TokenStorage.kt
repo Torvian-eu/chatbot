@@ -29,6 +29,7 @@ interface TokenStorage {
      * @param expiresAt The expiration timestamp for the access token
      * @param user The authenticated user data for optimistic authentication
      * @param permissions The list of permissions granted to the user
+     * @param isRestricted Whether the session is restricted (created from an unacknowledged device)
      * @return Either a [TokenStorageError] on failure or Unit on success
      */
     suspend fun saveAuthData(
@@ -36,7 +37,8 @@ interface TokenStorage {
         refreshToken: String,
         expiresAt: Instant,
         user: User,
-        permissions: List<Permission>
+        permissions: List<Permission>,
+        isRestricted: Boolean = false
     ): Either<TokenStorageError, Unit>
 
     /**

@@ -10,10 +10,12 @@ package eu.torvian.chatbot.app.config
  *                   This is typically "data".
  * @property tokenStorageDir The subdirectory within the data directory for storing authentication tokens.
  * @property certificateStorageDir The subdirectory within the data directory for storing certificates.
+ * @property deviceIdentityStorageDir The subdirectory within the data directory for storing device identity.
  */
 data class StorageConfig(
     val baseApplicationPath: String,
     val dataDir: String,
     val tokenStorageDir: String,
-    val certificateStorageDir: String
+    val certificateStorageDir: String,
+    val deviceIdentityStorageDir: String
 )

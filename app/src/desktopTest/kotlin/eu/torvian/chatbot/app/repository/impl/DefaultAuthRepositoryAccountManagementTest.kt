@@ -7,6 +7,7 @@ import eu.torvian.chatbot.app.domain.events.AppEvent
 import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.app.service.api.AuthApi
 import eu.torvian.chatbot.app.service.api.UserApi
+import eu.torvian.chatbot.app.service.auth.DeviceIdentityService
 import eu.torvian.chatbot.app.service.auth.TokenStorage
 import eu.torvian.chatbot.app.service.auth.TokenStorageError
 import eu.torvian.chatbot.app.service.misc.EventBus
@@ -37,6 +38,7 @@ class DefaultAuthRepositoryAccountManagementTest {
     private lateinit var userApi: UserApi
     private lateinit var tokenStorage: TokenStorage
     private lateinit var eventBus: EventBus
+    private lateinit var deviceIdentityService: DeviceIdentityService
     private lateinit var repository: DefaultAuthRepository
 
     private val testUser1 = User(
@@ -68,6 +70,7 @@ class DefaultAuthRepositoryAccountManagementTest {
         userApi = mockk()
         tokenStorage = mockk()
         eventBus = mockk()
+        deviceIdentityService = mockk()
 
         // Mock eventBus.events with a proper flow of AppEvent type
         val eventsFlow = MutableSharedFlow<AppEvent>()
@@ -76,12 +79,15 @@ class DefaultAuthRepositoryAccountManagementTest {
         // Mock eventBus.emitEvent to do nothing
         coEvery { eventBus.emitEvent(any()) } returns Unit
 
-        repository = DefaultAuthRepository(authApi, userApi, tokenStorage, eventBus)
+        // Mock deviceIdentityService to return a test device ID
+        coEvery { deviceIdentityService.getOrCreateDeviceId() } returns "test-device-id".right()
+
+        repository = DefaultAuthRepository(authApi, userApi, tokenStorage, eventBus, deviceIdentityService)
     }
 
     @AfterTest
     fun tearDown() {
-        clearMocks(authApi, userApi, tokenStorage, eventBus)
+        clearMocks(authApi, userApi, tokenStorage, eventBus, deviceIdentityService)
     }
 
     // ===== switchAccount Tests =====

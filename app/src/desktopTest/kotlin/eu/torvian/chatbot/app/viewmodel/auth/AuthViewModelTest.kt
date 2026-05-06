@@ -9,6 +9,7 @@ import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.auth.AccountData
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.api.ApiError
+import eu.torvian.chatbot.common.models.api.auth.UserSecurityAlert
 import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
 import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.user.UserStatus
@@ -49,6 +50,9 @@ class AuthViewModelTest {
             every { authState } returns MutableStateFlow(AuthState.Unauthenticated)
             every { availableAccounts } returns availableAccountsFlow
             coEvery { checkInitialAuthState() } returns Unit
+            // Mock the new security alerts methods
+            coEvery { getSecurityAlerts() } returns emptyList<UserSecurityAlert>().right()
+            coEvery { acknowledgeSecurityAlerts() } returns Unit.right()
         }
         mockNotificationService = mockk(relaxed = true)
 

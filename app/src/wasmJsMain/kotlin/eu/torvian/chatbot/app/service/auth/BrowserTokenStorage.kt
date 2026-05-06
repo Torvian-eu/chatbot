@@ -59,7 +59,8 @@ class BrowserTokenStorage(
         refreshToken: String,
         expiresAt: Instant,
         user: User,
-        permissions: List<Permission>
+        permissions: List<Permission>,
+        isRestricted: Boolean
     ): Either<TokenStorageError, Unit> = either {
         catch({
             val userId = user.id
@@ -69,7 +70,8 @@ class BrowserTokenStorage(
                 expiresAt = expiresAt.epochSeconds,
                 user = user,
                 permissions = permissions,
-                lastUsed = Clock.System.now()
+                lastUsed = Clock.System.now(),
+                isRestricted = isRestricted
             )
 
             encryptAndSaveTokenData(userId, tokenData).bind()
@@ -90,10 +92,10 @@ class BrowserTokenStorage(
     }
 
     override suspend fun getAccountData(): Either<TokenStorageError, AccountData> =
-        loadTokenData().map { AccountData(it.user, it.permissions, it.lastUsed) }
+        loadTokenData().map { AccountData(it.user, it.permissions, it.lastUsed, it.isRestricted) }
 
     override suspend fun getAccountData(userId: Long): Either<TokenStorageError, AccountData> =
-        loadTokenData(userId).map { AccountData(it.user, it.permissions, it.lastUsed) }
+        loadTokenData(userId).map { AccountData(it.user, it.permissions, it.lastUsed, it.isRestricted) }
 
     override suspend fun clearAuthData(): Either<TokenStorageError, Unit> = either {
         val activeUserId = getActiveUserIdOrRaise().bind()
@@ -132,7 +134,7 @@ class BrowserTokenStorage(
                         logger.warn("Failed to load token data for user $userId during account listing. Skipping.")
                     },
                     ifRight = { tokenData ->
-                        accounts.add(AccountData(tokenData.user, tokenData.permissions, tokenData.lastUsed))
+                        accounts.add(AccountData(tokenData.user, tokenData.permissions, tokenData.lastUsed, tokenData.isRestricted))
                     }
                 )
             }
@@ -338,5 +340,4 @@ class BrowserTokenStorage(
         }
     }
 }
-
 

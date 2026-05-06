@@ -6,16 +6,13 @@ import eu.torvian.chatbot.app.repository.impl.*
 import eu.torvian.chatbot.app.service.api.*
 import eu.torvian.chatbot.app.service.api.ktor.*
 import eu.torvian.chatbot.app.service.auth.createAuthenticatedHttpClient
+import eu.torvian.chatbot.app.service.auth.DefaultDeviceIdentityService
+import eu.torvian.chatbot.app.service.auth.DeviceIdentityService
 import eu.torvian.chatbot.app.service.mcp.LocalMCPServerManager
 import eu.torvian.chatbot.app.service.mcp.LocalMCPServerManagerImpl
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.service.security.CertificateTrustService
-import eu.torvian.chatbot.app.viewmodel.LocalMCPServerViewModel
-import eu.torvian.chatbot.app.viewmodel.ModelConfigViewModel
-import eu.torvian.chatbot.app.viewmodel.ModelSettingsViewModel
-import eu.torvian.chatbot.app.viewmodel.ProviderConfigViewModel
-import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
-import eu.torvian.chatbot.app.viewmodel.WorkersViewModel
+import eu.torvian.chatbot.app.viewmodel.*
 import eu.torvian.chatbot.app.viewmodel.admin.UserGroupManagementViewModel
 import eu.torvian.chatbot.app.viewmodel.admin.UserManagementViewModel
 import eu.torvian.chatbot.app.viewmodel.auth.AuthViewModel
@@ -97,8 +94,14 @@ fun appModule(config: AppConfiguration): Module = module {
             authApi = get(),
             userApi = get(),
             tokenStorage = get(),
-            eventBus = get()
+            eventBus = get(),
+            deviceIdentityService = get()
         )
+    }
+
+    // Device identity service for persistent device ID
+    single<DeviceIdentityService> {
+        DefaultDeviceIdentityService(storage = get())
     }
 
     // Default HttpClient (authenticated) for backward compatibility

@@ -14,9 +14,11 @@ import kotlin.time.Instant
  * @property user The authenticated user data for optimistic authentication
  * @property permissions The list of permissions granted to the user
  * @property lastUsed The timestamp when this account was last actively used
+ * @property isRestricted Whether the session is restricted (created from an unacknowledged device)
  */
 data class AccountData(
     val user: User,
     val permissions: List<Permission>,
-    val lastUsed: Instant
+    val lastUsed: Instant,
+    val isRestricted: Boolean = false
 )

@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.app.service.api
 
 import arrow.core.Either
+import eu.torvian.chatbot.common.models.api.auth.UserSecurityAlert
 import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
 import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.api.auth.LoginResponse
@@ -26,9 +27,10 @@ interface AuthApi {
      *
      * @param username The username or email for authentication
      * @param password The password for authentication
+     * @param deviceId Client-side UUID that persists across logins for device-based trust
      * @return Either an [ApiResourceError] on failure or [LoginResponse] with tokens on success
      */
-    suspend fun login(username: String, password: String): Either<ApiResourceError, LoginResponse>
+    suspend fun login(username: String, password: String, deviceId: String): Either<ApiResourceError, LoginResponse>
 
     /**
      * Registers a new user account.
@@ -80,4 +82,21 @@ interface AuthApi {
      * This is used when the token must be reloaded from storage. For example, when switching accounts
      */
     suspend fun clearToken()
+
+    /**
+     * Retrieves unacknowledged security alerts for the current user.
+     * These alerts represent login attempts from unrecognized IP addresses that require user acknowledgment.
+     *
+     * @return Either an [ApiResourceError] on failure or the list of security alerts on success
+     */
+    suspend fun getSecurityAlerts(): Either<ApiResourceError, List<UserSecurityAlert>>
+
+    /**
+     * Acknowledges all pending security alerts for the current user.
+     * This marks all unacknowledged security alerts as trusted.
+     *
+     * Note: This operation is not available for restricted sessions.
+     * @return Either an [ApiResourceError] on failure or Unit on success
+     */
+    suspend fun acknowledgeSecurityAlerts(): Either<ApiResourceError, Unit>
 }

@@ -59,12 +59,21 @@ open class FileSystemTokenStorage(
         refreshToken: String,
         expiresAt: Instant,
         user: User,
-        permissions: List<Permission>
+        permissions: List<Permission>,
+        isRestricted: Boolean
     ): Either<TokenStorageError, Unit> = either {
         catch({
             val userId = user.id
 
-            val tokenData = TokenData(accessToken, refreshToken, expiresAt.epochSeconds, user, permissions, Clock.System.now())
+            val tokenData = TokenData(
+                accessToken = accessToken,
+                refreshToken = refreshToken,
+                expiresAt = expiresAt.epochSeconds,
+                user = user,
+                permissions = permissions,
+                lastUsed = Clock.System.now(),
+                isRestricted = isRestricted
+            )
 
             encryptAndSaveTokenData(userId, tokenData).bind()
 
@@ -84,10 +93,10 @@ open class FileSystemTokenStorage(
     }
 
     override suspend fun getAccountData(): Either<TokenStorageError, AccountData> =
-        loadTokenData().map { tokenData -> AccountData(tokenData.user, tokenData.permissions, tokenData.lastUsed) }
+        loadTokenData().map { tokenData -> AccountData(tokenData.user, tokenData.permissions, tokenData.lastUsed, tokenData.isRestricted) }
 
     override suspend fun getAccountData(userId: Long): Either<TokenStorageError, AccountData> =
-        loadTokenData(userId).map { tokenData -> AccountData(tokenData.user, tokenData.permissions, tokenData.lastUsed) }
+        loadTokenData(userId).map { tokenData -> AccountData(tokenData.user, tokenData.permissions, tokenData.lastUsed, tokenData.isRestricted) }
 
     override suspend fun clearAuthData(): Either<TokenStorageError, Unit> = either {
         val activeUserId = getActiveUserIdOrRaise().bind()
@@ -132,7 +141,8 @@ open class FileSystemTokenStorage(
                                     AccountData(
                                         user = tokenData.user,
                                         permissions = tokenData.permissions,
-                                        lastUsed = tokenData.lastUsed
+                                        lastUsed = tokenData.lastUsed,
+                                        isRestricted = tokenData.isRestricted
                                     )
                                 )
                             }
