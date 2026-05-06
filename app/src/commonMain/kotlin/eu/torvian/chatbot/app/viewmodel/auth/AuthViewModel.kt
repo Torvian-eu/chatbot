@@ -8,6 +8,7 @@ import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.service.auth.AccountData
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
+import eu.torvian.chatbot.common.models.api.auth.UserSecurityAlert
 import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
@@ -26,6 +27,7 @@ import kotlinx.coroutines.launch
  * - Form validation and error handling
  * - User authentication operations, including logout and logout-all flows
  * - Multi-account management (listing, switching, removing accounts)
+ * - Security alerts management (IP-based login alerts)
  *
  * @param authRepository Repository for authentication operations
  * @param notificationService Service for handling and notifying about errors
@@ -47,6 +49,20 @@ class AuthViewModel(
      * The current authentication state from the repository.
      */
     val authState: StateFlow<AuthState> = authRepository.authState
+
+    /**
+     * Whether the current session is restricted (created from an unacknowledged IP).
+     * Derived from the current auth state.
+     */
+    val isCurrentSessionRestricted: StateFlow<Boolean>
+        get() {
+            val currentState = authRepository.authState.value
+            return if (currentState is AuthState.Authenticated) {
+                MutableStateFlow(currentState.isRestricted)
+            } else {
+                MutableStateFlow(false)
+            }
+        }
 
     // --- Form State Management ---
 
@@ -70,6 +86,12 @@ class AuthViewModel(
      * The active sessions currently fetched from the server for the security dialog.
      */
     val activeSessions = MutableStateFlow<List<UserSessionInfo>>(emptyList())
+
+    /**
+     * Unacknowledged security alerts for the current user.
+     * These represent login attempts from unrecognized IP addresses.
+     */
+    val securityAlerts = MutableStateFlow<List<UserSecurityAlert>>(emptyList())
 
     /**
      * Indicates whether an account switch operation is currently in progress.
@@ -148,6 +170,8 @@ class AuthViewModel(
                     if (_dialogState.value is AuthDialogState.AddAccount) {
                         _dialogState.value = AuthDialogState.None
                     }
+                    // Fetch security alerts after successful login
+                    fetchSecurityAlerts()
                 }
             )
         }
@@ -234,6 +258,7 @@ class AuthViewModel(
                 )
             }.onRight {
                 activeSessions.value = emptyList()
+                securityAlerts.value = emptyList()
                 clearAllForms()
             }
         }
@@ -254,6 +279,7 @@ class AuthViewModel(
                 )
             }.onRight {
                 activeSessions.value = emptyList()
+                securityAlerts.value = emptyList()
                 clearAllForms()
             }
         }
@@ -273,6 +299,47 @@ class AuthViewModel(
                 }
                 .onRight { sessions ->
                     activeSessions.value = sessions
+                }
+        }
+    }
+
+    /**
+     * Fetches unacknowledged security alerts for the current user.
+     * Called after successful login or when the user navigates to the security alerts view.
+     */
+    fun fetchSecurityAlerts() {
+        viewModelScope.launch {
+            authRepository.getSecurityAlerts()
+                .onLeft { error ->
+                    logger.warn("Failed to fetch security alerts: ${error.message}")
+                    // Don't show error notification - security alerts are not critical
+                    securityAlerts.value = emptyList()
+                }
+                .onRight { alerts ->
+                    securityAlerts.value = alerts
+                    logger.info("Fetched ${alerts.size} security alerts")
+                }
+        }
+    }
+
+    /**
+     * Acknowledges all pending security alerts for the current user.
+     * This marks all unacknowledged IP addresses as trusted.
+     *
+     * Note: This operation is not available for restricted sessions.
+     */
+    fun acknowledgeSecurityAlerts() {
+        viewModelScope.launch {
+            authRepository.acknowledgeSecurityAlerts()
+                .onLeft { error ->
+                    notificationService.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to acknowledge security alerts"
+                    )
+                }
+                .onRight {
+                    securityAlerts.value = emptyList()
+                    logger.info("Successfully acknowledged all security alerts")
                 }
         }
     }
@@ -366,6 +433,10 @@ class AuthViewModel(
      */
     suspend fun checkInitialAuthState() {
         authRepository.checkInitialAuthState()
+        // Fetch security alerts if authenticated after startup
+        if (authRepository.authState.value is AuthState.Authenticated) {
+            fetchSecurityAlerts()
+        }
     }
 
     // --- Account Management Operations ---
@@ -393,6 +464,8 @@ class AuthViewModel(
                 .onRight {
                     // Close dialog on successful switch
                     _dialogState.value = AuthDialogState.None
+                    // Fetch security alerts for the new account
+                    fetchSecurityAlerts()
                 }
 
             _accountSwitchInProgress.value = false
@@ -572,6 +645,9 @@ class AuthViewModel(
 
                 error.message.contains("Account locked", ignoreCase = true) ->
                     "Account is temporarily locked. Please try again later."
+
+                error.message.contains("verification-required", ignoreCase = true) ->
+                    "New login detected. Please check your email to verify your identity."
 
                 else -> "Login failed. Please try again."
             }

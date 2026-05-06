@@ -2,6 +2,7 @@ package eu.torvian.chatbot.app.repository
 
 import arrow.core.Either
 import eu.torvian.chatbot.app.service.auth.AccountData
+import eu.torvian.chatbot.common.models.api.auth.UserSecurityAlert
 import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
 import eu.torvian.chatbot.common.models.user.User
 import kotlinx.coroutines.flow.StateFlow
@@ -127,4 +128,21 @@ interface AuthRepository {
      * @return Either a [RepositoryError] on failure or Unit on success
      */
     suspend fun removeAccount(userId: Long): Either<RepositoryError, Unit>
+
+    /**
+     * Retrieves unacknowledged security alerts for the current user.
+     * These alerts represent login attempts from unrecognized IP addresses.
+     *
+     * @return Either a [RepositoryError] on failure or the list of security alerts on success
+     */
+    suspend fun getSecurityAlerts(): Either<RepositoryError, List<UserSecurityAlert>>
+
+    /**
+     * Acknowledges all pending security alerts for the current user.
+     * This marks all unacknowledged IP addresses as trusted.
+     *
+     * Note: This operation is not available for restricted sessions.
+     * @return Either a [RepositoryError] on failure or Unit on success
+     */
+    suspend fun acknowledgeSecurityAlerts(): Either<RepositoryError, Unit>
 }

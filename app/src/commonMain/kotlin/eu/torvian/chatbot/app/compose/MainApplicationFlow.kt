@@ -22,6 +22,7 @@ import eu.torvian.chatbot.app.compose.admin.AdminScreen
 import eu.torvian.chatbot.app.compose.auth.AuthDialogs
 import eu.torvian.chatbot.app.compose.auth.LoginScreen
 import eu.torvian.chatbot.app.compose.auth.RegisterScreen
+import eu.torvian.chatbot.app.compose.auth.SecurityAlertsDialog
 import eu.torvian.chatbot.app.compose.common.PlainTooltipBox
 import eu.torvian.chatbot.app.compose.permissions.RequiresAnyPermission
 import eu.torvian.chatbot.app.compose.settings.SettingsScreen
@@ -60,10 +61,24 @@ fun MainApplicationFlow(
     val availableAccounts by authViewModel.availableAccounts.collectAsState()
     val accountSwitchInProgress by authViewModel.accountSwitchInProgress.collectAsState()
     val dialogState by authViewModel.dialogState.collectAsState()
+    val securityAlerts by authViewModel.securityAlerts.collectAsState()
+
+    // Track whether the security alerts dialog has been shown
+    var hasShownSecurityAlertsDialog by remember { mutableStateOf(false) }
+
+    // Show security alerts dialog when there are unacknowledged alerts and we haven't shown them yet
+    val shouldShowSecurityAlerts = securityAlerts.isNotEmpty() && !hasShownSecurityAlertsDialog
 
     LaunchedEffect(authState.userId) {
         sessionListViewModel.loadSessionsAndGroups()
         navController.navigateToTop(Chat)
+    }
+
+    // Reset the dialog shown flag when alerts change
+    LaunchedEffect(securityAlerts) {
+        if (securityAlerts.isEmpty()) {
+            hasShownSecurityAlertsDialog = false
+        }
     }
 
     CompositionLocalProvider(LocalTopBarContent provides topBarController) {
@@ -93,6 +108,21 @@ fun MainApplicationFlow(
             accountSwitchInProgress = accountSwitchInProgress,
             authViewModel = authViewModel
         )
+
+        // Show security alerts dialog if there are unacknowledged alerts
+        if (shouldShowSecurityAlerts) {
+            SecurityAlertsDialog(
+                alerts = securityAlerts,
+                isRestricted = authState.isRestricted,
+                onDismiss = {
+                    hasShownSecurityAlertsDialog = true
+                },
+                onAcknowledge = {
+                    authViewModel.acknowledgeSecurityAlerts()
+                    hasShownSecurityAlertsDialog = true
+                }
+            )
+        }
     }
 }
 

@@ -16,6 +16,7 @@ import eu.torvian.chatbot.app.service.auth.AuthenticationFailureEvent
 import eu.torvian.chatbot.app.service.auth.TokenStorage
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
+import eu.torvian.chatbot.common.models.api.auth.UserSecurityAlert
 import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
 import eu.torvian.chatbot.common.models.user.User
 import kotlinx.coroutines.CoroutineScope
@@ -98,7 +99,8 @@ class DefaultAuthRepository(
             userId = loginResponse.user.id,
             username = loginResponse.user.username,
             permissions = loginResponse.permissions,
-            requiresPasswordChange = loginResponse.user.requiresPasswordChange
+            requiresPasswordChange = loginResponse.user.requiresPasswordChange,
+            isRestricted = loginResponse.isRestricted
         )
 
         // Refresh available accounts list
@@ -228,7 +230,8 @@ class DefaultAuthRepository(
                 userId = accountData.user.id,
                 username = accountData.user.username,
                 permissions = accountData.permissions,
-                requiresPasswordChange = accountData.user.requiresPasswordChange
+                requiresPasswordChange = accountData.user.requiresPasswordChange,
+                isRestricted = false  // Default to false on startup - will be updated after API call
             )
 
             logger.info("Initial authentication state check complete")
@@ -270,7 +273,8 @@ class DefaultAuthRepository(
             userId = accountData.user.id,
             username = accountData.user.username,
             permissions = accountData.permissions,
-            requiresPasswordChange = accountData.user.requiresPasswordChange
+            requiresPasswordChange = accountData.user.requiresPasswordChange,
+            isRestricted = false  // Default to false on account switch - will be updated after API call
         )
 
         // Emit account switched event
@@ -303,6 +307,28 @@ class DefaultAuthRepository(
         refreshAvailableAccounts()
 
         logger.info("Successfully removed account with userId: $userId")
+    }
+
+    override suspend fun getSecurityAlerts(): Either<RepositoryError, List<UserSecurityAlert>> = either {
+        logger.info("Fetching security alerts for the current user")
+
+        withError({ apiError ->
+            apiError.toRepositoryError("Failed to load security alerts")
+        }) {
+            authApi.getSecurityAlerts().bind()
+        }
+    }
+
+    override suspend fun acknowledgeSecurityAlerts(): Either<RepositoryError, Unit> = either {
+        logger.info("Acknowledging security alerts for the current user")
+
+        withError({ apiError ->
+            apiError.toRepositoryError("Failed to acknowledge security alerts")
+        }) {
+            authApi.acknowledgeSecurityAlerts().bind()
+        }
+
+        logger.info("Successfully acknowledged security alerts")
     }
 
     private suspend fun refreshAvailableAccounts() {
