@@ -14,9 +14,10 @@ interface WorkerSetupApi : AutoCloseable {
      *
      * @param username User name used for server authentication.
      * @param password Plaintext password used for server authentication.
+     * @param deviceId Unique device identifier used for security audit logs and device-based trust.
      * @return Either a logical setup error or a bearer access token.
      */
-    suspend fun login(username: String, password: String): Either<WorkerSetupError, String>
+    suspend fun login(username: String, password: String, deviceId: String): Either<WorkerSetupError, String>
 
     /**
      * Registers the newly generated worker certificate with the server.
@@ -47,4 +48,3 @@ interface WorkerSetupApi : AutoCloseable {
      */
     override fun close() {}
 }
-
