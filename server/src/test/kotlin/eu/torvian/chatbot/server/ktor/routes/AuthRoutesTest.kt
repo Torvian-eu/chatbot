@@ -296,7 +296,8 @@ class AuthRoutesTest {
 
         val loginRequest = LoginRequest(
             username = testUser.username,
-            password = plainPassword
+            password = plainPassword,
+            deviceId = "test-device-id"
         )
 
         // Act
@@ -330,7 +331,8 @@ class AuthRoutesTest {
 
         val loginRequest = LoginRequest(
             username = testUser.username,
-            password = "wrongPassword"
+            password = "wrongPassword",
+            deviceId = "test-device-id"
         )
 
         // Act
@@ -357,7 +359,8 @@ class AuthRoutesTest {
 
         val loginRequest = LoginRequest(
             username = "nonexistentuser",
-            password = "anyPassword"
+            password = "anyPassword",
+            deviceId = "test-device-id"
         )
 
         // Act
@@ -514,7 +517,8 @@ class AuthRoutesTest {
         // Login to get a refresh token
         val loginRequest = LoginRequest(
             username = testUser.username,
-            password = plainPassword
+            password = plainPassword,
+            deviceId = "test-device-id"
         )
 
         val loginResponse = client.post(href(AuthResource.Login())) {
@@ -801,7 +805,8 @@ class AuthRoutesTest {
             setBody(
                 LoginRequest(
                     username = testUser.username,
-                    password = plainPassword
+                    password = plainPassword,
+                    deviceId = "test-device-id"
                 )
             )
         }

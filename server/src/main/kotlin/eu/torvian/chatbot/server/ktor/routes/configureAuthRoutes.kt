@@ -3,27 +3,21 @@ package eu.torvian.chatbot.server.ktor.routes
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.AuthResource
-import eu.torvian.chatbot.common.models.api.auth.LoginRequest
-import eu.torvian.chatbot.common.models.api.auth.RefreshTokenRequest
-import eu.torvian.chatbot.common.models.api.auth.RegisterRequest
-import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
-import eu.torvian.chatbot.common.models.api.auth.ServiceTokenChallengeRequest
-import eu.torvian.chatbot.common.models.api.auth.ServiceTokenChallengeResponse
-import eu.torvian.chatbot.common.models.api.auth.ServiceTokenRequest
-import eu.torvian.chatbot.common.models.api.auth.ServiceTokenResponse
+import eu.torvian.chatbot.common.models.api.auth.*
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.domain.security.mappers.toLoginResponse
 import eu.torvian.chatbot.server.ktor.auth.getUserContext
 import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.service.core.UserService
 import eu.torvian.chatbot.server.service.core.WorkerService
-import eu.torvian.chatbot.server.service.core.error.worker.AuthenticateWorkerError
 import eu.torvian.chatbot.server.service.core.error.auth.RegisterUserError
+import eu.torvian.chatbot.server.service.core.error.worker.AuthenticateWorkerError
 import eu.torvian.chatbot.server.service.security.AuthenticationService
 import eu.torvian.chatbot.server.service.security.error.LoginError
-import eu.torvian.chatbot.server.service.security.error.LogoutError
 import eu.torvian.chatbot.server.service.security.error.LogoutAllError
+import eu.torvian.chatbot.server.service.security.error.LogoutError
 import eu.torvian.chatbot.server.service.security.error.RefreshTokenError
+import eu.torvian.chatbot.server.service.security.error.AcknowledgeAlertsError
 import io.ktor.http.*
 import io.ktor.server.auth.*
 import io.ktor.server.plugins.origin
@@ -78,7 +72,7 @@ fun Route.configureAuthRoutes(
         // Extract client IP address for session tracking (supports proxy via X-Forwarded-For header)
         val ipAddress = call.request.origin.remoteAddress
         call.respondEither(
-            authenticationService.login(request.username, request.password, ipAddress)
+            authenticationService.login(request.username, request.password, ipAddress, request.deviceId)
                 .map { it.toLoginResponse() }
         ) { error ->
             when (error) {
@@ -90,6 +84,9 @@ fun Route.configureAuthRoutes(
 
                 is LoginError.AccountLocked ->
                     apiError(CommonApiErrorCodes.PERMISSION_DENIED, "Account locked", "reason" to error.reason)
+
+                is LoginError.VerificationRequired ->
+                    apiError(CommonApiErrorCodes.VERIFICATION_REQUIRED, "Verification required")
 
                 is LoginError.SessionCreationFailed ->
                     apiError(CommonApiErrorCodes.INTERNAL, "Failed to create session", "reason" to error.reason)
@@ -126,31 +123,26 @@ fun Route.configureAuthRoutes(
     authenticate(AuthSchemes.USER_JWT) {
         post<AuthResource.Logout> { resource ->
             val userContext = call.getUserContext()
-            val sessionId = resource.sessionId ?: userContext.sessionId
-
-            if (resource.sessionId != null) {
-                val ownsTargetSession = authenticationService.getUserSessions(userContext.user.id)
-                    .fold(
-                        ifLeft = { false },
-                        ifRight = { sessions -> sessions.any { it.id == sessionId } }
-                    )
-
-                if (!ownsTargetSession) {
-                    call.respond(
-                        HttpStatusCode.NotFound,
-                        apiError(CommonApiErrorCodes.NOT_FOUND, "Session not found")
-                    )
-                    return@post
-                }
-            }
+            val targetSessionId = resource.sessionId ?: userContext.sessionId
 
             call.respondEither(
-                authenticationService.logout(sessionId),
+                authenticationService.logout(
+                    userId = userContext.user.id,
+                    targetSessionId = targetSessionId,
+                    requesterSessionId = userContext.sessionId,
+                    requesterIsRestricted = userContext.isRestricted
+                ),
                 HttpStatusCode.NoContent
             ) { error ->
                 when (error) {
                     is LogoutError.SessionNotFound ->
                         apiError(CommonApiErrorCodes.NOT_FOUND, "Session not found")
+
+                    is LogoutError.InsufficientPermissions ->
+                        apiError(
+                            CommonApiErrorCodes.PERMISSION_DENIED,
+                            "Action requires a trusted session. Please verify via email or another device."
+                        )
                 }
             }
         }
@@ -182,14 +174,21 @@ fun Route.configureAuthRoutes(
     // POST /api/v1/auth/logout-all - User logout from all sessions
     authenticate(AuthSchemes.USER_JWT) {
         post<AuthResource.LogoutAll> {
+            val userContext = call.getUserContext()
             val userId = call.getUserId()
             call.respondEither(
-                authenticationService.logoutAll(userId),
+                authenticationService.logoutAll(userId, userContext.isRestricted),
                 HttpStatusCode.NoContent
             ) { error ->
                 when (error) {
                     is LogoutAllError.NoSessionsFound ->
                         apiError(CommonApiErrorCodes.NOT_FOUND, "No sessions found for user")
+
+                    is LogoutAllError.InsufficientPermissions ->
+                        apiError(
+                            CommonApiErrorCodes.PERMISSION_DENIED,
+                            "Action requires a trusted session. Please verify via email or another device."
+                        )
                 }
             }
         }
@@ -199,6 +198,45 @@ fun Route.configureAuthRoutes(
     authenticate(AuthSchemes.USER_JWT) {
         get<AuthResource.Me> {
             call.respond(call.getUserContext().user)
+        }
+    }
+
+    // GET /api/v1/auth/security-alerts - Get unacknowledged security alerts for the current user
+    authenticate(AuthSchemes.USER_JWT) {
+        get<AuthResource.SecurityAlerts> {
+            val userId = call.getUserId()
+            val result = authenticationService.getSecurityAlerts(userId).map { alerts ->
+                alerts.map { alert ->
+                    UserSecurityAlert(
+                        id = alert.id,
+                        deviceId = alert.deviceId,
+                        ipAddress = alert.ipAddress,
+                        firstSeenAt = alert.createdAt,
+                        lastSeenAt = alert.createdAt
+                    )
+                }
+            }
+            call.respondEither(result)
+        }
+    }
+
+    // POST /api/v1/auth/acknowledge-alerts - Clear pending security alerts for the current user
+    authenticate(AuthSchemes.USER_JWT) {
+        post<AuthResource.AcknowledgeAlerts> {
+            val userContext = call.getUserContext()
+
+            call.respondEither(
+                authenticationService.acknowledgeSecurityAlerts(userContext.user.id, userContext.isRestricted),
+                HttpStatusCode.NoContent
+            ) { error ->
+                when (error) {
+                    is AcknowledgeAlertsError.InsufficientPermissions ->
+                        apiError(
+                            CommonApiErrorCodes.PERMISSION_DENIED,
+                            "Action requires a trusted session. Please verify via email or another device."
+                        )
+                }
+            }
         }
     }
 
