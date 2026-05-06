@@ -10,6 +10,12 @@ sealed interface LogoutError {
      * @property sessionId The session ID that was not found
      */
     data class SessionNotFound(val sessionId: Long) : LogoutError
+
+    /**
+     * The requester does not have permission to perform this logout operation.
+     * Typically returned when a restricted session attempts to revoke another session.
+     */
+    data object InsufficientPermissions : LogoutError
 }
 
 /**
@@ -22,4 +28,10 @@ sealed interface LogoutAllError {
      * @property userId The user ID who has no active sessions
      */
     data class NoSessionsFound(val userId: Long) : LogoutAllError
+
+    /**
+     * The requester does not have permission to log out from all sessions.
+     * Typically returned when a restricted session attempts to perform this action.
+     */
+    data object InsufficientPermissions : LogoutAllError
 }

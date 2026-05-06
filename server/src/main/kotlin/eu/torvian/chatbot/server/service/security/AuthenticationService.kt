@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.service.security
 
 import arrow.core.Either
+import eu.torvian.chatbot.server.data.entities.SecurityAuditEntity
 import eu.torvian.chatbot.server.domain.security.LoginResult
 import eu.torvian.chatbot.server.domain.security.UserContext
 import eu.torvian.chatbot.server.domain.security.WorkerContext
@@ -9,6 +10,7 @@ import eu.torvian.chatbot.server.service.security.error.LoginError
 import eu.torvian.chatbot.server.service.security.error.LogoutError
 import eu.torvian.chatbot.server.service.security.error.LogoutAllError
 import eu.torvian.chatbot.server.service.security.error.RefreshTokenError
+import eu.torvian.chatbot.server.service.security.error.AcknowledgeAlertsError
 import io.ktor.server.auth.jwt.*
 
 /**
@@ -31,20 +33,30 @@ interface AuthenticationService {
      * @param username The username to authenticate
      * @param password The plaintext password to verify
      * @param ipAddress Optional IP address of the client for session tracking
+     * @param deviceId Client-side UUID that persists across logins for device-based trust
      * @return Either [LoginError] if authentication fails, or [LoginResult] on success
      */
-    suspend fun login(username: String, password: String, ipAddress: String?): Either<LoginError, LoginResult>
+    suspend fun login(username: String, password: String, ipAddress: String?, deviceId: String): Either<LoginError, LoginResult>
 
     /**
      * Logs out a user from their current session.
      *
-     * This method invalidates only the user's current session (from which the request originates),
-     * allowing other sessions on different devices to remain active.
+     * This method invalidates only the specified session, allowing other sessions on different
+     * devices to remain active. The method performs ownership validation to ensure the
+     * requester can only log out sessions they own.
      *
-     * @param sessionId The unique identifier of the session to log out
+     * @param userId The unique identifier of the authenticated user making the request
+     * @param targetSessionId The unique identifier of the session to log out
+     * @param requesterSessionId The session ID of the user making the request (for authorization)
+     * @param requesterIsRestricted Whether the requester's session is restricted (device not verified)
      * @return Either [LogoutError] if logout fails, or Unit on success
      */
-    suspend fun logout(sessionId: Long): Either<LogoutError, Unit>
+    suspend fun logout(
+        userId: Long,
+        targetSessionId: Long,
+        requesterSessionId: Long,
+        requesterIsRestricted: Boolean
+    ): Either<LogoutError, Unit>
 
     /**
      * Logs out a user from all their active sessions.
@@ -53,9 +65,10 @@ interface AuthenticationService {
      * from all devices and applications.
      *
      * @param userId The unique identifier of the user to log out from all sessions
+     * @param requesterIsRestricted Whether the requester's session is restricted (device not verified)
      * @return Either [LogoutAllError] if logout fails, or Unit on success
      */
-    suspend fun logoutAll(userId: Long): Either<LogoutAllError, Unit>
+    suspend fun logoutAll(userId: Long, requesterIsRestricted: Boolean): Either<LogoutAllError, Unit>
 
     /**
      * Retrieves the stored sessions for a user so they can inspect active logins.
@@ -67,6 +80,17 @@ interface AuthenticationService {
      * @return A right-biased [Either] containing the user's session rows.
      */
     suspend fun getUserSessions(userId: Long): Either<Nothing, List<UserSessionEntity>>
+
+    /**
+     * Retrieves unacknowledged security alerts for a user.
+     *
+     * Returns detailed information about unrecognized device logins that have not been
+     * acknowledged by the user yet. These are sourced from the SecurityAuditDao.
+     *
+     * @param userId The unique identifier of the authenticated user.
+     * @return A right-biased [Either] containing the list of unacknowledged security alerts.
+     */
+    suspend fun getSecurityAlerts(userId: Long): Either<Nothing, List<SecurityAuditEntity>>
 
     /**
      * Validates JWT credentials from Ktor's auth pipeline.
@@ -104,4 +128,20 @@ interface AuthenticationService {
      * @return Either [RefreshTokenError] if refresh fails, or [LoginResult] with new tokens
      */
     suspend fun refreshToken(refreshToken: String, ipAddress: String?): Either<RefreshTokenError, LoginResult>
+
+    /**
+     * Marks every unacknowledged security alert for a user as acknowledged.
+     *
+     * This is the server-side confirmation step used after the UI shows a security warning.
+     * It also promotes the devices from the acknowledged alerts to the trusted devices table,
+     * allowing future logins from those devices to be unrestricted.
+     *
+     * Restricted sessions cannot acknowledge alerts - this prevents self-acknowledgement of
+     * untrusted devices. The caller must verify the session is not restricted before calling.
+     *
+     * @param userId The unique identifier of the authenticated user.
+     * @param requesterIsRestricted Whether the requester's session is restricted (device not verified)
+     * @return Either [AcknowledgeAlertsError] if acknowledgement fails, or Unit on success
+     */
+    suspend fun acknowledgeSecurityAlerts(userId: Long, requesterIsRestricted: Boolean): Either<AcknowledgeAlertsError, Unit>
 }

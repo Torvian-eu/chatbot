@@ -78,7 +78,21 @@ fun serviceModule() = module {
     // --- Authentication Services ---
     single<PasswordService> { BCryptPasswordService() }
     single<UserService> { UserServiceImpl(get(), get(), get(), get(), get(), get()) }
-    single<AuthenticationService> { AuthenticationServiceImpl(get(), get(), get(), get(), get(), get(), get(), get()) }
+    single<AuthenticationService> {
+        AuthenticationServiceImpl(
+            get(),         // userService
+            get(),         // passwordService
+            get(),         // jwtConfig
+            get(),         // userSessionDao
+            get(),         // userTrustedDeviceDao
+            get(),         // securityAuditDao
+            get(),         // userDao
+            get(),         // workerDao
+            get(),         // authorizationService
+            get(),         // transactionScope
+            get()          // accountSecurityMode
+        )
+    }
     single<WorkerService> { WorkerServiceImpl(get(), get(), get()) }
 
     // --- Authorizers (resource-level access) ---

@@ -6,14 +6,19 @@ import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.user.UserStatus
+import eu.torvian.chatbot.server.data.dao.SecurityAuditDao
 import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.UserSessionDao
+import eu.torvian.chatbot.server.data.dao.UserTrustedDeviceDao
 import eu.torvian.chatbot.server.data.dao.WorkerDao
 import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.dao.error.UserSessionError
+import eu.torvian.chatbot.server.data.entities.SecurityAuditEntity
 import eu.torvian.chatbot.server.data.entities.UserEntity
 import eu.torvian.chatbot.server.data.entities.UserSessionEntity
+import eu.torvian.chatbot.server.data.entities.UserTrustedDeviceEntity
 import eu.torvian.chatbot.server.data.entities.WorkerEntity
+import eu.torvian.chatbot.server.domain.config.AccountSecurityMode
 import eu.torvian.chatbot.server.data.entities.mappers.toUser
 import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.service.core.UserService
@@ -39,6 +44,8 @@ class AuthenticationServiceImplTest {
     private val userService = mockk<UserService>()
     private val passwordService = mockk<PasswordService>()
     private val userSessionDao = mockk<UserSessionDao>()
+    private val userTrustedDeviceDao = mockk<UserTrustedDeviceDao>()
+    private val securityAuditDao = mockk<SecurityAuditDao>()
     private val userDao = mockk<UserDao>()
     private val workerDao = mockk<WorkerDao>()
     private val authorizationService = mockk<AuthorizationService>()
@@ -50,16 +57,21 @@ class AuthenticationServiceImplTest {
         refreshExpirationMs = 7 * 24 * 60 * 60 * 1000L
     )
 
-    private val authService = AuthenticationServiceImpl(
+    private fun createAuthService(accountSecurityMode: AccountSecurityMode = AccountSecurityMode.DISABLED) = AuthenticationServiceImpl(
         userService,
         passwordService,
         jwtConfig,
         userSessionDao,
+        userTrustedDeviceDao,
+        securityAuditDao,
         userDao,
         workerDao,
         authorizationService,
-        transactionScope
+        transactionScope,
+        accountSecurityMode
     )
+
+    private val authService = createAuthService()
 
     private val testUser = UserEntity(
         id = 1L,
@@ -78,12 +90,32 @@ class AuthenticationServiceImplTest {
         createdAt = Instant.fromEpochMilliseconds(System.currentTimeMillis()),
         lastAccessed = Instant.fromEpochMilliseconds(System.currentTimeMillis()),
         expiresAt = Instant.fromEpochMilliseconds(System.currentTimeMillis() + 24 * 60 * 60 * 1000), // 24 hours
-        ipAddress = "127.0.0.1"
+        ipAddress = "127.0.0.1",
+        isRestricted = false
+    )
+
+    private val testTrustedDevice = UserTrustedDeviceEntity(
+        id = 300L,
+        userId = testUser.id,
+        deviceId = "device-001",
+        lastIpAddress = "10.0.0.1",
+        firstSeenAt = Instant.fromEpochMilliseconds(System.currentTimeMillis()),
+        lastUsedAt = Instant.fromEpochMilliseconds(System.currentTimeMillis())
     )
 
     @BeforeEach
     fun setUp() {
-        clearMocks(userService, passwordService, userSessionDao, userDao, workerDao, authorizationService, transactionScope)
+        clearMocks(
+            userService,
+            passwordService,
+            userSessionDao,
+            userTrustedDeviceDao,
+            securityAuditDao,
+            userDao,
+            workerDao,
+            authorizationService,
+            transactionScope
+        )
 
         coEvery { transactionScope.transaction<Any>(any()) } coAnswers {
             val block = firstArg<suspend () -> Any>()
@@ -96,16 +128,17 @@ class AuthenticationServiceImplTest {
         // Given
         val username = "testuser"
         val password = "correctpassword"
+        val deviceId = "device-001"
 
         coEvery { userDao.getUserByUsername(username) } returns testUser.right()
         every { passwordService.verifyPassword(password, testUser.passwordHash) } returns true
 
-        coEvery { userSessionDao.insertSession(testUser.id, any(), any()) } returns testSession.right()
+        coEvery { userSessionDao.insertSession(testUser.id, any(), any(), any()) } returns testSession.right()
         coEvery { userService.updateLastLogin(testUser.id) } returns Unit.right()
         coEvery { authorizationService.getUserPermissions(testUser.id) } returns emptyList()
 
         // When
-        val result = authService.login(username, password, "127.0.0.1")
+        val result = authService.login(username, password, "127.0.0.1", deviceId)
 
         // Then
         assertTrue(result.isRight())
@@ -116,7 +149,7 @@ class AuthenticationServiceImplTest {
         assertEquals(emptyList(), loginResult.permissions)
         coVerify { userDao.getUserByUsername(username) }
         verify { passwordService.verifyPassword(password, testUser.passwordHash) }
-        coVerify { userSessionDao.insertSession(testUser.id, any(), any()) }
+        coVerify { userSessionDao.insertSession(testUser.id, any(), any(), any()) }
         coVerify { userService.updateLastLogin(testUser.id) }
         coVerify { authorizationService.getUserPermissions(testUser.id) }
         val accessExpiryMs = JWT.decode(loginResult.accessToken).expiresAt.time
@@ -124,6 +157,163 @@ class AuthenticationServiceImplTest {
         assertTrue(loginExpiryMs >= accessExpiryMs)
         assertTrue(loginExpiryMs - accessExpiryMs < 1000)
         assertNotEquals(testSession.expiresAt.toEpochMilliseconds(), loginResult.expiresAt.toEpochMilliseconds())
+    }
+
+    @Test
+    fun `login should allow a new device in warning mode and flag the session as restricted`() = runTest {
+        val warningAuthService = createAuthService(AccountSecurityMode.WARNING)
+        val username = "testuser"
+        val password = "correctpassword"
+        val deviceId = "new-device-001"
+        val ipAddress = "10.0.0.1"
+
+        coEvery { userDao.getUserByUsername(username) } returns testUser.right()
+        every { passwordService.verifyPassword(password, testUser.passwordHash) } returns true
+        // User already has trusted devices, so this is not the first device
+        coEvery { userTrustedDeviceDao.getTrustedDevicesCount(testUser.id) } returns 1
+        coEvery { userTrustedDeviceDao.getTrustedDevice(testUser.id, deviceId) } returns null
+        coEvery {
+            securityAuditDao.insertAuditRecord(
+                userId = testUser.id,
+                deviceId = deviceId,
+                ipAddress = ipAddress,
+                createdAt = any()
+            )
+        } returns mockk()
+        coEvery { userSessionDao.insertSession(testUser.id, any(), ipAddress, any()) } returns testSession.right()
+        coEvery { userService.updateLastLogin(testUser.id) } returns Unit.right()
+        coEvery { authorizationService.getUserPermissions(testUser.id) } returns emptyList()
+
+        val result = warningAuthService.login(username, password, ipAddress, deviceId)
+
+        assertTrue(result.isRight())
+        assertTrue(result.getOrNull()!!.isRestricted)
+        coVerify { securityAuditDao.insertAuditRecord(testUser.id, deviceId, ipAddress, any()) }
+    }
+
+    @Test
+    fun `login should block a new device in strict mode with verification required`() = runTest {
+        val strictAuthService = createAuthService(AccountSecurityMode.STRICT)
+        val username = "testuser"
+        val password = "correctpassword"
+        val deviceId = "new-device-002"
+        val ipAddress = "10.0.0.2"
+
+        coEvery { userDao.getUserByUsername(username) } returns testUser.right()
+        every { passwordService.verifyPassword(password, testUser.passwordHash) } returns true
+        // User already has trusted devices, so this is not the first device
+        coEvery { userTrustedDeviceDao.getTrustedDevicesCount(testUser.id) } returns 1
+        coEvery { userTrustedDeviceDao.getTrustedDevice(testUser.id, deviceId) } returns null
+        coEvery {
+            securityAuditDao.insertAuditRecord(
+                userId = testUser.id,
+                deviceId = deviceId,
+                ipAddress = ipAddress,
+                createdAt = any()
+            )
+        } returns mockk()
+
+        val result = strictAuthService.login(username, password, ipAddress, deviceId)
+
+        assertTrue(result.isLeft())
+        assertEquals(LoginError.VerificationRequired, result.leftOrNull())
+        coVerify(exactly = 0) { userSessionDao.insertSession(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `login should auto-trust first device in warning mode without restriction`() = runTest {
+        val warningAuthService = createAuthService(AccountSecurityMode.WARNING)
+        val username = "testuser"
+        val password = "correctpassword"
+        val deviceId = "first-device-ever"
+        val ipAddress = "10.0.0.1"
+
+        coEvery { userDao.getUserByUsername(username) } returns testUser.right()
+        every { passwordService.verifyPassword(password, testUser.passwordHash) } returns true
+        // This is the first device ever for this user
+        coEvery { userTrustedDeviceDao.getTrustedDevicesCount(testUser.id) } returns 0
+        coEvery {
+            userTrustedDeviceDao.insertTrustedDevice(
+                userId = testUser.id,
+                deviceId = deviceId,
+                ipAddress = ipAddress,
+                firstSeenAt = any(),
+                lastUsedAt = any()
+            )
+        } returns testTrustedDevice
+        coEvery { userSessionDao.insertSession(testUser.id, any(), ipAddress, false) } returns testSession.right()
+        coEvery { userService.updateLastLogin(testUser.id) } returns Unit.right()
+        coEvery { authorizationService.getUserPermissions(testUser.id) } returns emptyList()
+
+        val result = warningAuthService.login(username, password, ipAddress, deviceId)
+
+        assertTrue(result.isRight())
+        // First device should NOT be restricted (TOFU)
+        assertTrue(!result.getOrNull()!!.isRestricted)
+        // Verify the device was inserted into trusted devices
+        coVerify { userTrustedDeviceDao.insertTrustedDevice(testUser.id, deviceId, ipAddress, any(), any()) }
+    }
+
+    @Test
+    fun `login should auto-trust first device in strict mode without restriction`() = runTest {
+        val strictAuthService = createAuthService(AccountSecurityMode.STRICT)
+        val username = "testuser"
+        val password = "correctpassword"
+        val deviceId = "first-device-ever"
+        val ipAddress = "10.0.0.1"
+
+        coEvery { userDao.getUserByUsername(username) } returns testUser.right()
+        every { passwordService.verifyPassword(password, testUser.passwordHash) } returns true
+        // This is the first device ever for this user
+        coEvery { userTrustedDeviceDao.getTrustedDevicesCount(testUser.id) } returns 0
+        coEvery {
+            userTrustedDeviceDao.insertTrustedDevice(
+                userId = testUser.id,
+                deviceId = deviceId,
+                ipAddress = ipAddress,
+                firstSeenAt = any(),
+                lastUsedAt = any()
+            )
+        } returns testTrustedDevice
+        coEvery { userSessionDao.insertSession(testUser.id, any(), ipAddress, false) } returns testSession.right()
+        coEvery { userService.updateLastLogin(testUser.id) } returns Unit.right()
+        coEvery { authorizationService.getUserPermissions(testUser.id) } returns emptyList()
+
+        val result = strictAuthService.login(username, password, ipAddress, deviceId)
+
+        assertTrue(result.isRight())
+        // First device should NOT be restricted (TOFU) - even in STRICT mode
+        assertTrue(!result.getOrNull()!!.isRestricted)
+        // Verify the device was inserted into trusted devices
+        coVerify { userTrustedDeviceDao.insertTrustedDevice(testUser.id, deviceId, ipAddress, any(), any()) }
+    }
+
+    @Test
+    fun `acknowledgeSecurityAlerts should promote devices to trusted`() = runTest {
+        // Setup: Create a mock SecurityAuditEntity for the test
+        val mockAuditEntity = mockk<SecurityAuditEntity>()
+        every { mockAuditEntity.deviceId } returns "device-001"
+        every { mockAuditEntity.ipAddress } returns "10.0.0.1"
+
+        coEvery { securityAuditDao.getUnacknowledgedByUserId(testUser.id) } returns listOf(mockAuditEntity)
+        coEvery { securityAuditDao.acknowledgeAllByUserId(testUser.id) } returns 1
+        coEvery { userTrustedDeviceDao.getTrustedDevice(testUser.id, "device-001") } returns null
+        coEvery {
+            userTrustedDeviceDao.insertTrustedDevice(
+                userId = testUser.id,
+                deviceId = "device-001",
+                ipAddress = any(),
+                firstSeenAt = any(),
+                lastUsedAt = any()
+            )
+        } returns testTrustedDevice
+
+        val result = authService.acknowledgeSecurityAlerts(testUser.id, requesterIsRestricted = false)
+
+        assertTrue(result.isRight())
+        coVerify { securityAuditDao.getUnacknowledgedByUserId(testUser.id) }
+        coVerify { securityAuditDao.acknowledgeAllByUserId(testUser.id) }
+        coVerify { userTrustedDeviceDao.insertTrustedDevice(testUser.id, "device-001", any(), any(), any()) }
     }
 
     @Test
@@ -215,11 +405,12 @@ class AuthenticationServiceImplTest {
         // Given
         val username = "nonexistent"
         val password = "password"
+        val deviceId = "device-001"
 
         coEvery { userDao.getUserByUsername(username) } returns UserError.UserNotFoundByUsername(username).left()
 
         // When
-        val result = authService.login(username, password, null)
+        val result = authService.login(username, password, null, deviceId)
 
         // Then
         assertTrue(result.isLeft())
@@ -231,12 +422,13 @@ class AuthenticationServiceImplTest {
         // Given
         val username = "testuser"
         val password = "wrongpassword"
+        val deviceId = "device-001"
 
         coEvery { userDao.getUserByUsername(username) } returns testUser.right()
         every { passwordService.verifyPassword(password, testUser.passwordHash) } returns false
 
         // When
-        val result = authService.login(username, password, null)
+        val result = authService.login(username, password, null, deviceId)
 
         // Then
         assertTrue(result.isLeft())
@@ -248,12 +440,13 @@ class AuthenticationServiceImplTest {
         // Given
         val username = "testuser"
         val password = "anypassword"
+        val deviceId = "device-001"
         val disabledUser = testUser.copy(status = UserStatus.DISABLED)
 
         coEvery { userDao.getUserByUsername(username) } returns disabledUser.right()
 
         // When
-        val result = authService.login(username, password, null)
+        val result = authService.login(username, password, null, deviceId)
 
         // Then
         assertTrue(result.isLeft())
@@ -269,15 +462,16 @@ class AuthenticationServiceImplTest {
         // Given
         val username = "testuser"
         val password = "correctpassword"
+        val deviceId = "device-001"
 
         coEvery { userDao.getUserByUsername(username) } returns testUser.right()
         every { passwordService.verifyPassword(password, testUser.passwordHash) } returns true
 
-        coEvery { userSessionDao.insertSession(testUser.id, any(), any()) } returns
+        coEvery { userSessionDao.insertSession(testUser.id, any(), any(), any()) } returns
                 UserSessionError.ForeignKeyViolation("User not found").left()
 
         // When
-        val result = authService.login(username, password, null)
+        val result = authService.login(username, password, null, deviceId)
 
         // Then
         assertTrue(result.isLeft())
@@ -287,29 +481,66 @@ class AuthenticationServiceImplTest {
     @Test
     fun `logout should successfully delete specific session`() = runTest {
         // Given
+        val userId = 1L
         val sessionId = 100L
+        val requesterSessionId = sessionId // Same session - user logging out themselves
+        coEvery { userSessionDao.getSessionById(sessionId) } returns testSession.copy(userId = userId).right()
         coEvery { userSessionDao.deleteSession(sessionId) } returns Unit.right()
 
         // When
-        val result = authService.logout(sessionId)
+        val result = authService.logout(userId, sessionId, requesterSessionId, requesterIsRestricted = false)
 
         // Then
         assertTrue(result.isRight())
+        coVerify { userSessionDao.getSessionById(sessionId) }
         coVerify { userSessionDao.deleteSession(sessionId) }
     }
 
     @Test
     fun `logout should return SessionNotFound when session does not exist`() = runTest {
         // Given
+        val userId = 1L
         val sessionId = 100L
-        coEvery { userSessionDao.deleteSession(sessionId) } returns UserSessionError.SessionNotFound(sessionId).left()
+        coEvery { userSessionDao.getSessionById(sessionId) } returns UserSessionError.SessionNotFound(sessionId).left()
 
         // When
-        val result = authService.logout(sessionId)
+        val result = authService.logout(userId, sessionId, sessionId, requesterIsRestricted = false)
 
         // Then
         assertTrue(result.isLeft())
         assertEquals(LogoutError.SessionNotFound(sessionId), result.leftOrNull())
+    }
+
+    @Test
+    fun `logout should return SessionNotFound when session belongs to different user`() = runTest {
+        // Given
+        val userId = 1L
+        val sessionId = 100L
+        // Session belongs to a different user (userId = 999)
+        coEvery { userSessionDao.getSessionById(sessionId) } returns testSession.copy(userId = 999L).right()
+
+        // When
+        val result = authService.logout(userId, sessionId, sessionId, requesterIsRestricted = false)
+
+        // Then
+        assertTrue(result.isLeft())
+        assertEquals(LogoutError.SessionNotFound(sessionId), result.leftOrNull())
+    }
+
+    @Test
+    fun `logout should return InsufficientPermissions when restricted session tries to revoke other session`() = runTest {
+        // Given
+        val userId = 1L
+        val sessionId = 100L
+        val requesterSessionId = 200L // Different session
+        coEvery { userSessionDao.getSessionById(sessionId) } returns testSession.copy(userId = userId).right()
+
+        // When
+        val result = authService.logout(userId, sessionId, requesterSessionId, requesterIsRestricted = true)
+
+        // Then
+        assertTrue(result.isLeft())
+        assertEquals(LogoutError.InsufficientPermissions, result.leftOrNull())
     }
 
     @Test
@@ -319,7 +550,7 @@ class AuthenticationServiceImplTest {
         coEvery { userSessionDao.deleteSessionsByUserId(userId) } returns 2
 
         // When
-        val result = authService.logoutAll(userId)
+        val result = authService.logoutAll(userId, requesterIsRestricted = false)
 
         // Then
         assertTrue(result.isRight())
@@ -333,7 +564,7 @@ class AuthenticationServiceImplTest {
         coEvery { userSessionDao.deleteSessionsByUserId(userId) } returns 0
 
         // When
-        val result = authService.logoutAll(userId)
+        val result = authService.logoutAll(userId, requesterIsRestricted = false)
 
         // Then
         assertTrue(result.isLeft())
@@ -362,7 +593,7 @@ class AuthenticationServiceImplTest {
     @Test
     fun `validateCredential should successfully validate valid credential`() = runTest {
         // Given
-        val token = jwtConfig.generateAccessToken(testUser.id, testSession.id)
+        val token = jwtConfig.generateAccessToken(testUser.id, testSession.id, isRestricted = false)
         val decodedJWT = JWT.decode(token)
         val credential = JWTCredential(decodedJWT)
 
@@ -386,7 +617,7 @@ class AuthenticationServiceImplTest {
     @Test
     fun `validateCredential should return null when session not found`() = runTest {
         // Given
-        val token = jwtConfig.generateAccessToken(testUser.id, testSession.id)
+        val token = jwtConfig.generateAccessToken(testUser.id, testSession.id, isRestricted = false)
         val decodedJWT = JWT.decode(token)
         val credential = JWTCredential(decodedJWT)
 
@@ -406,7 +637,7 @@ class AuthenticationServiceImplTest {
         // Given
         val expiredSession =
             testSession.copy(expiresAt = Instant.fromEpochMilliseconds(System.currentTimeMillis() - 1000))
-        val token = jwtConfig.generateAccessToken(testUser.id, expiredSession.id)
+        val token = jwtConfig.generateAccessToken(testUser.id, expiredSession.id, isRestricted = false)
         val decodedJWT = JWT.decode(token)
         val credential = JWTCredential(decodedJWT)
 
@@ -423,7 +654,7 @@ class AuthenticationServiceImplTest {
     @Test
     fun `validateCredential should return null when user not found`() = runTest {
         // Given
-        val token = jwtConfig.generateAccessToken(testUser.id, testSession.id)
+        val token = jwtConfig.generateAccessToken(testUser.id, testSession.id, isRestricted = false)
         val decodedJWT = JWT.decode(token)
         val credential = JWTCredential(decodedJWT)
 
@@ -503,7 +734,7 @@ class AuthenticationServiceImplTest {
     fun `validateCredential should return null for locked or disabled account`() = runTest {
         // Given
         val disabledUser = testUser.copy(status = UserStatus.DISABLED)
-        val token = jwtConfig.generateAccessToken(testUser.id, testSession.id)
+        val token = jwtConfig.generateAccessToken(testUser.id, testSession.id, isRestricted = false)
         val decodedJWT = JWT.decode(token)
         val credential = JWTCredential(decodedJWT)
 
@@ -526,7 +757,7 @@ class AuthenticationServiceImplTest {
         coEvery { userService.getUserById(testUser.id) } returns testUser.toUser().right()
         coEvery { userSessionDao.updateLastAccessed(testSession.id, any()) } returns Unit.right()
         coEvery { userSessionDao.deleteSession(testSession.id) } returns Unit.right()
-        coEvery { userSessionDao.insertSession(testUser.id, any(), any()) } returns testSession.right()
+        coEvery { userSessionDao.insertSession(testUser.id, any(), any(), any()) } returns testSession.right()
         coEvery { authorizationService.getUserPermissions(testUser.id) } returns emptyList()
 
         // When
@@ -544,7 +775,7 @@ class AuthenticationServiceImplTest {
     @Test
     fun `refreshToken should return InvalidRefreshToken for access token`() = runTest {
         // Given - use access token instead of refresh token
-        val accessToken = jwtConfig.generateAccessToken(testUser.id, testSession.id)
+        val accessToken = jwtConfig.generateAccessToken(testUser.id, testSession.id, isRestricted = false)
 
         // When
         val result = authService.refreshToken(accessToken, null)
