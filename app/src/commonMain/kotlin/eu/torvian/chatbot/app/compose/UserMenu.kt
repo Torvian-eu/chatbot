@@ -5,6 +5,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Devices
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.DropdownMenu
@@ -34,6 +35,7 @@ import eu.torvian.chatbot.app.service.auth.AccountData
  * @param onSwitchAccount Callback to open the account switcher dialog
  * @param onActiveSessions Callback to open the active sessions dialog
  * @param onTrustedDevices Callback to open the trusted devices dialog
+ * @param onChangePassword Callback to open the change password dialog
  * @param onLogout Callback to log out the current session
  * @param onLogoutAll Callback to log out from all sessions
  * @param onLogin Callback to navigate to login/add account
@@ -47,6 +49,7 @@ fun UserMenu(
     onSwitchAccount: () -> Unit,
     onActiveSessions: () -> Unit,
     onTrustedDevices: () -> Unit,
+    onChangePassword: () -> Unit,
     onLogout: () -> Unit,
     onLogoutAll: () -> Unit,
     onLogin: () -> Unit
@@ -81,8 +84,22 @@ fun UserMenu(
 
             HorizontalDivider()
 
+            // Change password is always available but disabled for restricted sessions.
+            // Disabled for restricted sessions (untrusted device) to prevent security issues.
+            DropdownMenuItem(
+                text = { Text("Change Password") },
+                onClick = {
+                    expanded = false
+                    onChangePassword()
+                },
+                leadingIcon = {
+                    Icon(Icons.Default.Lock, contentDescription = null)
+                },
+                enabled = !isCurrentSessionRestricted
+            )
+
             // Active session management opens a dedicated dialog instead of navigating away.
-            // Disabled for restricted sessions (Device not verified) to prevent security issues.
+            // Disabled for restricted sessions (device not verified) to prevent security issues.
             DropdownMenuItem(
                 text = { Text("Active Sessions") },
                 onClick = {
@@ -96,7 +113,7 @@ fun UserMenu(
             )
 
             // Logout all sessions affects every device, so keep it grouped with the security actions.
-            // Disabled for restricted sessions (IP not verified) to prevent account lockout.
+            // Disabled for restricted sessions (device not verified) to prevent account lockout.
             DropdownMenuItem(
                 text = { Text("Logout all sessions") },
                 onClick = {
@@ -134,7 +151,7 @@ fun UserMenu(
                 leadingIcon = {
                     Icon(Icons.Default.Devices, contentDescription = null)
                 },
-                enabled = !accountSwitchInProgress
+                enabled = !accountSwitchInProgress && !isCurrentSessionRestricted
             )
 
             HorizontalDivider()

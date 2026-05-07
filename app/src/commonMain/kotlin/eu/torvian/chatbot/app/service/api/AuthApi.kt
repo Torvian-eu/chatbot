@@ -119,4 +119,15 @@ interface AuthApi {
      * @return Either an [ApiResourceError] on failure or Unit on success
      */
     suspend fun revokeTrustedDevice(deviceId: String): Either<ApiResourceError, Unit>
+
+    /**
+     * Changes the password for the authenticated user.
+     *
+     * Requires the current password for verification. This operation is not available for restricted sessions.
+     *
+     * @param currentPassword The user's current password for verification
+     * @param newPassword The new password to set
+     * @return Either an [ApiResourceError] on failure or Unit on success
+     */
+    suspend fun changePassword(currentPassword: String, newPassword: String): Either<ApiResourceError, Unit>
 }

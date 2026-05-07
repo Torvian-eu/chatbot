@@ -434,8 +434,9 @@ class AuthViewModel(
                 )
             }
 
-            // Perform password change
-            val result = authRepository.changePassword(userId, newPassword)
+            // Perform password change using the repository's changePassword with current password
+            val currentPassword = currentForm.currentPassword
+            val result = authRepository.changePassword(currentPassword, newPassword)
 
             result.fold(
                 ifLeft = { error ->
@@ -458,6 +459,17 @@ class AuthViewModel(
                     }
                 }
             )
+        }
+    }
+
+    /**
+     * Changes the password for the currently authenticated user using stored userId from auth state.
+     * Used from the change password dialog.
+     */
+    fun changePassword() {
+        val currentAuthState = authRepository.authState.value
+        if (currentAuthState is AuthState.Authenticated) {
+            changePassword(currentAuthState.userId)
         }
     }
 
@@ -563,6 +575,13 @@ class AuthViewModel(
     }
 
     /**
+     * Opens the change password dialog.
+     */
+    fun openChangePasswordDialog() {
+        _dialogState.value = AuthDialogState.ChangePassword
+    }
+
+    /**
      * Closes any open authentication dialog.
      */
     fun closeDialog() {
@@ -642,14 +661,17 @@ class AuthViewModel(
      * Field-specific errors are cleared if the corresponding field is updated.
      */
     fun updatePasswordChangeForm(
+        currentPassword: String? = null,
         newPassword: String? = null,
         confirmPassword: String? = null
     ) {
         _passwordChangeFormState.update { currentState ->
             currentState.copy(
+                currentPassword = currentPassword ?: currentState.currentPassword,
                 newPassword = newPassword ?: currentState.newPassword,
                 confirmPassword = confirmPassword ?: currentState.confirmPassword,
                 // Clear field-specific errors when user types
+                currentPasswordError = if (currentPassword != null && currentPassword != currentState.currentPassword) null else currentState.currentPasswordError,
                 newPasswordError = if (newPassword != null && newPassword != currentState.newPassword) null else currentState.newPasswordError,
                 confirmPasswordError = if (confirmPassword != null && confirmPassword != currentState.confirmPassword) null else currentState.confirmPasswordError
             )

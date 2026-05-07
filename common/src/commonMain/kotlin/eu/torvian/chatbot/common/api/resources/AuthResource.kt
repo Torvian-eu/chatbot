@@ -91,4 +91,12 @@ class AuthResource(val parent: Api = Api()) {
      */
     @Resource("{deviceId}")
     class RevokeTrustedDevice(val parent: TrustedDevices = TrustedDevices(), val deviceId: String)
+
+    /**
+     * Resource for changing the authenticated user's password: /api/v1/auth/change-password
+     *
+     * Requires the current password for verification. This action is blocked for restricted (untrusted) sessions.
+     */
+    @Resource("change-password")
+    class ChangePassword(val parent: AuthResource = AuthResource())
 }

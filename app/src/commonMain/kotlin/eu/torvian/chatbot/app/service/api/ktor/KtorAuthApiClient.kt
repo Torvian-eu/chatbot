@@ -4,6 +4,7 @@ import arrow.core.Either
 import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.AuthApi
 import eu.torvian.chatbot.common.api.resources.AuthResource
+import eu.torvian.chatbot.common.models.api.auth.ChangePasswordRequest
 import eu.torvian.chatbot.common.models.api.auth.LoginRequest
 import eu.torvian.chatbot.common.models.api.auth.LoginResponse
 import eu.torvian.chatbot.common.models.api.auth.RefreshTokenRequest
@@ -128,6 +129,14 @@ class KtorAuthApiClient(
     override suspend fun revokeTrustedDevice(deviceId: String): Either<ApiResourceError, Unit> {
         return safeApiCall {
             authenticatedClient.delete(AuthResource.RevokeTrustedDevice(deviceId = deviceId)).body<Unit>()
+        }
+    }
+
+    override suspend fun changePassword(currentPassword: String, newPassword: String): Either<ApiResourceError, Unit> {
+        return safeApiCall {
+            authenticatedClient.post(AuthResource.ChangePassword()) {
+                setBody(ChangePasswordRequest(currentPassword = currentPassword, newPassword = newPassword))
+            }.body<Unit>()
         }
     }
 }

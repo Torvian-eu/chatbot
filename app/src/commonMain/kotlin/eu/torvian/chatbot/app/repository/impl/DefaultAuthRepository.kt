@@ -374,6 +374,18 @@ class DefaultAuthRepository(
         logger.info("Successfully revoked trusted device with deviceId: $deviceId")
     }
 
+    override suspend fun changePassword(currentPassword: String, newPassword: String): Either<RepositoryError, Unit> = either {
+        logger.info("Changing password for the authenticated user")
+
+        withError({ apiError ->
+            apiError.toRepositoryError("Failed to change password")
+        }) {
+            authApi.changePassword(currentPassword, newPassword).bind()
+        }
+
+        logger.info("Password changed successfully")
+    }
+
     private suspend fun refreshAvailableAccounts() {
         tokenStorage.listStoredAccounts().fold(
             ifLeft = { error ->

@@ -96,6 +96,24 @@ fun AuthDialogs(
             )
         }
 
+        is AuthDialogState.ChangePassword -> {
+            val passwordFormState by authViewModel.passwordChangeFormState.collectAsState()
+            val isRestricted = currentAuthState is AuthState.Authenticated && currentAuthState.isRestricted
+
+            ChangePasswordDialog(
+                formState = passwordFormState,
+                isRestricted = isRestricted,
+                onDismiss = {
+                    authViewModel.clearPasswordChangeForm()
+                    authViewModel.closeDialog()
+                },
+                onCurrentPasswordChange = { password -> authViewModel.updatePasswordChangeForm(currentPassword = password) },
+                onNewPasswordChange = { password -> authViewModel.updatePasswordChangeForm(newPassword = password) },
+                onConfirmPasswordChange = { password -> authViewModel.updatePasswordChangeForm(confirmPassword = password) },
+                onChangePassword = { authViewModel.changePassword() }
+            )
+        }
+
         AuthDialogState.None -> {
             // No dialog to show
         }

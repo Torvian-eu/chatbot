@@ -165,4 +165,15 @@ interface AuthRepository {
      * @return Either a [RepositoryError] on failure or Unit on success
      */
     suspend fun revokeTrustedDevice(deviceId: String): Either<RepositoryError, Unit>
+
+    /**
+     * Changes the password for the authenticated user.
+     *
+     * Requires the current password for verification. This operation is not available for restricted sessions.
+     *
+     * @param currentPassword The user's current password for verification
+     * @param newPassword The new password to set
+     * @return Either a [RepositoryError] on failure or Unit on success
+     */
+    suspend fun changePassword(currentPassword: String, newPassword: String): Either<RepositoryError, Unit>
 }

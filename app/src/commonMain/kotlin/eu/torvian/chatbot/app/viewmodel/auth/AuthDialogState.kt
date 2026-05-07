@@ -29,4 +29,9 @@ sealed interface AuthDialogState {
     data class RemoveAccountConfirmation(
         val account: AccountData
     ) : AuthDialogState
+
+    /**
+     * Change password dialog is shown.
+     */
+    data object ChangePassword : AuthDialogState
 }

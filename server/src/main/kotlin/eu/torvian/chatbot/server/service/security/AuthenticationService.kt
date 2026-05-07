@@ -10,6 +10,7 @@ import eu.torvian.chatbot.server.domain.security.WorkerContext
 import eu.torvian.chatbot.server.service.security.error.*
 import eu.torvian.chatbot.server.service.security.error.RevokeTrustedDeviceError.DeviceNotFound
 import eu.torvian.chatbot.server.service.security.error.RevokeTrustedDeviceError.InsufficientPermissions
+import eu.torvian.chatbot.server.service.core.error.auth.ChangePasswordError
 import io.ktor.server.auth.jwt.*
 
 /**
@@ -189,4 +190,26 @@ interface AuthenticationService {
         deviceId: String,
         requesterIsRestricted: Boolean
     ): Either<RevokeTrustedDeviceError, Unit>
+
+    /**
+     * Changes the password for an authenticated user.
+     *
+     * This method:
+     * 1. Checks if the requester is restricted (untrusted session) - blocked if so
+     * 2. Verifies the current password matches the stored hash
+     * 3. Validates the new password meets strength requirements
+     * 4. Updates the password and clears the requiresPasswordChange flag
+     *
+     * @param userId The unique identifier of the user changing their password
+     * @param currentPassword The user's current password for verification
+     * @param newPassword The new password to set
+     * @param requesterIsRestricted Whether the requester's session is restricted (device not verified)
+     * @return Either [ChangePasswordError] if the operation fails, or Unit on success
+     */
+    suspend fun changePassword(
+        userId: Long,
+        currentPassword: String,
+        newPassword: String,
+        requesterIsRestricted: Boolean
+    ): Either<ChangePasswordError, Unit>
 }

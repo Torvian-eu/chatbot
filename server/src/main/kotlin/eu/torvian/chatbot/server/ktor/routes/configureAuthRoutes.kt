@@ -19,6 +19,7 @@ import eu.torvian.chatbot.server.service.security.error.LogoutError
 import eu.torvian.chatbot.server.service.security.error.RefreshTokenError
 import eu.torvian.chatbot.server.service.security.error.AcknowledgeAlertsError
 import eu.torvian.chatbot.server.service.security.error.RevokeTrustedDeviceError
+import eu.torvian.chatbot.server.service.core.error.auth.ChangePasswordError
 import io.ktor.http.*
 import io.ktor.server.auth.*
 import io.ktor.server.plugins.origin
@@ -348,6 +349,44 @@ fun Route.configureAuthRoutes(
                 is AuthenticateWorkerError.InvalidChallenge,
                 is AuthenticateWorkerError.InvalidSignature ->
                     apiError(CommonApiErrorCodes.INVALID_CREDENTIALS, "Invalid worker authentication")
+            }
+        }
+    }
+
+    // POST /api/v1/auth/change-password - Change the authenticated user's password
+    authenticate(AuthSchemes.USER_JWT) {
+        post<AuthResource.ChangePassword> {
+            val userContext = call.getUserContext()
+            val request = call.receive<ChangePasswordRequest>()
+
+            call.respondEither(
+                authenticationService.changePassword(
+                    userId = userContext.user.id,
+                    currentPassword = request.currentPassword,
+                    newPassword = request.newPassword,
+                    requesterIsRestricted = userContext.isRestricted
+                ),
+                HttpStatusCode.NoContent
+            ) { error ->
+                when (error) {
+                    is ChangePasswordError.InvalidCurrentPassword ->
+                        apiError(CommonApiErrorCodes.INVALID_CREDENTIALS, "Current password is incorrect")
+
+                    is ChangePasswordError.InsufficientPermissions ->
+                        apiError(
+                            CommonApiErrorCodes.PERMISSION_DENIED,
+                            "Action requires a trusted session. Please verify via email or another device."
+                        )
+
+                    is ChangePasswordError.InvalidPassword ->
+                        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, error.reason)
+
+                    is ChangePasswordError.SameAsCurrentPassword ->
+                        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "New password cannot be the same as the current password")
+
+                    is ChangePasswordError.UserNotFound ->
+                        apiError(CommonApiErrorCodes.NOT_FOUND, "User not found")
+                }
             }
         }
     }

@@ -7,8 +7,9 @@ import arrow.core.right
 import com.auth0.jwt.exceptions.JWTDecodeException
 import com.auth0.jwt.exceptions.JWTVerificationException
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
-import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.common.models.api.auth.UserTrustedDeviceInfo
+import eu.torvian.chatbot.common.models.user.UserStatus
+import eu.torvian.chatbot.common.security.error.PasswordValidationError
 import eu.torvian.chatbot.server.data.dao.*
 import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.dao.error.UserSessionError
@@ -22,6 +23,7 @@ import eu.torvian.chatbot.server.domain.security.LoginResult
 import eu.torvian.chatbot.server.domain.security.UserContext
 import eu.torvian.chatbot.server.domain.security.WorkerContext
 import eu.torvian.chatbot.server.service.core.UserService
+import eu.torvian.chatbot.server.service.core.error.auth.ChangePasswordError
 import eu.torvian.chatbot.server.service.core.error.auth.UserNotFoundError
 import eu.torvian.chatbot.server.service.security.error.*
 import io.ktor.server.auth.jwt.*
@@ -102,7 +104,8 @@ class AuthenticationServiceImpl(
                 val session: UserSessionEntity = withError({ _: UserSessionError.ForeignKeyViolation ->
                     LoginError.UserNotFound
                 }) {
-                    userSessionDao.insertSession(userEntity.id, deviceId, sessionExpiresAt, ipAddress, isRestricted).bind()
+                    userSessionDao.insertSession(userEntity.id, deviceId, sessionExpiresAt, ipAddress, isRestricted)
+                        .bind()
                 }
 
                 // Generate tokens
@@ -294,7 +297,10 @@ class AuthenticationServiceImpl(
             securityAuditDao.getUnacknowledgedByUserId(userId).right()
         }
 
-    override suspend fun acknowledgeSecurityAlerts(userId: Long, requesterIsRestricted: Boolean): Either<AcknowledgeAlertsError, Unit> =
+    override suspend fun acknowledgeSecurityAlerts(
+        userId: Long,
+        requesterIsRestricted: Boolean
+    ): Either<AcknowledgeAlertsError, Unit> =
         transactionScope.transaction {
             either {
                 // Restricted sessions cannot acknowledge alerts - prevents self-acknowledgement of untrusted devices
@@ -417,7 +423,13 @@ class AuthenticationServiceImpl(
                 val newSession = withError({ _: UserSessionError.ForeignKeyViolation ->
                     RefreshTokenError.InvalidSession("User not found")
                 }) {
-                    userSessionDao.insertSession(userId, session.deviceId, newSessionExpiresAt, ipAddress, session.isRestricted).bind()
+                    userSessionDao.insertSession(
+                        userId,
+                        session.deviceId,
+                        newSessionExpiresAt,
+                        ipAddress,
+                        session.isRestricted
+                    ).bind()
                 }
 
                 // Generate new tokens, preserving the restricted status
@@ -577,7 +589,10 @@ class AuthenticationServiceImpl(
             }
         }
 
-    override suspend fun getTrustedDevices(userId: Long, requesterIsRestricted: Boolean): Either<RevokeTrustedDeviceError, List<UserTrustedDeviceInfo>> =
+    override suspend fun getTrustedDevices(
+        userId: Long,
+        requesterIsRestricted: Boolean
+    ): Either<RevokeTrustedDeviceError, List<UserTrustedDeviceInfo>> =
         transactionScope.transaction {
             either {
                 // Restricted sessions cannot list trusted devices - prevents enumeration attacks
@@ -601,7 +616,11 @@ class AuthenticationServiceImpl(
             }
         }
 
-    override suspend fun revokeTrustedDevice(userId: Long, deviceId: String, requesterIsRestricted: Boolean): Either<RevokeTrustedDeviceError, Unit> =
+    override suspend fun revokeTrustedDevice(
+        userId: Long,
+        deviceId: String,
+        requesterIsRestricted: Boolean
+    ): Either<RevokeTrustedDeviceError, Unit> =
         transactionScope.transaction {
             either {
                 // Restricted sessions cannot revoke devices - prevents malicious actions from unverified devices
@@ -619,6 +638,92 @@ class AuthenticationServiceImpl(
                 }
 
                 logger.info("Successfully revoked trusted device: $deviceId for user: $userId")
+            }
+        }
+
+    override suspend fun changePassword(
+        userId: Long,
+        currentPassword: String,
+        newPassword: String,
+        requesterIsRestricted: Boolean
+    ): Either<ChangePasswordError, Unit> =
+        transactionScope.transaction {
+            either {
+                logger.info("Changing password for user: $userId, restricted: $requesterIsRestricted")
+
+                // 1. Check restriction - restricted sessions cannot change password
+                ensure(!requesterIsRestricted) {
+                    logger.warn("Restricted session attempted to change password")
+                    raise(ChangePasswordError.InsufficientPermissions)
+                }
+
+                // 2. Verify current password
+                val userEntity = withError({ _: UserError.UserNotFound ->
+                    ChangePasswordError.UserNotFound(userId)
+                }) {
+                    userDao.getUserById(userId).bind()
+                }
+
+                // Verify the current password matches
+                ensure(passwordService.verifyPassword(currentPassword, userEntity.passwordHash)) {
+                    logger.warn("Invalid current password for user: $userId")
+                    raise(ChangePasswordError.InvalidCurrentPassword)
+                }
+
+                // 3. Validate new password strength
+                withError({ passwordError ->
+                    when (passwordError) {
+                        is PasswordValidationError.Empty ->
+                            ChangePasswordError.InvalidPassword("Password cannot be empty")
+
+                        is PasswordValidationError.OnlyWhitespace ->
+                            ChangePasswordError.InvalidPassword("Password cannot contain only whitespace")
+
+                        is PasswordValidationError.TooShort ->
+                            ChangePasswordError.InvalidPassword(
+                                "Password must be at least ${passwordError.minLength} characters"
+                            )
+
+                        is PasswordValidationError.TooLong ->
+                            ChangePasswordError.InvalidPassword(
+                                "Password must be no more than ${passwordError.maxLength} characters"
+                            )
+
+                        is PasswordValidationError.MissingCharacterTypes ->
+                            ChangePasswordError.InvalidPassword(
+                                "Password must contain required character types"
+                            )
+
+                        is PasswordValidationError.TooCommon ->
+                            ChangePasswordError.InvalidPassword(passwordError.reason)
+                    }
+                }) {
+                    passwordService.validatePasswordStrength(newPassword).bind()
+                }
+
+                // Prevent reusing the current password
+                ensure(!passwordService.verifyPassword(newPassword, userEntity.passwordHash)) {
+                    logger.warn("User $userId attempted to reuse current password")
+                    raise(ChangePasswordError.SameAsCurrentPassword)
+                }
+
+                // 4. Hash new password and update user record
+                val hashedPassword = passwordService.hashPassword(newPassword)
+
+                // Update user with new password and clear requiresPasswordChange flag
+                val updatedUser = userEntity.copy(
+                    passwordHash = hashedPassword,
+                    requiresPasswordChange = false
+                )
+                // Use mapLeft to convert the error type
+                userDao.updateUser(updatedUser).mapLeft { error ->
+                    when (error) {
+                        is UserError.UserNotFound -> ChangePasswordError.UserNotFound(userId)
+                        else -> ChangePasswordError.UserNotFound(userId)
+                    }
+                }.bind()
+
+                logger.info("Successfully changed password for user: $userId")
             }
         }
 }
