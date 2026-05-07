@@ -52,7 +52,7 @@ fun ForcePasswordChangeScreen(
             authViewModel.updatePasswordChangeForm(confirmPassword = confirmPassword)
         },
         onChangePassword = {
-            authViewModel.changePassword(authState.userId)
+            authViewModel.completeRequiredPasswordChange()
         },
         onLogout = authViewModel::logout,
         onAcknowledgeSuccessAndLogout = {

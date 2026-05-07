@@ -401,15 +401,85 @@ class AuthViewModel(
      * Changes the password for the currently authenticated user.
      * Used when the user is forced to change their password on first login.
      */
-    fun changePassword(userId: Long) {
+    fun changePassword() {
         viewModelScope.launch {
             val currentForm = _passwordChangeFormState.value
             val newPassword = currentForm.newPassword
             val confirmPassword = currentForm.confirmPassword
 
-            logger.info("Attempting password change for user: $userId")
+            logger.info("Attempting password change")
 
-            // Validate form before submission
+            // Validate form before submission - currentPassword, newPassword, and confirmPassword required
+            val currentPasswordError = if (currentForm.currentPassword.isBlank()) "Current password is required" else null
+            val newPasswordError = AuthFormValidation.validatePassword(newPassword)
+            val confirmPasswordError = AuthFormValidation.validateConfirmPassword(newPassword, confirmPassword)
+
+            if (currentPasswordError != null || newPasswordError != null || confirmPasswordError != null) {
+                _passwordChangeFormState.update { currentState ->
+                    currentState.copy(
+                        currentPasswordError = currentPasswordError,
+                        newPasswordError = newPasswordError,
+                        confirmPasswordError = confirmPasswordError,
+                        generalError = null
+                    )
+                }
+                return@launch
+            }
+
+            // Clear errors and set loading state
+            _passwordChangeFormState.update { currentState ->
+                currentState.copy(
+                    isLoading = true,
+                    currentPasswordError = null,
+                    newPasswordError = null,
+                    confirmPasswordError = null,
+                    generalError = null
+                )
+            }
+
+            // Perform password change using the repository's changePassword with current password
+            val result = authRepository.changePassword(currentForm.currentPassword, newPassword)
+
+            result.fold(
+                ifLeft = { error ->
+                    logger.warn("Password change failed: ${error.message}")
+                    _passwordChangeFormState.update { currentState ->
+                        currentState.copy(
+                            isLoading = false,
+                            generalError = mapPasswordChangeError(error)
+                        )
+                    }
+                },
+                ifRight = {
+                    logger.info("Password change successful")
+                    _passwordChangeFormState.update { currentState ->
+                        currentState.copy(
+                            isLoading = false,
+                            generalError = null,
+                            passwordChangeSuccessEvent = true
+                        )
+                    }
+                }
+            )
+        }
+    }
+
+    /**
+     * Completes a server-required password change for the currently authenticated user.
+     *
+     * This method is used when the user is forced to change their password
+     * (requiresPasswordChange = true). Unlike normal password change, it does not
+     * require the current password.
+     */
+    fun completeRequiredPasswordChange() {
+        viewModelScope.launch {
+            val currentForm = _passwordChangeFormState.value
+            val newPassword = currentForm.newPassword
+            val confirmPassword = currentForm.confirmPassword
+
+            logger.info("Attempting required password change")
+
+            // Validate form before submission - only newPassword and confirmPassword required
             val newPasswordError = AuthFormValidation.validatePassword(newPassword)
             val confirmPasswordError = AuthFormValidation.validateConfirmPassword(newPassword, confirmPassword)
 
@@ -434,13 +504,12 @@ class AuthViewModel(
                 )
             }
 
-            // Perform password change using the repository's changePassword with current password
-            val currentPassword = currentForm.currentPassword
-            val result = authRepository.changePassword(currentPassword, newPassword)
+            // Perform required password change using the repository
+            val result = authRepository.completeRequiredPasswordChange(newPassword)
 
             result.fold(
                 ifLeft = { error ->
-                    logger.warn("Password change failed for user $userId: ${error.message}")
+                    logger.warn("Required password change failed: ${error.message}")
                     _passwordChangeFormState.update { currentState ->
                         currentState.copy(
                             isLoading = false,
@@ -449,7 +518,7 @@ class AuthViewModel(
                     }
                 },
                 ifRight = {
-                    logger.info("Password change successful for user: $userId")
+                    logger.info("Required password change successful")
                     _passwordChangeFormState.update { currentState ->
                         currentState.copy(
                             isLoading = false,
@@ -459,17 +528,6 @@ class AuthViewModel(
                     }
                 }
             )
-        }
-    }
-
-    /**
-     * Changes the password for the currently authenticated user using stored userId from auth state.
-     * Used from the change password dialog.
-     */
-    fun changePassword() {
-        val currentAuthState = authRepository.authState.value
-        if (currentAuthState is AuthState.Authenticated) {
-            changePassword(currentAuthState.userId)
         }
     }
 

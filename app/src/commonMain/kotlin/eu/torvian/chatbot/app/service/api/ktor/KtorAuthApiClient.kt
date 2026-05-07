@@ -5,6 +5,7 @@ import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.AuthApi
 import eu.torvian.chatbot.common.api.resources.AuthResource
 import eu.torvian.chatbot.common.models.api.auth.ChangePasswordRequest
+import eu.torvian.chatbot.common.models.api.auth.CompleteRequiredPasswordChangeRequest
 import eu.torvian.chatbot.common.models.api.auth.LoginRequest
 import eu.torvian.chatbot.common.models.api.auth.LoginResponse
 import eu.torvian.chatbot.common.models.api.auth.RefreshTokenRequest
@@ -136,6 +137,14 @@ class KtorAuthApiClient(
         return safeApiCall {
             authenticatedClient.post(AuthResource.ChangePassword()) {
                 setBody(ChangePasswordRequest(currentPassword = currentPassword, newPassword = newPassword))
+            }.body<Unit>()
+        }
+    }
+
+    override suspend fun completeRequiredPasswordChange(newPassword: String): Either<ApiResourceError, Unit> {
+        return safeApiCall {
+            authenticatedClient.post(AuthResource.CompleteRequiredPasswordChange()) {
+                setBody(CompleteRequiredPasswordChangeRequest(newPassword = newPassword))
             }.body<Unit>()
         }
     }

@@ -726,4 +726,83 @@ class AuthenticationServiceImpl(
                 logger.info("Successfully changed password for user: $userId")
             }
         }
+
+    override suspend fun completeRequiredPasswordChange(
+        userId: Long,
+        newPassword: String,
+        requesterIsRestricted: Boolean
+    ): Either<CompleteRequiredPasswordChangeError, Unit> =
+        transactionScope.transaction {
+            either {
+                logger.info("Completing required password change for user: $userId, restricted: $requesterIsRestricted")
+
+                // 1. Check restriction - restricted sessions cannot complete required password change
+                ensure(!requesterIsRestricted) {
+                    logger.warn("Restricted session attempted to complete required password change")
+                    raise(CompleteRequiredPasswordChangeError.InsufficientPermissions)
+                }
+
+                // 2. Fetch user entity
+                val userEntity = withError({ _: UserError.UserNotFound ->
+                    CompleteRequiredPasswordChangeError.UserNotFound
+                }) {
+                    userDao.getUserById(userId).bind()
+                }
+
+                // 3. Check that password change is required for this user
+                ensure(userEntity.requiresPasswordChange) {
+                    logger.warn("User $userId attempted password change but it's not required")
+                    raise(CompleteRequiredPasswordChangeError.PasswordChangeNotRequired)
+                }
+
+                // 4. Validate new password strength
+                withError({ passwordError ->
+                    when (passwordError) {
+                        is PasswordValidationError.Empty ->
+                            CompleteRequiredPasswordChangeError.WeakPassword("Password cannot be empty")
+
+                        is PasswordValidationError.OnlyWhitespace ->
+                            CompleteRequiredPasswordChangeError.WeakPassword("Password cannot contain only whitespace")
+
+                        is PasswordValidationError.TooShort ->
+                            CompleteRequiredPasswordChangeError.WeakPassword(
+                                "Password must be at least ${passwordError.minLength} characters"
+                            )
+
+                        is PasswordValidationError.TooLong ->
+                            CompleteRequiredPasswordChangeError.WeakPassword(
+                                "Password must be no more than ${passwordError.maxLength} characters"
+                            )
+
+                        is PasswordValidationError.MissingCharacterTypes ->
+                            CompleteRequiredPasswordChangeError.WeakPassword(
+                                "Password must contain required character types"
+                            )
+
+                        is PasswordValidationError.TooCommon ->
+                            CompleteRequiredPasswordChangeError.WeakPassword(passwordError.reason)
+                    }
+                }) {
+                    passwordService.validatePasswordStrength(newPassword).bind()
+                }
+
+                // 5. Hash new password and update user record
+                val hashedPassword = passwordService.hashPassword(newPassword)
+
+                // Update user with new password and clear requiresPasswordChange flag
+                val updatedUser = userEntity.copy(
+                    passwordHash = hashedPassword,
+                    requiresPasswordChange = false
+                )
+                // Use mapLeft to convert the error type
+                userDao.updateUser(updatedUser).mapLeft { error ->
+                    when (error) {
+                        is UserError.UserNotFound -> CompleteRequiredPasswordChangeError.UserNotFound
+                        else -> CompleteRequiredPasswordChangeError.UpdateFailed("Database update failed")
+                    }
+                }.bind()
+
+                logger.info("Successfully completed required password change for user: $userId")
+            }
+        }
 }

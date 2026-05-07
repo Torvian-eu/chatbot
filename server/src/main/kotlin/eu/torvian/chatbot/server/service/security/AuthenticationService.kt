@@ -212,4 +212,26 @@ interface AuthenticationService {
         newPassword: String,
         requesterIsRestricted: Boolean
     ): Either<ChangePasswordError, Unit>
+
+    /**
+     * Completes a server-required password change for an authenticated user.
+     *
+     * This method is used when a user is forced to change their password
+     * (requiresPasswordChange = true). Unlike normal password change, it does not
+     * require the current password, but:
+     * 1. Checks if the requester is restricted (untrusted session) - blocked if so
+     * 2. Verifies the user's requiresPasswordChange flag is true
+     * 3. Validates the new password meets strength requirements
+     * 4. Updates the password and clears the requiresPasswordChange flag
+     *
+     * @param userId The unique identifier of the user changing their password
+     * @param newPassword The new password to set
+     * @param requesterIsRestricted Whether the requester's session is restricted (device not verified)
+     * @return Either [CompleteRequiredPasswordChangeError] if the operation fails, or Unit on success
+     */
+    suspend fun completeRequiredPasswordChange(
+        userId: Long,
+        newPassword: String,
+        requesterIsRestricted: Boolean
+    ): Either<CompleteRequiredPasswordChangeError, Unit>
 }

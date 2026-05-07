@@ -99,4 +99,13 @@ class AuthResource(val parent: Api = Api()) {
      */
     @Resource("change-password")
     class ChangePassword(val parent: AuthResource = AuthResource())
+
+    /**
+     * Resource for completing a server-required password change: /api/v1/auth/complete-required-password-change
+     *
+     * This endpoint is only valid when the authenticated user's requiresPasswordChange flag is true.
+     * It does not require the current password, but is blocked for restricted (untrusted) sessions.
+     */
+    @Resource("complete-required-password-change")
+    class CompleteRequiredPasswordChange(val parent: AuthResource = AuthResource())
 }

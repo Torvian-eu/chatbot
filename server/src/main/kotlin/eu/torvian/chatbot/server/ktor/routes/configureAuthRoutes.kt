@@ -19,6 +19,7 @@ import eu.torvian.chatbot.server.service.security.error.LogoutError
 import eu.torvian.chatbot.server.service.security.error.RefreshTokenError
 import eu.torvian.chatbot.server.service.security.error.AcknowledgeAlertsError
 import eu.torvian.chatbot.server.service.security.error.RevokeTrustedDeviceError
+import eu.torvian.chatbot.server.service.security.error.CompleteRequiredPasswordChangeError
 import eu.torvian.chatbot.server.service.core.error.auth.ChangePasswordError
 import io.ktor.http.*
 import io.ktor.server.auth.*
@@ -386,6 +387,54 @@ fun Route.configureAuthRoutes(
 
                     is ChangePasswordError.UserNotFound ->
                         apiError(CommonApiErrorCodes.NOT_FOUND, "User not found")
+                }
+            }
+        }
+    }
+
+    // POST /api/v1/auth/complete-required-password-change - Complete a server-required password change
+    authenticate(AuthSchemes.USER_JWT) {
+        post<AuthResource.CompleteRequiredPasswordChange> {
+            val userContext = call.getUserContext()
+            val request = call.receive<CompleteRequiredPasswordChangeRequest>()
+
+            call.respondEither(
+                authenticationService.completeRequiredPasswordChange(
+                    userId = userContext.user.id,
+                    newPassword = request.newPassword,
+                    requesterIsRestricted = userContext.isRestricted
+                ),
+                HttpStatusCode.NoContent
+            ) { error ->
+                when (error) {
+                    is CompleteRequiredPasswordChangeError.InsufficientPermissions ->
+                        apiError(
+                            CommonApiErrorCodes.PERMISSION_DENIED,
+                            "Action requires a trusted session. Please verify via email or another device."
+                        )
+
+                    is CompleteRequiredPasswordChangeError.PasswordChangeNotRequired ->
+                        apiError(
+                            CommonApiErrorCodes.FAILED_PRECONDITION,
+                            "Password change is not required"
+                        )
+
+                    is CompleteRequiredPasswordChangeError.WeakPassword ->
+                        apiError(
+                            CommonApiErrorCodes.INVALID_ARGUMENT,
+                            "Weak password",
+                            "reason" to error.reason
+                        )
+
+                    is CompleteRequiredPasswordChangeError.UserNotFound ->
+                        apiError(CommonApiErrorCodes.NOT_FOUND, "User not found")
+
+                    is CompleteRequiredPasswordChangeError.UpdateFailed ->
+                        apiError(
+                            CommonApiErrorCodes.INTERNAL,
+                            "Failed to update password",
+                            "reason" to error.reason
+                        )
                 }
             }
         }

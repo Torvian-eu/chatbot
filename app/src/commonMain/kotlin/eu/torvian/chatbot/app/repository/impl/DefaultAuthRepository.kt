@@ -386,6 +386,18 @@ class DefaultAuthRepository(
         logger.info("Password changed successfully")
     }
 
+    override suspend fun completeRequiredPasswordChange(newPassword: String): Either<RepositoryError, Unit> = either {
+        logger.info("Completing required password change for the authenticated user")
+
+        withError({ apiError ->
+            apiError.toRepositoryError("Failed to complete required password change")
+        }) {
+            authApi.completeRequiredPasswordChange(newPassword).bind()
+        }
+
+        logger.info("Required password change completed successfully")
+    }
+
     private suspend fun refreshAvailableAccounts() {
         tokenStorage.listStoredAccounts().fold(
             ifLeft = { error ->

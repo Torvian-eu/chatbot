@@ -130,4 +130,18 @@ interface AuthApi {
      * @return Either an [ApiResourceError] on failure or Unit on success
      */
     suspend fun changePassword(currentPassword: String, newPassword: String): Either<ApiResourceError, Unit>
+
+    /**
+     * Completes a server-required password change for the authenticated user.
+     *
+     * This endpoint is used when the user is forced to change their password
+     * (requiresPasswordChange = true). Unlike normal password change, it does not
+     * require the current password.
+     *
+     * This operation is not available for restricted sessions.
+     *
+     * @param newPassword The new password to set
+     * @return Either an [ApiResourceError] on failure or Unit on success
+     */
+    suspend fun completeRequiredPasswordChange(newPassword: String): Either<ApiResourceError, Unit>
 }
