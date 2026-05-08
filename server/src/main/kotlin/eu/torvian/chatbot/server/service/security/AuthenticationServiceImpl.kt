@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.service.security
 
 import arrow.core.Either
 import arrow.core.getOrElse
+import arrow.core.left
 import arrow.core.raise.*
 import arrow.core.right
 import com.auth0.jwt.exceptions.JWTDecodeException
@@ -9,6 +10,7 @@ import com.auth0.jwt.exceptions.JWTVerificationException
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.api.auth.UserTrustedDeviceInfo
 import eu.torvian.chatbot.common.models.user.UserStatus
+import eu.torvian.chatbot.common.security.AccountValidationPolicy
 import eu.torvian.chatbot.common.security.error.PasswordValidationError
 import eu.torvian.chatbot.server.data.dao.*
 import eu.torvian.chatbot.server.data.dao.error.UserError
@@ -42,6 +44,7 @@ import kotlin.time.Instant
  * - Session lifecycle management
  * - Token refresh capabilities
  * - Device-based trust with AccountSecurityMode (DISABLED, WARNING, STRICT)
+ * - Sliding-window lockout for failed login attempts
  */
 class AuthenticationServiceImpl(
     private val userService: UserService,
@@ -54,7 +57,9 @@ class AuthenticationServiceImpl(
     private val workerDao: WorkerDao,
     private val authorizationService: AuthorizationService,
     private val transactionScope: TransactionScope,
-    private val accountSecurityMode: AccountSecurityMode
+    private val accountSecurityMode: AccountSecurityMode,
+    private val failedLoginAttemptDao: FailedLoginAttemptDao,
+    private val authPolicy: AccountValidationPolicy
 ) : AuthenticationService {
 
     companion object {
@@ -66,13 +71,37 @@ class AuthenticationServiceImpl(
         password: String,
         ipAddress: String?,
         deviceId: String
-    ): Either<LoginError, LoginResult> =
-        transactionScope.transaction {
+    ): Either<LoginError, LoginResult> {
+        // Define effective IP address early for lockout checks and failure recording
+        val effectiveIpAddress = ipAddress ?: "unknown"
+
+        // Calculate sliding window start time for lockout checks
+        val currentTime = Clock.System.now()
+        val currentTimeMillis = currentTime.toEpochMilliseconds()
+        val windowStartMillis = currentTimeMillis - (authPolicy.lockoutWindowMinutes * 60 * 1000L)
+
+        // Check if username has too many failed attempts in the window (before main transaction)
+        val usernameFailures = failedLoginAttemptDao.countFailuresByUsername(username, windowStartMillis)
+        if (usernameFailures >= authPolicy.maxFailedAttempts) {
+            logger.warn("Login blocked for user $username: too many failed attempts ($usernameFailures/${authPolicy.maxFailedAttempts})")
+            return LoginError.TooManyAttempts.left()
+        }
+
+        // Check if IP address has too many failed attempts in the window (before main transaction)
+        val ipFailures = failedLoginAttemptDao.countFailuresByIp(effectiveIpAddress, windowStartMillis)
+        if (ipFailures >= authPolicy.maxFailedAttempts) {
+            logger.warn("Login blocked for IP $effectiveIpAddress: too many failed attempts ($ipFailures/${authPolicy.maxFailedAttempts})")
+            return LoginError.TooManyAttempts.left()
+        }
+
+        // Execute core login logic inside transaction and store result
+        val result = transactionScope.transaction {
             either {
                 logger.info("Attempting login for user: $username")
 
                 // Get user by username
                 val userEntity = withError({ _: UserError.UserNotFoundByUsername ->
+                    logger.warn("User not found: $username")
                     LoginError.UserNotFound
                 }) {
                     userDao.getUserByUsername(username).bind()
@@ -84,7 +113,7 @@ class AuthenticationServiceImpl(
 
                 ensure(passwordService.verifyPassword(password, userEntity.passwordHash)) {
                     logger.warn("Invalid password for user: $username")
-                    raise(LoginError.InvalidCredentials)
+                    LoginError.InvalidCredentials
                 }
 
                 // Handle device-based security - determines if the session should be restricted
@@ -96,8 +125,6 @@ class AuthenticationServiceImpl(
                 )
 
                 // Create session.
-                val currentTime = Clock.System.now()
-                val currentTimeMillis = currentTime.toEpochMilliseconds()
                 val sessionExpirationMs = jwtConfig.refreshExpirationMs
                 val sessionExpiresAt = currentTimeMillis + sessionExpirationMs
                 val accessTokenExpiresAt = currentTime.plus(jwtConfig.tokenExpirationMs.milliseconds)
@@ -142,6 +169,26 @@ class AuthenticationServiceImpl(
                 )
             }
         }
+
+        // Handle failed login attempts outside the main transaction to ensure persistence
+        // even when the main transaction rolls back
+        result.fold(
+            ifLeft = { error ->
+                if (error is LoginError.UserNotFound || error is LoginError.InvalidCredentials) {
+                    // Record the failed attempt
+                    failedLoginAttemptDao.recordFailure(username, effectiveIpAddress, deviceId)
+                    // Cleanup old records to prevent database bloat
+                    failedLoginAttemptDao.cleanupOldRecords(windowStartMillis)
+                }
+            },
+            ifRight = {
+                // Clear failed login attempts on successful login
+                // Only clears username-based failures, IP-based failures remain to prevent reset attacks
+                failedLoginAttemptDao.clearFailures(username)
+            }
+        )
+        return result
+    }
 
     /**
      * Handles device-based security and determines if the session should be restricted.

@@ -812,6 +812,9 @@ class AuthViewModel(
         error.matches(CommonApiErrorCodes.PERMISSION_DENIED) ->
             "Account is temporarily locked. Please try again later."
 
+        error.matches(CommonApiErrorCodes.TOO_MANY_ATTEMPTS) ->
+            "Too many failed login attempts. Please wait a few minutes and try again."
+
         else -> "An unexpected error occurred. Please try again."
     }
 

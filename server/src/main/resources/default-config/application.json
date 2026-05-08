@@ -83,6 +83,8 @@
       "minLength": 3,
       "maxLength": 50,
       "allowedRegexPattern": "^[a-zA-Z0-9_-]+$"
-    }
+    },
+    "maxFailedAttempts": 10,
+    "lockoutWindowMinutes": 5
   }
 }

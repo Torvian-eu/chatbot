@@ -99,6 +99,9 @@ fun Route.configureAuthRoutes(
                 is LoginError.VerificationRequired ->
                     apiError(CommonApiErrorCodes.VERIFICATION_REQUIRED, "Verification required")
 
+                is LoginError.TooManyAttempts ->
+                    apiError(CommonApiErrorCodes.TOO_MANY_ATTEMPTS, "Too many failed attempts. Please try again later.")
+
                 is LoginError.SessionCreationFailed ->
                     apiError(CommonApiErrorCodes.INTERNAL, "Failed to create session", "reason" to error.reason)
             }

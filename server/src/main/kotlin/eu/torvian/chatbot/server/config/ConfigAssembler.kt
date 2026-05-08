@@ -6,8 +6,6 @@ import arrow.core.raise.either
 import arrow.core.raise.ensure
 import eu.torvian.chatbot.common.security.AccountValidationPolicy
 import eu.torvian.chatbot.common.security.EncryptionConfig
-import eu.torvian.chatbot.common.security.PasswordValidationConfig
-import eu.torvian.chatbot.common.security.UsernameValidationConfig
 import eu.torvian.chatbot.server.domain.config.*
 import eu.torvian.chatbot.server.domain.security.JwtConfig
 import java.net.URI
@@ -171,7 +169,9 @@ private fun mergeReverseProxy(base: ReverseProxyConfigDto?, overlay: ReverseProx
  */
 private fun mergeAuthPolicy(base: AuthPolicyDto?, overlay: AuthPolicyDto?) = AuthPolicyDto(
     passwordConfig = overlay?.passwordConfig ?: base?.passwordConfig,
-    usernameConfig = overlay?.usernameConfig ?: base?.usernameConfig
+    usernameConfig = overlay?.usernameConfig ?: base?.usernameConfig,
+    maxFailedAttempts = overlay?.maxFailedAttempts ?: base?.maxFailedAttempts,
+    lockoutWindowMinutes = overlay?.lockoutWindowMinutes ?: base?.lockoutWindowMinutes
 )
 
 /**
@@ -205,8 +205,7 @@ fun AppConfigDto.toDomain(baseApplicationPath: String): Either<ConfigError.Valid
  * Missing or blank values fall back to [AccountSecurityMode.DISABLED] so the feature is opt-in.
  */
 private fun Raise<ConfigError.ValidationError>.parseAccountSecurityMode(value: String?): AccountSecurityMode {
-    val normalized = value?.trim().orEmpty()
-    if (normalized.isEmpty()) return AccountSecurityMode.DISABLED
+    val normalized = required("accountSecurityMode", value).trim()
 
     return runCatching { AccountSecurityMode.valueOf(normalized.uppercase()) }
         .getOrElse {
@@ -304,7 +303,12 @@ private fun Raise<ConfigError.ValidationError>.parseNetwork(dto: NetworkConfigDt
 
     val typeStr = required("network.connectorType", d.connectorType)
     val connectorType = ServerConnectorType.fromString(typeStr)
-        ?: raise(ConfigError.ValidationError.InvalidValue("network.connectorType", "Allowed: HTTP, HTTPS, HTTP_AND_HTTPS"))
+        ?: raise(
+            ConfigError.ValidationError.InvalidValue(
+                "network.connectorType",
+                "Allowed: HTTP, HTTPS, HTTP_AND_HTTPS"
+            )
+        )
 
     val port = required("network.port", d.port)
     ensure(port in 1..65535) {
@@ -432,10 +436,12 @@ private fun Raise<ConfigError.ValidationError>.parseReverseProxy(dto: ReversePro
  * @param dto Nullable DTO for authentication policy.
  * @return The parsed authentication policy configuration.
  */
-private fun parseAuthPolicy(dto: AuthPolicyDto?): AccountValidationPolicy {
+private fun Raise<ConfigError.ValidationError>.parseAuthPolicy(dto: AuthPolicyDto?): AccountValidationPolicy {
     return AccountValidationPolicy(
-        passwordConfig = dto?.passwordConfig ?: PasswordValidationConfig(),
-        usernameConfig = dto?.usernameConfig ?: UsernameValidationConfig()
+        passwordConfig = required("authPolicy.passwordConfig", dto?.passwordConfig),
+        usernameConfig = required("authPolicy.usernameConfig", dto?.usernameConfig),
+        maxFailedAttempts = required("authPolicy.maxFailedAttempts", dto?.maxFailedAttempts),
+        lockoutWindowMinutes = required("authPolicy.lockoutWindowMinutes", dto?.lockoutWindowMinutes)
     )
 }
 

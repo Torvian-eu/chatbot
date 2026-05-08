@@ -16,6 +16,7 @@ import eu.torvian.chatbot.server.data.entities.PermissionEntity
 import eu.torvian.chatbot.server.data.entities.RolePermissionEntity
 import eu.torvian.chatbot.server.data.entities.UserRoleAssignmentEntity
 import eu.torvian.chatbot.server.data.entities.UserGroupEntity
+import eu.torvian.chatbot.server.data.entities.FailedLoginAttemptEntity
 
 /**
  * Manager interface for inserting and cleaning up test data in the chatbot database.
@@ -416,6 +417,13 @@ interface TestDataManager {
      * @return The user role assignment entity if found, null otherwise.
      */
     suspend fun getUserRoleAssignment(userId: Long, roleId: Long): UserRoleAssignmentEntity?
+
+    /**
+     * Inserts a failed login attempt into the database. Creates the table if it does not exist.
+     *
+     * @param attempt The failed login attempt entity to insert.
+     */
+    suspend fun insertFailedLoginAttempt(attempt: FailedLoginAttemptEntity)
 
     // Add other individual insert functions here as your chatbot project grows
 }

@@ -178,4 +178,9 @@ enum class Table {
      * Table for linking MCP tools to their source servers.
      */
     LOCAL_MCP_TOOL_DEFINITIONS,
+
+    /**
+     * Table for storing failed login attempts for lockout enforcement.
+     */
+    FAILED_LOGIN_ATTEMPTS,
 }

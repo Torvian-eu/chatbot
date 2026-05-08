@@ -111,7 +111,8 @@ class AuthRoutesTest {
                 Table.USER_GROUPS,
                 Table.USER_GROUP_MEMBERSHIPS,
                 Table.WORKERS,
-                Table.WORKER_AUTH_CHALLENGES
+                Table.WORKER_AUTH_CHALLENGES,
+                Table.FAILED_LOGIN_ATTEMPTS
             )
         )
 

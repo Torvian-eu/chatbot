@@ -27,6 +27,14 @@ sealed interface LoginError {
     data object VerificationRequired : LoginError
 
     /**
+     * Login was blocked due to too many failed attempts within the configured window.
+     *
+     * This implements a sliding-window lockout policy (e.g., 10 failures per 5 minutes)
+     * based on both username and IP address to prevent brute-force attacks.
+     */
+    data object TooManyAttempts : LoginError
+
+    /**
      * Session creation failed after successful authentication.
      * 
      * @property reason Description of the session creation failure

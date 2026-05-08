@@ -89,6 +89,8 @@
       "minLength": "AUTH_USERNAME_MIN_LENGTH",
       "maxLength": "AUTH_USERNAME_MAX_LENGTH",
       "allowedRegexPattern": "AUTH_USERNAME_ALLOWED_REGEX"
-    }
+    },
+    "maxFailedAttempts": "AUTH_MAX_FAILED_ATTEMPTS",
+    "lockoutWindowMinutes": "AUTH_LOCKOUT_WINDOW_MINUTES"
   }
 }

@@ -28,6 +28,7 @@ fun daoModule() = module {
     single<UserSessionDao> { UserSessionDaoExposed(get()) }
     single<UserTrustedDeviceDao> { UserTrustedDeviceDaoExposed(get()) }
     single<SecurityAuditDao> { SecurityAuditDaoExposed(get()) }
+    single<FailedLoginAttemptDao> { FailedLoginAttemptsDaoExposed(get()) }
 
     // Ownership DAOs
     single<SessionOwnershipDao> { SessionOwnershipDaoExposed(get()) }

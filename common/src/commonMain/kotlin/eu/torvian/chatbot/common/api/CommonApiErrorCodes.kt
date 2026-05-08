@@ -219,6 +219,17 @@ object CommonApiErrorCodes {
      */
     val RATE_LIMIT = ApiErrorCode("rate-limit", 429)
 
+    /**
+     * Indicates that too many failed login attempts have been made from a
+     * specific username or IP address within the configured lockout window.
+     *
+     * This is used to implement sliding-window lockout for authentication
+     * to prevent brute-force attacks.
+     *
+     * Corresponds to HTTP Status Code 429 Too Many Requests.
+     */
+    val TOO_MANY_ATTEMPTS = ApiErrorCode("too-many-attempts", 429)
+
 
     // === 500 Internal Server Error ===
 
