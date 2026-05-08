@@ -383,6 +383,16 @@ class DefaultAuthRepository(
             authApi.changePassword(currentPassword, newPassword).bind()
         }
 
+        // Update auth state to reflect that password change is no longer required
+        val currentState = _authState.value
+        if (currentState is AuthState.Authenticated && currentState.requiresPasswordChange) {
+            _authState.value = currentState.copy(requiresPasswordChange = false)
+            logger.info("Updated auth state: requiresPasswordChange set to false")
+        }
+
+        // Update the cached account data in token storage so the change persists across restarts
+        updateCachedAccountPasswordFlag()
+
         logger.info("Password changed successfully")
     }
 
@@ -394,6 +404,16 @@ class DefaultAuthRepository(
         }) {
             authApi.completeRequiredPasswordChange(newPassword).bind()
         }
+
+        // Update auth state to reflect that password change is no longer required
+        val currentState = _authState.value
+        if (currentState is AuthState.Authenticated) {
+            _authState.value = currentState.copy(requiresPasswordChange = false)
+            logger.info("Updated auth state: requiresPasswordChange set to false after required change")
+        }
+
+        // Update the cached account data in token storage so the change persists across restarts
+        updateCachedAccountPasswordFlag()
 
         logger.info("Required password change completed successfully")
     }
@@ -408,5 +428,14 @@ class DefaultAuthRepository(
                 logger.info("Refreshed available accounts")
             }
         )
+    }
+
+    private suspend fun updateCachedAccountPasswordFlag() {
+        // Get the current authenticated user ID
+        val currentUserId = (_authState.value as? AuthState.Authenticated)?.userId ?: return
+
+        // Update the cached account data to set requiresPasswordChange to false
+        tokenStorage.updateAccountData(currentUserId, requiresPasswordChange = false)
+            .onLeft { logger.warn("Failed to update cached account data: ${it.message}") }
     }
 }

@@ -224,38 +224,7 @@ fun ChangePasswordDialog(
                     }
 
                     // Password requirements hint
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(
-                                text = "Password Requirements:",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "• At least 8 characters",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                            Text(
-                                text = "• Contains uppercase and lowercase letters",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                            Text(
-                                text = "• Contains at least one number",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                            Text(
-                                text = "• Contains at least one special character",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                    }
+                    PasswordRequirementsHint()
                 }
             }
         },

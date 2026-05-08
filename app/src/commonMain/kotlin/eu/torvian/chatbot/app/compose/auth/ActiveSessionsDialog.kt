@@ -1,12 +1,6 @@
 package eu.torvian.chatbot.app.compose.auth
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -14,15 +8,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Security
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -31,13 +17,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import eu.torvian.chatbot.app.compose.common.StatusBadge
 import eu.torvian.chatbot.app.repository.AuthState
+import eu.torvian.chatbot.app.utils.ui.formatRelativeTime
 import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
-import kotlin.time.Clock
-import kotlin.time.Duration.Companion.days
-import kotlin.time.Duration.Companion.hours
-import kotlin.time.Duration.Companion.minutes
-import kotlin.time.Instant
 
 /**
  * Dialog that shows the authenticated user's server-side sessions and allows revoking older devices.
@@ -269,55 +252,10 @@ private fun ActiveSessionCard(
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (isCurrentSession) {
-                    SessionBadge(text = "Current Session")
+                    StatusBadge(text = "Current Session")
                 }
-                SessionBadge(text = "Session #${session.sessionId}")
+                StatusBadge(text = "Session #${session.sessionId}")
             }
         }
     }
 }
-
-/**
- * Displays a lightweight status badge for session metadata.
- *
- * @param text The label shown inside the badge.
- */
-@Composable
-private fun SessionBadge(text: String) {
-    Surface(
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-        shape = MaterialTheme.shapes.small
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-        )
-    }
-}
-
-/**
- * Formats a timestamp as a human-friendly relative time string.
- *
- * @param instant The point in time to describe.
- * @return A short relative description such as "Just now" or "5 minutes ago".
- */
-private fun formatRelativeTime(instant: Instant): String {
-    val duration = Clock.System.now() - instant
-
-    return when {
-        duration < 1.minutes -> "Just now"
-        duration < 1.hours -> "${duration.inWholeMinutes} minute${pluralSuffix(duration.inWholeMinutes)} ago"
-        duration < 1.days -> "${duration.inWholeHours} hour${pluralSuffix(duration.inWholeHours)} ago"
-        else -> "${duration.inWholeDays} day${pluralSuffix(duration.inWholeDays)} ago"
-    }
-}
-
-/**
- * Returns a plural suffix for small relative-time labels.
- *
- * @param value The numeric quantity being rendered.
- * @return An empty string for singular values, otherwise "s".
- */
-private fun pluralSuffix(value: Long): String = if (value == 1L) "" else "s"

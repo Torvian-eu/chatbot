@@ -1,6 +1,8 @@
 package eu.torvian.chatbot.app.repository
 
 import eu.torvian.chatbot.app.service.api.ApiResourceError
+import eu.torvian.chatbot.app.service.api.matches
+import eu.torvian.chatbot.common.api.ApiErrorCode
 
 /**
  * Defines a hierarchy of errors that can originate from the Repository layer.
@@ -86,4 +88,14 @@ fun ApiResourceError.toRepositoryError(
     contextMessage: String? = null
 ): RepositoryError.DataFetchError {
     return RepositoryError.DataFetchError(this, contextMessage)
+}
+
+/**
+ * Returns true when this [RepositoryError] wraps a [RepositoryError.DataFetchError]
+ * whose underlying [ApiResourceError] matches the given [apiErrorCode].
+ *
+ * This enables structured error code matching instead of fragile string-scraping.
+ */
+fun RepositoryError.matches(apiErrorCode: ApiErrorCode): Boolean {
+    return this is RepositoryError.DataFetchError && this.apiResourceError.matches(apiErrorCode)
 }

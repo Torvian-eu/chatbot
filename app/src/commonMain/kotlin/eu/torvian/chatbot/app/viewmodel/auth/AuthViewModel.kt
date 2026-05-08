@@ -5,10 +5,13 @@ import androidx.lifecycle.viewModelScope
 import eu.torvian.chatbot.app.repository.AuthRepository
 import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.app.repository.matches
+import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.auth.AccountData
 import eu.torvian.chatbot.app.service.clipboard.ClipboardService
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
+import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.models.api.auth.UserSecurityAlert
 import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
 import eu.torvian.chatbot.common.models.api.auth.UserTrustedDeviceInfo
@@ -776,61 +779,74 @@ class AuthViewModel(
 
     // --- Error Mapping ---
 
-    private fun mapLoginError(error: RepositoryError): String {
-        return when (error) {
-            is RepositoryError.DataFetchError -> when {
-                error.message.contains("Invalid credentials", ignoreCase = true) ->
-                    "Invalid username or password"
+    /**
+     * Maps a [RepositoryError] to a user-friendly login error message.
+     * Uses structured checks against [CommonApiErrorCodes] for
+     * reliable error identification instead of fragile string matching.
+     */
+    private fun mapLoginError(error: RepositoryError): String = when {
+        error.matches(CommonApiErrorCodes.INVALID_CREDENTIALS) ->
+            "Invalid username or password"
 
-                error.message.contains("User not found", ignoreCase = true) ->
-                    "Invalid username or password"
+        error.matches(CommonApiErrorCodes.VERIFICATION_REQUIRED) ->
+            "New login detected. Please check your email to verify your identity."
 
-                error.message.contains("Account locked", ignoreCase = true) ->
-                    "Account is temporarily locked. Please try again later."
+        error.matches(CommonApiErrorCodes.PERMISSION_DENIED) ->
+            "Account is temporarily locked. Please try again later."
 
-                error.message.contains("verification-required", ignoreCase = true) ->
-                    "New login detected. Please check your email to verify your identity."
-
-                else -> "Login failed. Please try again."
-            }
-
-            is RepositoryError.OtherError ->
-                "An unexpected error occurred. Please try again."
-        }
+        else -> "An unexpected error occurred. Please try again."
     }
 
-    private fun mapRegistrationError(error: RepositoryError): String {
-        return when (error) {
-            is RepositoryError.DataFetchError -> when {
-                error.message.contains("Username already exists", ignoreCase = true) ->
-                    "Username is already taken. Please choose a different one."
+    /**
+     * Maps a [RepositoryError] to a user-friendly registration error message.
+     * Uses structured checks against [CommonApiErrorCodes] for
+     * reliable error identification instead of fragile string matching.
+     *
+     * For [CommonApiErrorCodes.ALREADY_EXISTS], inspects the error details to distinguish
+     * between username and email conflicts.
+     */
+    private fun mapRegistrationError(error: RepositoryError): String = when {
+        error.matches(CommonApiErrorCodes.ALREADY_EXISTS) -> {
+            // Inspect the underlying ApiError details to determine which field conflicts
+            val details = (error as? RepositoryError.DataFetchError)
+                ?.apiResourceError
+                ?.let { it as? ApiResourceError.ServerError }
+                ?.apiError?.details
+            val message = (error as? RepositoryError.DataFetchError)
+                ?.apiResourceError
+                ?.let { it as? ApiResourceError.ServerError }
+                ?.apiError?.message ?: ""
 
-                error.message.contains("Email already exists", ignoreCase = true) ->
-                    "Email is already registered. Please use a different email or try logging in."
+            // Check details keys or message content for email-related conflict
+            val isEmailConflict = details?.keys?.any { it.contains("email", ignoreCase = true) } == true ||
+                message.contains("email", ignoreCase = true)
 
-                else -> "Registration failed. Please try again."
+            if (isEmailConflict) {
+                "Email is already registered. Please use a different email or try logging in."
+            } else {
+                "Username is already taken. Please choose a different one."
             }
-
-            is RepositoryError.OtherError ->
-                "An unexpected error occurred. Please try again."
         }
+
+        else -> "An unexpected error occurred. Please try again."
     }
 
-    private fun mapPasswordChangeError(error: RepositoryError): String {
-        return when (error) {
-            is RepositoryError.DataFetchError -> when {
-                error.message.contains("Weak password", ignoreCase = true) ->
-                    "New password is too weak. Please choose a stronger password."
+    /**
+     * Maps a [RepositoryError] to a user-friendly password change error message.
+     * Uses structured checks against [CommonApiErrorCodes] for
+     * reliable error identification instead of fragile string matching.
+     */
+    private fun mapPasswordChangeError(error: RepositoryError): String = when {
+        error.matches(CommonApiErrorCodes.INVALID_ARGUMENT) ->
+            "New password is too weak. Please choose a stronger password."
 
-                error.message.contains("Password cannot be reused", ignoreCase = true) ->
-                    "New password cannot be the same as the old password."
+        error.matches(CommonApiErrorCodes.PERMISSION_DENIED) ->
+            "Action requires a trusted session. Please verify your identity."
 
-                else -> "Password change failed. Please try again."
-            }
+        error.matches(CommonApiErrorCodes.INVALID_CREDENTIALS) ->
+            "Current password is incorrect."
 
-            is RepositoryError.OtherError ->
-                "An unexpected error occurred. Please try again."
-        }
+        else -> "Password change failed. Please try again."
     }
 
     override fun onCleared() {
