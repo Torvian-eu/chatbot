@@ -6,6 +6,8 @@ import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.user.UserStatus
+import eu.torvian.chatbot.common.security.AccountValidationPolicy
+import eu.torvian.chatbot.common.security.UsernameValidator
 import eu.torvian.chatbot.common.security.error.CharacterType
 import eu.torvian.chatbot.common.security.error.PasswordValidationError
 import eu.torvian.chatbot.server.data.dao.RoleDao
@@ -27,6 +29,14 @@ import kotlin.time.Clock
 
 /**
  * Implementation of [UserService] with secure user registration and admin operations.
+ *
+ * @param userDao DAO for user data access
+ * @param passwordService Service for password hashing and validation
+ * @param roleDao DAO for role data access
+ * @param userRoleAssignmentDao DAO for user-role assignment data access
+ * @param userGroupService Service for group operations
+ * @param transactionScope Transaction scope for database operations
+ * @param policy The account validation policy containing username and password rules
  */
 class UserServiceImpl(
     private val userDao: UserDao,
@@ -34,15 +44,14 @@ class UserServiceImpl(
     private val roleDao: RoleDao,
     private val userRoleAssignmentDao: UserRoleAssignmentDao,
     private val userGroupService: UserGroupService,
-    private val transactionScope: TransactionScope
+    private val transactionScope: TransactionScope,
+    private val policy: AccountValidationPolicy
 ) : UserService {
 
     companion object {
         private val logger: Logger = LogManager.getLogger(UserServiceImpl::class.java)
     }
 
-    // TODO: Add more comprehensive validation for username and email,
-    //       make it configurable, and centralized (in 'common' module)
     override suspend fun registerUser(
         username: String,
         password: String,
@@ -51,12 +60,15 @@ class UserServiceImpl(
         either {
             logger.info("Registering new user: $username")
 
-            // Validate input
-            ensure(!username.isBlank()) { RegisterUserError.InvalidInput("Username cannot be blank") }
+            // Validate username using the shared policy validator
+            val usernameValidator = UsernameValidator(policy.usernameConfig)
+            usernameValidator.validate(username)?.let { errorMessage ->
+                raise(RegisterUserError.InvalidInput(errorMessage))
+            }
 
             ensure(email?.isBlank() != true) { RegisterUserError.InvalidInput("Email cannot be blank if provided") }
 
-            // Validate password strength
+            // Validate password strength (uses policy config via passwordService)
             withError({ passwordError ->
                 when (passwordError) {
                     is PasswordValidationError.Empty ->

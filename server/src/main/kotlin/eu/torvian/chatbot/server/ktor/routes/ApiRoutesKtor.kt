@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.server.ktor.routes
 
+import eu.torvian.chatbot.server.config.AppConfiguration
 import eu.torvian.chatbot.server.service.core.*
-import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.service.security.AuthenticationService
 import eu.torvian.chatbot.server.service.security.AuthorizationService
 import eu.torvian.chatbot.server.worker.mcp.configsync.LocalMCPServerConfigSyncService
@@ -34,8 +34,8 @@ class ApiRoutesKtor(
     private val roleService: RoleService,
     private val authorizationService: AuthorizationService,
     private val workerService: WorkerService,
-    private val jwtConfig: JwtConfig,
-    private val json: Json
+    private val json: Json,
+    private val appConfig: AppConfiguration
 ) {
     /**
      * Configures the API routes using the Ktor Resources plugin.
@@ -62,7 +62,7 @@ class ApiRoutesKtor(
      * Configures routes related to Authentication (/api/v1/auth).
      */
     fun configureAuthRoutes(route: Route) {
-        route.configureAuthRoutes(authenticationService, userService, workerService, jwtConfig)
+        route.configureAuthRoutes(authenticationService, userService, workerService, appConfig.jwt, appConfig.authPolicy)
     }
 
     /**

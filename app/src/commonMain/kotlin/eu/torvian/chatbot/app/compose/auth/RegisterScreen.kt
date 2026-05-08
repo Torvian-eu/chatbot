@@ -14,6 +14,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.viewmodel.auth.AuthViewModel
 import eu.torvian.chatbot.app.viewmodel.auth.RegisterFormState
+import eu.torvian.chatbot.common.security.PasswordValidationConfig
+import eu.torvian.chatbot.common.security.UsernameValidationConfig
 import org.koin.compose.viewmodel.koinViewModel
 
 /**
@@ -31,9 +33,13 @@ fun RegisterScreen(
 ) {
     val registerFormState by authViewModel.registerFormState.collectAsState()
     val scrollState = rememberScrollState()
+    val passwordValidationConfig = authViewModel.passwordValidationConfig
+    val usernameValidationConfig = authViewModel.usernameValidationConfig
 
     RegisterScreenContent(
         registerFormState = registerFormState,
+        passwordValidationConfig = passwordValidationConfig,
+        usernameValidationConfig = usernameValidationConfig,
         scrollState = scrollState,
         onUsernameChange = { username ->
             authViewModel.updateRegisterForm(username = username)
@@ -61,6 +67,8 @@ fun RegisterScreen(
 @Composable
 fun RegisterScreenContent(
     registerFormState: RegisterFormState,
+    passwordValidationConfig: PasswordValidationConfig,
+    usernameValidationConfig: UsernameValidationConfig,
     scrollState: ScrollState,
     onUsernameChange: (String) -> Unit,
     onEmailChange: (String) -> Unit,
@@ -104,6 +112,8 @@ fun RegisterScreenContent(
         } else {
             RegisterFormContent(
                 registerFormState = registerFormState,
+                passwordValidationConfig = passwordValidationConfig,
+                usernameValidationConfig = usernameValidationConfig,
                 onUsernameChange = onUsernameChange,
                 onEmailChange = onEmailChange,
                 onPasswordChange = onPasswordChange,
@@ -118,6 +128,8 @@ fun RegisterScreenContent(
 @Composable
 private fun RegisterFormContent(
     registerFormState: RegisterFormState,
+    passwordValidationConfig: PasswordValidationConfig,
+    usernameValidationConfig: UsernameValidationConfig,
     onUsernameChange: (String) -> Unit,
     onEmailChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
@@ -145,6 +157,12 @@ private fun RegisterFormContent(
                 enabled = !registerFormState.isLoading
             )
 
+            // Username Requirements Hint
+            UsernameRequirementsHint(
+                config = usernameValidationConfig,
+                modifier = Modifier.fillMaxWidth()
+            )
+
             // Email Field (Optional)
             AuthTextField(
                 value = registerFormState.email,
@@ -166,6 +184,12 @@ private fun RegisterFormContent(
                 errorMessage = registerFormState.passwordError,
                 imeAction = ImeAction.Next,
                 enabled = !registerFormState.isLoading
+            )
+
+            // Password Requirements Hint
+            PasswordRequirementsHint(
+                config = passwordValidationConfig,
+                modifier = Modifier.fillMaxWidth()
             )
 
             // Confirm Password Field

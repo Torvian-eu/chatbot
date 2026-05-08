@@ -394,15 +394,8 @@ object ServerMain {
         val certManager = config.ssl?.let { DefaultCertificateManager(it) }
 
         return ServerControlServiceImpl(
-            networkConfig = config.network,
-            sslConfig = config.ssl,
-            certificateManager = certManager,
-            databaseConfig = config.database,
-            encryptionConfig = config.encryption,
-            jwtConfig = config.jwt,
-            corsConfig = config.cors,
-            reverseProxyConfig = config.reverseProxy,
-            accountSecurityMode = config.accountSecurityMode
+            config = config,
+            certificateManager = certManager
         )
     }
 

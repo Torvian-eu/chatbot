@@ -6,6 +6,7 @@ import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
 import eu.torvian.chatbot.common.models.api.auth.UserTrustedDeviceInfo
 import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.api.auth.LoginResponse
+import eu.torvian.chatbot.common.security.AccountValidationPolicy
 
 /**
  * Authentication API client interface for managing user authentication operations.
@@ -144,4 +145,15 @@ interface AuthApi {
      * @return Either an [ApiResourceError] on failure or Unit on success
      */
     suspend fun completeRequiredPasswordChange(newPassword: String): Either<ApiResourceError, Unit>
+
+    /**
+     * Fetches the server's account validation policy.
+     *
+     * This endpoint is publicly accessible and returns the configured password
+     * and username validation rules. The client uses this to dynamically adjust
+     * its validation behavior and UI hints.
+     *
+     * @return Either an [ApiResourceError] on failure or [AccountValidationPolicy] on success
+     */
+    suspend fun getAuthPolicy(): Either<ApiResourceError, AccountValidationPolicy>
 }

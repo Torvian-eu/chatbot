@@ -7,6 +7,9 @@ import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.user.UserGroup
 import eu.torvian.chatbot.common.models.user.UserStatus
+import eu.torvian.chatbot.common.security.AccountValidationPolicy
+import eu.torvian.chatbot.common.security.PasswordValidationConfig
+import eu.torvian.chatbot.common.security.UsernameValidationConfig
 import eu.torvian.chatbot.common.security.error.PasswordValidationError
 import eu.torvian.chatbot.server.data.dao.RoleDao
 import eu.torvian.chatbot.server.data.dao.UserDao
@@ -34,8 +37,13 @@ class UserServiceImplTest {
     private val userGroupService = mockk<UserGroupService>()
     private val transactionScope = mockk<TransactionScope>()
 
+    private val defaultPolicy = AccountValidationPolicy(
+        passwordConfig = PasswordValidationConfig(),
+        usernameConfig = UsernameValidationConfig()
+    )
+
     private val userService =
-        UserServiceImpl(userDao, passwordService, roleDao, userRoleAssignmentDao, userGroupService, transactionScope)
+        UserServiceImpl(userDao, passwordService, roleDao, userRoleAssignmentDao, userGroupService, transactionScope, defaultPolicy)
 
     private val testUserEntity = UserEntity(
         id = 1L,
@@ -130,7 +138,7 @@ class UserServiceImplTest {
         // Then
         assertTrue(result.isLeft())
         val error = result.leftOrNull()
-        assertEquals(RegisterUserError.InvalidInput("Username cannot be blank"), error)
+        assertEquals(RegisterUserError.InvalidInput("Username is required"), error)
     }
 
     @Test

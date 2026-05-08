@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.server.config
 
+import eu.torvian.chatbot.common.security.AccountValidationPolicy
 import eu.torvian.chatbot.common.security.EncryptionConfig
 import eu.torvian.chatbot.server.domain.config.AccountSecurityMode
 import eu.torvian.chatbot.server.domain.config.CorsConfig
@@ -26,6 +27,7 @@ import eu.torvian.chatbot.server.domain.security.JwtConfig
  * @property jwt Settings for authentication and token validation.
  * @property accountSecurityMode Device-based login policy used to decide whether unknown devices are allowed.
  * @property reverseProxy Settings for reverse proxy (forwarded headers) support.
+ * @property authPolicy Validation rules for passwords and usernames.
  */
 data class AppConfiguration(
     val setupRequired: Boolean,
@@ -37,5 +39,6 @@ data class AppConfiguration(
     val encryption: EncryptionConfig,
     val jwt: JwtConfig,
     val accountSecurityMode: AccountSecurityMode,
-    val reverseProxy: ReverseProxyConfig
+    val reverseProxy: ReverseProxyConfig,
+    val authPolicy: AccountValidationPolicy = AccountValidationPolicy()
 )

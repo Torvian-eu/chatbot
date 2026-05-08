@@ -5,6 +5,8 @@ import eu.torvian.chatbot.app.repository.*
 import eu.torvian.chatbot.app.repository.impl.*
 import eu.torvian.chatbot.app.service.api.*
 import eu.torvian.chatbot.app.service.api.ktor.*
+import eu.torvian.chatbot.app.service.auth.AuthValidationService
+import eu.torvian.chatbot.app.service.auth.DefaultAuthValidationService
 import eu.torvian.chatbot.app.service.auth.DefaultDeviceIdentityService
 import eu.torvian.chatbot.app.service.auth.DeviceIdentityService
 import eu.torvian.chatbot.app.service.auth.createAuthenticatedHttpClient
@@ -96,7 +98,8 @@ fun appModule(config: AppConfiguration): Module = module {
             userApi = get(),
             tokenStorage = get(),
             eventBus = get(),
-            deviceIdentityService = get()
+            deviceIdentityService = get(),
+            authValidationService = get()
         )
     }
 
@@ -312,6 +315,11 @@ fun appModule(config: AppConfiguration): Module = module {
         FileReferenceUseCase(chatState, get(), scope)
     }
 
+    // Provide authentication form validation service
+    single<AuthValidationService> {
+        DefaultAuthValidationService()
+    }
+
     // Provide ViewModels, injecting the required dependencies
     viewModel {
         val scopeProvider = get<CoroutineScopeProvider>()
@@ -341,7 +349,13 @@ fun appModule(config: AppConfiguration): Module = module {
     viewModel {
         val scopeProvider = get<CoroutineScopeProvider>()
         val normalScope = scopeProvider.createNormalScope()
-        AuthViewModel(get<AuthRepository>(), get<NotificationService>(), get<ClipboardService>(), normalScope)
+        AuthViewModel(
+            get<AuthRepository>(),
+            get<NotificationService>(),
+            get<ClipboardService>(),
+            normalScope,
+            get<AuthValidationService>()
+        )
     }
     viewModel { SessionListViewModel(get<SessionRepository>(), get<GroupRepository>(), get<EventBus>(), get()) }
     viewModel {

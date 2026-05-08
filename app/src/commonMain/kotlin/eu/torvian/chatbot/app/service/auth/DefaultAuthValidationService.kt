@@ -1,45 +1,38 @@
-package eu.torvian.chatbot.app.viewmodel.auth
+package eu.torvian.chatbot.app.service.auth
 
-import eu.torvian.chatbot.common.security.PasswordValidator
+import eu.torvian.chatbot.common.security.*
 import eu.torvian.chatbot.common.security.error.CharacterType
 import eu.torvian.chatbot.common.security.error.PasswordValidationError
 
 /**
- * Validation utilities for authentication forms.
+ * Default implementation of [AuthValidationService].
+ *
+ * Uses [PasswordValidator] and [UsernameValidator] internally, delegating
+ * to the rules defined in the provided [AccountValidationPolicy].
+ *
+ * @param policy The validation policy containing password and username configuration
  */
-object AuthFormValidation {
+class DefaultAuthValidationService(
+    private var policy: AccountValidationPolicy = AccountValidationPolicy()
+) : AuthValidationService {
 
-    private const val MIN_USERNAME_LENGTH = 3
-    private const val MAX_USERNAME_LENGTH = 50
+    private val passwordValidator: PasswordValidator
+        get() = PasswordValidator(policy.passwordConfig)
 
-    private val EMAIL_REGEX = Regex(
-        "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
-    )
+    private val usernameValidator: UsernameValidator
+        get() = UsernameValidator(policy.usernameConfig)
 
-    private val USERNAME_REGEX = Regex("^[a-zA-Z0-9_-]+$")
+    override val passwordValidationConfig: PasswordValidationConfig
+        get() = policy.passwordConfig
 
-    private val passwordValidator = PasswordValidator()
+    override val usernameValidationConfig: UsernameValidationConfig
+        get() = policy.usernameConfig
 
-    /**
-     * Validates a username field.
-     */
-    fun validateUsername(username: String): String? {
-        return when {
-            username.isBlank() -> "Username is required"
-            username.length < MIN_USERNAME_LENGTH ->
-                "Username must be at least $MIN_USERNAME_LENGTH characters"
-            username.length > MAX_USERNAME_LENGTH ->
-                "Username must be no more than $MAX_USERNAME_LENGTH characters"
-            !USERNAME_REGEX.matches(username) ->
-                "Username can only contain letters, numbers, hyphens, and underscores"
-            else -> null
-        }
+    override fun validateUsername(username: String): String? {
+        return usernameValidator.validate(username)
     }
 
-    /**
-     * Validates an email field (optional field).
-     */
-    fun validateEmail(email: String): String? {
+    override fun validateEmail(email: String): String? {
         return when {
             email.isBlank() -> null // Email is optional
             !EMAIL_REGEX.matches(email) -> "Please enter a valid email address"
@@ -47,20 +40,14 @@ object AuthFormValidation {
         }
     }
 
-    /**
-     * Validates a password field using the shared PasswordValidator.
-     */
-    fun validatePassword(password: String): String? {
+    override fun validatePassword(password: String): String? {
         return passwordValidator.validatePasswordStrength(password).fold(
             ifLeft = { error -> mapPasswordValidationError(error) },
             ifRight = { null }
         )
     }
 
-    /**
-     * Validates password confirmation.
-     */
-    fun validateConfirmPassword(password: String, confirmPassword: String): String? {
+    override fun validateConfirmPassword(password: String, confirmPassword: String): String? {
         return when {
             confirmPassword.isBlank() -> "Please confirm your password"
             password != confirmPassword -> "Passwords do not match"
@@ -69,7 +56,7 @@ object AuthFormValidation {
     }
 
     /**
-     * Maps PasswordValidationError to user-friendly error messages.
+     * Maps [PasswordValidationError] to user-friendly error messages.
      */
     private fun mapPasswordValidationError(error: PasswordValidationError): String {
         return when (error) {
@@ -77,10 +64,13 @@ object AuthFormValidation {
             is PasswordValidationError.OnlyWhitespace -> "Password cannot contain only spaces"
             is PasswordValidationError.TooShort ->
                 "Password must be at least ${error.minLength} characters"
+
             is PasswordValidationError.TooLong ->
                 "Password must be no more than ${error.maxLength} characters"
+
             is PasswordValidationError.MissingCharacterTypes ->
                 buildMissingCharacterTypesMessage(error.missingTypes)
+
             is PasswordValidationError.TooCommon ->
                 "Password is too common. Please choose a more unique password"
         }
@@ -104,5 +94,15 @@ object AuthFormValidation {
             2 -> "Password must contain ${requirements[0]} and ${requirements[1]}"
             else -> "Password must contain ${requirements.dropLast(1).joinToString(", ")} and ${requirements.last()}"
         }
+    }
+
+    override fun updatePolicy(newPolicy: AccountValidationPolicy) {
+        policy = newPolicy
+    }
+
+    companion object {
+        private val EMAIL_REGEX = Regex(
+            "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
+        )
     }
 }

@@ -4,7 +4,9 @@ import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.AuthResource
 import eu.torvian.chatbot.common.models.api.auth.*
+import eu.torvian.chatbot.common.security.AccountValidationPolicy
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
+import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.domain.security.mappers.toLoginResponse
 import eu.torvian.chatbot.server.ktor.auth.getUserContext
 import eu.torvian.chatbot.server.ktor.auth.getUserId
@@ -37,8 +39,14 @@ fun Route.configureAuthRoutes(
     authenticationService: AuthenticationService,
     userService: UserService,
     workerService: WorkerService,
-    jwtConfig: eu.torvian.chatbot.server.domain.security.JwtConfig
+    jwtConfig: JwtConfig,
+    authPolicy: AccountValidationPolicy,
 ) {
+    // GET /api/v1/auth/policy - Public endpoint returning the account validation policy
+    get<AuthResource.Policy> {
+        call.respond(authPolicy)
+    }
+
     // POST /api/v1/auth/register - User registration
     post<AuthResource.Register> {
         val request = call.receive<RegisterRequest>()

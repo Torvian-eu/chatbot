@@ -6,8 +6,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.app.service.auth.AccountData
+import eu.torvian.chatbot.app.service.auth.AuthValidationService
 import eu.torvian.chatbot.app.viewmodel.auth.AuthDialogState
 import eu.torvian.chatbot.app.viewmodel.auth.AuthViewModel
+import org.koin.compose.getKoin
 
 /**
  * Container for all authentication-related dialogs.
@@ -99,10 +101,12 @@ fun AuthDialogs(
         is AuthDialogState.ChangePassword -> {
             val passwordFormState by authViewModel.passwordChangeFormState.collectAsState()
             val isRestricted = currentAuthState is AuthState.Authenticated && currentAuthState.isRestricted
+            val passwordValidationConfig = getKoin().get<AuthValidationService>().passwordValidationConfig
 
             ChangePasswordDialog(
                 formState = passwordFormState,
                 isRestricted = isRestricted,
+                passwordValidationConfig = passwordValidationConfig,
                 onDismiss = {
                     authViewModel.clearPasswordChangeForm()
                     authViewModel.closeDialog()

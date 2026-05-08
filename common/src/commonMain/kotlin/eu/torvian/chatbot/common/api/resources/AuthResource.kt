@@ -108,4 +108,13 @@ class AuthResource(val parent: Api = Api()) {
      */
     @Resource("complete-required-password-change")
     class CompleteRequiredPasswordChange(val parent: AuthResource = AuthResource())
+
+    /**
+     * Resource for the public auth policy endpoint: /api/v1/auth/policy
+     *
+     * Returns the server's account validation policy (password and username rules).
+     * This endpoint is publicly accessible and does not require authentication.
+     */
+    @Resource("policy")
+    class Policy(val parent: AuthResource = AuthResource())
 }

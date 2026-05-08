@@ -1,5 +1,7 @@
 package eu.torvian.chatbot.server.config
 
+import eu.torvian.chatbot.common.security.PasswordValidationConfig
+import eu.torvian.chatbot.common.security.UsernameValidationConfig
 import kotlinx.serialization.Serializable
 
 /**
@@ -16,6 +18,7 @@ import kotlinx.serialization.Serializable
  * @property encryption Optional [EncryptionConfigDto] for data encryption settings.
  * @property jwt Optional [JwtConfigDto] for JSON Web Token authentication settings.
  * @property accountSecurityMode Optional policy name for device-based login handling.
+ * @property authPolicy Optional [AuthPolicyDto] for account validation rules.
  */
 @Serializable
 data class AppConfigDto(
@@ -28,7 +31,20 @@ data class AppConfigDto(
     val encryption: EncryptionConfigDto? = null,
     val jwt: JwtConfigDto? = null,
     val accountSecurityMode: String? = null,
-    val reverseProxy: ReverseProxyConfigDto? = null
+    val reverseProxy: ReverseProxyConfigDto? = null,
+    val authPolicy: AuthPolicyDto? = null
+)
+
+/**
+ * DTO for authentication policy configuration.
+ *
+ * @property passwordConfig Optional password validation configuration.
+ * @property usernameConfig Optional username validation configuration.
+ */
+@Serializable
+data class AuthPolicyDto(
+    val passwordConfig: PasswordValidationConfig? = null,
+    val usernameConfig: UsernameValidationConfig? = null
 )
 
 /**

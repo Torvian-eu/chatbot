@@ -34,6 +34,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.viewmodel.auth.PasswordChangeFormState
+import eu.torvian.chatbot.common.security.PasswordValidationConfig
 
 /**
  * Dialog for changing the authenticated user's password.
@@ -43,6 +44,7 @@ import eu.torvian.chatbot.app.viewmodel.auth.PasswordChangeFormState
  *
  * @param formState The current state of the password change form
  * @param isRestricted Whether the current session is restricted (untrusted device)
+ * @param passwordValidationConfig The password validation configuration for rendering requirement hints
  * @param onDismiss Called when the dialog should be closed
  * @param onCurrentPasswordChange Called when the current password field changes
  * @param onNewPasswordChange Called when the new password field changes
@@ -53,6 +55,7 @@ import eu.torvian.chatbot.app.viewmodel.auth.PasswordChangeFormState
 fun ChangePasswordDialog(
     formState: PasswordChangeFormState,
     isRestricted: Boolean,
+    passwordValidationConfig: PasswordValidationConfig,
     onDismiss: () -> Unit,
     onCurrentPasswordChange: (String) -> Unit,
     onNewPasswordChange: (String) -> Unit,
@@ -224,7 +227,7 @@ fun ChangePasswordDialog(
                     }
 
                     // Password requirements hint
-                    PasswordRequirementsHint()
+                    PasswordRequirementsHint(passwordValidationConfig)
                 }
             }
         },

@@ -5,6 +5,9 @@ import arrow.core.right
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.user.Role
 import eu.torvian.chatbot.common.models.user.UserStatus
+import eu.torvian.chatbot.common.security.AccountValidationPolicy
+import eu.torvian.chatbot.common.security.PasswordValidationConfig
+import eu.torvian.chatbot.common.security.UsernameValidationConfig
 import eu.torvian.chatbot.server.data.dao.RoleDao
 import eu.torvian.chatbot.server.data.dao.UserDao
 import eu.torvian.chatbot.server.data.dao.UserRoleAssignmentDao
@@ -52,13 +55,19 @@ class UserServiceAdminTest {
             block()
         }
 
+        val defaultPolicy = AccountValidationPolicy(
+            passwordConfig = PasswordValidationConfig(),
+            usernameConfig = UsernameValidationConfig()
+        )
+
         userService = UserServiceImpl(
             userDao,
             passwordService,
             roleDao,
             userRoleAssignmentDao,
             userGroupService,
-            transactionScope
+            transactionScope,
+            defaultPolicy
         )
     }
 

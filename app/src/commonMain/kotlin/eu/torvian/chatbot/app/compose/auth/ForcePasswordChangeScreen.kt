@@ -12,15 +12,18 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import eu.torvian.chatbot.app.repository.AuthState
+import eu.torvian.chatbot.app.service.auth.AuthValidationService
+import eu.torvian.chatbot.app.viewmodel.auth.AuthViewModel
+import eu.torvian.chatbot.app.viewmodel.auth.PasswordChangeFormState
+import eu.torvian.chatbot.common.security.PasswordValidationConfig
+import org.koin.compose.getKoin
+import org.koin.compose.viewmodel.koinViewModel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import eu.torvian.chatbot.app.repository.AuthState
-import eu.torvian.chatbot.app.viewmodel.auth.AuthViewModel
-import eu.torvian.chatbot.app.viewmodel.auth.PasswordChangeFormState
-import org.koin.compose.viewmodel.koinViewModel
 
 /**
  * Force password change screen that is shown when a user must change their password
@@ -40,10 +43,13 @@ fun ForcePasswordChangeScreen(
 ) {
     val passwordChangeFormState by authViewModel.passwordChangeFormState.collectAsState()
     val scrollState = rememberScrollState()
+    val authValidationService = getKoin().get<AuthValidationService>()
+    val passwordValidationConfig = authValidationService.passwordValidationConfig
 
     ForcePasswordChangeScreenContent(
         username = authState.username,
         passwordChangeFormState = passwordChangeFormState,
+        passwordValidationConfig = passwordValidationConfig,
         scrollState = scrollState,
         onNewPasswordChange = { newPassword ->
             authViewModel.updatePasswordChangeForm(newPassword = newPassword)
@@ -67,6 +73,7 @@ fun ForcePasswordChangeScreen(
 fun ForcePasswordChangeScreenContent(
     username: String,
     passwordChangeFormState: PasswordChangeFormState,
+    passwordValidationConfig: PasswordValidationConfig,
     scrollState: ScrollState,
     onNewPasswordChange: (String) -> Unit,
     onConfirmPasswordChange: (String) -> Unit,
@@ -109,6 +116,7 @@ fun ForcePasswordChangeScreenContent(
                 PasswordChangeFormContent(
                     username = username,
                     passwordChangeFormState = passwordChangeFormState,
+                    passwordValidationConfig = passwordValidationConfig,
                     onNewPasswordChange = onNewPasswordChange,
                     onConfirmPasswordChange = onConfirmPasswordChange,
                     onChangePassword = onChangePassword,
@@ -123,6 +131,7 @@ fun ForcePasswordChangeScreenContent(
 private fun PasswordChangeFormContent(
     username: String,
     passwordChangeFormState: PasswordChangeFormState,
+    passwordValidationConfig: PasswordValidationConfig,
     onNewPasswordChange: (String) -> Unit,
     onConfirmPasswordChange: (String) -> Unit,
     onChangePassword: () -> Unit,
@@ -202,7 +211,7 @@ private fun PasswordChangeFormContent(
             }
 
             // Password Requirements
-            PasswordRequirementsHint()
+            PasswordRequirementsHint(passwordValidationConfig)
 
             // Change Password Button
             Button(

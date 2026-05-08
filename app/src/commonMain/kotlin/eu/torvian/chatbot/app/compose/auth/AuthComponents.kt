@@ -20,6 +20,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import eu.torvian.chatbot.common.security.PasswordValidationConfig
+import eu.torvian.chatbot.common.security.UsernameValidationConfig
 
 /**
  * Reusable text field component for authentication forms.
@@ -182,10 +184,16 @@ fun ErrorMessage(
 /**
  * Displays password requirements as a card with a bulleted list.
  *
- * @param modifier Optional modifier for the card.
+ * Each requirement bullet is only shown when the corresponding rule is enabled
+ * in the provided [config]. This allows the hint to dynamically reflect the
+ * actual validation policy.
+ *
+ * @param config The password validation configuration that determines which requirements to show
+ * @param modifier Optional modifier for the card
  */
 @Composable
 fun PasswordRequirementsHint(
+    config: PasswordValidationConfig,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -204,22 +212,103 @@ fun PasswordRequirementsHint(
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "• At least 8 characters",
+                text = "\u2022 At least ${config.minLength} characters",
+                style = MaterialTheme.typography.bodySmall
+            )
+            if (config.requireUppercase && config.requireLowercase) {
+                Text(
+                    text = "\u2022 Contains uppercase and lowercase letters",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            } else if (config.requireUppercase) {
+                Text(
+                    text = "\u2022 Contains uppercase letters",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            } else if (config.requireLowercase) {
+                Text(
+                    text = "\u2022 Contains lowercase letters",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            if (config.requireDigit) {
+                Text(
+                    text = "\u2022 Contains at least one number",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            if (config.requireSpecialChar) {
+                Text(
+                    text = "\u2022 Contains at least one special character",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Displays username requirements as a card with a bulleted list.
+ *
+ * Each requirement bullet is only shown when the corresponding rule is enabled
+ * in the provided [config]. This allows the hint to dynamically reflect the
+ * actual validation policy.
+ *
+ * @param config The username validation configuration that determines which requirements to show
+ * @param modifier Optional modifier for the card
+ */
+@Composable
+fun UsernameRequirementsHint(
+    config: UsernameValidationConfig,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = "Username Requirements:",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "\u2022 At least ${config.minLength} characters",
                 style = MaterialTheme.typography.bodySmall
             )
             Text(
-                text = "• Contains uppercase and lowercase letters",
+                text = "\u2022 No more than ${config.maxLength} characters",
                 style = MaterialTheme.typography.bodySmall
             )
             Text(
-                text = "• Contains at least one number",
-                style = MaterialTheme.typography.bodySmall
-            )
-            Text(
-                text = "• Contains at least one special character",
+                text = "\u2022 Only contains ${describeAllowedPattern(config.allowedRegexPattern)}",
                 style = MaterialTheme.typography.bodySmall
             )
         }
+    }
+}
+
+/**
+ * Converts a regex pattern string into a user-friendly description of allowed characters.
+ *
+ * Recognizes common patterns and provides human-readable descriptions.
+ * Falls back to a generic message if the pattern is not recognized.
+ *
+ * @param pattern The regex pattern string from [UsernameValidationConfig.allowedRegexPattern]
+ * @return A user-friendly description of allowed characters
+ */
+private fun describeAllowedPattern(pattern: String): String {
+    return when (pattern) {
+        "^[a-zA-Z0-9_-]+\$" -> "letters, numbers, hyphens, and underscores"
+        "^[a-zA-Z0-9]+\$" -> "letters and numbers"
+        "^[a-zA-Z]+\$" -> "letters"
+        "^[0-9]+\$" -> "numbers"
+        else -> "allowed characters based on server policy"
     }
 }
 

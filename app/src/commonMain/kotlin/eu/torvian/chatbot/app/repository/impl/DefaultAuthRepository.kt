@@ -16,6 +16,7 @@ import eu.torvian.chatbot.app.service.auth.AuthenticationFailureEvent
 import eu.torvian.chatbot.app.service.auth.DeviceIdentityError
 import eu.torvian.chatbot.app.service.auth.DeviceIdentityService
 import eu.torvian.chatbot.app.service.auth.TokenStorage
+import eu.torvian.chatbot.app.service.auth.AuthValidationService
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.models.api.auth.UserSecurityAlert
@@ -45,7 +46,8 @@ class DefaultAuthRepository(
     private val userApi: UserApi,
     private val tokenStorage: TokenStorage,
     private val eventBus: EventBus,
-    private val deviceIdentityService: DeviceIdentityService
+    private val deviceIdentityService: DeviceIdentityService,
+    private val authValidationService: AuthValidationService
 ) : AuthRepository {
 
     companion object {
@@ -232,6 +234,17 @@ class DefaultAuthRepository(
 
     override suspend fun checkInitialAuthState() {
         logger.info("Checking initial authentication state on startup")
+
+        // Fetch the server's auth policy (non-critical — falls back to defaults on failure)
+        authApi.getAuthPolicy().fold(
+            ifLeft = { error ->
+                logger.warn("Failed to fetch auth policy from server: ${error.message}. Using default policy.")
+            },
+            ifRight = { policy ->
+                authValidationService.updatePolicy(policy)
+                logger.info("Updated auth validation policy from server")
+            }
+        )
 
         either {
             // Refresh available accounts list

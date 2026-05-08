@@ -4,7 +4,10 @@ import arrow.core.Either
 import arrow.core.raise.Raise
 import arrow.core.raise.either
 import arrow.core.raise.ensure
+import eu.torvian.chatbot.common.security.AccountValidationPolicy
 import eu.torvian.chatbot.common.security.EncryptionConfig
+import eu.torvian.chatbot.common.security.PasswordValidationConfig
+import eu.torvian.chatbot.common.security.UsernameValidationConfig
 import eu.torvian.chatbot.server.domain.config.*
 import eu.torvian.chatbot.server.domain.security.JwtConfig
 import java.net.URI
@@ -38,7 +41,8 @@ fun AppConfigDto.merge(other: AppConfigDto?): AppConfigDto = AppConfigDto(
     encryption = mergeEncryption(encryption, other?.encryption),
     jwt = mergeJwt(jwt, other?.jwt),
     accountSecurityMode = other?.accountSecurityMode ?: accountSecurityMode,
-    reverseProxy = mergeReverseProxy(reverseProxy, other?.reverseProxy)
+    reverseProxy = mergeReverseProxy(reverseProxy, other?.reverseProxy),
+    authPolicy = mergeAuthPolicy(authPolicy, other?.authPolicy)
 )
 
 /**
@@ -159,6 +163,18 @@ private fun mergeReverseProxy(base: ReverseProxyConfigDto?, overlay: ReverseProx
 )
 
 /**
+ * Merge helper for authentication policy DTOs.
+ *
+ * @param base Base authentication policy DTO
+ * @param overlay Overlay authentication policy DTO (takes precedence)
+ * @return merged [AuthPolicyDto]
+ */
+private fun mergeAuthPolicy(base: AuthPolicyDto?, overlay: AuthPolicyDto?) = AuthPolicyDto(
+    passwordConfig = overlay?.passwordConfig ?: base?.passwordConfig,
+    usernameConfig = overlay?.usernameConfig ?: base?.usernameConfig
+)
+
+/**
  * Convert the merged [AppConfigDto] to a strict domain [AppConfiguration].
  *
  * @param baseApplicationPath The parent directory of the config directory, used as the base for
@@ -178,7 +194,8 @@ fun AppConfigDto.toDomain(baseApplicationPath: String): Either<ConfigError.Valid
         encryption = parseEncryption(encryption),
         jwt = parseJwt(jwt),
         accountSecurityMode = parseAccountSecurityMode(accountSecurityMode),
-        reverseProxy = parseReverseProxy(reverseProxy)
+        reverseProxy = parseReverseProxy(reverseProxy),
+        authPolicy = parseAuthPolicy(authPolicy)
     )
 }
 
@@ -406,6 +423,21 @@ private fun Raise<ConfigError.ValidationError>.parseReverseProxy(dto: ReversePro
     useXForwardedHeaders = required("reverseProxy.useXForwardedHeaders", dto?.useXForwardedHeaders),
     useForwardedHeaders = required("reverseProxy.useForwardedHeaders", dto?.useForwardedHeaders)
 )
+
+/**
+ * Parse and validate authentication policy DTO into domain [AccountValidationPolicy].
+ *
+ * If the DTO is null, returns a default [AccountValidationPolicy].
+ *
+ * @param dto Nullable DTO for authentication policy.
+ * @return The parsed authentication policy configuration.
+ */
+private fun parseAuthPolicy(dto: AuthPolicyDto?): AccountValidationPolicy {
+    return AccountValidationPolicy(
+        passwordConfig = dto?.passwordConfig ?: PasswordValidationConfig(),
+        usernameConfig = dto?.usernameConfig ?: UsernameValidationConfig()
+    )
+}
 
 /**
  * Helper that raises a [ConfigError.ValidationError.MissingKey] when the given [value] is null.

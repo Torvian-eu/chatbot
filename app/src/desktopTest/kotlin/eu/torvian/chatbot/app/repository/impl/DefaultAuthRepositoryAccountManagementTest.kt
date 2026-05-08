@@ -7,6 +7,7 @@ import eu.torvian.chatbot.app.domain.events.AppEvent
 import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.app.service.api.AuthApi
 import eu.torvian.chatbot.app.service.api.UserApi
+import eu.torvian.chatbot.app.service.auth.AuthValidationService
 import eu.torvian.chatbot.app.service.auth.DeviceIdentityService
 import eu.torvian.chatbot.app.service.auth.TokenStorage
 import eu.torvian.chatbot.app.service.auth.TokenStorageError
@@ -20,6 +21,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.test.runTest
 import kotlin.test.*
 import eu.torvian.chatbot.app.service.auth.AccountData
+import eu.torvian.chatbot.common.security.AccountValidationPolicy
 import kotlin.time.Clock
 
 /**
@@ -39,6 +41,7 @@ class DefaultAuthRepositoryAccountManagementTest {
     private lateinit var tokenStorage: TokenStorage
     private lateinit var eventBus: EventBus
     private lateinit var deviceIdentityService: DeviceIdentityService
+    private lateinit var authValidationService: AuthValidationService
     private lateinit var repository: DefaultAuthRepository
 
     private val testUser1 = User(
@@ -71,6 +74,7 @@ class DefaultAuthRepositoryAccountManagementTest {
         tokenStorage = mockk()
         eventBus = mockk()
         deviceIdentityService = mockk()
+        authValidationService = mockk(relaxed = true)
 
         // Mock eventBus.events with a proper flow of AppEvent type
         val eventsFlow = MutableSharedFlow<AppEvent>()
@@ -82,12 +86,15 @@ class DefaultAuthRepositoryAccountManagementTest {
         // Mock deviceIdentityService to return a test device ID
         coEvery { deviceIdentityService.getOrCreateDeviceId() } returns "test-device-id".right()
 
-        repository = DefaultAuthRepository(authApi, userApi, tokenStorage, eventBus, deviceIdentityService)
+        // Mock authApi.getAuthPolicy() to return a default policy (non-critical call)
+        coEvery { authApi.getAuthPolicy() } returns AccountValidationPolicy().right()
+
+        repository = DefaultAuthRepository(authApi, userApi, tokenStorage, eventBus, deviceIdentityService, authValidationService)
     }
 
     @AfterTest
     fun tearDown() {
-        clearMocks(authApi, userApi, tokenStorage, eventBus, deviceIdentityService)
+        clearMocks(authApi, userApi, tokenStorage, eventBus, deviceIdentityService, authValidationService)
     }
 
     // ===== switchAccount Tests =====

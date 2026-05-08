@@ -14,6 +14,7 @@ import eu.torvian.chatbot.common.models.api.auth.UserSecurityAlert
 import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
 import eu.torvian.chatbot.common.models.api.auth.UserTrustedDeviceInfo
 import eu.torvian.chatbot.common.models.user.User
+import eu.torvian.chatbot.common.security.AccountValidationPolicy
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.auth.*
@@ -146,6 +147,12 @@ class KtorAuthApiClient(
             authenticatedClient.post(AuthResource.CompleteRequiredPasswordChange()) {
                 setBody(CompleteRequiredPasswordChangeRequest(newPassword = newPassword))
             }.body<Unit>()
+        }
+    }
+
+    override suspend fun getAuthPolicy(): Either<ApiResourceError, AccountValidationPolicy> {
+        return safeApiCall {
+            unauthenticatedClient.get(AuthResource.Policy()).body<AccountValidationPolicy>()
         }
     }
 }

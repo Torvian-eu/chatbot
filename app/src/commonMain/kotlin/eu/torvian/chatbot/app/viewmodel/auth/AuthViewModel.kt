@@ -8,6 +8,7 @@ import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.matches
 import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.auth.AccountData
+import eu.torvian.chatbot.app.service.auth.AuthValidationService
 import eu.torvian.chatbot.app.service.clipboard.ClipboardService
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
@@ -15,6 +16,8 @@ import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.models.api.auth.UserSecurityAlert
 import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
 import eu.torvian.chatbot.common.models.api.auth.UserTrustedDeviceInfo
+import eu.torvian.chatbot.common.security.PasswordValidationConfig
+import eu.torvian.chatbot.common.security.UsernameValidationConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,13 +39,16 @@ import kotlinx.coroutines.launch
  *
  * @param authRepository Repository for authentication operations
  * @param notificationService Service for handling and notifying about errors
+ * @param clipboardService Service for clipboard operations
  * @param normalScope Coroutine scope for normal operations
+ * @param authValidationService Service for validating authentication form fields
  */
 class AuthViewModel(
     private val authRepository: AuthRepository,
     private val notificationService: NotificationService,
     private val clipboardService: ClipboardService,
-    private val normalScope: CoroutineScope
+    private val normalScope: CoroutineScope,
+    private val authValidationService: AuthValidationService
 ) : ViewModel(normalScope) {
 
     companion object {
@@ -66,6 +72,18 @@ class AuthViewModel(
 
     private val _passwordChangeFormState = MutableStateFlow(PasswordChangeFormState())
     val passwordChangeFormState: StateFlow<PasswordChangeFormState> = _passwordChangeFormState.asStateFlow()
+
+    /**
+     * The password validation configuration from the authentication service.
+     * Exposed so that UI components can dynamically render password requirement hints.
+     */
+    val passwordValidationConfig: PasswordValidationConfig = authValidationService.passwordValidationConfig
+
+    /**
+     * The username validation configuration from the authentication service.
+     * Exposed so that UI components can dynamically render username requirement hints.
+     */
+    val usernameValidationConfig: UsernameValidationConfig = authValidationService.usernameValidationConfig
 
     // --- Account Management State ---
 
@@ -117,7 +135,7 @@ class AuthViewModel(
             logger.info("Attempting login for user: $username")
 
             // Validate form before submission
-            val usernameError = AuthFormValidation.validateUsername(username)
+            val usernameError = authValidationService.validateUsername(username)
             val passwordError = if (password.isBlank()) "Password is required" else null
 
             if (usernameError != null || passwordError != null) {
@@ -189,10 +207,10 @@ class AuthViewModel(
             logger.info("Attempting registration for user: $username")
 
             // Validate all form fields
-            val usernameError = AuthFormValidation.validateUsername(username)
-            val emailError = AuthFormValidation.validateEmail(email)
-            val passwordError = AuthFormValidation.validatePassword(password)
-            val confirmPasswordError = AuthFormValidation.validateConfirmPassword(password, confirmPassword)
+            val usernameError = authValidationService.validateUsername(username)
+            val emailError = authValidationService.validateEmail(email)
+            val passwordError = authValidationService.validatePassword(password)
+            val confirmPasswordError = authValidationService.validateConfirmPassword(password, confirmPassword)
 
             if (usernameError != null || emailError != null || passwordError != null || confirmPasswordError != null) {
                 _registerFormState.update { currentState ->
@@ -414,8 +432,8 @@ class AuthViewModel(
 
             // Validate form before submission - currentPassword, newPassword, and confirmPassword required
             val currentPasswordError = if (currentForm.currentPassword.isBlank()) "Current password is required" else null
-            val newPasswordError = AuthFormValidation.validatePassword(newPassword)
-            val confirmPasswordError = AuthFormValidation.validateConfirmPassword(newPassword, confirmPassword)
+            val newPasswordError = authValidationService.validatePassword(newPassword)
+            val confirmPasswordError = authValidationService.validateConfirmPassword(newPassword, confirmPassword)
 
             if (currentPasswordError != null || newPasswordError != null || confirmPasswordError != null) {
                 _passwordChangeFormState.update { currentState ->
@@ -483,8 +501,8 @@ class AuthViewModel(
             logger.info("Attempting required password change")
 
             // Validate form before submission - only newPassword and confirmPassword required
-            val newPasswordError = AuthFormValidation.validatePassword(newPassword)
-            val confirmPasswordError = AuthFormValidation.validateConfirmPassword(newPassword, confirmPassword)
+            val newPasswordError = authValidationService.validatePassword(newPassword)
+            val confirmPasswordError = authValidationService.validateConfirmPassword(newPassword, confirmPassword)
 
             if (newPasswordError != null || confirmPasswordError != null) {
                 _passwordChangeFormState.update { currentState ->
