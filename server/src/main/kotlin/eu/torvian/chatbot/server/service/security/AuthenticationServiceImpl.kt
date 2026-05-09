@@ -339,9 +339,16 @@ class AuthenticationServiceImpl(
             userSessionDao.getSessionsByUserId(userId).right()
         }
 
-    override suspend fun getSecurityAlerts(userId: Long): Either<Nothing, List<SecurityAuditEntity>> =
+    override suspend fun getSecurityAlerts(userId: Long, requesterIsRestricted: Boolean): Either<GetSecurityAlertsError, List<SecurityAuditEntity>> =
         transactionScope.transaction {
-            securityAuditDao.getUnacknowledgedByUserId(userId).right()
+            either {
+                // Restricted sessions cannot list security alerts
+                ensure(!requesterIsRestricted) {
+                    logger.warn("Restricted session attempted to list security alerts for user: $userId")
+                    raise(GetSecurityAlertsError.InsufficientPermissions())
+                }
+                securityAuditDao.getUnacknowledgedByUserId(userId)
+            }
         }
 
     override suspend fun acknowledgeSecurityAlerts(

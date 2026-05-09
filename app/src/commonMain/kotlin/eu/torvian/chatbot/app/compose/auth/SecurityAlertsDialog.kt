@@ -35,9 +35,12 @@ import eu.torvian.chatbot.common.models.api.auth.UserSecurityAlert
 /**
  * Dialog that displays unacknowledged security alerts for the current user.
  *
- * This dialog shows login attempts from unrecognized IP addresses and allows
- * the user to acknowledge them. In restricted sessions (new location login),
- * the acknowledge button is disabled with an explanatory message.
+ * This dialog shows login attempts from unrecognized devices and allows
+ * the user to acknowledge them. The acknowledge button is disabled for restricted
+ * sessions with an explanatory message.
+ *
+ * Note: This dialog should not be shown for restricted sessions. The caller is
+ * responsible for checking [isRestricted] before invoking this dialog.
  *
  * @param alerts The list of unacknowledged security alerts to display.
  * @param isRestricted Whether the current session is restricted (created from an unacknowledged device).
@@ -77,7 +80,7 @@ fun SecurityAlertsDialog(
                             style = MaterialTheme.typography.headlineSmall
                         )
                         Text(
-                            text = "Review unrecognized login attempts from new locations.",
+                            text = "Review login attempts from untrusted devices.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -94,7 +97,7 @@ fun SecurityAlertsDialog(
                 // Show restricted session warning if applicable
                 if (isRestricted) {
                     RestrictedSessionWarning(
-                        message = "This session is restricted because you logged in from a new location. To clear this alert, please verify your IP via the link sent to your email or approve it from a trusted device."
+                        message = "This action requires a trusted session. Log in from an existing trusted device to review and approve security alerts."
                     )
                 }
 

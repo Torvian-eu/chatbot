@@ -20,6 +20,7 @@ import eu.torvian.chatbot.server.service.security.error.LogoutAllError
 import eu.torvian.chatbot.server.service.security.error.LogoutError
 import eu.torvian.chatbot.server.service.security.error.RefreshTokenError
 import eu.torvian.chatbot.server.service.security.error.AcknowledgeAlertsError
+import eu.torvian.chatbot.server.service.security.error.GetSecurityAlertsError
 import eu.torvian.chatbot.server.service.security.error.RevokeTrustedDeviceError
 import eu.torvian.chatbot.server.service.security.error.CompleteRequiredPasswordChangeError
 import eu.torvian.chatbot.server.service.core.error.auth.ChangePasswordError
@@ -233,8 +234,9 @@ fun Route.configureAuthRoutes(
     // GET /api/v1/auth/security-alerts - Get unacknowledged security alerts for the current user
     authenticate(AuthSchemes.USER_JWT) {
         get<AuthResource.SecurityAlerts> {
-            val userId = call.getUserId()
-            val result = authenticationService.getSecurityAlerts(userId).map { alerts ->
+            val userContext = call.getUserContext()
+            val userId = userContext.user.id
+            val result = authenticationService.getSecurityAlerts(userId, userContext.isRestricted).map { alerts ->
                 alerts.map { alert ->
                     UserSecurityAlert(
                         id = alert.id,
@@ -245,7 +247,15 @@ fun Route.configureAuthRoutes(
                     )
                 }
             }
-            call.respondEither(result)
+            call.respondEither(result) { error ->
+                when (error) {
+                    is GetSecurityAlertsError.InsufficientPermissions ->
+                        apiError(
+                            CommonApiErrorCodes.PERMISSION_DENIED,
+                            error.reason
+                        )
+                }
+            }
         }
     }
 

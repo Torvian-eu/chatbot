@@ -35,7 +35,7 @@ import kotlinx.coroutines.launch
  * - Form validation and error handling
  * - User authentication operations, including logout and logout-all flows
  * - Multi-account management (listing, switching, removing accounts)
- * - Security alerts management (IP-based login alerts)
+ * - Security alerts management (untrusted device login alerts)
  *
  * @param authRepository Repository for authentication operations
  * @param notificationService Service for handling and notifying about errors
@@ -187,7 +187,12 @@ class AuthViewModel(
                         _dialogState.value = AuthDialogState.None
                     }
                     // Fetch security alerts after successful login
-                    fetchSecurityAlerts()
+                    showSecurityAlerts()
+                    // Show restricted session info dialog if the session is restricted
+                    val currentState = authState.value
+                    if (currentState is AuthState.Authenticated && currentState.isRestricted) {
+                        openRestrictedSessionInfo()
+                    }
                 }
             )
         }
@@ -320,20 +325,44 @@ class AuthViewModel(
     }
 
     /**
-     * Fetches unacknowledged security alerts for the current user.
+     * Fetches unacknowledged security alerts for the current user and displays them.
      * Called after successful login or when the user navigates to the security alerts view.
+     *
+     * This method guards against fetching alerts for unauthenticated or restricted sessions,
+     * as the server denies this operation for restricted sessions.
+     *
+     * @param showOnEmpty If true, the security alerts dialog will be shown even if there are no unacknowledged alerts.
      */
-    fun fetchSecurityAlerts() {
+    fun showSecurityAlerts(showOnEmpty: Boolean = false) {
+        val currentAuthState = authState.value
+
+        if (currentAuthState !is AuthState.Authenticated) {
+            securityAlerts.value = emptyList()
+            logger.debug("Skipping security alerts fetch because user is not authenticated")
+            return
+        }
+
+        if (currentAuthState.isRestricted) {
+            securityAlerts.value = emptyList()
+            logger.info("Skipping security alerts fetch because current session is restricted")
+            return
+        }
+
         viewModelScope.launch {
             authRepository.getSecurityAlerts()
                 .onLeft { error ->
                     logger.warn("Failed to fetch security alerts: ${error.message}")
-                    // Don't show error notification - security alerts are not critical
-                    securityAlerts.value = emptyList()
+                    notificationService.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to load security alerts"
+                    )
                 }
                 .onRight { alerts ->
                     securityAlerts.value = alerts
                     logger.info("Fetched ${alerts.size} security alerts")
+                    if (alerts.isNotEmpty() || showOnEmpty) {
+                        _dialogState.value = AuthDialogState.SecurityAlerts(alerts)
+                    }
                 }
         }
     }
@@ -558,8 +587,13 @@ class AuthViewModel(
     suspend fun checkInitialAuthState() {
         authRepository.checkInitialAuthState()
         // Fetch security alerts if authenticated after startup
-        if (authRepository.authState.value is AuthState.Authenticated) {
-            fetchSecurityAlerts()
+        val currentState = authRepository.authState.value
+        if (currentState is AuthState.Authenticated) {
+            showSecurityAlerts()
+            // Show restricted session info dialog if the session is restricted
+            if (currentState.isRestricted) {
+                openRestrictedSessionInfo()
+            }
         }
     }
 
@@ -577,6 +611,10 @@ class AuthViewModel(
     fun switchAccount(userId: Long) {
         viewModelScope.launch {
             _accountSwitchInProgress.value = true
+            // Clear account-scoped security state to avoid stale data from the previous account.
+            securityAlerts.value = emptyList()
+            activeSessions.value = emptyList()
+            trustedDevices.value = emptyList()
 
             authRepository.switchAccount(userId)
                 .onLeft { error ->
@@ -589,7 +627,12 @@ class AuthViewModel(
                     // Close dialog on successful switch
                     _dialogState.value = AuthDialogState.None
                     // Fetch security alerts for the new account
-                    fetchSecurityAlerts()
+                    showSecurityAlerts()
+                    // Show restricted session info dialog if the new account is restricted
+                    val newState = authState.value
+                    if (newState is AuthState.Authenticated && newState.isRestricted) {
+                        openRestrictedSessionInfo()
+                    }
                 }
 
             _accountSwitchInProgress.value = false
@@ -658,6 +701,14 @@ class AuthViewModel(
      */
     fun openChangePasswordDialog() {
         _dialogState.value = AuthDialogState.ChangePassword
+    }
+
+    /**
+     * Opens the restricted session info dialog.
+     * This dialog explains to the user why their session has limited permissions.
+     */
+    fun openRestrictedSessionInfo() {
+        _dialogState.value = AuthDialogState.RestrictedSessionInfo
     }
 
     /**
@@ -807,7 +858,7 @@ class AuthViewModel(
             "Invalid username or password"
 
         error.matches(CommonApiErrorCodes.VERIFICATION_REQUIRED) ->
-            "New login detected. Please check your email to verify your identity."
+            "Login blocked from an untrusted device. Approve this device from an existing trusted session or contact an administrator."
 
         error.matches(CommonApiErrorCodes.PERMISSION_DENIED) ->
             "Account is temporarily locked. Please try again later."

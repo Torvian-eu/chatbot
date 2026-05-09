@@ -92,10 +92,15 @@ interface AuthenticationService {
      * Returns detailed information about unrecognized device logins that have not been
      * acknowledged by the user yet. These are sourced from the SecurityAuditDao.
      *
+     * Restricted sessions cannot list security alerts - this prevents access to
+     * security-sensitive information from untrusted devices.
+     *
      * @param userId The unique identifier of the authenticated user.
-     * @return A right-biased [Either] containing the list of unacknowledged security alerts.
+     * @param requesterIsRestricted Whether the requester's session is restricted (device not verified)
+     * @return A right-biased [Either] containing the list of unacknowledged security alerts,
+     *         or [GetSecurityAlertsError.InsufficientPermissions] if the requester is restricted.
      */
-    suspend fun getSecurityAlerts(userId: Long): Either<Nothing, List<SecurityAuditEntity>>
+    suspend fun getSecurityAlerts(userId: Long, requesterIsRestricted: Boolean): Either<GetSecurityAlertsError, List<SecurityAuditEntity>>
 
     /**
      * Validates JWT credentials from Ktor's auth pipeline.

@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.app.viewmodel.auth
 
 import eu.torvian.chatbot.app.service.auth.AccountData
+import eu.torvian.chatbot.common.models.api.auth.UserSecurityAlert
 
 /**
  * Represents the state of dialogs in the authentication screen.
@@ -34,4 +35,20 @@ sealed interface AuthDialogState {
      * Change password dialog is shown.
      */
     data object ChangePassword : AuthDialogState
+
+    /**
+     * Restricted session info dialog is shown.
+     * This dialog explains to the user why their session has limited permissions.
+     */
+    data object RestrictedSessionInfo : AuthDialogState
+
+    /**
+     * Security alerts dialog is shown.
+     * This dialog displays unacknowledged security alerts for the current user.
+     *
+     * @property alerts The list of unacknowledged security alerts to display.
+     */
+    data class SecurityAlerts(
+        val alerts: List<UserSecurityAlert>
+    ) : AuthDialogState
 }

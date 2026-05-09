@@ -132,7 +132,9 @@ interface AuthRepository {
 
     /**
      * Retrieves unacknowledged security alerts for the current user.
-     * These alerts represent login attempts from unrecognized IP addresses.
+     * These alerts represent login attempts from untrusted or unrecognized devices.
+     *
+     * Note: This operation is not available for restricted sessions.
      *
      * @return Either a [RepositoryError] on failure or the list of security alerts on success
      */

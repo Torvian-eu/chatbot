@@ -118,6 +118,24 @@ fun AuthDialogs(
             )
         }
 
+        is AuthDialogState.RestrictedSessionInfo -> {
+            RestrictedSessionInfoDialog(
+                onDismiss = { authViewModel.closeDialog() }
+            )
+        }
+
+        is AuthDialogState.SecurityAlerts -> {
+            val isRestricted = currentAuthState is AuthState.Authenticated && currentAuthState.isRestricted
+            SecurityAlertsDialog(
+                alerts = dialogState.alerts,
+                isRestricted = isRestricted,
+                onDismiss = { authViewModel.closeDialog() },
+                onAcknowledge = {
+                    authViewModel.acknowledgeSecurityAlerts()
+                }
+            )
+        }
+
         AuthDialogState.None -> {
             // No dialog to show
         }
