@@ -1,11 +1,11 @@
 package eu.torvian.chatbot.server.data.dao
 
 import arrow.core.Either
+import eu.torvian.chatbot.server.data.dao.error.DeleteLocalMCPServerError
+import eu.torvian.chatbot.server.data.dao.error.LocalMCPServerError
 import eu.torvian.chatbot.server.data.entities.CreateLocalMCPServerEntity
 import eu.torvian.chatbot.server.data.entities.LocalMCPServerEntity
 import eu.torvian.chatbot.server.data.entities.UpdateLocalMCPServerEntity
-import eu.torvian.chatbot.server.data.dao.error.DeleteLocalMCPServerError
-import eu.torvian.chatbot.server.data.dao.error.LocalMCPServerError
 
 /**
  * Data Access Object for server-side Local MCP server storage.
@@ -73,21 +73,6 @@ interface LocalMCPServerDao {
     suspend fun getServersByWorkerId(workerId: Long): List<LocalMCPServerEntity>
 
     /**
-     * Creates a new Local MCP Server entry and stores the ownership and enabled state.
-     *
-     * This method creates a new entry in the LocalMCPServerTable with the
-     * server-generated ID, userId, and isEnabled flag. The client drives creation
-     * and provides the initial isEnabled state. The client will store the full
-     * configuration locally using this ID.
-     *
-     * @param userId The ID of the user who owns this MCP server configuration
-     * @param isEnabled The initial enabled/disabled state (synced from client)
-     * @return The generated server ID
-     */
-    @Deprecated("Use createServer(CreateLocalMCPServerEntity)")
-    suspend fun createServer(userId: Long, isEnabled: Boolean): Long
-
-    /**
      * Deletes a LocalMCPServer entry by ID.
      *
      * This operation will cascade delete any tool linkages in LocalMCPToolDefinitionTable.
@@ -98,19 +83,6 @@ interface LocalMCPServerDao {
      * @return Either a [DeleteLocalMCPServerError] or Unit on success
      */
     suspend fun deleteById(id: Long): Either<DeleteLocalMCPServerError, Unit>
-
-    /**
-     * Retrieves all server IDs owned by a specific user.
-     *
-     * This is useful for validation and ownership checks. The actual configurations
-     * are stored client-side, but this allows the server to verify that a user
-     * owns a particular server ID.
-     *
-     * @param userId The ID of the user
-     * @return List of server IDs owned by the user (empty list if none)
-     */
-    @Deprecated("Use getServersByUserId")
-    suspend fun getIdsByUserId(userId: Long): List<Long>
 
     /**
      * Checks if a LocalMCPServer with the specified ID exists.
@@ -133,18 +105,4 @@ interface LocalMCPServerDao {
         userId: Long,
         serverId: Long
     ): Either<LocalMCPServerError.Unauthorized, Unit>
-
-    /**
-     * Updates the enabled state of a LocalMCPServer.
-     *
-     * This is called when the client syncs the enabled state from the client-side
-     * LocalMCPServerLocalTable.isEnabled flag.
-     *
-     * @param serverId The ID of the server to update
-     * @param isEnabled The new enabled state
-     * @return Either [LocalMCPServerError.NotFound] if not found, or Unit on success
-     */
-    @Deprecated("Use updateServer")
-    suspend fun setEnabled(serverId: Long, isEnabled: Boolean): Either<LocalMCPServerError.NotFound, Unit>
 }
-

@@ -18,10 +18,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertIs
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
+import kotlin.test.*
 
 /**
  * Tests for [LocalMCPServerDaoExposed].
@@ -160,46 +157,46 @@ class LocalMCPServerDaoExposedTest {
     }
 
     @Test
-    fun `getIdsByUserId should return all server IDs for user`() = runTest {
+    fun `getServersByUserId should return all servers for user`() = runTest {
         // Arrange
         val server1 = dao.createServer(createServerEntity(testUser1.id, isEnabled = true))
         val server2 = dao.createServer(createServerEntity(testUser1.id, isEnabled = false))
 
         // Act
-        val serverIds = dao.getServersByUserId(testUser1.id).map { it.id }
+        val servers = dao.getServersByUserId(testUser1.id)
 
         // Assert
-        assertEquals(2, serverIds.size)
-        assertTrue(serverIds.contains(server1.id))
-        assertTrue(serverIds.contains(server2.id))
+        assertEquals(2, servers.size)
+        assertTrue(servers.any { it.id == server1.id })
+        assertTrue(servers.any { it.id == server2.id })
     }
 
     @Test
-    fun `getIdsByUserId should return only servers for specified user`() = runTest {
+    fun `getServersByUserId should return only servers for specified user`() = runTest {
         // Arrange
         val user1Server = dao.createServer(createServerEntity(testUser1.id, isEnabled = true))
         val user2Server = dao.createServer(createServerEntity(testUser2.id, isEnabled = true))
 
         // Act
-        val user1ServerIds = dao.getServersByUserId(testUser1.id).map { it.id }
-        val user2ServerIds = dao.getServersByUserId(testUser2.id).map { it.id }
+        val user1Servers = dao.getServersByUserId(testUser1.id)
+        val user2Servers = dao.getServersByUserId(testUser2.id)
 
         // Assert
-        assertEquals(1, user1ServerIds.size)
-        assertEquals(1, user2ServerIds.size)
-        assertTrue(user1ServerIds.contains(user1Server.id))
-        assertFalse(user1ServerIds.contains(user2Server.id))
-        assertTrue(user2ServerIds.contains(user2Server.id))
-        assertFalse(user2ServerIds.contains(user1Server.id))
+        assertEquals(1, user1Servers.size)
+        assertEquals(1, user2Servers.size)
+        assertTrue(user1Servers.any { it.id == user1Server.id })
+        assertFalse(user1Servers.any { it.id == user2Server.id })
+        assertTrue(user2Servers.any { it.id == user2Server.id })
+        assertFalse(user2Servers.any { it.id == user1Server.id })
     }
 
     @Test
-    fun `getIdsByUserId should return empty list when user has no servers`() = runTest {
+    fun `getServersByUserId should return empty list when user has no servers`() = runTest {
         // Act
-        val serverIds = dao.getServersByUserId(testUser1.id).map { it.id }
+        val servers = dao.getServersByUserId(testUser1.id)
 
         // Assert
-        assertEquals(0, serverIds.size)
+        assertEquals(0, servers.size)
     }
 
     @Test
@@ -325,5 +322,73 @@ class LocalMCPServerDaoExposedTest {
         assertEquals(1, dao.getServersByWorkerId(101L).size)
         assertEquals(0, dao.getServersByWorkerId(100L).size)
     }
-}
 
+    @Test
+    fun `updateServer should correctly update isEnabled state`() = runTest {
+        // Arrange
+        val server = dao.createServer(createServerEntity(testUser1.id, isEnabled = true))
+
+        // Act - update to disabled
+        val updateResult = dao.updateServer(
+            userId = testUser1.id,
+            serverId = server.id,
+            server = UpdateLocalMCPServerEntity(
+                workerId = server.workerId,
+                name = server.name,
+                description = server.description,
+                command = server.command,
+                arguments = server.arguments,
+                workingDirectory = server.workingDirectory,
+                isEnabled = false,
+                autoStartOnEnable = server.autoStartOnEnable,
+                autoStartOnLaunch = server.autoStartOnLaunch,
+                autoStopAfterInactivitySeconds = server.autoStopAfterInactivitySeconds,
+                toolNamePrefix = server.toolNamePrefix,
+                environmentVariables = server.environmentVariables,
+                secretEnvironmentVariables = server.secretEnvironmentVariables
+            )
+        )
+
+        // Assert
+        assertTrue(updateResult.isRight())
+        val updatedServer = updateResult.getOrNull()
+        assertNotNull(updatedServer)
+        assertFalse(updatedServer.isEnabled, "isEnabled should be false after update")
+
+        // Verify by fetching the server
+        val fetchedServer = dao.getServerById(server.id).getOrNull()
+        assertNotNull(fetchedServer)
+        assertFalse(fetchedServer.isEnabled, "isEnabled should be false in fetched server")
+    }
+
+    @Test
+    fun `updateServer should return Unauthorized when user doesn't own server`() = runTest {
+        // Arrange
+        val server = dao.createServer(createServerEntity(testUser1.id, isEnabled = true))
+
+        // Act
+        val updateResult = dao.updateServer(
+            userId = testUser2.id,
+            serverId = server.id,
+            server = UpdateLocalMCPServerEntity(
+                workerId = server.workerId,
+                name = server.name,
+                description = server.description,
+                command = server.command,
+                arguments = server.arguments,
+                workingDirectory = server.workingDirectory,
+                isEnabled = false,
+                autoStartOnEnable = server.autoStartOnEnable,
+                autoStartOnLaunch = server.autoStartOnLaunch,
+                autoStopAfterInactivitySeconds = server.autoStopAfterInactivitySeconds,
+                toolNamePrefix = server.toolNamePrefix,
+                environmentVariables = server.environmentVariables,
+                secretEnvironmentVariables = server.secretEnvironmentVariables
+            )
+        )
+
+        // Assert
+        assertTrue(updateResult.isLeft(), "Should return error")
+        assertIs<LocalMCPServerError.Unauthorized>(updateResult.leftOrNull(), "Should be Unauthorized error")
+    }
+}
