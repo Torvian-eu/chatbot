@@ -17,6 +17,7 @@ import eu.torvian.chatbot.common.models.api.auth.UserSecurityAlert
 import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
 import eu.torvian.chatbot.common.models.api.auth.UserTrustedDeviceInfo
 import eu.torvian.chatbot.common.security.PasswordValidationConfig
+import eu.torvian.chatbot.common.security.SecurityAuditStatus
 import eu.torvian.chatbot.common.security.UsernameValidationConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
@@ -367,24 +368,35 @@ class AuthViewModel(
         }
     }
 
+
     /**
-     * Acknowledges all pending security alerts for the current user.
-     * This marks all unacknowledged security alerts as trusted.
+     * Resolves a single security alert with the specified outcome.
+     *
+     * This method allows the user to either trust or dismiss a specific security alert.
+     * - Trust (true): The device is added to the trusted devices list.
+     * - Dismiss (false): The alert is marked as dismissed without adding the device to trusted devices.
+     *
+     * After success, the security alerts list is refreshed.
      *
      * Note: This operation is not available for restricted sessions.
+     *
+     * @param alertId The unique identifier of the security alert to resolve.
+     * @param trust Whether to trust the device (true) or dismiss the alert (false).
      */
-    fun acknowledgeSecurityAlerts() {
+    fun resolveAlert(alertId: Long, trust: Boolean) {
         viewModelScope.launch {
-            authRepository.acknowledgeSecurityAlerts()
+            val outcome = if (trust) SecurityAuditStatus.TRUSTED else SecurityAuditStatus.DISMISSED
+            authRepository.resolveSecurityAlert(alertId, outcome)
                 .onLeft { error ->
                     notificationService.repositoryError(
                         error = error,
-                        shortMessage = "Failed to acknowledge security alerts"
+                        shortMessage = "Failed to resolve security alert"
                     )
                 }
                 .onRight {
-                    securityAlerts.value = emptyList()
-                    logger.info("Successfully acknowledged all security alerts")
+                    logger.info("Successfully resolved security alert $alertId with outcome: $outcome")
+                    // Refresh the alerts list to remove the resolved alert
+                    showSecurityAlerts(showOnEmpty = true)
                 }
         }
     }
@@ -460,7 +472,8 @@ class AuthViewModel(
             logger.info("Attempting password change")
 
             // Validate form before submission - currentPassword, newPassword, and confirmPassword required
-            val currentPasswordError = if (currentForm.currentPassword.isBlank()) "Current password is required" else null
+            val currentPasswordError =
+                if (currentForm.currentPassword.isBlank()) "Current password is required" else null
             val newPasswordError = authValidationService.validatePassword(newPassword)
             val confirmPasswordError = authValidationService.validateConfirmPassword(newPassword, confirmPassword)
 
@@ -891,7 +904,7 @@ class AuthViewModel(
 
             // Check details keys or message content for email-related conflict
             val isEmailConflict = details?.keys?.any { it.contains("email", ignoreCase = true) } == true ||
-                message.contains("email", ignoreCase = true)
+                    message.contains("email", ignoreCase = true)
 
             if (isEmailConflict) {
                 "Email is already registered. Please use a different email or try logging in."

@@ -13,8 +13,10 @@ import eu.torvian.chatbot.common.models.api.auth.RegisterRequest
 import eu.torvian.chatbot.common.models.api.auth.UserSecurityAlert
 import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
 import eu.torvian.chatbot.common.models.api.auth.UserTrustedDeviceInfo
+import eu.torvian.chatbot.common.models.api.auth.ResolveAlertRequest
 import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.security.AccountValidationPolicy
+import eu.torvian.chatbot.common.security.SecurityAuditStatus
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.auth.*
@@ -116,12 +118,6 @@ class KtorAuthApiClient(
         }
     }
 
-    override suspend fun acknowledgeSecurityAlerts(): Either<ApiResourceError, Unit> {
-        return safeApiCall {
-            authenticatedClient.post(AuthResource.AcknowledgeAlerts()).body<Unit>()
-        }
-    }
-
     override suspend fun getTrustedDevices(): Either<ApiResourceError, List<UserTrustedDeviceInfo>> {
         return safeApiCall {
             authenticatedClient.get(AuthResource.TrustedDevices()).body<List<UserTrustedDeviceInfo>>()
@@ -153,6 +149,14 @@ class KtorAuthApiClient(
     override suspend fun getAuthPolicy(): Either<ApiResourceError, AccountValidationPolicy> {
         return safeApiCall {
             unauthenticatedClient.get(AuthResource.Policy()).body<AccountValidationPolicy>()
+        }
+    }
+
+    override suspend fun resolveSecurityAlert(alertId: Long, outcome: SecurityAuditStatus): Either<ApiResourceError, Unit> {
+        return safeApiCall {
+            authenticatedClient.post(AuthResource.ResolveAlert(alertId = alertId)) {
+                setBody(ResolveAlertRequest(outcome = outcome))
+            }.body<Unit>()
         }
     }
 }

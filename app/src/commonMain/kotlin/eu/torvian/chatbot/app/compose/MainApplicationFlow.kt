@@ -247,19 +247,22 @@ private fun UserMenuButton(
     navController: NavController,
     scope: CoroutineScope
 ) {
+    val alerts by authViewModel.securityAlerts.collectAsState()
     PlainTooltipBox(text = "User menu") {
         UserMenu(
             username = authState.username,
             availableAccounts = availableAccounts,
             accountSwitchInProgress = accountSwitchInProgress,
             isCurrentSessionRestricted = authState.isRestricted,
+            hasSecurityAlerts = alerts.isNotEmpty(),
             onSwitchAccount = { authViewModel.openAccountSwitcher() },
             onActiveSessions = { authViewModel.openActiveSessions() },
             onTrustedDevices = { authViewModel.openTrustedDevices() },
             onChangePassword = { authViewModel.openChangePasswordDialog() },
             onLogout = { scope.launch { authViewModel.logout() } },
             onLogoutAll = { scope.launch { authViewModel.logoutAll() } },
-            onLogin = { navController.navigateToTop(Login) }
+            onLogin = { navController.navigateToTop(Login) },
+            onSecurityAlerts = { authViewModel.showSecurityAlerts(showOnEmpty = true) }
         )
     }
 }

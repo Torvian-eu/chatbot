@@ -57,10 +57,15 @@ class AuthResource(val parent: Api = Api()) {
     class SecurityAlerts(val parent: AuthResource = AuthResource())
 
     /**
-     * Resource for acknowledging security alerts and promoting devices to trusted: /api/v1/auth/acknowledge-alerts
+     * Resource for resolving a single security alert: /api/v1/auth/security-alerts/{alertId}/resolve
+     *
+     * @property alertId The unique identifier of the security alert to resolve.
      */
-    @Resource("acknowledge-alerts")
-    class AcknowledgeAlerts(val parent: AuthResource = AuthResource())
+    @Resource("resolve")
+    class ResolveAlert(
+        val parent: SecurityAlerts = SecurityAlerts(),
+        val alertId: Long
+    )
 
     /**
      * Resource for refreshing tokens: /api/v1/auth/refresh
@@ -95,7 +100,7 @@ class AuthResource(val parent: Api = Api()) {
     /**
      * Resource for changing the authenticated user's password: /api/v1/auth/change-password
      *
-     * Requires the current password for verification. This action is blocked for restricted (untrusted) sessions.
+     * Requires the current password for verification. This action is blocked for restricted sessions.
      */
     @Resource("change-password")
     class ChangePassword(val parent: AuthResource = AuthResource())
@@ -104,7 +109,7 @@ class AuthResource(val parent: Api = Api()) {
      * Resource for completing a server-required password change: /api/v1/auth/complete-required-password-change
      *
      * This endpoint is only valid when the authenticated user's requiresPasswordChange flag is true.
-     * It does not require the current password, but is blocked for restricted (untrusted) sessions.
+     * It does not require the current password, but is blocked for restricted sessions.
      */
     @Resource("complete-required-password-change")
     class CompleteRequiredPasswordChange(val parent: AuthResource = AuthResource())

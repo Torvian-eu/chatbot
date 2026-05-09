@@ -12,6 +12,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.DoNotDisturbAlt
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -19,12 +21,13 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -36,8 +39,7 @@ import eu.torvian.chatbot.common.models.api.auth.UserSecurityAlert
  * Dialog that displays unacknowledged security alerts for the current user.
  *
  * This dialog shows login attempts from unrecognized devices and allows
- * the user to acknowledge them. The acknowledge button is disabled for restricted
- * sessions with an explanatory message.
+ * the user to resolve them individually.
  *
  * Note: This dialog should not be shown for restricted sessions. The caller is
  * responsible for checking [isRestricted] before invoking this dialog.
@@ -45,14 +47,16 @@ import eu.torvian.chatbot.common.models.api.auth.UserSecurityAlert
  * @param alerts The list of unacknowledged security alerts to display.
  * @param isRestricted Whether the current session is restricted (created from an unacknowledged device).
  * @param onDismiss Called when the dialog should be closed.
- * @param onAcknowledge Called when the user clicks the acknowledge button (only enabled for non-restricted sessions).
+ * @param onResolveAlert Called when the user resolves an individual alert (trust or dismiss).
+ * @param onCopyToClipboard Called when the user copies alert details to clipboard.
  */
 @Composable
 fun SecurityAlertsDialog(
     alerts: List<UserSecurityAlert>,
     isRestricted: Boolean,
     onDismiss: () -> Unit,
-    onAcknowledge: () -> Unit
+    onResolveAlert: (alertId: Long, trust: Boolean) -> Unit,
+    onCopyToClipboard: (alert: UserSecurityAlert) -> Unit
 ) {
     Dialog(
         onDismissRequest = onDismiss,
@@ -115,32 +119,13 @@ fun SecurityAlertsDialog(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         items(alerts, key = { it.id }) { alert ->
-                            SecurityAlertCard(alert = alert)
+                            SecurityAlertCard(
+                                alert = alert,
+                                isRestricted = isRestricted,
+                                onResolveAlert = onResolveAlert,
+                                onCopyToClipboard = onCopyToClipboard
+                            )
                         }
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
-                ) {
-                    TextButton(onClick = onDismiss) {
-                        Text("Close")
-                    }
-
-                    Button(
-                        onClick = onAcknowledge,
-                        enabled = !isRestricted && alerts.isNotEmpty()
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Text(
-                            text = if (isRestricted) "Cannot Acknowledge" else "It was me",
-                            modifier = Modifier.padding(start = 4.dp)
-                        )
                     }
                 }
             }
@@ -149,16 +134,24 @@ fun SecurityAlertsDialog(
 }
 
 /**
- * Renders a single security alert card showing IP address and login time.
+ * Renders a single security alert card showing IP address, device ID, and login time.
  *
  * @param alert The security alert to display.
+ * @param isRestricted Whether the current session is restricted (buttons will be disabled).
+ * @param onResolveAlert Called when the user resolves the alert (trust or dismiss).
+ * @param onCopyToClipboard Called when the user copies alert details to clipboard.
  */
 @Composable
-private fun SecurityAlertCard(alert: UserSecurityAlert) {
+private fun SecurityAlertCard(
+    alert: UserSecurityAlert,
+    isRestricted: Boolean,
+    onResolveAlert: (alertId: Long, trust: Boolean) -> Unit,
+    onCopyToClipboard: (alert: UserSecurityAlert) -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         )
     ) {
         Column(
@@ -188,6 +181,32 @@ private fun SecurityAlertCard(alert: UserSecurityAlert) {
                             color = MaterialTheme.colorScheme.error
                         )
 
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Device: ${alert.deviceId.take(8)}...",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+
+                            IconButton(
+                                onClick = { onCopyToClipboard(alert) },
+                                enabled = !isRestricted,
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ContentCopy,
+                                    contentDescription = "Copy device ID to clipboard",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+
                         Text(
                             text = "First seen ${formatRelativeTime(alert.firstSeenAt)}",
                             style = MaterialTheme.typography.bodySmall,
@@ -211,6 +230,47 @@ private fun SecurityAlertCard(alert: UserSecurityAlert) {
                     containerColor = MaterialTheme.colorScheme.errorContainer,
                     contentColor = MaterialTheme.colorScheme.onErrorContainer
                 )
+            }
+
+            Text(
+                text = "Dismissing an alert removes the notification without trusting the device.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
+            ) {
+                OutlinedButton(
+                    onClick = { onResolveAlert(alert.id, false) },
+                    enabled = !isRestricted
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.DoNotDisturbAlt,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = "Not Me",
+                        modifier = Modifier.padding(start = 4.dp)
+                    )
+                }
+
+                Button(
+                    onClick = { onResolveAlert(alert.id, true) },
+                    enabled = !isRestricted
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = "It was me",
+                        modifier = Modifier.padding(start = 4.dp)
+                    )
+                }
             }
         }
     }

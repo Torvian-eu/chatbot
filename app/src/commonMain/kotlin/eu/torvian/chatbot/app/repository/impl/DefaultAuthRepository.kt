@@ -23,6 +23,7 @@ import eu.torvian.chatbot.common.models.api.auth.UserSecurityAlert
 import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
 import eu.torvian.chatbot.common.models.api.auth.UserTrustedDeviceInfo
 import eu.torvian.chatbot.common.models.user.User
+import eu.torvian.chatbot.common.security.SecurityAuditStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -353,18 +354,6 @@ class DefaultAuthRepository(
         }
     }
 
-    override suspend fun acknowledgeSecurityAlerts(): Either<RepositoryError, Unit> = either {
-        logger.info("Acknowledging security alerts for the current user")
-
-        withError({ apiError ->
-            apiError.toRepositoryError("Failed to acknowledge security alerts")
-        }) {
-            authApi.acknowledgeSecurityAlerts().bind()
-        }
-
-        logger.info("Successfully acknowledged security alerts")
-    }
-
     override suspend fun getTrustedDevices(): Either<RepositoryError, List<UserTrustedDeviceInfo>> = either {
         logger.info("Fetching trusted devices for the current user")
 
@@ -385,6 +374,18 @@ class DefaultAuthRepository(
         }
 
         logger.info("Successfully revoked trusted device with deviceId: $deviceId")
+    }
+
+    override suspend fun resolveSecurityAlert(alertId: Long, outcome: SecurityAuditStatus): Either<RepositoryError, Unit> = either {
+        logger.info("Resolving security alert with alertId: $alertId, outcome: $outcome")
+
+        withError({ apiError ->
+            apiError.toRepositoryError("Failed to resolve security alert")
+        }) {
+            authApi.resolveSecurityAlert(alertId, outcome).bind()
+        }
+
+        logger.info("Successfully resolved security alert with alertId: $alertId")
     }
 
     override suspend fun changePassword(currentPassword: String, newPassword: String): Either<RepositoryError, Unit> = either {

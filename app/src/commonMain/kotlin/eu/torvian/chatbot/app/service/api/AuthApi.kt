@@ -7,6 +7,7 @@ import eu.torvian.chatbot.common.models.api.auth.UserTrustedDeviceInfo
 import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.api.auth.LoginResponse
 import eu.torvian.chatbot.common.security.AccountValidationPolicy
+import eu.torvian.chatbot.common.security.SecurityAuditStatus
 
 /**
  * Authentication API client interface for managing user authentication operations.
@@ -94,15 +95,6 @@ interface AuthApi {
     suspend fun getSecurityAlerts(): Either<ApiResourceError, List<UserSecurityAlert>>
 
     /**
-     * Acknowledges all pending security alerts for the current user.
-     * This marks all unacknowledged security alerts as trusted.
-     *
-     * Note: This operation is not available for restricted sessions.
-     * @return Either an [ApiResourceError] on failure or Unit on success
-     */
-    suspend fun acknowledgeSecurityAlerts(): Either<ApiResourceError, Unit>
-
-    /**
      * Retrieves the list of trusted devices for the current user.
      * These are devices that have been trusted through first use or security alert acknowledgement.
      *
@@ -156,4 +148,19 @@ interface AuthApi {
      * @return Either an [ApiResourceError] on failure or [AccountValidationPolicy] on success
      */
     suspend fun getAuthPolicy(): Either<ApiResourceError, AccountValidationPolicy>
+
+    /**
+     * Resolves a single security alert with the specified outcome.
+     *
+     * This method allows the user to either trust or dismiss a specific security alert.
+     * - TRUSTED: The device is added to the trusted devices list and the alert is marked as trusted.
+     * - DISMISSED: The alert is marked as dismissed without adding the device to trusted devices.
+     *
+     * Note: This operation is not available for restricted sessions.
+     *
+     * @param alertId The unique identifier of the security alert to resolve.
+     * @param outcome The outcome to apply (TRUSTED or DISMISSED).
+     * @return Either an [ApiResourceError] on failure or Unit on success
+     */
+    suspend fun resolveSecurityAlert(alertId: Long, outcome: SecurityAuditStatus): Either<ApiResourceError, Unit>
 }

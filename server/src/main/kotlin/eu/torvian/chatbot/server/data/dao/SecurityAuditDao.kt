@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.server.data.dao
 
+import eu.torvian.chatbot.common.security.SecurityAuditStatus
 import eu.torvian.chatbot.server.data.entities.SecurityAuditEntity
 
 /**
@@ -7,7 +8,7 @@ import eu.torvian.chatbot.server.data.entities.SecurityAuditEntity
  */
 interface SecurityAuditDao {
     /**
-     * Inserts a new security audit record for an unacknowledged login attempt.
+     * Inserts a new security audit record for an unrecognized login attempt.
      *
      * @param userId The owning user identifier.
      * @param deviceId The client-side UUID of the device (mandatory).
@@ -23,26 +24,28 @@ interface SecurityAuditDao {
     ): SecurityAuditEntity
 
     /**
-     * Retrieves all unacknowledged security audit records for a user.
+     * Retrieves all pending security audit records for a user.
      *
      * @param userId The owning user identifier.
-     * @return List of unacknowledged audit records.
+     * @return List of pending audit records.
      */
     suspend fun getUnacknowledgedByUserId(userId: Long): List<SecurityAuditEntity>
 
     /**
-     * Marks all unacknowledged security audit records for a user as acknowledged.
+     * Updates the status of a specific audit record.
      *
-     * @param userId The owning user identifier.
+     * @param id The audit record identifier.
+     * @param status The new status to set.
+     * @param resolvedAt The timestamp when the record was resolved.
      * @return The number of rows updated.
      */
-    suspend fun acknowledgeAllByUserId(userId: Long): Int
+    suspend fun updateStatus(id: Long, status: SecurityAuditStatus, resolvedAt: Long): Int
 
     /**
-     * Gets unique device IDs from unacknowledged audit records for a user.
+     * Retrieves a single audit record by its ID.
      *
-     * @param userId The owning user identifier.
-     * @return Set of unique device IDs.
+     * @param id The audit record identifier.
+     * @return The audit record, or null if not found.
      */
-    suspend fun getUniqueDeviceIdsFromUnacknowledged(userId: Long): Set<String>
+    suspend fun getAuditRecordById(id: Long): SecurityAuditEntity?
 }

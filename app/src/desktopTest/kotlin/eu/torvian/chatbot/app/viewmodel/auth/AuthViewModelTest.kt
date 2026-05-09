@@ -58,7 +58,6 @@ class AuthViewModelTest {
             coEvery { checkInitialAuthState() } returns Unit
             // Mock the new security alerts methods
             coEvery { getSecurityAlerts() } returns emptyList<UserSecurityAlert>().right()
-            coEvery { acknowledgeSecurityAlerts() } returns Unit.right()
         }
         mockNotificationService = mockk(relaxed = true)
         mockClipboardService = mockk(relaxed = true)

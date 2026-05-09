@@ -130,8 +130,11 @@ fun AuthDialogs(
                 alerts = dialogState.alerts,
                 isRestricted = isRestricted,
                 onDismiss = { authViewModel.closeDialog() },
-                onAcknowledge = {
-                    authViewModel.acknowledgeSecurityAlerts()
+                onResolveAlert = { alertId, trust ->
+                    authViewModel.resolveAlert(alertId, trust)
+                },
+                onCopyToClipboard = { alert ->
+                    authViewModel.copyToClipboard(alert.deviceId)
                 }
             )
         }

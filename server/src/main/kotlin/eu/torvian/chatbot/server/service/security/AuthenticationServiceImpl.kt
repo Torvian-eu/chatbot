@@ -11,6 +11,7 @@ import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.api.auth.UserTrustedDeviceInfo
 import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.common.security.AccountValidationPolicy
+import eu.torvian.chatbot.common.security.SecurityAuditStatus
 import eu.torvian.chatbot.common.security.error.PasswordValidationError
 import eu.torvian.chatbot.server.data.dao.*
 import eu.torvian.chatbot.server.data.dao.error.UserError
@@ -348,57 +349,6 @@ class AuthenticationServiceImpl(
                     raise(GetSecurityAlertsError.InsufficientPermissions())
                 }
                 securityAuditDao.getUnacknowledgedByUserId(userId)
-            }
-        }
-
-    override suspend fun acknowledgeSecurityAlerts(
-        userId: Long,
-        requesterIsRestricted: Boolean
-    ): Either<AcknowledgeAlertsError, Unit> =
-        transactionScope.transaction {
-            either {
-                // Restricted sessions cannot acknowledge alerts - prevents self-acknowledgement of untrusted devices
-                ensure(!requesterIsRestricted) {
-                    logger.warn("Restricted session attempted to acknowledge security alerts")
-                    raise(AcknowledgeAlertsError.InsufficientPermissions())
-                }
-
-                // 1. Fetch all unacknowledged records from SecurityAuditDao
-                val auditRecords = securityAuditDao.getUnacknowledgedByUserId(userId)
-
-                if (auditRecords.isEmpty()) {
-                    return@transaction Unit.right()
-                }
-
-                // 2. For each unique deviceId, insert into trusted devices table if not already there
-                val currentTimeMillis = System.currentTimeMillis()
-                val processedDeviceIds = mutableSetOf<String>()
-
-                for (alert in auditRecords) {
-                    val deviceId = alert.deviceId
-
-                    // Skip if we've already processed this deviceId
-                    if (deviceId in processedDeviceIds) {
-                        continue
-                    }
-                    processedDeviceIds.add(deviceId)
-
-                    // Check if it already exists in trusted devices
-                    val existingDevice = userTrustedDeviceDao.getTrustedDevice(userId, deviceId)
-                    if (existingDevice == null) {
-                        // Insert into trusted devices table
-                        userTrustedDeviceDao.insertTrustedDevice(
-                            userId = userId,
-                            deviceId = deviceId,
-                            ipAddress = alert.ipAddress,
-                            firstSeenAt = currentTimeMillis,
-                            lastUsedAt = currentTimeMillis
-                        )
-                    }
-                }
-
-                // 3. Mark all audit records as acknowledged
-                securityAuditDao.acknowledgeAllByUserId(userId)
             }
         }
 
@@ -857,6 +807,88 @@ class AuthenticationServiceImpl(
                 }.bind()
 
                 logger.info("Successfully completed required password change for user: $userId")
+            }
+        }
+
+    /**
+     * Resolves a single security alert for the user with the specified outcome.
+     *
+     * This method allows the user to either trust or dismiss a specific security alert.
+     * - TRUSTED: The device is added to the trusted devices list and the alert is marked as trusted.
+     * - DISMISSED: The alert is marked as dismissed without adding the device to trusted devices.
+     *
+     * Restricted sessions cannot resolve alerts - this prevents self-resolution of untrusted devices.
+     *
+     * @param userId The unique identifier of the authenticated user.
+     * @param alertId The unique identifier of the security alert to resolve.
+     * @param outcome The outcome to apply (TRUSTED or DISMISSED).
+     * @param requesterIsRestricted Whether the requester's session is restricted (device not verified)
+     * @return Either [ResolveAlertError] if resolution fails, or Unit on success
+     */
+    override suspend fun resolveSingleAlert(
+        userId: Long,
+        alertId: Long,
+        outcome: SecurityAuditStatus,
+        requesterIsRestricted: Boolean
+    ): Either<ResolveAlertError, Unit> =
+        transactionScope.transaction {
+            either {
+                logger.info("Resolving security alert: $alertId for user: $userId with outcome: $outcome")
+
+                // 1. Check restriction - restricted sessions cannot resolve alerts
+                ensure(!requesterIsRestricted) {
+                    logger.warn("Restricted session attempted to resolve security alert: $alertId")
+                    ResolveAlertError.InsufficientPermissions()
+                }
+
+                // 2. Fetch the alert record
+                val auditRecord = securityAuditDao.getAuditRecordById(alertId)
+                    ?: raise(ResolveAlertError.AlertNotFound(alertId))
+
+                // 3. Ensure the alert belongs to the user
+                ensure(auditRecord.userId == userId) {
+                    logger.warn("Alert $alertId does not belong to user $userId")
+                    ResolveAlertError.AlertNotFound(alertId)
+                }
+
+                // 4. Ensure the alert is still pending
+                ensure(auditRecord.status == SecurityAuditStatus.PENDING) {
+                    logger.warn("Alert $alertId is not pending (status: ${auditRecord.status})")
+                    // Not an error - just return success since the alert is already resolved
+                    return@transaction Unit.right()
+                }
+
+                val currentTimeMillis = System.currentTimeMillis()
+
+                // 5. Handle the outcome
+                when (outcome) {
+                    SecurityAuditStatus.TRUSTED -> {
+                        // Add device to trusted devices if not already there
+                        val existingDevice = userTrustedDeviceDao.getTrustedDevice(userId, auditRecord.deviceId)
+                        if (existingDevice == null) {
+                            userTrustedDeviceDao.insertTrustedDevice(
+                                userId = userId,
+                                deviceId = auditRecord.deviceId,
+                                ipAddress = auditRecord.ipAddress,
+                                firstSeenAt = currentTimeMillis,
+                                lastUsedAt = currentTimeMillis
+                            )
+                        }
+                        // Mark the alert as trusted
+                        securityAuditDao.updateStatus(alertId, SecurityAuditStatus.TRUSTED, currentTimeMillis)
+                    }
+
+                    SecurityAuditStatus.DISMISSED -> {
+                        // Mark the alert as dismissed - do NOT add to trusted devices
+                        securityAuditDao.updateStatus(alertId, SecurityAuditStatus.DISMISSED, currentTimeMillis)
+                    }
+
+                    SecurityAuditStatus.PENDING -> {
+                        // No-op - should not happen as we check for PENDING above
+                    }
+                }
+
+                logger.info("Successfully resolved security alert: $alertId for user: $userId with outcome: $outcome")
             }
         }
 }

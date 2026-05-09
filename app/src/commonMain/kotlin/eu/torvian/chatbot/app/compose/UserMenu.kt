@@ -6,6 +6,7 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.DropdownMenu
@@ -32,6 +33,7 @@ import eu.torvian.chatbot.app.service.auth.AccountData
  * @param availableAccounts List of all stored user accounts available for switching
  * @param accountSwitchInProgress Whether an account switch operation is in progress
  * @param isCurrentSessionRestricted Whether the current session is restricted (IP not verified)
+ * @param hasSecurityAlerts Whether there are unacknowledged security alerts to display
  * @param onSwitchAccount Callback to open the account switcher dialog
  * @param onActiveSessions Callback to open the active sessions dialog
  * @param onTrustedDevices Callback to open the trusted devices dialog
@@ -39,6 +41,7 @@ import eu.torvian.chatbot.app.service.auth.AccountData
  * @param onLogout Callback to log out the current session
  * @param onLogoutAll Callback to log out from all sessions
  * @param onLogin Callback to navigate to login/add account
+ * @param onSecurityAlerts Callback to open the security alerts dialog
  */
 @Composable
 fun UserMenu(
@@ -46,13 +49,15 @@ fun UserMenu(
     availableAccounts: List<AccountData>,
     accountSwitchInProgress: Boolean,
     isCurrentSessionRestricted: Boolean,
+    hasSecurityAlerts: Boolean,
     onSwitchAccount: () -> Unit,
     onActiveSessions: () -> Unit,
     onTrustedDevices: () -> Unit,
     onChangePassword: () -> Unit,
     onLogout: () -> Unit,
     onLogoutAll: () -> Unit,
-    onLogin: () -> Unit
+    onLogin: () -> Unit,
+    onSecurityAlerts: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
 
@@ -83,6 +88,29 @@ fun UserMenu(
             )
 
             HorizontalDivider()
+
+            // Security Alerts - only shown when there are unacknowledged alerts
+            if (hasSecurityAlerts) {
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            "Security Alerts",
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    },
+                    onClick = {
+                        expanded = false
+                        onSecurityAlerts()
+                    },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.NotificationsActive,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
+                )
+            }
 
             // Change password is always available but disabled for restricted sessions.
             // Disabled for restricted sessions (untrusted device) to prevent security issues.

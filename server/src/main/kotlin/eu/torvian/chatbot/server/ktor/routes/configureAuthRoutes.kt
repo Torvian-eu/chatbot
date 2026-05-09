@@ -19,10 +19,10 @@ import eu.torvian.chatbot.server.service.security.error.LoginError
 import eu.torvian.chatbot.server.service.security.error.LogoutAllError
 import eu.torvian.chatbot.server.service.security.error.LogoutError
 import eu.torvian.chatbot.server.service.security.error.RefreshTokenError
-import eu.torvian.chatbot.server.service.security.error.AcknowledgeAlertsError
 import eu.torvian.chatbot.server.service.security.error.GetSecurityAlertsError
 import eu.torvian.chatbot.server.service.security.error.RevokeTrustedDeviceError
 import eu.torvian.chatbot.server.service.security.error.CompleteRequiredPasswordChangeError
+import eu.torvian.chatbot.server.service.security.error.ResolveAlertError
 import eu.torvian.chatbot.server.service.core.error.auth.ChangePasswordError
 import io.ktor.http.*
 import io.ktor.server.auth.*
@@ -259,20 +259,32 @@ fun Route.configureAuthRoutes(
         }
     }
 
-    // POST /api/v1/auth/acknowledge-alerts - Clear pending security alerts for the current user
+    // POST /api/v1/auth/security-alerts/{alertId}/resolve - Resolve a single security alert
     authenticate(AuthSchemes.USER_JWT) {
-        post<AuthResource.AcknowledgeAlerts> {
+        post<AuthResource.ResolveAlert> { resource ->
+            val request = call.receive<ResolveAlertRequest>()
             val userContext = call.getUserContext()
 
             call.respondEither(
-                authenticationService.acknowledgeSecurityAlerts(userContext.user.id, userContext.isRestricted),
+                authenticationService.resolveSingleAlert(
+                    userId = userContext.user.id,
+                    alertId = resource.alertId,
+                    outcome = request.outcome,
+                    requesterIsRestricted = userContext.isRestricted
+                ),
                 HttpStatusCode.NoContent
             ) { error ->
                 when (error) {
-                    is AcknowledgeAlertsError.InsufficientPermissions ->
+                    is ResolveAlertError.InsufficientPermissions ->
                         apiError(
                             CommonApiErrorCodes.PERMISSION_DENIED,
-                            "Action requires a trusted session. Please verify via email or another device."
+                            error.reason
+                        )
+
+                    is ResolveAlertError.AlertNotFound ->
+                        apiError(
+                            CommonApiErrorCodes.NOT_FOUND,
+                            "Security alert not found"
                         )
                 }
             }

@@ -7,6 +7,7 @@ import com.auth0.jwt.algorithms.Algorithm
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.common.security.AccountValidationPolicy
+import eu.torvian.chatbot.common.security.SecurityAuditStatus
 import eu.torvian.chatbot.server.data.dao.*
 import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.dao.error.UserSessionError
@@ -16,10 +17,7 @@ import eu.torvian.chatbot.server.domain.config.AccountSecurityMode
 import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.service.core.UserService
 import eu.torvian.chatbot.server.service.core.error.auth.UserNotFoundError
-import eu.torvian.chatbot.server.service.security.error.LoginError
-import eu.torvian.chatbot.server.service.security.error.LogoutAllError
-import eu.torvian.chatbot.server.service.security.error.LogoutError
-import eu.torvian.chatbot.server.service.security.error.RefreshTokenError
+import eu.torvian.chatbot.server.service.security.error.*
 import io.ktor.server.auth.jwt.*
 import io.mockk.*
 import kotlinx.coroutines.test.runTest
@@ -329,34 +327,6 @@ class AuthenticationServiceImplTest {
         assertTrue(!result.getOrNull()!!.isRestricted)
         // Verify the device was inserted into trusted devices
         coVerify { userTrustedDeviceDao.insertTrustedDevice(testUser.id, deviceId, ipAddress, any(), any()) }
-    }
-
-    @Test
-    fun `acknowledgeSecurityAlerts should promote devices to trusted`() = runTest {
-        // Setup: Create a mock SecurityAuditEntity for the test
-        val mockAuditEntity = mockk<SecurityAuditEntity>()
-        every { mockAuditEntity.deviceId } returns "device-001"
-        every { mockAuditEntity.ipAddress } returns "10.0.0.1"
-
-        coEvery { securityAuditDao.getUnacknowledgedByUserId(testUser.id) } returns listOf(mockAuditEntity)
-        coEvery { securityAuditDao.acknowledgeAllByUserId(testUser.id) } returns 1
-        coEvery { userTrustedDeviceDao.getTrustedDevice(testUser.id, "device-001") } returns null
-        coEvery {
-            userTrustedDeviceDao.insertTrustedDevice(
-                userId = testUser.id,
-                deviceId = "device-001",
-                ipAddress = any(),
-                firstSeenAt = any(),
-                lastUsedAt = any()
-            )
-        } returns testTrustedDevice
-
-        val result = authService.acknowledgeSecurityAlerts(testUser.id, requesterIsRestricted = false)
-
-        assertTrue(result.isRight())
-        coVerify { securityAuditDao.getUnacknowledgedByUserId(testUser.id) }
-        coVerify { securityAuditDao.acknowledgeAllByUserId(testUser.id) }
-        coVerify { userTrustedDeviceDao.insertTrustedDevice(testUser.id, "device-001", any(), any(), any()) }
     }
 
     @Test
@@ -848,5 +818,197 @@ class AuthenticationServiceImplTest {
         // Then
         assertTrue(result.isLeft())
         assertEquals(RefreshTokenError.InvalidRefreshToken, result.leftOrNull())
+    }
+
+    // --- Security Alert Tests ---
+
+    @Test
+    fun `getSecurityAlerts should return unacknowledged alerts for user`() = runTest {
+        // Given
+        val userId = testUser.id
+        val alerts = listOf(
+            SecurityAuditEntity(
+                id = 1L,
+                userId = userId,
+                deviceId = "device-001",
+                ipAddress = "10.0.0.1",
+                createdAt = Instant.fromEpochMilliseconds(System.currentTimeMillis()),
+                status = SecurityAuditStatus.PENDING
+            )
+        )
+        coEvery { securityAuditDao.getUnacknowledgedByUserId(userId) } returns alerts
+
+        // When
+        val result = authService.getSecurityAlerts(userId, requesterIsRestricted = false)
+
+        // Then
+        assertEquals(alerts, result.getOrNull())
+        coVerify { securityAuditDao.getUnacknowledgedByUserId(userId) }
+    }
+
+    @Test
+    fun `getSecurityAlerts should return InsufficientPermissions for restricted session`() = runTest {
+        // Given
+        val userId = testUser.id
+
+        // When
+        val result = authService.getSecurityAlerts(userId, requesterIsRestricted = true)
+
+        // Then
+        assertEquals(GetSecurityAlertsError.InsufficientPermissions(), result.leftOrNull())
+        coVerify(exactly = 0) { securityAuditDao.getUnacknowledgedByUserId(any()) }
+    }
+
+    @Test
+    fun `resolveSingleAlert should successfully trust a security alert`() = runTest {
+        // Given
+        val userId = testUser.id
+        val alertId = 1L
+        val deviceId = "device-001"
+        val alert = SecurityAuditEntity(
+            id = alertId,
+            userId = userId,
+            deviceId = deviceId,
+            ipAddress = "10.0.0.1",
+            createdAt = Instant.fromEpochMilliseconds(System.currentTimeMillis()),
+            status = SecurityAuditStatus.PENDING
+        )
+        coEvery { securityAuditDao.getAuditRecordById(alertId) } returns alert
+        coEvery { userTrustedDeviceDao.getTrustedDevice(userId, deviceId) } returns null
+        coEvery {
+            userTrustedDeviceDao.insertTrustedDevice(
+                userId = userId,
+                deviceId = deviceId,
+                ipAddress = "10.0.0.1",
+                firstSeenAt = any(),
+                lastUsedAt = any()
+            )
+        } returns testTrustedDevice
+        coEvery { securityAuditDao.updateStatus(alertId, SecurityAuditStatus.TRUSTED, any()) } returns 1
+
+        // When
+        val result =
+            authService.resolveSingleAlert(userId, alertId, SecurityAuditStatus.TRUSTED, requesterIsRestricted = false)
+
+        // Then
+        assertTrue(result.isRight())
+        coVerify { securityAuditDao.getAuditRecordById(alertId) }
+        coVerify { userTrustedDeviceDao.insertTrustedDevice(userId, deviceId, "10.0.0.1", any(), any()) }
+        coVerify { securityAuditDao.updateStatus(alertId, SecurityAuditStatus.TRUSTED, any()) }
+    }
+
+    @Test
+    fun `resolveSingleAlert should successfully dismiss a security alert`() = runTest {
+        // Given
+        val userId = testUser.id
+        val alertId = 1L
+        val deviceId = "device-001"
+        val alert = SecurityAuditEntity(
+            id = alertId,
+            userId = userId,
+            deviceId = deviceId,
+            ipAddress = "10.0.0.1",
+            createdAt = Instant.fromEpochMilliseconds(System.currentTimeMillis()),
+            status = SecurityAuditStatus.PENDING
+        )
+        coEvery { securityAuditDao.getAuditRecordById(alertId) } returns alert
+        coEvery { securityAuditDao.updateStatus(alertId, SecurityAuditStatus.DISMISSED, any()) } returns 1
+
+        // When
+        val result = authService.resolveSingleAlert(
+            userId,
+            alertId,
+            SecurityAuditStatus.DISMISSED,
+            requesterIsRestricted = false
+        )
+
+        // Then
+        assertTrue(result.isRight())
+        coVerify { securityAuditDao.getAuditRecordById(alertId) }
+        coVerify(exactly = 0) { userTrustedDeviceDao.insertTrustedDevice(any(), any(), any(), any(), any()) }
+        coVerify { securityAuditDao.updateStatus(alertId, SecurityAuditStatus.DISMISSED, any()) }
+    }
+
+    @Test
+    fun `resolveSingleAlert should return InsufficientPermissions for restricted session`() = runTest {
+        // Given
+        val userId = testUser.id
+        val alertId = 1L
+
+        // When
+        val result =
+            authService.resolveSingleAlert(userId, alertId, SecurityAuditStatus.TRUSTED, requesterIsRestricted = true)
+
+        // Then
+        assertEquals(ResolveAlertError.InsufficientPermissions(), result.leftOrNull())
+        coVerify(exactly = 0) { securityAuditDao.getAuditRecordById(any()) }
+    }
+
+    @Test
+    fun `resolveSingleAlert should return AlertNotFound when alert does not exist`() = runTest {
+        // Given
+        val userId = testUser.id
+        val alertId = 999L
+        coEvery { securityAuditDao.getAuditRecordById(alertId) } returns null
+
+        // When
+        val result =
+            authService.resolveSingleAlert(userId, alertId, SecurityAuditStatus.TRUSTED, requesterIsRestricted = false)
+
+        // Then
+        assertTrue(result.isLeft())
+        assertEquals(ResolveAlertError.AlertNotFound(alertId), result.leftOrNull())
+    }
+
+    @Test
+    fun `resolveSingleAlert should return AlertNotFound when alert belongs to different user`() = runTest {
+        // Given
+        val userId = testUser.id
+        val alertId = 1L
+        val otherUserAlert = SecurityAuditEntity(
+            id = alertId,
+            userId = 999L, // Different user
+            deviceId = "device-001",
+            ipAddress = "10.0.0.1",
+            createdAt = Instant.fromEpochMilliseconds(System.currentTimeMillis()),
+            status = SecurityAuditStatus.PENDING
+        )
+        coEvery { securityAuditDao.getAuditRecordById(alertId) } returns otherUserAlert
+
+        // When
+        val result =
+            authService.resolveSingleAlert(userId, alertId, SecurityAuditStatus.TRUSTED, requesterIsRestricted = false)
+
+        // Then
+        assertEquals(ResolveAlertError.AlertNotFound(alertId), result.leftOrNull())
+    }
+
+    @Test
+    fun `resolveSingleAlert should not insert device if already trusted`() = runTest {
+        // Given
+        val userId = testUser.id
+        val alertId = 1L
+        val deviceId = "device-001"
+        val alert = SecurityAuditEntity(
+            id = alertId,
+            userId = userId,
+            deviceId = deviceId,
+            ipAddress = "10.0.0.1",
+            createdAt = Instant.fromEpochMilliseconds(System.currentTimeMillis()),
+            status = SecurityAuditStatus.PENDING
+        )
+        coEvery { securityAuditDao.getAuditRecordById(alertId) } returns alert
+        coEvery { userTrustedDeviceDao.getTrustedDevice(userId, deviceId) } returns testTrustedDevice
+        coEvery { securityAuditDao.updateStatus(alertId, SecurityAuditStatus.TRUSTED, any()) } returns 1
+
+        // When
+        val result =
+            authService.resolveSingleAlert(userId, alertId, SecurityAuditStatus.TRUSTED, requesterIsRestricted = false)
+
+        // Then
+        assertTrue(result.isRight())
+        coVerify { securityAuditDao.getAuditRecordById(alertId) }
+        coVerify(exactly = 0) { userTrustedDeviceDao.insertTrustedDevice(any(), any(), any(), any(), any()) }
+        coVerify { securityAuditDao.updateStatus(alertId, SecurityAuditStatus.TRUSTED, any()) }
     }
 }

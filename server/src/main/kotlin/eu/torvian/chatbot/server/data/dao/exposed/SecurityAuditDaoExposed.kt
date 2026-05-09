@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.data.dao.exposed
 
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
+import eu.torvian.chatbot.common.security.SecurityAuditStatus
 import eu.torvian.chatbot.server.data.dao.SecurityAuditDao
 import eu.torvian.chatbot.server.data.entities.SecurityAuditEntity
 import eu.torvian.chatbot.server.data.tables.SecurityAuditTable
@@ -31,7 +32,7 @@ class SecurityAuditDaoExposed(
                 it[SecurityAuditTable.deviceId] = deviceId
                 it[SecurityAuditTable.ipAddress] = ipAddress
                 it[SecurityAuditTable.createdAt] = createdAt
-                it[SecurityAuditTable.isAcknowledged] = false
+                it[SecurityAuditTable.status] = SecurityAuditStatus.PENDING.name
             }
 
             inserted.resultedValues?.firstOrNull()?.toSecurityAuditEntity()
@@ -42,29 +43,25 @@ class SecurityAuditDaoExposed(
         transactionScope.transaction {
             SecurityAuditTable.selectAll()
                 .where {
-                    (SecurityAuditTable.userId eq userId) and (SecurityAuditTable.isAcknowledged eq false)
+                    (SecurityAuditTable.userId eq userId) and (SecurityAuditTable.status eq SecurityAuditStatus.PENDING.name)
                 }
                 .orderBy(SecurityAuditTable.createdAt to SortOrder.DESC)
                 .map { it.toSecurityAuditEntity() }
         }
 
-    override suspend fun acknowledgeAllByUserId(userId: Long): Int =
+    override suspend fun updateStatus(id: Long, status: SecurityAuditStatus, resolvedAt: Long): Int =
         transactionScope.transaction {
-            SecurityAuditTable.update({
-                (SecurityAuditTable.userId eq userId) and (SecurityAuditTable.isAcknowledged eq false)
-            }) {
-                it[SecurityAuditTable.isAcknowledged] = true
+            SecurityAuditTable.update({ SecurityAuditTable.id eq id }) {
+                it[SecurityAuditTable.status] = status.name
+                it[SecurityAuditTable.resolvedAt] = resolvedAt
             }
         }
 
-    override suspend fun getUniqueDeviceIdsFromUnacknowledged(userId: Long): Set<String> =
+    override suspend fun getAuditRecordById(id: Long): SecurityAuditEntity? =
         transactionScope.transaction {
             SecurityAuditTable.selectAll()
-                .where {
-                    (SecurityAuditTable.userId eq userId) and
-                    (SecurityAuditTable.isAcknowledged eq false)
-                }
-                .map { it[SecurityAuditTable.deviceId] }
-                .toSet()
+                .where { SecurityAuditTable.id eq id }
+                .singleOrNull()
+                ?.toSecurityAuditEntity()
         }
 }
