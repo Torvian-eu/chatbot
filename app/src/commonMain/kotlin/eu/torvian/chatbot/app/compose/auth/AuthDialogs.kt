@@ -120,6 +120,7 @@ fun AuthDialogs(
 
         is AuthDialogState.RestrictedSessionInfo -> {
             RestrictedSessionInfoDialog(
+                viewModel = authViewModel,
                 onDismiss = { authViewModel.closeDialog() }
             )
         }

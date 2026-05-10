@@ -243,4 +243,35 @@ interface AuthenticationService {
         newPassword: String,
         requesterIsRestricted: Boolean
     ): Either<CompleteRequiredPasswordChangeError, Unit>
+
+    /**
+     * Requests a device verification email for a specific device.
+     *
+     * This allows users on restricted (untrusted) sessions to request a verification email
+     * that will allow them to promote their device to "Trusted" via an email link.
+     *
+     * Rate limiting: A user can only request one verification email per device every 60 minutes.
+     *
+     * @param userId The unique identifier of the authenticated user.
+     * @param deviceId The device identifier to verify.
+     * @return Either [RequestDeviceVerificationError] if the request fails, or Unit on success
+     */
+    suspend fun requestDeviceVerificationEmail(
+        userId: Long,
+        deviceId: String
+    ): Either<RequestDeviceVerificationError, Unit>
+
+    /**
+     * Verifies a device using a token from an email verification link.
+     *
+     * This method:
+     * 1. Validates the token (not expired, not already used)
+     * 2. Adds the device to the trusted devices list
+     * 3. Resolves any PENDING security alerts for this device as TRUSTED
+     * 4. Deletes the verification token (single-use)
+     *
+     * @param token The verification token from the email link.
+     * @return Either [VerifyDeviceError] if verification fails, or Unit on success
+     */
+    suspend fun verifyDeviceByToken(token: String): Either<VerifyDeviceError, Unit>
 }

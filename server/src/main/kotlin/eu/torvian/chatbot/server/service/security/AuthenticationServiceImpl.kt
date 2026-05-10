@@ -60,7 +60,8 @@ class AuthenticationServiceImpl(
     private val transactionScope: TransactionScope,
     private val accountSecurityMode: AccountSecurityMode,
     private val failedLoginAttemptDao: FailedLoginAttemptDao,
-    private val authPolicy: AccountValidationPolicy
+    private val authPolicy: AccountValidationPolicy,
+    private val deviceVerificationTokenDao: DeviceVerificationTokenDao
 ) : AuthenticationService {
 
     companion object {
@@ -340,7 +341,10 @@ class AuthenticationServiceImpl(
             userSessionDao.getSessionsByUserId(userId).right()
         }
 
-    override suspend fun getSecurityAlerts(userId: Long, requesterIsRestricted: Boolean): Either<GetSecurityAlertsError, List<SecurityAuditEntity>> =
+    override suspend fun getSecurityAlerts(
+        userId: Long,
+        requesterIsRestricted: Boolean
+    ): Either<GetSecurityAlertsError, List<SecurityAuditEntity>> =
         transactionScope.transaction {
             either {
                 // Restricted sessions cannot list security alerts
@@ -810,21 +814,6 @@ class AuthenticationServiceImpl(
             }
         }
 
-    /**
-     * Resolves a single security alert for the user with the specified outcome.
-     *
-     * This method allows the user to either trust or dismiss a specific security alert.
-     * - TRUSTED: The device is added to the trusted devices list and the alert is marked as trusted.
-     * - DISMISSED: The alert is marked as dismissed without adding the device to trusted devices.
-     *
-     * Restricted sessions cannot resolve alerts - this prevents self-resolution of untrusted devices.
-     *
-     * @param userId The unique identifier of the authenticated user.
-     * @param alertId The unique identifier of the security alert to resolve.
-     * @param outcome The outcome to apply (TRUSTED or DISMISSED).
-     * @param requesterIsRestricted Whether the requester's session is restricted (device not verified)
-     * @return Either [ResolveAlertError] if resolution fails, or Unit on success
-     */
     override suspend fun resolveSingleAlert(
         userId: Long,
         alertId: Long,
@@ -874,6 +863,11 @@ class AuthenticationServiceImpl(
                                 lastUsedAt = currentTimeMillis
                             )
                         }
+                        // Unrestrict all sessions for this device - this unlocks any restricted sessions
+                        val unrestrictedCount = userSessionDao.unrestrictSessions(userId, auditRecord.deviceId)
+                        if (unrestrictedCount > 0) {
+                            logger.info("Unrestricted $unrestrictedCount session(s) for device ${auditRecord.deviceId}")
+                        }
                         // Mark the alert as trusted
                         securityAuditDao.updateStatus(alertId, SecurityAuditStatus.TRUSTED, currentTimeMillis)
                     }
@@ -889,6 +883,126 @@ class AuthenticationServiceImpl(
                 }
 
                 logger.info("Successfully resolved security alert: $alertId for user: $userId with outcome: $outcome")
+            }
+        }
+
+    override suspend fun requestDeviceVerificationEmail(
+        userId: Long,
+        deviceId: String
+    ): Either<RequestDeviceVerificationError, Unit> =
+        transactionScope.transaction {
+            either {
+                logger.info("Requesting device verification email for user: $userId, device: $deviceId")
+
+                // 1. Fetch user to check for email
+                val userEntity = withError({ _: UserError.UserNotFound ->
+                    RequestDeviceVerificationError.UserHasNoEmail
+                }) {
+                    userDao.getUserById(userId).bind()
+                }
+
+                // 2. Check user has an email address
+                ensure(!userEntity.email.isNullOrBlank()) {
+                    logger.warn("User $userId has no email address on file")
+                    raise(RequestDeviceVerificationError.UserHasNoEmail)
+                }
+
+                // 3. Check rate limit (1 hour = 3600000 ms)
+                val rateLimitMillis = 60 * 60 * 1000L
+                val lastTokenCreatedAt = deviceVerificationTokenDao.getLastTokenCreatedAt(userId, deviceId)
+                if (lastTokenCreatedAt != null) {
+                    val timeSinceLastToken = System.currentTimeMillis() - lastTokenCreatedAt
+                    if (timeSinceLastToken < rateLimitMillis) {
+                        val retryAfterMillis = rateLimitMillis - timeSinceLastToken
+                        logger.warn("Rate limit exceeded for user: $userId, device: $deviceId")
+                        raise(RequestDeviceVerificationError.RateLimitExceeded(retryAfterMillis))
+                    }
+                }
+
+                // 4. Generate secure token (UUID)
+                val token = java.util.UUID.randomUUID().toString()
+                val currentTimeMillis = System.currentTimeMillis()
+                val expiresAtMillis = currentTimeMillis + rateLimitMillis
+
+                // 5. Store the token
+                deviceVerificationTokenDao.createToken(
+                    userId = userId,
+                    deviceId = deviceId,
+                    token = token,
+                    expiresAt = expiresAtMillis,
+                    createdAt = currentTimeMillis
+                )
+
+                // 6. Mock email - log the verification URL
+                // In production, this would send an actual email
+                val verificationUrl = "http://localhost:8080/api/public/auth/verify-device?token=$token"
+                logger.info("=== DEVICE VERIFICATION EMAIL (MOCK) ===")
+                logger.info("To: ${userEntity.email}")
+                logger.info("Subject: Verify your device")
+                logger.info("Body: Click the following link to trust your device:")
+                logger.info(verificationUrl)
+                logger.info("========================================")
+
+                logger.info("Successfully created device verification token for user: $userId, device: $deviceId")
+            }
+        }
+
+    override suspend fun verifyDeviceByToken(token: String): Either<VerifyDeviceError, Unit> =
+        transactionScope.transaction {
+            either {
+                logger.info("Verifying device with token")
+
+                // 1. Find the token
+                val tokenEntity = deviceVerificationTokenDao.findToken(token)
+                if (tokenEntity == null) {
+                    logger.warn("Invalid verification token: $token")
+                    raise(VerifyDeviceError.InvalidOrExpiredToken)
+                }
+
+                // 2. Check token is not expired
+                val currentTimeMillis = System.currentTimeMillis()
+                if (tokenEntity.expiresAt.toEpochMilliseconds() < currentTimeMillis) {
+                    logger.warn("Expired verification token: $token")
+                    // Clean up expired token
+                    deviceVerificationTokenDao.deleteToken(token)
+                    raise(VerifyDeviceError.InvalidOrExpiredToken)
+                }
+
+                val userId = tokenEntity.userId
+                val deviceId = tokenEntity.deviceId
+
+                // 3. Add device to trusted devices if not already there
+                val existingDevice = userTrustedDeviceDao.getTrustedDevice(userId, deviceId)
+                if (existingDevice == null) {
+                    userTrustedDeviceDao.insertTrustedDevice(
+                        userId = userId,
+                        deviceId = deviceId,
+                        ipAddress = null, // IP not available from email link
+                        firstSeenAt = currentTimeMillis,
+                        lastUsedAt = currentTimeMillis
+                    )
+                    logger.info("Added device $deviceId to trusted devices for user $userId")
+                }
+
+                // 4. Unrestrict all sessions for this user/device combination
+                // This ensures existing restricted sessions become unrestricted immediately
+                val unrestrictedCount = userSessionDao.unrestrictSessions(userId, deviceId)
+                if (unrestrictedCount > 0) {
+                    logger.info("Unrestricted $unrestrictedCount session(s) for device $deviceId")
+                }
+
+                // 5. Resolve any PENDING security alerts for this device as TRUSTED
+                val pendingAlerts = securityAuditDao.getUnacknowledgedByUserIdAndDeviceId(userId, deviceId)
+
+                for (alert in pendingAlerts) {
+                    securityAuditDao.updateStatus(alert.id, SecurityAuditStatus.TRUSTED, currentTimeMillis)
+                    logger.info("Resolved security alert ${alert.id} as TRUSTED for device $deviceId")
+                }
+
+                // 6. Delete the token (single-use)
+                deviceVerificationTokenDao.deleteToken(token)
+
+                logger.info("Successfully verified device $deviceId for user $userId via email link")
             }
         }
 }

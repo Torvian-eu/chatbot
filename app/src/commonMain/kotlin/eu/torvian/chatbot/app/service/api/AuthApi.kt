@@ -139,6 +139,17 @@ interface AuthApi {
     suspend fun completeRequiredPasswordChange(newPassword: String): Either<ApiResourceError, Unit>
 
     /**
+     * Requests a device verification email for the current restricted session.
+     *
+     * This endpoint allows users on restricted sessions to request a verification email
+     * that will allow them to promote their device to "Trusted" via an email link.
+     *
+     * @param deviceId The client-side UUID of the device to verify
+     * @return Either an [ApiResourceError] on failure or Unit on success
+     */
+    suspend fun requestDeviceVerification(deviceId: String): Either<ApiResourceError, Unit>
+
+    /**
      * Fetches the server's account validation policy.
      *
      * This endpoint is publicly accessible and returns the configured password

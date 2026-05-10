@@ -14,6 +14,7 @@ import eu.torvian.chatbot.common.models.api.auth.UserSecurityAlert
 import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
 import eu.torvian.chatbot.common.models.api.auth.UserTrustedDeviceInfo
 import eu.torvian.chatbot.common.models.api.auth.ResolveAlertRequest
+import eu.torvian.chatbot.common.models.api.auth.RequestDeviceVerificationRequest
 import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.security.AccountValidationPolicy
 import eu.torvian.chatbot.common.security.SecurityAuditStatus
@@ -156,6 +157,14 @@ class KtorAuthApiClient(
         return safeApiCall {
             authenticatedClient.post(AuthResource.ResolveAlert(alertId = alertId)) {
                 setBody(ResolveAlertRequest(outcome = outcome))
+            }.body<Unit>()
+        }
+    }
+
+    override suspend fun requestDeviceVerification(deviceId: String): Either<ApiResourceError, Unit> {
+        return safeApiCall {
+            authenticatedClient.post(AuthResource.RequestDeviceVerification()) {
+                setBody(RequestDeviceVerificationRequest(deviceId = deviceId))
             }.body<Unit>()
         }
     }

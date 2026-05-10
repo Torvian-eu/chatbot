@@ -79,4 +79,16 @@ interface UserSessionDao {
      * @return The number of expired sessions deleted.
      */
     suspend fun deleteExpiredSessions(currentTime: Long): Int
+
+    /**
+     * Unrestricts all sessions for a specific user and device.
+     *
+     * This is called when a device is verified via email, to immediately unlock
+     * any existing restricted sessions for that device.
+     *
+     * @param userId The ID of the user whose sessions to update.
+     * @param deviceId The device ID whose sessions should be unrestricted.
+     * @return The number of sessions updated.
+     */
+    suspend fun unrestrictSessions(userId: Long, deviceId: String): Int
 }

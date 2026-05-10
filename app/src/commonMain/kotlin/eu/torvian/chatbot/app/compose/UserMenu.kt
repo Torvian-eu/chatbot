@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -42,6 +43,7 @@ import eu.torvian.chatbot.app.service.auth.AccountData
  * @param onLogoutAll Callback to log out from all sessions
  * @param onLogin Callback to navigate to login/add account
  * @param onSecurityAlerts Callback to open the security alerts dialog
+ * @param onShowRestrictedInfo Callback to open the restricted session info dialog
  */
 @Composable
 fun UserMenu(
@@ -57,7 +59,8 @@ fun UserMenu(
     onLogout: () -> Unit,
     onLogoutAll: () -> Unit,
     onLogin: () -> Unit,
-    onSecurityAlerts: () -> Unit
+    onSecurityAlerts: () -> Unit,
+    onShowRestrictedInfo: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
 
@@ -105,6 +108,29 @@ fun UserMenu(
                     leadingIcon = {
                         Icon(
                             Icons.Default.NotificationsActive,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
+                )
+            }
+
+            // Restricted Session Info - only shown when session is restricted
+            if (isCurrentSessionRestricted) {
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            "Restricted Session Info",
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    },
+                    onClick = {
+                        expanded = false
+                        onShowRestrictedInfo()
+                    },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.Warning,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.error
                         )

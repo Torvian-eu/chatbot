@@ -23,6 +23,7 @@ import eu.torvian.chatbot.server.service.security.error.GetSecurityAlertsError
 import eu.torvian.chatbot.server.service.security.error.RevokeTrustedDeviceError
 import eu.torvian.chatbot.server.service.security.error.CompleteRequiredPasswordChangeError
 import eu.torvian.chatbot.server.service.security.error.ResolveAlertError
+import eu.torvian.chatbot.server.service.security.error.RequestDeviceVerificationError
 import eu.torvian.chatbot.server.service.core.error.auth.ChangePasswordError
 import io.ktor.http.*
 import io.ktor.server.auth.*
@@ -467,6 +468,38 @@ fun Route.configureAuthRoutes(
                             CommonApiErrorCodes.INTERNAL,
                             "Failed to update password",
                             "reason" to error.reason
+                        )
+                }
+            }
+        }
+    }
+
+    // POST /api/v1/auth/request-device-verification - Request a device verification email
+    // This endpoint requires authentication (even for restricted sessions)
+    authenticate(AuthSchemes.USER_JWT) {
+        post<AuthResource.RequestDeviceVerification> {
+            val userContext = call.getUserContext()
+            val request = call.receive<RequestDeviceVerificationRequest>()
+
+            call.respondEither(
+                authenticationService.requestDeviceVerificationEmail(
+                    userId = userContext.user.id,
+                    deviceId = request.deviceId
+                ),
+                HttpStatusCode.Accepted
+            ) { error ->
+                when (error) {
+                    is RequestDeviceVerificationError.UserHasNoEmail ->
+                        apiError(
+                            CommonApiErrorCodes.FAILED_PRECONDITION,
+                            "User has no email address on file. Please add an email to your account first."
+                        )
+
+                    is RequestDeviceVerificationError.RateLimitExceeded ->
+                        apiError(
+                            CommonApiErrorCodes.RATE_LIMIT,
+                            "Verification email already sent. Please check your inbox or try again later.",
+                            "retryAfterSeconds" to (error.retryAfterMillis / 1000).toString()
                         )
                 }
             }

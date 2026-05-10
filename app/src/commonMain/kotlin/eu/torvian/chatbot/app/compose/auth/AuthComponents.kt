@@ -182,6 +182,33 @@ fun ErrorMessage(
 }
 
 /**
+ * Success message display component.
+ *
+ * @param message The success message to display.
+ * @param modifier Optional modifier for the card.
+ */
+@Composable
+fun SuccessMessage(
+    message: String,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        )
+    ) {
+        Text(
+            text = message,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(16.dp)
+        )
+    }
+}
+
+/**
  * Displays password requirements as a card with a bulleted list.
  *
  * Each requirement bullet is only shown when the corresponding rule is enabled

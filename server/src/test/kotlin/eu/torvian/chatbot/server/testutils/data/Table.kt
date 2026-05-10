@@ -183,4 +183,9 @@ enum class Table {
      * Table for storing failed login attempts for lockout enforcement.
      */
     FAILED_LOGIN_ATTEMPTS,
+
+    /**
+     * Table for storing device verification tokens for email-based device trust.
+     */
+    DEVICE_VERIFICATION_TOKENS,
 }

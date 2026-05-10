@@ -262,7 +262,8 @@ private fun UserMenuButton(
             onLogout = { scope.launch { authViewModel.logout() } },
             onLogoutAll = { scope.launch { authViewModel.logoutAll() } },
             onLogin = { navController.navigateToTop(Login) },
-            onSecurityAlerts = { authViewModel.showSecurityAlerts(showOnEmpty = true) }
+            onSecurityAlerts = { authViewModel.showSecurityAlerts(showOnEmpty = true) },
+            onShowRestrictedInfo = { authViewModel.openRestrictedSessionInfo() }
         )
     }
 }

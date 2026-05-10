@@ -37,6 +37,7 @@ class AuthenticationServiceImplTest {
     private val workerDao = mockk<WorkerDao>()
     private val authorizationService = mockk<AuthorizationService>()
     private val transactionScope = mockk<TransactionScope>()
+    private val deviceVerificationTokenDao = mockk<DeviceVerificationTokenDao>()
 
     private val jwtConfig = JwtConfig(
         secret = "test-secret-key-for-testing-purposes-only",
@@ -60,7 +61,8 @@ class AuthenticationServiceImplTest {
         transactionScope,
         AccountSecurityMode.DISABLED,
         failedLoginAttemptDao,
-        AccountValidationPolicy()
+        AccountValidationPolicy(),
+        deviceVerificationTokenDao
     )
 
     private fun createAuthService(
@@ -78,7 +80,8 @@ class AuthenticationServiceImplTest {
         transactionScope,
         accountSecurityMode,
         failedLoginAttemptDao,
-        AccountValidationPolicy()
+        AccountValidationPolicy(),
+        deviceVerificationTokenDao
     )
 
     private val testUser = UserEntity(
@@ -124,7 +127,8 @@ class AuthenticationServiceImplTest {
             workerDao,
             authorizationService,
             transactionScope,
-            failedLoginAttemptDao
+            failedLoginAttemptDao,
+            deviceVerificationTokenDao
         )
 
         coEvery { transactionScope.transaction<Any>(any()) } coAnswers {
@@ -885,6 +889,7 @@ class AuthenticationServiceImplTest {
             )
         } returns testTrustedDevice
         coEvery { securityAuditDao.updateStatus(alertId, SecurityAuditStatus.TRUSTED, any()) } returns 1
+        coEvery { userSessionDao.unrestrictSessions(userId, deviceId) } returns 1
 
         // When
         val result =
@@ -1000,6 +1005,7 @@ class AuthenticationServiceImplTest {
         coEvery { securityAuditDao.getAuditRecordById(alertId) } returns alert
         coEvery { userTrustedDeviceDao.getTrustedDevice(userId, deviceId) } returns testTrustedDevice
         coEvery { securityAuditDao.updateStatus(alertId, SecurityAuditStatus.TRUSTED, any()) } returns 1
+        coEvery { userSessionDao.unrestrictSessions(userId, deviceId) } returns 0
 
         // When
         val result =

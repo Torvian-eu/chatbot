@@ -97,6 +97,7 @@ fun serviceModule() = module {
             accountSecurityMode = get(),
             failedLoginAttemptDao = get(),
             authPolicy = get(),
+            deviceVerificationTokenDao = get(),
         )
     }
     single<WorkerService> { WorkerServiceImpl(get(), get(), get()) }

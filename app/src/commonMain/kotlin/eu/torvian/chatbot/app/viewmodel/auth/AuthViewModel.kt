@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.math.ceil
 
 /**
  * ViewModel for managing authentication UI state and operations.
@@ -116,6 +117,26 @@ class AuthViewModel(
      */
     private val _accountSwitchInProgress = MutableStateFlow(false)
     val accountSwitchInProgress: StateFlow<Boolean> = _accountSwitchInProgress.asStateFlow()
+
+    // --- Device Verification State ---
+
+    /**
+     * Indicates whether a device verification email request is in progress.
+     */
+    private val _isRequestingVerification = MutableStateFlow(false)
+    val isRequestingVerification: StateFlow<Boolean> = _isRequestingVerification.asStateFlow()
+
+    /**
+     * Indicates whether a verification email has been sent.
+     */
+    private val _verificationEmailSent = MutableStateFlow(false)
+    val verificationEmailSent: StateFlow<Boolean> = _verificationEmailSent.asStateFlow()
+
+    /**
+     * Error message for verification operations, if any.
+     */
+    private val _verificationError = MutableStateFlow<String?>(null)
+    val verificationError: StateFlow<String?> = _verificationError.asStateFlow()
 
     // --- Dialog State Management ---
 
@@ -729,6 +750,101 @@ class AuthViewModel(
      */
     fun closeDialog() {
         _dialogState.value = AuthDialogState.None
+    }
+
+    // --- Device Verification Operations ---
+
+    /**
+     * Requests a device verification email to be sent to the user's registered email address.
+     *
+     * This method is used for restricted sessions to allow users to verify their device
+     * via email. On success, the verification email sent state is set to true.
+     * On RATE_LIMIT error, the retryAfterSeconds is extracted and formatted into a user-friendly message.
+     */
+    fun requestVerificationEmail() {
+        viewModelScope.launch {
+            _isRequestingVerification.value = true
+            _verificationError.value = null
+
+            val deviceId = authState.value.let { state ->
+                if (state is AuthState.Authenticated) state.deviceId else null
+            }
+
+            if (deviceId == null) {
+                _verificationError.value = "Unable to request verification: no device ID available."
+                _isRequestingVerification.value = false
+                return@launch
+            }
+
+            authRepository.requestDeviceVerification(deviceId)
+                .onLeft { error ->
+                    val errorMessage = when {
+                        error.matches(CommonApiErrorCodes.RATE_LIMIT) -> {
+                            // Extract retryAfterSeconds from error details
+                            val retryAfterSeconds = (error as? RepositoryError.DataFetchError)
+                                ?.apiResourceError
+                                ?.let { it as? ApiResourceError.ServerError }
+                                ?.apiError?.details?.get("retryAfterSeconds")
+                                ?.toLongOrNull()
+
+                            if (retryAfterSeconds != null) {
+                                val minutes = ceil(retryAfterSeconds / 60.0).toLong()
+                                "Email already sent. Please wait $minutes minute${if (minutes != 1L) "s" else ""} before trying again."
+                            } else {
+                                "Email already sent. Please wait before trying again."
+                            }
+                        }
+                        error.matches(CommonApiErrorCodes.FAILED_PRECONDITION) -> {
+                            "User has no email address on file. Please add an email to your account first."
+                        }
+                        else -> "Failed to request verification email. Please try again."
+                    }
+                    _verificationError.value = errorMessage
+                    logger.warn("Failed to request device verification: ${error.message}")
+                }
+                .onRight {
+                    _verificationEmailSent.value = true
+                    logger.info("Device verification email sent successfully")
+                }
+
+            _isRequestingVerification.value = false
+        }
+    }
+
+    /**
+     * Checks the verification status by refreshing the session.
+     *
+     * This method calls refreshSession to obtain a new token. If the user has clicked
+     * the email verification link, the server will issue a new token with isRestricted = false.
+     * On success with unrestricted status, shows a success notification and closes the dialog.
+     * If the session remains restricted, shows an informative notification guiding the user.
+     */
+    fun checkVerificationStatus() {
+        viewModelScope.launch {
+            _isRequestingVerification.value = true
+            _verificationError.value = null
+
+            authRepository.refreshSession()
+                .onLeft { error ->
+                    _verificationError.value = "Failed to check verification status. Please try again."
+                    logger.warn("Failed to refresh session: ${error.message}")
+                }
+                .onRight {
+                    val currentState = authState.value
+                    if (currentState is AuthState.Authenticated && !currentState.isRestricted) {
+                        notificationService.genericSuccess("Device verified!")
+                        _dialogState.value = AuthDialogState.None
+                        _verificationEmailSent.value = false
+                        logger.info("Session is now unrestricted")
+                    } else {
+                        notificationService.genericSuccess(
+                            "Session is still restricted. Please ensure you have approved the login via the email link or from another trusted device."
+                        )
+                        logger.info("Session still restricted after refresh")
+                    }
+                }
+            _isRequestingVerification.value = false
+        }
     }
 
     // --- Clipboard Operations ---

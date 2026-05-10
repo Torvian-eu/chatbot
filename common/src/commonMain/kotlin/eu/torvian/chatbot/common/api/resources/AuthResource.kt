@@ -122,4 +122,14 @@ class AuthResource(val parent: Api = Api()) {
      */
     @Resource("policy")
     class Policy(val parent: AuthResource = AuthResource())
+
+    /**
+     * Resource for requesting a device verification email: /api/v1/auth/request-device-verification
+     *
+     * This endpoint allows users on restricted sessions to request a verification email
+     * that will allow them to promote their device to "Trusted" via an email link.
+     * Requires authentication (even for restricted sessions).
+     */
+    @Resource("request-device-verification")
+    class RequestDeviceVerification(val parent: AuthResource = AuthResource())
 }
