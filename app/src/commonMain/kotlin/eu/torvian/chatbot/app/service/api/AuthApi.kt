@@ -125,6 +125,17 @@ interface AuthApi {
     suspend fun changePassword(currentPassword: String, newPassword: String): Either<ApiResourceError, Unit>
 
     /**
+     * Changes the email address for the authenticated user.
+     *
+     * Requires the current password for verification. This operation is not available for restricted sessions.
+     *
+     * @param currentPassword The user's current password for verification
+     * @param newEmail The new email address to set
+     * @return Either an [ApiResourceError] on failure or [User] with updated user details on success
+     */
+    suspend fun changeEmail(currentPassword: String, newEmail: String): Either<ApiResourceError, User>
+
+    /**
      * Completes a server-required password change for the authenticated user.
      *
      * This endpoint is used when the user is forced to change their password

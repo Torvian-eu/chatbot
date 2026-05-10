@@ -75,6 +75,9 @@ class AuthViewModel(
     private val _passwordChangeFormState = MutableStateFlow(PasswordChangeFormState())
     val passwordChangeFormState: StateFlow<PasswordChangeFormState> = _passwordChangeFormState.asStateFlow()
 
+    private val _changeEmailFormState = MutableStateFlow(ChangeEmailFormState())
+    val changeEmailFormState: StateFlow<ChangeEmailFormState> = _changeEmailFormState.asStateFlow()
+
     /**
      * The password validation configuration from the authentication service.
      * Exposed so that UI components can dynamically render password requirement hints.
@@ -616,6 +619,70 @@ class AuthViewModel(
     }
 
     /**
+     * Changes the email address for the currently authenticated user.
+     */
+    fun changeEmail() {
+        viewModelScope.launch {
+            val currentForm = _changeEmailFormState.value
+            val currentPassword = currentForm.currentPassword
+            val newEmail = currentForm.newEmail
+
+            logger.info("Attempting email change")
+
+            // Validate form before submission
+            val currentPasswordError =
+                if (currentPassword.isBlank()) "Current password is required" else null
+            val newEmailError = authValidationService.validateEmail(newEmail)
+
+            if (currentPasswordError != null || newEmailError != null) {
+                _changeEmailFormState.update { currentState ->
+                    currentState.copy(
+                        currentPasswordError = currentPasswordError,
+                        newEmailError = newEmailError,
+                        generalError = null
+                    )
+                }
+                return@launch
+            }
+
+            // Clear errors and set loading state
+            _changeEmailFormState.update { currentState ->
+                currentState.copy(
+                    isLoading = true,
+                    currentPasswordError = null,
+                    newEmailError = null,
+                    generalError = null
+                )
+            }
+
+            // Perform email change using the repository
+            val result = authRepository.changeEmail(currentPassword, newEmail)
+
+            result.fold(
+                ifLeft = { error ->
+                    logger.warn("Email change failed: ${error.message}")
+                    _changeEmailFormState.update { currentState ->
+                        currentState.copy(
+                            isLoading = false,
+                            generalError = mapEmailChangeError(error)
+                        )
+                    }
+                },
+                ifRight = {
+                    logger.info("Email change successful")
+                    _changeEmailFormState.update { currentState ->
+                        currentState.copy(
+                            isLoading = false,
+                            generalError = null,
+                            emailChangeSuccessEvent = true
+                        )
+                    }
+                }
+            )
+        }
+    }
+
+    /**
      * Checks the initial authentication state on app startup.
      */
     suspend fun checkInitialAuthState() {
@@ -735,6 +802,13 @@ class AuthViewModel(
      */
     fun openChangePasswordDialog() {
         _dialogState.value = AuthDialogState.ChangePassword
+    }
+
+    /**
+     * Opens the change email dialog.
+     */
+    fun openChangeEmailDialog() {
+        _dialogState.value = AuthDialogState.ChangeEmail
     }
 
     /**
@@ -938,6 +1012,26 @@ class AuthViewModel(
     }
 
     /**
+     * Updates the change email form state with optional named parameters for each field.
+     * Only the provided fields will be updated; others remain unchanged.
+     * Field-specific errors are cleared if the corresponding field is updated.
+     */
+    fun updateChangeEmailForm(
+        currentPassword: String? = null,
+        newEmail: String? = null
+    ) {
+        _changeEmailFormState.update { currentState ->
+            currentState.copy(
+                currentPassword = currentPassword ?: currentState.currentPassword,
+                newEmail = newEmail ?: currentState.newEmail,
+                // Clear field-specific errors when user types
+                currentPasswordError = if (currentPassword != null && currentPassword != currentState.currentPassword) null else currentState.currentPasswordError,
+                newEmailError = if (newEmail != null && newEmail != currentState.newEmail) null else currentState.newEmailError
+            )
+        }
+    }
+
+    /**
      * Resets the registration form state, typically called by the UI after
      * successful navigation away from the registration success screen.
      */
@@ -967,12 +1061,20 @@ class AuthViewModel(
     }
 
     /**
+     * Clears the change email form state.
+     */
+    fun clearChangeEmailForm() {
+        _changeEmailFormState.value = ChangeEmailFormState()
+    }
+
+    /**
      * Clears all form states.
      */
     fun clearAllForms() {
         clearLoginForm()
         clearRegisterForm()
         clearPasswordChangeForm()
+        clearChangeEmailForm()
     }
 
     // --- Error Mapping ---
@@ -1048,6 +1150,24 @@ class AuthViewModel(
             "Current password is incorrect."
 
         else -> "Password change failed. Please try again."
+    }
+
+    /**
+     * Maps a [RepositoryError] to a user-friendly email change error message.
+     * Uses structured checks against [CommonApiErrorCodes] for
+     * reliable error identification instead of fragile string matching.
+     */
+    private fun mapEmailChangeError(error: RepositoryError): String = when {
+        error.matches(CommonApiErrorCodes.INVALID_ARGUMENT) ->
+            "New email is invalid. Please enter a valid email address."
+
+        error.matches(CommonApiErrorCodes.PERMISSION_DENIED) ->
+            "Action requires a trusted session. Please verify your identity."
+
+        error.matches(CommonApiErrorCodes.INVALID_CREDENTIALS) ->
+            "Current password is incorrect."
+
+        else -> "Email change failed. Please try again."
     }
 
     override fun onCleared() {

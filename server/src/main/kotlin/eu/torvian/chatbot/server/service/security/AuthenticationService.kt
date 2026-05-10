@@ -2,12 +2,14 @@ package eu.torvian.chatbot.server.service.security
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.api.auth.UserTrustedDeviceInfo
+import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.security.SecurityAuditStatus
 import eu.torvian.chatbot.server.data.entities.SecurityAuditEntity
 import eu.torvian.chatbot.server.data.entities.UserSessionEntity
 import eu.torvian.chatbot.server.domain.security.LoginResult
 import eu.torvian.chatbot.server.domain.security.UserContext
 import eu.torvian.chatbot.server.domain.security.WorkerContext
+import eu.torvian.chatbot.server.service.core.error.auth.ChangeEmailError
 import eu.torvian.chatbot.server.service.security.error.*
 import eu.torvian.chatbot.server.service.security.error.RevokeTrustedDeviceError.DeviceNotFound
 import eu.torvian.chatbot.server.service.security.error.RevokeTrustedDeviceError.InsufficientPermissions
@@ -221,6 +223,28 @@ interface AuthenticationService {
         newPassword: String,
         requesterIsRestricted: Boolean
     ): Either<ChangePasswordError, Unit>
+
+    /**
+     * Changes the email address for an authenticated user.
+     *
+     * This method:
+     * 1. Checks if the requester is restricted (untrusted session) - blocked if so
+     * 2. Verifies the current password matches the stored hash
+     * 3. Validates the new email format and uniqueness
+     * 4. Updates the email and returns the updated user
+     *
+     * @param userId The unique identifier of the user changing their email
+     * @param currentPassword The user's current password for verification
+     * @param newEmail The new email address to set
+     * @param requesterIsRestricted Whether the requester's session is restricted (device not verified)
+     * @return Either [ChangeEmailError] if the operation fails, or the updated [User] on success
+     */
+    suspend fun changeEmail(
+        userId: Long,
+        currentPassword: String,
+        newEmail: String,
+        requesterIsRestricted: Boolean
+    ): Either<ChangeEmailError, User>
 
     /**
      * Completes a server-required password change for an authenticated user.

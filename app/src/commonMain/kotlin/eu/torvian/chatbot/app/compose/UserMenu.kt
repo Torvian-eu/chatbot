@@ -5,6 +5,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Devices
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Security
@@ -39,6 +40,7 @@ import eu.torvian.chatbot.app.service.auth.AccountData
  * @param onActiveSessions Callback to open the active sessions dialog
  * @param onTrustedDevices Callback to open the trusted devices dialog
  * @param onChangePassword Callback to open the change password dialog
+ * @param onChangeEmail Callback to open the change email dialog
  * @param onLogout Callback to log out the current session
  * @param onLogoutAll Callback to log out from all sessions
  * @param onLogin Callback to navigate to login/add account
@@ -56,6 +58,7 @@ fun UserMenu(
     onActiveSessions: () -> Unit,
     onTrustedDevices: () -> Unit,
     onChangePassword: () -> Unit,
+    onChangeEmail: () -> Unit,
     onLogout: () -> Unit,
     onLogoutAll: () -> Unit,
     onLogin: () -> Unit,
@@ -148,6 +151,20 @@ fun UserMenu(
                 },
                 leadingIcon = {
                     Icon(Icons.Default.Lock, contentDescription = null)
+                },
+                enabled = !isCurrentSessionRestricted
+            )
+
+            // Change email is also always available but disabled for restricted sessions.
+            // Disabled for restricted sessions (untrusted device) to prevent security issues.
+            DropdownMenuItem(
+                text = { Text("Change Email") },
+                onClick = {
+                    expanded = false
+                    onChangeEmail()
+                },
+                leadingIcon = {
+                    Icon(Icons.Default.Email, contentDescription = null)
                 },
                 enabled = !isCurrentSessionRestricted
             )

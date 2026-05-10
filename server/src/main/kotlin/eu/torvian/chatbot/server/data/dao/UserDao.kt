@@ -110,4 +110,13 @@ interface UserDao {
      * @return Either [UserError.UserNotFound] if the user doesn't exist, or the updated [User] on success
      */
     suspend fun updatePasswordChangeRequired(id: Long, requiresPasswordChange: Boolean): Either<UserError.UserNotFound, User>
+
+    /**
+     * Checks if an email address is already in use by another user.
+     *
+     * @param email The email address to check
+     * @param excludeUserId Optional user ID to exclude from the check (for same-user updates)
+     * @return true if the email is already in use by another user, false otherwise
+     */
+    suspend fun emailExists(email: String, excludeUserId: Long? = null): Boolean
 }

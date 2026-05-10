@@ -220,4 +220,15 @@ interface AuthRepository {
      * @return Either a [RepositoryError] on failure or Unit on success
      */
     suspend fun completeRequiredPasswordChange(newPassword: String): Either<RepositoryError, Unit>
+
+    /**
+     * Changes the email address for the authenticated user.
+     *
+     * Requires the current password for verification. This operation is not available for restricted sessions.
+     *
+     * @param currentPassword The user's current password for verification
+     * @param newEmail The new email address to set
+     * @return Either a [RepositoryError] on failure or Unit on success
+     */
+    suspend fun changeEmail(currentPassword: String, newEmail: String): Either<RepositoryError, Unit>
 }

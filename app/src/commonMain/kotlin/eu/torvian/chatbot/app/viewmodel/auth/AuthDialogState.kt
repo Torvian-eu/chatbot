@@ -37,6 +37,11 @@ sealed interface AuthDialogState {
     data object ChangePassword : AuthDialogState
 
     /**
+     * Change email dialog is shown.
+     */
+    data object ChangeEmail : AuthDialogState
+
+    /**
      * Restricted session info dialog is shown.
      * This dialog explains to the user why their session has limited permissions.
      */

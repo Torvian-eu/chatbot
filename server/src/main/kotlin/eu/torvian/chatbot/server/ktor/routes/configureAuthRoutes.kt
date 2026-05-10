@@ -25,6 +25,7 @@ import eu.torvian.chatbot.server.service.security.error.CompleteRequiredPassword
 import eu.torvian.chatbot.server.service.security.error.ResolveAlertError
 import eu.torvian.chatbot.server.service.security.error.RequestDeviceVerificationError
 import eu.torvian.chatbot.server.service.core.error.auth.ChangePasswordError
+import eu.torvian.chatbot.server.service.core.error.auth.ChangeEmailError
 import io.ktor.http.*
 import io.ktor.server.auth.*
 import io.ktor.server.plugins.origin
@@ -420,6 +421,43 @@ fun Route.configureAuthRoutes(
                         apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "New password cannot be the same as the current password")
 
                     is ChangePasswordError.UserNotFound ->
+                        apiError(CommonApiErrorCodes.NOT_FOUND, "User not found")
+                }
+            }
+        }
+    }
+
+    // POST /api/v1/auth/change-email - Change the authenticated user's email address
+    authenticate(AuthSchemes.USER_JWT) {
+        post<AuthResource.ChangeEmail> {
+            val userContext = call.getUserContext()
+            val request = call.receive<ChangeEmailRequest>()
+
+            call.respondEither(
+                authenticationService.changeEmail(
+                    userId = userContext.user.id,
+                    currentPassword = request.currentPassword,
+                    newEmail = request.newEmail,
+                    requesterIsRestricted = userContext.isRestricted
+                )
+            ) { error ->
+                when (error) {
+                    is ChangeEmailError.InvalidCurrentPassword ->
+                        apiError(CommonApiErrorCodes.INVALID_CREDENTIALS, "Current password is incorrect")
+
+                    is ChangeEmailError.InsufficientPermissions ->
+                        apiError(
+                            CommonApiErrorCodes.PERMISSION_DENIED,
+                            "Action requires a trusted session. Please verify via email or another device."
+                        )
+
+                    is ChangeEmailError.EmailAlreadyExists ->
+                        apiError(CommonApiErrorCodes.ALREADY_EXISTS, "Email already exists", "email" to error.email)
+
+                    is ChangeEmailError.InvalidEmailFormat ->
+                        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid email format", "reason" to error.reason)
+
+                    is ChangeEmailError.UserNotFound ->
                         apiError(CommonApiErrorCodes.NOT_FOUND, "User not found")
                 }
             }

@@ -118,6 +118,23 @@ fun AuthDialogs(
             )
         }
 
+        is AuthDialogState.ChangeEmail -> {
+            val changeEmailFormState by authViewModel.changeEmailFormState.collectAsState()
+            val isRestricted = currentAuthState is AuthState.Authenticated && currentAuthState.isRestricted
+
+            ChangeEmailDialog(
+                formState = changeEmailFormState,
+                isRestricted = isRestricted,
+                onDismiss = {
+                    authViewModel.clearChangeEmailForm()
+                    authViewModel.closeDialog()
+                },
+                onCurrentPasswordChange = { password -> authViewModel.updateChangeEmailForm(currentPassword = password) },
+                onNewEmailChange = { email -> authViewModel.updateChangeEmailForm(newEmail = email) },
+                onChangeEmail = { authViewModel.changeEmail() }
+            )
+        }
+
         is AuthDialogState.RestrictedSessionInfo -> {
             RestrictedSessionInfoDialog(
                 viewModel = authViewModel,

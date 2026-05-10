@@ -259,6 +259,7 @@ private fun UserMenuButton(
             onActiveSessions = { authViewModel.openActiveSessions() },
             onTrustedDevices = { authViewModel.openTrustedDevices() },
             onChangePassword = { authViewModel.openChangePasswordDialog() },
+            onChangeEmail = { authViewModel.openChangeEmailDialog() },
             onLogout = { scope.launch { authViewModel.logout() } },
             onLogoutAll = { scope.launch { authViewModel.logoutAll() } },
             onLogin = { navController.navigateToTop(Login) },

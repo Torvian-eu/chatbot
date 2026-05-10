@@ -9,6 +9,7 @@ import com.auth0.jwt.exceptions.JWTDecodeException
 import com.auth0.jwt.exceptions.JWTVerificationException
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.api.auth.UserTrustedDeviceInfo
+import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.common.security.AccountValidationPolicy
 import eu.torvian.chatbot.common.security.SecurityAuditStatus
@@ -26,6 +27,7 @@ import eu.torvian.chatbot.server.domain.security.LoginResult
 import eu.torvian.chatbot.server.domain.security.UserContext
 import eu.torvian.chatbot.server.domain.security.WorkerContext
 import eu.torvian.chatbot.server.service.core.UserService
+import eu.torvian.chatbot.server.service.core.error.auth.ChangeEmailError
 import eu.torvian.chatbot.server.service.core.error.auth.ChangePasswordError
 import eu.torvian.chatbot.server.service.core.error.auth.UserNotFoundError
 import eu.torvian.chatbot.server.service.security.error.*
@@ -1003,6 +1005,75 @@ class AuthenticationServiceImpl(
                 deviceVerificationTokenDao.deleteToken(token)
 
                 logger.info("Successfully verified device $deviceId for user $userId via email link")
+            }
+        }
+
+    override suspend fun changeEmail(
+        userId: Long,
+        currentPassword: String,
+        newEmail: String,
+        requesterIsRestricted: Boolean
+    ): Either<ChangeEmailError, User> =
+        transactionScope.transaction {
+            either {
+                logger.info("Changing email for user: $userId, restricted: $requesterIsRestricted")
+
+                // 1. Check restriction - restricted sessions cannot change email
+                ensure(!requesterIsRestricted) {
+                    logger.warn("Restricted session attempted to change email")
+                    raise(ChangeEmailError.InsufficientPermissions)
+                }
+
+                // 2. Validate email format
+                val trimmedEmail = newEmail.trim()
+                ensure(trimmedEmail.isNotEmpty()) {
+                    logger.warn("Empty email provided for user: $userId")
+                    raise(ChangeEmailError.InvalidEmailFormat("Email cannot be empty"))
+                }
+                // Basic email format validation
+                val emailRegex = Regex("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")
+                ensure(emailRegex.matches(trimmedEmail)) {
+                    logger.warn("Invalid email format for user: $userId, email: $trimmedEmail")
+                    raise(ChangeEmailError.InvalidEmailFormat("Invalid email format"))
+                }
+
+                // 3. Check if email already exists (excluding current user)
+                val emailExists = userDao.emailExists(trimmedEmail, userId)
+                ensure(!emailExists) {
+                    logger.warn("Email already exists: $trimmedEmail")
+                    raise(ChangeEmailError.EmailAlreadyExists(trimmedEmail))
+                }
+
+                // 4. Fetch user entity
+                val userEntity = withError({ _: UserError.UserNotFound ->
+                    ChangeEmailError.UserNotFound(userId)
+                }) {
+                    userDao.getUserById(userId).bind()
+                }
+
+                // 5. Verify the current password matches
+                ensure(passwordService.verifyPassword(currentPassword, userEntity.passwordHash)) {
+                    logger.warn("Invalid current password for user: $userId")
+                    raise(ChangeEmailError.InvalidCurrentPassword)
+                }
+
+                // 6. Update user with new email
+                val updatedUser = userEntity.copy(
+                    email = trimmedEmail,
+                    updatedAt = Clock.System.now()
+                )
+                userDao.updateUser(updatedUser).mapLeft { error ->
+                    when (error) {
+                        is UserError.UserNotFound -> ChangeEmailError.UserNotFound(userId)
+                        is UserError.EmailAlreadyExists -> ChangeEmailError.EmailAlreadyExists(trimmedEmail)
+                        else -> ChangeEmailError.UserNotFound(userId)
+                    }
+                }.bind()
+
+                logger.info("Successfully changed email for user: $userId")
+
+                // 7. Return updated user
+                updatedUser.toUser()
             }
         }
 }

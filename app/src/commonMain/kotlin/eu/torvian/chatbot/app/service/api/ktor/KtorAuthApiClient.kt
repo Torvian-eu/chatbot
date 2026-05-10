@@ -4,6 +4,7 @@ import arrow.core.Either
 import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.AuthApi
 import eu.torvian.chatbot.common.api.resources.AuthResource
+import eu.torvian.chatbot.common.models.api.auth.ChangeEmailRequest
 import eu.torvian.chatbot.common.models.api.auth.ChangePasswordRequest
 import eu.torvian.chatbot.common.models.api.auth.CompleteRequiredPasswordChangeRequest
 import eu.torvian.chatbot.common.models.api.auth.LoginRequest
@@ -136,6 +137,14 @@ class KtorAuthApiClient(
             authenticatedClient.post(AuthResource.ChangePassword()) {
                 setBody(ChangePasswordRequest(currentPassword = currentPassword, newPassword = newPassword))
             }.body<Unit>()
+        }
+    }
+
+    override suspend fun changeEmail(currentPassword: String, newEmail: String): Either<ApiResourceError, User> {
+        return safeApiCall {
+            authenticatedClient.post(AuthResource.ChangeEmail()) {
+                setBody(ChangeEmailRequest(currentPassword = currentPassword, newEmail = newEmail))
+            }.body<User>()
         }
     }
 
