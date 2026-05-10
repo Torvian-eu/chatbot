@@ -145,15 +145,6 @@ class LocalMCPServerDaoExposed(
                 .map { it.toLocalMCPServerEntity() }
         }
 
-    @Deprecated("Use createServer(CreateLocalMCPServerEntity)")
-    override suspend fun createServer(userId: Long, isEnabled: Boolean): Long =
-        transactionScope.transaction {
-            LocalMCPServerTable.insertAndGetId {
-                it[LocalMCPServerTable.userId] = userId
-                it[LocalMCPServerTable.isEnabled] = isEnabled
-            }.value
-        }
-
     override suspend fun deleteById(id: Long): Either<DeleteLocalMCPServerError, Unit> =
         transactionScope.transaction {
             either {
@@ -162,15 +153,6 @@ class LocalMCPServerDaoExposed(
                 }
                 ensure(rowsDeleted == 1) { DeleteLocalMCPServerError.NotFound(id) }
             }
-        }
-
-    @Deprecated("Use getServersByUserId")
-    override suspend fun getIdsByUserId(userId: Long): List<Long> =
-        transactionScope.transaction {
-            LocalMCPServerTable
-                .select(LocalMCPServerTable.id)
-                .where { LocalMCPServerTable.userId eq userId }
-                .map { it[LocalMCPServerTable.id].value }
         }
 
     override suspend fun existsById(id: Long): Boolean =
@@ -198,18 +180,4 @@ class LocalMCPServerDaoExposed(
                 }
             }
         }
-
-    @Deprecated("Use updateServer")
-    override suspend fun setEnabled(serverId: Long, isEnabled: Boolean): Either<LocalMCPServerError.NotFound, Unit> =
-        transactionScope.transaction {
-            either {
-                val rowsUpdated = LocalMCPServerTable.update(
-                    where = { LocalMCPServerTable.id eq serverId }
-                ) {
-                    it[LocalMCPServerTable.isEnabled] = isEnabled
-                }
-                ensure(rowsUpdated == 1) { LocalMCPServerError.NotFound(serverId) }
-            }
-        }
 }
-

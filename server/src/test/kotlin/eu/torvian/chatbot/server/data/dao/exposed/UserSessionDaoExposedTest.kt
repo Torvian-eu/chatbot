@@ -15,6 +15,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -69,7 +70,7 @@ class UserSessionDaoExposedTest {
     @Test
     fun `getSessionById should return session when it exists`() = runTest {
         // Insert a test session
-        val insertResult = userSessionDao.insertSession(testUser.id, futureTime)
+        val insertResult = userSessionDao.insertSession(testUser.id, "test-device-id", futureTime, "127.0.0.1", false)
         assertTrue(insertResult.isRight(), "Failed to insert test session")
         val insertedSession = insertResult.getOrNull()!!
 
@@ -91,15 +92,15 @@ class UserSessionDaoExposedTest {
 
         assertTrue(result.isLeft(), "Expected Left result for non-existing session")
         val error = result.leftOrNull()
-        assertTrue(error is UserSessionError.SessionNotFound, "Expected SessionNotFound error")
-        assertEquals(999L, (error as UserSessionError.SessionNotFound).id, "Expected matching ID in error")
+        assertIs<UserSessionError.SessionNotFound>(error, "Expected SessionNotFound error")
+        assertEquals(999L, error.id, "Expected matching ID in error")
     }
 
     @Test
     fun `getSessionsByUserId should return all sessions for user`() = runTest {
         // Insert multiple sessions for the user
-        val session1Result = userSessionDao.insertSession(testUser.id, futureTime)
-        val session2Result = userSessionDao.insertSession(testUser.id, futureTime + 1000)
+        val session1Result = userSessionDao.insertSession(testUser.id, "device-1", futureTime, "127.0.0.1", false)
+        val session2Result = userSessionDao.insertSession(testUser.id, "device-2", futureTime + 1000, "192.168.1.1", false)
         assertTrue(session1Result.isRight() && session2Result.isRight(), "Failed to insert test sessions")
 
         // Get sessions by user ID
@@ -118,7 +119,7 @@ class UserSessionDaoExposedTest {
 
     @Test
     fun `insertSession should create new session successfully`() = runTest {
-        val result = userSessionDao.insertSession(testUser.id, futureTime)
+        val result = userSessionDao.insertSession(testUser.id, "test-device-id", futureTime, "127.0.0.1", false)
 
         assertTrue(result.isRight(), "Expected successful session creation")
         val session = result.getOrNull()
@@ -131,17 +132,17 @@ class UserSessionDaoExposedTest {
 
     @Test
     fun `insertSession should return ForeignKeyViolation when user does not exist`() = runTest {
-        val result = userSessionDao.insertSession(999L, futureTime)
+        val result = userSessionDao.insertSession(999L, "test-device-id", futureTime, null, false)
 
         assertTrue(result.isLeft(), "Expected Left result for non-existing user")
         val error = result.leftOrNull()
-        assertTrue(error is UserSessionError.ForeignKeyViolation, "Expected ForeignKeyViolation error")
+        assertIs<UserSessionError.ForeignKeyViolation>(error, "Expected ForeignKeyViolation error")
     }
 
     @Test
     fun `updateLastAccessed should update timestamp successfully`() = runTest {
         // Insert a test session
-        val insertResult = userSessionDao.insertSession(testUser.id, futureTime)
+        val insertResult = userSessionDao.insertSession(testUser.id, "test-device-id", futureTime, "127.0.0.1", false)
         assertTrue(insertResult.isRight(), "Failed to insert test session")
         val session = insertResult.getOrNull()!!
 
@@ -168,14 +169,14 @@ class UserSessionDaoExposedTest {
 
         assertTrue(result.isLeft(), "Expected Left result for non-existing session")
         val error = result.leftOrNull()
-        assertTrue(error is UserSessionError.SessionNotFound, "Expected SessionNotFound error")
-        assertEquals(999L, (error as UserSessionError.SessionNotFound).id, "Expected matching ID in error")
+        assertIs<UserSessionError.SessionNotFound>(error, "Expected SessionNotFound error")
+        assertEquals(999L, error.id, "Expected matching ID in error")
     }
 
     @Test
     fun `deleteSession should delete existing session successfully`() = runTest {
         // Insert a test session
-        val insertResult = userSessionDao.insertSession(testUser.id, futureTime)
+        val insertResult = userSessionDao.insertSession(testUser.id, "test-device-id", futureTime, "127.0.0.1", false)
         assertTrue(insertResult.isRight(), "Failed to insert test session")
         val session = insertResult.getOrNull()!!
 
@@ -188,7 +189,7 @@ class UserSessionDaoExposedTest {
         val fetchResult = userSessionDao.getSessionById(session.id)
         assertTrue(fetchResult.isLeft(), "Expected session to be deleted")
         val error = fetchResult.leftOrNull()
-        assertTrue(error is UserSessionError.SessionNotFound, "Expected SessionNotFound error after deletion")
+        assertIs<UserSessionError.SessionNotFound>(error, "Expected SessionNotFound error after deletion")
     }
 
     @Test
@@ -197,15 +198,15 @@ class UserSessionDaoExposedTest {
 
         assertTrue(result.isLeft(), "Expected Left result for non-existing session")
         val error = result.leftOrNull()
-        assertTrue(error is UserSessionError.SessionNotFound, "Expected SessionNotFound error")
-        assertEquals(999L, (error as UserSessionError.SessionNotFound).id, "Expected matching ID in error")
+        assertIs<UserSessionError.SessionNotFound>(error, "Expected SessionNotFound error")
+        assertEquals(999L, error.id, "Expected matching ID in error")
     }
 
     @Test
     fun `deleteSessionsByUserId should delete all sessions for user`() = runTest {
         // Insert multiple sessions for the user
-        userSessionDao.insertSession(testUser.id, futureTime)
-        userSessionDao.insertSession(testUser.id, futureTime + 1000)
+        userSessionDao.insertSession(testUser.id, "device-1", futureTime, "127.0.0.1", false)
+        userSessionDao.insertSession(testUser.id, "device-2", futureTime + 1000, "192.168.1.1", false)
 
         // Delete all sessions for the user
         val deletedCount = userSessionDao.deleteSessionsByUserId(testUser.id)
@@ -220,8 +221,8 @@ class UserSessionDaoExposedTest {
     @Test
     fun `deleteExpiredSessions should delete only expired sessions`() = runTest {
         // Insert both expired and valid sessions
-        userSessionDao.insertSession(testUser.id, pastTime) // Expired
-        userSessionDao.insertSession(testUser.id, futureTime) // Valid
+        userSessionDao.insertSession(testUser.id, "expired-device", pastTime, "127.0.0.1", false) // Expired
+        userSessionDao.insertSession(testUser.id, "valid-device", futureTime, "192.168.1.1", false) // Valid
 
         val currentTime = System.currentTimeMillis()
         val deletedCount = userSessionDao.deleteExpiredSessions(currentTime)

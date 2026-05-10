@@ -1,12 +1,7 @@
 package eu.torvian.chatbot.server.main
 
-import eu.torvian.chatbot.common.security.EncryptionConfig
-import eu.torvian.chatbot.server.domain.config.CorsConfig
-import eu.torvian.chatbot.server.domain.config.DatabaseConfig
-import eu.torvian.chatbot.server.domain.config.NetworkConfig
+import eu.torvian.chatbot.server.config.AppConfiguration
 import eu.torvian.chatbot.server.domain.config.ServerConnectorType
-import eu.torvian.chatbot.server.domain.config.SslConfig
-import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.service.security.CertificateManager
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
@@ -29,22 +24,12 @@ private const val SERVER_STARTUP_TIMEOUT_MILLIS = 15_000L // 15 seconds
  * stop, and monitor its status. It ensures that the primary server URI is correctly identified
  * and that startup failures or timeouts are properly handled.
  *
- * @property networkConfig The validated network configuration.
- * @property sslConfig Optional SSL configuration (required for HTTPS/HTTP_AND_HTTPS).
+ * @property config The root application configuration.
  * @property certificateManager Optional manager for SSL certificate operations.
- * @property databaseConfig Database configuration passed to the application module.
- * @property encryptionConfig Encryption configuration passed to the application module.
- * @property jwtConfig JWT configuration passed to the application module.
- * @property corsConfig CORS configuration passed to the application module.
  */
 class ServerControlServiceImpl(
-    val networkConfig: NetworkConfig,
-    val sslConfig: SslConfig?,
-    private val certificateManager: CertificateManager?,
-    private val databaseConfig: DatabaseConfig,
-    private val encryptionConfig: EncryptionConfig,
-    private val jwtConfig: JwtConfig,
-    private val corsConfig: CorsConfig
+    private val config: AppConfiguration,
+    private val certificateManager: CertificateManager?
 ) : ServerControlService {
     private val logger: Logger = LogManager.getLogger(this::class.java)
 
@@ -82,7 +67,7 @@ class ServerControlServiceImpl(
         _serverStatus.value = ServerStatus.Starting // Indicate starting state early
 
         val server = createEmbeddedServer(
-            Jetty, port = networkConfig.port, host = networkConfig.host,
+            Jetty, port = config.network.port, host = config.network.host,
             onStarting = { logger.info("Ktor engine starting...") },
             onStarted = { app ->
                 // This callback is invoked by Ktor when its internal engine is fully started.
@@ -107,7 +92,7 @@ class ServerControlServiceImpl(
                         scheme = if (primaryConnector.type == ConnectorType.HTTPS) "https" else "http",
                         host = primaryConnector.host,
                         port = primaryConnector.port,
-                        path = networkConfig.path,
+                        path = config.network.path,
                         startTime = Clock.System.now()
                     )
                     _serverInfo = info // Update the internal backing field for the getter
@@ -210,20 +195,20 @@ class ServerControlServiceImpl(
         onStopping: (Application) -> Unit,
         onStopped: (Application) -> Unit,
     ): EmbeddedServer<TEngine, TConfiguration> {
-        val currentSslConfig = sslConfig
+        val currentSslConfig = config.ssl
 
         return embeddedServer(
             factory = factory,
             configure = {
                 // Configure HTTPS connector if connector type requires it
-                if (networkConfig.connectorType == ServerConnectorType.HTTPS ||
-                    networkConfig.connectorType == ServerConnectorType.HTTP_AND_HTTPS
+                if (config.network.connectorType == ServerConnectorType.HTTPS ||
+                    config.network.connectorType == ServerConnectorType.HTTP_AND_HTTPS
                 ) {
                     val ssl = requireNotNull(currentSslConfig) {
-                        "SSL configuration is mandatory for connectorType ${networkConfig.connectorType}"
+                        "SSL configuration is mandatory for connectorType ${config.network.connectorType}"
                     }
                     val certManager = requireNotNull(certificateManager) {
-                        "Certificate manager is mandatory for connectorType ${networkConfig.connectorType}"
+                        "Certificate manager is mandatory for connectorType ${config.network.connectorType}"
                     }
                     sslConnector(
                         keyStore = certManager.loadCertificateFromKeystore(),
@@ -237,8 +222,8 @@ class ServerControlServiceImpl(
                 }
 
                 // Configure HTTP connector if connector type requires it
-                if (networkConfig.connectorType == ServerConnectorType.HTTP ||
-                    networkConfig.connectorType == ServerConnectorType.HTTP_AND_HTTPS
+                if (config.network.connectorType == ServerConnectorType.HTTP ||
+                    config.network.connectorType == ServerConnectorType.HTTP_AND_HTTPS
                 ) {
                     connector {
                         this.port = port
@@ -254,7 +239,7 @@ class ServerControlServiceImpl(
             this.monitor.subscribe(ApplicationStopped) { onStopped(it) }
 
             // Apply the main application module
-            chatBotServerModule(databaseConfig, encryptionConfig, jwtConfig, corsConfig)
+            chatBotServerModule(config)
         }
     }
 }

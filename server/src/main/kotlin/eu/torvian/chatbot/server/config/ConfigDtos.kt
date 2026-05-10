@@ -1,5 +1,7 @@
 package eu.torvian.chatbot.server.config
 
+import eu.torvian.chatbot.common.security.PasswordValidationConfig
+import eu.torvian.chatbot.common.security.UsernameValidationConfig
 import kotlinx.serialization.Serializable
 
 /**
@@ -15,6 +17,8 @@ import kotlinx.serialization.Serializable
  * @property database Optional [DatabaseConfigDto] for database connection parameters.
  * @property encryption Optional [EncryptionConfigDto] for data encryption settings.
  * @property jwt Optional [JwtConfigDto] for JSON Web Token authentication settings.
+ * @property accountSecurityMode Optional policy name for device-based login handling.
+ * @property authPolicy Optional [AuthPolicyDto] for account validation rules.
  */
 @Serializable
 data class AppConfigDto(
@@ -25,7 +29,26 @@ data class AppConfigDto(
     val ssl: SslConfigDto? = null,
     val database: DatabaseConfigDto? = null,
     val encryption: EncryptionConfigDto? = null,
-    val jwt: JwtConfigDto? = null
+    val jwt: JwtConfigDto? = null,
+    val accountSecurityMode: String? = null,
+    val reverseProxy: ReverseProxyConfigDto? = null,
+    val authPolicy: AuthPolicyDto? = null
+)
+
+/**
+ * DTO for authentication policy configuration.
+ *
+ * @property passwordConfig Optional password validation configuration.
+ * @property usernameConfig Optional username validation configuration.
+ * @property maxFailedAttempts Maximum number of failed login attempts allowed within the lockout window.
+ * @property lockoutWindowMinutes Duration in minutes for the sliding lockout window.
+ */
+@Serializable
+data class AuthPolicyDto(
+    val passwordConfig: PasswordValidationConfig? = null,
+    val usernameConfig: UsernameValidationConfig? = null,
+    val maxFailedAttempts: Int? = null,
+    val lockoutWindowMinutes: Int? = null
 )
 
 /**
@@ -56,7 +79,7 @@ data class SetupConfigDto(val required: Boolean? = null)
  * @property dataDir The subdirectory name within the base application path for runtime data. Typically "data".
  * @property databaseFilename The filename of the database within the data directory. Typically "chatbot.db".
  * @property keystoreFilename The filename of the SSL keystore within the data directory. Typically "keystore.jks".
- * @property logsDir Optional subdirectory name within the base application path for log files.
+ * @property logsDir: Optional subdirectory name within the base application path for log files.
  */
 @Serializable
 data class StorageConfigDto(
@@ -166,4 +189,20 @@ data class JwtConfigDto(
     val secret: String? = null,
     val tokenExpirationMs: Long? = null,
     val refreshExpirationMs: Long? = null
+)
+
+/**
+ * DTO for reverse proxy (forwarded headers) configuration.
+ *
+ * @property enabled Whether forwarded headers should be trusted and processed.
+ * @property proxyCount The number of trusted proxies in front of the server.
+ * @property useXForwardedHeaders Whether to trust X-Forwarded-* headers.
+ * @property useForwardedHeaders Whether to trust RFC 7239 Forwarded header.
+ */
+@Serializable
+data class ReverseProxyConfigDto(
+    val enabled: Boolean? = null,
+    val proxyCount: Int? = null,
+    val useXForwardedHeaders: Boolean? = null,
+    val useForwardedHeaders: Boolean? = null
 )

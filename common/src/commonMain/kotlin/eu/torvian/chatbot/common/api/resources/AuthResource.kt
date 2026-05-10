@@ -21,11 +21,17 @@ class AuthResource(val parent: Api = Api()) {
     class Login(val parent: AuthResource = AuthResource())
     
     /**
-     * Resource for user logout (current session only): /api/v1/auth/logout
+     * Resource for user logout and session revocation: /api/v1/auth/logout
+     *
+     * When [sessionId] is omitted, the server logs out the current authenticated session.
+     * When a value is provided, the server revokes that specific session for the authenticated user.
      */
     @Resource("logout")
-    class Logout(val parent: AuthResource = AuthResource())
-    
+    class Logout(
+        val parent: AuthResource = AuthResource(),
+        val sessionId: Long? = null
+    )
+
     /**
      * Resource for user logout from all sessions: /api/v1/auth/logout-all
      */
@@ -33,11 +39,34 @@ class AuthResource(val parent: Api = Api()) {
     class LogoutAll(val parent: AuthResource = AuthResource())
 
     /**
+     * Resource for listing the authenticated user's active sessions: /api/v1/auth/sessions
+     */
+    @Resource("sessions")
+    class Sessions(val parent: AuthResource = AuthResource())
+
+    /**
      * Resource for getting current user profile: /api/v1/auth/me
      */
     @Resource("me")
     class Me(val parent: AuthResource = AuthResource())
-    
+
+    /**
+     * Resource for retrieving unacknowledged security alerts: /api/v1/auth/security-alerts
+     */
+    @Resource("security-alerts")
+    class SecurityAlerts(val parent: AuthResource = AuthResource())
+
+    /**
+     * Resource for resolving a single security alert: /api/v1/auth/security-alerts/{alertId}/resolve
+     *
+     * @property alertId The unique identifier of the security alert to resolve.
+     */
+    @Resource("resolve")
+    class ResolveAlert(
+        val parent: SecurityAlerts = SecurityAlerts(),
+        val alertId: Long
+    )
+
     /**
      * Resource for refreshing tokens: /api/v1/auth/refresh
      */
@@ -52,4 +81,45 @@ class AuthResource(val parent: Api = Api()) {
 
     @Resource("service-token/challenge")
     class ServiceTokenChallenge(val parent: AuthResource = AuthResource())
+
+    /**
+     * Resource for listing trusted devices: /api/v1/auth/trusted-devices
+     */
+    @Resource("trusted-devices")
+    class TrustedDevices(val parent: AuthResource = AuthResource())
+
+    /**
+     * Resource for revoking a specific trusted device: /api/v1/auth/trusted-devices/{deviceId}
+     *
+     * @property parent Parent trusted devices resource.
+     * @property deviceId The device identifier to revoke.
+     */
+    @Resource("{deviceId}")
+    class RevokeTrustedDevice(val parent: TrustedDevices = TrustedDevices(), val deviceId: String)
+
+    /**
+     * Resource for changing the authenticated user's password: /api/v1/auth/change-password
+     *
+     * Requires the current password for verification. This action is blocked for restricted sessions.
+     */
+    @Resource("change-password")
+    class ChangePassword(val parent: AuthResource = AuthResource())
+
+    /**
+     * Resource for completing a server-required password change: /api/v1/auth/complete-required-password-change
+     *
+     * This endpoint is only valid when the authenticated user's requiresPasswordChange flag is true.
+     * It does not require the current password, but is blocked for restricted sessions.
+     */
+    @Resource("complete-required-password-change")
+    class CompleteRequiredPasswordChange(val parent: AuthResource = AuthResource())
+
+    /**
+     * Resource for the public auth policy endpoint: /api/v1/auth/policy
+     *
+     * Returns the server's account validation policy (password and username rules).
+     * This endpoint is publicly accessible and does not require authentication.
+     */
+    @Resource("policy")
+    class Policy(val parent: AuthResource = AuthResource())
 }

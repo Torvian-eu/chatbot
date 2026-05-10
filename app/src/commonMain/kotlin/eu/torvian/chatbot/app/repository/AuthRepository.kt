@@ -2,7 +2,11 @@ package eu.torvian.chatbot.app.repository
 
 import arrow.core.Either
 import eu.torvian.chatbot.app.service.auth.AccountData
+import eu.torvian.chatbot.common.models.api.auth.UserSecurityAlert
+import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
+import eu.torvian.chatbot.common.models.api.auth.UserTrustedDeviceInfo
 import eu.torvian.chatbot.common.models.user.User
+import eu.torvian.chatbot.common.security.SecurityAuditStatus
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -57,12 +61,37 @@ interface AuthRepository {
     suspend fun changePassword(userId: Long, newPassword: String): Either<RepositoryError, Unit>
 
     /**
+     * Loads the authenticated user's active sessions from the server.
+     *
+     * @return Either a [RepositoryError] on failure or the current session list on success
+     */
+    suspend fun getActiveSessions(): Either<RepositoryError, List<UserSessionInfo>>
+
+    /**
+     * Revokes a specific session belonging to the authenticated user.
+     *
+     * This is intended for security management UI where the user can remove a session from
+     * another device without logging out the current browser or app instance.
+     *
+     * @param sessionId The session identifier to revoke
+     * @return Either a [RepositoryError] on failure or Unit on success
+     */
+    suspend fun revokeSession(sessionId: Long): Either<RepositoryError, Unit>
+
+    /**
      * Logs out the current user by clearing tokens and updating auth state.
      * Only clears local tokens after successful server logout.
      *
      * @return Either a [RepositoryError] on failure or Unit on success
      */
     suspend fun logout(): Either<RepositoryError, Unit>
+
+    /**
+     * Logs the current user out from all server-side sessions and clears local auth data.
+     *
+     * @return Either a [RepositoryError] on failure or Unit on success
+     */
+    suspend fun logoutAll(): Either<RepositoryError, Unit>
 
     /**
      * Checks if the user is currently authenticated by checking the auth state.
@@ -101,4 +130,73 @@ interface AuthRepository {
      * @return Either a [RepositoryError] on failure or Unit on success
      */
     suspend fun removeAccount(userId: Long): Either<RepositoryError, Unit>
+
+    /**
+     * Retrieves unacknowledged security alerts for the current user.
+     * These alerts represent login attempts from untrusted or unrecognized devices.
+     *
+     * Note: This operation is not available for restricted sessions.
+     *
+     * @return Either a [RepositoryError] on failure or the list of security alerts on success
+     */
+    suspend fun getSecurityAlerts(): Either<RepositoryError, List<UserSecurityAlert>>
+
+    /**
+     * Retrieves the list of trusted devices for the current user.
+     * These are devices that have been trusted through first use or security alert acknowledgement.
+     *
+     * Note: This operation is not available for restricted sessions.
+     * @return Either a [RepositoryError] on failure or the list of trusted devices on success
+     */
+    suspend fun getTrustedDevices(): Either<RepositoryError, List<UserTrustedDeviceInfo>>
+
+    /**
+     * Revokes (deletes) a specific trusted device for the current user.
+     * This removes the device from the trusted devices list.
+     *
+     * Note: This operation is not available for restricted sessions.
+     * @param deviceId The device identifier to revoke
+     * @return Either a [RepositoryError] on failure or Unit on success
+     */
+    suspend fun revokeTrustedDevice(deviceId: String): Either<RepositoryError, Unit>
+
+    /**
+     * Resolves a single security alert with the specified outcome.
+     *
+     * This method allows the user to either trust or dismiss a specific security alert.
+     * - TRUSTED: The device is added to the trusted devices list and the alert is marked as trusted.
+     * - DISMISSED: The alert is marked as dismissed without adding the device to trusted devices.
+     *
+     * Note: This operation is not available for restricted sessions.
+     *
+     * @param alertId The unique identifier of the security alert to resolve.
+     * @param outcome The outcome to apply (TRUSTED or DISMISSED).
+     * @return Either a [RepositoryError] on failure or Unit on success
+     */
+    suspend fun resolveSecurityAlert(alertId: Long, outcome: SecurityAuditStatus): Either<RepositoryError, Unit>
+
+    /**
+     * Changes the password for the authenticated user.
+     *
+     * Requires the current password for verification. This operation is not available for restricted sessions.
+     *
+     * @param currentPassword The user's current password for verification
+     * @param newPassword The new password to set
+     * @return Either a [RepositoryError] on failure or Unit on success
+     */
+    suspend fun changePassword(currentPassword: String, newPassword: String): Either<RepositoryError, Unit>
+
+    /**
+     * Completes a server-required password change for the authenticated user.
+     *
+     * This endpoint is used when the user is forced to change their password
+     * (requiresPasswordChange = true). Unlike normal password change, it does not
+     * require the current password.
+     *
+     * This operation is not available for restricted sessions.
+     *
+     * @param newPassword The new password to set
+     * @return Either a [RepositoryError] on failure or Unit on success
+     */
+    suspend fun completeRequiredPasswordChange(newPassword: String): Either<RepositoryError, Unit>
 }

@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.testutils.ktor
 
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
+import eu.torvian.chatbot.server.domain.config.ReverseProxyConfig
 import eu.torvian.chatbot.server.ktor.configureKtor
 import eu.torvian.chatbot.server.utils.misc.DIContainerKey
 import io.ktor.client.*
@@ -45,8 +46,8 @@ fun myTestApplication(
                 // Store the DIContainer in the application attributes
                 attributes.put(DIContainerKey, container)
 
-                // Configure Ktor
-                configureKtor(container.get(), container.get())
+                // Configure Ktor (reverse proxy disabled for tests by default)
+                configureKtor(container.get(), container.get(), ReverseProxyConfig(enabled = false))
 
                 // Additional Ktor configuration
                 app()

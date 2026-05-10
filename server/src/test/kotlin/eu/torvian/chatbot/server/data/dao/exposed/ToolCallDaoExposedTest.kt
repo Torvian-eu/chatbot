@@ -25,6 +25,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -251,8 +252,8 @@ class ToolCallDaoExposedTest {
         // Verify
         assertTrue(result.isLeft(), "Expected Left (error)")
         result.onLeft { error ->
-            assertTrue(error is ToolCallError.NotFound, "Expected NotFound error")
-            assertEquals(999L, (error as ToolCallError.NotFound).id)
+            assertIs<ToolCallError.NotFound>(error, "Expected NotFound error")
+            assertEquals(999L, error.id)
         }
     }
 
@@ -305,10 +306,7 @@ class ToolCallDaoExposedTest {
         // Verify
         assertTrue(result.isLeft(), "Expected Left (error)")
         result.onLeft { error ->
-            assertTrue(
-                error is InsertToolCallError.ForeignKeyViolation,
-                "Expected ForeignKeyViolation error but got $error"
-            )
+            assertIs<InsertToolCallError.ForeignKeyViolation>(error, "Expected ForeignKeyViolation error but got $error")
         }
     }
 
@@ -335,10 +333,7 @@ class ToolCallDaoExposedTest {
         // Verify
         assertTrue(result.isLeft(), "Expected Left (error)")
         result.onLeft { error ->
-            assertTrue(
-                error is InsertToolCallError.ForeignKeyViolation,
-                "Expected ForeignKeyViolation error but got $error"
-            )
+            assertIs<InsertToolCallError.ForeignKeyViolation>(error, "Expected ForeignKeyViolation error but got $error")
         }
     }
 
@@ -469,8 +464,8 @@ class ToolCallDaoExposedTest {
         // Verify
         assertTrue(result.isLeft(), "Expected Left (error)")
         result.onLeft { error ->
-            assertTrue(error is UpdateToolCallError.NotFound, "Expected NotFound error")
-            assertEquals(999L, (error as UpdateToolCallError.NotFound).id)
+            assertIs<UpdateToolCallError.NotFound>(error, "Expected NotFound error")
+            assertEquals(999L, error.id)
         }
     }
 

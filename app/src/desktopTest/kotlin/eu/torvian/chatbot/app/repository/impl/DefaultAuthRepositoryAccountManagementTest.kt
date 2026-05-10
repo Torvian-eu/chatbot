@@ -7,9 +7,12 @@ import eu.torvian.chatbot.app.domain.events.AppEvent
 import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.app.service.api.AuthApi
 import eu.torvian.chatbot.app.service.api.UserApi
+import eu.torvian.chatbot.app.service.auth.AuthValidationService
+import eu.torvian.chatbot.app.service.auth.DeviceIdentityService
 import eu.torvian.chatbot.app.service.auth.TokenStorage
 import eu.torvian.chatbot.app.service.auth.TokenStorageError
 import eu.torvian.chatbot.app.service.misc.EventBus
+import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
 import eu.torvian.chatbot.common.models.user.Permission
 import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.user.UserStatus
@@ -18,6 +21,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.test.runTest
 import kotlin.test.*
 import eu.torvian.chatbot.app.service.auth.AccountData
+import eu.torvian.chatbot.common.security.AccountValidationPolicy
 import kotlin.time.Clock
 
 /**
@@ -36,6 +40,8 @@ class DefaultAuthRepositoryAccountManagementTest {
     private lateinit var userApi: UserApi
     private lateinit var tokenStorage: TokenStorage
     private lateinit var eventBus: EventBus
+    private lateinit var deviceIdentityService: DeviceIdentityService
+    private lateinit var authValidationService: AuthValidationService
     private lateinit var repository: DefaultAuthRepository
 
     private val testUser1 = User(
@@ -67,6 +73,8 @@ class DefaultAuthRepositoryAccountManagementTest {
         userApi = mockk()
         tokenStorage = mockk()
         eventBus = mockk()
+        deviceIdentityService = mockk()
+        authValidationService = mockk(relaxed = true)
 
         // Mock eventBus.events with a proper flow of AppEvent type
         val eventsFlow = MutableSharedFlow<AppEvent>()
@@ -75,12 +83,18 @@ class DefaultAuthRepositoryAccountManagementTest {
         // Mock eventBus.emitEvent to do nothing
         coEvery { eventBus.emitEvent(any()) } returns Unit
 
-        repository = DefaultAuthRepository(authApi, userApi, tokenStorage, eventBus)
+        // Mock deviceIdentityService to return a test device ID
+        coEvery { deviceIdentityService.getOrCreateDeviceId() } returns "test-device-id".right()
+
+        // Mock authApi.getAuthPolicy() to return a default policy (non-critical call)
+        coEvery { authApi.getAuthPolicy() } returns AccountValidationPolicy().right()
+
+        repository = DefaultAuthRepository(authApi, userApi, tokenStorage, eventBus, deviceIdentityService, authValidationService)
     }
 
     @AfterTest
     fun tearDown() {
-        clearMocks(authApi, userApi, tokenStorage, eventBus)
+        clearMocks(authApi, userApi, tokenStorage, eventBus, deviceIdentityService, authValidationService)
     }
 
     // ===== switchAccount Tests =====
@@ -305,5 +319,95 @@ class DefaultAuthRepositoryAccountManagementTest {
         // Assert
         assertTrue(result.isRight()) // API logout succeeded
         assertTrue(repository.authState.value is AuthState.Unauthenticated)
+    }
+
+    @Test
+    fun `logoutAll should clear local auth data and set Unauthenticated`() = runTest {
+        // Arrange - set up user 1 as active
+        coEvery { tokenStorage.switchAccount(1L) } returns Unit.right()
+        coEvery { tokenStorage.getAccountData(1L) } returns AccountData(testUser1, testPermissions, Clock.System.now()).right()
+        coEvery { tokenStorage.listStoredAccounts() } returns listOf(
+            AccountData(testUser1, testPermissions, Clock.System.now())
+        ).right()
+        coEvery { authApi.clearToken() } returns Unit
+        repository.switchAccount(1L)
+        assertTrue(repository.authState.value is AuthState.Authenticated)
+
+        coEvery { authApi.logoutAll() } returns Unit.right()
+        coEvery { tokenStorage.clearAuthData() } returns Unit.right()
+
+        // Act
+        val result = repository.logoutAll()
+
+        // Assert
+        assertTrue(result.isRight())
+        assertTrue(repository.authState.value is AuthState.Unauthenticated)
+        coVerify { tokenStorage.clearAuthData() }
+        coVerify { authApi.logoutAll() }
+    }
+
+    @Test
+    fun `logoutAll should still set Unauthenticated even if storage fails`() = runTest {
+        // Arrange - set up user 1 as active
+        coEvery { tokenStorage.switchAccount(1L) } returns Unit.right()
+        coEvery { tokenStorage.getAccountData(1L) } returns AccountData(testUser1, testPermissions, Clock.System.now()).right()
+        coEvery { tokenStorage.listStoredAccounts() } returns listOf(
+            AccountData(testUser1, testPermissions, Clock.System.now())
+        ).right()
+        coEvery { authApi.clearToken() } returns Unit
+        repository.switchAccount(1L)
+        assertTrue(repository.authState.value is AuthState.Authenticated)
+
+        coEvery { authApi.logoutAll() } returns Unit.right()
+        coEvery { tokenStorage.clearAuthData() } returns TokenStorageError.IOError("Storage error").left()
+        coEvery { tokenStorage.listStoredAccounts() } returns emptyList<AccountData>().right()
+
+        // Act
+        val result = repository.logoutAll()
+
+        // Assert
+        assertTrue(result.isRight())
+        assertTrue(repository.authState.value is AuthState.Unauthenticated)
+    }
+
+    // ===== active sessions Tests =====
+
+    @Test
+    fun `getActiveSessions should return sessions from auth api`() = runTest {
+        // Arrange
+        val sessions = listOf(
+            UserSessionInfo(
+                sessionId = 1L,
+                deviceId = "test-device-id",
+                ipAddress = "10.0.0.1",
+                createdAt = Clock.System.now(),
+                lastAccessed = Clock.System.now(),
+                expiresAt = Clock.System.now(),
+                isCurrentSession = true
+            )
+        )
+        coEvery { authApi.getActiveSessions() } returns sessions.right()
+
+        // Act
+        val result = repository.getActiveSessions()
+
+        // Assert
+        assertTrue(result.isRight())
+        assertEquals(sessions, result.getOrNull())
+        coVerify { authApi.getActiveSessions() }
+    }
+
+    @Test
+    fun `revokeSession should call logout for the requested session id`() = runTest {
+        // Arrange
+        val sessionId = 7L
+        coEvery { authApi.logout(sessionId) } returns Unit.right()
+
+        // Act
+        val result = repository.revokeSession(sessionId)
+
+        // Assert
+        assertTrue(result.isRight())
+        coVerify { authApi.logout(sessionId) }
     }
 }

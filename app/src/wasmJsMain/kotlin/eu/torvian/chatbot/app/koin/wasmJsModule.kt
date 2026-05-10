@@ -1,7 +1,9 @@
 package eu.torvian.chatbot.app.koin
 
 import eu.torvian.chatbot.app.config.AppConfiguration
+import eu.torvian.chatbot.app.service.auth.BrowserDeviceIdentityStorage
 import eu.torvian.chatbot.app.service.auth.BrowserTokenStorage
+import eu.torvian.chatbot.app.service.auth.DeviceIdentityStorage
 import eu.torvian.chatbot.app.service.auth.TokenStorage
 import eu.torvian.chatbot.app.service.api.ktor.BrowserWebSocketAuthSubprotocolProvider
 import eu.torvian.chatbot.app.service.api.ktor.WebSocketAuthSubprotocolProvider
@@ -41,6 +43,12 @@ fun wasmJsModule(config: AppConfiguration) = module {
 
     single<CertificateStorage> {
         BrowserCertificateStorage()
+    }
+
+    single<DeviceIdentityStorage> {
+        BrowserDeviceIdentityStorage(
+            storageNamespace = "${config.storage.baseApplicationPath}/${config.storage.dataDir}/${config.storage.deviceIdentityStorageDir}"
+        )
     }
 
     single<ClipboardService> {

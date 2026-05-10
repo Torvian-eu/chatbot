@@ -22,6 +22,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Instant
@@ -184,8 +185,8 @@ class SessionServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for blank name")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is CreateSessionError.InvalidName, "Should be InvalidName error")
-        assertEquals("Session name cannot be blank.", (error as CreateSessionError.InvalidName).reason)
+        assertIs<CreateSessionError.InvalidName>(error, "Should be InvalidName error")
+        assertEquals("Session name cannot be blank.", error.reason)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 0) { sessionDao.insertSession(any()) }
     }
@@ -205,8 +206,8 @@ class SessionServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for foreign key violation")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is CreateSessionError.InvalidRelatedEntity, "Should be InvalidRelatedEntity error")
-        assertEquals("Invalid group ID", (error as CreateSessionError.InvalidRelatedEntity).message)
+        assertIs<CreateSessionError.InvalidRelatedEntity>(error, "Should be InvalidRelatedEntity error")
+        assertEquals("Invalid group ID", error.message)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { sessionDao.insertSession(sessionName) }
     }
@@ -242,8 +243,8 @@ class SessionServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for non-existent session")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is GetSessionDetailsError.SessionNotFound, "Should be SessionNotFound error")
-        assertEquals(sessionId, (error as GetSessionDetailsError.SessionNotFound).id)
+        assertIs<GetSessionDetailsError.SessionNotFound>(error, "Should be SessionNotFound error")
+        assertEquals(sessionId, error.id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
     }
@@ -279,8 +280,8 @@ class SessionServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for blank name")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is UpdateSessionNameError.InvalidName, "Should be InvalidName error")
-        assertEquals("Session name cannot be blank.", (error as UpdateSessionNameError.InvalidName).reason)
+        assertIs<UpdateSessionNameError.InvalidName>(error, "Should be InvalidName error")
+        assertEquals("Session name cannot be blank.", error.reason)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 0) { sessionDao.updateSessionName(any(), any()) }
     }
@@ -300,8 +301,8 @@ class SessionServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for non-existent session")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is UpdateSessionNameError.SessionNotFound, "Should be SessionNotFound error")
-        assertEquals(sessionId, (error as UpdateSessionNameError.SessionNotFound).id)
+        assertIs<UpdateSessionNameError.SessionNotFound>(error, "Should be SessionNotFound error")
+        assertEquals(sessionId, error.id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { sessionDao.updateSessionName(sessionId, newName) }
     }
@@ -354,8 +355,8 @@ class SessionServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for non-existent session")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is UpdateSessionGroupIdError.SessionNotFound, "Should be SessionNotFound error")
-        assertEquals(sessionId, (error as UpdateSessionGroupIdError.SessionNotFound).id)
+        assertIs<UpdateSessionGroupIdError.SessionNotFound>(error, "Should be SessionNotFound error")
+        assertEquals(sessionId, error.id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { sessionDao.updateSessionGroupId(sessionId, groupId) }
     }
@@ -432,10 +433,9 @@ class SessionServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for non-CHAT model type")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is UpdateSessionCurrentModelIdError.InvalidModelType, "Should be InvalidModelType error")
-        val invalidTypeError = error as UpdateSessionCurrentModelIdError.InvalidModelType
-        assertEquals(modelId, invalidTypeError.modelId)
-        assertEquals("EMBEDDING", invalidTypeError.actualType)
+        assertIs<UpdateSessionCurrentModelIdError.InvalidModelType>(error, "Should be InvalidModelType error")
+        assertEquals(modelId, error.modelId)
+        assertEquals("EMBEDDING", error.actualType)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { modelDao.getModelById(modelId) }
         coVerify(exactly = 0) { sessionDao.updateSessionCurrentModelId(any(), any()) }
@@ -459,8 +459,8 @@ class SessionServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for non-existent session")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is UpdateSessionCurrentModelIdError.SessionNotFound, "Should be SessionNotFound error")
-        assertEquals(sessionId, (error as UpdateSessionCurrentModelIdError.SessionNotFound).id)
+        assertIs<UpdateSessionCurrentModelIdError.SessionNotFound>(error, "Should be SessionNotFound error")
+        assertEquals(sessionId, error.id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { modelDao.getModelById(modelId) }
         coVerify(exactly = 1) { sessionDao.updateSessionCurrentModelId(sessionId, modelId) }
@@ -490,11 +490,8 @@ class SessionServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for foreign key violation")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(
-            error is UpdateSessionCurrentModelIdError.InvalidRelatedEntity,
-            "Should be InvalidRelatedEntity error"
-        )
-        assertEquals("Invalid model ID", (error as UpdateSessionCurrentModelIdError.InvalidRelatedEntity).message)
+        assertIs<UpdateSessionCurrentModelIdError.InvalidRelatedEntity>(error, "Should be InvalidRelatedEntity error")
+        assertEquals("Invalid model ID", error.message)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { modelDao.getModelById(modelId) }
         coVerify(exactly = 1) { sessionDao.updateSessionCurrentModelId(sessionId, modelId) }
@@ -569,8 +566,8 @@ class SessionServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for non-existent session")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is UpdateSessionCurrentSettingsIdError.SessionNotFound, "Should be SessionNotFound error")
-        assertEquals(sessionId, (error as UpdateSessionCurrentSettingsIdError.SessionNotFound).id)
+        assertIs<UpdateSessionCurrentSettingsIdError.SessionNotFound>(error, "Should be SessionNotFound error")
+        assertEquals(sessionId, error.id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
     }
@@ -606,14 +603,10 @@ class SessionServiceImplTest {
             assertTrue(result.isLeft(), "Should return Left for model mismatch")
             val error = result.leftOrNull()
             assertNotNull(error, "Error should not be null")
-            assertTrue(
-                error is UpdateSessionCurrentSettingsIdError.SettingsModelMismatch,
-                "Should be SettingsModelMismatch error"
-            )
-            val mismatchError = error as UpdateSessionCurrentSettingsIdError.SettingsModelMismatch
-            assertEquals(settingsId, mismatchError.settingsId)
-            assertEquals(settingsModelId, mismatchError.settingsModelId)
-            assertEquals(sessionModelId, mismatchError.sessionModelId)
+            assertIs<UpdateSessionCurrentSettingsIdError.SettingsModelMismatch>(error, "Should be SettingsModelMismatch error")
+            assertEquals(settingsId, error.settingsId)
+            assertEquals(settingsModelId, error.settingsModelId)
+            assertEquals(sessionModelId, error.sessionModelId)
             coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
             coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
             coVerify(exactly = 1) { settingsDao.getSettingsById(settingsId) }
@@ -656,8 +649,8 @@ class SessionServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for non-existent session")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is UpdateSessionLeafMessageIdError.SessionNotFound, "Should be SessionNotFound error")
-        assertEquals(sessionId, (error as UpdateSessionLeafMessageIdError.SessionNotFound).id)
+        assertIs<UpdateSessionLeafMessageIdError.SessionNotFound>(error, "Should be SessionNotFound error")
+        assertEquals(sessionId, error.id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { sessionDao.updateSessionLeafMessageId(sessionId, messageId) }
     }
@@ -677,11 +670,8 @@ class SessionServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for foreign key violation")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(
-            error is UpdateSessionLeafMessageIdError.InvalidRelatedEntity,
-            "Should be InvalidRelatedEntity error"
-        )
-        assertEquals("Invalid message ID", (error as UpdateSessionLeafMessageIdError.InvalidRelatedEntity).message)
+        assertIs<UpdateSessionLeafMessageIdError.InvalidRelatedEntity>(error, "Should be InvalidRelatedEntity error")
+        assertEquals("Invalid message ID", error.message)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { sessionDao.updateSessionLeafMessageId(sessionId, messageId) }
     }
@@ -716,8 +706,8 @@ class SessionServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for non-existent session")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is DeleteSessionError.SessionNotFound, "Should be SessionNotFound error")
-        assertEquals(sessionId, (error as DeleteSessionError.SessionNotFound).id)
+        assertIs<DeleteSessionError.SessionNotFound>(error, "Should be SessionNotFound error")
+        assertEquals(sessionId, error.id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { sessionDao.deleteSession(sessionId) }
     }

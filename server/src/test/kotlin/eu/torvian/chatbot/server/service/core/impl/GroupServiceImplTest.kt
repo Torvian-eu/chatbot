@@ -17,6 +17,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Instant
@@ -143,8 +144,8 @@ class GroupServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for blank name")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is CreateGroupError.InvalidName, "Should be InvalidName error")
-        assertEquals("Group name cannot be blank.", (error as CreateGroupError.InvalidName).reason)
+        assertIs<CreateGroupError.InvalidName>(error, "Should be InvalidName error")
+        assertEquals("Group name cannot be blank.", error.reason)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 0) { groupDao.insertGroup(any()) }
     }
@@ -162,7 +163,7 @@ class GroupServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for empty name")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is CreateGroupError.InvalidName, "Should be InvalidName error")
+        assertIs<CreateGroupError.InvalidName>(error, "Should be InvalidName error")
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 0) { groupDao.insertGroup(any()) }
     }
@@ -172,7 +173,6 @@ class GroupServiceImplTest {
     @Test
     fun `renameGroup should rename group successfully`() = runTest {
         // Arrange
-        val userId = 1L
         val groupId = 1L
         val newName = "Renamed Group"
         coEvery { groupDao.renameGroup(groupId, newName) } returns Unit.right()
@@ -199,8 +199,8 @@ class GroupServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for blank name")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is RenameGroupError.InvalidName, "Should be InvalidName error")
-        assertEquals("New group name cannot be blank.", (error as RenameGroupError.InvalidName).reason)
+        assertIs<RenameGroupError.InvalidName>(error, "Should be InvalidName error")
+        assertEquals("New group name cannot be blank.", error.reason)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 0) { groupDao.renameGroup(any(), any()) }
     }
@@ -220,8 +220,8 @@ class GroupServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for non-existent group")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is RenameGroupError.GroupNotFound, "Should be GroupNotFound error")
-        assertEquals(groupId, (error as RenameGroupError.GroupNotFound).id)
+        assertIs<RenameGroupError.GroupNotFound>(error, "Should be GroupNotFound error")
+        assertEquals(groupId, error.id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { groupDao.renameGroup(groupId, newName) }
     }
@@ -231,7 +231,6 @@ class GroupServiceImplTest {
     @Test
     fun `deleteGroup should delete group successfully and ungroup sessions`() = runTest {
         // Arrange
-        val userId = 1L
         val groupId = 1L
         coEvery { sessionDao.ungroupSessions(groupId) } returns Unit
         coEvery { groupDao.deleteGroup(groupId) } returns Unit.right()
@@ -261,8 +260,8 @@ class GroupServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for non-existent group")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is DeleteGroupError.GroupNotFound, "Should be GroupNotFound error")
-        assertEquals(groupId, (error as DeleteGroupError.GroupNotFound).id)
+        assertIs<DeleteGroupError.GroupNotFound>(error, "Should be GroupNotFound error")
+        assertEquals(groupId, error.id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { sessionDao.ungroupSessions(groupId) }
         coVerify(exactly = 1) { groupDao.deleteGroup(groupId) }

@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.server.ktor
 
+import eu.torvian.chatbot.server.domain.config.ReverseProxyConfig
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.ktor.auth.extractJwtAuthHeader
@@ -10,6 +11,7 @@ import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.auth.jwt.*
 import io.ktor.server.plugins.contentnegotiation.*
+import io.ktor.server.plugins.forwardedheaders.*
 import io.ktor.server.resources.*
 import io.ktor.server.sse.*
 import io.ktor.server.websocket.*
@@ -17,8 +19,36 @@ import kotlinx.serialization.json.Json
 
 /**
  * Configures the Ktor server with necessary plugins and settings. (shared with tests)
+ *
+ * @param jwtConfig JWT configuration for authentication.
+ * @param authService Authentication service for credential validation.
+ * @param reverseProxyConfig Reverse proxy configuration for forwarded headers support.
  */
-fun Application.configureKtor(jwtConfig: JwtConfig, authService: AuthenticationService) {
+fun Application.configureKtor(
+    jwtConfig: JwtConfig,
+    authService: AuthenticationService,
+    reverseProxyConfig: ReverseProxyConfig
+) {
+    // Install forwarded headers plugins only when reverse proxy is enabled.
+    // This prevents IP spoofing attacks when the server is directly exposed to the internet.
+    if (reverseProxyConfig.enabled) {
+        // Install RFC 7239 Forwarded header support if enabled.
+        // This is less common but more standardized. Disabled by default for security.
+        if (reverseProxyConfig.useForwardedHeaders) {
+            install(ForwardedHeaders) {
+                skipLastProxies(reverseProxyConfig.proxyCount)
+            }
+        }
+
+        // Install X-Forwarded-* headers support if enabled.
+        // Most reverse proxies (Caddy, Nginx, etc.) use these. Enabled by default.
+        if (reverseProxyConfig.useXForwardedHeaders) {
+            install(XForwardedHeaders) {
+                skipLastProxies(reverseProxyConfig.proxyCount)
+            }
+        }
+    }
+
     // Install the ContentNegotiation plugin for JSON serialization
     install(ContentNegotiation) {
         json(Json)

@@ -27,6 +27,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -155,8 +156,8 @@ class ModelSettingsServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for non-existent settings")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is GetSettingsByIdError.SettingsNotFound, "Should be SettingsNotFound error")
-        assertEquals(settingsId, (error as GetSettingsByIdError.SettingsNotFound).id)
+        assertIs<GetSettingsByIdError.SettingsNotFound>(error, "Should be SettingsNotFound error")
+        assertEquals(settingsId, error.id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { settingsDao.getSettingsById(settingsId) }
     }
@@ -271,8 +272,8 @@ class ModelSettingsServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for non-existent model")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is AddSettingsError.ModelNotFound, "Should be ModelNotFound error")
-        assertEquals(modelId, (error as AddSettingsError.ModelNotFound).modelId)
+        assertIs<AddSettingsError.ModelNotFound>(error, "Should be ModelNotFound error")
+        assertEquals(modelId, error.modelId)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { llmModelService.getModelById(modelId) }
         coVerify(exactly = 0) { settingsDao.insertSettings(any()) }
@@ -313,8 +314,8 @@ class ModelSettingsServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for non-existent settings")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is UpdateSettingsError.SettingsNotFound, "Should be SettingsNotFound error")
-        assertEquals(settingsId, (error as UpdateSettingsError.SettingsNotFound).id)
+        assertIs<UpdateSettingsError.SettingsNotFound>(error, "Should be SettingsNotFound error")
+        assertEquals(settingsId, error.id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { llmModelService.getModelById(updatedSettings.modelId) }
         coVerify(exactly = 1) { settingsDao.updateSettings(updatedSettings) }
@@ -335,8 +336,8 @@ class ModelSettingsServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for non-existent model")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is UpdateSettingsError.ModelNotFound, "Should be ModelNotFound error")
-        assertEquals(modelId, (error as UpdateSettingsError.ModelNotFound).modelId)
+        assertIs<UpdateSettingsError.ModelNotFound>(error, "Should be ModelNotFound error")
+        assertEquals(modelId, error.modelId)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { llmModelService.getModelById(modelId) }
         coVerify(exactly = 0) { settingsDao.updateSettings(any()) }
@@ -373,8 +374,8 @@ class ModelSettingsServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for non-existent settings")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is DeleteSettingsError.SettingsNotFound, "Should be SettingsNotFound error")
-        assertEquals(settingsId, (error as DeleteSettingsError.SettingsNotFound).id)
+        assertIs<DeleteSettingsError.SettingsNotFound>(error, "Should be SettingsNotFound error")
+        assertEquals(settingsId, error.id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { settingsDao.deleteSettings(settingsId) }
     }

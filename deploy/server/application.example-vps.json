@@ -57,5 +57,42 @@
     "tokenExpirationMs": 86400000,
     "refreshExpirationMs": 604800000
     /* jwt.secret must be set in secrets.json or via environment variable */
+  },
+
+  "accountSecurityMode" : "WARNING",
+
+  "reverseProxy": {
+    /*
+      Enable this if the server is behind a reverse proxy (e.g., Caddy, Nginx, Cloudflare).
+      - proxyCount: Number of trusted proxies in front of the server.
+        Use 1 if directly behind Caddy.
+        Use 2 if behind Cloudflare AND Caddy (or similar multi-proxy setup).
+      - useXForwardedHeaders: Enable for Caddy, Nginx, etc. (most common)
+      - useForwardedHeaders: Enable for RFC 7239 Forwarded header (less common, more secure)
+      When disabled (false), X-Forwarded-For headers are ignored for security.
+    */
+    "enabled": true,
+    "proxyCount": 1,
+    "useXForwardedHeaders": true,
+    "useForwardedHeaders": false
+  },
+
+  "authPolicy": {
+    "passwordConfig": {
+      "minLength": 8,
+      "maxLength": 128,
+      "requireLowercase": true,
+      "requireUppercase": true,
+      "requireDigit": true,
+      "requireSpecialChar": true,
+      "checkCommonPasswords": true
+    },
+    "usernameConfig": {
+      "minLength": 3,
+      "maxLength": 50,
+      "allowedRegexPattern": "^[a-zA-Z0-9_-]+$"
+    },
+    "maxFailedAttempts": 10,
+    "lockoutWindowMinutes": 5
   }
 }

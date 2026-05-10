@@ -12,6 +12,8 @@ fun LoginResult.toLoginResponse(): LoginResponse {
         accessToken = this.accessToken,
         refreshToken = this.refreshToken,
         expiresAt = this.expiresAt,
-        permissions = this.permissions
+        permissions = this.permissions,
+        isRestricted = this.isRestricted,
+        deviceId = this.deviceId
     )
 }

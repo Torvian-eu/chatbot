@@ -29,6 +29,7 @@ interface TokenStorage {
      * @param expiresAt The expiration timestamp for the access token
      * @param user The authenticated user data for optimistic authentication
      * @param permissions The list of permissions granted to the user
+     * @param isRestricted Whether the session is restricted (created from an unacknowledged device)
      * @return Either a [TokenStorageError] on failure or Unit on success
      */
     suspend fun saveAuthData(
@@ -36,7 +37,8 @@ interface TokenStorage {
         refreshToken: String,
         expiresAt: Instant,
         user: User,
-        permissions: List<Permission>
+        permissions: List<Permission>,
+        isRestricted: Boolean = false
     ): Either<TokenStorageError, Unit>
 
     /**
@@ -127,5 +129,20 @@ interface TokenStorage {
      * @return Either a [TokenStorageError] on failure or Unit on success
      */
     suspend fun removeAccount(userId: Long): Either<TokenStorageError, Unit>
+
+    /**
+     * Updates cached user data for a specific account without requiring re-authentication.
+     *
+     * This is used to persist server-side state changes (e.g., after a password change
+     * that clears the `requiresPasswordChange` flag) so they survive app restarts.
+     *
+     * @param userId The ID of the account to update
+     * @param requiresPasswordChange The new value for the password-change flag
+     * @return Either a [TokenStorageError] on failure or Unit on success
+     */
+    suspend fun updateAccountData(
+        userId: Long,
+        requiresPasswordChange: Boolean
+    ): Either<TokenStorageError, Unit>
 
 }

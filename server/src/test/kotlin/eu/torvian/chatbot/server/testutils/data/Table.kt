@@ -82,6 +82,11 @@ enum class Table {
     USER_SESSIONS,
 
     /**
+     * Table for storing user trusted device records.
+     */
+    USER_TRUSTED_DEVICES,
+
+    /**
      * Table for storing user-defined groups.
      */
     USER_GROUPS,
@@ -173,4 +178,9 @@ enum class Table {
      * Table for linking MCP tools to their source servers.
      */
     LOCAL_MCP_TOOL_DEFINITIONS,
+
+    /**
+     * Table for storing failed login attempts for lockout enforcement.
+     */
+    FAILED_LOGIN_ATTEMPTS,
 }

@@ -3,10 +3,13 @@ package eu.torvian.chatbot.app.compose.auth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.app.service.auth.AccountData
+import eu.torvian.chatbot.app.service.auth.AuthValidationService
 import eu.torvian.chatbot.app.viewmodel.auth.AuthDialogState
 import eu.torvian.chatbot.app.viewmodel.auth.AuthViewModel
+import org.koin.compose.getKoin
 
 /**
  * Container for all authentication-related dialogs.
@@ -21,6 +24,8 @@ fun AuthDialogs(
     accountSwitchInProgress: Boolean,
     authViewModel: AuthViewModel
 ) {
+    val activeSessions by authViewModel.activeSessions.collectAsState()
+
     when (dialogState) {
         is AuthDialogState.SwitchAccount -> {
             SwitchAccountDialog(
@@ -48,12 +53,89 @@ fun AuthDialogs(
             )
         }
 
+        is AuthDialogState.ActiveSessions -> {
+            LaunchedEffect(dialogState) {
+                authViewModel.refreshSessions()
+            }
+
+            val isCurrentSessionRestricted = currentAuthState is AuthState.Authenticated && currentAuthState.isRestricted
+
+            ActiveSessionsDialog(
+                sessions = activeSessions,
+                currentAuthState = currentAuthState,
+                isCurrentSessionRestricted = isCurrentSessionRestricted,
+                onDismiss = { authViewModel.closeDialog() },
+                onRevokeSession = { sessionId: Long -> authViewModel.revokeSession(sessionId) },
+                onCopyToClipboard = authViewModel::copyToClipboard
+            )
+        }
+
         is AuthDialogState.RemoveAccountConfirmation -> {
             RemoveAccountConfirmationDialog(
                 account = dialogState.account,
                 currentAuthState = currentAuthState,
                 onDismiss = { authViewModel.closeDialog() },
                 onConfirm = { authViewModel.removeAccount(dialogState.account.user.id) }
+            )
+        }
+
+        is AuthDialogState.TrustedDevices -> {
+            LaunchedEffect(dialogState) {
+                authViewModel.refreshTrustedDevices()
+            }
+
+            val trustedDevices by authViewModel.trustedDevices.collectAsState()
+            val currentDeviceId = (currentAuthState as? AuthState.Authenticated)?.deviceId
+            val isCurrentSessionRestricted = currentAuthState is AuthState.Authenticated && currentAuthState.isRestricted
+
+            TrustedDevicesDialog(
+                devices = trustedDevices,
+                currentDeviceId = currentDeviceId,
+                isCurrentSessionRestricted = isCurrentSessionRestricted,
+                onDismiss = { authViewModel.closeDialog() },
+                onRevokeDevice = { deviceId -> authViewModel.revokeTrustedDevice(deviceId) },
+                onCopyToClipboard = authViewModel::copyToClipboard
+            )
+        }
+
+        is AuthDialogState.ChangePassword -> {
+            val passwordFormState by authViewModel.passwordChangeFormState.collectAsState()
+            val isRestricted = currentAuthState is AuthState.Authenticated && currentAuthState.isRestricted
+            val passwordValidationConfig = getKoin().get<AuthValidationService>().passwordValidationConfig
+
+            ChangePasswordDialog(
+                formState = passwordFormState,
+                isRestricted = isRestricted,
+                passwordValidationConfig = passwordValidationConfig,
+                onDismiss = {
+                    authViewModel.clearPasswordChangeForm()
+                    authViewModel.closeDialog()
+                },
+                onCurrentPasswordChange = { password -> authViewModel.updatePasswordChangeForm(currentPassword = password) },
+                onNewPasswordChange = { password -> authViewModel.updatePasswordChangeForm(newPassword = password) },
+                onConfirmPasswordChange = { password -> authViewModel.updatePasswordChangeForm(confirmPassword = password) },
+                onChangePassword = { authViewModel.changePassword() }
+            )
+        }
+
+        is AuthDialogState.RestrictedSessionInfo -> {
+            RestrictedSessionInfoDialog(
+                onDismiss = { authViewModel.closeDialog() }
+            )
+        }
+
+        is AuthDialogState.SecurityAlerts -> {
+            val isRestricted = currentAuthState is AuthState.Authenticated && currentAuthState.isRestricted
+            SecurityAlertsDialog(
+                alerts = dialogState.alerts,
+                isRestricted = isRestricted,
+                onDismiss = { authViewModel.closeDialog() },
+                onResolveAlert = { alertId, trust ->
+                    authViewModel.resolveAlert(alertId, trust)
+                },
+                onCopyToClipboard = { alert ->
+                    authViewModel.copyToClipboard(alert.deviceId)
+                }
             )
         }
 

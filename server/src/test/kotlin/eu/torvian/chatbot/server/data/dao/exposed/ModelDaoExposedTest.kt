@@ -17,6 +17,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -277,8 +278,8 @@ class ModelDaoExposedTest {
         assertTrue(result.isLeft(), "Expected Left result for non-existent model")
         val error = result.leftOrNull()
         assertNotNull(error, "Expected non-null error")
-        assertTrue(error is UpdateModelError.ModelNotFound, "Expected UpdateModelError.ModelNotFound error")
-        assertEquals(999, (error as UpdateModelError.ModelNotFound).id, "Expected error with correct ID")
+        assertIs<UpdateModelError.ModelNotFound>(error, "Expected UpdateModelError.ModelNotFound error")
+        assertEquals(999, error.id, "Expected error with correct ID")
     }
 
     @Test

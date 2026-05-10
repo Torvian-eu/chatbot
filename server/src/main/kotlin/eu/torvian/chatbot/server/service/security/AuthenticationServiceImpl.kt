@@ -2,27 +2,31 @@ package eu.torvian.chatbot.server.service.security
 
 import arrow.core.Either
 import arrow.core.getOrElse
-import arrow.core.raise.catch
-import arrow.core.raise.either
-import arrow.core.raise.ensure
-import arrow.core.raise.withError
+import arrow.core.left
+import arrow.core.raise.*
+import arrow.core.right
 import com.auth0.jwt.exceptions.JWTDecodeException
 import com.auth0.jwt.exceptions.JWTVerificationException
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
+import eu.torvian.chatbot.common.models.api.auth.UserTrustedDeviceInfo
 import eu.torvian.chatbot.common.models.user.UserStatus
-import eu.torvian.chatbot.server.data.dao.UserDao
-import eu.torvian.chatbot.server.data.dao.UserSessionDao
-import eu.torvian.chatbot.server.data.dao.WorkerDao
+import eu.torvian.chatbot.common.security.AccountValidationPolicy
+import eu.torvian.chatbot.common.security.SecurityAuditStatus
+import eu.torvian.chatbot.common.security.error.PasswordValidationError
+import eu.torvian.chatbot.server.data.dao.*
 import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.dao.error.UserSessionError
 import eu.torvian.chatbot.server.data.dao.error.WorkerError
+import eu.torvian.chatbot.server.data.entities.SecurityAuditEntity
 import eu.torvian.chatbot.server.data.entities.UserSessionEntity
 import eu.torvian.chatbot.server.data.entities.mappers.toUser
+import eu.torvian.chatbot.server.domain.config.AccountSecurityMode
 import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.domain.security.LoginResult
 import eu.torvian.chatbot.server.domain.security.UserContext
 import eu.torvian.chatbot.server.domain.security.WorkerContext
 import eu.torvian.chatbot.server.service.core.UserService
+import eu.torvian.chatbot.server.service.core.error.auth.ChangePasswordError
 import eu.torvian.chatbot.server.service.core.error.auth.UserNotFoundError
 import eu.torvian.chatbot.server.service.security.error.*
 import io.ktor.server.auth.jwt.*
@@ -40,29 +44,65 @@ import kotlin.time.Instant
  * - JWT token generation and validation
  * - Session lifecycle management
  * - Token refresh capabilities
+ * - Device-based trust with AccountSecurityMode (DISABLED, WARNING, STRICT)
+ * - Sliding-window lockout for failed login attempts
  */
 class AuthenticationServiceImpl(
     private val userService: UserService,
     private val passwordService: PasswordService,
     private val jwtConfig: JwtConfig,
     private val userSessionDao: UserSessionDao,
+    private val userTrustedDeviceDao: UserTrustedDeviceDao,
+    private val securityAuditDao: SecurityAuditDao,
     private val userDao: UserDao,
     private val workerDao: WorkerDao,
     private val authorizationService: AuthorizationService,
-    private val transactionScope: TransactionScope
+    private val transactionScope: TransactionScope,
+    private val accountSecurityMode: AccountSecurityMode,
+    private val failedLoginAttemptDao: FailedLoginAttemptDao,
+    private val authPolicy: AccountValidationPolicy
 ) : AuthenticationService {
 
     companion object {
         private val logger: Logger = LogManager.getLogger(AuthenticationServiceImpl::class.java)
     }
 
-    override suspend fun login(username: String, password: String): Either<LoginError, LoginResult> =
-        transactionScope.transaction {
+    override suspend fun login(
+        username: String,
+        password: String,
+        ipAddress: String?,
+        deviceId: String
+    ): Either<LoginError, LoginResult> {
+        // Define effective IP address early for lockout checks and failure recording
+        val effectiveIpAddress = ipAddress ?: "unknown"
+
+        // Calculate sliding window start time for lockout checks
+        val currentTime = Clock.System.now()
+        val currentTimeMillis = currentTime.toEpochMilliseconds()
+        val windowStartMillis = currentTimeMillis - (authPolicy.lockoutWindowMinutes * 60 * 1000L)
+
+        // Check if username has too many failed attempts in the window (before main transaction)
+        val usernameFailures = failedLoginAttemptDao.countFailuresByUsername(username, windowStartMillis)
+        if (usernameFailures >= authPolicy.maxFailedAttempts) {
+            logger.warn("Login blocked for user $username: too many failed attempts ($usernameFailures/${authPolicy.maxFailedAttempts})")
+            return LoginError.TooManyAttempts.left()
+        }
+
+        // Check if IP address has too many failed attempts in the window (before main transaction)
+        val ipFailures = failedLoginAttemptDao.countFailuresByIp(effectiveIpAddress, windowStartMillis)
+        if (ipFailures >= authPolicy.maxFailedAttempts) {
+            logger.warn("Login blocked for IP $effectiveIpAddress: too many failed attempts ($ipFailures/${authPolicy.maxFailedAttempts})")
+            return LoginError.TooManyAttempts.left()
+        }
+
+        // Execute core login logic inside transaction and store result
+        val result = transactionScope.transaction {
             either {
                 logger.info("Attempting login for user: $username")
 
                 // Get user by username
                 val userEntity = withError({ _: UserError.UserNotFoundByUsername ->
+                    logger.warn("User not found: $username")
                     LoginError.UserNotFound
                 }) {
                     userDao.getUserByUsername(username).bind()
@@ -72,33 +112,41 @@ class AuthenticationServiceImpl(
                     LoginError.AccountLocked("Account is disabled")
                 }
 
-                // Verify password
-                if (!passwordService.verifyPassword(password, userEntity.passwordHash)) {
+                ensure(passwordService.verifyPassword(password, userEntity.passwordHash)) {
                     logger.warn("Invalid password for user: $username")
-                    raise(LoginError.InvalidCredentials)
+                    LoginError.InvalidCredentials
                 }
 
-                // Create new session
-                val currentTime = Clock.System.now()
+                // Handle device-based security - determines if the session should be restricted
+                val isRestricted = handleDeviceSecurityAndDetermineRestriction(
+                    userId = userEntity.id,
+                    deviceId = deviceId,
+                    ipAddress = ipAddress,
+                    currentTime = Clock.System.now()
+                )
+
+                // Create session.
                 val sessionExpirationMs = jwtConfig.refreshExpirationMs
-                val sessionExpiresAt = currentTime.toEpochMilliseconds() + sessionExpirationMs
+                val sessionExpiresAt = currentTimeMillis + sessionExpirationMs
                 val accessTokenExpiresAt = currentTime.plus(jwtConfig.tokenExpirationMs.milliseconds)
                 val session: UserSessionEntity = withError({ _: UserSessionError.ForeignKeyViolation ->
                     LoginError.UserNotFound
                 }) {
-                    userSessionDao.insertSession(userEntity.id, sessionExpiresAt).bind()
+                    userSessionDao.insertSession(userEntity.id, deviceId, sessionExpiresAt, ipAddress, isRestricted)
+                        .bind()
                 }
 
                 // Generate tokens
                 val accessToken = jwtConfig.generateAccessToken(
                     userId = userEntity.id,
                     sessionId = session.id,
-                    currentTime = currentTime.toEpochMilliseconds()
+                    isRestricted = isRestricted,
+                    currentTime = currentTimeMillis
                 )
                 val refreshToken = jwtConfig.generateRefreshToken(
                     userId = userEntity.id,
                     sessionId = session.id,
-                    currentTime = currentTime.toEpochMilliseconds()
+                    currentTime = currentTimeMillis
                 )
 
                 // Update last login
@@ -116,36 +164,168 @@ class AuthenticationServiceImpl(
                     accessToken = accessToken,
                     refreshToken = refreshToken,
                     expiresAt = accessTokenExpiresAt,
-                    permissions = permissions
+                    permissions = permissions,
+                    isRestricted = isRestricted,
+                    deviceId = deviceId
                 )
             }
         }
 
-    override suspend fun logout(sessionId: Long): Either<LogoutError, Unit> =
-        transactionScope.transaction {
-            either {
-                logger.info("Logging out session: $sessionId")
+        // Handle failed login attempts outside the main transaction to ensure persistence
+        // even when the main transaction rolls back
+        result.fold(
+            ifLeft = { error ->
+                if (error is LoginError.UserNotFound || error is LoginError.InvalidCredentials) {
+                    // Record the failed attempt
+                    failedLoginAttemptDao.recordFailure(username, effectiveIpAddress, deviceId)
+                    // Cleanup old records to prevent database bloat
+                    failedLoginAttemptDao.cleanupOldRecords(windowStartMillis)
+                }
+            },
+            ifRight = {
+                // Clear failed login attempts on successful login
+                // Only clears username-based failures, IP-based failures remain to prevent reset attacks
+                failedLoginAttemptDao.clearFailures(username)
+            }
+        )
+        return result
+    }
 
-                // Delete the specific session
-                withError({ _: UserSessionError.SessionNotFound ->
-                    LogoutError.SessionNotFound(sessionId)
-                }) {
-                    userSessionDao.deleteSession(sessionId).bind()
+    /**
+     * Handles device-based security and determines if the session should be restricted.
+     *
+     * Uses [AccountSecurityMode] for the security policy:
+     * - DISABLED: Always allow unrestricted sessions.
+     * - WARNING: Restrict sessions for unknown devices until acknowledged.
+     * - STRICT: Block unknown devices entirely with [LoginError.VerificationRequired].
+     *
+     * Trust on First Use (TOFU): The first device a user ever logs in with is automatically
+     * trusted, regardless of security mode (except DISABLED). Subsequent devices follow the
+     * WARNING/STRICT rules.
+     *
+     * @return true if the session should be restricted, false otherwise
+     */
+    private suspend fun Raise<LoginError>.handleDeviceSecurityAndDetermineRestriction(
+        userId: Long,
+        deviceId: String,
+        ipAddress: String?,
+        currentTime: Instant
+    ): Boolean {
+        // DISABLED mode: always allow unrestricted sessions
+        if (accountSecurityMode == AccountSecurityMode.DISABLED) {
+            return false
+        }
+
+        val normalizedDeviceId = deviceId.trim()
+        val currentTimeMillis = currentTime.toEpochMilliseconds()
+
+        // Trust on First Use (TOFU): Check if this is the user's first device ever
+        val trustedCount = userTrustedDeviceDao.getTrustedDevicesCount(userId)
+        if (trustedCount == 0) {
+            // FIRST DEVICE EVER: Auto-trust it regardless of security mode
+            userTrustedDeviceDao.insertTrustedDevice(
+                userId = userId,
+                deviceId = normalizedDeviceId,
+                ipAddress = ipAddress,
+                firstSeenAt = currentTimeMillis,
+                lastUsedAt = currentTimeMillis
+            )
+            return false
+        }
+
+        // Check if this device is already trusted for this user
+        val trustedDevice = userTrustedDeviceDao.getTrustedDevice(userId, normalizedDeviceId)
+
+        if (trustedDevice == null) {
+            // Unknown device - create audit record
+            securityAuditDao.insertAuditRecord(
+                userId = userId,
+                deviceId = normalizedDeviceId,
+                ipAddress = ipAddress,
+                createdAt = currentTimeMillis
+            )
+
+            // Apply security mode policy
+            return when (accountSecurityMode) {
+                AccountSecurityMode.STRICT -> {
+                    // Block unknown devices in STRICT mode
+                    raise(LoginError.VerificationRequired)
                 }
 
-                logger.info("Successfully logged out session: $sessionId")
+                AccountSecurityMode.WARNING -> {
+                    // Restrict session for unknown devices in WARNING mode
+                    true
+                }
             }
         }
 
-    override suspend fun logoutAll(userId: Long): Either<LogoutAllError, Unit> =
+        // Known device found - update last used info and allow unrestricted session
+        userTrustedDeviceDao.updateLastUsedAt(
+            id = trustedDevice.id,
+            lastUsedAt = currentTimeMillis,
+            lastIpAddress = ipAddress
+        )
+        return false
+    }
+
+    override suspend fun logout(
+        userId: Long,
+        targetSessionId: Long,
+        requesterSessionId: Long,
+        requesterIsRestricted: Boolean
+    ): Either<LogoutError, Unit> =
         transactionScope.transaction {
             either {
-                logger.info("Logging out all sessions for user: $userId")
+                logger.info("Logging out session: $targetSessionId, user: $userId, requester: $requesterSessionId, restricted: $requesterIsRestricted")
+
+                // Fetch the target session to validate ownership
+                val targetSession = withError({ _: UserSessionError.SessionNotFound ->
+                    LogoutError.SessionNotFound(targetSessionId)
+                }) {
+                    userSessionDao.getSessionById(targetSessionId).bind()
+                }
+
+                // Validate that the session belongs to the requesting user (ownership check)
+                // This prevents users from logging out sessions belonging to other users
+                ensure(targetSession.userId == userId) {
+                    logger.warn("Session $targetSessionId does not belong to user $userId")
+                    raise(LogoutError.SessionNotFound(targetSessionId))
+                }
+
+                // Restricted sessions can only log out themselves, not other sessions
+                if (targetSessionId != requesterSessionId) {
+                    ensure(!requesterIsRestricted) {
+                        logger.warn("Restricted session attempted to revoke another session: $targetSessionId")
+                        raise(LogoutError.InsufficientPermissions)
+                    }
+                }
+
+                // Delete the specific session
+                withError({ _: UserSessionError.SessionNotFound ->
+                    LogoutError.SessionNotFound(targetSessionId)
+                }) {
+                    userSessionDao.deleteSession(targetSessionId).bind()
+                }
+
+                logger.info("Successfully logged out session: $targetSessionId")
+            }
+        }
+
+    override suspend fun logoutAll(userId: Long, requesterIsRestricted: Boolean): Either<LogoutAllError, Unit> =
+        transactionScope.transaction {
+            either {
+                logger.info("Logging out all sessions for user: $userId, restricted: $requesterIsRestricted")
+
+                // Restricted sessions cannot log out from all sessions
+                ensure(!requesterIsRestricted) {
+                    logger.warn("Restricted session attempted to log out from all sessions")
+                    raise(LogoutAllError.InsufficientPermissions)
+                }
 
                 // Delete all sessions for the user
                 val deletedCount = userSessionDao.deleteSessionsByUserId(userId)
 
-                if (deletedCount == 0) {
+                ensure(deletedCount > 0) {
                     logger.warn("No sessions found for user: $userId")
                     raise(LogoutAllError.NoSessionsFound(userId))
                 }
@@ -154,7 +334,28 @@ class AuthenticationServiceImpl(
             }
         }
 
-    override suspend fun refreshToken(refreshToken: String): Either<RefreshTokenError, LoginResult> =
+    override suspend fun getUserSessions(userId: Long): Either<Nothing, List<UserSessionEntity>> =
+        transactionScope.transaction {
+            // The DAO already scopes the query by user ID, so this remains a pure read operation.
+            userSessionDao.getSessionsByUserId(userId).right()
+        }
+
+    override suspend fun getSecurityAlerts(userId: Long, requesterIsRestricted: Boolean): Either<GetSecurityAlertsError, List<SecurityAuditEntity>> =
+        transactionScope.transaction {
+            either {
+                // Restricted sessions cannot list security alerts
+                ensure(!requesterIsRestricted) {
+                    logger.warn("Restricted session attempted to list security alerts for user: $userId")
+                    raise(GetSecurityAlertsError.InsufficientPermissions())
+                }
+                securityAuditDao.getUnacknowledgedByUserId(userId)
+            }
+        }
+
+    override suspend fun refreshToken(
+        refreshToken: String,
+        ipAddress: String?
+    ): Either<RefreshTokenError, LoginResult> =
         transactionScope.transaction {
             either {
                 // First, decode and verify the refresh token (non-suspend operations)
@@ -220,19 +421,26 @@ class AuthenticationServiceImpl(
                     userSessionDao.deleteSession(sessionId).bind()
                 }
 
-                // Create new session
+                // Create new session, preserving the restricted status from the old session
                 val newSessionExpirationMs = jwtConfig.refreshExpirationMs
                 val newSessionExpiresAt = currentTime.toEpochMilliseconds() + newSessionExpirationMs
                 val newSession = withError({ _: UserSessionError.ForeignKeyViolation ->
                     RefreshTokenError.InvalidSession("User not found")
                 }) {
-                    userSessionDao.insertSession(userId, newSessionExpiresAt).bind()
+                    userSessionDao.insertSession(
+                        userId,
+                        session.deviceId,
+                        newSessionExpiresAt,
+                        ipAddress,
+                        session.isRestricted
+                    ).bind()
                 }
 
-                // Generate new tokens
+                // Generate new tokens, preserving the restricted status
                 val newAccessToken = jwtConfig.generateAccessToken(
                     userId = userId,
                     sessionId = newSession.id,
+                    isRestricted = session.isRestricted,
                     currentTime = currentTime.toEpochMilliseconds()
                 )
                 val newRefreshToken = jwtConfig.generateRefreshToken(
@@ -252,7 +460,9 @@ class AuthenticationServiceImpl(
                     accessToken = newAccessToken,
                     refreshToken = newRefreshToken,
                     expiresAt = tokenExpiresAt,
-                    permissions = permissions
+                    permissions = permissions,
+                    isRestricted = session.isRestricted,
+                    deviceId = null // Device ID not available during token refresh; client uses its own device ID
                 )
             }
         }
@@ -312,7 +522,8 @@ class AuthenticationServiceImpl(
                 user = user,
                 sessionId = sessionId,
                 tokenIssuedAt = issuedAt,
-                tokenExpiresAt = expiresAt
+                tokenExpiresAt = expiresAt,
+                isRestricted = session.isRestricted
             )
 
             logger.debug("Credential validation successful for user: ${user.username}")
@@ -379,6 +590,305 @@ class AuthenticationServiceImpl(
             }.getOrElse {
                 logger.debug("Worker credential validation failed: {}", it)
                 null
+            }
+        }
+
+    override suspend fun getTrustedDevices(
+        userId: Long,
+        requesterIsRestricted: Boolean
+    ): Either<RevokeTrustedDeviceError, List<UserTrustedDeviceInfo>> =
+        transactionScope.transaction {
+            either {
+                // Restricted sessions cannot list trusted devices - prevents enumeration attacks
+                ensure(!requesterIsRestricted) {
+                    logger.warn("Restricted session attempted to list trusted devices")
+                    raise(RevokeTrustedDeviceError.InsufficientPermissions())
+                }
+
+                // Fetch all trusted devices for the user
+                val devices = userTrustedDeviceDao.getTrustedDevices(userId)
+
+                // Map to API response DTO
+                devices.map { device ->
+                    UserTrustedDeviceInfo(
+                        deviceId = device.deviceId,
+                        lastIpAddress = device.lastIpAddress,
+                        firstSeenAt = device.firstSeenAt,
+                        lastUsedAt = device.lastUsedAt
+                    )
+                }
+            }
+        }
+
+    override suspend fun revokeTrustedDevice(
+        userId: Long,
+        deviceId: String,
+        requesterIsRestricted: Boolean
+    ): Either<RevokeTrustedDeviceError, Unit> =
+        transactionScope.transaction {
+            either {
+                // Restricted sessions cannot revoke devices - prevents malicious actions from unverified devices
+                ensure(!requesterIsRestricted) {
+                    logger.warn("Restricted session attempted to revoke trusted device: $deviceId")
+                    raise(RevokeTrustedDeviceError.InsufficientPermissions())
+                }
+
+                // Delete the trusted device
+                val deletedCount = userTrustedDeviceDao.deleteTrustedDevice(userId, deviceId)
+
+                ensure(deletedCount > 0) {
+                    logger.warn("Device not found for revocation: $deviceId, user: $userId")
+                    raise(RevokeTrustedDeviceError.DeviceNotFound(deviceId))
+                }
+
+                logger.info("Successfully revoked trusted device: $deviceId for user: $userId")
+            }
+        }
+
+    override suspend fun changePassword(
+        userId: Long,
+        currentPassword: String,
+        newPassword: String,
+        requesterIsRestricted: Boolean
+    ): Either<ChangePasswordError, Unit> =
+        transactionScope.transaction {
+            either {
+                logger.info("Changing password for user: $userId, restricted: $requesterIsRestricted")
+
+                // 1. Check restriction - restricted sessions cannot change password
+                ensure(!requesterIsRestricted) {
+                    logger.warn("Restricted session attempted to change password")
+                    raise(ChangePasswordError.InsufficientPermissions)
+                }
+
+                // 2. Verify current password
+                val userEntity = withError({ _: UserError.UserNotFound ->
+                    ChangePasswordError.UserNotFound(userId)
+                }) {
+                    userDao.getUserById(userId).bind()
+                }
+
+                // Verify the current password matches
+                ensure(passwordService.verifyPassword(currentPassword, userEntity.passwordHash)) {
+                    logger.warn("Invalid current password for user: $userId")
+                    raise(ChangePasswordError.InvalidCurrentPassword)
+                }
+
+                // 3. Validate new password strength
+                withError({ passwordError ->
+                    when (passwordError) {
+                        is PasswordValidationError.Empty ->
+                            ChangePasswordError.InvalidPassword("Password cannot be empty")
+
+                        is PasswordValidationError.OnlyWhitespace ->
+                            ChangePasswordError.InvalidPassword("Password cannot contain only whitespace")
+
+                        is PasswordValidationError.TooShort ->
+                            ChangePasswordError.InvalidPassword(
+                                "Password must be at least ${passwordError.minLength} characters"
+                            )
+
+                        is PasswordValidationError.TooLong ->
+                            ChangePasswordError.InvalidPassword(
+                                "Password must be no more than ${passwordError.maxLength} characters"
+                            )
+
+                        is PasswordValidationError.MissingCharacterTypes ->
+                            ChangePasswordError.InvalidPassword(
+                                "Password must contain required character types"
+                            )
+
+                        is PasswordValidationError.TooCommon ->
+                            ChangePasswordError.InvalidPassword(passwordError.reason)
+                    }
+                }) {
+                    passwordService.validatePasswordStrength(newPassword).bind()
+                }
+
+                // Prevent reusing the current password
+                ensure(!passwordService.verifyPassword(newPassword, userEntity.passwordHash)) {
+                    logger.warn("User $userId attempted to reuse current password")
+                    raise(ChangePasswordError.SameAsCurrentPassword)
+                }
+
+                // 4. Hash new password and update user record
+                val hashedPassword = passwordService.hashPassword(newPassword)
+
+                // Update user with new password and clear requiresPasswordChange flag
+                val updatedUser = userEntity.copy(
+                    passwordHash = hashedPassword,
+                    requiresPasswordChange = false
+                )
+                // Use mapLeft to convert the error type
+                userDao.updateUser(updatedUser).mapLeft { error ->
+                    when (error) {
+                        is UserError.UserNotFound -> ChangePasswordError.UserNotFound(userId)
+                        else -> ChangePasswordError.UserNotFound(userId)
+                    }
+                }.bind()
+
+                logger.info("Successfully changed password for user: $userId")
+            }
+        }
+
+    override suspend fun completeRequiredPasswordChange(
+        userId: Long,
+        newPassword: String,
+        requesterIsRestricted: Boolean
+    ): Either<CompleteRequiredPasswordChangeError, Unit> =
+        transactionScope.transaction {
+            either {
+                logger.info("Completing required password change for user: $userId, restricted: $requesterIsRestricted")
+
+                // 1. Check restriction - restricted sessions cannot complete required password change
+                ensure(!requesterIsRestricted) {
+                    logger.warn("Restricted session attempted to complete required password change")
+                    raise(CompleteRequiredPasswordChangeError.InsufficientPermissions)
+                }
+
+                // 2. Fetch user entity
+                val userEntity = withError({ _: UserError.UserNotFound ->
+                    CompleteRequiredPasswordChangeError.UserNotFound
+                }) {
+                    userDao.getUserById(userId).bind()
+                }
+
+                // 3. Check that password change is required for this user
+                ensure(userEntity.requiresPasswordChange) {
+                    logger.warn("User $userId attempted password change but it's not required")
+                    raise(CompleteRequiredPasswordChangeError.PasswordChangeNotRequired)
+                }
+
+                // 4. Validate new password strength
+                withError({ passwordError ->
+                    when (passwordError) {
+                        is PasswordValidationError.Empty ->
+                            CompleteRequiredPasswordChangeError.WeakPassword("Password cannot be empty")
+
+                        is PasswordValidationError.OnlyWhitespace ->
+                            CompleteRequiredPasswordChangeError.WeakPassword("Password cannot contain only whitespace")
+
+                        is PasswordValidationError.TooShort ->
+                            CompleteRequiredPasswordChangeError.WeakPassword(
+                                "Password must be at least ${passwordError.minLength} characters"
+                            )
+
+                        is PasswordValidationError.TooLong ->
+                            CompleteRequiredPasswordChangeError.WeakPassword(
+                                "Password must be no more than ${passwordError.maxLength} characters"
+                            )
+
+                        is PasswordValidationError.MissingCharacterTypes ->
+                            CompleteRequiredPasswordChangeError.WeakPassword(
+                                "Password must contain required character types"
+                            )
+
+                        is PasswordValidationError.TooCommon ->
+                            CompleteRequiredPasswordChangeError.WeakPassword(passwordError.reason)
+                    }
+                }) {
+                    passwordService.validatePasswordStrength(newPassword).bind()
+                }
+
+                // 5. Hash new password and update user record
+                val hashedPassword = passwordService.hashPassword(newPassword)
+
+                // Update user with new password and clear requiresPasswordChange flag
+                val updatedUser = userEntity.copy(
+                    passwordHash = hashedPassword,
+                    requiresPasswordChange = false
+                )
+                // Use mapLeft to convert the error type
+                userDao.updateUser(updatedUser).mapLeft { error ->
+                    when (error) {
+                        is UserError.UserNotFound -> CompleteRequiredPasswordChangeError.UserNotFound
+                        else -> CompleteRequiredPasswordChangeError.UpdateFailed("Database update failed")
+                    }
+                }.bind()
+
+                logger.info("Successfully completed required password change for user: $userId")
+            }
+        }
+
+    /**
+     * Resolves a single security alert for the user with the specified outcome.
+     *
+     * This method allows the user to either trust or dismiss a specific security alert.
+     * - TRUSTED: The device is added to the trusted devices list and the alert is marked as trusted.
+     * - DISMISSED: The alert is marked as dismissed without adding the device to trusted devices.
+     *
+     * Restricted sessions cannot resolve alerts - this prevents self-resolution of untrusted devices.
+     *
+     * @param userId The unique identifier of the authenticated user.
+     * @param alertId The unique identifier of the security alert to resolve.
+     * @param outcome The outcome to apply (TRUSTED or DISMISSED).
+     * @param requesterIsRestricted Whether the requester's session is restricted (device not verified)
+     * @return Either [ResolveAlertError] if resolution fails, or Unit on success
+     */
+    override suspend fun resolveSingleAlert(
+        userId: Long,
+        alertId: Long,
+        outcome: SecurityAuditStatus,
+        requesterIsRestricted: Boolean
+    ): Either<ResolveAlertError, Unit> =
+        transactionScope.transaction {
+            either {
+                logger.info("Resolving security alert: $alertId for user: $userId with outcome: $outcome")
+
+                // 1. Check restriction - restricted sessions cannot resolve alerts
+                ensure(!requesterIsRestricted) {
+                    logger.warn("Restricted session attempted to resolve security alert: $alertId")
+                    ResolveAlertError.InsufficientPermissions()
+                }
+
+                // 2. Fetch the alert record
+                val auditRecord = securityAuditDao.getAuditRecordById(alertId)
+                    ?: raise(ResolveAlertError.AlertNotFound(alertId))
+
+                // 3. Ensure the alert belongs to the user
+                ensure(auditRecord.userId == userId) {
+                    logger.warn("Alert $alertId does not belong to user $userId")
+                    ResolveAlertError.AlertNotFound(alertId)
+                }
+
+                // 4. Ensure the alert is still pending
+                ensure(auditRecord.status == SecurityAuditStatus.PENDING) {
+                    logger.warn("Alert $alertId is not pending (status: ${auditRecord.status})")
+                    // Not an error - just return success since the alert is already resolved
+                    return@transaction Unit.right()
+                }
+
+                val currentTimeMillis = System.currentTimeMillis()
+
+                // 5. Handle the outcome
+                when (outcome) {
+                    SecurityAuditStatus.TRUSTED -> {
+                        // Add device to trusted devices if not already there
+                        val existingDevice = userTrustedDeviceDao.getTrustedDevice(userId, auditRecord.deviceId)
+                        if (existingDevice == null) {
+                            userTrustedDeviceDao.insertTrustedDevice(
+                                userId = userId,
+                                deviceId = auditRecord.deviceId,
+                                ipAddress = auditRecord.ipAddress,
+                                firstSeenAt = currentTimeMillis,
+                                lastUsedAt = currentTimeMillis
+                            )
+                        }
+                        // Mark the alert as trusted
+                        securityAuditDao.updateStatus(alertId, SecurityAuditStatus.TRUSTED, currentTimeMillis)
+                    }
+
+                    SecurityAuditStatus.DISMISSED -> {
+                        // Mark the alert as dismissed - do NOT add to trusted devices
+                        securityAuditDao.updateStatus(alertId, SecurityAuditStatus.DISMISSED, currentTimeMillis)
+                    }
+
+                    SecurityAuditStatus.PENDING -> {
+                        // No-op - should not happen as we check for PENDING above
+                    }
+                }
+
+                logger.info("Successfully resolved security alert: $alertId for user: $userId with outcome: $outcome")
             }
         }
 }

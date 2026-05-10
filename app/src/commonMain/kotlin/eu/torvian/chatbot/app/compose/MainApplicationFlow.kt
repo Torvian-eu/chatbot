@@ -230,6 +230,13 @@ private fun MainTopAppBar(
 
 /**
  * User menu button with tooltip.
+ *
+ * @param authState The currently authenticated user state used to render the menu label.
+ * @param availableAccounts The locally stored accounts that can be switched to.
+ * @param accountSwitchInProgress Whether account switching is currently busy.
+ * @param authViewModel The auth view model that owns the menu actions.
+ * @param navController Navigation controller used for login navigation.
+ * @param scope Coroutine scope used to launch logout actions from the UI.
  */
 @Composable
 private fun UserMenuButton(
@@ -240,15 +247,22 @@ private fun UserMenuButton(
     navController: NavController,
     scope: CoroutineScope
 ) {
+    val alerts by authViewModel.securityAlerts.collectAsState()
     PlainTooltipBox(text = "User menu") {
         UserMenu(
             username = authState.username,
             availableAccounts = availableAccounts,
             accountSwitchInProgress = accountSwitchInProgress,
+            isCurrentSessionRestricted = authState.isRestricted,
+            hasSecurityAlerts = alerts.isNotEmpty(),
             onSwitchAccount = { authViewModel.openAccountSwitcher() },
-            onAddAccount = { authViewModel.openAddAccount() },
+            onActiveSessions = { authViewModel.openActiveSessions() },
+            onTrustedDevices = { authViewModel.openTrustedDevices() },
+            onChangePassword = { authViewModel.openChangePasswordDialog() },
             onLogout = { scope.launch { authViewModel.logout() } },
-            onLogin = { navController.navigateToTop(Login) }
+            onLogoutAll = { scope.launch { authViewModel.logoutAll() } },
+            onLogin = { navController.navigateToTop(Login) },
+            onSecurityAlerts = { authViewModel.showSecurityAlerts(showOnEmpty = true) }
         )
     }
 }

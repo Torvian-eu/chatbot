@@ -44,7 +44,10 @@ class UserSessionDaoExposed(
 
     override suspend fun insertSession(
         userId: Long,
-        expiresAt: Long
+        deviceId: String,
+        expiresAt: Long,
+        ipAddress: String?,
+        isRestricted: Boolean
     ): Either<UserSessionError.ForeignKeyViolation, UserSessionEntity> =
         transactionScope.transaction {
             either {
@@ -52,9 +55,12 @@ class UserSessionDaoExposed(
                     val currentTime = System.currentTimeMillis()
                     val insertStatement = UserSessionsTable.insert {
                         it[UserSessionsTable.userId] = userId
+                        it[UserSessionsTable.deviceId] = deviceId
                         it[UserSessionsTable.expiresAt] = expiresAt
                         it[createdAt] = currentTime
                         it[lastAccessed] = currentTime
+                        it[UserSessionsTable.ipAddress] = ipAddress
+                        it[UserSessionsTable.isRestricted] = isRestricted
                     }
 
                     insertStatement.resultedValues?.first()?.toUserSessionEntity()

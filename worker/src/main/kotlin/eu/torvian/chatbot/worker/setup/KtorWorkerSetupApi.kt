@@ -36,11 +36,15 @@ class KtorWorkerSetupApi(
     private val client: HttpClient
 ) : WorkerSetupApi {
 
-    override suspend fun login(username: String, password: String): Either<WorkerSetupError, String> {
-        logger.debug("Logging in worker setup user {}", username)
+    override suspend fun login(username: String, password: String, deviceId: String): Either<WorkerSetupError, String> {
+        logger.debug("Logging in worker setup user {} (deviceId={})", username, deviceId)
         return execute("login") {
             client.post(AuthResource.Login()) {
-                setBody(LoginRequest(username = username, password = password))
+                setBody(LoginRequest(
+                    username = username,
+                    password = password,
+                    deviceId = deviceId
+                ))
             }.body<LoginResponse>().accessToken
         }.mapLeft { error ->
             when (error) {
@@ -176,5 +180,3 @@ fun createWorkerSetupHttpClient(serverBaseUrl: String): HttpClient {
 }
 
 private val setupHttpClientLogger: Logger = LogManager.getLogger("WorkerSetupHttpClient")
-
-

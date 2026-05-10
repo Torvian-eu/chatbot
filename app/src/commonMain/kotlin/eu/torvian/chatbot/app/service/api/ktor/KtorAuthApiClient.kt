@@ -4,11 +4,19 @@ import arrow.core.Either
 import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.AuthApi
 import eu.torvian.chatbot.common.api.resources.AuthResource
+import eu.torvian.chatbot.common.models.api.auth.ChangePasswordRequest
+import eu.torvian.chatbot.common.models.api.auth.CompleteRequiredPasswordChangeRequest
 import eu.torvian.chatbot.common.models.api.auth.LoginRequest
 import eu.torvian.chatbot.common.models.api.auth.LoginResponse
 import eu.torvian.chatbot.common.models.api.auth.RefreshTokenRequest
 import eu.torvian.chatbot.common.models.api.auth.RegisterRequest
+import eu.torvian.chatbot.common.models.api.auth.UserSecurityAlert
+import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
+import eu.torvian.chatbot.common.models.api.auth.UserTrustedDeviceInfo
+import eu.torvian.chatbot.common.models.api.auth.ResolveAlertRequest
 import eu.torvian.chatbot.common.models.user.User
+import eu.torvian.chatbot.common.security.AccountValidationPolicy
+import eu.torvian.chatbot.common.security.SecurityAuditStatus
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.auth.*
@@ -22,7 +30,7 @@ import io.ktor.client.request.*
  * This implementation handles authentication operations with the backend server.
  * It uses two different HttpClient instances:
  * - unauthenticatedClient: For login, register, and refresh operations (to prevent infinite loops)
- * - authenticatedClient: For logout operation (requires valid authentication)
+ * - authenticatedClient: For logout operations (requires valid authentication)
  *
  * @property unauthenticatedClient HttpClient without authentication for auth operations
  * @property authenticatedClient HttpClient with authentication for logout operations
@@ -41,11 +49,11 @@ class KtorAuthApiClient(
         }
     }
 
-    override suspend fun login(username: String, password: String): Either<ApiResourceError, LoginResponse> {
+    override suspend fun login(username: String, password: String, deviceId: String): Either<ApiResourceError, LoginResponse> {
         return safeApiCall {
             authenticatedClient.authProvider<BearerAuthProvider>()?.clearToken()
             unauthenticatedClient.post(AuthResource.Login()) {
-                setBody(LoginRequest(username = username, password = password))
+                setBody(LoginRequest(username = username, password = password, deviceId = deviceId))
             }.body<LoginResponse>()
         }
     }
@@ -58,10 +66,39 @@ class KtorAuthApiClient(
         }
     }
 
-    override suspend fun logout(): Either<ApiResourceError, Unit> {
+    override suspend fun getActiveSessions(): Either<ApiResourceError, List<UserSessionInfo>> {
         return safeApiCall {
-            authenticatedClient.post(AuthResource.Logout()).body<Unit>()
-            authenticatedClient.authProvider<BearerAuthProvider>()?.clearToken()
+            authenticatedClient.get(AuthResource.Sessions()).body<List<UserSessionInfo>>()
+        }
+    }
+
+    override suspend fun logout(sessionId: Long?): Either<ApiResourceError, Unit> {
+        return safeApiCall {
+            val resource = if (sessionId == null) {
+                AuthResource.Logout()
+            } else {
+                AuthResource.Logout(sessionId = sessionId)
+            }
+
+            authenticatedClient.post(resource).body<Unit>()
+
+            // Only clear the cached bearer token when the current session was revoked; revoking a
+            // different session must not log the user out locally.
+            if (sessionId == null) {
+                authenticatedClient.authProvider<BearerAuthProvider>()?.clearToken()
+            }
+        }
+    }
+
+    override suspend fun logoutAll(): Either<ApiResourceError, Unit> {
+        return safeApiCall {
+            try {
+                authenticatedClient.post(AuthResource.LogoutAll()).body<Unit>()
+            } finally {
+                // The in-memory bearer token is cleared even if the server call fails so the client
+                // does not keep using credentials that have just been invalidated.
+                authenticatedClient.authProvider<BearerAuthProvider>()?.clearToken()
+            }
         }
     }
 
@@ -73,5 +110,53 @@ class KtorAuthApiClient(
 
     override suspend fun clearToken() {
         authenticatedClient.authProvider<BearerAuthProvider>()?.clearToken()
+    }
+
+    override suspend fun getSecurityAlerts(): Either<ApiResourceError, List<UserSecurityAlert>> {
+        return safeApiCall {
+            authenticatedClient.get(AuthResource.SecurityAlerts()).body<List<UserSecurityAlert>>()
+        }
+    }
+
+    override suspend fun getTrustedDevices(): Either<ApiResourceError, List<UserTrustedDeviceInfo>> {
+        return safeApiCall {
+            authenticatedClient.get(AuthResource.TrustedDevices()).body<List<UserTrustedDeviceInfo>>()
+        }
+    }
+
+    override suspend fun revokeTrustedDevice(deviceId: String): Either<ApiResourceError, Unit> {
+        return safeApiCall {
+            authenticatedClient.delete(AuthResource.RevokeTrustedDevice(deviceId = deviceId)).body<Unit>()
+        }
+    }
+
+    override suspend fun changePassword(currentPassword: String, newPassword: String): Either<ApiResourceError, Unit> {
+        return safeApiCall {
+            authenticatedClient.post(AuthResource.ChangePassword()) {
+                setBody(ChangePasswordRequest(currentPassword = currentPassword, newPassword = newPassword))
+            }.body<Unit>()
+        }
+    }
+
+    override suspend fun completeRequiredPasswordChange(newPassword: String): Either<ApiResourceError, Unit> {
+        return safeApiCall {
+            authenticatedClient.post(AuthResource.CompleteRequiredPasswordChange()) {
+                setBody(CompleteRequiredPasswordChangeRequest(newPassword = newPassword))
+            }.body<Unit>()
+        }
+    }
+
+    override suspend fun getAuthPolicy(): Either<ApiResourceError, AccountValidationPolicy> {
+        return safeApiCall {
+            unauthenticatedClient.get(AuthResource.Policy()).body<AccountValidationPolicy>()
+        }
+    }
+
+    override suspend fun resolveSecurityAlert(alertId: Long, outcome: SecurityAuditStatus): Either<ApiResourceError, Unit> {
+        return safeApiCall {
+            authenticatedClient.post(AuthResource.ResolveAlert(alertId = alertId)) {
+                setBody(ResolveAlertRequest(outcome = outcome))
+            }.body<Unit>()
+        }
     }
 }

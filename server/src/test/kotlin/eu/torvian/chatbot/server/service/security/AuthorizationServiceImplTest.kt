@@ -20,6 +20,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -204,8 +205,8 @@ class AuthorizationServiceImplTest {
         // Then
         assertTrue(result.isLeft())
         result.onLeft { error ->
-            assertTrue(error is AuthorizationError.PermissionDenied)
-            assertEquals(userId, (error as AuthorizationError.PermissionDenied).userId)
+            assertIs<AuthorizationError.PermissionDenied>(error)
+            assertEquals(userId, error.userId)
             assertEquals(action, error.action)
             assertEquals(subject, error.subject)
         }
@@ -435,7 +436,7 @@ class AuthorizationServiceImplTest {
         // Then
         assertTrue(result.isLeft())
         result.onLeft { error ->
-            assertTrue(error is AuthorizationError.PermissionDenied)
+            assertIs<AuthorizationError.PermissionDenied>(error)
             assertEquals(userId, error.userId)
             assertEquals("manage", error.action)
             assertEquals("users", error.subject)
@@ -480,7 +481,7 @@ class AuthorizationServiceImplTest {
         // Then
         assertTrue(result.isLeft())
         result.onLeft { error ->
-            assertTrue(error is AuthorizationError.AnyPermissionDenied)
+            assertIs<AuthorizationError.AnyPermissionDenied>(error)
             assertEquals(userId, error.userId)
             assertEquals(2, error.permissions.size)
         }
@@ -535,7 +536,7 @@ class AuthorizationServiceImplTest {
         // Then
         assertTrue(result.isLeft())
         result.onLeft { error ->
-            assertTrue(error is AuthorizationError.AllPermissionsDenied)
+            assertIs<AuthorizationError.AllPermissionsDenied>(error)
             assertEquals(userId, error.userId)
             assertEquals(2, error.permissions.size)
         }
@@ -576,7 +577,7 @@ class AuthorizationServiceImplTest {
         // Then
         assertTrue(result.isLeft())
         result.onLeft { error ->
-            assertTrue(error is ResourceAuthorizationError.AccessDenied)
+            assertIs<ResourceAuthorizationError.AccessDenied>(error)
             assertEquals(userId, error.userId)
             assertEquals(resourceType, error.resourceType)
             assertEquals(resourceId, error.id)
@@ -601,7 +602,7 @@ class AuthorizationServiceImplTest {
         // Then
         assertTrue(result.isLeft())
         result.onLeft { error ->
-            assertTrue(error is ResourceAuthorizationError.ResourceNotFound)
+            assertIs<ResourceAuthorizationError.ResourceNotFound>(error)
             assertEquals(resourceType, error.resourceType)
             assertEquals(resourceId, error.id)
         }
@@ -621,7 +622,7 @@ class AuthorizationServiceImplTest {
         // Then
         assertTrue(result.isLeft())
         result.onLeft { error ->
-            assertTrue(error is ResourceAuthorizationError.UnsupportedResourceType)
+            assertIs<ResourceAuthorizationError.UnsupportedResourceType>(error)
             assertEquals(resourceType, error.resourceType)
         }
     }
@@ -694,8 +695,8 @@ class AuthorizationServiceImplTest {
         // Then
         assertTrue(result.isLeft())
         result.onLeft { error ->
-            assertTrue(error is AuthorizationError.RoleRequired)
-            assertEquals(userId, (error as AuthorizationError.RoleRequired).userId)
+            assertIs<AuthorizationError.RoleRequired>(error)
+            assertEquals(userId, error.userId)
             assertEquals(roleName, error.roleName)
         }
     }

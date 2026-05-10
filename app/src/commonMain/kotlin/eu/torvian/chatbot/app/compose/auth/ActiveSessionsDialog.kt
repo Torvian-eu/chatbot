@@ -1,0 +1,261 @@
+package eu.torvian.chatbot.app.compose.auth
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material3.*
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import eu.torvian.chatbot.app.compose.common.StatusBadge
+import eu.torvian.chatbot.app.repository.AuthState
+import eu.torvian.chatbot.app.utils.ui.formatRelativeTime
+import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
+
+/**
+ * Dialog that shows the authenticated user's server-side sessions and allows revoking older devices.
+ *
+ * The dialog intentionally keeps the current session non-revocable so the user can inspect their
+ * login footprint without risking immediate self-lockout.
+ *
+ * @param sessions The sessions loaded from the backend in newest-first order.
+ * @param currentAuthState The current authentication state used to identify the active session.
+ * @param isCurrentSessionRestricted Whether the current session is restricted (IP not verified).
+ * @param onDismiss Called when the dialog should be closed.
+ * @param onRevokeSession Called when the user requests revocation of a non-current session.
+ * @param onCopyToClipboard Called when the user wants to copy text to the clipboard.
+ */
+@Composable
+fun ActiveSessionsDialog(
+    sessions: List<UserSessionInfo>,
+    currentAuthState: AuthState,
+    isCurrentSessionRestricted: Boolean,
+    onDismiss: () -> Unit,
+    onRevokeSession: (Long) -> Unit,
+    onCopyToClipboard: (String) -> Unit
+) {
+    val currentSessionId = if (currentAuthState is AuthState.Authenticated) {
+        sessions.firstOrNull { session -> session.isCurrentSession }?.sessionId
+    } else {
+        null
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true
+        )
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth(),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "Active Sessions",
+                            style = MaterialTheme.typography.headlineSmall
+                        )
+                        Text(
+                            text = "Review where your account is signed in and revoke anything unfamiliar.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close active sessions dialog"
+                        )
+                    }
+                }
+
+                HorizontalDivider()
+
+                if (sessions.isEmpty()) {
+                    Text(
+                        text = "No active sessions were returned by the server.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 420.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(sessions, key = { it.sessionId }) { session ->
+                            ActiveSessionCard(
+                                session = session,
+                                isCurrentSession = session.isCurrentSession || session.sessionId == currentSessionId,
+                                isRevokeDisabled = isCurrentSessionRestricted,
+                                onRevokeSession = { onRevokeSession(session.sessionId) },
+                                onCopyToClipboard = onCopyToClipboard
+                            )
+                        }
+                    }
+                }
+
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.align(Alignment.End)
+                ) {
+                    Text("Close")
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Renders a single active session row with status, timing, and revocation controls.
+ *
+ * @param session The session to display.
+ * @param isCurrentSession Whether the session matches the currently authenticated request.
+ * @param isRevokeDisabled Whether the revoke action should be disabled (for restricted sessions).
+ * @param onRevokeSession Called when the user wants to revoke this session.
+ * @param onCopyToClipboard Called when the user wants to copy text to the clipboard.
+ */
+@Composable
+private fun ActiveSessionCard(
+    session: UserSessionInfo,
+    isCurrentSession: Boolean,
+    isRevokeDisabled: Boolean,
+    onRevokeSession: () -> Unit,
+    onCopyToClipboard: (String) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = if (isCurrentSession) {
+            CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+        } else {
+            CardDefaults.cardColors()
+        }
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Security,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(28.dp)
+                    )
+
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = session.ipAddress ?: "Unknown IP address",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+
+                        Text(
+                            text = "Last accessed ${formatRelativeTime(session.lastAccessed)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Show delete button only for non-current sessions and when not disabled
+                    if (!isCurrentSession) {
+                        IconButton(
+                            onClick = onRevokeSession,
+                            enabled = !isRevokeDisabled
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = if (isRevokeDisabled) {
+                                    "Revoke session (disabled in restricted sessions)"
+                                } else {
+                                    "Revoke session"
+                                },
+                                tint = if (isRevokeDisabled) {
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                } else {
+                                    MaterialTheme.colorScheme.error
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Device ID row with copy button
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = "Device ID: ",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = session.deviceId.take(8) + "...",
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                IconButton(
+                    onClick = { onCopyToClipboard(session.deviceId) },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ContentCopy,
+                        contentDescription = "Copy device ID to clipboard",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (isCurrentSession) {
+                    StatusBadge(text = "Current Session")
+                }
+                StatusBadge(text = "Session #${session.sessionId}")
+            }
+        }
+    }
+}

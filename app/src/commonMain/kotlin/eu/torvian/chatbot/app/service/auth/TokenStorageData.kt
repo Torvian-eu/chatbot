@@ -31,6 +31,7 @@ internal data class DekMetadata(
  * @property user The authenticated user data for optimistic authentication.
  * @property permissions The list of permissions granted to the user.
  * @property lastUsed The timestamp when this account was last actively used.
+ * @property isRestricted Whether the session is restricted (created from an unacknowledged device).
  */
 @Serializable
 internal data class TokenData(
@@ -39,6 +40,6 @@ internal data class TokenData(
     val expiresAt: Long,
     val user: User,
     val permissions: List<Permission> = emptyList(),
-    val lastUsed: Instant = Clock.System.now()
+    val lastUsed: Instant = Clock.System.now(),
+    val isRestricted: Boolean = false
 )
-

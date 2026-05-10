@@ -13,6 +13,7 @@ import eu.torvian.chatbot.server.data.entities.RoleEntity
 import eu.torvian.chatbot.server.data.entities.PermissionEntity
 import eu.torvian.chatbot.server.data.entities.RolePermissionEntity
 import eu.torvian.chatbot.server.data.entities.UserRoleAssignmentEntity
+import eu.torvian.chatbot.server.data.entities.FailedLoginAttemptEntity
 
 /**
  * A declarative container for domain objects to be inserted into the chatbot test database.
@@ -47,6 +48,7 @@ import eu.torvian.chatbot.server.data.entities.UserRoleAssignmentEntity
  * @property permissions List of permission entries to insert into the `permissions` table.
  * @property rolePermissions List of role permission mappings to insert into the `role_permissions` table.
  * @property userRoleAssignments List of user role assignments to insert into the `user_role_assignments` table.
+ * @property failedLoginAttempts List of failed login attempt entries to insert into the `failed_login_attempts` table.
  */
 data class TestDataSet(
     val apiSecrets: List<ApiSecretEntity> = emptyList(),
@@ -61,5 +63,6 @@ data class TestDataSet(
     val roles: List<RoleEntity> = emptyList(),
     val permissions: List<PermissionEntity> = emptyList(),
     val rolePermissions: List<RolePermissionEntity> = emptyList(),
-    val userRoleAssignments: List<UserRoleAssignmentEntity> = emptyList()
+    val userRoleAssignments: List<UserRoleAssignmentEntity> = emptyList(),
+    val failedLoginAttempts: List<FailedLoginAttemptEntity> = emptyList()
 )

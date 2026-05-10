@@ -64,5 +64,33 @@
     "secret": "JWT_SECRET",
     "tokenExpirationMs": "JWT_TOKEN_EXPIRATION_MS",
     "refreshExpirationMs": "JWT_REFRESH_EXPIRATION_MS"
+  },
+
+  "accountSecurityMode": "CHATBOT_ACCOUNT_SECURITY_MODE",
+
+  "reverseProxy": {
+    "enabled": "REVERSE_PROXY_ENABLED",
+    "proxyCount": "REVERSE_PROXY_COUNT",
+    "useXForwardedHeaders": "REVERSE_PROXY_USE_X_FORWARDED",
+    "useForwardedHeaders": "REVERSE_PROXY_USE_RFC_FORWARDED"
+  },
+
+  "authPolicy": {
+    "passwordConfig": {
+      "minLength": "AUTH_PASSWORD_MIN_LENGTH",
+      "maxLength": "AUTH_PASSWORD_MAX_LENGTH",
+      "requireLowercase": "AUTH_PASSWORD_REQUIRE_LOWERCASE",
+      "requireUppercase": "AUTH_PASSWORD_REQUIRE_UPPERCASE",
+      "requireDigit": "AUTH_PASSWORD_REQUIRE_DIGIT",
+      "requireSpecialChar": "AUTH_PASSWORD_REQUIRE_SPECIAL_CHAR",
+      "checkCommonPasswords": "AUTH_PASSWORD_CHECK_COMMON"
+    },
+    "usernameConfig": {
+      "minLength": "AUTH_USERNAME_MIN_LENGTH",
+      "maxLength": "AUTH_USERNAME_MAX_LENGTH",
+      "allowedRegexPattern": "AUTH_USERNAME_ALLOWED_REGEX"
+    },
+    "maxFailedAttempts": "AUTH_MAX_FAILED_ATTEMPTS",
+    "lockoutWindowMinutes": "AUTH_LOCKOUT_WINDOW_MINUTES"
   }
 }

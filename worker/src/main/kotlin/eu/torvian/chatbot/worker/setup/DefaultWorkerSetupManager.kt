@@ -42,6 +42,7 @@ class DefaultWorkerSetupManager(
     private val credentialProvider: WorkerSetupCredentialProvider = DefaultWorkerSetupCredentialProvider(),
     private val displayNameProvider: WorkerSetupDisplayNameProvider = DefaultWorkerSetupDisplayNameProvider(),
     private val serverUrlProvider: WorkerSetupServerUrlProvider = DefaultWorkerSetupServerUrlProvider(),
+    private val deviceIdProvider: WorkerSetupDeviceIdProvider = DefaultWorkerSetupDeviceIdProvider(),
     private val pathResolver: PathResolver = PathResolver(),
     private val setupApiFactory: (String) -> WorkerSetupApi = { serverUrl ->
         KtorWorkerSetupApi(createWorkerSetupHttpClient(serverUrl))
@@ -85,13 +86,16 @@ class DefaultWorkerSetupManager(
         ).bind()
 
         val credentials = credentialProvider.resolveCredentials().bind()
+        val setupDeviceId = deviceIdProvider.resolveDeviceId().bind()
+        // Use provided device ID if available, otherwise fall back to worker's own uid
+        val loginDeviceId = setupDeviceId?.takeIf { it.isNotBlank() } ?: uid
         val setupApi = setupApiFactory(serverUrl)
 
         var accessToken: String? = null
         var logoutError: WorkerSetupError? = null
 
         try {
-            accessToken = setupApi.login(credentials.username, credentials.password).bind()
+            accessToken = setupApi.login(credentials.username, credentials.password, loginDeviceId).bind()
 
             setupApi.registerWorker(
                 accessToken = accessToken,
@@ -316,6 +320,12 @@ class DefaultWorkerSetupManager(
         private val logger: Logger = LogManager.getLogger(DefaultWorkerSetupManager::class.java)
     }
 }
+
+
+
+
+
+
 
 
 

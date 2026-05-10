@@ -11,6 +11,7 @@ import eu.torvian.chatbot.common.models.api.auth.LoginRequest
 import eu.torvian.chatbot.common.models.api.auth.LoginResponse
 import eu.torvian.chatbot.common.models.api.auth.RefreshTokenRequest
 import eu.torvian.chatbot.common.models.api.auth.RegisterRequest
+import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
 import eu.torvian.chatbot.common.models.api.auth.ServiceTokenChallengeRequest
 import eu.torvian.chatbot.common.models.api.auth.ServiceTokenChallengeResponse
 import eu.torvian.chatbot.common.models.api.auth.ServiceTokenRequest
@@ -18,6 +19,7 @@ import eu.torvian.chatbot.common.models.api.auth.ServiceTokenResponse
 import eu.torvian.chatbot.common.models.user.User
 import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.server.data.entities.UserEntity
+import eu.torvian.chatbot.server.data.entities.UserSessionEntity
 import eu.torvian.chatbot.server.service.core.UserGroupService
 import eu.torvian.chatbot.server.service.core.WorkerService
 import eu.torvian.chatbot.server.service.security.CertificateService
@@ -45,7 +47,9 @@ import java.util.Base64
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.time.Instant
 
 /**
  * Integration tests for Authentication API routes.
@@ -107,7 +111,8 @@ class AuthRoutesTest {
                 Table.USER_GROUPS,
                 Table.USER_GROUP_MEMBERSHIPS,
                 Table.WORKERS,
-                Table.WORKER_AUTH_CHALLENGES
+                Table.WORKER_AUTH_CHALLENGES,
+                Table.FAILED_LOGIN_ATTEMPTS
             )
         )
 
@@ -292,7 +297,8 @@ class AuthRoutesTest {
 
         val loginRequest = LoginRequest(
             username = testUser.username,
-            password = plainPassword
+            password = plainPassword,
+            deviceId = "test-device-id"
         )
 
         // Act
@@ -326,7 +332,8 @@ class AuthRoutesTest {
 
         val loginRequest = LoginRequest(
             username = testUser.username,
-            password = "wrongPassword"
+            password = "wrongPassword",
+            deviceId = "test-device-id"
         )
 
         // Act
@@ -353,7 +360,8 @@ class AuthRoutesTest {
 
         val loginRequest = LoginRequest(
             username = "nonexistentuser",
-            password = "anyPassword"
+            password = "anyPassword",
+            deviceId = "test-device-id"
         )
 
         // Act
@@ -409,6 +417,41 @@ class AuthRoutesTest {
 
         // Assert
         assertEquals(HttpStatusCode.Unauthorized, response.status)
+    }
+
+    @Test
+    fun `POST auth logout with sessionId revokes only the targeted session`() = authTestApplication {
+        // Arrange
+        testDataManager.setup(
+            TestDataSet(
+                chatGroups = listOf(testGroup)
+            )
+        )
+
+        testDataManager.insertUser(testUser)
+        val currentSession = authHelper.createTestSession(id = 1L, userId = testUser.id)
+        val targetSession = authHelper.createTestSession(id = 2L, userId = testUser.id)
+        testDataManager.insertUserSession(currentSession)
+        testDataManager.insertUserSession(targetSession)
+
+        val authToken = authHelper.generateToken(testUser.id, currentSession.id)
+
+        // Act
+        val response = client.post(href(AuthResource.Logout(sessionId = targetSession.id))) {
+            authenticate(authToken)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.NoContent, response.status)
+
+        val sessionsResponse = client.get(href(AuthResource.Sessions())) {
+            authenticate(authToken)
+        }
+        assertEquals(HttpStatusCode.OK, sessionsResponse.status)
+        val sessions = sessionsResponse.body<List<UserSessionInfo>>()
+        assertEquals(1, sessions.size)
+        assertEquals(currentSession.id, sessions.single().sessionId)
+        assertTrue(sessions.single().isCurrentSession)
     }
 
     // ========== Logout All Tests ==========
@@ -475,7 +518,8 @@ class AuthRoutesTest {
         // Login to get a refresh token
         val loginRequest = LoginRequest(
             username = testUser.username,
-            password = plainPassword
+            password = plainPassword,
+            deviceId = "test-device-id"
         )
 
         val loginResponse = client.post(href(AuthResource.Login())) {
@@ -762,7 +806,8 @@ class AuthRoutesTest {
             setBody(
                 LoginRequest(
                     username = testUser.username,
-                    password = plainPassword
+                    password = plainPassword,
+                    deviceId = "test-device-id"
                 )
             )
         }
@@ -773,6 +818,55 @@ class AuthRoutesTest {
         val response = client.get(href(AuthResource.Me())) {
             authenticate(refreshToken)
         }
+
+        // Assert
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
+    }
+
+    @Test
+    fun `GET auth sessions - returns current user's sessions with current session flagged`() = authTestApplication {
+        // Arrange
+        testDataManager.setup(
+            TestDataSet(
+                chatGroups = listOf(testGroup)
+            )
+        )
+
+        val authToken = authHelper.createUserAndGetToken(testUser)
+        val currentSession = authHelper.defaultTestSession
+        val recentSession = UserSessionEntity(
+            id = 2L,
+            userId = testUser.id,
+            deviceId = "recent-device-id",
+            expiresAt = Instant.fromEpochMilliseconds(System.currentTimeMillis() + (48 * 60 * 60 * 1000)),
+            createdAt = Instant.fromEpochMilliseconds(System.currentTimeMillis() - 60_000),
+            lastAccessed = Instant.fromEpochMilliseconds(System.currentTimeMillis() + 5_000),
+            ipAddress = "10.0.0.2"
+        )
+        testDataManager.insertUserSession(recentSession)
+
+        // Act
+        val response = client.get(href(AuthResource.Sessions())) {
+            authenticate(authToken)
+        }
+
+        // Assert
+        assertEquals(HttpStatusCode.OK, response.status)
+        val sessions = response.body<List<UserSessionInfo>>()
+        assertEquals(2, sessions.size)
+        assertEquals(recentSession.id, sessions.first().sessionId)
+        assertEquals(recentSession.ipAddress, sessions.first().ipAddress)
+        assertFalse(sessions.first().isCurrentSession)
+        assertEquals(currentSession.id, sessions.last().sessionId)
+        assertEquals(currentSession.ipAddress, sessions.last().ipAddress)
+        assertTrue(sessions.last().isCurrentSession)
+        assertEquals(1, sessions.count { it.isCurrentSession })
+    }
+
+    @Test
+    fun `GET auth sessions - without authentication returns 401`() = authTestApplication {
+        // Act
+        val response = client.get(href(AuthResource.Sessions()))
 
         // Assert
         assertEquals(HttpStatusCode.Unauthorized, response.status)

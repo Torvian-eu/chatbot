@@ -55,5 +55,33 @@
     "tokenExpirationMs": 86400000,
     "refreshExpirationMs": 604800000
     /* jwt.secret must be set in secrets.json or via environment variable */
+  },
+
+  "accountSecurityMode" : "WARNING",
+
+  "reverseProxy": {
+    "enabled": false,
+    "proxyCount": 1,
+    "useXForwardedHeaders": true,
+    "useForwardedHeaders": false
+  },
+
+  "authPolicy": {
+    "passwordConfig": {
+      "minLength": 8,
+      "maxLength": 128,
+      "requireLowercase": true,
+      "requireUppercase": true,
+      "requireDigit": true,
+      "requireSpecialChar": true,
+      "checkCommonPasswords": true
+    },
+    "usernameConfig": {
+      "minLength": 3,
+      "maxLength": 50,
+      "allowedRegexPattern": "^[a-zA-Z0-9_-]+$"
+    },
+    "maxFailedAttempts": 10,
+    "lockoutWindowMinutes": 5
   }
 }

@@ -6,6 +6,7 @@ import eu.torvian.chatbot.common.security.error.PasswordValidationError
 import eu.torvian.chatbot.common.security.error.CharacterType
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -146,10 +147,7 @@ class BCryptPasswordServiceTest {
             assertTrue(result.isLeft(), "Password '$password' should be rejected as too common")
 
             val error = result.leftOrNull()
-            assertTrue(
-                error is PasswordValidationError.TooCommon,
-                "Expected TooCommon error for '$password', got $error"
-            )
+            assertIs<PasswordValidationError.TooCommon>(error, "Expected TooCommon error for '$password', got $error")
         }
     }
 

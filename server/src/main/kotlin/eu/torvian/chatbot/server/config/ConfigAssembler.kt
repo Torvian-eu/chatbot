@@ -4,6 +4,7 @@ import arrow.core.Either
 import arrow.core.raise.Raise
 import arrow.core.raise.either
 import arrow.core.raise.ensure
+import eu.torvian.chatbot.common.security.AccountValidationPolicy
 import eu.torvian.chatbot.common.security.EncryptionConfig
 import eu.torvian.chatbot.server.domain.config.*
 import eu.torvian.chatbot.server.domain.security.JwtConfig
@@ -36,7 +37,10 @@ fun AppConfigDto.merge(other: AppConfigDto?): AppConfigDto = AppConfigDto(
     ssl = mergeSsl(ssl, other?.ssl),
     database = mergeDatabase(database, other?.database),
     encryption = mergeEncryption(encryption, other?.encryption),
-    jwt = mergeJwt(jwt, other?.jwt)
+    jwt = mergeJwt(jwt, other?.jwt),
+    accountSecurityMode = other?.accountSecurityMode ?: accountSecurityMode,
+    reverseProxy = mergeReverseProxy(reverseProxy, other?.reverseProxy),
+    authPolicy = mergeAuthPolicy(authPolicy, other?.authPolicy)
 )
 
 /**
@@ -143,6 +147,34 @@ private fun mergeJwt(base: JwtConfigDto?, overlay: JwtConfigDto?) = JwtConfigDto
 )
 
 /**
+ * Merge helper for reverse proxy DTOs.
+ *
+ * @param base Base reverse proxy DTO
+ * @param overlay Overlay reverse proxy DTO (takes precedence)
+ * @return merged [ReverseProxyConfigDto]
+ */
+private fun mergeReverseProxy(base: ReverseProxyConfigDto?, overlay: ReverseProxyConfigDto?) = ReverseProxyConfigDto(
+    enabled = overlay?.enabled ?: base?.enabled,
+    proxyCount = overlay?.proxyCount ?: base?.proxyCount,
+    useXForwardedHeaders = overlay?.useXForwardedHeaders ?: base?.useXForwardedHeaders,
+    useForwardedHeaders = overlay?.useForwardedHeaders ?: base?.useForwardedHeaders
+)
+
+/**
+ * Merge helper for authentication policy DTOs.
+ *
+ * @param base Base authentication policy DTO
+ * @param overlay Overlay authentication policy DTO (takes precedence)
+ * @return merged [AuthPolicyDto]
+ */
+private fun mergeAuthPolicy(base: AuthPolicyDto?, overlay: AuthPolicyDto?) = AuthPolicyDto(
+    passwordConfig = overlay?.passwordConfig ?: base?.passwordConfig,
+    usernameConfig = overlay?.usernameConfig ?: base?.usernameConfig,
+    maxFailedAttempts = overlay?.maxFailedAttempts ?: base?.maxFailedAttempts,
+    lockoutWindowMinutes = overlay?.lockoutWindowMinutes ?: base?.lockoutWindowMinutes
+)
+
+/**
  * Convert the merged [AppConfigDto] to a strict domain [AppConfiguration].
  *
  * @param baseApplicationPath The parent directory of the config directory, used as the base for
@@ -160,8 +192,25 @@ fun AppConfigDto.toDomain(baseApplicationPath: String): Either<ConfigError.Valid
         ssl = parseSsl(ssl, network?.connectorType, storageConfig),
         database = parseDatabase(database, storageConfig),
         encryption = parseEncryption(encryption),
-        jwt = parseJwt(jwt)
+        jwt = parseJwt(jwt),
+        accountSecurityMode = parseAccountSecurityMode(accountSecurityMode),
+        reverseProxy = parseReverseProxy(reverseProxy),
+        authPolicy = parseAuthPolicy(authPolicy)
     )
+}
+
+/**
+ * Parse the optional top-level account security mode from text into the strict domain enum.
+ *
+ * Missing or blank values fall back to [AccountSecurityMode.DISABLED] so the feature is opt-in.
+ */
+private fun Raise<ConfigError.ValidationError>.parseAccountSecurityMode(value: String?): AccountSecurityMode {
+    val normalized = required("accountSecurityMode", value).trim()
+
+    return runCatching { AccountSecurityMode.valueOf(normalized.uppercase()) }
+        .getOrElse {
+            raise(ConfigError.ValidationError.InvalidValue("accountSecurityMode", "Allowed: DISABLED, WARNING, STRICT"))
+        }
 }
 
 /**
@@ -254,7 +303,12 @@ private fun Raise<ConfigError.ValidationError>.parseNetwork(dto: NetworkConfigDt
 
     val typeStr = required("network.connectorType", d.connectorType)
     val connectorType = ServerConnectorType.fromString(typeStr)
-        ?: raise(ConfigError.ValidationError.InvalidValue("network.connectorType", "Allowed: HTTP, HTTPS, HTTP_AND_HTTPS"))
+        ?: raise(
+            ConfigError.ValidationError.InvalidValue(
+                "network.connectorType",
+                "Allowed: HTTP, HTTPS, HTTP_AND_HTTPS"
+            )
+        )
 
     val port = required("network.port", d.port)
     ensure(port in 1..65535) {
@@ -360,6 +414,36 @@ private fun Raise<ConfigError.ValidationError>.parseJwt(dto: JwtConfigDto?) = Jw
     tokenExpirationMs = required("jwt.tokenExpirationMs", dto?.tokenExpirationMs),
     refreshExpirationMs = required("jwt.refreshExpirationMs", dto?.refreshExpirationMs)
 )
+
+/**
+ * Parse and validate reverse proxy DTO into domain [ReverseProxyConfig].
+ *
+ * @param dto Nullable DTO for reverse proxy.
+ * @return The parsed reverse proxy configuration.
+ */
+private fun Raise<ConfigError.ValidationError>.parseReverseProxy(dto: ReverseProxyConfigDto?) = ReverseProxyConfig(
+    enabled = required("reverseProxy.enabled", dto?.enabled),
+    proxyCount = required("reverseProxy.proxyCount", dto?.proxyCount),
+    useXForwardedHeaders = required("reverseProxy.useXForwardedHeaders", dto?.useXForwardedHeaders),
+    useForwardedHeaders = required("reverseProxy.useForwardedHeaders", dto?.useForwardedHeaders)
+)
+
+/**
+ * Parse and validate authentication policy DTO into domain [AccountValidationPolicy].
+ *
+ * If the DTO is null, returns a default [AccountValidationPolicy].
+ *
+ * @param dto Nullable DTO for authentication policy.
+ * @return The parsed authentication policy configuration.
+ */
+private fun Raise<ConfigError.ValidationError>.parseAuthPolicy(dto: AuthPolicyDto?): AccountValidationPolicy {
+    return AccountValidationPolicy(
+        passwordConfig = required("authPolicy.passwordConfig", dto?.passwordConfig),
+        usernameConfig = required("authPolicy.usernameConfig", dto?.usernameConfig),
+        maxFailedAttempts = required("authPolicy.maxFailedAttempts", dto?.maxFailedAttempts),
+        lockoutWindowMinutes = required("authPolicy.lockoutWindowMinutes", dto?.lockoutWindowMinutes)
+    )
+}
 
 /**
  * Helper that raises a [ConfigError.ValidationError.MissingKey] when the given [value] is null.

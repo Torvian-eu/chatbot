@@ -3,6 +3,8 @@ package eu.torvian.chatbot.server.koin
 import eu.torvian.chatbot.common.security.AESCryptoProvider
 import eu.torvian.chatbot.common.security.CryptoProvider
 import eu.torvian.chatbot.common.security.EncryptionService
+import eu.torvian.chatbot.common.security.PasswordValidator
+import eu.torvian.chatbot.server.config.AppConfiguration
 import eu.torvian.chatbot.server.service.core.*
 import eu.torvian.chatbot.server.service.core.impl.*
 import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutor
@@ -76,9 +78,27 @@ fun serviceModule() = module {
     single<CertificateService> { DefaultCertificateService() }
 
     // --- Authentication Services ---
-    single<PasswordService> { BCryptPasswordService() }
-    single<UserService> { UserServiceImpl(get(), get(), get(), get(), get(), get()) }
-    single<AuthenticationService> { AuthenticationServiceImpl(get(), get(), get(), get(), get(), get(), get(), get()) }
+    single<PasswordService> {
+        BCryptPasswordService(PasswordValidator(get<AppConfiguration>().authPolicy.passwordConfig))
+    }
+    single<UserService> { UserServiceImpl(get(), get(), get(), get(), get(), get(), get()) }
+    single<AuthenticationService> {
+        AuthenticationServiceImpl(
+            userService = get(),
+            passwordService = get(),
+            jwtConfig = get(),
+            userSessionDao = get(),
+            userTrustedDeviceDao = get(),
+            securityAuditDao = get(),
+            userDao = get(),
+            workerDao = get(),
+            authorizationService = get(),
+            transactionScope = get(),
+            accountSecurityMode = get(),
+            failedLoginAttemptDao = get(),
+            authPolicy = get(),
+        )
+    }
     single<WorkerService> { WorkerServiceImpl(get(), get(), get()) }
 
     // --- Authorizers (resource-level access) ---

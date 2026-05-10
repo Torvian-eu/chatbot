@@ -7,7 +7,7 @@ import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.common.security.EncryptedSecret
 import eu.torvian.chatbot.common.security.EncryptionConfig
 import eu.torvian.chatbot.server.data.entities.*
-import eu.torvian.chatbot.server.domain.config.DatabaseConfig
+import eu.torvian.chatbot.server.domain.config.*
 import eu.torvian.chatbot.server.service.llm.RawChatMessage
 import kotlinx.serialization.json.Json
 import java.util.*
@@ -35,6 +35,30 @@ object TestDefaults {
         filepath = "data/test-${UUID.randomUUID()}.db",
         user = null,
         password = null
+    )
+
+    fun getDefaultStorageConfig() = StorageConfig(
+        baseApplicationPath = "test",
+        dataDir = "data",
+        databaseFilename = "test.db",
+        keystoreFilename = "keystore.jks",
+        logsDir = "logs"
+    )
+
+    fun getDefaultNetworkConfig() = NetworkConfig(
+        host = "localhost",
+        port = 8080,
+        path = "/",
+        connectorType = ServerConnectorType.HTTP
+    )
+
+    fun getDefaultCorsConfig() = CorsConfig(allowedOrigins = emptyList())
+
+    fun getDefaultReverseProxyConfig() = ReverseProxyConfig(
+        enabled = false,
+        proxyCount = 0,
+        useXForwardedHeaders = false,
+        useForwardedHeaders = false
     )
 
     val DEFAULT_ENCRYPTION_CONFIG = EncryptionConfig(
@@ -232,9 +256,11 @@ object TestDefaults {
     val userSession1 = UserSessionEntity(
         id = 1L,
         userId = user1.id,
+        deviceId = "test-device-id",
         expiresAt = Instant.fromEpochMilliseconds(System.currentTimeMillis() + (24 * 60 * 60 * 1000)), // 24 hours from now
         createdAt = Instant.fromEpochMilliseconds(DEFAULT_INSTANT_MILLIS),
-        lastAccessed = Instant.fromEpochMilliseconds(DEFAULT_INSTANT_MILLIS)
+        lastAccessed = Instant.fromEpochMilliseconds(DEFAULT_INSTANT_MILLIS),
+        ipAddress = "127.0.0.1"
     )
 
     val userGroup1 = UserGroupEntity(

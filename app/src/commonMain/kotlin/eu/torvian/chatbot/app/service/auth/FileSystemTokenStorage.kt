@@ -59,12 +59,21 @@ open class FileSystemTokenStorage(
         refreshToken: String,
         expiresAt: Instant,
         user: User,
-        permissions: List<Permission>
+        permissions: List<Permission>,
+        isRestricted: Boolean
     ): Either<TokenStorageError, Unit> = either {
         catch({
             val userId = user.id
 
-            val tokenData = TokenData(accessToken, refreshToken, expiresAt.epochSeconds, user, permissions, Clock.System.now())
+            val tokenData = TokenData(
+                accessToken = accessToken,
+                refreshToken = refreshToken,
+                expiresAt = expiresAt.epochSeconds,
+                user = user,
+                permissions = permissions,
+                lastUsed = Clock.System.now(),
+                isRestricted = isRestricted
+            )
 
             encryptAndSaveTokenData(userId, tokenData).bind()
 
@@ -84,10 +93,10 @@ open class FileSystemTokenStorage(
     }
 
     override suspend fun getAccountData(): Either<TokenStorageError, AccountData> =
-        loadTokenData().map { tokenData -> AccountData(tokenData.user, tokenData.permissions, tokenData.lastUsed) }
+        loadTokenData().map { tokenData -> AccountData(tokenData.user, tokenData.permissions, tokenData.lastUsed, tokenData.isRestricted) }
 
     override suspend fun getAccountData(userId: Long): Either<TokenStorageError, AccountData> =
-        loadTokenData(userId).map { tokenData -> AccountData(tokenData.user, tokenData.permissions, tokenData.lastUsed) }
+        loadTokenData(userId).map { tokenData -> AccountData(tokenData.user, tokenData.permissions, tokenData.lastUsed, tokenData.isRestricted) }
 
     override suspend fun clearAuthData(): Either<TokenStorageError, Unit> = either {
         val activeUserId = getActiveUserIdOrRaise().bind()
@@ -132,7 +141,8 @@ open class FileSystemTokenStorage(
                                     AccountData(
                                         user = tokenData.user,
                                         permissions = tokenData.permissions,
-                                        lastUsed = tokenData.lastUsed
+                                        lastUsed = tokenData.lastUsed,
+                                        isRestricted = tokenData.isRestricted
                                     )
                                 )
                             }
@@ -197,6 +207,21 @@ open class FileSystemTokenStorage(
         }) { e: Exception ->
             raise(TokenStorageError.IOError("Failed to remove account: ${e.message}", e))
         }
+    }
+
+    override suspend fun updateAccountData(
+        userId: Long,
+        requiresPasswordChange: Boolean
+    ): Either<TokenStorageError, Unit> = either {
+        logger.info("Updating cached account data for user $userId (requiresPasswordChange=$requiresPasswordChange)")
+
+        // Load existing token data, update the user field, and re-encrypt
+        val tokenData = loadTokenData(userId).bind()
+        val updatedUser = tokenData.user.copy(requiresPasswordChange = requiresPasswordChange)
+        val updatedTokenData = tokenData.copy(user = updatedUser)
+        encryptAndSaveTokenData(userId, updatedTokenData).bind()
+
+        logger.info("Successfully updated cached account data for user $userId")
     }
 
     // Protected functions

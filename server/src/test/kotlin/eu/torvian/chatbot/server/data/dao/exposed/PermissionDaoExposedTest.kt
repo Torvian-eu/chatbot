@@ -16,6 +16,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -121,8 +122,8 @@ class PermissionDaoExposedTest {
 
         assertTrue(result.isLeft(), "Expected Left result for non-existing permission")
         val error = result.leftOrNull()
-        assertTrue(error is PermissionError.PermissionNotFound, "Expected PermissionNotFound error")
-        assertEquals(999L, (error as PermissionError.PermissionNotFound).id, "Expected matching ID in error")
+        assertIs<PermissionError.PermissionNotFound>(error, "Expected PermissionNotFound error")
+        assertEquals(999L, error.id, "Expected matching ID in error")
     }
 
     @Test
@@ -150,7 +151,7 @@ class PermissionDaoExposedTest {
 
         assertTrue(result.isLeft(), "Expected Left result for non-existing permission")
         val error = result.leftOrNull()
-        assertTrue(error is PermissionError.PermissionNotFound, "Expected PermissionNotFound error")
+        assertIs<PermissionError.PermissionNotFound>(error, "Expected PermissionNotFound error")
     }
 
     @Test
@@ -176,10 +177,9 @@ class PermissionDaoExposedTest {
 
         assertTrue(result.isLeft(), "Expected Left result for duplicate permission")
         val error = result.leftOrNull()
-        assertTrue(error is PermissionError.PermissionAlreadyExists, "Expected PermissionAlreadyExists error")
-        val duplicateError = error as PermissionError.PermissionAlreadyExists
-        assertEquals(testAction, duplicateError.action, "Expected matching action in error")
-        assertEquals(testSubject, duplicateError.subject, "Expected matching subject in error")
+        assertIs<PermissionError.PermissionAlreadyExists>(error, "Expected PermissionAlreadyExists error")
+        assertEquals(testAction, error.action, "Expected matching action in error")
+        assertEquals(testSubject, error.subject, "Expected matching subject in error")
     }
 
     @Test
@@ -198,7 +198,7 @@ class PermissionDaoExposedTest {
         val fetchResult = permissionDao.getPermissionById(permission.id)
         assertTrue(fetchResult.isLeft(), "Expected permission to be deleted")
         val error = fetchResult.leftOrNull()
-        assertTrue(error is PermissionError.PermissionNotFound, "Expected PermissionNotFound error after deletion")
+        assertIs<PermissionError.PermissionNotFound>(error, "Expected PermissionNotFound error after deletion")
     }
 
     @Test
@@ -207,8 +207,8 @@ class PermissionDaoExposedTest {
 
         assertTrue(result.isLeft(), "Expected Left result for non-existing permission")
         val error = result.leftOrNull()
-        assertTrue(error is PermissionError.PermissionNotFound, "Expected PermissionNotFound error")
-        assertEquals(999L, (error as PermissionError.PermissionNotFound).id, "Expected matching ID in error")
+        assertIs<PermissionError.PermissionNotFound>(error, "Expected PermissionNotFound error")
+        assertEquals(999L, error.id, "Expected matching ID in error")
     }
 
     @Test

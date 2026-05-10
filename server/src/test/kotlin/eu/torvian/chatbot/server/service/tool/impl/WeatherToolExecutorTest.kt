@@ -8,6 +8,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.*
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
@@ -121,7 +122,7 @@ class WeatherToolExecutorTest {
 
         assertTrue(result.isLeft(), "Expected error for unsupported city")
         val error = result.swap().getOrElse { fail("Expected Left but got Right") }
-        assertTrue(error is ToolExecutionError.InvalidInput)
+        assertIs<ToolExecutionError.InvalidInput>(error)
         assertTrue(error.message.contains("Weather data not available"))
     }
 
@@ -134,7 +135,7 @@ class WeatherToolExecutorTest {
 
         assertTrue(result.isLeft(), "Expected error for missing city")
         val error = result.swap().getOrElse { fail("Expected Left but got Right") }
-        assertTrue(error is ToolExecutionError.InvalidInput)
+        assertIs<ToolExecutionError.InvalidInput>(error)
         assertTrue(error.message.contains("Missing or empty required parameter 'city'"))
     }
 
@@ -146,7 +147,7 @@ class WeatherToolExecutorTest {
 
         assertTrue(result.isLeft(), "Expected error for null input")
         val error = result.swap().getOrElse { fail("Expected Left but got Right") }
-        assertTrue(error is ToolExecutionError.InvalidInput)
+        assertIs<ToolExecutionError.InvalidInput>(error)
     }
 
     @Test
@@ -158,7 +159,7 @@ class WeatherToolExecutorTest {
 
         assertTrue(result.isLeft(), "Expected error for invalid JSON")
         val error = result.swap().getOrElse { fail("Expected Left but got Right") }
-        assertTrue(error is ToolExecutionError.InvalidInput)
+        assertIs<ToolExecutionError.InvalidInput>(error)
         assertTrue(error.message.contains("Failed to parse input JSON"))
     }
 
@@ -173,7 +174,7 @@ class WeatherToolExecutorTest {
 
         assertTrue(result.isLeft(), "Expected error for wrong tool type")
         val error = result.swap().getOrElse { fail("Expected Left but got Right") }
-        assertTrue(error is ToolExecutionError.InvalidConfiguration)
+        assertIs<ToolExecutionError.InvalidConfiguration>(error)
     }
 
     @Test

@@ -2,26 +2,62 @@ package eu.torvian.chatbot.app.compose
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.Devices
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SwapHoriz
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import eu.torvian.chatbot.app.service.auth.AccountData
 
 /**
  * User menu dropdown for authenticated users.
+ *
+ * The menu exposes account switching, account creation, active-session management, and logout
+ * actions that are driven by the surrounding authentication flow.
+ *
+ * @param username The username to display in the menu header
+ * @param availableAccounts List of all stored user accounts available for switching
+ * @param accountSwitchInProgress Whether an account switch operation is in progress
+ * @param isCurrentSessionRestricted Whether the current session is restricted (IP not verified)
+ * @param hasSecurityAlerts Whether there are unacknowledged security alerts to display
+ * @param onSwitchAccount Callback to open the account switcher dialog
+ * @param onActiveSessions Callback to open the active sessions dialog
+ * @param onTrustedDevices Callback to open the trusted devices dialog
+ * @param onChangePassword Callback to open the change password dialog
+ * @param onLogout Callback to log out the current session
+ * @param onLogoutAll Callback to log out from all sessions
+ * @param onLogin Callback to navigate to login/add account
+ * @param onSecurityAlerts Callback to open the security alerts dialog
  */
 @Composable
 fun UserMenu(
     username: String,
     availableAccounts: List<AccountData>,
     accountSwitchInProgress: Boolean,
+    isCurrentSessionRestricted: Boolean,
+    hasSecurityAlerts: Boolean,
     onSwitchAccount: () -> Unit,
-    onAddAccount: () -> Unit,
+    onActiveSessions: () -> Unit,
+    onTrustedDevices: () -> Unit,
+    onChangePassword: () -> Unit,
     onLogout: () -> Unit,
-    onLogin: () -> Unit
+    onLogoutAll: () -> Unit,
+    onLogin: () -> Unit,
+    onSecurityAlerts: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
 
@@ -37,7 +73,7 @@ fun UserMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false }
         ) {
-            // User info header
+            // User info header.
             DropdownMenuItem(
                 text = {
                     Text(
@@ -53,18 +89,69 @@ fun UserMenu(
 
             HorizontalDivider()
 
-            // Add Account option
+            // Security Alerts - only shown when there are unacknowledged alerts
+            if (hasSecurityAlerts) {
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            "Security Alerts",
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    },
+                    onClick = {
+                        expanded = false
+                        onSecurityAlerts()
+                    },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.NotificationsActive,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
+                )
+            }
+
+            // Change password is always available but disabled for restricted sessions.
+            // Disabled for restricted sessions (untrusted device) to prevent security issues.
             DropdownMenuItem(
-                text = { Text("Add Account") },
+                text = { Text("Change Password") },
                 onClick = {
                     expanded = false
-                    onLogin()
-//                    onAddAccount()
+                    onChangePassword()
                 },
                 leadingIcon = {
-                    Icon(Icons.Default.PersonAdd, contentDescription = null)
+                    Icon(Icons.Default.Lock, contentDescription = null)
                 },
-                enabled = !accountSwitchInProgress
+                enabled = !isCurrentSessionRestricted
+            )
+
+            // Active session management opens a dedicated dialog instead of navigating away.
+            // Disabled for restricted sessions (device not verified) to prevent security issues.
+            DropdownMenuItem(
+                text = { Text("Active Sessions") },
+                onClick = {
+                    expanded = false
+                    onActiveSessions()
+                },
+                leadingIcon = {
+                    Icon(Icons.Default.Security, contentDescription = null)
+                },
+                enabled = !isCurrentSessionRestricted
+            )
+
+            // Logout all sessions affects every device, so keep it grouped with the security actions.
+            // Disabled for restricted sessions (device not verified) to prevent account lockout.
+            DropdownMenuItem(
+                text = { Text("Logout all sessions") },
+                onClick = {
+                    expanded = false
+                    onLogoutAll()
+                },
+                leadingIcon = {
+                    Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
+                },
+                enabled = !accountSwitchInProgress && !isCurrentSessionRestricted
             )
 
             // Switch Account option (only show if multiple accounts available)
@@ -82,9 +169,35 @@ fun UserMenu(
                 )
             }
 
+            // Trusted Devices option (navigates to device management screen)
+            DropdownMenuItem(
+                text = { Text("Trusted Devices") },
+                onClick = {
+                    expanded = false
+                    onTrustedDevices()
+                },
+                leadingIcon = {
+                    Icon(Icons.Default.Devices, contentDescription = null)
+                },
+                enabled = !accountSwitchInProgress && !isCurrentSessionRestricted
+            )
+
             HorizontalDivider()
 
-            // Logout option
+            // The existing flow still navigates to the login screen for adding another account.
+            DropdownMenuItem(
+                text = { Text("Add Account") },
+                onClick = {
+                    expanded = false
+                    onLogin()
+                },
+                leadingIcon = {
+                    Icon(Icons.Default.AccountCircle, contentDescription = null)
+                },
+                enabled = !accountSwitchInProgress
+            )
+
+            // Current-session logout stays last so the more explicit security actions appear first.
             DropdownMenuItem(
                 text = { Text("Logout") },
                 onClick = {
@@ -92,7 +205,7 @@ fun UserMenu(
                     onLogout()
                 },
                 leadingIcon = {
-                    Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null)
+                    Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
                 }
             )
         }

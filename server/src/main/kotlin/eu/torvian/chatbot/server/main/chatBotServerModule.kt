@@ -1,10 +1,7 @@
 package eu.torvian.chatbot.server.main
 
 import eu.torvian.chatbot.common.misc.di.KoinDIContainer
-import eu.torvian.chatbot.common.security.EncryptionConfig
-import eu.torvian.chatbot.server.domain.config.CorsConfig
-import eu.torvian.chatbot.server.domain.config.DatabaseConfig
-import eu.torvian.chatbot.server.domain.security.JwtConfig
+import eu.torvian.chatbot.server.config.AppConfiguration
 import eu.torvian.chatbot.server.koin.*
 import eu.torvian.chatbot.server.ktor.configureKtor
 import eu.torvian.chatbot.server.ktor.routes.ApiRoutesKtor
@@ -32,25 +29,18 @@ private val logger: Logger = LogManager.getLogger("chatBotServerModule")
  * Configures the Ktor application module with all necessary plugins, DI, database, and routing.
  * This function is an extension on [Application], intended to be passed to `embeddedServer`.
  *
- * @param databaseConfig Database configuration
- * @param encryptionConfig Encryption configuration
- * @param jwtConfig JWT configuration
+ * @param config The root application configuration.
  */
-fun Application.chatBotServerModule(
-    databaseConfig: DatabaseConfig,
-    encryptionConfig: EncryptionConfig,
-    jwtConfig: JwtConfig,
-    corsConfig: CorsConfig
-) {
+fun Application.chatBotServerModule(config: AppConfiguration) {
     // Configure Koin DI FIRST, as plugins and routing will depend on it
-    configureKoin(databaseConfig, encryptionConfig, jwtConfig)
+    configureKoin(config)
 
     // Configure Ktor (general plugins like content negotiation, status pages, etc.)
-    configureKtor(get(), get())
+    configureKtor(config.jwt, get(), config.reverseProxy)
 
     // Configure CORS from explicit allowlist.
     install(CORS) {
-        corsConfig.allowedOrigins.forEach { origin ->
+        config.cors.allowedOrigins.forEach { origin ->
             allowHost(origin.hostWithOptionalPort, schemes = listOf(origin.scheme))
         }
 
@@ -82,19 +72,13 @@ fun Application.chatBotServerModule(
 /**
  * Configures Koin for dependency injection within the Application.
  *
- * @param databaseConfig Database configuration
- * @param encryptionConfig Encryption configuration
- * @param jwtConfig JWT configuration
+ * @param config The root application configuration.
  */
-fun Application.configureKoin(
-    databaseConfig: DatabaseConfig,
-    encryptionConfig: EncryptionConfig,
-    jwtConfig: JwtConfig
-) {
+fun Application.configureKoin(config: AppConfiguration) {
     // Initialize Koin plugin with defined modules
     install(Koin) {
         modules(
-            configModule(databaseConfig, encryptionConfig, jwtConfig),
+            configModule(config),
             databaseModule(),
             miscModule(),
             daoModule(),

@@ -26,6 +26,17 @@ sealed interface ChangePasswordError {
      * New password is the same as the current password.
      */
     data object SameAsCurrentPassword : ChangePasswordError
+
+    /**
+     * The current password provided does not match the stored password hash.
+     */
+    data object InvalidCurrentPassword : ChangePasswordError
+
+    /**
+     * The requester does not have permission to change the password.
+     * This is returned for restricted (untrusted) sessions.
+     */
+    data object InsufficientPermissions : ChangePasswordError
 }
 
 /**
@@ -41,4 +52,13 @@ fun ChangePasswordError.toApiError(): ApiError = when (this) {
     is ChangePasswordError.SameAsCurrentPassword ->
         // Use a message that client-side mapping already expects
         apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Password cannot be reused")
+
+    is ChangePasswordError.InvalidCurrentPassword ->
+        apiError(CommonApiErrorCodes.INVALID_CREDENTIALS, "Current password is incorrect")
+
+    is ChangePasswordError.InsufficientPermissions ->
+        apiError(
+            CommonApiErrorCodes.PERMISSION_DENIED,
+            "Action requires a trusted session. Please verify via email or another device."
+        )
 }

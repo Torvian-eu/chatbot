@@ -5,6 +5,7 @@ import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.security.error.PasswordValidationError
 import eu.torvian.chatbot.common.security.error.CharacterType
+import kotlinx.serialization.Serializable
 
 /**
  * Configuration for password validation rules.
@@ -17,6 +18,7 @@ import eu.torvian.chatbot.common.security.error.CharacterType
  * @param requireSpecialChar Whether at least one special character is required
  * @param checkCommonPasswords Whether to check against common weak passwords
  */
+@Serializable
 data class PasswordValidationConfig(
     val minLength: Int = DEFAULT_MIN_LENGTH,
     val maxLength: Int = DEFAULT_MAX_LENGTH,

@@ -19,6 +19,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -146,8 +147,8 @@ class UserDaoExposedTest {
 
         assertTrue(result.isLeft(), "Expected Left result for non-existing user")
         val error = result.leftOrNull()
-        assertTrue(error is UserError.UserNotFound, "Expected UserNotFound error")
-        assertEquals(999L, (error as UserError.UserNotFound).id, "Expected matching ID in error")
+        assertIs<UserError.UserNotFound>(error, "Expected UserNotFound error")
+        assertEquals(999L, error.id, "Expected matching ID in error")
     }
 
     @Test
@@ -175,10 +176,10 @@ class UserDaoExposedTest {
 
         assertTrue(result.isLeft(), "Expected Left result for non-existing user")
         val error = result.leftOrNull()
-        assertTrue(error is UserError.UserNotFoundByUsername, "Expected UserNotFoundByUsername error")
+        assertIs<UserError.UserNotFoundByUsername>(error, "Expected UserNotFoundByUsername error")
         assertEquals(
             "nonexistent",
-            (error as UserError.UserNotFoundByUsername).username,
+            error.username,
             "Expected matching username in error"
         )
     }
@@ -211,10 +212,10 @@ class UserDaoExposedTest {
 
         assertTrue(secondResult.isLeft(), "Expected Left result for duplicate username")
         val error = secondResult.leftOrNull()
-        assertTrue(error is UserError.UsernameAlreadyExists, "Expected UsernameAlreadyExists error")
+        assertIs<UserError.UsernameAlreadyExists>(error, "Expected UsernameAlreadyExists error")
         assertEquals(
             testUser1.username,
-            (error as UserError.UsernameAlreadyExists).username,
+            error.username,
             "Expected matching username in error"
         )
     }
@@ -231,8 +232,8 @@ class UserDaoExposedTest {
 
         assertTrue(secondResult.isLeft(), "Expected Left result for duplicate email")
         val error = secondResult.leftOrNull()
-        assertTrue(error is UserError.EmailAlreadyExists, "Expected EmailAlreadyExists error")
-        assertEquals(testUser1.email, (error as UserError.EmailAlreadyExists).email, "Expected matching email in error")
+        assertIs<UserError.EmailAlreadyExists>(error, "Expected EmailAlreadyExists error")
+        assertEquals(testUser1.email, error.email, "Expected matching email in error")
     }
 
     @Test
@@ -269,8 +270,8 @@ class UserDaoExposedTest {
 
         assertTrue(result.isLeft(), "Expected Left result for non-existing user")
         val error = result.leftOrNull()
-        assertTrue(error is UserError.UserNotFound, "Expected UserNotFound error")
-        assertEquals(999L, (error as UserError.UserNotFound).id, "Expected matching ID in error")
+        assertIs<UserError.UserNotFound>(error, "Expected UserNotFound error")
+        assertEquals(999L, error.id, "Expected matching ID in error")
     }
 
     @Test
@@ -301,8 +302,8 @@ class UserDaoExposedTest {
 
         assertTrue(result.isLeft(), "Expected Left result for non-existing user")
         val error = result.leftOrNull()
-        assertTrue(error is UserError.UserNotFound, "Expected UserNotFound error")
-        assertEquals(999L, (error as UserError.UserNotFound).id, "Expected matching ID in error")
+        assertIs<UserError.UserNotFound>(error, "Expected UserNotFound error")
+        assertEquals(999L, error.id, "Expected matching ID in error")
     }
 
     @Test
@@ -322,7 +323,7 @@ class UserDaoExposedTest {
         val fetchResult = userDao.getUserById(user.id)
         assertTrue(fetchResult.isLeft(), "Expected user to be deleted")
         val error = fetchResult.leftOrNull()
-        assertTrue(error is UserError.UserNotFound, "Expected UserNotFound error after deletion")
+        assertIs<UserError.UserNotFound>(error, "Expected UserNotFound error after deletion")
     }
 
     @Test
@@ -331,8 +332,8 @@ class UserDaoExposedTest {
 
         assertTrue(result.isLeft(), "Expected Left result for non-existing user")
         val error = result.leftOrNull()
-        assertTrue(error is UserError.UserNotFound, "Expected UserNotFound error")
-        assertEquals(999L, (error as UserError.UserNotFound).id, "Expected matching ID in error")
+        assertIs<UserError.UserNotFound>(error, "Expected UserNotFound error")
+        assertEquals(999L, error.id, "Expected matching ID in error")
     }
 
     @Test

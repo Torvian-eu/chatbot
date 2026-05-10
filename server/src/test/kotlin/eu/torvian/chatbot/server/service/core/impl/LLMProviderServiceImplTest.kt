@@ -26,6 +26,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -188,8 +189,8 @@ class LLMProviderServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for non-existent provider")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is GetProviderError.ProviderNotFound, "Should be ProviderNotFound error")
-        assertEquals(providerId, (error as GetProviderError.ProviderNotFound).id)
+        assertIs<GetProviderError.ProviderNotFound>(error, "Should be ProviderNotFound error")
+        assertEquals(providerId, error.id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { llmProviderDao.getProviderById(providerId) }
     }
@@ -245,8 +246,8 @@ class LLMProviderServiceImplTest {
         // Assert
         assertTrue(result.isLeft())
         val error = result.leftOrNull()
-        assertTrue(error is DiscoverProviderModelsError.ProviderNotFound)
-        assertEquals(providerId, (error as DiscoverProviderModelsError.ProviderNotFound).id)
+        assertIs<DiscoverProviderModelsError.ProviderNotFound>(error)
+        assertEquals(providerId, error.id)
         coVerify(exactly = 1) { llmProviderDao.getProviderById(providerId) }
         coVerify(exactly = 0) { llmApiClient.discoverModels(any(), any()) }
     }
@@ -308,8 +309,8 @@ class LLMProviderServiceImplTest {
         // Assert
         assertTrue(result.isLeft())
         val error = result.leftOrNull()
-        assertTrue(error is TestProviderConnectionError.InvalidInput)
-        assertEquals("Provider base URL cannot be blank.", (error as TestProviderConnectionError.InvalidInput).reason)
+        assertIs<TestProviderConnectionError.InvalidInput>(error)
+        assertEquals("Provider base URL cannot be blank.", error.reason)
         coVerify(exactly = 0) { llmApiClient.discoverModels(any(), any()) }
     }
 
@@ -330,8 +331,8 @@ class LLMProviderServiceImplTest {
         // Assert
         assertTrue(result.isLeft())
         val error = result.leftOrNull()
-        assertTrue(error is TestProviderConnectionError.AuthenticationFailed)
-        assertEquals("bad credentials", (error as TestProviderConnectionError.AuthenticationFailed).reason)
+        assertIs<TestProviderConnectionError.AuthenticationFailed>(error)
+        assertEquals("bad credentials", error.reason)
     }
 
     // --- addProvider Tests ---
@@ -408,8 +409,8 @@ class LLMProviderServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for blank name")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is AddProviderError.InvalidInput, "Should be InvalidInput error")
-        assertEquals("Provider name cannot be blank.", (error as AddProviderError.InvalidInput).reason)
+        assertIs<AddProviderError.InvalidInput>(error, "Should be InvalidInput error")
+        assertEquals("Provider name cannot be blank.", error.reason)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 0) { credentialManager.storeCredential(any()) }
         coVerify(exactly = 0) { llmProviderDao.insertProvider(any(), any(), any(), any(), any()) }
@@ -430,8 +431,8 @@ class LLMProviderServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for blank baseUrl")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is AddProviderError.InvalidInput, "Should be InvalidInput error")
-        assertEquals("Provider base URL cannot be blank.", (error as AddProviderError.InvalidInput).reason)
+        assertIs<AddProviderError.InvalidInput>(error, "Should be InvalidInput error")
+        assertEquals("Provider base URL cannot be blank.", error.reason)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 0) { credentialManager.storeCredential(any()) }
         coVerify(exactly = 0) { llmProviderDao.insertProvider(any(), any(), any(), any(), any()) }
@@ -453,10 +454,10 @@ class LLMProviderServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for blank credential")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is AddProviderError.InvalidInput, "Should be InvalidInput error")
+        assertIs<AddProviderError.InvalidInput>(error, "Should be InvalidInput error")
         assertEquals(
             "Provider credential cannot be blank when provided.",
-            (error as AddProviderError.InvalidInput).reason
+            error.reason
         )
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 0) { credentialManager.storeCredential(any()) }
@@ -492,8 +493,8 @@ class LLMProviderServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for blank name")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is UpdateProviderError.InvalidInput, "Should be InvalidInput error")
-        assertEquals("Provider name cannot be blank.", (error as UpdateProviderError.InvalidInput).reason)
+        assertIs<UpdateProviderError.InvalidInput>(error, "Should be InvalidInput error")
+        assertEquals("Provider name cannot be blank.", error.reason)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 0) { llmProviderDao.updateProvider(any()) }
     }
@@ -510,8 +511,8 @@ class LLMProviderServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for blank baseUrl")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is UpdateProviderError.InvalidInput, "Should be InvalidInput error")
-        assertEquals("Provider base URL cannot be blank.", (error as UpdateProviderError.InvalidInput).reason)
+        assertIs<UpdateProviderError.InvalidInput>(error, "Should be InvalidInput error")
+        assertEquals("Provider base URL cannot be blank.", error.reason)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 0) { llmProviderDao.updateProvider(any()) }
     }
@@ -531,8 +532,8 @@ class LLMProviderServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for non-existent provider")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is UpdateProviderError.ProviderNotFound, "Should be ProviderNotFound error")
-        assertEquals(providerId, (error as UpdateProviderError.ProviderNotFound).id)
+        assertIs<UpdateProviderError.ProviderNotFound>(error, "Should be ProviderNotFound error")
+        assertEquals(providerId, error.id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { llmProviderDao.updateProvider(updatedProvider) }
     }
@@ -552,8 +553,8 @@ class LLMProviderServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for API key already in use")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is UpdateProviderError.ApiKeyAlreadyInUse, "Should be ApiKeyAlreadyInUse error")
-        assertEquals(apiKeyId, (error as UpdateProviderError.ApiKeyAlreadyInUse).apiKeyId)
+        assertIs<UpdateProviderError.ApiKeyAlreadyInUse>(error, "Should be ApiKeyAlreadyInUse error")
+        assertEquals(apiKeyId, error.apiKeyId)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { llmProviderDao.updateProvider(updatedProvider) }
     }
@@ -615,8 +616,8 @@ class LLMProviderServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left when provider is in use")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is DeleteProviderError.ProviderInUse, "Should be ProviderInUse error")
-        assertEquals(providerId, (error as DeleteProviderError.ProviderInUse).id)
+        assertIs<DeleteProviderError.ProviderInUse>(error, "Should be ProviderInUse error")
+        assertEquals(providerId, error.id)
         assertEquals(listOf(testModel1.name), error.modelNames)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { modelDao.getModelsByProviderId(providerId) }
@@ -640,8 +641,8 @@ class LLMProviderServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for non-existent provider")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is DeleteProviderError.ProviderNotFound, "Should be ProviderNotFound error")
-        assertEquals(providerId, (error as DeleteProviderError.ProviderNotFound).id)
+        assertIs<DeleteProviderError.ProviderNotFound>(error, "Should be ProviderNotFound error")
+        assertEquals(providerId, error.id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { modelDao.getModelsByProviderId(providerId) }
         coVerify(exactly = 1) { llmProviderDao.getProviderById(providerId) }
@@ -711,10 +712,10 @@ class LLMProviderServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for blank credential")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is UpdateProviderCredentialError.InvalidInput, "Should be InvalidInput error")
+        assertIs<UpdateProviderCredentialError.InvalidInput>(error, "Should be InvalidInput error")
         assertEquals(
             "Provider credential cannot be blank.",
-            (error as UpdateProviderCredentialError.InvalidInput).reason
+            error.reason
         )
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 0) { llmProviderDao.getProviderById(any()) }
@@ -738,8 +739,8 @@ class LLMProviderServiceImplTest {
         assertTrue(result.isLeft(), "Should return Left for non-existent provider")
         val error = result.leftOrNull()
         assertNotNull(error, "Error should not be null")
-        assertTrue(error is UpdateProviderCredentialError.ProviderNotFound, "Should be ProviderNotFound error")
-        assertEquals(providerId, (error as UpdateProviderCredentialError.ProviderNotFound).id)
+        assertIs<UpdateProviderCredentialError.ProviderNotFound>(error, "Should be ProviderNotFound error")
+        assertEquals(providerId, error.id)
         coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
         coVerify(exactly = 1) { llmProviderDao.getProviderById(providerId) }
         coVerify(exactly = 0) { credentialManager.storeCredential(any()) }

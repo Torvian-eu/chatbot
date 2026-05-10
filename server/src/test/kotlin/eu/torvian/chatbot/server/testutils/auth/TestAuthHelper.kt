@@ -43,9 +43,11 @@ class TestAuthHelper(private val container: DIContainer) {
     val defaultTestSession = UserSessionEntity(
         id = 1L,
         userId = defaultTestUser.id,
+        deviceId = "test-device-id",
         expiresAt = Instant.fromEpochMilliseconds(System.currentTimeMillis() + (24 * 60 * 60 * 1000)), // 24 hours from now
         createdAt = TestDefaults.DEFAULT_INSTANT,
-        lastAccessed = TestDefaults.DEFAULT_INSTANT
+        lastAccessed = TestDefaults.DEFAULT_INSTANT,
+        ipAddress = "127.0.0.1"
     )
 
     val securePassword = "Gdsdw35!dfg"
@@ -84,9 +86,11 @@ class TestAuthHelper(private val container: DIContainer) {
         testDataManager.insertUserSession(UserSessionEntity(
             id = sessionId,
             userId = userId,
+            deviceId = "test-device-id",
             expiresAt = Instant.fromEpochMilliseconds(System.currentTimeMillis() + (24 * 60 * 60 * 1000)), // 24 hours from now
             createdAt = TestDefaults.DEFAULT_INSTANT,
-            lastAccessed = TestDefaults.DEFAULT_INSTANT
+            lastAccessed = TestDefaults.DEFAULT_INSTANT,
+            ipAddress = "127.0.0.1"
         ))
 
         // Generate JWT token
@@ -147,9 +151,11 @@ class TestAuthHelper(private val container: DIContainer) {
         return UserSessionEntity(
             id = id,
             userId = userId,
+            deviceId = "test-device-id",
             expiresAt = Instant.fromEpochMilliseconds(expiresAt),
             createdAt = TestDefaults.DEFAULT_INSTANT,
-            lastAccessed = TestDefaults.DEFAULT_INSTANT
+            lastAccessed = TestDefaults.DEFAULT_INSTANT,
+            ipAddress = "127.0.0.1"
         )
     }
 }
@@ -175,4 +181,3 @@ fun HttpRequestBuilder.offerWebSocketAuthSubprotocolMarker(
 ) {
     header(HttpHeaders.SecWebSocketProtocol, marker)
 }
-

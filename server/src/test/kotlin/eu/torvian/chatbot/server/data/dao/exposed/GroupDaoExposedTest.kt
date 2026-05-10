@@ -15,6 +15,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.*
+import kotlin.test.assertIs
 
 /**
  * Tests for [GroupDaoExposed].
@@ -110,8 +111,8 @@ class GroupDaoExposedTest {
         assertTrue(result.isLeft(), "Expected Left result for non-existent group")
         val error = result.leftOrNull()
         assertNotNull(error, "Expected non-null error")
-        assertTrue(error is GroupError.GroupNotFound, "Expected GroupNotFound error")
-        assertEquals(999, (error as GroupError.GroupNotFound).id, "Expected error with correct ID")
+        assertIs<GroupError.GroupNotFound>(error, "Expected GroupNotFound error")
+        assertEquals(999, error.id, "Expected error with correct ID")
     }
 
     @Test
@@ -171,8 +172,8 @@ class GroupDaoExposedTest {
         assertTrue(result.isLeft(), "Expected Left result for non-existent group")
         val error = result.leftOrNull()
         assertNotNull(error, "Expected non-null error")
-        assertTrue(error is GroupError.GroupNotFound, "Expected GroupNotFound error")
-        assertEquals(999, (error as GroupError.GroupNotFound).id, "Expected error with correct ID")
+        assertIs<GroupError.GroupNotFound>(error, "Expected GroupNotFound error")
+        assertEquals(999, error.id, "Expected error with correct ID")
     }
 
     @Test
@@ -212,7 +213,7 @@ class GroupDaoExposedTest {
         assertTrue(getResult.isLeft(), "Expected group to be deleted")
         val error = getResult.leftOrNull()
         assertNotNull(error, "Expected non-null error")
-        assertTrue(error is GroupError.GroupNotFound, "Expected GroupNotFound error")
+        assertIs<GroupError.GroupNotFound>(error, "Expected GroupNotFound error")
     }
 
     @Test
@@ -224,7 +225,7 @@ class GroupDaoExposedTest {
         assertTrue(result.isLeft(), "Expected Left result for non-existent group")
         val error = result.leftOrNull()
         assertNotNull(error, "Expected non-null error")
-        assertTrue(error is GroupError.GroupNotFound, "Expected GroupNotFound error")
-        assertEquals(999, (error as GroupError.GroupNotFound).id, "Expected error with correct ID")
+        assertIs<GroupError.GroupNotFound>(error, "Expected GroupNotFound error")
+        assertEquals(999, error.id, "Expected error with correct ID")
     }
 }

@@ -182,6 +182,9 @@ class DefaultWorkerSetupManagerTest {
         serverUrlProvider: WorkerSetupServerUrlProvider = object : WorkerSetupServerUrlProvider {
             override suspend fun resolveServerUrl(defaultServerUrl: String) =
                 Either.Right(defaultServerUrl)
+        },
+        deviceIdProvider: WorkerSetupDeviceIdProvider = object : WorkerSetupDeviceIdProvider {
+            override suspend fun resolveDeviceId() = Either.Right(null)
         }
     ): DefaultWorkerSetupManager {
         return DefaultWorkerSetupManager(
@@ -192,6 +195,7 @@ class DefaultWorkerSetupManagerTest {
             },
             displayNameProvider = displayNameProvider,
             serverUrlProvider = serverUrlProvider,
+            deviceIdProvider = deviceIdProvider,
             setupApiFactory = { api }
         )
     }
@@ -201,15 +205,17 @@ class DefaultWorkerSetupManagerTest {
     ) : WorkerSetupApi {
         var loginUsername: String? = null
         var loginPassword: String? = null
+        var loginDeviceId: String? = null
         var registerWorkerUid: String? = null
         var registerDisplayName: String? = null
         var registerCertificatePem: String? = null
         var logoutAccessToken: String? = null
         val loginIssuedToken: String = "setup-login-token"
 
-        override suspend fun login(username: String, password: String): Either<WorkerSetupError, String> {
+        override suspend fun login(username: String, password: String, deviceId: String): Either<WorkerSetupError, String> {
             loginUsername = username
             loginPassword = password
+            loginDeviceId = deviceId
             if (loginShouldFail) {
                 return Either.Left(WorkerSetupError.LoginFailed("invalid credentials"))
             }
@@ -237,5 +243,3 @@ class DefaultWorkerSetupManagerTest {
         }
     }
 }
-
-

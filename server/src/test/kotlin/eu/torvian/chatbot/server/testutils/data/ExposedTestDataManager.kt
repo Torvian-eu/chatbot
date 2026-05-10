@@ -51,6 +51,7 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
             Table.ROLE_PERMISSIONS to RolePermissionsTable,
             Table.USER_ROLE_ASSIGNMENTS to UserRoleAssignmentsTable,
             Table.USER_SESSIONS to UserSessionsTable,
+            Table.USER_TRUSTED_DEVICES to UserTrustedDevicesTable,
             Table.USER_GROUPS to UserGroupsTable,
             Table.USER_GROUP_MEMBERSHIPS to UserGroupMembershipsTable,
             Table.WORKERS to WorkersTable,
@@ -87,7 +88,10 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
 
             // MCP server tables (must come after users and tool definitions)
             Table.LOCAL_MCP_SERVERS to LocalMCPServerTable,
-            Table.LOCAL_MCP_TOOL_DEFINITIONS to LocalMCPToolDefinitionTable
+            Table.LOCAL_MCP_TOOL_DEFINITIONS to LocalMCPToolDefinitionTable,
+
+            // Failed login attempts table (for lockout feature)
+            Table.FAILED_LOGIN_ATTEMPTS to FailedLoginAttemptsTable,
         )
 
         /**
@@ -106,6 +110,9 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
         dataSet.permissions.forEach { insertPermission(it) }
         dataSet.rolePermissions.forEach { insertRolePermission(it) }
         dataSet.userRoleAssignments.forEach { insertUserRoleAssignment(it) }
+
+        // Insert failed login attempts
+        dataSet.failedLoginAttempts.forEach { insertFailedLoginAttempt(it) }
 
         // Insert other entities
         dataSet.apiSecrets.forEach { insertApiSecret(it) }
@@ -516,9 +523,11 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
             UserSessionsTable.insert {
                 it[id] = userSession.id
                 it[userId] = userSession.userId
+                it[deviceId] = userSession.deviceId
                 it[expiresAt] = userSession.expiresAt.toEpochMilliseconds()
                 it[createdAt] = userSession.createdAt.toEpochMilliseconds()
                 it[lastAccessed] = userSession.lastAccessed.toEpochMilliseconds()
+                it[ipAddress] = userSession.ipAddress
             }
             return@transaction
         }
@@ -637,6 +646,18 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
                 .singleOrNull()
         }
 
+    override suspend fun insertFailedLoginAttempt(attempt: FailedLoginAttemptEntity) =
+        transactionScope.transaction {
+            ensureTableCreated(Table.FAILED_LOGIN_ATTEMPTS)
+            FailedLoginAttemptsTable.insert {
+                it[username] = attempt.username
+                it[ipAddress] = attempt.ipAddress
+                it[deviceId] = attempt.deviceId
+                it[attemptTimestamp] = attempt.attemptTimestamp
+            }
+            return@transaction
+        }
+
     /**
      * Ensures the specified table has been created by this manager instance. If it hasn't been created yet,
      * it is created immediately and marked as created. This is useful for individual insert operations.
@@ -662,6 +683,10 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
         if (data.permissions.isNotEmpty()) required += Table.PERMISSIONS
         if (data.rolePermissions.isNotEmpty()) required += Table.ROLE_PERMISSIONS
         if (data.userRoleAssignments.isNotEmpty()) required += Table.USER_ROLE_ASSIGNMENTS
+        if (data.users.isNotEmpty()) required += Table.USER_TRUSTED_DEVICES
+
+        // Failed login attempts table (for lockout feature)
+        if (data.failedLoginAttempts.isNotEmpty()) required += Table.FAILED_LOGIN_ATTEMPTS
 
         // Other tables
         if (data.apiSecrets.isNotEmpty()) required += Table.API_SECRETS

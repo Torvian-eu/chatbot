@@ -5,9 +5,20 @@ import androidx.lifecycle.viewModelScope
 import eu.torvian.chatbot.app.repository.AuthRepository
 import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.app.repository.matches
+import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.auth.AccountData
+import eu.torvian.chatbot.app.service.auth.AuthValidationService
+import eu.torvian.chatbot.app.service.clipboard.ClipboardService
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
+import eu.torvian.chatbot.common.api.CommonApiErrorCodes
+import eu.torvian.chatbot.common.models.api.auth.UserSecurityAlert
+import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
+import eu.torvian.chatbot.common.models.api.auth.UserTrustedDeviceInfo
+import eu.torvian.chatbot.common.security.PasswordValidationConfig
+import eu.torvian.chatbot.common.security.SecurityAuditStatus
+import eu.torvian.chatbot.common.security.UsernameValidationConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,17 +34,22 @@ import kotlinx.coroutines.launch
  * - Authentication state management (delegated to AuthRepository)
  * - Login and registration form state
  * - Form validation and error handling
- * - User authentication operations
+ * - User authentication operations, including logout and logout-all flows
  * - Multi-account management (listing, switching, removing accounts)
+ * - Security alerts management (untrusted device login alerts)
  *
  * @param authRepository Repository for authentication operations
  * @param notificationService Service for handling and notifying about errors
+ * @param clipboardService Service for clipboard operations
  * @param normalScope Coroutine scope for normal operations
+ * @param authValidationService Service for validating authentication form fields
  */
 class AuthViewModel(
     private val authRepository: AuthRepository,
     private val notificationService: NotificationService,
-    private val normalScope: CoroutineScope
+    private val clipboardService: ClipboardService,
+    private val normalScope: CoroutineScope,
+    private val authValidationService: AuthValidationService
 ) : ViewModel(normalScope) {
 
     companion object {
@@ -58,12 +74,41 @@ class AuthViewModel(
     private val _passwordChangeFormState = MutableStateFlow(PasswordChangeFormState())
     val passwordChangeFormState: StateFlow<PasswordChangeFormState> = _passwordChangeFormState.asStateFlow()
 
+    /**
+     * The password validation configuration from the authentication service.
+     * Exposed so that UI components can dynamically render password requirement hints.
+     */
+    val passwordValidationConfig: PasswordValidationConfig = authValidationService.passwordValidationConfig
+
+    /**
+     * The username validation configuration from the authentication service.
+     * Exposed so that UI components can dynamically render username requirement hints.
+     */
+    val usernameValidationConfig: UsernameValidationConfig = authValidationService.usernameValidationConfig
+
     // --- Account Management State ---
 
     /**
      * List of all stored user accounts available for switching.
      */
     val availableAccounts: StateFlow<List<AccountData>> = authRepository.availableAccounts
+
+    /**
+     * The active sessions currently fetched from the server for the security dialog.
+     */
+    val activeSessions = MutableStateFlow<List<UserSessionInfo>>(emptyList())
+
+    /**
+     * Unacknowledged security alerts for the current user.
+     * These represent login attempts from unrecognized devices.
+     */
+    val securityAlerts = MutableStateFlow<List<UserSecurityAlert>>(emptyList())
+
+    /**
+     * Trusted devices for the current user.
+     * These are devices that have been trusted through first use or security alert acknowledgement.
+     */
+    val trustedDevices = MutableStateFlow<List<UserTrustedDeviceInfo>>(emptyList())
 
     /**
      * Indicates whether an account switch operation is currently in progress.
@@ -91,7 +136,7 @@ class AuthViewModel(
             logger.info("Attempting login for user: $username")
 
             // Validate form before submission
-            val usernameError = AuthFormValidation.validateUsername(username)
+            val usernameError = authValidationService.validateUsername(username)
             val passwordError = if (password.isBlank()) "Password is required" else null
 
             if (usernameError != null || passwordError != null) {
@@ -142,6 +187,13 @@ class AuthViewModel(
                     if (_dialogState.value is AuthDialogState.AddAccount) {
                         _dialogState.value = AuthDialogState.None
                     }
+                    // Fetch security alerts after successful login
+                    showSecurityAlerts()
+                    // Show restricted session info dialog if the session is restricted
+                    val currentState = authState.value
+                    if (currentState is AuthState.Authenticated && currentState.isRestricted) {
+                        openRestrictedSessionInfo()
+                    }
                 }
             )
         }
@@ -161,10 +213,10 @@ class AuthViewModel(
             logger.info("Attempting registration for user: $username")
 
             // Validate all form fields
-            val usernameError = AuthFormValidation.validateUsername(username)
-            val emailError = AuthFormValidation.validateEmail(email)
-            val passwordError = AuthFormValidation.validatePassword(password)
-            val confirmPasswordError = AuthFormValidation.validateConfirmPassword(password, confirmPassword)
+            val usernameError = authValidationService.validateUsername(username)
+            val emailError = authValidationService.validateEmail(email)
+            val passwordError = authValidationService.validatePassword(password)
+            val confirmPasswordError = authValidationService.validateConfirmPassword(password, confirmPassword)
 
             if (usernameError != null || emailError != null || passwordError != null || confirmPasswordError != null) {
                 _registerFormState.update { currentState ->
@@ -227,8 +279,183 @@ class AuthViewModel(
                     shortMessage = "Logout failed"
                 )
             }.onRight {
+                activeSessions.value = emptyList()
+                securityAlerts.value = emptyList()
                 clearAllForms()
             }
+        }
+    }
+
+    /**
+     * Logs the current user out from all sessions.
+     *
+     * The repository is responsible for clearing local authentication state, and the view model
+     * only reacts to the outcome by surfacing errors or resetting local forms.
+     */
+    fun logoutAll() {
+        viewModelScope.launch {
+            authRepository.logoutAll().onLeft { error ->
+                notificationService.repositoryError(
+                    error = error,
+                    shortMessage = "Logout all sessions failed"
+                )
+            }.onRight {
+                activeSessions.value = emptyList()
+                securityAlerts.value = emptyList()
+                clearAllForms()
+            }
+        }
+    }
+
+    /**
+     * Fetches the authenticated user's current active sessions from the repository.
+     */
+    fun refreshSessions() {
+        viewModelScope.launch {
+            authRepository.getActiveSessions()
+                .onLeft { error ->
+                    notificationService.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to load active sessions"
+                    )
+                }
+                .onRight { sessions ->
+                    activeSessions.value = sessions
+                }
+        }
+    }
+
+    /**
+     * Fetches unacknowledged security alerts for the current user and displays them.
+     * Called after successful login or when the user navigates to the security alerts view.
+     *
+     * This method guards against fetching alerts for unauthenticated or restricted sessions,
+     * as the server denies this operation for restricted sessions.
+     *
+     * @param showOnEmpty If true, the security alerts dialog will be shown even if there are no unacknowledged alerts.
+     */
+    fun showSecurityAlerts(showOnEmpty: Boolean = false) {
+        val currentAuthState = authState.value
+
+        if (currentAuthState !is AuthState.Authenticated) {
+            securityAlerts.value = emptyList()
+            logger.debug("Skipping security alerts fetch because user is not authenticated")
+            return
+        }
+
+        if (currentAuthState.isRestricted) {
+            securityAlerts.value = emptyList()
+            logger.info("Skipping security alerts fetch because current session is restricted")
+            return
+        }
+
+        viewModelScope.launch {
+            authRepository.getSecurityAlerts()
+                .onLeft { error ->
+                    logger.warn("Failed to fetch security alerts: ${error.message}")
+                    notificationService.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to load security alerts"
+                    )
+                }
+                .onRight { alerts ->
+                    securityAlerts.value = alerts
+                    logger.info("Fetched ${alerts.size} security alerts")
+                    if (alerts.isNotEmpty() || showOnEmpty) {
+                        _dialogState.value = AuthDialogState.SecurityAlerts(alerts)
+                    }
+                }
+        }
+    }
+
+
+    /**
+     * Resolves a single security alert with the specified outcome.
+     *
+     * This method allows the user to either trust or dismiss a specific security alert.
+     * - Trust (true): The device is added to the trusted devices list.
+     * - Dismiss (false): The alert is marked as dismissed without adding the device to trusted devices.
+     *
+     * After success, the security alerts list is refreshed.
+     *
+     * Note: This operation is not available for restricted sessions.
+     *
+     * @param alertId The unique identifier of the security alert to resolve.
+     * @param trust Whether to trust the device (true) or dismiss the alert (false).
+     */
+    fun resolveAlert(alertId: Long, trust: Boolean) {
+        viewModelScope.launch {
+            val outcome = if (trust) SecurityAuditStatus.TRUSTED else SecurityAuditStatus.DISMISSED
+            authRepository.resolveSecurityAlert(alertId, outcome)
+                .onLeft { error ->
+                    notificationService.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to resolve security alert"
+                    )
+                }
+                .onRight {
+                    logger.info("Successfully resolved security alert $alertId with outcome: $outcome")
+                    // Refresh the alerts list to remove the resolved alert
+                    showSecurityAlerts(showOnEmpty = true)
+                }
+        }
+    }
+
+    /**
+     * Revokes one of the authenticated user's active sessions and refreshes the list afterwards.
+     *
+     * @param sessionId The server session identifier to revoke.
+     */
+    fun revokeSession(sessionId: Long) {
+        viewModelScope.launch {
+            authRepository.revokeSession(sessionId)
+                .onLeft { error ->
+                    notificationService.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to revoke session"
+                    )
+                }
+                .onRight {
+                    refreshSessions()
+                }
+        }
+    }
+
+    /**
+     * Fetches the authenticated user's trusted devices from the repository.
+     */
+    fun refreshTrustedDevices() {
+        viewModelScope.launch {
+            authRepository.getTrustedDevices()
+                .onLeft { error ->
+                    notificationService.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to load trusted devices"
+                    )
+                }
+                .onRight { devices ->
+                    trustedDevices.value = devices
+                }
+        }
+    }
+
+    /**
+     * Revokes one of the authenticated user's trusted devices and refreshes the list afterwards.
+     *
+     * @param deviceId The device identifier to revoke.
+     */
+    fun revokeTrustedDevice(deviceId: String) {
+        viewModelScope.launch {
+            authRepository.revokeTrustedDevice(deviceId)
+                .onLeft { error ->
+                    notificationService.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to revoke trusted device"
+                    )
+                }
+                .onRight {
+                    refreshTrustedDevices()
+                }
         }
     }
 
@@ -236,17 +463,88 @@ class AuthViewModel(
      * Changes the password for the currently authenticated user.
      * Used when the user is forced to change their password on first login.
      */
-    fun changePassword(userId: Long) {
+    fun changePassword() {
         viewModelScope.launch {
             val currentForm = _passwordChangeFormState.value
             val newPassword = currentForm.newPassword
             val confirmPassword = currentForm.confirmPassword
 
-            logger.info("Attempting password change for user: $userId")
+            logger.info("Attempting password change")
 
-            // Validate form before submission
-            val newPasswordError = AuthFormValidation.validatePassword(newPassword)
-            val confirmPasswordError = AuthFormValidation.validateConfirmPassword(newPassword, confirmPassword)
+            // Validate form before submission - currentPassword, newPassword, and confirmPassword required
+            val currentPasswordError =
+                if (currentForm.currentPassword.isBlank()) "Current password is required" else null
+            val newPasswordError = authValidationService.validatePassword(newPassword)
+            val confirmPasswordError = authValidationService.validateConfirmPassword(newPassword, confirmPassword)
+
+            if (currentPasswordError != null || newPasswordError != null || confirmPasswordError != null) {
+                _passwordChangeFormState.update { currentState ->
+                    currentState.copy(
+                        currentPasswordError = currentPasswordError,
+                        newPasswordError = newPasswordError,
+                        confirmPasswordError = confirmPasswordError,
+                        generalError = null
+                    )
+                }
+                return@launch
+            }
+
+            // Clear errors and set loading state
+            _passwordChangeFormState.update { currentState ->
+                currentState.copy(
+                    isLoading = true,
+                    currentPasswordError = null,
+                    newPasswordError = null,
+                    confirmPasswordError = null,
+                    generalError = null
+                )
+            }
+
+            // Perform password change using the repository's changePassword with current password
+            val result = authRepository.changePassword(currentForm.currentPassword, newPassword)
+
+            result.fold(
+                ifLeft = { error ->
+                    logger.warn("Password change failed: ${error.message}")
+                    _passwordChangeFormState.update { currentState ->
+                        currentState.copy(
+                            isLoading = false,
+                            generalError = mapPasswordChangeError(error)
+                        )
+                    }
+                },
+                ifRight = {
+                    logger.info("Password change successful")
+                    _passwordChangeFormState.update { currentState ->
+                        currentState.copy(
+                            isLoading = false,
+                            generalError = null,
+                            passwordChangeSuccessEvent = true
+                        )
+                    }
+                }
+            )
+        }
+    }
+
+    /**
+     * Completes a server-required password change for the currently authenticated user.
+     *
+     * This method is used when the user is forced to change their password
+     * (requiresPasswordChange = true). Unlike normal password change, it does not
+     * require the current password.
+     */
+    fun completeRequiredPasswordChange() {
+        viewModelScope.launch {
+            val currentForm = _passwordChangeFormState.value
+            val newPassword = currentForm.newPassword
+            val confirmPassword = currentForm.confirmPassword
+
+            logger.info("Attempting required password change")
+
+            // Validate form before submission - only newPassword and confirmPassword required
+            val newPasswordError = authValidationService.validatePassword(newPassword)
+            val confirmPasswordError = authValidationService.validateConfirmPassword(newPassword, confirmPassword)
 
             if (newPasswordError != null || confirmPasswordError != null) {
                 _passwordChangeFormState.update { currentState ->
@@ -269,12 +567,12 @@ class AuthViewModel(
                 )
             }
 
-            // Perform password change
-            val result = authRepository.changePassword(userId, newPassword)
+            // Perform required password change using the repository
+            val result = authRepository.completeRequiredPasswordChange(newPassword)
 
             result.fold(
                 ifLeft = { error ->
-                    logger.warn("Password change failed for user $userId: ${error.message}")
+                    logger.warn("Required password change failed: ${error.message}")
                     _passwordChangeFormState.update { currentState ->
                         currentState.copy(
                             isLoading = false,
@@ -283,7 +581,7 @@ class AuthViewModel(
                     }
                 },
                 ifRight = {
-                    logger.info("Password change successful for user: $userId")
+                    logger.info("Required password change successful")
                     _passwordChangeFormState.update { currentState ->
                         currentState.copy(
                             isLoading = false,
@@ -301,6 +599,15 @@ class AuthViewModel(
      */
     suspend fun checkInitialAuthState() {
         authRepository.checkInitialAuthState()
+        // Fetch security alerts if authenticated after startup
+        val currentState = authRepository.authState.value
+        if (currentState is AuthState.Authenticated) {
+            showSecurityAlerts()
+            // Show restricted session info dialog if the session is restricted
+            if (currentState.isRestricted) {
+                openRestrictedSessionInfo()
+            }
+        }
     }
 
     // --- Account Management Operations ---
@@ -317,6 +624,10 @@ class AuthViewModel(
     fun switchAccount(userId: Long) {
         viewModelScope.launch {
             _accountSwitchInProgress.value = true
+            // Clear account-scoped security state to avoid stale data from the previous account.
+            securityAlerts.value = emptyList()
+            activeSessions.value = emptyList()
+            trustedDevices.value = emptyList()
 
             authRepository.switchAccount(userId)
                 .onLeft { error ->
@@ -328,6 +639,13 @@ class AuthViewModel(
                 .onRight {
                     // Close dialog on successful switch
                     _dialogState.value = AuthDialogState.None
+                    // Fetch security alerts for the new account
+                    showSecurityAlerts()
+                    // Show restricted session info dialog if the new account is restricted
+                    val newState = authState.value
+                    if (newState is AuthState.Authenticated && newState.isRestricted) {
+                        openRestrictedSessionInfo()
+                    }
                 }
 
             _accountSwitchInProgress.value = false
@@ -369,10 +687,17 @@ class AuthViewModel(
     }
 
     /**
-     * Opens the add account dialog.
+     * Opens the active sessions security dialog.
      */
-    fun openAddAccount() {
-        _dialogState.value = AuthDialogState.AddAccount
+    fun openActiveSessions() {
+        _dialogState.value = AuthDialogState.ActiveSessions
+    }
+
+    /**
+     * Opens the trusted devices dialog.
+     */
+    fun openTrustedDevices() {
+        _dialogState.value = AuthDialogState.TrustedDevices
     }
 
     /**
@@ -385,10 +710,47 @@ class AuthViewModel(
     }
 
     /**
+     * Opens the change password dialog.
+     */
+    fun openChangePasswordDialog() {
+        _dialogState.value = AuthDialogState.ChangePassword
+    }
+
+    /**
+     * Opens the restricted session info dialog.
+     * This dialog explains to the user why their session has limited permissions.
+     */
+    fun openRestrictedSessionInfo() {
+        _dialogState.value = AuthDialogState.RestrictedSessionInfo
+    }
+
+    /**
      * Closes any open authentication dialog.
      */
     fun closeDialog() {
         _dialogState.value = AuthDialogState.None
+    }
+
+    // --- Clipboard Operations ---
+
+    /**
+     * Copies the given text to the system clipboard and shows a success notification.
+     *
+     * @param text The text to copy to the clipboard.
+     */
+    fun copyToClipboard(text: String) {
+        viewModelScope.launch {
+            try {
+                clipboardService.copyToClipboard(text)
+                notificationService.genericSuccess("Copied to clipboard")
+            } catch (e: Exception) {
+                logger.warn("Failed to copy to clipboard: ${e.message}")
+                notificationService.genericError(
+                    shortMessage = "Failed to copy to clipboard",
+                    detailedMessage = e.message
+                )
+            }
+        }
     }
 
     // --- Form State Updates ---
@@ -442,14 +804,17 @@ class AuthViewModel(
      * Field-specific errors are cleared if the corresponding field is updated.
      */
     fun updatePasswordChangeForm(
+        currentPassword: String? = null,
         newPassword: String? = null,
         confirmPassword: String? = null
     ) {
         _passwordChangeFormState.update { currentState ->
             currentState.copy(
+                currentPassword = currentPassword ?: currentState.currentPassword,
                 newPassword = newPassword ?: currentState.newPassword,
                 confirmPassword = confirmPassword ?: currentState.confirmPassword,
                 // Clear field-specific errors when user types
+                currentPasswordError = if (currentPassword != null && currentPassword != currentState.currentPassword) null else currentState.currentPasswordError,
                 newPasswordError = if (newPassword != null && newPassword != currentState.newPassword) null else currentState.newPasswordError,
                 confirmPasswordError = if (confirmPassword != null && confirmPassword != currentState.confirmPassword) null else currentState.confirmPasswordError
             )
@@ -496,58 +861,77 @@ class AuthViewModel(
 
     // --- Error Mapping ---
 
-    private fun mapLoginError(error: RepositoryError): String {
-        return when (error) {
-            is RepositoryError.DataFetchError -> when {
-                error.message.contains("Invalid credentials", ignoreCase = true) ->
-                    "Invalid username or password"
+    /**
+     * Maps a [RepositoryError] to a user-friendly login error message.
+     * Uses structured checks against [CommonApiErrorCodes] for
+     * reliable error identification instead of fragile string matching.
+     */
+    private fun mapLoginError(error: RepositoryError): String = when {
+        error.matches(CommonApiErrorCodes.INVALID_CREDENTIALS) ->
+            "Invalid username or password"
 
-                error.message.contains("User not found", ignoreCase = true) ->
-                    "Invalid username or password"
+        error.matches(CommonApiErrorCodes.VERIFICATION_REQUIRED) ->
+            "Login blocked from an untrusted device. Approve this device from an existing trusted session or contact an administrator."
 
-                error.message.contains("Account locked", ignoreCase = true) ->
-                    "Account is temporarily locked. Please try again later."
+        error.matches(CommonApiErrorCodes.PERMISSION_DENIED) ->
+            "Account is temporarily locked. Please try again later."
 
-                else -> "Login failed. Please try again."
-            }
+        error.matches(CommonApiErrorCodes.TOO_MANY_ATTEMPTS) ->
+            "Too many failed login attempts. Please wait a few minutes and try again."
 
-            is RepositoryError.OtherError ->
-                "An unexpected error occurred. Please try again."
-        }
+        else -> "An unexpected error occurred. Please try again."
     }
 
-    private fun mapRegistrationError(error: RepositoryError): String {
-        return when (error) {
-            is RepositoryError.DataFetchError -> when {
-                error.message.contains("Username already exists", ignoreCase = true) ->
-                    "Username is already taken. Please choose a different one."
+    /**
+     * Maps a [RepositoryError] to a user-friendly registration error message.
+     * Uses structured checks against [CommonApiErrorCodes] for
+     * reliable error identification instead of fragile string matching.
+     *
+     * For [CommonApiErrorCodes.ALREADY_EXISTS], inspects the error details to distinguish
+     * between username and email conflicts.
+     */
+    private fun mapRegistrationError(error: RepositoryError): String = when {
+        error.matches(CommonApiErrorCodes.ALREADY_EXISTS) -> {
+            // Inspect the underlying ApiError details to determine which field conflicts
+            val details = (error as? RepositoryError.DataFetchError)
+                ?.apiResourceError
+                ?.let { it as? ApiResourceError.ServerError }
+                ?.apiError?.details
+            val message = (error as? RepositoryError.DataFetchError)
+                ?.apiResourceError
+                ?.let { it as? ApiResourceError.ServerError }
+                ?.apiError?.message ?: ""
 
-                error.message.contains("Email already exists", ignoreCase = true) ->
-                    "Email is already registered. Please use a different email or try logging in."
+            // Check details keys or message content for email-related conflict
+            val isEmailConflict = details?.keys?.any { it.contains("email", ignoreCase = true) } == true ||
+                    message.contains("email", ignoreCase = true)
 
-                else -> "Registration failed. Please try again."
+            if (isEmailConflict) {
+                "Email is already registered. Please use a different email or try logging in."
+            } else {
+                "Username is already taken. Please choose a different one."
             }
-
-            is RepositoryError.OtherError ->
-                "An unexpected error occurred. Please try again."
         }
+
+        else -> "An unexpected error occurred. Please try again."
     }
 
-    private fun mapPasswordChangeError(error: RepositoryError): String {
-        return when (error) {
-            is RepositoryError.DataFetchError -> when {
-                error.message.contains("Weak password", ignoreCase = true) ->
-                    "New password is too weak. Please choose a stronger password."
+    /**
+     * Maps a [RepositoryError] to a user-friendly password change error message.
+     * Uses structured checks against [CommonApiErrorCodes] for
+     * reliable error identification instead of fragile string matching.
+     */
+    private fun mapPasswordChangeError(error: RepositoryError): String = when {
+        error.matches(CommonApiErrorCodes.INVALID_ARGUMENT) ->
+            "New password is too weak. Please choose a stronger password."
 
-                error.message.contains("Password cannot be reused", ignoreCase = true) ->
-                    "New password cannot be the same as the old password."
+        error.matches(CommonApiErrorCodes.PERMISSION_DENIED) ->
+            "Action requires a trusted session. Please verify your identity."
 
-                else -> "Password change failed. Please try again."
-            }
+        error.matches(CommonApiErrorCodes.INVALID_CREDENTIALS) ->
+            "Current password is incorrect."
 
-            is RepositoryError.OtherError ->
-                "An unexpected error occurred. Please try again."
-        }
+        else -> "Password change failed. Please try again."
     }
 
     override fun onCleared() {

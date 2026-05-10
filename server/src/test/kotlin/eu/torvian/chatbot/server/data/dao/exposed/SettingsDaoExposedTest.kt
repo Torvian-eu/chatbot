@@ -17,6 +17,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -321,8 +322,8 @@ class SettingsDaoExposedTest {
         assertTrue(result.isLeft(), "Expected Left result for non-existent settings")
         val error = result.leftOrNull()
         assertNotNull(error, "Expected non-null error")
-        assertTrue(error is SettingsError.SettingsNotFound, "Expected SettingsNotFound error")
-        assertEquals(999L, (error as SettingsError.SettingsNotFound).id, "Expected error with correct ID")
+        assertIs<SettingsError.SettingsNotFound>(error, "Expected SettingsNotFound error")
+        assertEquals(999L, error.id, "Expected error with correct ID")
     }
 
     @Test
@@ -347,7 +348,7 @@ class SettingsDaoExposedTest {
         assertTrue(result.isLeft(), "Expected Left result for non-existent model")
         val error = result.leftOrNull()
         assertNotNull(error, "Expected non-null error")
-        assertTrue(error is SettingsError.ModelNotFound, "Expected ModelNotFound error")
+        assertIs<SettingsError.ModelNotFound>(error, "Expected ModelNotFound error")
         assertEquals(999L, error.modelId, "Expected error with correct ID")
     }
 

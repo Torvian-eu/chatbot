@@ -1,5 +1,7 @@
 package eu.torvian.chatbot.server.config
 
+import eu.torvian.chatbot.common.security.PasswordValidationConfig
+import eu.torvian.chatbot.common.security.UsernameValidationConfig
 import eu.torvian.chatbot.server.domain.config.SslConfig
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
@@ -173,7 +175,19 @@ class ConfigAssemblerSslSanTest {
             secret = "jwt-secret",
             tokenExpirationMs = 60_000,
             refreshExpirationMs = 120_000
+        ),
+        reverseProxy = ReverseProxyConfigDto(
+            enabled = false,
+            proxyCount = 1,
+            useXForwardedHeaders = true,
+            useForwardedHeaders = false
+        ),
+        accountSecurityMode = "DISABLED",
+        authPolicy = AuthPolicyDto(
+            passwordConfig = PasswordValidationConfig(),
+            usernameConfig = UsernameValidationConfig(),
+            maxFailedAttempts = 10,
+            lockoutWindowMinutes = 5
         )
     )
 }
-

@@ -1,6 +1,8 @@
 package eu.torvian.chatbot.app.koin
 
 import eu.torvian.chatbot.app.config.AppConfiguration
+import eu.torvian.chatbot.app.service.auth.DeviceIdentityStorage
+import eu.torvian.chatbot.app.service.auth.FileSystemDeviceIdentityStorage
 import eu.torvian.chatbot.app.service.auth.FileSystemTokenStorage
 import eu.torvian.chatbot.app.service.auth.TokenStorage
 import eu.torvian.chatbot.app.service.clipboard.ClipboardService
@@ -48,6 +50,16 @@ fun androidModule(config: AppConfiguration) = module {
                 config.storage.baseApplicationPath,
                 config.storage.dataDir,
                 config.storage.certificateStorageDir
+            ).toString()
+        )
+    }
+
+    single<DeviceIdentityStorage> {
+        FileSystemDeviceIdentityStorage(
+            storageDirectoryPath = Path(
+                config.storage.baseApplicationPath,
+                config.storage.dataDir,
+                config.storage.deviceIdentityStorageDir
             ).toString()
         )
     }

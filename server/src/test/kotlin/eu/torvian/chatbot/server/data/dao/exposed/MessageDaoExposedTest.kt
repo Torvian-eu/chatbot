@@ -16,6 +16,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.*
+import kotlin.test.assertIs
 
 /**
  * Tests for [MessageDaoExposed].
@@ -298,7 +299,7 @@ class MessageDaoExposedTest {
         val message = result.getOrNull()
         assertNotNull(message, "Expected non-null message")
         assertTrue(message is ChatMessage.AssistantMessage, "Expected AssistantMessage type")
-        val assistant = message as ChatMessage.AssistantMessage
+        val assistant = assertIs<ChatMessage.AssistantMessage>(message)
         assertEquals(content, assistant.content, "Expected matching content")
         assertEquals(testSession1.id, assistant.sessionId, "Expected matching sessionId")
         assertEquals(testUserMessage1.id, assistant.parentMessageId, "Expected matching parentMessageId")
@@ -432,8 +433,8 @@ class MessageDaoExposedTest {
         assertTrue(result.isLeft())
         val error = result.leftOrNull()
         assertNotNull(error)
-        assertTrue(error is InsertMessageError.ParentNotFound)
-        assertEquals(999, (error as InsertMessageError.ParentNotFound).parentId)
+        assertIs<InsertMessageError.ParentNotFound>(error)
+        assertEquals(999, error.parentId)
     }
 
     @Test
@@ -462,8 +463,8 @@ class MessageDaoExposedTest {
         assertTrue(result.isLeft())
         val error = result.leftOrNull()
         assertNotNull(error)
-        assertTrue(error is InsertMessageError.ParentNotInSession)
-        assertEquals(testUserMessage2.id, (error as InsertMessageError.ParentNotInSession).parentId)
+        assertIs<InsertMessageError.ParentNotInSession>(error)
+        assertEquals(testUserMessage2.id, error.parentId)
         assertEquals(testSession1.id, error.sessionId)
     }
 

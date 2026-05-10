@@ -18,6 +18,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -262,7 +263,7 @@ class SessionToolConfigDaoExposedTest {
         // Verify
         assertTrue(result.isLeft(), "Expected Left (error)")
         result.onLeft { error ->
-            assertTrue(error is SetToolEnabledError.ForeignKeyViolation, "Expected ForeignKeyViolation error but got $error")
+            assertIs<SetToolEnabledError.ForeignKeyViolation>(error, "Expected ForeignKeyViolation error but got $error")
         }
     }
 
@@ -278,7 +279,7 @@ class SessionToolConfigDaoExposedTest {
         // Verify
         assertTrue(result.isLeft(), "Expected Left (error)")
         result.onLeft { error ->
-            assertTrue(error is SetToolEnabledError.ForeignKeyViolation, "Expected ForeignKeyViolation error but got $error")
+            assertIs<SetToolEnabledError.ForeignKeyViolation>(error, "Expected ForeignKeyViolation error but got $error")
         }
     }
 }

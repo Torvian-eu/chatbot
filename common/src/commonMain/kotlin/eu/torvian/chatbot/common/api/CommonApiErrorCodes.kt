@@ -95,6 +95,13 @@ object CommonApiErrorCodes {
     val INVALID_CREDENTIALS = ApiErrorCode("invalid-credentials", 401)
 
     /**
+     * Indicates that authentication was blocked until the user verifies a new client IP.
+     *
+     * Corresponds to HTTP Status Code 401 Unauthorized.
+     */
+    val VERIFICATION_REQUIRED = ApiErrorCode("verification-required", 401)
+
+    /**
      * Indicates that the authentication token provided is invalid, expired,
      * revoked, or malformed.
      *
@@ -211,6 +218,17 @@ object CommonApiErrorCodes {
      * Corresponds to HTTP Status Code 429 Too Many Requests.
      */
     val RATE_LIMIT = ApiErrorCode("rate-limit", 429)
+
+    /**
+     * Indicates that too many failed login attempts have been made from a
+     * specific username or IP address within the configured lockout window.
+     *
+     * This is used to implement sliding-window lockout for authentication
+     * to prevent brute-force attacks.
+     *
+     * Corresponds to HTTP Status Code 429 Too Many Requests.
+     */
+    val TOO_MANY_ATTEMPTS = ApiErrorCode("too-many-attempts", 429)
 
 
     // === 500 Internal Server Error ===
