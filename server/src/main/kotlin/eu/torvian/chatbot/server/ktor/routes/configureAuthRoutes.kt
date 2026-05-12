@@ -12,20 +12,12 @@ import eu.torvian.chatbot.server.ktor.auth.getUserContext
 import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.service.core.UserService
 import eu.torvian.chatbot.server.service.core.WorkerService
+import eu.torvian.chatbot.server.service.core.error.auth.ChangeEmailError
+import eu.torvian.chatbot.server.service.core.error.auth.ChangePasswordError
 import eu.torvian.chatbot.server.service.core.error.auth.RegisterUserError
 import eu.torvian.chatbot.server.service.core.error.worker.AuthenticateWorkerError
 import eu.torvian.chatbot.server.service.security.AuthenticationService
-import eu.torvian.chatbot.server.service.security.error.LoginError
-import eu.torvian.chatbot.server.service.security.error.LogoutAllError
-import eu.torvian.chatbot.server.service.security.error.LogoutError
-import eu.torvian.chatbot.server.service.security.error.RefreshTokenError
-import eu.torvian.chatbot.server.service.security.error.GetSecurityAlertsError
-import eu.torvian.chatbot.server.service.security.error.RevokeTrustedDeviceError
-import eu.torvian.chatbot.server.service.security.error.CompleteRequiredPasswordChangeError
-import eu.torvian.chatbot.server.service.security.error.ResolveAlertError
-import eu.torvian.chatbot.server.service.security.error.RequestDeviceVerificationError
-import eu.torvian.chatbot.server.service.core.error.auth.ChangePasswordError
-import eu.torvian.chatbot.server.service.core.error.auth.ChangeEmailError
+import eu.torvian.chatbot.server.service.security.error.*
 import io.ktor.http.*
 import io.ktor.server.auth.*
 import io.ktor.server.plugins.origin
@@ -321,7 +313,11 @@ fun Route.configureAuthRoutes(
             val userContext = call.getUserContext()
 
             call.respondEither(
-                authenticationService.revokeTrustedDevice(userContext.user.id, resource.deviceId, userContext.isRestricted),
+                authenticationService.revokeTrustedDevice(
+                    userContext.user.id,
+                    resource.deviceId,
+                    userContext.isRestricted
+                ),
                 HttpStatusCode.NoContent
             ) { error ->
                 when (error) {
@@ -418,7 +414,10 @@ fun Route.configureAuthRoutes(
                         apiError(CommonApiErrorCodes.INVALID_ARGUMENT, error.reason)
 
                     is ChangePasswordError.SameAsCurrentPassword ->
-                        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "New password cannot be the same as the current password")
+                        apiError(
+                            CommonApiErrorCodes.INVALID_ARGUMENT,
+                            "New password cannot be the same as the current password"
+                        )
 
                     is ChangePasswordError.UserNotFound ->
                         apiError(CommonApiErrorCodes.NOT_FOUND, "User not found")
@@ -525,22 +524,7 @@ fun Route.configureAuthRoutes(
                     deviceId = request.deviceId
                 ),
                 HttpStatusCode.Accepted
-            ) { error ->
-                when (error) {
-                    is RequestDeviceVerificationError.UserHasNoEmail ->
-                        apiError(
-                            CommonApiErrorCodes.FAILED_PRECONDITION,
-                            "User has no email address on file. Please add an email to your account first."
-                        )
-
-                    is RequestDeviceVerificationError.RateLimitExceeded ->
-                        apiError(
-                            CommonApiErrorCodes.RATE_LIMIT,
-                            "Verification email already sent. Please check your inbox or try again later.",
-                            "retryAfterSeconds" to (error.retryAfterMillis / 1000).toString()
-                        )
-                }
-            }
+            ) { it.toApiError() }
         }
     }
 }

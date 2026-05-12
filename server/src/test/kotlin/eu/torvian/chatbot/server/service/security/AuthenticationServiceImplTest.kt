@@ -38,6 +38,7 @@ class AuthenticationServiceImplTest {
     private val authorizationService = mockk<AuthorizationService>()
     private val transactionScope = mockk<TransactionScope>()
     private val deviceVerificationTokenDao = mockk<DeviceVerificationTokenDao>()
+    private val securityNotificationService = mockk<SecurityNotificationService>()
 
     private val jwtConfig = JwtConfig(
         secret = "test-secret-key-for-testing-purposes-only",
@@ -62,7 +63,8 @@ class AuthenticationServiceImplTest {
         AccountSecurityMode.DISABLED,
         failedLoginAttemptDao,
         AccountValidationPolicy(),
-        deviceVerificationTokenDao
+        deviceVerificationTokenDao,
+        securityNotificationService
     )
 
     private fun createAuthService(
@@ -81,7 +83,8 @@ class AuthenticationServiceImplTest {
         accountSecurityMode,
         failedLoginAttemptDao,
         AccountValidationPolicy(),
-        deviceVerificationTokenDao
+        deviceVerificationTokenDao,
+        securityNotificationService
     )
 
     private val testUser = UserEntity(

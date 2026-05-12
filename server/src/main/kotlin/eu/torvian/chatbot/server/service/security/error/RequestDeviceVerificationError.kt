@@ -17,6 +17,15 @@ sealed interface RequestDeviceVerificationError {
      * Rate limit exceeded - user can only request one verification email per device per hour.
      */
     data class RateLimitExceeded(val retryAfterMillis: Long) : RequestDeviceVerificationError
+
+    /**
+     * Failed to send the verification notification.
+     *
+     * This can be due to email service failure or other notification delivery issues.
+     *
+     * @property reason A human-readable description of why the notification failed to send.
+     */
+    data class NotificationServiceFailed(val reason: String) : RequestDeviceVerificationError
 }
 
 /**
@@ -35,6 +44,12 @@ fun RequestDeviceVerificationError.toApiError(): ApiError = when (this) {
             "Verification email already sent. Please check your inbox or try again later.",
             "retryAfterSeconds" to (retryAfterMillis / 1000).toString()
         )
+
+    is RequestDeviceVerificationError.NotificationServiceFailed ->
+        apiError(
+            CommonApiErrorCodes.INTERNAL,
+            "Failed to send verification notification: ${this.reason}"
+        )
 }
 
 /**
@@ -45,4 +60,6 @@ fun RequestDeviceVerificationError.toErrorHeaders(): Map<String, String> = when 
 
     is RequestDeviceVerificationError.RateLimitExceeded ->
         mapOf("Retry-After" to (retryAfterMillis / 1000).toString())
+
+    is RequestDeviceVerificationError.NotificationServiceFailed -> emptyMap()
 }

@@ -30,6 +30,7 @@ import java.net.URI
  * @return new [AppConfigDto] containing merged values.
  */
 fun AppConfigDto.merge(other: AppConfigDto?): AppConfigDto = AppConfigDto(
+    serverUrl = other?.serverUrl ?: serverUrl,
     setup = SetupConfigDto(other?.setup?.required ?: setup?.required),
     storage = mergeStorage(storage, other?.storage),
     network = mergeNetwork(network, other?.network),
@@ -38,6 +39,7 @@ fun AppConfigDto.merge(other: AppConfigDto?): AppConfigDto = AppConfigDto(
     database = mergeDatabase(database, other?.database),
     encryption = mergeEncryption(encryption, other?.encryption),
     jwt = mergeJwt(jwt, other?.jwt),
+    email = mergeEmail(email, other?.email),
     accountSecurityMode = other?.accountSecurityMode ?: accountSecurityMode,
     reverseProxy = mergeReverseProxy(reverseProxy, other?.reverseProxy),
     authPolicy = mergeAuthPolicy(authPolicy, other?.authPolicy)
@@ -175,6 +177,19 @@ private fun mergeAuthPolicy(base: AuthPolicyDto?, overlay: AuthPolicyDto?) = Aut
 )
 
 /**
+ * Merge helper for email DTOs.
+ *
+ * @param base Base email DTO
+ * @param overlay Overlay email DTO (takes precedence)
+ * @return merged [EmailConfigDto]
+ */
+private fun mergeEmail(base: EmailConfigDto?, overlay: EmailConfigDto?) = EmailConfigDto(
+    provider = overlay?.provider ?: base?.provider,
+    fromAddress = overlay?.fromAddress ?: base?.fromAddress,
+    properties = (base?.properties ?: emptyMap()) + (overlay?.properties ?: emptyMap())
+)
+
+/**
  * Convert the merged [AppConfigDto] to a strict domain [AppConfiguration].
  *
  * @param baseApplicationPath The parent directory of the config directory, used as the base for
@@ -185,6 +200,7 @@ fun AppConfigDto.toDomain(baseApplicationPath: String): Either<ConfigError.Valid
     val storageConfig = parseStorage(storage, baseApplicationPath)
 
     AppConfiguration(
+        serverUrl = required("serverUrl", serverUrl),
         setupRequired = required("setup.required", setup?.required),
         storage = storageConfig,
         network = parseNetwork(network),
@@ -193,6 +209,7 @@ fun AppConfigDto.toDomain(baseApplicationPath: String): Either<ConfigError.Valid
         database = parseDatabase(database, storageConfig),
         encryption = parseEncryption(encryption),
         jwt = parseJwt(jwt),
+        email = parseEmail(email),
         accountSecurityMode = parseAccountSecurityMode(accountSecurityMode),
         reverseProxy = parseReverseProxy(reverseProxy),
         authPolicy = parseAuthPolicy(authPolicy)
@@ -443,6 +460,45 @@ private fun Raise<ConfigError.ValidationError>.parseAuthPolicy(dto: AuthPolicyDt
         maxFailedAttempts = required("authPolicy.maxFailedAttempts", dto?.maxFailedAttempts),
         lockoutWindowMinutes = required("authPolicy.lockoutWindowMinutes", dto?.lockoutWindowMinutes)
     )
+}
+
+/**
+ * Parse and validate email DTO into domain [EmailConfig].
+ *
+ * Properties ending with "_env" are resolved from environment variables.
+ * For example, "password_env": "SMTP_PASSWORD" will read the value from the
+ * SMTP_PASSWORD environment variable.
+ *
+ * @param dto Nullable DTO for email.
+ * @return The parsed email configuration.
+ */
+private fun Raise<ConfigError.ValidationError>.parseEmail(dto: EmailConfigDto?) = EmailConfig(
+    provider = required("email.provider", dto?.provider),
+    fromAddress = required("email.fromAddress", dto?.fromAddress),
+    properties = resolveEnvProperties(dto?.properties)
+)
+
+/**
+ * Resolve properties that reference environment variables.
+ * Properties with keys ending in "_env" are resolved from the environment.
+ * The value of such a property is the name of the environment variable to read.
+ */
+private fun Raise<ConfigError.ValidationError>.resolveEnvProperties(properties: Map<String, String>?): Map<String, String> {
+    if (properties == null) return emptyMap()
+
+    val result = mutableMapOf<String, String>()
+    for ((key, value) in properties) {
+        if (key.endsWith("_env")) {
+            // This is an environment variable reference
+            val actualKey = key.removeSuffix("_env")
+            val envValue = System.getenv(value)
+                ?: raise(ConfigError.ValidationError.MissingKey("email.properties.$key (env var '$value' not set)"))
+            result[actualKey] = envValue
+        } else {
+            result[key] = value
+        }
+    }
+    return result
 }
 
 /**

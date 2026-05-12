@@ -48,6 +48,22 @@ import kotlin.time.Instant
  * - Token refresh capabilities
  * - Device-based trust with AccountSecurityMode (DISABLED, WARNING, STRICT)
  * - Sliding-window lockout for failed login attempts
+ *
+ * @property userService Service for user-related operations.
+ * @property passwordService Service for password hashing and validation.
+ * @property jwtConfig JWT configuration for token generation.
+ * @property userSessionDao Data access object for user sessions.
+ * @property userTrustedDeviceDao Data access object for trusted devices.
+ * @property securityAuditDao Data access object for security audit logs.
+ * @property userDao Data access object for user data.
+ * @property workerDao Data accessObject for worker data.
+ * @property authorizationService Service for authorization checks.
+ * @property transactionScope Scope for database transactions.
+ * @property accountSecurityMode Mode for device-based security (DISABLED, WARNING, STRICT).
+ * @property failedLoginAttemptDao Data access object for failed login attempts.
+ * @property authPolicy Policy for account validation rules.
+ * @property deviceVerificationTokenDao Data access object for device verification tokens.
+ * @property securityNotificationService Service for sending security notifications (device verification emails).
  */
 class AuthenticationServiceImpl(
     private val userService: UserService,
@@ -63,7 +79,8 @@ class AuthenticationServiceImpl(
     private val accountSecurityMode: AccountSecurityMode,
     private val failedLoginAttemptDao: FailedLoginAttemptDao,
     private val authPolicy: AccountValidationPolicy,
-    private val deviceVerificationTokenDao: DeviceVerificationTokenDao
+    private val deviceVerificationTokenDao: DeviceVerificationTokenDao,
+    private val securityNotificationService: SecurityNotificationService
 ) : AuthenticationService {
 
     companion object {
@@ -932,7 +949,17 @@ class AuthenticationServiceImpl(
                 val currentTimeMillis = System.currentTimeMillis()
                 val expiresAtMillis = currentTimeMillis + rateLimitMillis
 
-                // 5. Store the token
+                // 5. Send device verification email via notification service
+                // Note: We fail the request if email sending fails
+                securityNotificationService.sendDeviceVerification(
+                    userEmail = userEntity.email,
+                    token = token
+                ).mapLeft { mailError ->
+                    logger.warn("Failed to send device verification email: $mailError")
+                    RequestDeviceVerificationError.NotificationServiceFailed(mailError.toString())
+                }.bind()
+
+                // 6. Store the token
                 deviceVerificationTokenDao.createToken(
                     userId = userId,
                     deviceId = deviceId,
@@ -940,16 +967,6 @@ class AuthenticationServiceImpl(
                     expiresAt = expiresAtMillis,
                     createdAt = currentTimeMillis
                 )
-
-                // 6. Mock email - log the verification URL
-                // In production, this would send an actual email
-                val verificationUrl = "http://localhost:8080/api/v1/public/auth/verify-device?token=$token"
-                logger.info("=== DEVICE VERIFICATION EMAIL (MOCK) ===")
-                logger.info("To: ${userEntity.email}")
-                logger.info("Subject: Verify your device")
-                logger.info("Body: Click the following link to trust your device:")
-                logger.info(verificationUrl)
-                logger.info("========================================")
 
                 logger.info("Successfully created device verification token for user: $userId, device: $deviceId")
             }
@@ -1009,7 +1026,17 @@ class AuthenticationServiceImpl(
                 val currentTimeMillis = System.currentTimeMillis()
                 val expiresAtMillis = currentTimeMillis + rateLimitMillis
 
-                // 7. Store the token
+                // 7. Send device verification email via notification service
+                // Note: We fail the request if email sending fails
+                securityNotificationService.sendDeviceVerification(
+                    userEmail = email,
+                    token = token
+                ).mapLeft { mailError ->
+                    logger.warn("Failed to send public device verification email: $mailError")
+                    RequestDeviceVerificationError.NotificationServiceFailed(mailError.toString())
+                }.bind()
+
+                // 8. Store the token
                 deviceVerificationTokenDao.createToken(
                     userId = userEntity.id,
                     deviceId = deviceId,
@@ -1017,16 +1044,6 @@ class AuthenticationServiceImpl(
                     expiresAt = expiresAtMillis,
                     createdAt = currentTimeMillis
                 )
-
-                // 8. Mock email - log the verification URL
-                // In production, this would send an actual email
-                val verificationUrl = "http://localhost:8080/api/v1/public/auth/verify-device?token=$token"
-                logger.info("=== DEVICE VERIFICATION EMAIL (MOCK) ===")
-                logger.info("To: $email")
-                logger.info("Subject: Verify your device")
-                logger.info("Body: Click the following link to trust your device:")
-                logger.info(verificationUrl)
-                logger.info("========================================")
 
                 logger.info("Successfully created public device verification token for user: ${userEntity.id}, device: $deviceId")
             }

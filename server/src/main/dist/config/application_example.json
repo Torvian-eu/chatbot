@@ -7,6 +7,8 @@
     - The data directory (database, keystore) is always a sibling of the config directory.
   */
 
+  "serverUrl": "http://localhost:8080",
+
   "storage": {
     "dataDir": "data",
     "databaseFilename": "chatbot.db",
@@ -57,6 +59,22 @@
     "tokenExpirationMs": 86400000,
     "refreshExpirationMs": 604800000
     /* jwt.secret must be set in secrets.json or via environment variable */
+  },
+
+  "email": {
+    "provider": "log",
+    "fromAddress": "noreply@chatbot.local",
+    "properties": {
+      /* SMTP properties (when provider is "smtp"):
+       * Use "_env" suffix to read from environment variables:
+       * "host": "smtp.example.com",
+       * "port": "587",
+       * "user_env": "SMTP_USER",
+       * "password_env": "SMTP_PASSWORD",
+       * "auth": "true",
+       * "starttls": "true"
+       */
+    }
   },
 
   "accountSecurityMode" : "WARNING",

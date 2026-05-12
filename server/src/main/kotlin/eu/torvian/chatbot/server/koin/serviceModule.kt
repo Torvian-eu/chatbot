@@ -7,6 +7,9 @@ import eu.torvian.chatbot.common.security.PasswordValidator
 import eu.torvian.chatbot.server.config.AppConfiguration
 import eu.torvian.chatbot.server.service.core.*
 import eu.torvian.chatbot.server.service.core.impl.*
+import eu.torvian.chatbot.server.service.email.LoggingMailService
+import eu.torvian.chatbot.server.service.email.MailService
+import eu.torvian.chatbot.server.service.email.SmtpMailService
 import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutor
 import eu.torvian.chatbot.server.service.security.*
 import eu.torvian.chatbot.server.service.security.authorizer.*
@@ -77,6 +80,28 @@ fun serviceModule() = module {
     single<CredentialManager> { DbEncryptedCredentialManager(get(), get()) }
     single<CertificateService> { DefaultCertificateService() }
 
+    // --- Mail Service (pluggable transport) ---
+    single<MailService> {
+        val config = get<AppConfiguration>()
+        when (config.email.provider.lowercase()) {
+            "smtp" -> SmtpMailService(
+                fromAddress = config.email.fromAddress,
+                properties = config.email.properties
+            )
+            else -> LoggingMailService(
+                fromAddress = config.email.fromAddress
+            )
+        }
+    }
+
+    // --- Security Notification Service ---
+    single<SecurityNotificationService> {
+        SecurityNotificationServiceImpl(
+            mailService = get(),
+            serverUrl = get<AppConfiguration>().serverUrl
+        )
+    }
+
     // --- Authentication Services ---
     single<PasswordService> {
         BCryptPasswordService(PasswordValidator(get<AppConfiguration>().authPolicy.passwordConfig))
@@ -98,6 +123,7 @@ fun serviceModule() = module {
             failedLoginAttemptDao = get(),
             authPolicy = get(),
             deviceVerificationTokenDao = get(),
+            securityNotificationService = get()
         )
     }
     single<WorkerService> { WorkerServiceImpl(get(), get(), get()) }
