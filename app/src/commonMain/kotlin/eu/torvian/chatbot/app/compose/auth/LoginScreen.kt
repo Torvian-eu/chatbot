@@ -50,6 +50,9 @@ fun LoginScreen(
         onNavigateToRegister = onNavigateToRegister,
         onSwitchAccount = { userId ->
             authViewModel.switchAccount(userId)
+        },
+        onRequestVerification = {
+            authViewModel.requestPublicVerification()
         }
     )
 }
@@ -64,7 +67,8 @@ fun LoginScreenContent(
     onPasswordChange: (String) -> Unit,
     onLogin: () -> Unit,
     onNavigateToRegister: () -> Unit,
-    onSwitchAccount: (Long) -> Unit
+    onSwitchAccount: (Long) -> Unit,
+    onRequestVerification: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -130,12 +134,12 @@ fun LoginScreenContent(
                 AuthTextField(
                     value = loginFormState.username,
                     onValueChange = onUsernameChange,
-                    label = "Username or Email",
+                    label = "Username",
                     isError = loginFormState.usernameError != null,
                     errorMessage = loginFormState.usernameError,
-                    keyboardType = KeyboardType.Email,
+                    keyboardType = KeyboardType.Text,
                     imeAction = ImeAction.Next,
-                    enabled = !loginFormState.isLoading
+                    enabled = !loginFormState.isLoading && !loginFormState.isVerifying
                 )
 
                 // Password Field
@@ -151,7 +155,7 @@ fun LoginScreenContent(
                             onLogin()
                         }
                     },
-                    enabled = !loginFormState.isLoading
+                    enabled = !loginFormState.isLoading && !loginFormState.isVerifying
                 )
 
                 // General Error Message
@@ -162,14 +166,64 @@ fun LoginScreenContent(
                     )
                 }
 
-                // Login Button
-                AuthButton(
-                    onClick = onLogin,
-                    text = "Sign In",
-                    isLoading = loginFormState.isLoading,
-                    enabled = loginFormState.isValid,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
+                // Verification Results (Success or Error) - shown outside the trigger block
+                loginFormState.verificationMessage?.let { message ->
+                    if (loginFormState.isVerificationSuccess) {
+                        SuccessMessage(
+                            message = message,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    } else {
+                        ErrorMessage(
+                            message = message,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+                }
+
+                // Verification Trigger - shown when VERIFICATION_REQUIRED error occurs
+                if (loginFormState.showVerificationTrigger && !loginFormState.isVerificationSuccess) {
+                    Column(
+                        modifier = Modifier.padding(top = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "This device is not recognized. You can request a verification email to verify it.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        // Buttons side-by-side: Request Verification and Sign In
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            AuthButton(
+                                onClick = onRequestVerification,
+                                text = "Verify via Email",
+                                isLoading = loginFormState.isVerifying,
+                                enabled = !loginFormState.isVerifying,
+                                isPrimary = false,
+                                modifier = Modifier.weight(1f)
+                            )
+                            AuthButton(
+                                onClick = onLogin,
+                                text = "Sign In",
+                                isLoading = loginFormState.isLoading,
+                                enabled = loginFormState.isValid && !loginFormState.isVerifying,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                } else {
+                    // Login Button (when no verification needed)
+                    AuthButton(
+                        onClick = onLogin,
+                        text = "Sign In",
+                        isLoading = loginFormState.isLoading,
+                        enabled = loginFormState.isValid && !loginFormState.isVerifying,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
             }
         }
 
@@ -186,7 +240,7 @@ fun LoginScreenContent(
             )
             TextButton(
                 onClick = onNavigateToRegister,
-                enabled = !loginFormState.isLoading
+                enabled = !loginFormState.isLoading && !loginFormState.isVerifying
             ) {
                 Text("Sign Up")
             }

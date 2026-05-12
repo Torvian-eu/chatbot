@@ -1,9 +1,13 @@
 package eu.torvian.chatbot.server.ktor.routes
 
 import eu.torvian.chatbot.common.api.resources.PublicAuthResource
+import eu.torvian.chatbot.common.models.api.auth.RequestPublicDeviceVerificationRequest
 import eu.torvian.chatbot.server.service.security.AuthenticationService
 import eu.torvian.chatbot.server.service.security.error.VerifyDeviceError
+import eu.torvian.chatbot.server.service.security.error.toApiError
+import eu.torvian.chatbot.server.service.security.error.toErrorHeaders
 import io.ktor.http.*
+import io.ktor.server.request.*
 import io.ktor.server.resources.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.Route
@@ -80,6 +84,23 @@ fun Route.configurePublicAuthRoutes(
                     status = HttpStatusCode.Found
                 )
             }
+        )
+    }
+
+    // POST /api/public/auth/request-device-verification - Request a device verification email from a new device
+    // This is a public endpoint for users blocked by STRICT mode on new devices
+    // Relies on rate-limiting and trust-checks to prevent abuse
+    post<PublicAuthResource.RequestPublicDeviceVerification> {
+        val request = call.receive<RequestPublicDeviceVerificationRequest>()
+
+        call.respondEither(
+            authenticationService.requestPublicDeviceVerification(
+                username = request.username,
+                deviceId = request.deviceId
+            ),
+            successCode = HttpStatusCode.Accepted,
+            errorHeaders = { it.toErrorHeaders() },
+            errorMapping = { it.toApiError() }
         )
     }
 }

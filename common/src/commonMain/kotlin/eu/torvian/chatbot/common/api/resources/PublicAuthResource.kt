@@ -6,7 +6,7 @@ import io.ktor.resources.*
  * Top-level resource for the public API endpoints.
  * These endpoints do not require authentication.
  */
-@Resource("/api/public")
+@Resource("/api/v1/public")
 class PublicApi
 
 /**
@@ -25,4 +25,13 @@ class PublicAuthResource(val parent: PublicApi = PublicApi()) {
      */
     @Resource("verify-device")
     class VerifyDevice(val parent: PublicAuthResource = PublicAuthResource(), val token: String)
+
+    /**
+     * Resource for requesting a device verification email from a new device: /api/public/auth/request-device-verification
+     *
+     * This is a POST endpoint for users blocked by STRICT mode on new devices.
+     * Requires valid username and password to prevent abuse.
+     */
+    @Resource("request-device-verification")
+    class RequestPublicDeviceVerification(val parent: PublicAuthResource = PublicAuthResource())
 }

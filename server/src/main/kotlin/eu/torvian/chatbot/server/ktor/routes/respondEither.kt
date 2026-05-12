@@ -12,6 +12,7 @@ import io.ktor.server.response.*
  *
  * @param either The result of an operation, either a success value (R) or an error (L).
  * @param successCode The HTTP status code to use for a successful (Right) response. Defaults to OK.
+ * @param errorHeaders Optional headers to add to error responses.
  * @param errorMapping A function to map the error object (L) to an ApiError object.
  *                     The HTTP status code will be taken from the ApiError object itself.
  *                     Defaults to a generic INTERNAL ApiError with status 500.
@@ -19,6 +20,7 @@ import io.ktor.server.response.*
 suspend inline fun <reified R : Any, reified L : Any> ApplicationCall.respondEither(
     either: Either<L, R>,
     successCode: HttpStatusCode = HttpStatusCode.OK,
+    noinline errorHeaders: (L) -> Map<String, String> = { emptyMap() },
     noinline errorMapping: (L) -> ApiError
 ) {
     when (either) {
@@ -35,6 +37,10 @@ suspend inline fun <reified R : Any, reified L : Any> ApplicationCall.respondEit
         is Either.Left -> {
             val apiError = errorMapping(either.value)
             val status = HttpStatusCode.fromValue(apiError.statusCode)
+            // Add custom headers to the error response
+            errorHeaders(either.value).forEach { (key, value) ->
+                response.headers.append(key, value)
+            }
             respond(status, apiError)
         }
     }

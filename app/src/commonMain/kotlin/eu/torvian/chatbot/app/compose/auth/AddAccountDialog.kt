@@ -82,10 +82,10 @@ fun AddAccountDialog(
                     AuthTextField(
                         value = loginFormState.username,
                         onValueChange = onUsernameChange,
-                        label = "Username or Email",
+                        label = "Username",
                         isError = loginFormState.usernameError != null,
                         errorMessage = loginFormState.usernameError,
-                        keyboardType = KeyboardType.Email,
+                        keyboardType = KeyboardType.Text,
                         imeAction = ImeAction.Next,
                         enabled = !loginFormState.isLoading
                     )

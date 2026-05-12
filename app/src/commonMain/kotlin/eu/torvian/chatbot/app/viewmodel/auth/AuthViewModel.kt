@@ -180,7 +180,10 @@ class AuthViewModel(
                     isLoading = true,
                     usernameError = null,
                     passwordError = null,
-                    generalError = null
+                    generalError = null,
+                    showVerificationTrigger = false,
+                    verificationMessage = null,
+                    isVerificationSuccess = false
                 )
             }
 
@@ -190,11 +193,22 @@ class AuthViewModel(
             result.fold(
                 ifLeft = { error ->
                     logger.warn("Login failed for user $username: ${error.message}")
-                    _loginFormState.update { currentState ->
-                        currentState.copy(
-                            isLoading = false,
-                            generalError = mapLoginError(error)
-                        )
+                    if (error.matches(CommonApiErrorCodes.VERIFICATION_REQUIRED)) {
+                        // Show verification trigger for public device verification
+                        _loginFormState.update { currentState ->
+                            currentState.copy(
+                                isLoading = false,
+                                showVerificationTrigger = true,
+                                generalError = null
+                            )
+                        }
+                    } else {
+                        _loginFormState.update { currentState ->
+                            currentState.copy(
+                                isLoading = false,
+                                generalError = mapLoginError(error)
+                            )
+                        }
                     }
                 },
                 ifRight = {
@@ -918,6 +932,71 @@ class AuthViewModel(
                     }
                 }
             _isRequestingVerification.value = false
+        }
+    }
+
+    /**
+     * Requests a public device verification email for a new device.
+     *
+     * This method is used when login fails with VERIFICATION_REQUIRED error.
+     * It calls the public API endpoint to request a verification email.
+     * On success, updates the login form state with a success message.
+     * On RATE_LIMIT error, extracts retryAfterSeconds and formats a user-friendly message.
+     */
+    fun requestPublicVerification() {
+        viewModelScope.launch {
+            val username = _loginFormState.value.username
+
+            _loginFormState.update { currentState ->
+                currentState.copy(
+                    isVerifying = true,
+                    verificationMessage = null
+                )
+            }
+
+            authRepository.requestPublicDeviceVerification(username)
+                .onLeft { error ->
+                    val errorMessage = when {
+                        error.matches(CommonApiErrorCodes.RATE_LIMIT) -> {
+                            // Extract retryAfterSeconds from error details
+                            val retryAfterSeconds = (error as? RepositoryError.DataFetchError)
+                                ?.apiResourceError
+                                ?.let { it as? ApiResourceError.ServerError }
+                                ?.apiError?.details?.get("retryAfterSeconds")
+                                ?.toLongOrNull()
+
+                            if (retryAfterSeconds != null) {
+                                val minutes = ceil(retryAfterSeconds / 60.0).toLong()
+                                "Email already sent. Please wait $minutes minute${if (minutes != 1L) "s" else ""} before trying again."
+                            } else {
+                                "Email already sent. Please wait before trying again."
+                            }
+                        }
+                        error.matches(CommonApiErrorCodes.FAILED_PRECONDITION) -> {
+                            "User has no email address on file. Please add an email to your account first."
+                        }
+                        else -> "Failed to request verification email. Please try again."
+                    }
+                    _loginFormState.update { currentState ->
+                        currentState.copy(
+                            isVerifying = false,
+                            verificationMessage = errorMessage,
+                            isVerificationSuccess = false
+                        )
+                    }
+                    logger.warn("Failed to request public device verification: ${error.message}")
+                }
+                .onRight {
+                    _loginFormState.update { currentState ->
+                        currentState.copy(
+                            isVerifying = false,
+                            verificationMessage = "Verification email sent! Please check your inbox and click the link to verify your device.",
+                            isVerificationSuccess = true,
+                            showVerificationTrigger = false
+                        )
+                    }
+                    logger.info("Public device verification email sent successfully")
+                }
         }
     }
 

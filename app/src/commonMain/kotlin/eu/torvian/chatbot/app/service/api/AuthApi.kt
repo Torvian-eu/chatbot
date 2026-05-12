@@ -161,6 +161,18 @@ interface AuthApi {
     suspend fun requestDeviceVerification(deviceId: String): Either<ApiResourceError, Unit>
 
     /**
+     * Requests a device verification email for a new device using public authentication.
+     *
+     * This endpoint is for users blocked by STRICT mode on new devices. It allows
+     * requesting a verification email without an existing authenticated session.
+     *
+     * @param username The username of the account
+     * @param deviceId The client-side UUID of the device to verify
+     * @return Either an [ApiResourceError] on failure or Unit on success
+     */
+    suspend fun requestPublicDeviceVerification(username: String, deviceId: String): Either<ApiResourceError, Unit>
+
+    /**
      * Fetches the server's account validation policy.
      *
      * This endpoint is publicly accessible and returns the configured password

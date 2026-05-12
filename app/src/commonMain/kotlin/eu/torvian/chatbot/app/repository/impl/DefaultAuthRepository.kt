@@ -473,6 +473,30 @@ class DefaultAuthRepository(
         logger.info("Device verification email sent successfully")
     }
 
+    override suspend fun requestPublicDeviceVerification(username: String): Either<RepositoryError, Unit> = either {
+        logger.info("Requesting public device verification email for user: $username")
+
+        // Resolve device ID internally - this is the key change that moves device ID handling to the repository layer
+        val deviceId = withError({ error ->
+            _authState.value = AuthState.Unauthenticated
+            val errorMessage = when (error) {
+                is DeviceIdentityError.PersistenceFailure -> error.message
+                is DeviceIdentityError.ReadFailure -> error.message
+            }
+            RepositoryError.OtherError("Failed to resolve device identity: $errorMessage")
+        }) {
+            deviceIdentityService.getOrCreateDeviceId().bind()
+        }
+
+        withError({ apiError ->
+            apiError.toRepositoryError("Failed to request public device verification")
+        }) {
+            authApi.requestPublicDeviceVerification(username, deviceId).bind()
+        }
+
+        logger.info("Public device verification email sent successfully")
+    }
+
     override suspend fun refreshSession(): Either<RepositoryError, Unit> = either {
         logger.info("Refreshing session to check for restriction status update")
 

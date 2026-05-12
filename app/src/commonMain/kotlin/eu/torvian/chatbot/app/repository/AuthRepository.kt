@@ -198,6 +198,17 @@ interface AuthRepository {
     suspend fun requestDeviceVerification(deviceId: String): Either<RepositoryError, Unit>
 
     /**
+     * Requests a device verification email for a new device using public authentication.
+     *
+     * This is for users blocked by STRICT mode on new devices. The repository resolves
+     * the device ID internally and calls the public API endpoint.
+     *
+     * @param username The username of the account
+     * @return Either a [RepositoryError] on failure or Unit on success
+     */
+    suspend fun requestPublicDeviceVerification(username: String): Either<RepositoryError, Unit>
+
+    /**
      * Refreshes the current session by obtaining a new token using the stored refresh token.
      *
      * This is used to check if the user's session has been promoted from restricted to unrestricted

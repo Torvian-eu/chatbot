@@ -233,6 +233,7 @@ class AuthenticationServiceImplTest {
         // User already has trusted devices, so this is not the first device
         coEvery { userTrustedDeviceDao.getTrustedDevicesCount(testUser.id) } returns 1
         coEvery { userTrustedDeviceDao.getTrustedDevice(testUser.id, deviceId) } returns null
+        // Audit record is inserted outside the transaction for STRICT mode
         coEvery {
             securityAuditDao.insertAuditRecord(
                 userId = testUser.id,
@@ -245,8 +246,10 @@ class AuthenticationServiceImplTest {
         val result = strictAuthService.login(username, password, ipAddress, deviceId)
 
         assertTrue(result.isLeft())
-        assertEquals(LoginError.VerificationRequired, result.leftOrNull())
+        assertEquals(LoginError.VerificationRequired(testUser.id), result.leftOrNull())
         coVerify(exactly = 0) { userSessionDao.insertSession(any(), any(), any(), any()) }
+        // Verify audit record was inserted outside the transaction
+        coVerify { securityAuditDao.insertAuditRecord(testUser.id, deviceId, ipAddress, any()) }
     }
 
     @Test

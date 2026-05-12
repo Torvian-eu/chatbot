@@ -19,6 +19,9 @@ sealed interface RequestDeviceVerificationError {
     data class RateLimitExceeded(val retryAfterMillis: Long) : RequestDeviceVerificationError
 }
 
+/**
+ * Converts this error to an [ApiError] for HTTP response.
+ */
 fun RequestDeviceVerificationError.toApiError(): ApiError = when (this) {
     is RequestDeviceVerificationError.UserHasNoEmail ->
         apiError(
@@ -32,4 +35,14 @@ fun RequestDeviceVerificationError.toApiError(): ApiError = when (this) {
             "Verification email already sent. Please check your inbox or try again later.",
             "retryAfterSeconds" to (retryAfterMillis / 1000).toString()
         )
+}
+
+/**
+ * Returns additional HTTP headers to include in the error response.
+ */
+fun RequestDeviceVerificationError.toErrorHeaders(): Map<String, String> = when (this) {
+    is RequestDeviceVerificationError.UserHasNoEmail -> emptyMap()
+
+    is RequestDeviceVerificationError.RateLimitExceeded ->
+        mapOf("Retry-After" to (retryAfterMillis / 1000).toString())
 }

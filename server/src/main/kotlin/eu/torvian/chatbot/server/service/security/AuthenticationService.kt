@@ -286,6 +286,30 @@ interface AuthenticationService {
     ): Either<RequestDeviceVerificationError, Unit>
 
     /**
+     * Requests a device verification email for a specific device from a public endpoint.
+     *
+     * This is for users blocked by STRICT mode on new devices who cannot authenticate normally.
+     * The endpoint relies on rate-limiting, trust-checks, and audit record verification to prevent abuse.
+     *
+     * Security behavior:
+     * - If the device is already trusted for the user: returns success without sending email (silent skip)
+     * - If the user doesn't exist: returns success without sending email (prevents account enumeration)
+     * - If no PENDING security audit record exists for the user/device: returns success without sending email (silent skip)
+     * - If rate limit is exceeded: returns [RequestDeviceVerificationError.RateLimitExceeded]
+     * - If user has no email: returns [RequestDeviceVerificationError.UserHasNoEmail]
+     *
+     * Rate limiting: A user can only request one verification email per device every 60 minutes.
+     *
+     * @param username The username of the account.
+     * @param deviceId The device identifier to verify.
+     * @return Either [RequestDeviceVerificationError] if the request fails, or Unit on success
+     */
+    suspend fun requestPublicDeviceVerification(
+        username: String,
+        deviceId: String
+    ): Either<RequestDeviceVerificationError, Unit>
+
+    /**
      * Verifies a device using a token from an email verification link.
      *
      * This method:

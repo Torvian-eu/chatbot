@@ -12,7 +12,11 @@ data class LoginFormState(
     val isLoading: Boolean = false,
     val usernameError: String? = null,
     val passwordError: String? = null,
-    val generalError: String? = null
+    val generalError: String? = null,
+    val showVerificationTrigger: Boolean = false,
+    val isVerifying: Boolean = false,
+    val verificationMessage: String? = null,
+    val isVerificationSuccess: Boolean = false
 ) {
     val isValid: Boolean
         get() = username.isNotBlank() &&

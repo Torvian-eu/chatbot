@@ -19,6 +19,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.common.security.PasswordValidationConfig
 import eu.torvian.chatbot.common.security.UsernameValidationConfig
@@ -131,6 +132,13 @@ fun PasswordTextField(
 
 /**
  * Loading button component for authentication actions.
+ *
+ * @param onClick The click callback for the button.
+ * @param text The text to display on the button.
+ * @param modifier Optional modifier for the button.
+ * @param isLoading Whether to show a loading spinner instead of the text.
+ * @param enabled Whether the button is enabled.
+ * @param isPrimary If true, renders as a filled button; if false, renders as an outlined button.
  */
 @Composable
 fun AuthButton(
@@ -138,22 +146,42 @@ fun AuthButton(
     text: String,
     modifier: Modifier = Modifier,
     isLoading: Boolean = false,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    isPrimary: Boolean = true
 ) {
-    Button(
-        onClick = onClick,
-        enabled = enabled && !isLoading,
-        modifier = modifier.fillMaxWidth()
-    ) {
-        if (isLoading) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(16.dp),
-                strokeWidth = 2.dp,
-                color = MaterialTheme.colorScheme.onPrimary
-            )
-            Spacer(modifier = Modifier.width(8.dp))
+    if (isPrimary) {
+        Button(
+            onClick = onClick,
+            enabled = enabled && !isLoading,
+            modifier = modifier
+        ) {
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+            Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Text(text)
+    } else {
+        OutlinedButton(
+            onClick = onClick,
+            enabled = enabled && !isLoading,
+            modifier = modifier,
+            colors = ButtonDefaults.outlinedButtonColors()
+        ) {
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+            Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
     }
 }
 

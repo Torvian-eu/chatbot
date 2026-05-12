@@ -183,12 +183,29 @@ class AuthenticationServiceImpl(
                     failedLoginAttemptDao.recordFailure(username, effectiveIpAddress, deviceId)
                     // Cleanup old records to prevent database bloat
                     failedLoginAttemptDao.cleanupOldRecords(windowStartMillis)
+                } else if (error is LoginError.VerificationRequired) {
+                    // Insert audit record for STRICT mode login attempt (outside transaction so it persists)
+                    securityAuditDao.insertAuditRecord(
+                        userId = error.userId,
+                        deviceId = deviceId,
+                        ipAddress = effectiveIpAddress,
+                        createdAt = currentTimeMillis
+                    )
                 }
             },
-            ifRight = {
+            ifRight = { loginResult ->
                 // Clear failed login attempts on successful login
                 // Only clears username-based failures, IP-based failures remain to prevent reset attacks
                 failedLoginAttemptDao.clearFailures(username)
+                // Insert audit record for WARNING mode login (restricted session)
+                if (loginResult.isRestricted) {
+                    securityAuditDao.insertAuditRecord(
+                        userId = loginResult.user.id,
+                        deviceId = deviceId,
+                        ipAddress = effectiveIpAddress,
+                        createdAt = currentTimeMillis
+                    )
+                }
             }
         )
         return result
@@ -238,29 +255,18 @@ class AuthenticationServiceImpl(
 
         // Check if this device is already trusted for this user
         val trustedDevice = userTrustedDeviceDao.getTrustedDevice(userId, normalizedDeviceId)
-
-        if (trustedDevice == null) {
-            // Unknown device - create audit record
-            securityAuditDao.insertAuditRecord(
-                userId = userId,
-                deviceId = normalizedDeviceId,
-                ipAddress = ipAddress,
-                createdAt = currentTimeMillis
-            )
-
-            // Apply security mode policy
-            return when (accountSecurityMode) {
+            ?: // Unknown device - apply security mode policy
+            when (accountSecurityMode) {
                 AccountSecurityMode.STRICT -> {
                     // Block unknown devices in STRICT mode
-                    raise(LoginError.VerificationRequired)
+                    raise(LoginError.VerificationRequired(userId))
                 }
 
                 AccountSecurityMode.WARNING -> {
                     // Restrict session for unknown devices in WARNING mode
-                    true
+                    return true
                 }
             }
-        }
 
         // Known device found - update last used info and allow unrestricted session
         userTrustedDeviceDao.updateLastUsedAt(
@@ -937,7 +943,7 @@ class AuthenticationServiceImpl(
 
                 // 6. Mock email - log the verification URL
                 // In production, this would send an actual email
-                val verificationUrl = "http://localhost:8080/api/public/auth/verify-device?token=$token"
+                val verificationUrl = "http://localhost:8080/api/v1/public/auth/verify-device?token=$token"
                 logger.info("=== DEVICE VERIFICATION EMAIL (MOCK) ===")
                 logger.info("To: ${userEntity.email}")
                 logger.info("Subject: Verify your device")
@@ -946,6 +952,83 @@ class AuthenticationServiceImpl(
                 logger.info("========================================")
 
                 logger.info("Successfully created device verification token for user: $userId, device: $deviceId")
+            }
+        }
+
+    override suspend fun requestPublicDeviceVerification(
+        username: String,
+        deviceId: String
+    ): Either<RequestDeviceVerificationError, Unit> =
+        transactionScope.transaction {
+            either {
+                logger.info("Requesting public device verification for username: $username, device: $deviceId")
+
+                // 1. Find user by username
+                val userEntity = userDao.getUserByUsername(username).mapLeft {
+                    // User not found - return success to prevent account enumeration
+                    logger.info("Public device verification: user not found (returning success for security)")
+                    return@either
+                }.bind()
+
+                // 2. Check if device is already trusted for this user (silent skip)
+                val existingTrustedDevice = userTrustedDeviceDao.getTrustedDevice(userEntity.id, deviceId)
+                if (existingTrustedDevice != null) {
+                    logger.info("Public device verification: device already trusted for user ${userEntity.id} (silent skip)")
+                    return@either
+                }
+
+                // 3. Check for PENDING security audit record for this user/device
+                // This ensures a valid login attempt was recently made from this device
+                val pendingAudits = securityAuditDao.getUnacknowledgedByUserIdAndDeviceId(userEntity.id, deviceId)
+                if (pendingAudits.isEmpty()) {
+                    logger.info("Public device verification: no pending audit record for user ${userEntity.id}, device $deviceId (silent skip)")
+                    return@either
+                }
+
+                // 4. Check user has an email address
+                val email = userEntity.email
+                if (email.isNullOrBlank()) {
+                    logger.warn("User ${userEntity.id} has no email address on file")
+                    raise(RequestDeviceVerificationError.UserHasNoEmail)
+                }
+
+                // 5. Check rate limit (1 hour = 3600000 ms)
+                val rateLimitMillis = 60 * 60 * 1000L
+                val lastTokenCreatedAt = deviceVerificationTokenDao.getLastTokenCreatedAt(userEntity.id, deviceId)
+                if (lastTokenCreatedAt != null) {
+                    val timeSinceLastToken = System.currentTimeMillis() - lastTokenCreatedAt
+                    if (timeSinceLastToken < rateLimitMillis) {
+                        val retryAfterMillis = rateLimitMillis - timeSinceLastToken
+                        logger.warn("Rate limit exceeded for user: ${userEntity.id}, device: $deviceId")
+                        raise(RequestDeviceVerificationError.RateLimitExceeded(retryAfterMillis))
+                    }
+                }
+
+                // 6. Generate secure token (UUID)
+                val token = java.util.UUID.randomUUID().toString()
+                val currentTimeMillis = System.currentTimeMillis()
+                val expiresAtMillis = currentTimeMillis + rateLimitMillis
+
+                // 7. Store the token
+                deviceVerificationTokenDao.createToken(
+                    userId = userEntity.id,
+                    deviceId = deviceId,
+                    token = token,
+                    expiresAt = expiresAtMillis,
+                    createdAt = currentTimeMillis
+                )
+
+                // 8. Mock email - log the verification URL
+                // In production, this would send an actual email
+                val verificationUrl = "http://localhost:8080/api/v1/public/auth/verify-device?token=$token"
+                logger.info("=== DEVICE VERIFICATION EMAIL (MOCK) ===")
+                logger.info("To: $email")
+                logger.info("Subject: Verify your device")
+                logger.info("Body: Click the following link to trust your device:")
+                logger.info(verificationUrl)
+                logger.info("========================================")
+
+                logger.info("Successfully created public device verification token for user: ${userEntity.id}, device: $deviceId")
             }
         }
 
