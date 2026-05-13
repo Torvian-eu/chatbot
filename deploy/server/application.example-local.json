@@ -61,16 +61,20 @@
 
   "email": {
     "provider": "log",
-    "fromAddress": "noreply@chatbot.local",
+    /* Use your real domain name here to avoid outbound emails getting marked as spam: */
+    "fromAddress": "noreply@yourdomain.com",
     "properties": {
       /* SMTP properties (when provider is "smtp"):
        * Use "_env" suffix to read from environment variables:
-       * "host": "smtp.example.com",
+       * "host": "mail.example.com",
        * "port": "587",
        * "user_env": "SMTP_USER",
        * "password_env": "SMTP_PASSWORD",
        * "auth": "true",
-       * "starttls": "true"
+       * "starttls": "true",
+       * Setting "debug" to "true" will log the full SMTP conversation:
+       * "debug": "false",
+       * "mail.smtp.ssl.trust": "mail.example.com"
        */
     }
   },

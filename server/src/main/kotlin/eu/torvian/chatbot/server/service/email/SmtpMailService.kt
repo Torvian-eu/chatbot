@@ -34,8 +34,10 @@ import java.net.UnknownHostException
  *   - "port": The SMTP server port (required)
  *   - "user": The username for authentication (required)
  *   - "password": The password for authentication (required)
- *   - "starttls": Boolean ("true"/"false") to enable STARTTLS (optional, default: false)
+ *   - "starttls": Boolean ("true"/"false") to enable STARTTLS (optional, default: true)
  *   - "auth": Boolean ("true"/"false") to enable authentication (optional, default: true)
+ *   - "debug": Boolean ("true"/"false") to enable protocol debug output (optional, default: false)
+ *   - Any key starting with "mail." is passed through as a Jakarta Mail property (e.g., "mail.smtp.ssl.trust")
  */
 class SmtpMailService(
     private val fromAddress: String,
@@ -59,6 +61,12 @@ class SmtpMailService(
             put("mail.smtp.port", port.toString())
             put("mail.smtp.auth", properties["auth"]?.toBooleanStrictOrNull()?.toString() ?: "true")
             put("mail.smtp.starttls.enable", properties["starttls"]?.toBooleanStrictOrNull()?.toString() ?: "true")
+            // Set modern TLS protocols by default for handshake compatibility
+            put("mail.smtp.ssl.protocols", "TLSv1.2 TLSv1.3")
+            // Pass-through any property starting with "mail."
+            properties.filterKeys { it.startsWith("mail.", true) }.forEach { (key, value) ->
+                put(key, value)
+            }
         }
 
         // Create session with authenticator
@@ -67,6 +75,11 @@ class SmtpMailService(
                 return PasswordAuthentication(user, password)
             }
         })
+
+        // Enable debug mode if configured
+        if (properties["debug"]?.toBooleanStrictOrNull() == true) {
+            session.setDebug(true)
+        }
 
         try {
             // Create and configure the message
