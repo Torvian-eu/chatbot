@@ -4,11 +4,26 @@ import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.server.service.email.error.MailError
+import jakarta.mail.Authenticator
+import jakarta.mail.AuthenticationFailedException
+import jakarta.mail.Message
+import jakarta.mail.MessagingException
+import jakarta.mail.PasswordAuthentication
+import jakarta.mail.SendFailedException
+import jakarta.mail.Session
+import jakarta.mail.Transport
+import jakarta.mail.internet.InternetAddress
+import jakarta.mail.internet.MimeMessage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
+import java.io.IOException
+import java.net.SocketException
+import java.net.UnknownHostException
 
 /**
- * A mail service implementation that sends emails via SMTP.
+ * A mail service implementation that sends emails via SMTP using Jakarta Mail (Angus Mail).
  *
  * This implementation retrieves SMTP configuration from a properties map,
  * allowing for flexible configuration without hardcoding specific properties.
@@ -19,7 +34,8 @@ import org.apache.logging.log4j.Logger
  *   - "port": The SMTP server port (required)
  *   - "user": The username for authentication (required)
  *   - "password": The password for authentication (required)
- *   - "ssl": Whether to use SSL (optional, default: false)
+ *   - "starttls": Boolean ("true"/"false") to enable STARTTLS (optional, default: false)
+ *   - "auth": Boolean ("true"/"false") to enable authentication (optional, default: true)
  */
 class SmtpMailService(
     private val fromAddress: String,
@@ -30,23 +46,77 @@ class SmtpMailService(
         private val logger: Logger = LogManager.getLogger(SmtpMailService::class.java)
     }
 
-    override suspend fun sendMail(to: String, subject: String, body: String): Either<MailError, Unit> {
+    override suspend fun sendMail(to: String, subject: String, body: String): Either<MailError, Unit> = withContext(Dispatchers.IO) {
         // Validate required configuration
-        val host = properties["host"] ?: return MailError.ConfigurationMissing("host").left()
-        val port = properties["port"] ?: return MailError.ConfigurationMissing("port").left()
-        val user = properties["user"] ?: return MailError.ConfigurationMissing("user").left()
-        val password = properties["password"] ?: return MailError.ConfigurationMissing("password").left()
+        val host = properties["host"] ?: return@withContext MailError.ConfigurationMissing("host").left()
+        val port = properties["port"]?.toIntOrNull() ?: return@withContext MailError.ConfigurationMissing("port").left()
+        val user = properties["user"] ?: return@withContext MailError.ConfigurationMissing("user").left()
+        val password = properties["password"] ?: return@withContext MailError.ConfigurationMissing("password").left()
 
-        // TODO: Implement actual SMTP sending logic
-        // This is a placeholder that logs the intended action
-        logger.info("=== EMAIL (SMTP) ===")
-        logger.info("From: $fromAddress")
-        logger.info("To: $to")
-        logger.info("Subject: $subject")
-        logger.info("Host: $host, Port: $port, User: $user")
-        logger.info("Body: $body")
-        logger.info("====================")
+        // Build JavaMail properties
+        val mailProperties = java.util.Properties().apply {
+            put("mail.smtp.host", host)
+            put("mail.smtp.port", port.toString())
+            put("mail.smtp.auth", properties["auth"]?.toBooleanStrictOrNull()?.toString() ?: "true")
+            put("mail.smtp.starttls.enable", properties["starttls"]?.toBooleanStrictOrNull()?.toString() ?: "true")
+        }
 
-        return Unit.right()
+        // Create session with authenticator
+        val session = Session.getInstance(mailProperties, object : Authenticator() {
+            override fun getPasswordAuthentication(): PasswordAuthentication {
+                return PasswordAuthentication(user, password)
+            }
+        })
+
+        try {
+            // Create and configure the message
+            val message = MimeMessage(session).apply {
+                setFrom(InternetAddress(fromAddress))
+                setRecipient(Message.RecipientType.TO, InternetAddress(to))
+                this.subject = subject
+                setText(body)
+            }
+
+            // Send the message
+            Transport.send(message)
+
+            logger.info("Successfully sent email to $to via SMTP $host:$port")
+            Unit.right()
+        } catch (e: MessagingException) {
+            // Map MessagingException to domain errors using structured type checks
+            val error = when {
+                // Authentication failures are indicated by AuthenticationFailedException
+                e is AuthenticationFailedException -> MailError.AuthenticationFailed
+
+                // Server rejections (invalid addresses, policy violations) use SendFailedException
+                e is SendFailedException -> {
+                    // Check for invalid or unsent addresses to provide specific reason
+                    val reason = when {
+                        e.invalidAddresses != null && e.invalidAddresses.isNotEmpty() ->
+                            "Invalid addresses: ${e.invalidAddresses.joinToString { it.toString() }}"
+                        e.validUnsentAddresses != null && e.validUnsentAddresses.isNotEmpty() ->
+                            "Valid but unsent addresses: ${e.validUnsentAddresses.joinToString { it.toString() }}"
+                        else -> e.message ?: "Message rejected by server"
+                    }
+                    MailError.Rejected(reason)
+                }
+
+                // Network issues are indicated by specific exception types in the cause chain
+                e.cause is IOException ||
+                e.cause is SocketException ||
+                e.cause is UnknownHostException ->
+                    MailError.NetworkError(e.message ?: "Network error")
+
+                // Fallback: check for authentication codes in message
+                e.message?.contains("535", ignoreCase = true) == true ->
+                    MailError.AuthenticationFailed
+
+                // Default to network error for other cases
+                else ->
+                    MailError.NetworkError(e.message ?: "Unknown SMTP error")
+            }
+            logger.warn("Failed to send email to $to: ${e.message}")
+            error.left()
+        }
     }
 }

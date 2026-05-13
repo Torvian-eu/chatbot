@@ -33,4 +33,15 @@ sealed interface MailError {
      * @property missingKey The name of the missing configuration key.
      */
     data class ConfigurationMissing(val missingKey: String) : MailError
+
+    /**
+     * The mail server rejected the message.
+     *
+     * This indicates that the server was reachable and authenticated, but refused
+     * to send the email. Common causes include invalid recipient addresses,
+     * message content violations, or server policy rejections.
+     *
+     * @property reason A human-readable description of why the message was rejected.
+     */
+    data class Rejected(val reason: String) : MailError
 }

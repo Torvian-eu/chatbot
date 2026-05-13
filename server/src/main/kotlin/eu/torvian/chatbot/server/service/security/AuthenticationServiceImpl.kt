@@ -956,7 +956,7 @@ class AuthenticationServiceImpl(
                     token = token
                 ).mapLeft { mailError ->
                     logger.warn("Failed to send device verification email: $mailError")
-                    RequestDeviceVerificationError.NotificationServiceFailed(mailError.toString())
+                    RequestDeviceVerificationError.NotificationServiceFailed
                 }.bind()
 
                 // 6. Store the token
@@ -1033,7 +1033,7 @@ class AuthenticationServiceImpl(
                     token = token
                 ).mapLeft { mailError ->
                     logger.warn("Failed to send public device verification email: $mailError")
-                    RequestDeviceVerificationError.NotificationServiceFailed(mailError.toString())
+                    RequestDeviceVerificationError.NotificationServiceFailed
                 }.bind()
 
                 // 8. Store the token
