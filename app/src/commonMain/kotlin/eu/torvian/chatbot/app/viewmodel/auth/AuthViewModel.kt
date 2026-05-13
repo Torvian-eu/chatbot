@@ -684,6 +684,8 @@ class AuthViewModel(
                 },
                 ifRight = {
                     logger.info("Email change successful")
+                    notificationService.genericSuccess("Your email address has been updated.")
+                    _dialogState.value = AuthDialogState.None
                     _changeEmailFormState.update { currentState ->
                         currentState.copy(
                             isLoading = false,
