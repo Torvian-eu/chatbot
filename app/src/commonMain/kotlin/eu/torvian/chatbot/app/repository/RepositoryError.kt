@@ -99,3 +99,16 @@ fun ApiResourceError.toRepositoryError(
 fun RepositoryError.matches(apiErrorCode: ApiErrorCode): Boolean {
     return this is RepositoryError.DataFetchError && this.apiResourceError.matches(apiErrorCode)
 }
+
+/**
+ * Extracts a string value from the error details by the given key.
+ *
+ * @param key The key to look up in the error details
+ * @return The string value associated with the key, or null if not found
+ */
+fun RepositoryError.getStringDetail(key: String): String? {
+    return (this as? RepositoryError.DataFetchError)
+        ?.apiResourceError
+        ?.let { it as? ApiResourceError.ServerError }
+        ?.apiError?.details?.get(key)
+}

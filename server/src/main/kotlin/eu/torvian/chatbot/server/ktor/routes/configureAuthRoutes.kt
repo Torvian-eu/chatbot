@@ -51,10 +51,20 @@ fun Route.configureAuthRoutes(
         ) { error ->
             when (error) {
                 is RegisterUserError.UsernameAlreadyExists ->
-                    apiError(CommonApiErrorCodes.ALREADY_EXISTS, "Username already exists")
+                    apiError(
+                        CommonApiErrorCodes.ALREADY_EXISTS,
+                        "Username already exists",
+                        "field" to "username",
+                        "username" to error.username
+                    )
 
                 is RegisterUserError.EmailAlreadyExists ->
-                    apiError(CommonApiErrorCodes.ALREADY_EXISTS, "Email already exists")
+                    apiError(
+                        CommonApiErrorCodes.ALREADY_EXISTS,
+                        "Email already exists",
+                        "field" to "email",
+                        "email" to error.email
+                    )
 
                 is RegisterUserError.InvalidInput ->
                     apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid input", "reason" to error.reason)

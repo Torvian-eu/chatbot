@@ -4,9 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import eu.torvian.chatbot.app.repository.AuthRepository
 import eu.torvian.chatbot.app.repository.AuthState
-import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.matches
-import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.auth.AccountData
 import eu.torvian.chatbot.app.service.auth.AuthValidationService
 import eu.torvian.chatbot.app.service.clipboard.ClipboardService
@@ -26,7 +24,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlin.math.ceil
 
 /**
  * ViewModel for managing authentication UI state and operations.
@@ -206,7 +203,7 @@ class AuthViewModel(
                         _loginFormState.update { currentState ->
                             currentState.copy(
                                 isLoading = false,
-                                generalError = mapLoginError(error)
+                                generalError = error.mapLoginError()
                             )
                         }
                     }
@@ -292,7 +289,7 @@ class AuthViewModel(
                     _registerFormState.update { currentState ->
                         currentState.copy(
                             isLoading = false,
-                            generalError = mapRegistrationError(error)
+                            generalError = error.mapRegistrationError()
                         )
                     }
                 },
@@ -547,7 +544,7 @@ class AuthViewModel(
                     _passwordChangeFormState.update { currentState ->
                         currentState.copy(
                             isLoading = false,
-                            generalError = mapPasswordChangeError(error)
+                            generalError = error.mapPasswordChangeError()
                         )
                     }
                 },
@@ -614,7 +611,7 @@ class AuthViewModel(
                     _passwordChangeFormState.update { currentState ->
                         currentState.copy(
                             isLoading = false,
-                            generalError = mapPasswordChangeError(error)
+                            generalError = error.mapPasswordChangeError()
                         )
                     }
                 },
@@ -678,7 +675,7 @@ class AuthViewModel(
                     _changeEmailFormState.update { currentState ->
                         currentState.copy(
                             isLoading = false,
-                            generalError = mapEmailChangeError(error)
+                            generalError = error.mapEmailChangeError()
                         )
                     }
                 },
@@ -868,28 +865,7 @@ class AuthViewModel(
 
             authRepository.requestDeviceVerification(deviceId)
                 .onLeft { error ->
-                    val errorMessage = when {
-                        error.matches(CommonApiErrorCodes.RATE_LIMIT) -> {
-                            // Extract retryAfterSeconds from error details
-                            val retryAfterSeconds = (error as? RepositoryError.DataFetchError)
-                                ?.apiResourceError
-                                ?.let { it as? ApiResourceError.ServerError }
-                                ?.apiError?.details?.get("retryAfterSeconds")
-                                ?.toLongOrNull()
-
-                            if (retryAfterSeconds != null) {
-                                val minutes = ceil(retryAfterSeconds / 60.0).toLong()
-                                "Email already sent. Please wait $minutes minute${if (minutes != 1L) "s" else ""} before trying again."
-                            } else {
-                                "Email already sent. Please wait before trying again."
-                            }
-                        }
-                        error.matches(CommonApiErrorCodes.FAILED_PRECONDITION) -> {
-                            "User has no email address on file. Please add an email to your account first."
-                        }
-                        else -> "Failed to request verification email. Please try again."
-                    }
-                    _verificationError.value = errorMessage
+                    _verificationError.value = error.mapVerificationError()
                     logger.warn("Failed to request device verification: ${error.message}")
                 }
                 .onRight {
@@ -958,27 +934,7 @@ class AuthViewModel(
 
             authRepository.requestPublicDeviceVerification(username)
                 .onLeft { error ->
-                    val errorMessage = when {
-                        error.matches(CommonApiErrorCodes.RATE_LIMIT) -> {
-                            // Extract retryAfterSeconds from error details
-                            val retryAfterSeconds = (error as? RepositoryError.DataFetchError)
-                                ?.apiResourceError
-                                ?.let { it as? ApiResourceError.ServerError }
-                                ?.apiError?.details?.get("retryAfterSeconds")
-                                ?.toLongOrNull()
-
-                            if (retryAfterSeconds != null) {
-                                val minutes = ceil(retryAfterSeconds / 60.0).toLong()
-                                "Email already sent. Please wait $minutes minute${if (minutes != 1L) "s" else ""} before trying again."
-                            } else {
-                                "Email already sent. Please wait before trying again."
-                            }
-                        }
-                        error.matches(CommonApiErrorCodes.FAILED_PRECONDITION) -> {
-                            "User has no email address on file. Please add an email to your account first."
-                        }
-                        else -> "Failed to request verification email. Please try again."
-                    }
+                    val errorMessage = error.mapVerificationError()
                     _loginFormState.update { currentState ->
                         currentState.copy(
                             isVerifying = false,
@@ -1156,99 +1112,6 @@ class AuthViewModel(
         clearRegisterForm()
         clearPasswordChangeForm()
         clearChangeEmailForm()
-    }
-
-    // --- Error Mapping ---
-
-    /**
-     * Maps a [RepositoryError] to a user-friendly login error message.
-     * Uses structured checks against [CommonApiErrorCodes] for
-     * reliable error identification instead of fragile string matching.
-     */
-    private fun mapLoginError(error: RepositoryError): String = when {
-        error.matches(CommonApiErrorCodes.INVALID_CREDENTIALS) ->
-            "Invalid username or password"
-
-        error.matches(CommonApiErrorCodes.VERIFICATION_REQUIRED) ->
-            "Login blocked from an untrusted device. Approve this device from an existing trusted session or contact an administrator."
-
-        error.matches(CommonApiErrorCodes.PERMISSION_DENIED) ->
-            "Account is temporarily locked. Please try again later."
-
-        error.matches(CommonApiErrorCodes.TOO_MANY_ATTEMPTS) ->
-            "Too many failed login attempts. Please wait a few minutes and try again."
-
-        else -> "An unexpected error occurred. Please try again."
-    }
-
-    /**
-     * Maps a [RepositoryError] to a user-friendly registration error message.
-     * Uses structured checks against [CommonApiErrorCodes] for
-     * reliable error identification instead of fragile string matching.
-     *
-     * For [CommonApiErrorCodes.ALREADY_EXISTS], inspects the error details to distinguish
-     * between username and email conflicts.
-     */
-    private fun mapRegistrationError(error: RepositoryError): String = when {
-        error.matches(CommonApiErrorCodes.ALREADY_EXISTS) -> {
-            // Inspect the underlying ApiError details to determine which field conflicts
-            val details = (error as? RepositoryError.DataFetchError)
-                ?.apiResourceError
-                ?.let { it as? ApiResourceError.ServerError }
-                ?.apiError?.details
-            val message = (error as? RepositoryError.DataFetchError)
-                ?.apiResourceError
-                ?.let { it as? ApiResourceError.ServerError }
-                ?.apiError?.message ?: ""
-
-            // Check details keys or message content for email-related conflict
-            val isEmailConflict = details?.keys?.any { it.contains("email", ignoreCase = true) } == true ||
-                    message.contains("email", ignoreCase = true)
-
-            if (isEmailConflict) {
-                "Email is already registered. Please use a different email or try logging in."
-            } else {
-                "Username is already taken. Please choose a different one."
-            }
-        }
-
-        else -> "An unexpected error occurred. Please try again."
-    }
-
-    /**
-     * Maps a [RepositoryError] to a user-friendly password change error message.
-     * Uses structured checks against [CommonApiErrorCodes] for
-     * reliable error identification instead of fragile string matching.
-     */
-    private fun mapPasswordChangeError(error: RepositoryError): String = when {
-        error.matches(CommonApiErrorCodes.INVALID_ARGUMENT) ->
-            "New password is too weak. Please choose a stronger password."
-
-        error.matches(CommonApiErrorCodes.PERMISSION_DENIED) ->
-            "Action requires a trusted session. Please verify your identity."
-
-        error.matches(CommonApiErrorCodes.INVALID_CREDENTIALS) ->
-            "Current password is incorrect."
-
-        else -> "Password change failed. Please try again."
-    }
-
-    /**
-     * Maps a [RepositoryError] to a user-friendly email change error message.
-     * Uses structured checks against [CommonApiErrorCodes] for
-     * reliable error identification instead of fragile string matching.
-     */
-    private fun mapEmailChangeError(error: RepositoryError): String = when {
-        error.matches(CommonApiErrorCodes.INVALID_ARGUMENT) ->
-            "New email is invalid. Please enter a valid email address."
-
-        error.matches(CommonApiErrorCodes.PERMISSION_DENIED) ->
-            "Action requires a trusted session. Please verify your identity."
-
-        error.matches(CommonApiErrorCodes.INVALID_CREDENTIALS) ->
-            "Current password is incorrect."
-
-        else -> "Email change failed. Please try again."
     }
 
     override fun onCleared() {

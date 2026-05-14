@@ -589,7 +589,7 @@ class AuthViewModelTest {
             statusCode = 409,
             code = "already-exists",
             message = "Username already exists",
-            details = mapOf("username" to "existinguser")
+            details = mapOf("field" to "username", "username" to "existinguser")
         )
         val usernameExistsError = RepositoryError.DataFetchError(
             ApiResourceError.ServerError(apiError)
