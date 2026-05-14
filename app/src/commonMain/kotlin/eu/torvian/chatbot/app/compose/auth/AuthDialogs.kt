@@ -136,8 +136,16 @@ fun AuthDialogs(
         }
 
         is AuthDialogState.RestrictedSessionInfo -> {
+            val isRequestingVerification by authViewModel.isRequestingVerification.collectAsState()
+            val verificationEmailSent by authViewModel.verificationEmailSent.collectAsState()
+            val verificationError by authViewModel.verificationError.collectAsState()
+
             RestrictedSessionInfoDialog(
-                viewModel = authViewModel,
+                isRequestingVerification = isRequestingVerification,
+                verificationEmailSent = verificationEmailSent,
+                verificationError = verificationError,
+                onRequestVerificationEmail = { authViewModel.requestVerificationEmail() },
+                onCheckVerificationStatus = { authViewModel.checkVerificationStatus() },
                 onDismiss = { authViewModel.closeDialog() }
             )
         }

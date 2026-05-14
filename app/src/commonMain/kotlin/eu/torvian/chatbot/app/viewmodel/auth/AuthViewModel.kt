@@ -903,9 +903,8 @@ class AuthViewModel(
                         _verificationEmailSent.value = false
                         logger.info("Session is now unrestricted")
                     } else {
-                        notificationService.genericSuccess(
+                        _verificationError.value =
                             "Session is still restricted. Please ensure you have approved the login via the email link or from another trusted device."
-                        )
                         logger.info("Session still restricted after refresh")
                     }
                 }
