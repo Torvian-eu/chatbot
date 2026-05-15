@@ -13,7 +13,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.service.auth.AccountData
-import eu.torvian.chatbot.app.viewmodel.auth.AuthViewModel
+import eu.torvian.chatbot.app.viewmodel.auth.AccountManagementViewModel
+import eu.torvian.chatbot.app.viewmodel.auth.AuthEntryViewModel
 import eu.torvian.chatbot.app.viewmodel.auth.LoginFormState
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -21,16 +22,17 @@ import org.koin.compose.viewmodel.koinViewModel
  * Login screen for user authentication.
  *
  * @param onNavigateToRegister Callback to navigate to registration screen
- * @param authViewModel ViewModel for authentication operations
+ * @param authEntryViewModel ViewModel for authentication entry operations
  */
 @Composable
 fun LoginScreen(
     onNavigateToRegister: () -> Unit,
-    authViewModel: AuthViewModel = koinViewModel()
+    authEntryViewModel: AuthEntryViewModel = koinViewModel(),
+    accountManagementViewModel: AccountManagementViewModel = koinViewModel()
 ) {
-    val loginFormState by authViewModel.loginFormState.collectAsState()
-    val availableAccounts by authViewModel.availableAccounts.collectAsState()
-    val accountSwitchInProgress by authViewModel.accountSwitchInProgress.collectAsState()
+    val loginFormState by authEntryViewModel.loginFormState.collectAsState()
+    val availableAccounts by accountManagementViewModel.availableAccounts.collectAsState()
+    val accountSwitchInProgress by accountManagementViewModel.accountSwitchInProgress.collectAsState()
     val scrollState = rememberScrollState()
 
     LoginScreenContent(
@@ -39,20 +41,20 @@ fun LoginScreen(
         accountSwitchInProgress = accountSwitchInProgress,
         scrollState = scrollState,
         onUsernameChange = { username ->
-            authViewModel.updateLoginForm(username = username)
+            authEntryViewModel.updateLoginForm(username = username)
         },
         onPasswordChange = { password ->
-            authViewModel.updateLoginForm(password = password)
+            authEntryViewModel.updateLoginForm(password = password)
         },
         onLogin = {
-            authViewModel.login()
+            authEntryViewModel.login()
         },
         onNavigateToRegister = onNavigateToRegister,
         onSwitchAccount = { userId ->
-            authViewModel.switchAccount(userId)
+            accountManagementViewModel.switchAccount(userId)
         },
         onRequestVerification = {
-            authViewModel.requestPublicVerification()
+            authEntryViewModel.requestPublicVerification()
         }
     )
 }

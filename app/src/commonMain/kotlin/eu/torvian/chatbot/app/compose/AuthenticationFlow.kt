@@ -17,7 +17,8 @@ import eu.torvian.chatbot.app.compose.snackbar.SharedSnackbar
 import eu.torvian.chatbot.app.compose.snackbar.SnackbarVisualsWithError
 import eu.torvian.chatbot.app.domain.navigation.Login
 import eu.torvian.chatbot.app.domain.navigation.Register
-import eu.torvian.chatbot.app.viewmodel.auth.AuthViewModel
+import eu.torvian.chatbot.app.viewmodel.auth.AuthEntryViewModel
+import org.koin.compose.viewmodel.koinViewModel
 
 /**
  * Authentication flow navigation for unauthenticated users.
@@ -25,8 +26,8 @@ import eu.torvian.chatbot.app.viewmodel.auth.AuthViewModel
 @Composable
 fun AuthenticationFlow(
     snackbarHostState: SnackbarHostState,
-    authViewModel: AuthViewModel
 ) {
+    val authEntryViewModel: AuthEntryViewModel = koinViewModel()
     val navController = rememberNavController()
 
     Scaffold(
@@ -50,7 +51,7 @@ fun AuthenticationFlow(
                                 popUpTo(Login) { inclusive = true }
                             }
                         },
-                        authViewModel = authViewModel
+                        authEntryViewModel = authEntryViewModel
                     )
                 }
 
@@ -66,7 +67,7 @@ fun AuthenticationFlow(
                                 popUpTo(Register) { inclusive = true }
                             }
                         },
-                        authViewModel = authViewModel
+                        authEntryViewModel = authEntryViewModel
                     )
                 }
             }

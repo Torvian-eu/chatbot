@@ -13,11 +13,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import eu.torvian.chatbot.app.repository.AuthState
-import eu.torvian.chatbot.app.service.auth.AuthValidationService
-import eu.torvian.chatbot.app.viewmodel.auth.AuthViewModel
+import eu.torvian.chatbot.app.viewmodel.auth.SessionViewModel
+import eu.torvian.chatbot.app.viewmodel.auth.UserProfileViewModel
 import eu.torvian.chatbot.app.viewmodel.auth.PasswordChangeFormState
 import eu.torvian.chatbot.common.security.PasswordValidationConfig
-import org.koin.compose.getKoin
 import org.koin.compose.viewmodel.koinViewModel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,18 +32,19 @@ import androidx.compose.ui.unit.dp
  * change their password successfully or log out.
  *
  * @param authState The current authenticated state
- * @param authViewModel ViewModel for authentication operations
+ * @param sessionViewModel ViewModel for session lifecycle operations
+ * @param userProfileViewModel ViewModel for user profile operations
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ForcePasswordChangeScreen(
     authState: AuthState.Authenticated,
-    authViewModel: AuthViewModel = koinViewModel()
+    sessionViewModel: SessionViewModel = koinViewModel(),
+    userProfileViewModel: UserProfileViewModel = koinViewModel()
 ) {
-    val passwordChangeFormState by authViewModel.passwordChangeFormState.collectAsState()
+    val passwordChangeFormState by userProfileViewModel.passwordChangeFormState.collectAsState()
     val scrollState = rememberScrollState()
-    val authValidationService = getKoin().get<AuthValidationService>()
-    val passwordValidationConfig = authValidationService.passwordValidationConfig
+    val passwordValidationConfig = userProfileViewModel.passwordValidationConfig
 
     ForcePasswordChangeScreenContent(
         username = authState.username,
@@ -52,18 +52,18 @@ fun ForcePasswordChangeScreen(
         passwordValidationConfig = passwordValidationConfig,
         scrollState = scrollState,
         onNewPasswordChange = { newPassword ->
-            authViewModel.updatePasswordChangeForm(newPassword = newPassword)
+            userProfileViewModel.updatePasswordChangeForm(newPassword = newPassword)
         },
         onConfirmPasswordChange = { confirmPassword ->
-            authViewModel.updatePasswordChangeForm(confirmPassword = confirmPassword)
+            userProfileViewModel.updatePasswordChangeForm(confirmPassword = confirmPassword)
         },
         onChangePassword = {
-            authViewModel.completeRequiredPasswordChange()
+            userProfileViewModel.completeRequiredPasswordChange()
         },
-        onLogout = authViewModel::logout,
+        onLogout = sessionViewModel::logout,
         onAcknowledgeSuccessAndLogout = {
-            authViewModel.clearPasswordChangeForm()
-            authViewModel.logout()
+            userProfileViewModel.clearPasswordChangeForm()
+            sessionViewModel.logout()
         }
     )
 }

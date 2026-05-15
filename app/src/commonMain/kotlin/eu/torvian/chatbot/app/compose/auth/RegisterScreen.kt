@@ -12,7 +12,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import eu.torvian.chatbot.app.viewmodel.auth.AuthViewModel
+import eu.torvian.chatbot.app.viewmodel.auth.AuthEntryViewModel
 import eu.torvian.chatbot.app.viewmodel.auth.RegisterFormState
 import eu.torvian.chatbot.common.security.PasswordValidationConfig
 import eu.torvian.chatbot.common.security.UsernameValidationConfig
@@ -23,18 +23,18 @@ import org.koin.compose.viewmodel.koinViewModel
  *
  * @param onNavigateToLogin Callback to navigate to login screen
  * @param onRegistrationSuccess Callback when registration is successful
- * @param authViewModel ViewModel for authentication operations
+ * @param authEntryViewModel ViewModel for authentication entry operations
  */
 @Composable
 fun RegisterScreen(
     onNavigateToLogin: () -> Unit,
     onRegistrationSuccess: () -> Unit,
-    authViewModel: AuthViewModel = koinViewModel()
+    authEntryViewModel: AuthEntryViewModel = koinViewModel()
 ) {
-    val registerFormState by authViewModel.registerFormState.collectAsState()
+    val registerFormState by authEntryViewModel.registerFormState.collectAsState()
     val scrollState = rememberScrollState()
-    val passwordValidationConfig = authViewModel.passwordValidationConfig
-    val usernameValidationConfig = authViewModel.usernameValidationConfig
+    val passwordValidationConfig = authEntryViewModel.passwordValidationConfig
+    val usernameValidationConfig = authEntryViewModel.usernameValidationConfig
 
     RegisterScreenContent(
         registerFormState = registerFormState,
@@ -42,23 +42,23 @@ fun RegisterScreen(
         usernameValidationConfig = usernameValidationConfig,
         scrollState = scrollState,
         onUsernameChange = { username ->
-            authViewModel.updateRegisterForm(username = username)
+            authEntryViewModel.updateRegisterForm(username = username)
         },
         onEmailChange = { email ->
-            authViewModel.updateRegisterForm(email = email)
+            authEntryViewModel.updateRegisterForm(email = email)
         },
         onPasswordChange = { password ->
-            authViewModel.updateRegisterForm(password = password)
+            authEntryViewModel.updateRegisterForm(password = password)
         },
         onConfirmPasswordChange = { confirmPassword ->
-            authViewModel.updateRegisterForm(confirmPassword = confirmPassword)
+            authEntryViewModel.updateRegisterForm(confirmPassword = confirmPassword)
         },
         onRegister = {
-            authViewModel.register()
+            authEntryViewModel.register()
         },
         onNavigateToLogin = onNavigateToLogin,
         onAcknowledgeRegistrationSuccess = {
-            authViewModel.acknowledgeRegistrationSuccess()
+            authEntryViewModel.acknowledgeRegistrationSuccess()
             onNavigateToLogin()
         }
     )
