@@ -119,6 +119,7 @@ class DefaultAuthRepository(
         _authState.value = AuthState.Authenticated(
             userId = loginResponse.user.id,
             username = loginResponse.user.username,
+            email = loginResponse.user.email,
             permissions = loginResponse.permissions,
             requiresPasswordChange = loginResponse.user.requiresPasswordChange,
             isRestricted = loginResponse.isRestricted,
@@ -262,6 +263,7 @@ class DefaultAuthRepository(
             _authState.value = AuthState.Authenticated(
                 userId = accountData.user.id,
                 username = accountData.user.username,
+                email = accountData.user.email,
                 permissions = accountData.permissions,
                 requiresPasswordChange = accountData.user.requiresPasswordChange,
                 isRestricted = accountData.isRestricted,
@@ -306,6 +308,7 @@ class DefaultAuthRepository(
         _authState.value = AuthState.Authenticated(
             userId = accountData.user.id,
             username = accountData.user.username,
+            email = accountData.user.email,
             permissions = accountData.permissions,
             requiresPasswordChange = accountData.user.requiresPasswordChange,
             isRestricted = accountData.isRestricted,
@@ -432,6 +435,113 @@ class DefaultAuthRepository(
         logger.info("Required password change completed successfully")
     }
 
+    override suspend fun changeEmail(currentPassword: String, newEmail: String): Either<RepositoryError, Unit> = either {
+        logger.info("Changing email for the authenticated user")
+
+        // Call the API to change email
+        val updatedUser = withError({ apiError ->
+            apiError.toRepositoryError("Failed to change email")
+        }) {
+            authApi.changeEmail(currentPassword, newEmail).bind()
+        }
+
+        // Update auth state with the new email
+        val currentState = _authState.value
+        if (currentState is AuthState.Authenticated) {
+            _authState.value = currentState.copy(
+                username = updatedUser.username,
+                email = updatedUser.email
+            )
+            logger.info("Updated auth state after email change")
+        }
+
+        // Update the cached user in token storage so the change persists across restarts
+        updateCachedUserEmail(updatedUser)
+
+        logger.info("Email changed successfully")
+    }
+
+    override suspend fun requestDeviceVerification(deviceId: String): Either<RepositoryError, Unit> = either {
+        logger.info("Requesting device verification email for device: $deviceId")
+
+        withError({ apiError ->
+            apiError.toRepositoryError("Failed to request device verification")
+        }) {
+            authApi.requestDeviceVerification(deviceId).bind()
+        }
+
+        logger.info("Device verification email sent successfully")
+    }
+
+    override suspend fun requestPublicDeviceVerification(username: String): Either<RepositoryError, Unit> = either {
+        logger.info("Requesting public device verification email for user: $username")
+
+        // Resolve device ID internally - this is the key change that moves device ID handling to the repository layer
+        val deviceId = withError({ error ->
+            _authState.value = AuthState.Unauthenticated
+            val errorMessage = when (error) {
+                is DeviceIdentityError.PersistenceFailure -> error.message
+                is DeviceIdentityError.ReadFailure -> error.message
+            }
+            RepositoryError.OtherError("Failed to resolve device identity: $errorMessage")
+        }) {
+            deviceIdentityService.getOrCreateDeviceId().bind()
+        }
+
+        withError({ apiError ->
+            apiError.toRepositoryError("Failed to request public device verification")
+        }) {
+            authApi.requestPublicDeviceVerification(username, deviceId).bind()
+        }
+
+        logger.info("Public device verification email sent successfully")
+    }
+
+    override suspend fun refreshSession(): Either<RepositoryError, Unit> = either {
+        logger.info("Refreshing session to check for restriction status update")
+
+        // Get the current refresh token
+        val refreshToken = withError({ tokenError ->
+            RepositoryError.OtherError("Failed to get refresh token: ${tokenError.message}")
+        }) {
+            tokenStorage.getRefreshToken().bind()
+        }
+
+        // Call the refresh token API
+        val loginResponse = withError({ apiError ->
+            apiError.toRepositoryError("Failed to refresh session")
+        }) {
+            authApi.refreshToken(refreshToken).bind()
+        }
+
+        // Save the new auth data (which may have isRestricted = false)
+        withError({ tokenError ->
+            RepositoryError.OtherError("Failed to save refreshed auth data: ${tokenError.message}")
+        }) {
+            tokenStorage.saveAuthData(
+                accessToken = loginResponse.accessToken,
+                refreshToken = loginResponse.refreshToken,
+                expiresAt = loginResponse.expiresAt,
+                user = loginResponse.user,
+                permissions = loginResponse.permissions,
+                isRestricted = loginResponse.isRestricted
+            ).bind()
+        }
+
+        // Update auth state with the new data
+        _authState.value = AuthState.Authenticated(
+            userId = loginResponse.user.id,
+            username = loginResponse.user.username,
+            email = loginResponse.user.email,
+            permissions = loginResponse.permissions,
+            requiresPasswordChange = loginResponse.user.requiresPasswordChange,
+            isRestricted = loginResponse.isRestricted,
+            deviceId = deviceIdentityService.getOrCreateDeviceId().getOrNull()
+        )
+
+        logger.info("Session refreshed successfully. isRestricted: ${loginResponse.isRestricted}")
+    }
+
     private suspend fun refreshAvailableAccounts() {
         tokenStorage.listStoredAccounts().fold(
             ifLeft = { error ->
@@ -451,5 +561,14 @@ class DefaultAuthRepository(
         // Update the cached account data to set requiresPasswordChange to false
         tokenStorage.updateAccountData(currentUserId, requiresPasswordChange = false)
             .onLeft { logger.warn("Failed to update cached account data: ${it.message}") }
+    }
+
+    private suspend fun updateCachedUserEmail(updatedUser: User) {
+        // Get the current authenticated user ID
+        val currentUserId = (_authState.value as? AuthState.Authenticated)?.userId ?: return
+
+        // Update the cached user data in token storage
+        tokenStorage.updateAccountData(currentUserId, email = updatedUser.email)
+            .onLeft { logger.warn("Failed to update cached user email: ${it.message}") }
     }
 }

@@ -5,11 +5,26 @@ import eu.torvian.chatbot.common.security.UsernameValidationConfig
 import kotlinx.serialization.Serializable
 
 /**
+ * DTO for email configuration.
+ *
+ * @property provider The email provider type (e.g., "log" for logging, "smtp" for SMTP).
+ * @property fromAddress The default sender address for outgoing emails.
+ * @property properties Provider-specific configuration properties (e.g., SMTP host, port, credentials).
+ */
+@Serializable
+data class EmailConfigDto(
+    val provider: String? = null,
+    val fromAddress: String? = null,
+    val properties: Map<String, String>? = null
+)
+
+/**
  * A nullable Data Transfer Object (DTO) that mirrors the complete application configuration structure.
  * This DTO is used during the merging process of partial JSON configuration files. All fields are
  * nullable, allowing for incremental building of the configuration from multiple sources, where
  * missing fields simply remain null until a layer provides a value.
  *
+ * @property serverUrl The base URL of the server, used for constructing absolute links in emails.
  * @property setup Optional [SetupConfigDto] for initial server setup requirements.
  * @property storage Optional [StorageConfigDto] for data storage path configuration.
  * @property network Optional [NetworkConfigDto] for server connectivity settings.
@@ -17,11 +32,13 @@ import kotlinx.serialization.Serializable
  * @property database Optional [DatabaseConfigDto] for database connection parameters.
  * @property encryption Optional [EncryptionConfigDto] for data encryption settings.
  * @property jwt Optional [JwtConfigDto] for JSON Web Token authentication settings.
+ * @property email Optional [EmailConfigDto] for email service configuration.
  * @property accountSecurityMode Optional policy name for device-based login handling.
  * @property authPolicy Optional [AuthPolicyDto] for account validation rules.
  */
 @Serializable
 data class AppConfigDto(
+    val serverUrl: String? = null,
     val setup: SetupConfigDto? = null,
     val storage: StorageConfigDto? = null,
     val network: NetworkConfigDto? = null,
@@ -30,6 +47,7 @@ data class AppConfigDto(
     val database: DatabaseConfigDto? = null,
     val encryption: EncryptionConfigDto? = null,
     val jwt: JwtConfigDto? = null,
+    val email: EmailConfigDto? = null,
     val accountSecurityMode: String? = null,
     val reverseProxy: ReverseProxyConfigDto? = null,
     val authPolicy: AuthPolicyDto? = null

@@ -22,9 +22,11 @@ sealed interface LoginError {
     data class AccountLocked(val reason: String) : LoginError
 
     /**
-     * Login was blocked because the client connected from an unrecognized IP address.
+     * Login was blocked because the client connected from an unrecognized device.
+     *
+     * @property userId The ID of the user who attempted to log in from an unrecognized device.
      */
-    data object VerificationRequired : LoginError
+    data class VerificationRequired(val userId: Long) : LoginError
 
     /**
      * Login was blocked due to too many failed attempts within the configured window.

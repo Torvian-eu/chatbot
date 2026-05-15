@@ -251,7 +251,7 @@ class DefaultWorkerAuthenticatedRequestExecutorTest {
         assertTrue(result.isLeft())
         val error = result.swap().getOrNull()
         assertTrue(error is WorkerAuthenticatedRequestError.HttpStatus)
-        assertEquals(500, (error as WorkerAuthenticatedRequestError.HttpStatus).statusCode)
+        assertEquals(500, error.statusCode)
         assertEquals(0, authManager.forceReauthenticateCalls, "forceReauthenticate should not be called for 500")
     }
 
@@ -284,7 +284,7 @@ class DefaultWorkerAuthenticatedRequestExecutorTest {
         assertTrue(result.isLeft())
         val error = result.swap().getOrNull()
         assertTrue(error is WorkerAuthenticatedRequestError.HttpStatus)
-        assertEquals(500, (error as WorkerAuthenticatedRequestError.HttpStatus).statusCode)
+        assertEquals(500, error.statusCode)
         assertEquals(2, callCount)
         assertEquals(1, authManager.forceReauthenticateCalls)
     }

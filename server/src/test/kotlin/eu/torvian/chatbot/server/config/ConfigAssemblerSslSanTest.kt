@@ -144,6 +144,7 @@ class ConfigAssemblerSslSanTest {
         ssl: SslConfigDto,
         cors: CorsConfigDto? = null
     ) = AppConfigDto(
+        serverUrl = "http://localhost:8080",
         setup = SetupConfigDto(required = false),
         storage = StorageConfigDto(
             dataDir = "data",
@@ -175,6 +176,10 @@ class ConfigAssemblerSslSanTest {
             secret = "jwt-secret",
             tokenExpirationMs = 60_000,
             refreshExpirationMs = 120_000
+        ),
+        email = EmailConfigDto(
+            provider = "log",
+            fromAddress = "noreply@chatbot.test"
         ),
         reverseProxy = ReverseProxyConfigDto(
             enabled = false,

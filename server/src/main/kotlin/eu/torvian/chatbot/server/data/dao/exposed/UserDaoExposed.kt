@@ -16,7 +16,9 @@ import eu.torvian.chatbot.server.data.tables.*
 import eu.torvian.chatbot.server.data.tables.mappers.toUserEntity
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.leftJoin
+import org.jetbrains.exposed.v1.core.neq
 import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
+import org.jetbrains.exposed.v1.jdbc.andWhere
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
@@ -280,5 +282,20 @@ class UserDaoExposed(
                 // Return updated public view
                 getUserById(id).bind().toUser()
             }
+        }
+
+    override suspend fun emailExists(email: String, excludeUserId: Long?): Boolean =
+        transactionScope.transaction {
+            val count = if (excludeUserId != null) {
+                UsersTable.selectAll()
+                    .where { UsersTable.email eq email }
+                    .andWhere { UsersTable.id neq excludeUserId }
+                    .count()
+            } else {
+                UsersTable.selectAll()
+                    .where { UsersTable.email eq email }
+                    .count()
+            }
+            count > 0
         }
 }

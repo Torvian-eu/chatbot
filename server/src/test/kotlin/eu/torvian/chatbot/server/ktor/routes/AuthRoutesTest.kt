@@ -189,6 +189,8 @@ class AuthRoutesTest {
         val error = response.body<ApiError>()
         assertEquals(CommonApiErrorCodes.ALREADY_EXISTS.code, error.code)
         assertEquals("Username already exists", error.message)
+        assertEquals("username", error.details?.get("field"))
+        assertEquals(testUser.username, error.details?.get("username"))
     }
 
     @Test
@@ -218,6 +220,8 @@ class AuthRoutesTest {
         val error = response.body<ApiError>()
         assertEquals(CommonApiErrorCodes.ALREADY_EXISTS.code, error.code)
         assertEquals("Email already exists", error.message)
+        assertEquals("email", error.details?.get("field"))
+        assertEquals(testUser.email, error.details?.get("email"))
     }
 
     @Test

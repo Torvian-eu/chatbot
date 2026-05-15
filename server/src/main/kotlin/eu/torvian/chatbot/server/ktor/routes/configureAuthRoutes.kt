@@ -12,18 +12,16 @@ import eu.torvian.chatbot.server.ktor.auth.getUserContext
 import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.service.core.UserService
 import eu.torvian.chatbot.server.service.core.WorkerService
+import eu.torvian.chatbot.server.service.core.error.auth.ChangeEmailError
+import eu.torvian.chatbot.server.service.core.error.auth.ChangePasswordError
 import eu.torvian.chatbot.server.service.core.error.auth.RegisterUserError
 import eu.torvian.chatbot.server.service.core.error.worker.AuthenticateWorkerError
 import eu.torvian.chatbot.server.service.security.AuthenticationService
-import eu.torvian.chatbot.server.service.security.error.LoginError
-import eu.torvian.chatbot.server.service.security.error.LogoutAllError
-import eu.torvian.chatbot.server.service.security.error.LogoutError
-import eu.torvian.chatbot.server.service.security.error.RefreshTokenError
-import eu.torvian.chatbot.server.service.security.error.GetSecurityAlertsError
-import eu.torvian.chatbot.server.service.security.error.RevokeTrustedDeviceError
-import eu.torvian.chatbot.server.service.security.error.CompleteRequiredPasswordChangeError
-import eu.torvian.chatbot.server.service.security.error.ResolveAlertError
-import eu.torvian.chatbot.server.service.core.error.auth.ChangePasswordError
+import eu.torvian.chatbot.server.service.security.AccountManagementService
+import eu.torvian.chatbot.server.service.security.DeviceTrustService
+import eu.torvian.chatbot.server.service.security.SecurityAuditService
+import eu.torvian.chatbot.server.service.security.TokenService
+import eu.torvian.chatbot.server.service.security.error.*
 import io.ktor.http.*
 import io.ktor.server.auth.*
 import io.ktor.server.plugins.origin
@@ -38,6 +36,10 @@ import kotlin.time.Instant.Companion.fromEpochMilliseconds
  */
 fun Route.configureAuthRoutes(
     authenticationService: AuthenticationService,
+    tokenService: TokenService,
+    accountManagementService: AccountManagementService,
+    deviceTrustService: DeviceTrustService,
+    securityAuditService: SecurityAuditService,
     userService: UserService,
     workerService: WorkerService,
     jwtConfig: JwtConfig,
@@ -57,10 +59,20 @@ fun Route.configureAuthRoutes(
         ) { error ->
             when (error) {
                 is RegisterUserError.UsernameAlreadyExists ->
-                    apiError(CommonApiErrorCodes.ALREADY_EXISTS, "Username already exists")
+                    apiError(
+                        CommonApiErrorCodes.ALREADY_EXISTS,
+                        "Username already exists",
+                        "field" to "username",
+                        "username" to error.username
+                    )
 
                 is RegisterUserError.EmailAlreadyExists ->
-                    apiError(CommonApiErrorCodes.ALREADY_EXISTS, "Email already exists")
+                    apiError(
+                        CommonApiErrorCodes.ALREADY_EXISTS,
+                        "Email already exists",
+                        "field" to "email",
+                        "email" to error.email
+                    )
 
                 is RegisterUserError.InvalidInput ->
                     apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid input", "reason" to error.reason)
@@ -115,7 +127,7 @@ fun Route.configureAuthRoutes(
         // Extract client IP address for session tracking (supports proxy via X-Forwarded-For header)
         val ipAddress = call.request.origin.remoteAddress
         call.respondEither(
-            authenticationService.refreshToken(request.refreshToken, ipAddress)
+            tokenService.refreshToken(request.refreshToken, ipAddress)
                 .map { it.toLoginResponse() }
         ) { error ->
             when (error) {
@@ -236,7 +248,7 @@ fun Route.configureAuthRoutes(
         get<AuthResource.SecurityAlerts> {
             val userContext = call.getUserContext()
             val userId = userContext.user.id
-            val result = authenticationService.getSecurityAlerts(userId, userContext.isRestricted).map { alerts ->
+            val result = securityAuditService.getSecurityAlerts(userId, userContext.isRestricted).map { alerts ->
                 alerts.map { alert ->
                     UserSecurityAlert(
                         id = alert.id,
@@ -266,7 +278,7 @@ fun Route.configureAuthRoutes(
             val userContext = call.getUserContext()
 
             call.respondEither(
-                authenticationService.resolveSingleAlert(
+                securityAuditService.resolveSingleAlert(
                     userId = userContext.user.id,
                     alertId = resource.alertId,
                     outcome = request.outcome,
@@ -297,7 +309,7 @@ fun Route.configureAuthRoutes(
             val userContext = call.getUserContext()
 
             call.respondEither(
-                authenticationService.getTrustedDevices(userContext.user.id, userContext.isRestricted)
+                deviceTrustService.getTrustedDevices(userContext.user.id, userContext.isRestricted)
             ) { error ->
                 when (error) {
                     is RevokeTrustedDeviceError.InsufficientPermissions ->
@@ -319,7 +331,11 @@ fun Route.configureAuthRoutes(
             val userContext = call.getUserContext()
 
             call.respondEither(
-                authenticationService.revokeTrustedDevice(userContext.user.id, resource.deviceId, userContext.isRestricted),
+                deviceTrustService.revokeTrustedDevice(
+                    userContext.user.id,
+                    resource.deviceId,
+                    userContext.isRestricted
+                ),
                 HttpStatusCode.NoContent
             ) { error ->
                 when (error) {
@@ -394,7 +410,7 @@ fun Route.configureAuthRoutes(
             val request = call.receive<ChangePasswordRequest>()
 
             call.respondEither(
-                authenticationService.changePassword(
+                accountManagementService.changePassword(
                     userId = userContext.user.id,
                     currentPassword = request.currentPassword,
                     newPassword = request.newPassword,
@@ -416,9 +432,49 @@ fun Route.configureAuthRoutes(
                         apiError(CommonApiErrorCodes.INVALID_ARGUMENT, error.reason)
 
                     is ChangePasswordError.SameAsCurrentPassword ->
-                        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "New password cannot be the same as the current password")
+                        apiError(
+                            CommonApiErrorCodes.INVALID_ARGUMENT,
+                            "New password cannot be the same as the current password"
+                        )
 
                     is ChangePasswordError.UserNotFound ->
+                        apiError(CommonApiErrorCodes.NOT_FOUND, "User not found")
+                }
+            }
+        }
+    }
+
+    // POST /api/v1/auth/change-email - Change the authenticated user's email address
+    authenticate(AuthSchemes.USER_JWT) {
+        post<AuthResource.ChangeEmail> {
+            val userContext = call.getUserContext()
+            val request = call.receive<ChangeEmailRequest>()
+
+            call.respondEither(
+                accountManagementService.changeEmail(
+                    userId = userContext.user.id,
+                    currentPassword = request.currentPassword,
+                    newEmail = request.newEmail,
+                    requesterIsRestricted = userContext.isRestricted
+                )
+            ) { error ->
+                when (error) {
+                    is ChangeEmailError.InvalidCurrentPassword ->
+                        apiError(CommonApiErrorCodes.INVALID_CREDENTIALS, "Current password is incorrect")
+
+                    is ChangeEmailError.InsufficientPermissions ->
+                        apiError(
+                            CommonApiErrorCodes.PERMISSION_DENIED,
+                            "Action requires a trusted session. Please verify via email or another device."
+                        )
+
+                    is ChangeEmailError.EmailAlreadyExists ->
+                        apiError(CommonApiErrorCodes.ALREADY_EXISTS, "Email already exists", "email" to error.email)
+
+                    is ChangeEmailError.InvalidEmailFormat ->
+                        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid email format", "reason" to error.reason)
+
+                    is ChangeEmailError.UserNotFound ->
                         apiError(CommonApiErrorCodes.NOT_FOUND, "User not found")
                 }
             }
@@ -432,7 +488,7 @@ fun Route.configureAuthRoutes(
             val request = call.receive<CompleteRequiredPasswordChangeRequest>()
 
             call.respondEither(
-                authenticationService.completeRequiredPasswordChange(
+                accountManagementService.completeRequiredPasswordChange(
                     userId = userContext.user.id,
                     newPassword = request.newPassword,
                     requesterIsRestricted = userContext.isRestricted
@@ -470,6 +526,23 @@ fun Route.configureAuthRoutes(
                         )
                 }
             }
+        }
+    }
+
+    // POST /api/v1/auth/request-device-verification - Request a device verification email
+    // This endpoint requires authentication (even for restricted sessions)
+    authenticate(AuthSchemes.USER_JWT) {
+        post<AuthResource.RequestDeviceVerification> {
+            val userContext = call.getUserContext()
+            val request = call.receive<RequestDeviceVerificationRequest>()
+
+            call.respondEither(
+                deviceTrustService.requestDeviceVerificationEmail(
+                    userId = userContext.user.id,
+                    deviceId = request.deviceId
+                ),
+                HttpStatusCode.Accepted
+            ) { it.toApiError() }
         }
     }
 }

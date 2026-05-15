@@ -37,6 +37,8 @@ dependencies {
     implementation(libs.arrow.core)                   // Arrow Core for functional programming
     implementation(libs.hikaricp)                     // HikariCP for connection pooling
     implementation(libs.flyway.core)                  // Flyway for schema migrations
+    implementation(libs.jakarta.mail)                 // Jakarta Mail API
+    runtimeOnly(libs.angus.mail)                      // Angus Mail (Jakarta Mail implementation)
 
     // Testing dependencies
     testImplementation(libs.bundles.ktor.server.test)  // Ktor server testing

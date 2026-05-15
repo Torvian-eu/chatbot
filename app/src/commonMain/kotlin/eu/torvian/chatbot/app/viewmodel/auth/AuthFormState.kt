@@ -12,7 +12,11 @@ data class LoginFormState(
     val isLoading: Boolean = false,
     val usernameError: String? = null,
     val passwordError: String? = null,
-    val generalError: String? = null
+    val generalError: String? = null,
+    val showVerificationTrigger: Boolean = false,
+    val isVerifying: Boolean = false,
+    val verificationMessage: String? = null,
+    val isVerificationSuccess: Boolean = false
 ) {
     val isValid: Boolean
         get() = username.isNotBlank() &&
@@ -83,5 +87,29 @@ data class PasswordChangeFormState(
         get() = currentPasswordError != null ||
                 newPasswordError != null ||
                 confirmPasswordError != null ||
+                generalError != null
+}
+
+/**
+ * Represents the state of the change email form.
+ */
+@Serializable
+data class ChangeEmailFormState(
+    val currentPassword: String = "",
+    val newEmail: String = "",
+    val isLoading: Boolean = false,
+    val currentPasswordError: String? = null,
+    val newEmailError: String? = null,
+    val generalError: String? = null,
+    val emailChangeSuccessEvent: Boolean = false
+) {
+    val isValid: Boolean
+        get() = currentPassword.isNotBlank() &&
+                newEmail.isNotBlank() &&
+                newEmailError == null
+
+    val hasErrors: Boolean
+        get() = currentPasswordError != null ||
+                newEmailError != null ||
                 generalError != null
 }

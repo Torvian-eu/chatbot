@@ -138,11 +138,13 @@ interface TokenStorage {
      *
      * @param userId The ID of the account to update
      * @param requiresPasswordChange The new value for the password-change flag
+     * @param email The new email address (optional)
      * @return Either a [TokenStorageError] on failure or Unit on success
      */
     suspend fun updateAccountData(
         userId: Long,
-        requiresPasswordChange: Boolean
+        requiresPasswordChange: Boolean? = null,
+        email: String? = null
     ): Either<TokenStorageError, Unit>
 
 }

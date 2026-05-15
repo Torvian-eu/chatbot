@@ -36,7 +36,8 @@ fun miscModule() = module {
     single {
         ApiRoutesKtor(
             get(), get(), get(), get(), get(), get(), get(), get(), get(), get(),
-            get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()
+            get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(),
+            get(), get(), get(), get()
         )
     }
 }

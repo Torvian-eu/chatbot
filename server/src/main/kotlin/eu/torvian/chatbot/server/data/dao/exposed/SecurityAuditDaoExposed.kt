@@ -49,6 +49,18 @@ class SecurityAuditDaoExposed(
                 .map { it.toSecurityAuditEntity() }
         }
 
+    override suspend fun getUnacknowledgedByUserIdAndDeviceId(userId: Long, deviceId: String): List<SecurityAuditEntity> =
+        transactionScope.transaction {
+            SecurityAuditTable.selectAll()
+                .where {
+                    (SecurityAuditTable.userId eq userId) and
+                        (SecurityAuditTable.deviceId eq deviceId) and
+                        (SecurityAuditTable.status eq SecurityAuditStatus.PENDING.name)
+                }
+                .orderBy(SecurityAuditTable.createdAt to SortOrder.DESC)
+                .map { it.toSecurityAuditEntity() }
+        }
+
     override suspend fun updateStatus(id: Long, status: SecurityAuditStatus, resolvedAt: Long): Int =
         transactionScope.transaction {
             SecurityAuditTable.update({ SecurityAuditTable.id eq id }) {

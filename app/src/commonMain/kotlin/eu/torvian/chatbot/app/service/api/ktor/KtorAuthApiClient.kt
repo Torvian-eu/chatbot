@@ -4,12 +4,16 @@ import arrow.core.Either
 import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.AuthApi
 import eu.torvian.chatbot.common.api.resources.AuthResource
+import eu.torvian.chatbot.common.api.resources.PublicAuthResource
+import eu.torvian.chatbot.common.models.api.auth.ChangeEmailRequest
 import eu.torvian.chatbot.common.models.api.auth.ChangePasswordRequest
 import eu.torvian.chatbot.common.models.api.auth.CompleteRequiredPasswordChangeRequest
 import eu.torvian.chatbot.common.models.api.auth.LoginRequest
 import eu.torvian.chatbot.common.models.api.auth.LoginResponse
 import eu.torvian.chatbot.common.models.api.auth.RefreshTokenRequest
 import eu.torvian.chatbot.common.models.api.auth.RegisterRequest
+import eu.torvian.chatbot.common.models.api.auth.RequestDeviceVerificationRequest
+import eu.torvian.chatbot.common.models.api.auth.RequestPublicDeviceVerificationRequest
 import eu.torvian.chatbot.common.models.api.auth.UserSecurityAlert
 import eu.torvian.chatbot.common.models.api.auth.UserSessionInfo
 import eu.torvian.chatbot.common.models.api.auth.UserTrustedDeviceInfo
@@ -138,6 +142,14 @@ class KtorAuthApiClient(
         }
     }
 
+    override suspend fun changeEmail(currentPassword: String, newEmail: String): Either<ApiResourceError, User> {
+        return safeApiCall {
+            authenticatedClient.post(AuthResource.ChangeEmail()) {
+                setBody(ChangeEmailRequest(currentPassword = currentPassword, newEmail = newEmail))
+            }.body<User>()
+        }
+    }
+
     override suspend fun completeRequiredPasswordChange(newPassword: String): Either<ApiResourceError, Unit> {
         return safeApiCall {
             authenticatedClient.post(AuthResource.CompleteRequiredPasswordChange()) {
@@ -156,6 +168,22 @@ class KtorAuthApiClient(
         return safeApiCall {
             authenticatedClient.post(AuthResource.ResolveAlert(alertId = alertId)) {
                 setBody(ResolveAlertRequest(outcome = outcome))
+            }.body<Unit>()
+        }
+    }
+
+    override suspend fun requestDeviceVerification(deviceId: String): Either<ApiResourceError, Unit> {
+        return safeApiCall {
+            authenticatedClient.post(AuthResource.RequestDeviceVerification()) {
+                setBody(RequestDeviceVerificationRequest(deviceId = deviceId))
+            }.body<Unit>()
+        }
+    }
+
+    override suspend fun requestPublicDeviceVerification(username: String, deviceId: String): Either<ApiResourceError, Unit> {
+        return safeApiCall {
+            unauthenticatedClient.post(PublicAuthResource.RequestPublicDeviceVerification()) {
+                setBody(RequestPublicDeviceVerificationRequest(username = username, deviceId = deviceId))
             }.body<Unit>()
         }
     }

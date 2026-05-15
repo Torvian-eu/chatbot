@@ -16,6 +16,7 @@ sealed class AuthState {
      *
      * @property userId The unique identifier of the authenticated user
      * @property username The username of the authenticated user
+     * @property email The email address of the authenticated user
      * @property permissions The list of permissions granted to the user (aggregated from all their roles)
      * @property requiresPasswordChange Whether the user must change their password immediately
      * @property isRestricted Whether the session is restricted (created from an unacknowledged device)
@@ -24,6 +25,7 @@ sealed class AuthState {
     data class Authenticated(
         val userId: Long,
         val username: String,
+        val email: String? = null,
         val permissions: List<Permission>,
         val requiresPasswordChange: Boolean = false,
         val isRestricted: Boolean = false,

@@ -211,13 +211,17 @@ open class FileSystemTokenStorage(
 
     override suspend fun updateAccountData(
         userId: Long,
-        requiresPasswordChange: Boolean
+        requiresPasswordChange: Boolean?,
+        email: String?
     ): Either<TokenStorageError, Unit> = either {
-        logger.info("Updating cached account data for user $userId (requiresPasswordChange=$requiresPasswordChange)")
+        logger.info("Updating cached account data for user $userId (requiresPasswordChange=$requiresPasswordChange, email=$email)")
 
         // Load existing token data, update the user field, and re-encrypt
         val tokenData = loadTokenData(userId).bind()
-        val updatedUser = tokenData.user.copy(requiresPasswordChange = requiresPasswordChange)
+        val updatedUser = tokenData.user.copy(
+            requiresPasswordChange = requiresPasswordChange ?: tokenData.user.requiresPasswordChange,
+            email = email ?: tokenData.user.email
+        )
         val updatedTokenData = tokenData.copy(user = updatedUser)
         encryptAndSaveTokenData(userId, updatedTokenData).bind()
 

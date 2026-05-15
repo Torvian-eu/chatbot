@@ -187,6 +187,38 @@ interface AuthRepository {
     suspend fun changePassword(currentPassword: String, newPassword: String): Either<RepositoryError, Unit>
 
     /**
+     * Requests a device verification email for the current restricted session.
+     *
+     * This allows users on restricted sessions to request a verification email
+     * that will allow them to promote their device to "Trusted" via an email link.
+     *
+     * @param deviceId The client-side UUID of the device to verify
+     * @return Either a [RepositoryError] on failure or Unit on success
+     */
+    suspend fun requestDeviceVerification(deviceId: String): Either<RepositoryError, Unit>
+
+    /**
+     * Requests a device verification email for a new device using public authentication.
+     *
+     * This is for users blocked by STRICT mode on new devices. The repository resolves
+     * the device ID internally and calls the public API endpoint.
+     *
+     * @param username The username of the account
+     * @return Either a [RepositoryError] on failure or Unit on success
+     */
+    suspend fun requestPublicDeviceVerification(username: String): Either<RepositoryError, Unit>
+
+    /**
+     * Refreshes the current session by obtaining a new token using the stored refresh token.
+     *
+     * This is used to check if the user's session has been promoted from restricted to unrestricted
+     * (e.g., after clicking a device verification email link).
+     *
+     * @return Either a [RepositoryError] on failure or Unit on success
+     */
+    suspend fun refreshSession(): Either<RepositoryError, Unit>
+
+    /**
      * Completes a server-required password change for the authenticated user.
      *
      * This endpoint is used when the user is forced to change their password
@@ -199,4 +231,15 @@ interface AuthRepository {
      * @return Either a [RepositoryError] on failure or Unit on success
      */
     suspend fun completeRequiredPasswordChange(newPassword: String): Either<RepositoryError, Unit>
+
+    /**
+     * Changes the email address for the authenticated user.
+     *
+     * Requires the current password for verification. This operation is not available for restricted sessions.
+     *
+     * @param currentPassword The user's current password for verification
+     * @param newEmail The new email address to set
+     * @return Either a [RepositoryError] on failure or Unit on success
+     */
+    suspend fun changeEmail(currentPassword: String, newEmail: String): Either<RepositoryError, Unit>
 }

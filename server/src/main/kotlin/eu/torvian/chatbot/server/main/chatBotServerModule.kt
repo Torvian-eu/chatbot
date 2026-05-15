@@ -6,6 +6,9 @@ import eu.torvian.chatbot.server.koin.*
 import eu.torvian.chatbot.server.ktor.configureKtor
 import eu.torvian.chatbot.server.ktor.routes.ApiRoutesKtor
 import eu.torvian.chatbot.server.ktor.routes.configureWorkerWebSocketRoutes
+import eu.torvian.chatbot.server.ktor.routes.configurePublicAuthRoutes
+import eu.torvian.chatbot.server.service.security.DeviceTrustService
+import eu.torvian.chatbot.server.service.security.TokenService
 import eu.torvian.chatbot.server.worker.protocol.codec.WorkerServerWebSocketMessageCodec
 import eu.torvian.chatbot.server.worker.protocol.routing.WorkerServerIncomingMessageRouter
 import eu.torvian.chatbot.server.worker.command.pending.PendingWorkerCommandRegistry
@@ -36,7 +39,7 @@ fun Application.chatBotServerModule(config: AppConfiguration) {
     configureKoin(config)
 
     // Configure Ktor (general plugins like content negotiation, status pages, etc.)
-    configureKtor(config.jwt, get(), config.reverseProxy)
+    configureKtor(config.jwt, get<TokenService>(), config.reverseProxy)
 
     // Configure CORS from explicit allowlist.
     install(CORS) {
@@ -121,6 +124,7 @@ fun Application.configureDatabase() {
  */
 fun Application.configureRouting() {
     val apiRoutesKtor: ApiRoutesKtor = get()
+    val deviceTrustService: DeviceTrustService = get()
     val workerSessionRegistry: WorkerSessionRegistry = get()
     val workerMessageCodec: WorkerServerWebSocketMessageCodec = get()
     val workerMessageRouter: WorkerServerIncomingMessageRouter = get()
@@ -133,5 +137,6 @@ fun Application.configureRouting() {
             messageRouter = workerMessageRouter,
             pendingCommandRegistry = pendingWorkerCommandRegistry
         )
+        configurePublicAuthRoutes(deviceTrustService)
     }
 }

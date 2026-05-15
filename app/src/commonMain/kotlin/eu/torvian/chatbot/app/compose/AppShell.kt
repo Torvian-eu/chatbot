@@ -17,7 +17,7 @@ import eu.torvian.chatbot.app.generated.resources.action_retry
 import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.service.security.CertificateTrustService
-import eu.torvian.chatbot.app.viewmodel.auth.AuthViewModel
+import eu.torvian.chatbot.app.viewmodel.auth.SessionViewModel
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.getString
 import org.koin.compose.currentKoinScope
@@ -35,8 +35,8 @@ import org.koin.compose.viewmodel.koinViewModel
  */
 @Composable
 fun AppShell() {
-    val authViewModel: AuthViewModel = koinViewModel()
-    val authState by authViewModel.authState.collectAsState()
+    val sessionViewModel: SessionViewModel = koinViewModel()
+    val authState by sessionViewModel.authState.collectAsState()
     val eventBus: EventBus = currentKoinScope().get()
 
     // Get the CertificateTrustService from Koin
@@ -50,7 +50,7 @@ fun AppShell() {
 
     // Check initial authentication state on app startup
     LaunchedEffect(Unit) {
-        authViewModel.checkInitialAuthState()
+        sessionViewModel.checkInitialAuthState()
     }
 
     // Global error handling (preserve existing superior logic)
@@ -116,8 +116,7 @@ fun AppShell() {
 
         is AuthState.Unauthenticated -> {
             AuthenticationFlow(
-                snackbarHostState = snackbarHostState,
-                authViewModel = authViewModel
+                snackbarHostState = snackbarHostState
             )
         }
 
@@ -130,8 +129,7 @@ fun AppShell() {
             } else {
                 MainApplicationFlow(
                     authState = currentAuthState,
-                    snackbarHostState = snackbarHostState,
-                    authViewModel = authViewModel
+                    snackbarHostState = snackbarHostState
                 )
             }
         }

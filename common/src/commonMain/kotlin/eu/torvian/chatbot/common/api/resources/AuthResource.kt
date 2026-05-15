@@ -106,6 +106,14 @@ class AuthResource(val parent: Api = Api()) {
     class ChangePassword(val parent: AuthResource = AuthResource())
 
     /**
+     * Resource for changing the authenticated user's email address: /api/v1/auth/change-email
+     *
+     * Requires the current password for verification. This action is blocked for restricted sessions.
+     */
+    @Resource("change-email")
+    class ChangeEmail(val parent: AuthResource = AuthResource())
+
+    /**
      * Resource for completing a server-required password change: /api/v1/auth/complete-required-password-change
      *
      * This endpoint is only valid when the authenticated user's requiresPasswordChange flag is true.
@@ -122,4 +130,14 @@ class AuthResource(val parent: Api = Api()) {
      */
     @Resource("policy")
     class Policy(val parent: AuthResource = AuthResource())
+
+    /**
+     * Resource for requesting a device verification email: /api/v1/auth/request-device-verification
+     *
+     * This endpoint allows users on restricted sessions to request a verification email
+     * that will allow them to promote their device to "Trusted" via an email link.
+     * Requires authentication (even for restricted sessions).
+     */
+    @Resource("request-device-verification")
+    class RequestDeviceVerification(val parent: AuthResource = AuthResource())
 }

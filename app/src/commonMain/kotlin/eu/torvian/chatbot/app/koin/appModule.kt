@@ -18,7 +18,11 @@ import eu.torvian.chatbot.app.service.security.CertificateTrustService
 import eu.torvian.chatbot.app.viewmodel.*
 import eu.torvian.chatbot.app.viewmodel.admin.UserGroupManagementViewModel
 import eu.torvian.chatbot.app.viewmodel.admin.UserManagementViewModel
-import eu.torvian.chatbot.app.viewmodel.auth.AuthViewModel
+import eu.torvian.chatbot.app.viewmodel.auth.AccountManagementViewModel
+import eu.torvian.chatbot.app.viewmodel.auth.AuthEntryViewModel
+import eu.torvian.chatbot.app.viewmodel.auth.SecurityAuditViewModel
+import eu.torvian.chatbot.app.viewmodel.auth.SessionViewModel
+import eu.torvian.chatbot.app.viewmodel.auth.UserProfileViewModel
 import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatStateImpl
@@ -349,12 +353,49 @@ fun appModule(config: AppConfiguration): Module = module {
     viewModel {
         val scopeProvider = get<CoroutineScopeProvider>()
         val normalScope = scopeProvider.createNormalScope()
-        AuthViewModel(
+        AuthEntryViewModel(
+            get<AuthRepository>(),
+            get<NotificationService>(),
+            normalScope,
+            get<AuthValidationService>()
+        )
+    }
+    viewModel {
+        val scopeProvider = get<CoroutineScopeProvider>()
+        val normalScope = scopeProvider.createNormalScope()
+        SessionViewModel(
+            get<AuthRepository>(),
+            get<NotificationService>(),
+            normalScope
+        )
+    }
+    viewModel {
+        val scopeProvider = get<CoroutineScopeProvider>()
+        val normalScope = scopeProvider.createNormalScope()
+        AccountManagementViewModel(
+            get<AuthRepository>(),
+            get<NotificationService>(),
+            normalScope
+        )
+    }
+    viewModel {
+        val scopeProvider = get<CoroutineScopeProvider>()
+        val normalScope = scopeProvider.createNormalScope()
+        SecurityAuditViewModel(
             get<AuthRepository>(),
             get<NotificationService>(),
             get<ClipboardService>(),
-            normalScope,
-            get<AuthValidationService>()
+            normalScope
+        )
+    }
+    viewModel {
+        val scopeProvider = get<CoroutineScopeProvider>()
+        val normalScope = scopeProvider.createNormalScope()
+        UserProfileViewModel(
+            get<AuthRepository>(),
+            get<NotificationService>(),
+            get<AuthValidationService>(),
+            normalScope
         )
     }
     viewModel { SessionListViewModel(get<SessionRepository>(), get<GroupRepository>(), get<EventBus>(), get()) }

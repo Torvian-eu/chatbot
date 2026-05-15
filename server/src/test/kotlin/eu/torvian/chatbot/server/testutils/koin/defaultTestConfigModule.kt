@@ -5,6 +5,7 @@ import eu.torvian.chatbot.common.security.PasswordValidationConfig
 import eu.torvian.chatbot.common.security.UsernameValidationConfig
 import eu.torvian.chatbot.server.config.AppConfiguration
 import eu.torvian.chatbot.server.domain.config.AccountSecurityMode
+import eu.torvian.chatbot.server.domain.config.EmailConfig
 import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.koin.configModule
 import eu.torvian.chatbot.server.testutils.data.TestDefaults
@@ -19,6 +20,7 @@ import eu.torvian.chatbot.server.testutils.data.TestDefaults
  */
 fun defaultTestConfigModule(accountSecurityMode: AccountSecurityMode = AccountSecurityMode.DISABLED) = configModule(
     config = AppConfiguration(
+        serverUrl = "http://localhost:8080",
         setupRequired = false,
         storage = TestDefaults.getDefaultStorageConfig(),
         network = TestDefaults.getDefaultNetworkConfig(),
@@ -27,6 +29,10 @@ fun defaultTestConfigModule(accountSecurityMode: AccountSecurityMode = AccountSe
         database = TestDefaults.getDefaultDatabaseConfig(),
         encryption = TestDefaults.DEFAULT_ENCRYPTION_CONFIG,
         jwt = JwtConfig(secret = "test-secret-key-for-testing-purposes-only"),
+        email = EmailConfig(
+            provider = "log",
+            fromAddress = "noreply@chatbot.test"
+        ),
         accountSecurityMode = accountSecurityMode,
         reverseProxy = TestDefaults.getDefaultReverseProxyConfig(),
         authPolicy = AccountValidationPolicy(

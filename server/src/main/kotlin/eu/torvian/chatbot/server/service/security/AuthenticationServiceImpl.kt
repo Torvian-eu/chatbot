@@ -1,35 +1,22 @@
 package eu.torvian.chatbot.server.service.security
 
 import arrow.core.Either
-import arrow.core.getOrElse
 import arrow.core.left
 import arrow.core.raise.*
 import arrow.core.right
-import com.auth0.jwt.exceptions.JWTDecodeException
-import com.auth0.jwt.exceptions.JWTVerificationException
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
-import eu.torvian.chatbot.common.models.api.auth.UserTrustedDeviceInfo
 import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.common.security.AccountValidationPolicy
-import eu.torvian.chatbot.common.security.SecurityAuditStatus
-import eu.torvian.chatbot.common.security.error.PasswordValidationError
 import eu.torvian.chatbot.server.data.dao.*
 import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.dao.error.UserSessionError
-import eu.torvian.chatbot.server.data.dao.error.WorkerError
-import eu.torvian.chatbot.server.data.entities.SecurityAuditEntity
 import eu.torvian.chatbot.server.data.entities.UserSessionEntity
 import eu.torvian.chatbot.server.data.entities.mappers.toUser
 import eu.torvian.chatbot.server.domain.config.AccountSecurityMode
 import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.domain.security.LoginResult
-import eu.torvian.chatbot.server.domain.security.UserContext
-import eu.torvian.chatbot.server.domain.security.WorkerContext
 import eu.torvian.chatbot.server.service.core.UserService
-import eu.torvian.chatbot.server.service.core.error.auth.ChangePasswordError
-import eu.torvian.chatbot.server.service.core.error.auth.UserNotFoundError
 import eu.torvian.chatbot.server.service.security.error.*
-import io.ktor.server.auth.jwt.*
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 import kotlin.time.Clock
@@ -37,15 +24,32 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Instant
 
 /**
- * Implementation of [AuthenticationService] with JWT token generation and validation.
+ * Implementation of [AuthenticationService] for core authentication and session management.
  *
- * This implementation provides complete authentication functionality including:
+ * Handles user login/logout operations and session lifecycle management, including:
  * - User credential validation
- * - JWT token generation and validation
- * - Session lifecycle management
- * - Token refresh capabilities
- * - Device-based trust with AccountSecurityMode (DISABLED, WARNING, STRICT)
+ * - JWT token generation
+ * - Session creation and deletion
+ * - Device-based trust checking during login
  * - Sliding-window lockout for failed login attempts
+ *
+ * For JWT token operations, see [TokenService].
+ * For device trust management, see [DeviceTrustService].
+ * For security alerts, see [SecurityAuditService].
+ * For account management, see [AccountManagementService].
+ *
+ * @property userService Service for user-related operations.
+ * @property passwordService Service for password hashing and validation.
+ * @property jwtConfig JWT configuration for token generation.
+ * @property userSessionDao Data access object for user sessions.
+ * @property userTrustedDeviceDao Data access object for trusted devices.
+ * @property securityAuditDao Data access object for security audit logs.
+ * @property userDao Data access object for user data.
+ * @property authorizationService Service for authorization checks.
+ * @property transactionScope Scope for database transactions.
+ * @property accountSecurityMode Mode for device-based security (DISABLED, WARNING, STRICT).
+ * @property failedLoginAttemptDao Data access object for failed login attempts.
+ * @property authPolicy Policy for account validation rules.
  */
 class AuthenticationServiceImpl(
     private val userService: UserService,
@@ -55,7 +59,6 @@ class AuthenticationServiceImpl(
     private val userTrustedDeviceDao: UserTrustedDeviceDao,
     private val securityAuditDao: SecurityAuditDao,
     private val userDao: UserDao,
-    private val workerDao: WorkerDao,
     private val authorizationService: AuthorizationService,
     private val transactionScope: TransactionScope,
     private val accountSecurityMode: AccountSecurityMode,
@@ -180,12 +183,29 @@ class AuthenticationServiceImpl(
                     failedLoginAttemptDao.recordFailure(username, effectiveIpAddress, deviceId)
                     // Cleanup old records to prevent database bloat
                     failedLoginAttemptDao.cleanupOldRecords(windowStartMillis)
+                } else if (error is LoginError.VerificationRequired) {
+                    // Insert audit record for STRICT mode login attempt (outside transaction so it persists)
+                    securityAuditDao.insertAuditRecord(
+                        userId = error.userId,
+                        deviceId = deviceId,
+                        ipAddress = effectiveIpAddress,
+                        createdAt = currentTimeMillis
+                    )
                 }
             },
-            ifRight = {
+            ifRight = { loginResult ->
                 // Clear failed login attempts on successful login
                 // Only clears username-based failures, IP-based failures remain to prevent reset attacks
                 failedLoginAttemptDao.clearFailures(username)
+                // Insert audit record for WARNING mode login (restricted session)
+                if (loginResult.isRestricted) {
+                    securityAuditDao.insertAuditRecord(
+                        userId = loginResult.user.id,
+                        deviceId = deviceId,
+                        ipAddress = effectiveIpAddress,
+                        createdAt = currentTimeMillis
+                    )
+                }
             }
         )
         return result
@@ -235,29 +255,18 @@ class AuthenticationServiceImpl(
 
         // Check if this device is already trusted for this user
         val trustedDevice = userTrustedDeviceDao.getTrustedDevice(userId, normalizedDeviceId)
-
-        if (trustedDevice == null) {
-            // Unknown device - create audit record
-            securityAuditDao.insertAuditRecord(
-                userId = userId,
-                deviceId = normalizedDeviceId,
-                ipAddress = ipAddress,
-                createdAt = currentTimeMillis
-            )
-
-            // Apply security mode policy
-            return when (accountSecurityMode) {
+            ?: // Unknown device - apply security mode policy
+            when (accountSecurityMode) {
                 AccountSecurityMode.STRICT -> {
                     // Block unknown devices in STRICT mode
-                    raise(LoginError.VerificationRequired)
+                    raise(LoginError.VerificationRequired(userId))
                 }
 
                 AccountSecurityMode.WARNING -> {
                     // Restrict session for unknown devices in WARNING mode
-                    true
+                    return true
                 }
             }
-        }
 
         // Known device found - update last used info and allow unrestricted session
         userTrustedDeviceDao.updateLastUsedAt(
@@ -338,557 +347,5 @@ class AuthenticationServiceImpl(
         transactionScope.transaction {
             // The DAO already scopes the query by user ID, so this remains a pure read operation.
             userSessionDao.getSessionsByUserId(userId).right()
-        }
-
-    override suspend fun getSecurityAlerts(userId: Long, requesterIsRestricted: Boolean): Either<GetSecurityAlertsError, List<SecurityAuditEntity>> =
-        transactionScope.transaction {
-            either {
-                // Restricted sessions cannot list security alerts
-                ensure(!requesterIsRestricted) {
-                    logger.warn("Restricted session attempted to list security alerts for user: $userId")
-                    raise(GetSecurityAlertsError.InsufficientPermissions())
-                }
-                securityAuditDao.getUnacknowledgedByUserId(userId)
-            }
-        }
-
-    override suspend fun refreshToken(
-        refreshToken: String,
-        ipAddress: String?
-    ): Either<RefreshTokenError, LoginResult> =
-        transactionScope.transaction {
-            either {
-                // First, decode and verify the refresh token (non-suspend operations)
-                // This block remains as is, as withError is not suitable for early return from Either.catch
-                val decodedJWT = catch({
-                    jwtConfig.userVerifier.verify(refreshToken)
-                }) { e ->
-                    when (e) {
-                        is JWTDecodeException -> {
-                            logger.debug("Refresh token decode failed", e)
-                            raise(RefreshTokenError.InvalidRefreshToken)
-                        }
-
-                        is JWTVerificationException -> {
-                            logger.debug("Refresh token verification failed", e)
-                            raise(RefreshTokenError.InvalidRefreshToken)
-                        }
-
-                        else -> {
-                            logger.error("Unexpected error during token refresh", e)
-                            raise(RefreshTokenError.TokenGenerationFailed("Unexpected error occurred"))
-                        }
-                    }
-                }
-
-                // Verify this is actually a refresh token
-                val tokenType = decodedJWT.getClaim("tokenType")?.asString()
-                ensure(tokenType == "refresh") {
-                    RefreshTokenError.InvalidRefreshToken
-                }
-
-                // Extract claims
-                val userId = decodedJWT.subject?.toLongOrNull()
-                    ?: raise(RefreshTokenError.InvalidRefreshToken)
-
-                val sessionId = decodedJWT.getClaim("sessionId")?.asLong()
-                    ?: raise(RefreshTokenError.InvalidRefreshToken)
-
-                // Validate session exists
-                val session = withError({ _: UserSessionError.SessionNotFound ->
-                    RefreshTokenError.InvalidSession("Session not found")
-                }) {
-                    userSessionDao.getSessionById(sessionId).bind()
-                }
-
-                // Validate session is not expired
-                val currentTime = Instant.fromEpochMilliseconds(System.currentTimeMillis())
-                ensure(session.expiresAt > currentTime) {
-                    RefreshTokenError.InvalidSession("Session expired")
-                }
-
-                // Get user details
-                val user = withError({ _: UserNotFoundError.ById ->
-                    RefreshTokenError.InvalidSession("User not found")
-                }) {
-                    userService.getUserById(userId).bind()
-                }
-
-                // Delete old session
-                withError({ _: UserSessionError.SessionNotFound ->
-                    RefreshTokenError.InvalidSession("Session not found")
-                }) {
-                    userSessionDao.deleteSession(sessionId).bind()
-                }
-
-                // Create new session, preserving the restricted status from the old session
-                val newSessionExpirationMs = jwtConfig.refreshExpirationMs
-                val newSessionExpiresAt = currentTime.toEpochMilliseconds() + newSessionExpirationMs
-                val newSession = withError({ _: UserSessionError.ForeignKeyViolation ->
-                    RefreshTokenError.InvalidSession("User not found")
-                }) {
-                    userSessionDao.insertSession(
-                        userId,
-                        session.deviceId,
-                        newSessionExpiresAt,
-                        ipAddress,
-                        session.isRestricted
-                    ).bind()
-                }
-
-                // Generate new tokens, preserving the restricted status
-                val newAccessToken = jwtConfig.generateAccessToken(
-                    userId = userId,
-                    sessionId = newSession.id,
-                    isRestricted = session.isRestricted,
-                    currentTime = currentTime.toEpochMilliseconds()
-                )
-                val newRefreshToken = jwtConfig.generateRefreshToken(
-                    userId = userId,
-                    sessionId = newSession.id,
-                    currentTime = currentTime.toEpochMilliseconds()
-                )
-                val tokenExpiresAt = currentTime.plus(jwtConfig.tokenExpirationMs.milliseconds)
-
-                // Retrieve user permissions
-                val permissions = authorizationService.getUserPermissions(userId)
-
-                logger.info("Successfully refreshed tokens for user: $userId")
-
-                LoginResult(
-                    user = user,
-                    accessToken = newAccessToken,
-                    refreshToken = newRefreshToken,
-                    expiresAt = tokenExpiresAt,
-                    permissions = permissions,
-                    isRestricted = session.isRestricted,
-                    deviceId = null // Device ID not available during token refresh; client uses its own device ID
-                )
-            }
-        }
-
-    override suspend fun validateCredential(credential: JWTCredential): UserContext? = transactionScope.transaction {
-        either {
-            logger.debug("Validating JWT credential for subject: ${credential.payload.subject}")
-            // Ktor already verified the signature and expiration. We validate the business logic.
-
-            val principalType = credential.payload.getClaim("principalType")?.asString()
-            ensure(principalType == "user") {
-                TokenValidationError.InvalidClaims
-            }
-
-            // Ensure only access tokens can authenticate protected routes.
-            val tokenType = credential.payload.getClaim("tokenType")?.asString()
-            ensure(tokenType == "access") {
-                TokenValidationError.InvalidClaims
-            }
-
-            // Extract claims from the payload
-            val userId = credential.payload.subject?.toLongOrNull()
-                ?: raise(TokenValidationError.InvalidClaims)
-            val sessionId = credential.payload.getClaim("sessionId")?.asLong()
-                ?: raise(TokenValidationError.InvalidClaims)
-            val issuedAt = Instant.fromEpochMilliseconds(credential.payload.issuedAt?.time ?: 0L)
-            val expiresAt = Instant.fromEpochMilliseconds(credential.payload.expiresAt?.time ?: 0L)
-
-            // Validate session exists in the database
-            val session = withError({ _: UserSessionError.SessionNotFound ->
-                TokenValidationError.InvalidSession("Session not found")
-            }) {
-                userSessionDao.getSessionById(sessionId).bind()
-            }
-
-            // Validate session is not expired
-            val currentTime = Instant.fromEpochMilliseconds(System.currentTimeMillis())
-            ensure(session.expiresAt > currentTime) {
-                TokenValidationError.InvalidSession("Session expired")
-            }
-
-            // Get user details
-            val user = withError({ _: UserNotFoundError.ById ->
-                TokenValidationError.InvalidSession("User not found for session")
-            }) {
-                userService.getUserById(userId).bind()
-            }
-
-            ensure(user.status == UserStatus.ACTIVE) {
-                TokenValidationError.AccountLocked("Account is disabled")
-            }
-
-            // Update session last accessed time
-            userSessionDao.updateLastAccessed(sessionId, currentTime.toEpochMilliseconds())
-
-            val userContext = UserContext(
-                user = user,
-                sessionId = sessionId,
-                tokenIssuedAt = issuedAt,
-                tokenExpiresAt = expiresAt,
-                isRestricted = session.isRestricted
-            )
-
-            logger.debug("Credential validation successful for user: ${user.username}")
-            userContext
-        }.getOrElse {  // Return UserContext on success, null on any validation error
-            logger.debug("Credential validation failed: {}", it)
-            null
-        }
-    }
-
-    override suspend fun validateWorkerCredential(credential: JWTCredential): WorkerContext? =
-        transactionScope.transaction {
-            either {
-                logger.debug("Validating worker credential (subject={})", credential.payload.subject)
-
-                val principalType = credential.payload.getClaim("principalType")?.asString()
-                if (principalType != "service") {
-                    logger.debug("Worker credential rejected: invalid principal type ({})", principalType)
-                    raise(TokenValidationError.InvalidClaims)
-                }
-
-                val tokenType = credential.payload.getClaim("tokenType")?.asString()
-                if (tokenType != "access") {
-                    logger.debug("Worker credential rejected: invalid token type ({})", tokenType)
-                    raise(TokenValidationError.InvalidClaims)
-                }
-
-                val workerId = credential.payload.getClaim("workerId")?.asLong()
-                    ?: raise(TokenValidationError.InvalidClaims)
-                val claimedWorkerUid = credential.payload.getClaim("workerUid")?.asString()
-                val ownerUserId = credential.payload.getClaim("ownerUserId")?.asLong()
-                    ?: raise(TokenValidationError.InvalidClaims)
-                val scopes = credential.payload.getClaim("scope")?.asList(String::class.java) ?: emptyList()
-                val issuedAt = Instant.fromEpochMilliseconds(credential.payload.issuedAt?.time ?: 0L)
-                val expiresAt = Instant.fromEpochMilliseconds(credential.payload.expiresAt?.time ?: 0L)
-
-                val worker = withError({ _: WorkerError.NotFound ->
-                    logger.warn("Worker credential rejected: worker not found (workerId={})", workerId)
-                    TokenValidationError.InvalidSession("Worker not found")
-                }) {
-                    workerDao.getWorkerById(workerId).bind()
-                }
-
-                if (worker.ownerUserId != ownerUserId) {
-                    logger.warn("Worker credential rejected: owner mismatch (workerId={})", workerId)
-                    raise(TokenValidationError.InvalidClaims)
-                }
-                if (claimedWorkerUid != null && claimedWorkerUid != worker.workerUid) {
-                    logger.warn("Worker credential rejected: worker UID mismatch (workerId={})", workerId)
-                    raise(TokenValidationError.InvalidClaims)
-                }
-
-                val context = WorkerContext(
-                    workerId = worker.id,
-                    workerUid = worker.workerUid,
-                    ownerUserId = ownerUserId,
-                    scopes = scopes,
-                    tokenIssuedAt = issuedAt,
-                    tokenExpiresAt = expiresAt
-                )
-
-                logger.debug("Worker credential validation successful (workerId={})", worker.id)
-                context
-            }.getOrElse {
-                logger.debug("Worker credential validation failed: {}", it)
-                null
-            }
-        }
-
-    override suspend fun getTrustedDevices(
-        userId: Long,
-        requesterIsRestricted: Boolean
-    ): Either<RevokeTrustedDeviceError, List<UserTrustedDeviceInfo>> =
-        transactionScope.transaction {
-            either {
-                // Restricted sessions cannot list trusted devices - prevents enumeration attacks
-                ensure(!requesterIsRestricted) {
-                    logger.warn("Restricted session attempted to list trusted devices")
-                    raise(RevokeTrustedDeviceError.InsufficientPermissions())
-                }
-
-                // Fetch all trusted devices for the user
-                val devices = userTrustedDeviceDao.getTrustedDevices(userId)
-
-                // Map to API response DTO
-                devices.map { device ->
-                    UserTrustedDeviceInfo(
-                        deviceId = device.deviceId,
-                        lastIpAddress = device.lastIpAddress,
-                        firstSeenAt = device.firstSeenAt,
-                        lastUsedAt = device.lastUsedAt
-                    )
-                }
-            }
-        }
-
-    override suspend fun revokeTrustedDevice(
-        userId: Long,
-        deviceId: String,
-        requesterIsRestricted: Boolean
-    ): Either<RevokeTrustedDeviceError, Unit> =
-        transactionScope.transaction {
-            either {
-                // Restricted sessions cannot revoke devices - prevents malicious actions from unverified devices
-                ensure(!requesterIsRestricted) {
-                    logger.warn("Restricted session attempted to revoke trusted device: $deviceId")
-                    raise(RevokeTrustedDeviceError.InsufficientPermissions())
-                }
-
-                // Delete the trusted device
-                val deletedCount = userTrustedDeviceDao.deleteTrustedDevice(userId, deviceId)
-
-                ensure(deletedCount > 0) {
-                    logger.warn("Device not found for revocation: $deviceId, user: $userId")
-                    raise(RevokeTrustedDeviceError.DeviceNotFound(deviceId))
-                }
-
-                logger.info("Successfully revoked trusted device: $deviceId for user: $userId")
-            }
-        }
-
-    override suspend fun changePassword(
-        userId: Long,
-        currentPassword: String,
-        newPassword: String,
-        requesterIsRestricted: Boolean
-    ): Either<ChangePasswordError, Unit> =
-        transactionScope.transaction {
-            either {
-                logger.info("Changing password for user: $userId, restricted: $requesterIsRestricted")
-
-                // 1. Check restriction - restricted sessions cannot change password
-                ensure(!requesterIsRestricted) {
-                    logger.warn("Restricted session attempted to change password")
-                    raise(ChangePasswordError.InsufficientPermissions)
-                }
-
-                // 2. Verify current password
-                val userEntity = withError({ _: UserError.UserNotFound ->
-                    ChangePasswordError.UserNotFound(userId)
-                }) {
-                    userDao.getUserById(userId).bind()
-                }
-
-                // Verify the current password matches
-                ensure(passwordService.verifyPassword(currentPassword, userEntity.passwordHash)) {
-                    logger.warn("Invalid current password for user: $userId")
-                    raise(ChangePasswordError.InvalidCurrentPassword)
-                }
-
-                // 3. Validate new password strength
-                withError({ passwordError ->
-                    when (passwordError) {
-                        is PasswordValidationError.Empty ->
-                            ChangePasswordError.InvalidPassword("Password cannot be empty")
-
-                        is PasswordValidationError.OnlyWhitespace ->
-                            ChangePasswordError.InvalidPassword("Password cannot contain only whitespace")
-
-                        is PasswordValidationError.TooShort ->
-                            ChangePasswordError.InvalidPassword(
-                                "Password must be at least ${passwordError.minLength} characters"
-                            )
-
-                        is PasswordValidationError.TooLong ->
-                            ChangePasswordError.InvalidPassword(
-                                "Password must be no more than ${passwordError.maxLength} characters"
-                            )
-
-                        is PasswordValidationError.MissingCharacterTypes ->
-                            ChangePasswordError.InvalidPassword(
-                                "Password must contain required character types"
-                            )
-
-                        is PasswordValidationError.TooCommon ->
-                            ChangePasswordError.InvalidPassword(passwordError.reason)
-                    }
-                }) {
-                    passwordService.validatePasswordStrength(newPassword).bind()
-                }
-
-                // Prevent reusing the current password
-                ensure(!passwordService.verifyPassword(newPassword, userEntity.passwordHash)) {
-                    logger.warn("User $userId attempted to reuse current password")
-                    raise(ChangePasswordError.SameAsCurrentPassword)
-                }
-
-                // 4. Hash new password and update user record
-                val hashedPassword = passwordService.hashPassword(newPassword)
-
-                // Update user with new password and clear requiresPasswordChange flag
-                val updatedUser = userEntity.copy(
-                    passwordHash = hashedPassword,
-                    requiresPasswordChange = false
-                )
-                // Use mapLeft to convert the error type
-                userDao.updateUser(updatedUser).mapLeft { error ->
-                    when (error) {
-                        is UserError.UserNotFound -> ChangePasswordError.UserNotFound(userId)
-                        else -> ChangePasswordError.UserNotFound(userId)
-                    }
-                }.bind()
-
-                logger.info("Successfully changed password for user: $userId")
-            }
-        }
-
-    override suspend fun completeRequiredPasswordChange(
-        userId: Long,
-        newPassword: String,
-        requesterIsRestricted: Boolean
-    ): Either<CompleteRequiredPasswordChangeError, Unit> =
-        transactionScope.transaction {
-            either {
-                logger.info("Completing required password change for user: $userId, restricted: $requesterIsRestricted")
-
-                // 1. Check restriction - restricted sessions cannot complete required password change
-                ensure(!requesterIsRestricted) {
-                    logger.warn("Restricted session attempted to complete required password change")
-                    raise(CompleteRequiredPasswordChangeError.InsufficientPermissions)
-                }
-
-                // 2. Fetch user entity
-                val userEntity = withError({ _: UserError.UserNotFound ->
-                    CompleteRequiredPasswordChangeError.UserNotFound
-                }) {
-                    userDao.getUserById(userId).bind()
-                }
-
-                // 3. Check that password change is required for this user
-                ensure(userEntity.requiresPasswordChange) {
-                    logger.warn("User $userId attempted password change but it's not required")
-                    raise(CompleteRequiredPasswordChangeError.PasswordChangeNotRequired)
-                }
-
-                // 4. Validate new password strength
-                withError({ passwordError ->
-                    when (passwordError) {
-                        is PasswordValidationError.Empty ->
-                            CompleteRequiredPasswordChangeError.WeakPassword("Password cannot be empty")
-
-                        is PasswordValidationError.OnlyWhitespace ->
-                            CompleteRequiredPasswordChangeError.WeakPassword("Password cannot contain only whitespace")
-
-                        is PasswordValidationError.TooShort ->
-                            CompleteRequiredPasswordChangeError.WeakPassword(
-                                "Password must be at least ${passwordError.minLength} characters"
-                            )
-
-                        is PasswordValidationError.TooLong ->
-                            CompleteRequiredPasswordChangeError.WeakPassword(
-                                "Password must be no more than ${passwordError.maxLength} characters"
-                            )
-
-                        is PasswordValidationError.MissingCharacterTypes ->
-                            CompleteRequiredPasswordChangeError.WeakPassword(
-                                "Password must contain required character types"
-                            )
-
-                        is PasswordValidationError.TooCommon ->
-                            CompleteRequiredPasswordChangeError.WeakPassword(passwordError.reason)
-                    }
-                }) {
-                    passwordService.validatePasswordStrength(newPassword).bind()
-                }
-
-                // 5. Hash new password and update user record
-                val hashedPassword = passwordService.hashPassword(newPassword)
-
-                // Update user with new password and clear requiresPasswordChange flag
-                val updatedUser = userEntity.copy(
-                    passwordHash = hashedPassword,
-                    requiresPasswordChange = false
-                )
-                // Use mapLeft to convert the error type
-                userDao.updateUser(updatedUser).mapLeft { error ->
-                    when (error) {
-                        is UserError.UserNotFound -> CompleteRequiredPasswordChangeError.UserNotFound
-                        else -> CompleteRequiredPasswordChangeError.UpdateFailed("Database update failed")
-                    }
-                }.bind()
-
-                logger.info("Successfully completed required password change for user: $userId")
-            }
-        }
-
-    /**
-     * Resolves a single security alert for the user with the specified outcome.
-     *
-     * This method allows the user to either trust or dismiss a specific security alert.
-     * - TRUSTED: The device is added to the trusted devices list and the alert is marked as trusted.
-     * - DISMISSED: The alert is marked as dismissed without adding the device to trusted devices.
-     *
-     * Restricted sessions cannot resolve alerts - this prevents self-resolution of untrusted devices.
-     *
-     * @param userId The unique identifier of the authenticated user.
-     * @param alertId The unique identifier of the security alert to resolve.
-     * @param outcome The outcome to apply (TRUSTED or DISMISSED).
-     * @param requesterIsRestricted Whether the requester's session is restricted (device not verified)
-     * @return Either [ResolveAlertError] if resolution fails, or Unit on success
-     */
-    override suspend fun resolveSingleAlert(
-        userId: Long,
-        alertId: Long,
-        outcome: SecurityAuditStatus,
-        requesterIsRestricted: Boolean
-    ): Either<ResolveAlertError, Unit> =
-        transactionScope.transaction {
-            either {
-                logger.info("Resolving security alert: $alertId for user: $userId with outcome: $outcome")
-
-                // 1. Check restriction - restricted sessions cannot resolve alerts
-                ensure(!requesterIsRestricted) {
-                    logger.warn("Restricted session attempted to resolve security alert: $alertId")
-                    ResolveAlertError.InsufficientPermissions()
-                }
-
-                // 2. Fetch the alert record
-                val auditRecord = securityAuditDao.getAuditRecordById(alertId)
-                    ?: raise(ResolveAlertError.AlertNotFound(alertId))
-
-                // 3. Ensure the alert belongs to the user
-                ensure(auditRecord.userId == userId) {
-                    logger.warn("Alert $alertId does not belong to user $userId")
-                    ResolveAlertError.AlertNotFound(alertId)
-                }
-
-                // 4. Ensure the alert is still pending
-                ensure(auditRecord.status == SecurityAuditStatus.PENDING) {
-                    logger.warn("Alert $alertId is not pending (status: ${auditRecord.status})")
-                    // Not an error - just return success since the alert is already resolved
-                    return@transaction Unit.right()
-                }
-
-                val currentTimeMillis = System.currentTimeMillis()
-
-                // 5. Handle the outcome
-                when (outcome) {
-                    SecurityAuditStatus.TRUSTED -> {
-                        // Add device to trusted devices if not already there
-                        val existingDevice = userTrustedDeviceDao.getTrustedDevice(userId, auditRecord.deviceId)
-                        if (existingDevice == null) {
-                            userTrustedDeviceDao.insertTrustedDevice(
-                                userId = userId,
-                                deviceId = auditRecord.deviceId,
-                                ipAddress = auditRecord.ipAddress,
-                                firstSeenAt = currentTimeMillis,
-                                lastUsedAt = currentTimeMillis
-                            )
-                        }
-                        // Mark the alert as trusted
-                        securityAuditDao.updateStatus(alertId, SecurityAuditStatus.TRUSTED, currentTimeMillis)
-                    }
-
-                    SecurityAuditStatus.DISMISSED -> {
-                        // Mark the alert as dismissed - do NOT add to trusted devices
-                        securityAuditDao.updateStatus(alertId, SecurityAuditStatus.DISMISSED, currentTimeMillis)
-                    }
-
-                    SecurityAuditStatus.PENDING -> {
-                        // No-op - should not happen as we check for PENDING above
-                    }
-                }
-
-                logger.info("Successfully resolved security alert: $alertId for user: $userId with outcome: $outcome")
-            }
         }
 }

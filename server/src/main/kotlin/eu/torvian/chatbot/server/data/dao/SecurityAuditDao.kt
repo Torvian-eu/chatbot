@@ -32,6 +32,15 @@ interface SecurityAuditDao {
     suspend fun getUnacknowledgedByUserId(userId: Long): List<SecurityAuditEntity>
 
     /**
+     * Retrieves all pending security audit records for a user filtered by device ID.
+     *
+     * @param userId The owning user identifier.
+     * @param deviceId The client-side UUID of the device to filter by.
+     * @return List of pending audit records for the specified device.
+     */
+    suspend fun getUnacknowledgedByUserIdAndDeviceId(userId: Long, deviceId: String): List<SecurityAuditEntity>
+
+    /**
      * Updates the status of a specific audit record.
      *
      * @param id The audit record identifier.

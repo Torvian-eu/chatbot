@@ -12,6 +12,7 @@ import eu.torvian.chatbot.server.data.dao.error.UserSessionError
 import eu.torvian.chatbot.server.data.entities.UserSessionEntity
 import eu.torvian.chatbot.server.data.tables.UserSessionsTable
 import eu.torvian.chatbot.server.data.tables.mappers.toUserSessionEntity
+import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.less
 import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
@@ -105,5 +106,14 @@ class UserSessionDaoExposed(
     override suspend fun deleteExpiredSessions(currentTime: Long): Int =
         transactionScope.transaction {
             UserSessionsTable.deleteWhere { UserSessionsTable.expiresAt less currentTime }
+        }
+
+    override suspend fun unrestrictSessions(userId: Long, deviceId: String): Int =
+        transactionScope.transaction {
+            UserSessionsTable.update({
+                (UserSessionsTable.userId eq userId) and (UserSessionsTable.deviceId eq deviceId)
+            }) {
+                it[isRestricted] = false
+            }
         }
 }

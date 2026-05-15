@@ -32,9 +32,11 @@ import eu.torvian.chatbot.app.compose.topbar.TopBarContent
 import eu.torvian.chatbot.app.compose.topbar.TopBarContentController
 import eu.torvian.chatbot.app.domain.navigation.*
 import eu.torvian.chatbot.app.repository.AuthState
-import eu.torvian.chatbot.app.service.auth.AccountData
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
-import eu.torvian.chatbot.app.viewmodel.auth.AuthViewModel
+import eu.torvian.chatbot.app.viewmodel.auth.AccountManagementViewModel
+import eu.torvian.chatbot.app.viewmodel.auth.SecurityAuditViewModel
+import eu.torvian.chatbot.app.viewmodel.auth.SessionViewModel
+import eu.torvian.chatbot.app.viewmodel.auth.UserProfileViewModel
 import eu.torvian.chatbot.common.api.CommonPermissions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -47,8 +49,7 @@ import org.koin.compose.viewmodel.koinViewModel
 @Composable
 fun MainApplicationFlow(
     authState: AuthState.Authenticated,
-    snackbarHostState: SnackbarHostState,
-    authViewModel: AuthViewModel
+    snackbarHostState: SnackbarHostState
 ) {
     val navController = rememberNavController()
     val sessionListViewModel: SessionListViewModel = koinViewModel()
@@ -56,10 +57,6 @@ fun MainApplicationFlow(
 
     var topBarContent by remember { mutableStateOf<TopBarContent?>(null) }
     val topBarController = rememberTopBarController { topBarContent = it }
-
-    val availableAccounts by authViewModel.availableAccounts.collectAsState()
-    val accountSwitchInProgress by authViewModel.accountSwitchInProgress.collectAsState()
-    val dialogState by authViewModel.dialogState.collectAsState()
 
     LaunchedEffect(authState.userId) {
         sessionListViewModel.loadSessionsAndGroups()
@@ -71,9 +68,6 @@ fun MainApplicationFlow(
             topBarContent = topBarContent,
             snackbarHostState = snackbarHostState,
             authState = authState,
-            availableAccounts = availableAccounts,
-            accountSwitchInProgress = accountSwitchInProgress,
-            authViewModel = authViewModel,
             navController = navController,
             scope = scope
         ) { paddingValues ->
@@ -81,18 +75,12 @@ fun MainApplicationFlow(
                 navController = navController,
                 paddingValues = paddingValues,
                 sessionListViewModel = sessionListViewModel,
-                authState = authState,
-                authViewModel = authViewModel
+                authState = authState
             )
         }
 
-        AuthDialogs(
-            dialogState = dialogState,
-            availableAccounts = availableAccounts,
-            currentAuthState = authState,
-            accountSwitchInProgress = accountSwitchInProgress,
-            authViewModel = authViewModel
-        )
+        // AuthDialogs resolves its own ViewModels and collects its own dialog states
+        AuthDialogs(currentAuthState = authState)
     }
 }
 
@@ -148,9 +136,6 @@ private fun MainScaffold(
     topBarContent: TopBarContent?,
     snackbarHostState: SnackbarHostState,
     authState: AuthState.Authenticated,
-    availableAccounts: List<AccountData>,
-    accountSwitchInProgress: Boolean,
-    authViewModel: AuthViewModel,
     navController: NavController,
     scope: CoroutineScope,
     content: @Composable (PaddingValues) -> Unit
@@ -161,9 +146,6 @@ private fun MainScaffold(
                 MainTopAppBar(
                     topBarContent = topBarContent,
                     authState = authState,
-                    availableAccounts = availableAccounts,
-                    accountSwitchInProgress = accountSwitchInProgress,
-                    authViewModel = authViewModel,
                     navController = navController,
                     scope = scope
                 )
@@ -187,9 +169,6 @@ private fun MainScaffold(
 private fun MainTopAppBar(
     topBarContent: TopBarContent?,
     authState: AuthState.Authenticated,
-    availableAccounts: List<AccountData>,
-    accountSwitchInProgress: Boolean,
-    authViewModel: AuthViewModel,
     navController: NavController,
     scope: CoroutineScope
 ) {
@@ -205,9 +184,6 @@ private fun MainTopAppBar(
                 val userMenu = @Composable {
                     UserMenuButton(
                         authState = authState,
-                        availableAccounts = availableAccounts,
-                        accountSwitchInProgress = accountSwitchInProgress,
-                        authViewModel = authViewModel,
                         navController = navController,
                         scope = scope
                     )
@@ -231,23 +207,29 @@ private fun MainTopAppBar(
 /**
  * User menu button with tooltip.
  *
+ * Resolves its own ViewModels and collects local state for accounts, switches, and security alerts.
+ *
  * @param authState The currently authenticated user state used to render the menu label.
- * @param availableAccounts The locally stored accounts that can be switched to.
- * @param accountSwitchInProgress Whether account switching is currently busy.
- * @param authViewModel The auth view model that owns the menu actions.
  * @param navController Navigation controller used for login navigation.
  * @param scope Coroutine scope used to launch logout actions from the UI.
  */
 @Composable
 private fun UserMenuButton(
     authState: AuthState.Authenticated,
-    availableAccounts: List<AccountData>,
-    accountSwitchInProgress: Boolean,
-    authViewModel: AuthViewModel,
     navController: NavController,
     scope: CoroutineScope
 ) {
-    val alerts by authViewModel.securityAlerts.collectAsState()
+    // Resolve ViewModels locally
+    val sessionViewModel: SessionViewModel = koinViewModel()
+    val accountManagementViewModel: AccountManagementViewModel = koinViewModel()
+    val securityAuditViewModel: SecurityAuditViewModel = koinViewModel()
+    val userProfileViewModel: UserProfileViewModel = koinViewModel()
+
+    // Collect local state
+    val availableAccounts by accountManagementViewModel.availableAccounts.collectAsState()
+    val accountSwitchInProgress by accountManagementViewModel.accountSwitchInProgress.collectAsState()
+    val alerts by securityAuditViewModel.securityAlerts.collectAsState()
+
     PlainTooltipBox(text = "User menu") {
         UserMenu(
             username = authState.username,
@@ -255,14 +237,16 @@ private fun UserMenuButton(
             accountSwitchInProgress = accountSwitchInProgress,
             isCurrentSessionRestricted = authState.isRestricted,
             hasSecurityAlerts = alerts.isNotEmpty(),
-            onSwitchAccount = { authViewModel.openAccountSwitcher() },
-            onActiveSessions = { authViewModel.openActiveSessions() },
-            onTrustedDevices = { authViewModel.openTrustedDevices() },
-            onChangePassword = { authViewModel.openChangePasswordDialog() },
-            onLogout = { scope.launch { authViewModel.logout() } },
-            onLogoutAll = { scope.launch { authViewModel.logoutAll() } },
+            onSwitchAccount = { accountManagementViewModel.openAccountSwitcher() },
+            onActiveSessions = { securityAuditViewModel.openActiveSessions() },
+            onTrustedDevices = { securityAuditViewModel.openTrustedDevices() },
+            onChangePassword = { userProfileViewModel.openChangePasswordDialog() },
+            onChangeEmail = { userProfileViewModel.openChangeEmailDialog() },
+            onLogout = { scope.launch { sessionViewModel.logout() } },
+            onLogoutAll = { scope.launch { sessionViewModel.logoutAll() } },
             onLogin = { navController.navigateToTop(Login) },
-            onSecurityAlerts = { authViewModel.showSecurityAlerts(showOnEmpty = true) }
+            onSecurityAlerts = { securityAuditViewModel.showSecurityAlerts(showOnEmpty = true) },
+            onShowRestrictedInfo = { securityAuditViewModel.openRestrictedSessionInfo() }
         )
     }
 }
@@ -382,8 +366,7 @@ private fun MainNavHost(
     navController: NavHostController,
     paddingValues: PaddingValues,
     sessionListViewModel: SessionListViewModel,
-    authState: AuthState.Authenticated,
-    authViewModel: AuthViewModel
+    authState: AuthState.Authenticated
 ) {
     Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
         NavHost(
@@ -408,8 +391,7 @@ private fun MainNavHost(
                         navController.navigate(Register) {
                             popUpTo(Login) { inclusive = true }
                         }
-                    },
-                    authViewModel = authViewModel
+                    }
                 )
             }
             composable<Register> {
@@ -423,8 +405,7 @@ private fun MainNavHost(
                         navController.navigate(Login) {
                             popUpTo(Register) { inclusive = true }
                         }
-                    },
-                    authViewModel = authViewModel
+                    }
                 )
             }
         }

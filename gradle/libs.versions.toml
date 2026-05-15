@@ -29,6 +29,8 @@ android-targetSdk = "36"     # The target Android version for testing
 slf4j = "2.0.17"             # SLF4J version used for logging
 hikaricp = "7.0.2"           # HikariCP version for connection pooling
 flyway = "12.1.1"            # Flyway version for DB migrations
+jakarta-mail = "2.1.5"         # Jakarta Mail API version
+angus-mail = "2.0.5"           # Angus Mail (Jakarta Mail implementation) version
 sqldelight = "2.2.1"         # SQLDelight version for multiplatform database
 mcp-sdk = "0.9.0"            # MCP Kotlin SDK version
 
@@ -165,6 +167,10 @@ mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
 mcp-sdk-core = { module = "io.modelcontextprotocol:kotlin-sdk-core", version.ref = "mcp-sdk" }
 mcp-sdk-client = { module = "io.modelcontextprotocol:kotlin-sdk-client", version.ref = "mcp-sdk" }
 
+# Jakarta Mail / Angus Mail
+jakarta-mail = { module = "jakarta.mail:jakarta.mail-api", version.ref = "jakarta-mail" }
+angus-mail = { module = "org.eclipse.angus:angus-mail", version.ref = "angus-mail" }
+
 [bundles]
 # Ktor Server: Includes all necessary dependencies for a Ktor backend
 ktor-server = [
@@ -248,7 +254,7 @@ compose = { id = "org.jetbrains.compose", version.ref = "compose" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 
 # Compose Hot Reload Gradle Plugin: Adds hot reload support for Compose Multiplatform.
-compose-hotreload = { id = "org.jetbrains.compose.hot-reload", version.ref = "compose-hot-reload" }
+compose-hotreload = { id = "org.jetbrains.compose.hot-reload", version.ref = "compose" }
 
 # Android Application Gradle Plugin: Adds Android-specific tasks to the Gradle build.
 android-application = { id = "com.android.application", version.ref = "android-gradle-plugin" }

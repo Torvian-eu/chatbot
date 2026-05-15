@@ -4,7 +4,7 @@ import eu.torvian.chatbot.server.domain.config.ReverseProxyConfig
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.domain.security.JwtConfig
 import eu.torvian.chatbot.server.ktor.auth.extractJwtAuthHeader
-import eu.torvian.chatbot.server.service.security.AuthenticationService
+import eu.torvian.chatbot.server.service.security.TokenService
 import io.ktor.serialization.kotlinx.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
@@ -21,12 +21,12 @@ import kotlinx.serialization.json.Json
  * Configures the Ktor server with necessary plugins and settings. (shared with tests)
  *
  * @param jwtConfig JWT configuration for authentication.
- * @param authService Authentication service for credential validation.
+ * @param tokenService Token service for credential validation.
  * @param reverseProxyConfig Reverse proxy configuration for forwarded headers support.
  */
 fun Application.configureKtor(
     jwtConfig: JwtConfig,
-    authService: AuthenticationService,
+    tokenService: TokenService,
     reverseProxyConfig: ReverseProxyConfig
 ) {
     // Install forwarded headers plugins only when reverse proxy is enabled.
@@ -76,7 +76,7 @@ fun Application.configureKtor(
                 call.request.extractJwtAuthHeader()
             }
             validate { credential ->
-                authService.validateCredential(credential)
+                tokenService.validateCredential(credential)
             }
         }
 
@@ -84,7 +84,7 @@ fun Application.configureKtor(
             realm = jwtConfig.realm
             verifier(jwtConfig.workerVerifier)
             validate { credential ->
-                authService.validateWorkerCredential(credential)
+                tokenService.validateWorkerCredential(credential)
             }
         }
     }

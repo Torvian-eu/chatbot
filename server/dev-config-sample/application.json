@@ -7,6 +7,8 @@
     CHATBOT_SERVER_CONFIG_DIR to that directory.
   */
 
+  "serverUrl": "http://localhost:8080",
+
   "storage": {
     "dataDir": "data",
     "databaseFilename": "chatbot_dev.db",
@@ -54,6 +56,26 @@
     "tokenExpirationMs": 86400000,
     "refreshExpirationMs": 604800000
     /* jwt.secret is provided in secrets.json for dev */
+  },
+
+  "email": {
+    "provider": "log",
+    /* Use your real domain name here to avoid outbound emails getting marked as spam: */
+    "fromAddress": "noreply@yourdomain.com",
+    "properties": {
+      /* SMTP properties (when provider is "smtp"):
+       * Use "_env" suffix to read from environment variables:
+       * "host": "mail.example.com",
+       * "port": "587",
+       * "user_env": "SMTP_USER",
+       * "password_env": "SMTP_PASSWORD",
+       * "auth": "true",
+       * "starttls": "true",
+       * Setting "debug" to "true" will log the full SMTP conversation:
+       * "debug": "false",
+       * "mail.smtp.ssl.trust": "mail.example.com"
+       */
+    }
   },
 
   "accountSecurityMode" : "WARNING",
