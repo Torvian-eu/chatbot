@@ -17,6 +17,10 @@ import eu.torvian.chatbot.server.service.core.error.auth.ChangePasswordError
 import eu.torvian.chatbot.server.service.core.error.auth.RegisterUserError
 import eu.torvian.chatbot.server.service.core.error.worker.AuthenticateWorkerError
 import eu.torvian.chatbot.server.service.security.AuthenticationService
+import eu.torvian.chatbot.server.service.security.AccountManagementService
+import eu.torvian.chatbot.server.service.security.DeviceTrustService
+import eu.torvian.chatbot.server.service.security.SecurityAuditService
+import eu.torvian.chatbot.server.service.security.TokenService
 import eu.torvian.chatbot.server.service.security.error.*
 import io.ktor.http.*
 import io.ktor.server.auth.*
@@ -32,6 +36,10 @@ import kotlin.time.Instant.Companion.fromEpochMilliseconds
  */
 fun Route.configureAuthRoutes(
     authenticationService: AuthenticationService,
+    tokenService: TokenService,
+    accountManagementService: AccountManagementService,
+    deviceTrustService: DeviceTrustService,
+    securityAuditService: SecurityAuditService,
     userService: UserService,
     workerService: WorkerService,
     jwtConfig: JwtConfig,
@@ -119,7 +127,7 @@ fun Route.configureAuthRoutes(
         // Extract client IP address for session tracking (supports proxy via X-Forwarded-For header)
         val ipAddress = call.request.origin.remoteAddress
         call.respondEither(
-            authenticationService.refreshToken(request.refreshToken, ipAddress)
+            tokenService.refreshToken(request.refreshToken, ipAddress)
                 .map { it.toLoginResponse() }
         ) { error ->
             when (error) {
@@ -240,7 +248,7 @@ fun Route.configureAuthRoutes(
         get<AuthResource.SecurityAlerts> {
             val userContext = call.getUserContext()
             val userId = userContext.user.id
-            val result = authenticationService.getSecurityAlerts(userId, userContext.isRestricted).map { alerts ->
+            val result = securityAuditService.getSecurityAlerts(userId, userContext.isRestricted).map { alerts ->
                 alerts.map { alert ->
                     UserSecurityAlert(
                         id = alert.id,
@@ -270,7 +278,7 @@ fun Route.configureAuthRoutes(
             val userContext = call.getUserContext()
 
             call.respondEither(
-                authenticationService.resolveSingleAlert(
+                securityAuditService.resolveSingleAlert(
                     userId = userContext.user.id,
                     alertId = resource.alertId,
                     outcome = request.outcome,
@@ -301,7 +309,7 @@ fun Route.configureAuthRoutes(
             val userContext = call.getUserContext()
 
             call.respondEither(
-                authenticationService.getTrustedDevices(userContext.user.id, userContext.isRestricted)
+                deviceTrustService.getTrustedDevices(userContext.user.id, userContext.isRestricted)
             ) { error ->
                 when (error) {
                     is RevokeTrustedDeviceError.InsufficientPermissions ->
@@ -323,7 +331,7 @@ fun Route.configureAuthRoutes(
             val userContext = call.getUserContext()
 
             call.respondEither(
-                authenticationService.revokeTrustedDevice(
+                deviceTrustService.revokeTrustedDevice(
                     userContext.user.id,
                     resource.deviceId,
                     userContext.isRestricted
@@ -402,7 +410,7 @@ fun Route.configureAuthRoutes(
             val request = call.receive<ChangePasswordRequest>()
 
             call.respondEither(
-                authenticationService.changePassword(
+                accountManagementService.changePassword(
                     userId = userContext.user.id,
                     currentPassword = request.currentPassword,
                     newPassword = request.newPassword,
@@ -443,7 +451,7 @@ fun Route.configureAuthRoutes(
             val request = call.receive<ChangeEmailRequest>()
 
             call.respondEither(
-                authenticationService.changeEmail(
+                accountManagementService.changeEmail(
                     userId = userContext.user.id,
                     currentPassword = request.currentPassword,
                     newEmail = request.newEmail,
@@ -480,7 +488,7 @@ fun Route.configureAuthRoutes(
             val request = call.receive<CompleteRequiredPasswordChangeRequest>()
 
             call.respondEither(
-                authenticationService.completeRequiredPasswordChange(
+                accountManagementService.completeRequiredPasswordChange(
                     userId = userContext.user.id,
                     newPassword = request.newPassword,
                     requesterIsRestricted = userContext.isRestricted
@@ -529,7 +537,7 @@ fun Route.configureAuthRoutes(
             val request = call.receive<RequestDeviceVerificationRequest>()
 
             call.respondEither(
-                authenticationService.requestDeviceVerificationEmail(
+                deviceTrustService.requestDeviceVerificationEmail(
                     userId = userContext.user.id,
                     deviceId = request.deviceId
                 ),

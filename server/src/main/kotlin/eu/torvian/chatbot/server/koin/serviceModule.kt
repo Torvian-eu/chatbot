@@ -107,6 +107,42 @@ fun serviceModule() = module {
         BCryptPasswordService(PasswordValidator(get<AppConfiguration>().authPolicy.passwordConfig))
     }
     single<UserService> { UserServiceImpl(get(), get(), get(), get(), get(), get(), get()) }
+    single<TokenService> {
+        TokenServiceImpl(
+            userService = get(),
+            jwtConfig = get(),
+            userSessionDao = get(),
+            workerDao = get(),
+            authorizationService = get(),
+            transactionScope = get()
+        )
+    }
+    single<DeviceTrustService> {
+        DeviceTrustServiceImpl(
+            userDao = get(),
+            userTrustedDeviceDao = get(),
+            userSessionDao = get(),
+            securityAuditDao = get(),
+            deviceVerificationTokenDao = get(),
+            securityNotificationService = get(),
+            transactionScope = get()
+        )
+    }
+    single<SecurityAuditService> {
+        SecurityAuditServiceImpl(
+            securityAuditDao = get(),
+            userTrustedDeviceDao = get(),
+            userSessionDao = get(),
+            transactionScope = get()
+        )
+    }
+    single<AccountManagementService> {
+        AccountManagementServiceImpl(
+            userDao = get(),
+            passwordService = get(),
+            transactionScope = get()
+        )
+    }
     single<AuthenticationService> {
         AuthenticationServiceImpl(
             userService = get(),
@@ -116,14 +152,11 @@ fun serviceModule() = module {
             userTrustedDeviceDao = get(),
             securityAuditDao = get(),
             userDao = get(),
-            workerDao = get(),
             authorizationService = get(),
             transactionScope = get(),
             accountSecurityMode = get(),
             failedLoginAttemptDao = get(),
-            authPolicy = get(),
-            deviceVerificationTokenDao = get(),
-            securityNotificationService = get()
+            authPolicy = get()
         )
     }
     single<WorkerService> { WorkerServiceImpl(get(), get(), get()) }

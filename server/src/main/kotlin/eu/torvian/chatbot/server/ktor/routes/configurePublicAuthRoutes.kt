@@ -2,7 +2,7 @@ package eu.torvian.chatbot.server.ktor.routes
 
 import eu.torvian.chatbot.common.api.resources.PublicAuthResource
 import eu.torvian.chatbot.common.models.api.auth.RequestPublicDeviceVerificationRequest
-import eu.torvian.chatbot.server.service.security.AuthenticationService
+import eu.torvian.chatbot.server.service.security.DeviceTrustService
 import eu.torvian.chatbot.server.service.security.error.VerifyDeviceError
 import eu.torvian.chatbot.server.service.security.error.toApiError
 import eu.torvian.chatbot.server.service.security.error.toErrorHeaders
@@ -16,14 +16,14 @@ import io.ktor.server.routing.Route
  * Configures public routes that do not require authentication.
  */
 fun Route.configurePublicAuthRoutes(
-    authenticationService: AuthenticationService,
+    deviceTrustService: DeviceTrustService,
 ) {
     // GET /api/public/auth/verify-device?token=... - Verify device via email link
     // This is a public endpoint that verifies the token and promotes the device to trusted
     get<PublicAuthResource.VerifyDevice> { resource ->
         val token = resource.token
 
-        val result = authenticationService.verifyDeviceByToken(token)
+        val result = deviceTrustService.verifyDeviceByToken(token)
 
         result.fold(
             ifLeft = { error ->
@@ -94,7 +94,7 @@ fun Route.configurePublicAuthRoutes(
         val request = call.receive<RequestPublicDeviceVerificationRequest>()
 
         call.respondEither(
-            authenticationService.requestPublicDeviceVerification(
+            deviceTrustService.requestPublicDeviceVerification(
                 username = request.username,
                 deviceId = request.deviceId
             ),

@@ -3,6 +3,10 @@ package eu.torvian.chatbot.server.ktor.routes
 import eu.torvian.chatbot.server.config.AppConfiguration
 import eu.torvian.chatbot.server.service.core.*
 import eu.torvian.chatbot.server.service.security.AuthenticationService
+import eu.torvian.chatbot.server.service.security.TokenService
+import eu.torvian.chatbot.server.service.security.AccountManagementService
+import eu.torvian.chatbot.server.service.security.DeviceTrustService
+import eu.torvian.chatbot.server.service.security.SecurityAuditService
 import eu.torvian.chatbot.server.service.security.AuthorizationService
 import eu.torvian.chatbot.server.worker.mcp.configsync.LocalMCPServerConfigSyncService
 import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.LocalMCPRuntimeControlService
@@ -29,6 +33,10 @@ class ApiRoutesKtor(
     private val localMCPServerConfigSyncService: LocalMCPServerConfigSyncService,
     private val localMCPToolDefinitionService: LocalMCPToolDefinitionService,
     private val authenticationService: AuthenticationService,
+    private val tokenService: TokenService,
+    private val accountManagementService: AccountManagementService,
+    private val deviceTrustService: DeviceTrustService,
+    private val securityAuditService: SecurityAuditService,
     private val userService: UserService,
     private val userGroupService: UserGroupService,
     private val roleService: RoleService,
@@ -62,7 +70,7 @@ class ApiRoutesKtor(
      * Configures routes related to Authentication (/api/v1/auth).
      */
     fun configureAuthRoutes(route: Route) {
-        route.configureAuthRoutes(authenticationService, userService, workerService, appConfig.jwt, appConfig.authPolicy)
+        route.configureAuthRoutes(authenticationService, tokenService, accountManagementService, deviceTrustService, securityAuditService, userService, workerService, appConfig.jwt, appConfig.authPolicy)
     }
 
     /**
