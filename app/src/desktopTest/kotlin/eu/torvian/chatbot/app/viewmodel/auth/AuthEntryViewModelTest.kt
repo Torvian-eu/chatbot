@@ -339,30 +339,6 @@ class AuthEntryViewModelTest {
         assertNotNull(viewModel.loginFormState.value.verificationMessage)
     }
 
-    // ===== Dialog State Management Tests =====
-
-    @Test
-    fun `openAddAccountDialog should set dialog state`() {
-        // Act
-        viewModel.openAddAccountDialog()
-
-        // Assert
-        assertTrue(viewModel.dialogState.value is EntryDialogState.AddAccount)
-    }
-
-    @Test
-    fun `closeDialog should set dialog state to None`() {
-        // Arrange
-        viewModel.openAddAccountDialog()
-        assertTrue(viewModel.dialogState.value is EntryDialogState.AddAccount)
-
-        // Act
-        viewModel.closeDialog()
-
-        // Assert
-        assertTrue(viewModel.dialogState.value is EntryDialogState.None)
-    }
-
     // ===== Form State Management Tests =====
 
     @Test

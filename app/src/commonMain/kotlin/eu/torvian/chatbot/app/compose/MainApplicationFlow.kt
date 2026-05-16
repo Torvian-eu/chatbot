@@ -20,8 +20,6 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import eu.torvian.chatbot.app.compose.admin.AdminScreen
 import eu.torvian.chatbot.app.compose.auth.AuthDialogs
-import eu.torvian.chatbot.app.compose.auth.LoginScreen
-import eu.torvian.chatbot.app.compose.auth.RegisterScreen
 import eu.torvian.chatbot.app.compose.common.PlainTooltipBox
 import eu.torvian.chatbot.app.compose.permissions.RequiresAnyPermission
 import eu.torvian.chatbot.app.compose.settings.SettingsScreen
@@ -184,7 +182,6 @@ private fun MainTopAppBar(
                 val userMenu = @Composable {
                     UserMenuButton(
                         authState = authState,
-                        navController = navController,
                         scope = scope
                     )
                 }
@@ -210,13 +207,11 @@ private fun MainTopAppBar(
  * Resolves its own ViewModels and collects local state for accounts, switches, and security alerts.
  *
  * @param authState The currently authenticated user state used to render the menu label.
- * @param navController Navigation controller used for login navigation.
  * @param scope Coroutine scope used to launch logout actions from the UI.
  */
 @Composable
 private fun UserMenuButton(
     authState: AuthState.Authenticated,
-    navController: NavController,
     scope: CoroutineScope
 ) {
     // Resolve ViewModels locally
@@ -244,7 +239,7 @@ private fun UserMenuButton(
             onChangeEmail = { userProfileViewModel.openChangeEmailDialog() },
             onLogout = { scope.launch { sessionViewModel.logout() } },
             onLogoutAll = { scope.launch { sessionViewModel.logoutAll() } },
-            onLogin = { navController.navigateToTop(Login) },
+            onAddAccount = { scope.launch { sessionViewModel.setUnauthenticated() } },
             onSecurityAlerts = { securityAuditViewModel.showSecurityAlerts(showOnEmpty = true) },
             onShowRestrictedInfo = { securityAuditViewModel.openRestrictedSessionInfo() }
         )
@@ -384,29 +379,6 @@ private fun MainNavHost(
             }
             composable<Admin> {
                 AdminScreen(authState = authState)
-            }
-            composable<Login> {
-                LoginScreen(
-                    onNavigateToRegister = {
-                        navController.navigate(Register) {
-                            popUpTo(Login) { inclusive = true }
-                        }
-                    }
-                )
-            }
-            composable<Register> {
-                RegisterScreen(
-                    onNavigateToLogin = {
-                        navController.navigate(Login) {
-                            popUpTo(Register) { inclusive = true }
-                        }
-                    },
-                    onRegistrationSuccess = {
-                        navController.navigate(Login) {
-                            popUpTo(Register) { inclusive = true }
-                        }
-                    }
-                )
             }
         }
     }

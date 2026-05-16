@@ -24,12 +24,11 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 
 /**
- * ViewModel for managing authentication entry flows (login, registration, and add account).
+ * ViewModel for managing authentication entry flows (login, registration).
  *
  * This ViewModel handles:
  * - Login form state and validation
  * - Registration form state and validation
- * - Add account dialog state
  * - Form submission and error handling
  *
  * @param authRepository Repository for authentication operations.
@@ -74,11 +73,6 @@ class AuthEntryViewModel(
      * Exposed so that UI components can dynamically render username requirement hints.
      */
     val usernameValidationConfig: UsernameValidationConfig = authValidationService.usernameValidationConfig
-
-    // --- Dialog State Management ---
-
-    private val _dialogState = MutableStateFlow<EntryDialogState>(EntryDialogState.None)
-    val dialogState: StateFlow<EntryDialogState> = _dialogState.asStateFlow()
 
     // --- Authentication Operations ---
 
@@ -155,10 +149,6 @@ class AuthEntryViewModel(
                     }
                     // Clear form on successful login
                     clearLoginForm()
-                    // Close the add account dialog if it's open
-                    if (_dialogState.value is EntryDialogState.AddAccount) {
-                        _dialogState.value = EntryDialogState.None
-                    }
                 }
             )
         }
@@ -231,22 +221,6 @@ class AuthEntryViewModel(
                 }
             )
         }
-    }
-
-    // --- Dialog State Management ---
-
-    /**
-     * Opens the add account dialog.
-     */
-    fun openAddAccountDialog() {
-        _dialogState.value = EntryDialogState.AddAccount
-    }
-
-    /**
-     * Closes any open authentication dialog.
-     */
-    fun closeDialog() {
-        _dialogState.value = EntryDialogState.None
     }
 
     // --- Device Verification Operations ---

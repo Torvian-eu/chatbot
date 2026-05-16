@@ -242,4 +242,12 @@ interface AuthRepository {
      * @return Either a [RepositoryError] on failure or Unit on success
      */
     suspend fun changeEmail(currentPassword: String, newEmail: String): Either<RepositoryError, Unit>
+
+    /**
+     * Sets the authentication state to Unauthenticated.
+     *
+     * This is used to trigger navigation to the AuthenticationFlow from the MainApplicationFlow,
+     * for example when the user wants to add another account.
+     */
+    suspend fun setUnauthenticated()
 }

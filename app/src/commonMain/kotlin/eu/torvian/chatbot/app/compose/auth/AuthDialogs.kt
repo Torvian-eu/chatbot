@@ -8,8 +8,6 @@ import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.app.service.auth.AuthValidationService
 import eu.torvian.chatbot.app.viewmodel.auth.AccountDialogState
 import eu.torvian.chatbot.app.viewmodel.auth.AccountManagementViewModel
-import eu.torvian.chatbot.app.viewmodel.auth.EntryDialogState
-import eu.torvian.chatbot.app.viewmodel.auth.AuthEntryViewModel
 import eu.torvian.chatbot.app.viewmodel.auth.SecurityDialogState
 import eu.torvian.chatbot.app.viewmodel.auth.SecurityAuditViewModel
 import eu.torvian.chatbot.app.viewmodel.auth.UserDialogState
@@ -28,13 +26,9 @@ import org.koin.compose.viewmodel.koinViewModel
 @Composable
 fun AuthDialogs(currentAuthState: AuthState) {
     // Resolve ViewModels locally
-    val authEntryViewModel: AuthEntryViewModel = koinViewModel()
     val accountManagementViewModel: AccountManagementViewModel = koinViewModel()
     val securityAuditViewModel: SecurityAuditViewModel = koinViewModel()
     val userProfileViewModel: UserProfileViewModel = koinViewModel()
-
-    // Render entry dialogs
-    EntryDialogs(authEntryViewModel = authEntryViewModel)
 
     // Render account management dialogs
     AccountManagementDialogs(
@@ -53,36 +47,6 @@ fun AuthDialogs(currentAuthState: AuthState) {
         currentAuthState = currentAuthState,
         userProfileViewModel = userProfileViewModel
     )
-}
-
-/**
- * Renders entry-related dialogs (add account).
- * Collects its own dialog state from the provided ViewModel.
- */
-@Composable
-private fun EntryDialogs(authEntryViewModel: AuthEntryViewModel) {
-    val dialogState by authEntryViewModel.dialogState.collectAsState()
-
-    when (dialogState) {
-        is EntryDialogState.AddAccount -> {
-            val loginFormState by authEntryViewModel.loginFormState.collectAsState()
-
-            AddAccountDialog(
-                loginFormState = loginFormState,
-                onDismiss = {
-                    authEntryViewModel.clearLoginForm()
-                    authEntryViewModel.closeDialog()
-                },
-                onUsernameChange = { username -> authEntryViewModel.updateLoginForm(username = username) },
-                onPasswordChange = { password -> authEntryViewModel.updateLoginForm(password = password) },
-                onLogin = { authEntryViewModel.login() }
-            )
-        }
-
-        EntryDialogState.None -> {
-            // No dialog to show
-        }
-    }
 }
 
 /**
