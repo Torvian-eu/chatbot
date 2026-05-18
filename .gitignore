@@ -64,6 +64,7 @@ deploy/worker/dist
 deploy/wasm-client
 deploy/caddy/Caddyfile
 deploy/server/docker-compose.yml
+deploy/packages
 
 ### Custom ignore rules
 /.github/copilot-instructions.md
