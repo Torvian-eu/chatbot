@@ -571,4 +571,9 @@ class DefaultAuthRepository(
         tokenStorage.updateAccountData(currentUserId, email = updatedUser.email)
             .onLeft { logger.warn("Failed to update cached user email: ${it.message}") }
     }
+
+    override suspend fun setUnauthenticated() {
+        logger.info("Setting auth state to Unauthenticated (triggered from MainApplicationFlow)")
+        _authState.value = AuthState.Unauthenticated
+    }
 }

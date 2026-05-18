@@ -112,6 +112,7 @@ class AuthenticationServiceImpl(
                 }
 
                 ensure(userEntity.status == UserStatus.ACTIVE) {
+                    logger.warn("Account is not active for user: $username (status: ${userEntity.status})")
                     LoginError.AccountLocked("Account is disabled")
                 }
 

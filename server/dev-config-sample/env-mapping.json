@@ -5,8 +5,25 @@
     that will be looked up in the system environment.
   */
 
+  "serverUrl": "SERVER_URL",
+
   "setup": {
     "required": "CHATBOT_SETUP_REQUIRED"
+  },
+
+  "email": {
+    "provider": "EMAIL_PROVIDER",
+    "fromAddress": "EMAIL_FROM_ADDRESS",
+    "properties": {
+      "host": "EMAIL_HOST",
+      "port": "EMAIL_PORT",
+      "user": "EMAIL_USER",
+      "password": "EMAIL_PASSWORD",
+      "auth": "EMAIL_AUTH",
+      "starttls": "EMAIL_STARTTLS",
+      "debug": "EMAIL_DEBUG",
+      "mail.smtp.ssl.trust": "EMAIL_SMTP_SSL_TRUST"
+    }
   },
 
   "storage": {

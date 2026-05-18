@@ -43,7 +43,7 @@ import eu.torvian.chatbot.app.service.auth.AccountData
  * @param onChangeEmail Callback to open the change email dialog
  * @param onLogout Callback to log out the current session
  * @param onLogoutAll Callback to log out from all sessions
- * @param onLogin Callback to navigate to login/add account
+ * @param onAddAccount Callback to navigate to add another account (sets auth state to Unauthenticated)
  * @param onSecurityAlerts Callback to open the security alerts dialog
  * @param onShowRestrictedInfo Callback to open the restricted session info dialog
  */
@@ -61,7 +61,7 @@ fun UserMenu(
     onChangeEmail: () -> Unit,
     onLogout: () -> Unit,
     onLogoutAll: () -> Unit,
-    onLogin: () -> Unit,
+    onAddAccount: () -> Unit,
     onSecurityAlerts: () -> Unit,
     onShowRestrictedInfo: () -> Unit
 ) {
@@ -232,7 +232,7 @@ fun UserMenu(
                 text = { Text("Add Account") },
                 onClick = {
                     expanded = false
-                    onLogin()
+                    onAddAccount()
                 },
                 leadingIcon = {
                     Icon(Icons.Default.AccountCircle, contentDescription = null)

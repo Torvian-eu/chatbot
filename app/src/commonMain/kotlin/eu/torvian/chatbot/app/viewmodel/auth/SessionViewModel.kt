@@ -83,6 +83,18 @@ class SessionViewModel(
         }
     }
 
+    /**
+     * Sets the authentication state to Unauthenticated.
+     *
+     * This triggers navigation to the AuthenticationFlow from the MainApplicationFlow,
+     * for example when the user wants to add another account.
+     */
+    fun setUnauthenticated() {
+        viewModelScope.launch {
+            authRepository.setUnauthenticated()
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         // normalScope will be cancelled when the ViewModel is cleared
