@@ -55,6 +55,9 @@ class ChatStateImpl(
     private val _basePathOverride = MutableStateFlow<String?>(null)
     private val _collapsedMessageIds = MutableStateFlow<Set<Long>>(emptySet())
 
+    // --- Auto-collapse tracking ---
+    private var lastAutoCollapsedSessionId: Long? = null
+
     // --- Public Read-Only StateFlows ---
 
     override val activeSessionId: StateFlow<Long?> = _activeSessionId.asStateFlow()
@@ -238,6 +241,19 @@ class ChatStateImpl(
                 }
             }
             .launchIn(backgroundScope)
+
+        // Auto-collapse messages when a new session is loaded
+        combine(activeSessionId, displayedMessages) { sessionId, messages ->
+            sessionId to messages
+        }
+            .filter { (sessionId, messages) ->
+                sessionId != null && sessionId != lastAutoCollapsedSessionId && messages.isNotEmpty()
+            }
+            .onEach { (sessionId, _) ->
+                lastAutoCollapsedSessionId = sessionId
+                collapseAllDisplayedMessages()
+            }
+            .launchIn(backgroundScope)
     }
 
     // --- Public State Mutation Methods ---
@@ -326,5 +342,6 @@ class ChatStateImpl(
         _pendingFileReferences.value = emptyList()
         _basePathOverride.value = null
         _collapsedMessageIds.value = emptySet()
+        lastAutoCollapsedSessionId = null
     }
 }

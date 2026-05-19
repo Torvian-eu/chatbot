@@ -135,8 +135,6 @@ class LoadSessionUseCase(
                 return@parZip
             }
         }
-        // Collapse all displayed messages after loading
-        state.collapseAllDisplayedMessages()
     }
 
     /**
