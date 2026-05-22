@@ -17,7 +17,6 @@ Torvian chatbot is a multiplatform chatbot application with AI/LLM integration. 
 - Ktor 3.4.1
 - Exposed 1.1.1
 - SQLite JDBC 3.51.2.0
-- SQLDelight 2.2.1
 - Koin 4.1.1
 - Arrow 2.2.2
 - kotlinx.serialization

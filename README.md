@@ -246,7 +246,7 @@ chatbot/
 - **Languages**: Kotlin 2.3.10
 - **UI Framework**: Compose Multiplatform 1.10.2 (with Material 3 1.9.0)
 - **Server**: Ktor 3.4.1
-- **Database**: SQLite with Exposed ORM 1.1.1 (Server) and SQLDelight 2.2.1 (App)
+- **Database**: SQLite with Exposed ORM 1.1.1 (Server)
 - **Dependency Injection**: Koin 4.1.1
 - **Functional Programming**: Arrow 2.2.2
 - **Logic**: kotlinx.serialization
