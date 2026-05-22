@@ -43,6 +43,7 @@ import kotlin.time.Instant
  * @property jwtConfig JWT configuration for token generation.
  * @property userSessionDao Data access object for user sessions.
  * @property userTrustedDeviceDao Data access object for trusted devices.
+ * @property userDeviceDao Data access object for the per-user device registry.
  * @property securityAuditDao Data access object for security audit logs.
  * @property userDao Data access object for user data.
  * @property authorizationService Service for authorization checks.
@@ -57,6 +58,7 @@ class AuthenticationServiceImpl(
     private val jwtConfig: JwtConfig,
     private val userSessionDao: UserSessionDao,
     private val userTrustedDeviceDao: UserTrustedDeviceDao,
+    private val userDeviceDao: UserDeviceDao,
     private val securityAuditDao: SecurityAuditDao,
     private val userDao: UserDao,
     private val authorizationService: AuthorizationService,
@@ -119,6 +121,14 @@ class AuthenticationServiceImpl(
                 ensure(passwordService.verifyPassword(password, userEntity.passwordHash)) {
                     logger.warn("Invalid password for user: $username")
                     LoginError.InvalidCredentials
+                }
+
+                // Keep the device registry in sync with successful logins so preference scopes can resolve.
+                val existingRegistryDevice = userDeviceDao.getDeviceByClientId(userEntity.id, deviceId)
+                if (existingRegistryDevice == null) {
+                    userDeviceDao.insertDevice(userEntity.id, deviceId, null)
+                } else {
+                    userDeviceDao.updateDeviceUsage(existingRegistryDevice.id, currentTimeMillis)
                 }
 
                 // Handle device-based security - determines if the session should be restricted
@@ -237,7 +247,6 @@ class AuthenticationServiceImpl(
             return false
         }
 
-        val normalizedDeviceId = deviceId.trim()
         val currentTimeMillis = currentTime.toEpochMilliseconds()
 
         // Trust on First Use (TOFU): Check if this is the user's first device ever
@@ -246,7 +255,7 @@ class AuthenticationServiceImpl(
             // FIRST DEVICE EVER: Auto-trust it regardless of security mode
             userTrustedDeviceDao.insertTrustedDevice(
                 userId = userId,
-                deviceId = normalizedDeviceId,
+                deviceId = deviceId,
                 ipAddress = ipAddress,
                 firstSeenAt = currentTimeMillis,
                 lastUsedAt = currentTimeMillis
@@ -255,7 +264,7 @@ class AuthenticationServiceImpl(
         }
 
         // Check if this device is already trusted for this user
-        val trustedDevice = userTrustedDeviceDao.getTrustedDevice(userId, normalizedDeviceId)
+        val trustedDevice = userTrustedDeviceDao.getTrustedDevice(userId, deviceId)
             ?: // Unknown device - apply security mode policy
             when (accountSecurityMode) {
                 AccountSecurityMode.STRICT -> {

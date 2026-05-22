@@ -10,6 +10,7 @@ import eu.torvian.chatbot.server.data.dao.*
 import eu.torvian.chatbot.server.data.dao.error.UserError
 import eu.torvian.chatbot.server.data.dao.error.UserSessionError
 import eu.torvian.chatbot.server.data.entities.UserEntity
+import eu.torvian.chatbot.server.data.entities.UserDeviceEntity
 import eu.torvian.chatbot.server.data.entities.UserSessionEntity
 import eu.torvian.chatbot.server.data.entities.UserTrustedDeviceEntity
 import eu.torvian.chatbot.server.data.entities.mappers.toUser
@@ -34,6 +35,7 @@ class AuthenticationServiceImplTest {
     private val passwordService = mockk<PasswordService>()
     private val userSessionDao = mockk<UserSessionDao>()
     private val userTrustedDeviceDao = mockk<UserTrustedDeviceDao>()
+    private val userDeviceDao = mockk<UserDeviceDao>()
     private val securityAuditDao = mockk<SecurityAuditDao>()
     private val userDao = mockk<UserDao>()
     private val authorizationService = mockk<AuthorizationService>()
@@ -48,35 +50,37 @@ class AuthenticationServiceImplTest {
 
     // Create authService with the new signature
     private val authService = AuthenticationServiceImpl(
-        userService,
-        passwordService,
-        jwtConfig,
-        userSessionDao,
-        userTrustedDeviceDao,
-        securityAuditDao,
-        userDao,
-        authorizationService,
-        transactionScope,
-        AccountSecurityMode.DISABLED,
-        failedLoginAttemptDao,
-        AccountValidationPolicy()
+        userService = userService,
+        passwordService = passwordService,
+        jwtConfig = jwtConfig,
+        userSessionDao = userSessionDao,
+        userTrustedDeviceDao = userTrustedDeviceDao,
+        userDeviceDao = userDeviceDao,
+        securityAuditDao = securityAuditDao,
+        userDao = userDao,
+        authorizationService = authorizationService,
+        transactionScope = transactionScope,
+        accountSecurityMode = AccountSecurityMode.DISABLED,
+        failedLoginAttemptDao = failedLoginAttemptDao,
+        authPolicy = AccountValidationPolicy()
     )
 
     private fun createAuthService(
         accountSecurityMode: AccountSecurityMode = AccountSecurityMode.DISABLED
     ) = AuthenticationServiceImpl(
-        userService,
-        passwordService,
-        jwtConfig,
-        userSessionDao,
-        userTrustedDeviceDao,
-        securityAuditDao,
-        userDao,
-        authorizationService,
-        transactionScope,
-        accountSecurityMode,
-        failedLoginAttemptDao,
-        AccountValidationPolicy()
+        userService = userService,
+        passwordService = passwordService,
+        jwtConfig = jwtConfig,
+        userSessionDao = userSessionDao,
+        userTrustedDeviceDao = userTrustedDeviceDao,
+        userDeviceDao = userDeviceDao,
+        securityAuditDao = securityAuditDao,
+        userDao = userDao,
+        authorizationService = authorizationService,
+        transactionScope = transactionScope,
+        accountSecurityMode = accountSecurityMode,
+        failedLoginAttemptDao = failedLoginAttemptDao,
+        authPolicy = AccountValidationPolicy()
     )
 
     private val testUser = UserEntity(
@@ -110,6 +114,15 @@ class AuthenticationServiceImplTest {
         lastUsedAt = Instant.fromEpochMilliseconds(System.currentTimeMillis())
     )
 
+    private val testDeviceRecord = UserDeviceEntity(
+        id = 400L,
+        userId = testUser.id,
+        clientDeviceId = "device-001",
+        deviceName = "device-001",
+        createdAt = Instant.fromEpochMilliseconds(System.currentTimeMillis()),
+        lastUsedAt = Instant.fromEpochMilliseconds(System.currentTimeMillis())
+    )
+
     @BeforeEach
     fun setUp() {
         clearMocks(
@@ -117,6 +130,7 @@ class AuthenticationServiceImplTest {
             passwordService,
             userSessionDao,
             userTrustedDeviceDao,
+            userDeviceDao,
             securityAuditDao,
             userDao,
             authorizationService,
@@ -135,6 +149,9 @@ class AuthenticationServiceImplTest {
         coEvery { failedLoginAttemptDao.recordFailure(any(), any(), any()) } returns Unit
         coEvery { failedLoginAttemptDao.clearFailures(any()) } returns Unit
         coEvery { failedLoginAttemptDao.cleanupOldRecords(any()) } returns Unit
+        coEvery { userDeviceDao.getDeviceByClientId(any(), any()) } returns null
+        coEvery { userDeviceDao.insertDevice(any(), any(), any()) } returns testDeviceRecord
+        coEvery { userDeviceDao.updateDeviceUsage(any(), any()) } returns true
     }
 
     @Test
