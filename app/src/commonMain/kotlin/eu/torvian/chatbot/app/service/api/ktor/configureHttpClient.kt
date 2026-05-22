@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.app.service.api.ktor
 
+import eu.torvian.chatbot.app.service.auth.DeviceIdentityService
 import io.ktor.client.*
 import io.ktor.client.engine.*
 import io.ktor.client.plugins.*
@@ -8,6 +9,7 @@ import io.ktor.client.plugins.logging.*
 import io.ktor.client.plugins.resources.*
 import io.ktor.client.plugins.sse.*
 import io.ktor.client.plugins.websocket.WebSockets
+import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
@@ -54,7 +56,7 @@ fun <T : HttpClientEngineConfig> HttpClientConfig<T>.configureHttpClient(
 
     // Add logging for debugging API calls
     install(Logging) {
-        logger = Logger.Companion.DEFAULT
+        logger = Logger.DEFAULT
         level = logLevel
     }
 
@@ -67,4 +69,20 @@ fun <T : HttpClientEngineConfig> HttpClientConfig<T>.configureHttpClient(
     install(SSE)
 
     install(WebSockets)
+}
+
+/**
+ * Installs a send-pipeline interceptor that injects the `X-Device-Id` header into
+ * every outgoing request. The header is resolved lazily on the first request and
+ * then cached for the remainder of the process lifetime via [DeviceIdentityService].
+ *
+ * @param deviceIdentityService Service that provides the stable device identifier.
+ */
+fun HttpClient.addDeviceIdInterceptor(deviceIdentityService: DeviceIdentityService) {
+    sendPipeline.intercept(HttpSendPipeline.State) {
+        val deviceId = deviceIdentityService.getOrCreateDeviceId().getOrNull()
+        if (deviceId != null && context.headers["X-Device-Id"] == null) {
+            context.headers.append("X-Device-Id", deviceId)
+        }
+    }
 }
