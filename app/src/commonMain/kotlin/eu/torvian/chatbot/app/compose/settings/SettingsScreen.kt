@@ -127,6 +127,13 @@ fun SettingsScreen(
                     ) { breadcrumbs ->
                         breadcrumbSegments = breadcrumbs
                     }
+
+                    SettingsCategory.Appearance -> AppearanceTabRoute(
+                        authState = authState,
+                        categoryResetSignal = categoryResetSignal
+                    ) { breadcrumbs ->
+                        breadcrumbSegments = breadcrumbs
+                    }
                 }
             }
         }
