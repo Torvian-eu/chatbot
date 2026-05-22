@@ -51,7 +51,9 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
             Table.ROLE_PERMISSIONS to RolePermissionsTable,
             Table.USER_ROLE_ASSIGNMENTS to UserRoleAssignmentsTable,
             Table.USER_SESSIONS to UserSessionsTable,
+            Table.USER_DEVICES to UserDevicesTable,
             Table.USER_TRUSTED_DEVICES to UserTrustedDevicesTable,
+            Table.USER_PREFERENCES to UserPreferencesTable,
             Table.USER_GROUPS to UserGroupsTable,
             Table.USER_GROUP_MEMBERSHIPS to UserGroupMembershipsTable,
             Table.WORKERS to WorkersTable,
@@ -683,6 +685,7 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
         if (data.permissions.isNotEmpty()) required += Table.PERMISSIONS
         if (data.rolePermissions.isNotEmpty()) required += Table.ROLE_PERMISSIONS
         if (data.userRoleAssignments.isNotEmpty()) required += Table.USER_ROLE_ASSIGNMENTS
+        if (data.users.isNotEmpty()) required += Table.USER_DEVICES
         if (data.users.isNotEmpty()) required += Table.USER_TRUSTED_DEVICES
 
         // Failed login attempts table (for lockout feature)
