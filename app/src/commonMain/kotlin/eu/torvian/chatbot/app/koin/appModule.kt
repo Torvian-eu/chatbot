@@ -5,11 +5,7 @@ import eu.torvian.chatbot.app.repository.*
 import eu.torvian.chatbot.app.repository.impl.*
 import eu.torvian.chatbot.app.service.api.*
 import eu.torvian.chatbot.app.service.api.ktor.*
-import eu.torvian.chatbot.app.service.auth.AuthValidationService
-import eu.torvian.chatbot.app.service.auth.DefaultAuthValidationService
-import eu.torvian.chatbot.app.service.auth.DefaultDeviceIdentityService
-import eu.torvian.chatbot.app.service.auth.DeviceIdentityService
-import eu.torvian.chatbot.app.service.auth.createAuthenticatedHttpClient
+import eu.torvian.chatbot.app.service.auth.*
 import eu.torvian.chatbot.app.service.clipboard.ClipboardService
 import eu.torvian.chatbot.app.service.mcp.LocalMCPServerManager
 import eu.torvian.chatbot.app.service.mcp.LocalMCPServerManagerImpl
@@ -18,11 +14,7 @@ import eu.torvian.chatbot.app.service.security.CertificateTrustService
 import eu.torvian.chatbot.app.viewmodel.*
 import eu.torvian.chatbot.app.viewmodel.admin.UserGroupManagementViewModel
 import eu.torvian.chatbot.app.viewmodel.admin.UserManagementViewModel
-import eu.torvian.chatbot.app.viewmodel.auth.AccountManagementViewModel
-import eu.torvian.chatbot.app.viewmodel.auth.AuthEntryViewModel
-import eu.torvian.chatbot.app.viewmodel.auth.SecurityAuditViewModel
-import eu.torvian.chatbot.app.viewmodel.auth.SessionViewModel
-import eu.torvian.chatbot.app.viewmodel.auth.UserProfileViewModel
+import eu.torvian.chatbot.app.viewmodel.auth.*
 import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatStateImpl
@@ -75,7 +67,9 @@ fun appModule(config: AppConfiguration): Module = module {
             logLevel = LogLevel.INFO,
             certificateStorage = get(),
             certificateTrustService = get()
-        )
+        ).apply {
+            addDeviceIdInterceptor(get())
+        }
     }
 
     // Provide the authenticated Ktor HttpClient with Auth plugin
@@ -85,7 +79,9 @@ fun appModule(config: AppConfiguration): Module = module {
             tokenStorage = get(),
             unauthenticatedHttpClient = get(named("unauthenticated")),
             eventBus = get()
-        )
+        ).apply {
+            addDeviceIdInterceptor(get())
+        }
     }
 
     // Create AuthApi with both authenticated and unauthenticated clients
@@ -185,10 +181,16 @@ fun appModule(config: AppConfiguration): Module = module {
     single<WorkerApi> {
         KtorWorkerApiClient(get())
     }
+    single<UserPreferenceApi> {
+        KtorUserPreferenceApiClient(get())
+    }
 
     // Provide Repository implementations, injecting the API clients
     single<ModelRepository> {
         DefaultModelRepository(get())
+    }
+    single<UserPreferenceRepository> {
+        DefaultUserPreferenceRepository(get())
     }
     single<ProviderRepository> {
         DefaultProviderRepository(get())
@@ -449,4 +451,11 @@ fun appModule(config: AppConfiguration): Module = module {
             notificationService = get()
         )
     }
+    viewModel {
+        PreferencesViewModel(
+            userPreferenceRepository = get(),
+            notificationService = get()
+        )
+    }
+    viewModel { AppViewModel(get(), get(), get()) }
 }
