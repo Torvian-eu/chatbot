@@ -28,7 +28,9 @@ import eu.torvian.chatbot.app.compose.snackbar.SnackbarVisualsWithError
 import eu.torvian.chatbot.app.compose.topbar.LocalTopBarContent
 import eu.torvian.chatbot.app.compose.topbar.TopBarContent
 import eu.torvian.chatbot.app.compose.topbar.TopBarContentController
-import eu.torvian.chatbot.app.domain.navigation.*
+import eu.torvian.chatbot.app.domain.navigation.Admin
+import eu.torvian.chatbot.app.domain.navigation.Chat
+import eu.torvian.chatbot.app.domain.navigation.Settings
 import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
 import eu.torvian.chatbot.app.viewmodel.auth.AccountManagementViewModel
@@ -138,25 +140,23 @@ private fun MainScaffold(
     scope: CoroutineScope,
     content: @Composable (PaddingValues) -> Unit
 ) {
-    MaterialTheme(colorScheme = lightColorScheme()) {
-        Scaffold(
-            topBar = {
-                MainTopAppBar(
-                    topBarContent = topBarContent,
-                    authState = authState,
-                    navController = navController,
-                    scope = scope
-                )
-            },
-            snackbarHost = {
-                SnackbarHost(hostState = snackbarHostState) { data ->
-                    val visualsWithError = data.visuals as? SnackbarVisualsWithError
-                    SharedSnackbar(data, visualsWithError)
-                }
-            },
-            content = content
-        )
-    }
+    Scaffold(
+        topBar = {
+            MainTopAppBar(
+                topBarContent = topBarContent,
+                authState = authState,
+                navController = navController,
+                scope = scope
+            )
+        },
+        snackbarHost = {
+            SnackbarHost(hostState = snackbarHostState) { data ->
+                val visualsWithError = data.visuals as? SnackbarVisualsWithError
+                SharedSnackbar(data, visualsWithError)
+            }
+        },
+        content = content
+    )
 }
 
 /**
