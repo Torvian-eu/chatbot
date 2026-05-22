@@ -60,6 +60,7 @@ fun Application.chatBotServerModule(config: AppConfiguration) {
         allowHeader(HttpHeaders.Authorization)
         // If there are any other custom headers, add them here:
         // allowHeader("X-Custom-Header")
+        allowHeader("X-Device-Id")
 
         // set maxAge to cache preflight responses
         maxAgeInSeconds = 3600 // Cache preflight response for 1 hour
