@@ -73,6 +73,7 @@ fun serviceModule() = module {
 
     single<RoleService> { RoleServiceImpl(get(), get(), get()) }
     single<UserGroupService> { UserGroupServiceImpl(get(), get(), get()) }
+    single<UserPreferenceService> { UserPreferenceServiceImpl(get(), get(), get()) }
 
     // --- Security Services ---
     single<CryptoProvider> { AESCryptoProvider(get()) }
@@ -150,6 +151,7 @@ fun serviceModule() = module {
             jwtConfig = get(),
             userSessionDao = get(),
             userTrustedDeviceDao = get(),
+            userDeviceDao = get(),
             securityAuditDao = get(),
             userDao = get(),
             authorizationService = get(),
