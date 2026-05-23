@@ -1,22 +1,26 @@
 package eu.torvian.chatbot.app.compose.chatarea
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -43,6 +47,7 @@ import org.jetbrains.compose.resources.stringResource
  * @param fileReferences List of file references attached to the current message.
  * @param modifier Modifier to be applied to the component.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun InputArea(
     inputContent: String,
@@ -53,17 +58,28 @@ fun InputArea(
     fileReferences: List<FileReference> = emptyList(),
     modifier: Modifier = Modifier
 ) {
-    val isSendButtonEnabled = inputContent.isNotBlank() && !isSendingMessage
+    val state = rememberTextFieldState(inputContent)
+
+    // Sync external changes (like clearing the input after sending)
+    LaunchedEffect(inputContent) {
+        if (inputContent != state.text.toString()) {
+            state.setTextAndPlaceCursorAtEnd(inputContent)
+        }
+    }
+
+    // Sync internal typing back to the actions
+    LaunchedEffect(state) {
+        snapshotFlow { state.text }
+            .collect { actions.onUpdateInput(it.toString()) }
+    }
+
+    val isSendButtonEnabled = state.text.isNotBlank() && !isSendingMessage
 
     Column(modifier = modifier) {
-        // Reply Target Display (E1.S7)
-        AnimatedVisibility(
-            visible = replyTargetMessage != null,
-            enter = expandVertically(expandFrom = Alignment.Top),
-            exit = shrinkVertically(shrinkTowards = Alignment.Top)
-        ) {
-            replyTargetMessage?.let { message ->
-                ReplyTargetBanner(message = message, onCancelReply = actions.onCancelReply)
+        // Reply Target Banner
+        AnimatedVisibility(visible = replyTargetMessage != null) {
+            replyTargetMessage?.let {
+                ReplyTargetBanner(it, actions.onCancelReply)
             }
         }
 
@@ -74,15 +90,14 @@ fun InputArea(
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 2.dp
         ) {
-            Column(modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)) {
-                // Main Input Field (E1.S1)
-                TextField(
-                    value = inputContent,
-                    onValueChange = actions.onUpdateInput,
+            Column(modifier = Modifier.padding(4.dp)) {
+                BasicTextField(
+                    state = state,
                     modifier = Modifier
                         .fillMaxWidth()
                         .defaultMinSize(minHeight = 48.dp) // Ensure a minimum height for the input
-                        .onKeyEvent { keyEvent: KeyEvent ->
+                        .onKeyEvent { keyEvent ->
+                            // Ctrl+Enter to send
                             if (keyEvent.isCtrlPressed && keyEvent.key == Key.Enter && keyEvent.type == KeyEventType.KeyDown) {
                                 if (isSendButtonEnabled) {
                                     actions.onSendMessage()
@@ -94,27 +109,42 @@ fun InputArea(
                                 false // Let other key events be handled normally
                             }
                         },
-                    placeholder = { Text("Type a message...") },
-                    singleLine = false, // Allow multiline input
-                    maxLines = if (isExpanded) Int.MAX_VALUE else 5, // Remove limit when expanded
-                    shape = RoundedCornerShape(20.dp), // Slightly less rounded than container
-                    colors = TextFieldDefaults.colors(
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        disabledIndicatorColor = Color.Transparent,
-                        errorIndicatorColor = Color.Transparent,
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                    ),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(
-                        onSend = {
-                            // This handles the regular Enter key press without Ctrl
-                            if (isSendButtonEnabled) {
-                                actions.onSendMessage()
+                    // Handle regular "Enter" on mobile/IME
+                    onKeyboardAction = {
+                        if (isSendButtonEnabled) actions.onSendMessage()
+                    },
+                    lineLimits = if (isExpanded) {
+                        TextFieldLineLimits.MultiLine(minHeightInLines = 1)
+                    } else {
+                        TextFieldLineLimits.MultiLine(minHeightInLines = 1, maxHeightInLines = 5)
+                    },
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(
+                        color = MaterialTheme.colorScheme.onSurface
+                    ),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    decorator = { innerTextField ->
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(
+                                    if (state.undoState.canUndo) // Just a way to check focus/activity
+                                        MaterialTheme.colorScheme.surfaceContainerHighest
+                                    else
+                                        MaterialTheme.colorScheme.surfaceContainerHigh
+                                )
+                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                        ) {
+                            if (state.text.isEmpty()) {
+                                Text(
+                                    "Type a message...",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                )
                             }
+                            innerTextField()
                         }
-                    )
+                    }
                 )
 
                 // File reference badges section - part of input field styling

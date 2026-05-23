@@ -6,21 +6,21 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AttachFile
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -56,80 +56,102 @@ fun MessageContent(
     val previewLength = 200
 
     if (isBeingEdited) {
-        // Message is in editing state
-        var localEditingContent by remember(editingContent) {
-            mutableStateOf(editingContent ?: message.content)
-        }
+        val state = rememberTextFieldState(editingContent ?: message.content)
 
-        // Text field for editing message content
-        TextField(
-            value = localEditingContent,
-            onValueChange = { newValue ->
-                localEditingContent = newValue
-                messageActions.onUpdateEditingContent(newValue)
-            },
-            placeholder = { Text("Edit your message...", color = contentColor.copy(alpha = 0.6f)) },
-            textStyle = MaterialTheme.typography.bodyLarge.copy(color = contentColor),
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                focusedIndicatorColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
-        )
-
-        // File references management for editing
-        if (editingFileReferences.isNotEmpty()) {
-            EditingFileReferencesSection(
-                fileReferences = editingFileReferences,
-                basePathOverride = editingBasePathOverride,
-                onAddFiles = { messageActions.onAddEditingFileReferences() },
-                onRemoveFile = { messageActions.onRemoveEditingFileReference(it) },
-                onToggleContent = { ref, includeContent ->
-                    messageActions.onToggleEditingFileContent(ref, includeContent)
-                },
-                onSetBasePath = { messageActions.onSetEditingBasePathOverride(it) },
-                onResetBasePath = { messageActions.onResetEditingBasePath() },
-                modifier = Modifier.padding(top = 8.dp)
-            )
-        } else {
-            // Show "Add Files" button when no files are attached
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-                horizontalArrangement = Arrangement.Start
-            ) {
-                TextButton(
-                    onClick = { messageActions.onAddEditingFileReferences() }
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.AttachFile,
-                        contentDescription = "Add files",
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text("Add Files")
-                }
+        // Sync external changes (like undo/redo from ViewModel) into the state
+        LaunchedEffect(editingContent) {
+            if (editingContent != null && editingContent != state.text.toString()) {
+                state.setTextAndPlaceCursorAtEnd(editingContent)
             }
         }
 
-        // Actions for the edited message (Save, Cancel)
-        MessageEditActions(
-            onSave = {
-                messageActions.onSaveEditing()
-            },
-            onSaveAsCopy = {
-                messageActions.onSaveEditingAsCopy()
-            },
-            onCancel = {
-                messageActions.onCancelEditing()
-            },
-            modifier = Modifier.padding(top = 8.dp) // Padding between text field and actions
-        )
+        // Sync internal changes back to the ViewModel
+        LaunchedEffect(state) {
+            snapshotFlow { state.text }
+                .collect { newText ->
+                    val textString = newText.toString()
+                    if (textString != editingContent) {
+                        messageActions.onUpdateEditingContent(textString)
+                    }
+                }
+        }
+
+        Column(modifier = Modifier.fillMaxWidth()) {
+            BasicTextField(
+                state = state,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(12.dp), // BasicTextField needs manual padding
+                textStyle = MaterialTheme.typography.bodyLarge.copy(color = contentColor),
+                cursorBrush = SolidColor(contentColor),
+                lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 1),
+                decorator = { innerTextField ->
+                    // This allows us to keep the placeholder logic
+                    Box {
+                        if (state.text.isEmpty()) {
+                            Text(
+                                "Edit your message...",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = contentColor.copy(alpha = 0.6f)
+                            )
+                        }
+                        innerTextField()
+                    }
+                }
+            )
+
+            // File references management for editing
+            if (editingFileReferences.isNotEmpty()) {
+                EditingFileReferencesSection(
+                    fileReferences = editingFileReferences,
+                    basePathOverride = editingBasePathOverride,
+                    onAddFiles = { messageActions.onAddEditingFileReferences() },
+                    onRemoveFile = { messageActions.onRemoveEditingFileReference(it) },
+                    onToggleContent = { ref, includeContent ->
+                        messageActions.onToggleEditingFileContent(ref, includeContent)
+                    },
+                    onSetBasePath = { messageActions.onSetEditingBasePathOverride(it) },
+                    onResetBasePath = { messageActions.onResetEditingBasePath() },
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            } else {
+                // Show "Add Files" button when no files are attached
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.Start
+                ) {
+                    TextButton(
+                        onClick = { messageActions.onAddEditingFileReferences() }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AttachFile,
+                            contentDescription = "Add files",
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text("Add Files")
+                    }
+                }
+            }
+
+            // Actions for the edited message (Save, Cancel)
+            MessageEditActions(
+                onSave = {
+                    messageActions.onSaveEditing()
+                },
+                onSaveAsCopy = {
+                    messageActions.onSaveEditingAsCopy()
+                },
+                onCancel = {
+                    messageActions.onCancelEditing()
+                },
+                modifier = Modifier.padding(top = 8.dp) // Padding between text field and actions
+            )
+        }
     } else {
         // Message is not being edited
         Column {
@@ -306,7 +328,11 @@ private fun EditingFileReferencesSection(
                             basePathInput = basePathOverride ?: ""
                             editingBasePath = false
                         }) {
-                            Icon(Icons.Default.Close, contentDescription = "Cancel", modifier = Modifier.size(16.dp))
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Cancel",
+                                modifier = Modifier.size(16.dp)
+                            )
                         }
                     }
                 }
