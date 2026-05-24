@@ -1,6 +1,10 @@
 package eu.torvian.chatbot.app.compose.common
 
-import androidx.compose.ui.test.*
+import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.v2.runComposeUiTest
 import kotlin.test.Test
 
 @OptIn(ExperimentalTestApi::class)
