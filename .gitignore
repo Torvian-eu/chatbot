@@ -11,6 +11,7 @@ build/
 .idea/libraries/
 .idea/runConfigurations
 .idea/artifacts
+.idea/inspectionProfiles
 *.iws
 *.iml
 *.ipr
