@@ -4,12 +4,15 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ErrorStateDisplay
@@ -22,6 +25,7 @@ import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 /**
  * Composable for the main chat message display area.
@@ -226,11 +230,44 @@ private fun SuccessStateDisplay(
             autoExpand = false
         } else {
             val lineCount = inputContent.count { it == '\n' } + 1
-            if (lineCount > 5 || inputContent.length > 200) {
+            if (lineCount > 7 || inputContent.length > 560) {
                 delay(50)
                 autoExpand = true
                 scrollToInputTrigger++
             }
+        }
+    }
+
+    // Create a single FocusRequester to be shared between both InputArea locations
+    val inputFocusRequester = remember { FocusRequester() }
+
+    // Lift TextFieldState here so it survives expand/collapse
+    val inputTextFieldState = rememberTextFieldState(inputContent)
+
+    // Sync external changes (like clearing after send) to the state
+    LaunchedEffect(inputContent) {
+        if (inputContent != inputTextFieldState.text.toString()) {
+            inputTextFieldState.setTextAndPlaceCursorAtEnd(inputContent)
+        }
+    }
+
+    // Sync typing back to the ViewModel
+    LaunchedEffect(inputTextFieldState) {
+        snapshotFlow { inputTextFieldState.text }
+            .distinctUntilChanged()
+            .collect { actions.onUpdateInput(it.toString()) }
+    }
+
+    // Trigger focus whenever the position of the input area swaps (Expand OR Collapse)
+    LaunchedEffect(isInputExpanded) {
+        // A small delay is crucial here.
+        // When collapsing, AnimatedVisibility needs a moment to 'attach'
+        // the bottom InputArea to the UI tree before it can receive focus.
+        delay(150)
+        try {
+            inputFocusRequester.requestFocus()
+        } catch (_: Exception) {
+            // Log or ignore: focus might fail if the transition is interrupted
         }
     }
 
@@ -254,6 +291,8 @@ private fun SuccessStateDisplay(
             replyTargetMessage = replyTargetMessage,
             isSendingMessage = isSendingMessage,
             pendingFileReferences = pendingFileReferences,
+            inputFocusRequester = inputFocusRequester,
+            inputTextFieldState = inputTextFieldState,
             modifier = Modifier.weight(1f) // Messages take up most space
         )
 
@@ -270,6 +309,8 @@ private fun SuccessStateDisplay(
                 isSendingMessage = isSendingMessage,
                 isExpanded = false,
                 fileReferences = pendingFileReferences,
+                focusRequester = inputFocusRequester,
+                textFieldState = inputTextFieldState,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp) // Small padding between messages and input

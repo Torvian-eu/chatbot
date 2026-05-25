@@ -11,6 +11,7 @@ build/
 .idea/libraries/
 .idea/runConfigurations
 .idea/artifacts
+.idea/inspectionProfiles
 *.iws
 *.iml
 *.ipr
@@ -54,9 +55,6 @@ CopyFileContentSettings.xml
 
 ### Android related files
 local.properties
-
-### SQL Delight
-app/src/commonMain/sqldelight/databases/
 
 ### Build output directories
 deploy/server/dist

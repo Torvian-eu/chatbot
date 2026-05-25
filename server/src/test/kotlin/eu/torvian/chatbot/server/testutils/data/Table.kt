@@ -87,6 +87,16 @@ enum class Table {
     USER_TRUSTED_DEVICES,
 
     /**
+     * Table for storing registered client devices used by the login flow and device-scoped preferences.
+     */
+    USER_DEVICES,
+
+    /**
+     * Table for storing global and device-scoped user preferences.
+     */
+    USER_PREFERENCES,
+
+    /**
      * Table for storing user-defined groups.
      */
     USER_GROUPS,

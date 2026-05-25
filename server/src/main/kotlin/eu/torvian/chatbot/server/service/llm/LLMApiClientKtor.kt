@@ -213,7 +213,7 @@ class LLMApiClientKtor(
                     // Transform ByteReadChannel into a Flow of lines
                     val responseStream: Flow<String> = channelFlow {
                         while (!byteReadChannel.isClosedForRead) {
-                            val line = byteReadChannel.readLineStrict(limit = 10_240)
+                            val line = byteReadChannel.readLine()
                             if (line != null) {
                                 send(line)
                             } else {

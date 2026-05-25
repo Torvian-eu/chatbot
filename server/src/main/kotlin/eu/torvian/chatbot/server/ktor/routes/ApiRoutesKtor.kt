@@ -43,7 +43,8 @@ class ApiRoutesKtor(
     private val authorizationService: AuthorizationService,
     private val workerService: WorkerService,
     private val json: Json,
-    private val appConfig: AppConfiguration
+    private val appConfig: AppConfiguration,
+    private val userPreferenceService: UserPreferenceService
 ) {
     /**
      * Configures the API routes using the Ktor Resources plugin.
@@ -53,6 +54,7 @@ class ApiRoutesKtor(
         configureAuthRoutes(route)
         configureWorkerRoutes(route)
         configureUserRoutes(route)
+        configureMeRoutes(route)
         configureUserGroupRoutes(route)
         configureRoleRoutes(route)
         configureSessionRoutes(route)
@@ -86,6 +88,13 @@ class ApiRoutesKtor(
      */
     fun configureUserRoutes(route: Route) {
         route.configureUserRoutes(userService, authorizationService)
+    }
+
+    /**
+     * Configures routes related to authenticated self-service preferences (/api/v1/me).
+     */
+    fun configureMeRoutes(route: Route) {
+        route.configureMeRoutes(userPreferenceService)
     }
 
     /**

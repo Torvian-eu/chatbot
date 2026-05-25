@@ -11,7 +11,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -52,7 +51,7 @@ fun LoadingOverlay(
             Box(
                 modifier = modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.3f)), // Semi-transparent overlay
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.3f)), // Semi-transparent overlay
                 contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator(

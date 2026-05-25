@@ -6,7 +6,7 @@
 - Errors from Ktor's authentication middleware (on the server) should be mapped to proper API errors. (ApiError class)
 - Add better support for parallel tool calls (when a model calls multiple tools in a single response). Currently they are executed sequentially.
 - The material icons libraries are now deprecated. Replace them with individual icon downloads. See TODO in app/build.gradle.kts. Other docs: https://kotlinlang.org/docs/multiplatform/compose-multiplatform-resources-usage.html#icons, https://developer.android.com/develop/ui/compose/graphics/images/material, https://developers.google.com/fonts/docs/material_icons#rtl_icons_on_android
-- Add Docker support for the server module.
+- [x] Add Docker support for the server module.
 - Add one-click installers for the desktop client application.
 - Add all-in-one installer for desktop that includes the server and the client, for simple local setup (without Docker).
 - Allow admin to add new users through the admin panel.
@@ -25,12 +25,14 @@
 - [x] Save expanded states of chat messages (in memory only), so that they are restored when the user revisits the session.
 - Save scrollbar position (in memory only), so that it is restored when the user revisits the session (when in LRU cache).
 - [x] When the user selects a model in the chat area, the first available settings profile for that model should be selected automatically.
-- MCP tools for chat session should be collapsed by default in the tool selection dialog. 
+- [x] MCP tools for chat session should be collapsed by default in the tool selection dialog.
+- MCP tools in the tool selection dialog need better formatting. Currently, the description spans multiple lines and makes it hard to read. Consider a more compact layout, with the tool name and description on the same line.
 - Add back button to navigation bar, for desktop and web platforms only.
 - Add a running clock when submitting a message to the assistant, so that the user can time how long the assistant takes to respond. This can be implemented as a simple timer that starts when the user submits the message and stops when the assistant finishes responding. The elapsed time can be displayed next to the assistant's response.
+- Input area: Remove auto expand behavior, grow space until half of the viewport height, add scrollbar. 
 
 ## Security
-- User account will be locked after a certain number of failed login attempts.
+- [x] User account will be locked after a certain number of failed login attempts.
 - Limit number of registration attempts per hour (in total and per IP address).
 
 ## Code quality
@@ -49,4 +51,3 @@
 
 ## Misc
 - Split server code in two parts, so that the app can be (optionally) used without the server. The API calls on the client side will need to be routed directly to mocked endpoints (instead of through Ktor). In order to achieve this, most of the server code will need to be made KMP-compatible. The part that cannot be made KMP-compatible (Ktor server) will remain in a separate module.
-- (deprecated) Remove LocalMCPServerLocalTable. Store it on the server instead. Environment variables remain to be encrypted and stored locally on the client side.
