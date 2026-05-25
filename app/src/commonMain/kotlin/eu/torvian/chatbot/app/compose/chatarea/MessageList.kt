@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -16,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ScrollbarWrapper
@@ -49,6 +52,8 @@ import kotlinx.coroutines.yield
  * @param isSendingMessage Whether a send/stream operation is active.
  * @param pendingFileReferences File references attached to the composer.
  * @param modifier Modifier applied to the outer container.
+ * @param inputFocusRequester Focus requester to programmatically control focus on the input text field.
+ * @param inputTextFieldState The text field state for the input area, shared with parent.
  */
 @Composable
 fun MessageList(
@@ -69,7 +74,9 @@ fun MessageList(
     replyTargetMessage: ChatMessage? = null,
     isSendingMessage: Boolean = false,
     pendingFileReferences: List<FileReference> = emptyList(),
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    inputFocusRequester: FocusRequester = remember { FocusRequester() },
+    inputTextFieldState: TextFieldState = rememberTextFieldState()
 ) {
     // Create ScrollState for scrollbar integration
     val scrollState = rememberScrollState()
@@ -202,6 +209,8 @@ fun MessageList(
                                 isSendingMessage = isSendingMessage,
                                 isExpanded = true,
                                 fileReferences = pendingFileReferences,
+                                focusRequester = inputFocusRequester,
+                                textFieldState = inputTextFieldState,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .bringIntoViewRequester(inlineReplyInputRequester)
@@ -221,6 +230,8 @@ fun MessageList(
                             isSendingMessage = isSendingMessage,
                             isExpanded = true,
                             fileReferences = pendingFileReferences,
+                            focusRequester = inputFocusRequester,
+                            textFieldState = inputTextFieldState,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .bringIntoViewRequester(trailingInputRequester)

@@ -8,18 +8,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.rememberTextFieldState
-import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.input.ImeAction
@@ -46,6 +48,8 @@ import org.jetbrains.compose.resources.stringResource
  * @param isSendingMessage Indicates if a message is currently being sent.
  * @param fileReferences List of file references attached to the current message.
  * @param modifier Modifier to be applied to the component.
+ * @param focusRequester Focus requester to programmatically control focus on the text field.
+ * @param textFieldState The text field state, shared with parent for cursor persistence.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -56,24 +60,11 @@ fun InputArea(
     isSendingMessage: Boolean,
     isExpanded: Boolean = false,
     fileReferences: List<FileReference> = emptyList(),
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    focusRequester: FocusRequester = remember { FocusRequester() },
+    textFieldState: TextFieldState = rememberTextFieldState()
 ) {
-    val state = rememberTextFieldState(inputContent)
-
-    // Sync external changes (like clearing the input after sending)
-    LaunchedEffect(inputContent) {
-        if (inputContent != state.text.toString()) {
-            state.setTextAndPlaceCursorAtEnd(inputContent)
-        }
-    }
-
-    // Sync internal typing back to the actions
-    LaunchedEffect(state) {
-        snapshotFlow { state.text }
-            .collect { actions.onUpdateInput(it.toString()) }
-    }
-
-    val isSendButtonEnabled = state.text.isNotBlank() && !isSendingMessage
+    val isSendButtonEnabled = textFieldState.text.isNotBlank() && !isSendingMessage
 
     Column(modifier = modifier) {
         // Reply Target Banner
@@ -92,10 +83,11 @@ fun InputArea(
         ) {
             Column(modifier = Modifier.padding(4.dp)) {
                 BasicTextField(
-                    state = state,
+                    state = textFieldState,
                     modifier = Modifier
                         .fillMaxWidth()
                         .defaultMinSize(minHeight = 48.dp) // Ensure a minimum height for the input
+                        .focusRequester(focusRequester)
                         .onKeyEvent { keyEvent ->
                             // Ctrl+Enter to send
                             if (keyEvent.isCtrlPressed && keyEvent.key == Key.Enter && keyEvent.type == KeyEventType.KeyDown) {
@@ -128,14 +120,14 @@ fun InputArea(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(20.dp))
                                 .background(
-                                    if (state.undoState.canUndo) // Just a way to check focus/activity
+                                    if (textFieldState.undoState.canUndo) // Just a way to check focus/activity
                                         MaterialTheme.colorScheme.surfaceContainerHighest
                                     else
                                         MaterialTheme.colorScheme.surfaceContainerHigh
                                 )
                                 .padding(horizontal = 16.dp, vertical = 12.dp)
                         ) {
-                            if (state.text.isEmpty()) {
+                            if (textFieldState.text.isEmpty()) {
                                 Text(
                                     "Type a message...",
                                     style = MaterialTheme.typography.bodyLarge,
@@ -198,7 +190,9 @@ fun InputArea(
                             ) {
                                 IconButton(
                                     onClick = actions.onToggleExpansion,
-                                    modifier = Modifier.size(40.dp)
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .focusProperties { canFocus = false }
                                 ) {
                                     Icon(
                                         imageVector = if (isExpanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
