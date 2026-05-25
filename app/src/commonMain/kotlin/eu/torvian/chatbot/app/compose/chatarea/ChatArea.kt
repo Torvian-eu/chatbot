@@ -230,7 +230,7 @@ private fun SuccessStateDisplay(
             autoExpand = false
         } else {
             val lineCount = inputContent.count { it == '\n' } + 1
-            if (lineCount > 5 || inputContent.length > 200) {
+            if (lineCount > 7 || inputContent.length > 560) {
                 delay(50)
                 autoExpand = true
                 scrollToInputTrigger++

@@ -109,7 +109,7 @@ fun InputArea(
                     lineLimits = if (isExpanded) {
                         TextFieldLineLimits.MultiLine(minHeightInLines = 1)
                     } else {
-                        TextFieldLineLimits.MultiLine(minHeightInLines = 1, maxHeightInLines = 5)
+                        TextFieldLineLimits.MultiLine(minHeightInLines = 1, maxHeightInLines = 7)
                     },
                     textStyle = MaterialTheme.typography.bodyLarge.copy(
                         color = MaterialTheme.colorScheme.onSurface
