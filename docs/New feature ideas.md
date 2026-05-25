@@ -37,6 +37,8 @@
 ### Make chat session importable from file/clipboard (for ChatGPT export format)
 
 ### Make messages searchable
+- Global search: add a search bar to the left panel on the chat screen, which allows the user to search for messages across all sessions. The search results should show the message content, session name, and a link to the message in the session.
+- Local search: add a search bar to the "more" menu in the top app bar, which allows the user to search for messages within the current session. The search results should show the message content, and a link to the message in the session.
 
 ### (done) Add Save as Copy button to message edit area (in addition to Save/Cancel)
 This action saves the edited message as a new message, and creates a new branch in the conversation (also for leaf messages).
