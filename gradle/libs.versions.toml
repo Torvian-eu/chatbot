@@ -12,7 +12,6 @@ log4j = "2.26.0"             # Log4j version
 jbcrypt = "0.4"              # JBCrypt version
 bouncycastle = "1.84"        # BouncyCastle version
 koin = "4.2.1"               # Koin version
-typesafe-config = "1.4.6"    # Typesafe Config version
 mockk = "1.14.9"             # MockK version
 arrow = "2.2.2.1"              # Arrow version
 compose = "1.11.0"           # Compose Multiplatform version
@@ -43,9 +42,6 @@ serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-jso
 coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "datetime" }
 kotlinx-io-core = { module = "org.jetbrains.kotlinx:kotlinx-io-core", version.ref = "kotlinx-io" }
-
-# Typesafe Config
-typesafe-config = { module = "com.typesafe:config", version.ref = "typesafe-config" }
 
 # Logging
 log4j-api = { module = "org.apache.logging.log4j:log4j-api", version.ref = "log4j" }
