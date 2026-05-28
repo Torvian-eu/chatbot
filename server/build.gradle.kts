@@ -33,7 +33,6 @@ dependencies {
     implementation(libs.ktor.server.forwarded.header) // Ktor plugin for handling forwarded headers (X-Forwarded-For, etc.)
     implementation(libs.sqlite.jdbc)                  // SQLite JDBC Driver
     implementation(libs.jbcrypt)                      // Password hashing library
-    implementation(libs.typesafe.config)              // Typesafe Config for configuration
     implementation(libs.arrow.core)                   // Arrow Core for functional programming
     implementation(libs.hikaricp)                     // HikariCP for connection pooling
     implementation(libs.flyway.core)                  // Flyway for schema migrations
