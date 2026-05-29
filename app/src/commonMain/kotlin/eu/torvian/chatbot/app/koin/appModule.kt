@@ -185,6 +185,9 @@ fun appModule(config: AppConfiguration): Module = module {
     single<UserPreferenceApi> {
         KtorUserPreferenceApiClient(get())
     }
+    single<MetadataApi> {
+        KtorMetadataApiClient(get(named("unauthenticated")))
+    }
 
     // Provide Repository implementations, injecting the API clients
     single<ModelRepository> {
@@ -235,6 +238,9 @@ fun appModule(config: AppConfiguration): Module = module {
             localMCPToolApi = get(),
             toolRepository = get()
         )
+    }
+    single<ServerMetadataRepository> {
+        DefaultServerMetadataRepository(get())
     }
 
     single<LocalMCPServerManager> {
@@ -458,6 +464,6 @@ fun appModule(config: AppConfiguration): Module = module {
             notificationService = get()
         )
     }
-    viewModel { AppViewModel(get(), get(), get()) }
+    viewModel { AppViewModel(get(), get(), get(), get()) }
     viewModel { AboutViewModel() }
 }

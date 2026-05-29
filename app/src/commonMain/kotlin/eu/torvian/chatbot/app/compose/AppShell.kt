@@ -1,9 +1,15 @@
 package eu.torvian.chatbot.app.compose
 
-import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import eu.torvian.chatbot.app.VersionInfo
 import eu.torvian.chatbot.app.compose.auth.AuthLoadingScreen
 import eu.torvian.chatbot.app.compose.auth.ForcePasswordChangeScreen
 import eu.torvian.chatbot.app.compose.dialogs.CertificateWarningDialog
@@ -17,6 +23,7 @@ import eu.torvian.chatbot.app.generated.resources.action_retry
 import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.service.security.CertificateTrustService
+import eu.torvian.chatbot.app.viewmodel.AppViewModel
 import eu.torvian.chatbot.app.viewmodel.auth.SessionViewModel
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.getString
@@ -36,8 +43,13 @@ import org.koin.compose.viewmodel.koinViewModel
 @Composable
 fun AppShell() {
     val sessionViewModel: SessionViewModel = koinViewModel()
+    val appViewModel: AppViewModel = koinViewModel()
     val authState by sessionViewModel.authState.collectAsState()
+    val isVersionMismatch by appViewModel.isVersionMismatch.collectAsState()
+    val serverInfo by appViewModel.serverInfo.collectAsState()
     val eventBus: EventBus = currentKoinScope().get()
+
+    var isVersionWarningDismissed by rememberSaveable { mutableStateOf(false) }
 
     // Get the CertificateTrustService from Koin
     val certificateTrustService: CertificateTrustService = currentKoinScope().get()
@@ -108,29 +120,68 @@ fun AppShell() {
         }
     }
 
-    // Route based on authentication state
-    when (val currentAuthState = authState) {
-        is AuthState.Loading -> {
-            AuthLoadingScreen()
+    Column(modifier = Modifier.fillMaxSize()) {
+        if (isVersionMismatch && !isVersionWarningDismissed) {
+            Surface(
+                color = MaterialTheme.colorScheme.errorContainer,
+                contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Version Mismatch Detected",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Text(
+                            text = "The application version does not match the server version. This may cause unexpected behavior.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Text(
+                            text = "App Version: ${VersionInfo.VERSION} | Server Version: ${serverInfo?.version ?: "Unknown"}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    IconButton(onClick = { isVersionWarningDismissed = true }) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Dismiss version mismatch warning"
+                        )
+                    }
+                }
+            }
         }
 
-        is AuthState.Unauthenticated -> {
-            AuthenticationFlow(
-                snackbarHostState = snackbarHostState
-            )
-        }
+        Box(modifier = Modifier.weight(1f)) {
+            // Route based on authentication state
+            when (val currentAuthState = authState) {
+                is AuthState.Loading -> {
+                    AuthLoadingScreen()
+                }
 
-        is AuthState.Authenticated -> {
-            // Check if user needs to change password before accessing the app
-            if (currentAuthState.requiresPasswordChange) {
-                ForcePasswordChangeScreen(
-                    authState = currentAuthState
-                )
-            } else {
-                MainApplicationFlow(
-                    authState = currentAuthState,
-                    snackbarHostState = snackbarHostState
-                )
+                is AuthState.Unauthenticated -> {
+                    AuthenticationFlow(
+                        snackbarHostState = snackbarHostState
+                    )
+                }
+
+                is AuthState.Authenticated -> {
+                    // Check if user needs to change password before accessing the app
+                    if (currentAuthState.requiresPasswordChange) {
+                        ForcePasswordChangeScreen(
+                            authState = currentAuthState
+                        )
+                    } else {
+                        MainApplicationFlow(
+                            authState = currentAuthState,
+                            snackbarHostState = snackbarHostState
+                        )
+                    }
+                }
             }
         }
     }
