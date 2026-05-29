@@ -6,6 +6,7 @@ import arrow.core.raise.ensure
 import eu.torvian.chatbot.worker.config.*
 import eu.torvian.chatbot.worker.koin.workerModule
 import eu.torvian.chatbot.worker.runtime.WorkerRuntime
+import eu.torvian.chatbot.worker.service.api.WorkerMetadataService
 import eu.torvian.chatbot.worker.setup.*
 import eu.torvian.chatbot.worker.VersionInfo
 import io.ktor.client.*
@@ -160,9 +161,18 @@ class WorkerMain(
             modules(workerModule(config, tokenPath, privateKeyPem))
         }
         val koin = koinApplication.koin
+        val metadataService = koin.get<WorkerMetadataService>()
         val httpClient = koin.get<HttpClient>()
         val runtime = koin.get<WorkerRuntime>()
         try {
+            metadataService.checkCompatibility().fold(
+                ifLeft = { error ->
+                    logger.warn("Worker/server compatibility probe reported a logical issue; continuing startup: {}", error)
+                },
+                ifRight = {
+                    // Compatibility mismatches are handled inside the service by logging a warning.
+                }
+            )
             logger.info("Worker HTTP client initialized for {}", config.server.baseUrl)
             runtime.run(options.runOnce).mapLeft { WorkerMainError.Runtime(it) }.bind()
         } finally {
