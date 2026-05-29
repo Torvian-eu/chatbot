@@ -7,6 +7,7 @@ import eu.torvian.chatbot.worker.config.*
 import eu.torvian.chatbot.worker.koin.workerModule
 import eu.torvian.chatbot.worker.runtime.WorkerRuntime
 import eu.torvian.chatbot.worker.setup.*
+import eu.torvian.chatbot.worker.VersionInfo
 import io.ktor.client.*
 import kotlinx.coroutines.runBlocking
 import org.apache.logging.log4j.LogManager
@@ -72,7 +73,7 @@ class WorkerMain(
      *         or status 0 on clean completion.
      */
     fun start(args: Array<String>) = runBlocking {
-        logger.info("Worker process starting")
+        logger.info("Starting Torvian Chatbot Worker v${VersionInfo.VERSION}...")
         run(args).fold(
             { error ->
                 logger.error("Worker startup failed: {}", error)
