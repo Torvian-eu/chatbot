@@ -2,6 +2,7 @@ package eu.torvian.chatbot.app.main
 
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
+import eu.torvian.chatbot.app.VersionInfo
 import eu.torvian.chatbot.app.compose.startup.CommonAppLifecycleManager
 import eu.torvian.chatbot.app.config.FileSystemClientConfigLoader
 import eu.torvian.chatbot.app.koin.appModule
@@ -48,7 +49,7 @@ fun main() = runBlocking {
 
     // 2. Launch the Compose Multiplatform application.
     application {
-        Window(onCloseRequest = ::exitApplication, title = "Torvian chatbot") {
+        Window(onCloseRequest = ::exitApplication, title = "Torvian Chatbot v${VersionInfo.VERSION}") {
             CommonAppLifecycleManager(
                 configDir = configDir.toString(),
                 configLoader = FileSystemClientConfigLoader(),
