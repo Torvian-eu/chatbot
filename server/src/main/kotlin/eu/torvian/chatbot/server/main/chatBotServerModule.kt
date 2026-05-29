@@ -5,16 +5,17 @@ import eu.torvian.chatbot.server.config.AppConfiguration
 import eu.torvian.chatbot.server.koin.*
 import eu.torvian.chatbot.server.ktor.configureKtor
 import eu.torvian.chatbot.server.ktor.routes.ApiRoutesKtor
-import eu.torvian.chatbot.server.ktor.routes.configureWorkerWebSocketRoutes
 import eu.torvian.chatbot.server.ktor.routes.configurePublicAuthRoutes
+import eu.torvian.chatbot.server.ktor.routes.configurePublicMetadataRoutes
+import eu.torvian.chatbot.server.ktor.routes.configureWorkerWebSocketRoutes
 import eu.torvian.chatbot.server.service.security.DeviceTrustService
 import eu.torvian.chatbot.server.service.security.TokenService
-import eu.torvian.chatbot.server.worker.protocol.codec.WorkerServerWebSocketMessageCodec
-import eu.torvian.chatbot.server.worker.protocol.routing.WorkerServerIncomingMessageRouter
-import eu.torvian.chatbot.server.worker.command.pending.PendingWorkerCommandRegistry
-import eu.torvian.chatbot.server.worker.session.WorkerSessionRegistry
 import eu.torvian.chatbot.server.service.setup.InitializationCoordinator
 import eu.torvian.chatbot.server.utils.misc.DIContainerKey
+import eu.torvian.chatbot.server.worker.command.pending.PendingWorkerCommandRegistry
+import eu.torvian.chatbot.server.worker.protocol.codec.WorkerServerWebSocketMessageCodec
+import eu.torvian.chatbot.server.worker.protocol.routing.WorkerServerIncomingMessageRouter
+import eu.torvian.chatbot.server.worker.session.WorkerSessionRegistry
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.plugins.cors.routing.*
@@ -33,10 +34,11 @@ private val logger: Logger = LogManager.getLogger("chatBotServerModule")
  * This function is an extension on [Application], intended to be passed to `embeddedServer`.
  *
  * @param config The root application configuration.
+ * @param serverControl The server control service for managing server lifecycle.
  */
-fun Application.chatBotServerModule(config: AppConfiguration) {
+fun Application.chatBotServerModule(config: AppConfiguration, serverControl: ServerControlService) {
     // Configure Koin DI FIRST, as plugins and routing will depend on it
-    configureKoin(config)
+    configureKoin(config, serverControl)
 
     // Configure Ktor (general plugins like content negotiation, status pages, etc.)
     configureKtor(config.jwt, get<TokenService>(), config.reverseProxy)
@@ -77,8 +79,9 @@ fun Application.chatBotServerModule(config: AppConfiguration) {
  * Configures Koin for dependency injection within the Application.
  *
  * @param config The root application configuration.
+ * @param serverControl The server control service to register in Koin.
  */
-fun Application.configureKoin(config: AppConfiguration) {
+fun Application.configureKoin(config: AppConfiguration, serverControl: ServerControlService) {
     // Initialize Koin plugin with defined modules
     install(Koin) {
         modules(
@@ -87,13 +90,23 @@ fun Application.configureKoin(config: AppConfiguration) {
             miscModule(),
             daoModule(),
             serviceModule(),
-            mainModule(this@configureKoin) // Pass Application instance for Ktor specific bindings if needed
+            mainModule(this@configureKoin), // Pass Application instance for Ktor specific bindings if needed
+            serverControlModule(serverControl) // Register ServerControlService in Koin
         )
     }
 
     // Store the DI container in the application attributes for later manual access if needed
     val container = KoinDIContainer(getKoin())
     attributes.put(DIContainerKey, container)
+}
+
+/**
+ * Dependency injection module for the ServerControlService.
+ *
+ * @param serverControl The server control service instance to register.
+ */
+fun serverControlModule(serverControl: ServerControlService) = org.koin.dsl.module {
+    single<ServerControlService> { serverControl }
 }
 
 /**
@@ -130,6 +143,7 @@ fun Application.configureRouting() {
     val workerMessageCodec: WorkerServerWebSocketMessageCodec = get()
     val workerMessageRouter: WorkerServerIncomingMessageRouter = get()
     val pendingWorkerCommandRegistry: PendingWorkerCommandRegistry = get()
+    val serverControl: ServerControlService = get()
     routing {
         apiRoutesKtor.configureAllRoutes(this)
         configureWorkerWebSocketRoutes(
@@ -139,5 +153,6 @@ fun Application.configureRouting() {
             pendingCommandRegistry = pendingWorkerCommandRegistry
         )
         configurePublicAuthRoutes(deviceTrustService)
+        configurePublicMetadataRoutes(serverControl)
     }
 }

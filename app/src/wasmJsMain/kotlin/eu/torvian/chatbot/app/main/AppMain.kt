@@ -2,11 +2,13 @@ package eu.torvian.chatbot.app.main
 
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.window.ComposeViewport
+import eu.torvian.chatbot.app.VersionInfo
 import eu.torvian.chatbot.app.compose.startup.CommonAppLifecycleManager
 import eu.torvian.chatbot.app.config.WebStorageClientConfigLoader
 import eu.torvian.chatbot.app.koin.appModule
 import eu.torvian.chatbot.app.koin.wasmJsModule
 import eu.torvian.chatbot.app.utils.misc.createKmpLogger
+import kotlinx.browser.document
 import kotlinx.browser.window
 
 private val logger = createKmpLogger("WasmJsAppMain")
@@ -28,6 +30,7 @@ private const val CONFIG_DIR = "eu.torvian.chatbot"
  */
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
+    document.title = "Torvian Chatbot v${VersionInfo.VERSION}"
     logger.info("WasmJS application starting...")
     ComposeViewport {
         CommonAppLifecycleManager(

@@ -51,6 +51,7 @@ import eu.torvian.chatbot.worker.protocol.transport.WebSocketTransportConfig
 import eu.torvian.chatbot.worker.protocol.transport.TransportConnectionLoopRunner
 import eu.torvian.chatbot.worker.runtime.WorkerRuntime
 import eu.torvian.chatbot.worker.runtime.WorkerRuntimeImpl
+import eu.torvian.chatbot.worker.service.api.WorkerMetadataService
 import io.ktor.client.*
 import io.ktor.client.engine.okhttp.*
 import io.ktor.client.plugins.*
@@ -83,6 +84,7 @@ fun workerModule(
     privateKeyPem: String
 ) = module {
     single<HttpClient> { createWorkerHttpClient(config.server.baseUrl) }
+    single<WorkerMetadataService> { WorkerMetadataService(get()) }
     single<ServiceTokenStore> { FileServiceTokenStore(tokenPath) }
     single<WorkerAuthApi> { KtorWorkerAuthApi(get()) }
     single<ChallengeSigner> { PemChallengeSigner(privateKeyPem) }

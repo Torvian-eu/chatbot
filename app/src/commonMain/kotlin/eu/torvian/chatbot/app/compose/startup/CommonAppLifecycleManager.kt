@@ -16,6 +16,7 @@ import eu.torvian.chatbot.app.viewmodel.startup.StartupViewModel
 import org.koin.compose.KoinApplication
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.KoinApplication
+import org.koin.dsl.koinConfiguration
 
 /**
  * Common composable that manages startup, theming, and dependency injection for all platforms.
@@ -84,16 +85,16 @@ fun CommonAppLifecycleManager(
         }
 
         is StartupState.Ready -> {
-            KoinApplication(application = {
-                koinApp(this, currentState.config)
-            }) {
-                val appViewModel: AppViewModel = koinViewModel()
-                val currentTheme by appViewModel.currentTheme.collectAsState()
+            KoinApplication(
+                configuration = koinConfiguration(declaration = { koinApp(this, currentState.config) }),
+                content = {
+                    val appViewModel: AppViewModel = koinViewModel()
+                    val currentTheme by appViewModel.currentTheme.collectAsState()
 
-                AppTheme(currentTheme) {
-                    AppShell()
-                }
-            }
+                    AppTheme(currentTheme) {
+                        AppShell()
+                    }
+                })
         }
     }
 }

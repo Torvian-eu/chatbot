@@ -24,6 +24,7 @@ import eu.torvian.chatbot.app.viewmodel.chat.util.ThreadBuilder
 import eu.torvian.chatbot.app.viewmodel.common.CoroutineScopeProvider
 import eu.torvian.chatbot.app.viewmodel.common.DefaultCoroutineScopeProvider
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
+import eu.torvian.chatbot.app.viewmodel.settings.AboutViewModel
 import io.ktor.client.*
 import io.ktor.client.plugins.logging.*
 import kotlinx.coroutines.CoroutineScope
@@ -184,6 +185,9 @@ fun appModule(config: AppConfiguration): Module = module {
     single<UserPreferenceApi> {
         KtorUserPreferenceApiClient(get())
     }
+    single<MetadataApi> {
+        KtorMetadataApiClient(get(named("unauthenticated")))
+    }
 
     // Provide Repository implementations, injecting the API clients
     single<ModelRepository> {
@@ -234,6 +238,9 @@ fun appModule(config: AppConfiguration): Module = module {
             localMCPToolApi = get(),
             toolRepository = get()
         )
+    }
+    single<ServerMetadataRepository> {
+        DefaultServerMetadataRepository(get())
     }
 
     single<LocalMCPServerManager> {
@@ -457,5 +464,6 @@ fun appModule(config: AppConfiguration): Module = module {
             notificationService = get()
         )
     }
-    viewModel { AppViewModel(get(), get(), get()) }
+    viewModel { AppViewModel(get(), get(), get(), get()) }
+    viewModel { AboutViewModel() }
 }

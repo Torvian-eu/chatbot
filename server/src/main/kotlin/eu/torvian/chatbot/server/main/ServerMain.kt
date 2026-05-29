@@ -4,6 +4,7 @@ import arrow.core.raise.Raise
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.raise.ensureNotNull
+import eu.torvian.chatbot.server.VersionInfo
 import eu.torvian.chatbot.server.config.*
 import eu.torvian.chatbot.server.domain.config.DatabaseConfig
 import eu.torvian.chatbot.server.domain.config.ServerConnectorType
@@ -36,6 +37,7 @@ object ServerMain {
 
     @JvmStatic
     fun main(args: Array<String>) = runBlocking {
+        logger.info("Starting Torvian Chatbot Server v${VersionInfo.VERSION}...")
         val program = either {
             // Phase 1: Load the DTO (Nullable/Partial)
             var currentDto = ServerConfigLoader.loadConfigDto().bind()

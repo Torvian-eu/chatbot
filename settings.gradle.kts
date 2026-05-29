@@ -1,7 +1,7 @@
 // Define global project metadata
+val projectVersion = "0.5.0"
 val projectName = "chatbot"
 val projectGroup = "eu.torvian"
-val defaultVersion = "1.0-SNAPSHOT"
 
 // Set the root project's name
 rootProject.name = projectName
@@ -9,15 +9,14 @@ rootProject.name = projectName
 /**
  * Dynamically configure each project's group and version.
  * - Group: Defined globally
- * - Version: Falls back to default if not defined in build.gradle.kts
+ * - Version: Set from central projectVersion
  */
 gradle.beforeProject {
     group = projectGroup
+    version = projectVersion
 
-    // Fallback to default version if not specified in the module
-    if (project.version == "unspecified") {
-        version = defaultVersion
-    }
+    // Expose version to all projects via extra properties
+    extensions.extraProperties["centralVersion"] = projectVersion
 
     // Log for verification
     println("Configured project: $name → Version: $version")

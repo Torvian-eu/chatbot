@@ -134,6 +134,10 @@ fun SettingsScreen(
                     ) { breadcrumbs ->
                         breadcrumbSegments = breadcrumbs
                     }
+
+                    SettingsCategory.About -> AboutTabRoute { breadcrumbs ->
+                        breadcrumbSegments = breadcrumbs
+                    }
                 }
             }
         }

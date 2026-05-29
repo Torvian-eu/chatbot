@@ -65,3 +65,41 @@ tasks {
         enabled = false
     }
 }
+
+val centralVersion = extensions.extraProperties["centralVersion"]?.toString() ?: "unspecified"
+
+val generateVersionInfo by tasks.registering {
+    val versionValue = centralVersion
+    val outputDir = layout.buildDirectory.dir("generated/version/main/kotlin")
+    val outputFile = outputDir.map { it.file("eu/torvian/chatbot/worker/VersionInfo.kt") }
+
+    inputs.property("version", versionValue)
+    outputs.dir(outputDir)
+
+    doLast {
+        val versionFile = outputFile.get().asFile
+        versionFile.parentFile.mkdirs()
+        versionFile.writeText(
+            """
+            package eu.torvian.chatbot.worker
+
+            /**
+             * Generated version information for the worker module.
+             */
+            object VersionInfo {
+                /**
+                 * The version of the Torvian Chatbot Worker.
+                 */
+                const val VERSION: String = "$versionValue"
+            }
+            """.trimIndent()
+        )
+    }
+}
+
+sourceSets {
+    main {
+        kotlin.srcDir(tasks.named("generateVersionInfo"))
+    }
+}
+
