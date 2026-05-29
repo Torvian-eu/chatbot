@@ -238,7 +238,7 @@ class ServerControlServiceImpl(
             this.monitor.subscribe(ApplicationStopped) { onStopped(it) }
 
             // Apply the main application module
-            chatBotServerModule(config)
+            chatBotServerModule(config, this@ServerControlServiceImpl)
         }
     }
 }
