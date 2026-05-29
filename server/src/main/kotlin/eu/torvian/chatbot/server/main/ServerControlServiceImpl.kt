@@ -63,8 +63,7 @@ class ServerControlServiceImpl(
             logger.warn("Server start requested, but status is ${_serverStatus.value}. Ignoring.")
             return
         }
-        logger.info("Starting Chatbot Server...")
-        _serverStatus.value = ServerStatus.Starting // Indicate starting state early
+        logger.info("Initializing Ktor engine...")
 
         val server = createEmbeddedServer(
             Jetty, port = config.network.port, host = config.network.host,
