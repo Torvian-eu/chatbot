@@ -303,7 +303,6 @@ private fun SuccessStateDisplay(
             exit = shrinkVertically(shrinkTowards = Alignment.Top)
         ) {
             InputArea(
-                inputContent = inputContent,
                 actions = inputAreaActions,
                 replyTargetMessage = replyTargetMessage,
                 isSendingMessage = isSendingMessage,
