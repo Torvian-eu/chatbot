@@ -42,7 +42,7 @@ import org.jetbrains.compose.resources.stringResource
  * - Loading indicator on send button (E1.S3)
  * - File reference badges and attach button
  *
- * @param inputContent The current text content of the input field.
+
  * @param actions Grouped callbacks for input area interactions.
  * @param replyTargetMessage The message being replied to, if any.
  * @param isSendingMessage Indicates if a message is currently being sent.
@@ -54,7 +54,6 @@ import org.jetbrains.compose.resources.stringResource
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun InputArea(
-    inputContent: String,
     actions: InputAreaActions,
     replyTargetMessage: ChatMessage?,
     isSendingMessage: Boolean,
@@ -88,7 +87,7 @@ fun InputArea(
                         .fillMaxWidth()
                         .defaultMinSize(minHeight = 48.dp) // Ensure a minimum height for the input
                         .focusRequester(focusRequester)
-                        .onKeyEvent { keyEvent ->
+                        .onPreviewKeyEvent { keyEvent ->
                             // Ctrl+Enter to send
                             if (keyEvent.isCtrlPressed && keyEvent.key == Key.Enter && keyEvent.type == KeyEventType.KeyDown) {
                                 if (isSendButtonEnabled) {

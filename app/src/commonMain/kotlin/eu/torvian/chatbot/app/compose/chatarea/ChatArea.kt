@@ -166,159 +166,159 @@ private fun SuccessStateDisplay(
         )
     }
 
-    // Expansion state management (Compose-only, not in ViewModel)
-    var manualExpandToggle by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    // Session-local UI state: must be scoped to chatSession.id to prevent leaking across sessions
+    key(chatSession.id) {
+        // Expansion state management (Compose-only, not in ViewModel)
+        var manualExpandToggle by rememberSaveable { mutableStateOf<Boolean?>(null) }
 
-    // Scroll trigger to force scroll to input when manually expanding
-    var scrollToInputTrigger by remember { mutableStateOf(0) }
+        // Scroll trigger to force scroll to input when manually expanding
+        var scrollToInputTrigger by remember { mutableStateOf(0) }
 
-    // State to track automatic expansion based on input content
-    var autoExpand by remember { mutableStateOf(false) }
+        // State to track automatic expansion based on input content
+        var autoExpand by remember { mutableStateOf(false) }
 
-    // Determine if input should be expanded (manual toggle overrides automatic behavior)
-    val isInputExpanded = remember(manualExpandToggle, autoExpand) {
-        when (manualExpandToggle) {
-            true -> true // Manual expansion is on
-            false -> false // Manual expansion is off
-            null -> autoExpand // No manual toggle, use automatic behavior
+        // Determine if input should be expanded (manual toggle overrides automatic behavior)
+        val isInputExpanded = remember(manualExpandToggle, autoExpand) {
+            when (manualExpandToggle) {
+                true -> true // Manual expansion is on
+                false -> false // Manual expansion is off
+                null -> autoExpand // No manual toggle, use automatic behavior
+            }
         }
-    }
 
-    // Toggle function for manual expansion
-    val onToggleExpansion = {
-        val wasExpanded = isInputExpanded
-        manualExpandToggle = when (manualExpandToggle) {
-            null -> !isInputExpanded // First toggle: set explicit state
-            true -> false // Expanded -> collapse
-            false -> true // Collapsed -> expand
-        }
-        // Trigger scroll when expanding
-        if (!wasExpanded && manualExpandToggle == true) {
-            scrollToInputTrigger++
-        }
-    }
-
-
-    val inputAreaActions = remember(actions, onToggleExpansion) {
-        InputAreaActions(
-            onUpdateInput = actions::onUpdateInput,
-            onSendMessage = actions::onSendMessage,
-            onCancelSendMessage = actions::onCancelSendMessage,
-            onCancelReply = actions::onCancelReply,
-            onToggleExpansion = onToggleExpansion,
-            onAddFileReferences = actions::onAddFileReferences,
-            onRemoveFileReference = actions::onRemoveFileReference,
-            onShowFileReferenceDetails = actions::onShowFileReferenceDetails,
-            onManageFileReferences = actions::onShowFileReferencesManagement
-        )
-    }
-
-    // Scroll to reply target when it changes
-    LaunchedEffect(replyTargetMessage) {
-        if (replyTargetMessage != null) {
-            scrollToInputTrigger++
-        }
-    }
-
-    // Auto-expand when input reaches 5 lines or 200 characters
-    // When expanded, collapse only when input is cleared.
-    LaunchedEffect(inputContent) {
-        if (manualExpandToggle != null || autoExpand && inputContent.isNotEmpty()) {
-            return@LaunchedEffect
-        }
-        else if (inputContent.isEmpty()) {
-            autoExpand = false
-        } else {
-            val lineCount = inputContent.count { it == '\n' } + 1
-            if (lineCount > 7 || inputContent.length > 560) {
-                delay(50)
-                autoExpand = true
+        // Toggle function for manual expansion
+        val onToggleExpansion = {
+            manualExpandToggle = when (manualExpandToggle) {
+                null -> !isInputExpanded // First toggle: set explicit state
+                true -> false // Expanded -> collapse
+                false -> true // Collapsed -> expand
+            }
+            // Trigger scroll when expanding
+            if (!isInputExpanded && manualExpandToggle == true) {
                 scrollToInputTrigger++
             }
         }
-    }
 
-    // Create a single FocusRequester to be shared between both InputArea locations
-    val inputFocusRequester = remember { FocusRequester() }
-
-    // Lift TextFieldState here so it survives expand/collapse
-    val inputTextFieldState = rememberTextFieldState(inputContent)
-
-    // Sync external changes (like clearing after send) to the state
-    LaunchedEffect(inputContent) {
-        if (inputContent != inputTextFieldState.text.toString()) {
-            inputTextFieldState.setTextAndPlaceCursorAtEnd(inputContent)
-        }
-    }
-
-    // Sync typing back to the ViewModel
-    LaunchedEffect(inputTextFieldState) {
-        snapshotFlow { inputTextFieldState.text }
-            .distinctUntilChanged()
-            .collect { actions.onUpdateInput(it.toString()) }
-    }
-
-    // Trigger focus whenever the position of the input area swaps (Expand OR Collapse)
-    LaunchedEffect(isInputExpanded) {
-        // A small delay is crucial here.
-        // When collapsing, AnimatedVisibility needs a moment to 'attach'
-        // the bottom InputArea to the UI tree before it can receive focus.
-        delay(150)
-        try {
-            inputFocusRequester.requestFocus()
-        } catch (_: Exception) {
-            // Log or ignore: focus might fail if the transition is interrupted
-        }
-    }
-
-    Column(modifier = Modifier.fillMaxSize()) {
-
-        MessageList(
-            chatSession = chatSession,
-            displayedMessages = displayedMessages,
-            collapsedMessageIds = collapsedMessageIds,
-            messageActions = messageActions,
-            inputAreaActions = inputAreaActions,
-            editingMessage = editingMessage,
-            editingContent = editingContent,
-            editingFileReferences = editingFileReferences,
-            editingBasePathOverride = editingBasePathOverride,
-            modelsById = modelsById, // Pass map for graceful degradation
-            toolCallsMap = toolCallsMap,
-            isInputExpanded = isInputExpanded,
-            scrollToInputTrigger = scrollToInputTrigger,
-            inputContent = inputContent,
-            replyTargetMessage = replyTargetMessage,
-            isSendingMessage = isSendingMessage,
-            pendingFileReferences = pendingFileReferences,
-            inputFocusRequester = inputFocusRequester,
-            inputTextFieldState = inputTextFieldState,
-            modifier = Modifier.weight(1f) // Messages take up most space
-        )
-
-        // Input area at bottom - only visible when not expanded
-        AnimatedVisibility(
-            visible = !isInputExpanded,
-            enter = expandVertically(expandFrom = Alignment.Top),
-            exit = shrinkVertically(shrinkTowards = Alignment.Top)
-        ) {
-            InputArea(
-                inputContent = inputContent,
-                actions = inputAreaActions,
-                replyTargetMessage = replyTargetMessage,
-                isSendingMessage = isSendingMessage,
-                isExpanded = false,
-                fileReferences = pendingFileReferences,
-                focusRequester = inputFocusRequester,
-                textFieldState = inputTextFieldState,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp) // Small padding between messages and input
+        val inputAreaActions = remember(actions, onToggleExpansion) {
+            InputAreaActions(
+                onUpdateInput = actions::onUpdateInput,
+                onSendMessage = actions::onSendMessage,
+                onCancelSendMessage = actions::onCancelSendMessage,
+                onCancelReply = actions::onCancelReply,
+                onToggleExpansion = onToggleExpansion,
+                onAddFileReferences = actions::onAddFileReferences,
+                onRemoveFileReference = actions::onRemoveFileReference,
+                onShowFileReferenceDetails = actions::onShowFileReferenceDetails,
+                onManageFileReferences = actions::onShowFileReferencesManagement
             )
         }
-    }
 
-    Dialogs(
-        dialogState = dialogState
-    )
+        // Scroll to reply target when it changes
+        LaunchedEffect(replyTargetMessage) {
+            if (replyTargetMessage != null) {
+                scrollToInputTrigger++
+            }
+        }
+
+        // Auto-expand when input reaches 5 lines or 200 characters
+        // When expanded, collapse only when input is cleared.
+        LaunchedEffect(inputContent) {
+            if (manualExpandToggle != null || autoExpand && inputContent.isNotEmpty()) {
+                return@LaunchedEffect
+            }
+            else if (inputContent.isEmpty()) {
+                autoExpand = false
+            } else {
+                val lineCount = inputContent.count { it == '\n' } + 1
+                if (lineCount > 7 || inputContent.length > 560) {
+                    delay(50)
+                    autoExpand = true
+                    scrollToInputTrigger++
+                }
+            }
+        }
+
+        // Create a single FocusRequester to be shared between both InputArea locations
+        val inputFocusRequester = remember { FocusRequester() }
+
+        // Lift TextFieldState here so it survives expand/collapse
+        val inputTextFieldState = rememberTextFieldState(inputContent)
+
+        // Sync external changes (like clearing after send) to the state
+        LaunchedEffect(inputContent) {
+            if (inputContent != inputTextFieldState.text.toString()) {
+                inputTextFieldState.setTextAndPlaceCursorAtEnd(inputContent)
+            }
+        }
+
+        // Sync typing back to the ViewModel
+        LaunchedEffect(inputTextFieldState) {
+            snapshotFlow { inputTextFieldState.text.toString() }
+                .distinctUntilChanged()
+                .collect { actions.onUpdateInput(it) }
+        }
+
+        // Trigger focus whenever the position of the input area swaps (Expand OR Collapse)
+        LaunchedEffect(isInputExpanded) {
+            // A small delay is crucial here.
+            // When collapsing, AnimatedVisibility needs a moment to 'attach'
+            // the bottom InputArea to the UI tree before it can receive focus.
+            delay(150)
+            try {
+                inputFocusRequester.requestFocus()
+            } catch (_: Exception) {
+                // Log or ignore: focus might fail if the transition is interrupted
+            }
+        }
+
+        Column(modifier = Modifier.fillMaxSize()) {
+
+            MessageList(
+                chatSession = chatSession,
+                displayedMessages = displayedMessages,
+                collapsedMessageIds = collapsedMessageIds,
+                messageActions = messageActions,
+                inputAreaActions = inputAreaActions,
+                editingMessage = editingMessage,
+                editingContent = editingContent,
+                editingFileReferences = editingFileReferences,
+                editingBasePathOverride = editingBasePathOverride,
+                modelsById = modelsById, // Pass map for graceful degradation
+                toolCallsMap = toolCallsMap,
+                isInputExpanded = isInputExpanded,
+                scrollToInputTrigger = scrollToInputTrigger,
+                inputContent = inputContent,
+                replyTargetMessage = replyTargetMessage,
+                isSendingMessage = isSendingMessage,
+                pendingFileReferences = pendingFileReferences,
+                inputFocusRequester = inputFocusRequester,
+                inputTextFieldState = inputTextFieldState,
+                modifier = Modifier.weight(1f) // Messages take up most space
+            )
+
+            // Input area at bottom - only visible when not expanded
+            AnimatedVisibility(
+                visible = !isInputExpanded,
+                enter = expandVertically(expandFrom = Alignment.Top),
+                exit = shrinkVertically(shrinkTowards = Alignment.Top)
+            ) {
+                InputArea(
+                    actions = inputAreaActions,
+                    replyTargetMessage = replyTargetMessage,
+                    isSendingMessage = isSendingMessage,
+                    isExpanded = false,
+                    fileReferences = pendingFileReferences,
+                    focusRequester = inputFocusRequester,
+                    textFieldState = inputTextFieldState,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp) // Small padding between messages and input
+                )
+            }
+        }
+
+        Dialogs(
+            dialogState = dialogState
+        )
+    }
 }

@@ -203,7 +203,6 @@ fun MessageList(
                         // Insert expanded input area right after reply target message
                         if (isInputExpanded && replyTargetMessage != null && message.id == replyTargetMessage.id) {
                             InputArea(
-                                inputContent = inputContent,
                                 actions = inputAreaActions,
                                 replyTargetMessage = replyTargetMessage,
                                 isSendingMessage = isSendingMessage,
@@ -224,7 +223,6 @@ fun MessageList(
                 if (isInputExpanded && replyTargetMessage == null) {
                     key("expanded_input_area") {
                         InputArea(
-                            inputContent = inputContent,
                             actions = inputAreaActions,
                             replyTargetMessage = replyTargetMessage,
                             isSendingMessage = isSendingMessage,

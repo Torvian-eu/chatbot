@@ -12,14 +12,17 @@ Torvian chatbot is a multiplatform chatbot application with AI/LLM integration. 
 - `docs/` — documentation
 
 ## Stack
-- Kotlin 2.3.10
-- Compose Multiplatform 1.10.2 with Material 3 1.9.0
-- Ktor 3.4.1
-- Exposed 1.1.1
-- SQLite JDBC 3.51.2.0
-- Koin 4.1.1
-- Arrow 2.2.2
-- kotlinx.serialization
+- Kotlin 2.3.21
+- Compose Multiplatform 1.11.0 with Material 3 1.9.0
+- Ktor 3.5.0
+- Exposed 1.3.0
+- SQLite JDBC 3.53.1.0
+- Koin 4.2.1
+- Arrow 2.2.2.1
+- Kotlinx Serialization 1.11.0
+- MCP Kotlin SDK 0.12.0
+- Flyway 12.6.2
+- MockK 1.14.9
 - Gradle 9.4.0
 
 ## Conventions
