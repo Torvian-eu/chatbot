@@ -87,7 +87,7 @@ fun InputArea(
                         .fillMaxWidth()
                         .defaultMinSize(minHeight = 48.dp) // Ensure a minimum height for the input
                         .focusRequester(focusRequester)
-                        .onKeyEvent { keyEvent ->
+                        .onPreviewKeyEvent { keyEvent ->
                             // Ctrl+Enter to send
                             if (keyEvent.isCtrlPressed && keyEvent.key == Key.Enter && keyEvent.type == KeyEventType.KeyDown) {
                                 if (isSendButtonEnabled) {
