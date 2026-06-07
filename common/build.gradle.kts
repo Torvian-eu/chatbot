@@ -69,7 +69,7 @@ kotlin {
 
     androidTarget {
         compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_11)
+            jvmTarget.set(JvmTarget.fromTarget(libs.versions.javaAndroid.get()))
         }
     }
 
@@ -133,8 +133,15 @@ kotlin {
             }
         }
         compileOptions {
-            sourceCompatibility = JavaVersion.VERSION_11
-            targetCompatibility = JavaVersion.VERSION_11
+            val javaAndroidVal = libs.versions.javaAndroid.get()
+            sourceCompatibility = JavaVersion.toVersion(javaAndroidVal)
+            targetCompatibility = JavaVersion.toVersion(javaAndroidVal)
         }
     }
+}
+
+tasks.withType<Test> {
+    jvmArgs(
+        "--sun-misc-unsafe-memory-access=allow" // Allow unsafe memory access for testing purposes (needed for MockK)
+    )
 }
