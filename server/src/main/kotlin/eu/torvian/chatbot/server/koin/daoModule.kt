@@ -60,6 +60,7 @@ fun daoModule() = module {
     // MCP server DAOs
     single<LocalMCPServerDao> { LocalMCPServerDaoExposed(get()) }
     single<LocalMCPToolDefinitionDao> { LocalMCPToolDefinitionDaoExposed(get()) }
+    single<LocalMCPServerSignatureDao> { LocalMCPServerSignatureDaoExposed(get()) }
 
     // Worker DAOs
     single<WorkerDao> { WorkerDaoExposed(get()) }
