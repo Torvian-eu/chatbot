@@ -11,6 +11,8 @@ import eu.torvian.chatbot.app.service.mcp.LocalMCPServerManager
 import eu.torvian.chatbot.app.service.mcp.LocalMCPServerManagerImpl
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.service.security.CertificateTrustService
+import eu.torvian.chatbot.app.startup.AppStartupInitializer
+import eu.torvian.chatbot.app.startup.DefaultAppStartupInitializer
 import eu.torvian.chatbot.app.viewmodel.*
 import eu.torvian.chatbot.app.viewmodel.admin.UserGroupManagementViewModel
 import eu.torvian.chatbot.app.viewmodel.admin.UserManagementViewModel
@@ -109,6 +111,13 @@ fun appModule(config: AppConfiguration): Module = module {
         DefaultDeviceIdentityService(
             storage = get(),
             cryptoProvider = get()
+        )
+    }
+
+    // Generic startup initializer that runs once when the app reaches the ready state
+    single<AppStartupInitializer> {
+        DefaultAppStartupInitializer(
+            deviceIdentityService = get()
         )
     }
 
