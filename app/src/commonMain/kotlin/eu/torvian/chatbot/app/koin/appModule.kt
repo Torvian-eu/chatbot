@@ -106,7 +106,10 @@ fun appModule(config: AppConfiguration): Module = module {
 
     // Device identity service for persistent device ID
     single<DeviceIdentityService> {
-        DefaultDeviceIdentityService(storage = get())
+        DefaultDeviceIdentityService(
+            storage = get(),
+            cryptoProvider = get()
+        )
     }
 
     // Default HttpClient (authenticated) for backward compatibility
