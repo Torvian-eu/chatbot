@@ -11,6 +11,8 @@ import eu.torvian.chatbot.app.service.mcp.LocalMCPServerManager
 import eu.torvian.chatbot.app.service.mcp.LocalMCPServerManagerImpl
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.service.security.CertificateTrustService
+import eu.torvian.chatbot.app.service.security.DefaultRequestSigningService
+import eu.torvian.chatbot.app.service.security.RequestSigningService
 import eu.torvian.chatbot.app.startup.AppStartupInitializer
 import eu.torvian.chatbot.app.startup.DefaultAppStartupInitializer
 import eu.torvian.chatbot.app.viewmodel.*
@@ -111,6 +113,15 @@ fun appModule(config: AppConfiguration): Module = module {
         DefaultDeviceIdentityService(
             storage = get(),
             cryptoProvider = get()
+        )
+    }
+
+    // Generic request-signing service for detached protocol-level signatures.
+    single<RequestSigningService> {
+        DefaultRequestSigningService(
+            deviceIdentityService = get(),
+            cryptoProvider = get(),
+            json = get()
         )
     }
 
