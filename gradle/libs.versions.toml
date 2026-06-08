@@ -160,6 +160,9 @@ mcp-sdk-client = { module = "io.modelcontextprotocol:kotlin-sdk-client", version
 jakarta-mail = { module = "jakarta.mail:jakarta.mail-api", version.ref = "jakarta-mail" }
 angus-mail = { module = "org.eclipse.angus:angus-mail", version.ref = "angus-mail" }
 
+# Kotlinx Browser for WASM JS interop
+kotlinx-browser = { module = "org.jetbrains.kotlinx:kotlinx-browser", version = "0.5.0" }
+
 [bundles]
 # Ktor Server: Includes all necessary dependencies for a Ktor backend
 ktor-server = [

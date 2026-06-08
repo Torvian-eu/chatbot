@@ -11,7 +11,9 @@ import eu.torvian.chatbot.app.service.clipboard.ClipboardService
 import eu.torvian.chatbot.app.service.clipboard.ClipboardServiceWasmJs
 import eu.torvian.chatbot.app.service.security.BrowserCertificateStorage
 import eu.torvian.chatbot.app.service.security.CertificateStorage
+import eu.torvian.chatbot.common.security.AsymmetricCryptoProvider
 import eu.torvian.chatbot.common.security.CryptoProvider
+import eu.torvian.chatbot.common.security.WasmJsAsymmetricCryptoProvider
 import eu.torvian.chatbot.common.security.WasmJsWebCryptoProvider
 import org.koin.dsl.module
 
@@ -28,6 +30,10 @@ fun wasmJsModule(config: AppConfiguration) = module {
     single<CryptoProvider> {
         // Use the secure Web Crypto API provider for WASM/JS.
         WasmJsWebCryptoProvider(config.encryption)
+    }
+
+    single<AsymmetricCryptoProvider> {
+        WasmJsAsymmetricCryptoProvider()
     }
 
     single<TokenStorage> {

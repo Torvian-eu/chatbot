@@ -102,6 +102,17 @@ kotlin {
             implementation(libs.kotlinx.coroutines.test)
         }
 
+        wasmJsMain.dependencies {
+            // Kotlinx Browser for WASM JS interop (Int8Array, JsAny, Promise)
+            implementation(libs.kotlinx.browser)
+        }
+
+        desktopAndroidMain.dependencies {
+            // BouncyCastle for RSA signing
+            implementation(libs.bouncycastle.prov)
+            implementation(libs.bouncycastle.pkix)
+        }
+
         desktopMain.dependencies {
             // Logging (JVM-specific)
             implementation(libs.log4j.api)
