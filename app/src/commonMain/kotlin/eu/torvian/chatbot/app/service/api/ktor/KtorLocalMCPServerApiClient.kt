@@ -3,34 +3,36 @@ package eu.torvian.chatbot.app.service.api.ktor
 import arrow.core.Either
 import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.LocalMCPServerApi
+import eu.torvian.chatbot.app.service.security.RequestSigningService
 import eu.torvian.chatbot.common.api.resources.LocalMCPServerResource
-import eu.torvian.chatbot.common.models.api.mcp.CreateLocalMCPServerRequest
-import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
-import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
-import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerConnectionResponse
-import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerDraftConnectionRequest
-import eu.torvian.chatbot.common.models.api.mcp.UpdateLocalMCPServerRequest
+import eu.torvian.chatbot.common.models.api.mcp.*
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.resources.*
-import io.ktor.client.request.*
+import kotlinx.serialization.json.Json
 
 /**
  * Ktor HttpClient implementation of the [LocalMCPServerApi] interface.
  *
  * Uses the configured [HttpClient] and the [BaseApiResourceClient.safeApiCall] helper
  * to interact with the backend's Local MCP Server endpoints, mapping responses
- * to [Either<ApiResourceError, T>].
+ * to [Either<ApiResourceError, T>]. Signed create/update calls reuse the generic detached-signing
+ * helpers from [SignedJsonApiResourceClient].
  *
- * @property client The Ktor HttpClient instance injected for making requests.
+ * @param client Ktor HTTP client used for transport.
+ * @param json JSON codec used to serialize signed create/update request bodies.
+ * @param requestSigningService Detached request-signing service used for selected MCP mutation calls.
  */
-class KtorLocalMCPServerApiClient(client: HttpClient) : BaseApiResourceClient(client), LocalMCPServerApi {
+class KtorLocalMCPServerApiClient(
+    client: HttpClient,
+    json: Json,
+    requestSigningService: RequestSigningService
+) : SignedJsonApiResourceClient(client, json, requestSigningService), LocalMCPServerApi {
 
     override suspend fun createServer(request: CreateLocalMCPServerRequest): Either<ApiResourceError, LocalMCPServerDto> =
-        safeApiCall {
+        safeSignedJsonApiCall(request, CreateLocalMCPServerRequest.serializer()) { signedRequest ->
             client.post(LocalMCPServerResource()) {
-                setBody(request)
+                applyDetachedSignedJsonBody(signedRequest)
             }.body<LocalMCPServerDto>()
         }
 
@@ -49,9 +51,10 @@ class KtorLocalMCPServerApiClient(client: HttpClient) : BaseApiResourceClient(cl
         serverId: Long,
         request: UpdateLocalMCPServerRequest
     ): Either<ApiResourceError, LocalMCPServerDto> =
-        safeApiCall {
-            client.put(LocalMCPServerResource.ById(id = serverId)) { setBody(request) }
-                .body<LocalMCPServerDto>()
+        safeSignedJsonApiCall(request, UpdateLocalMCPServerRequest.serializer()) { signedRequest ->
+            client.put(LocalMCPServerResource.ById(id = serverId)) {
+                applyDetachedSignedJsonBody(signedRequest)
+            }.body<LocalMCPServerDto>()
         }
 
     override suspend fun deleteServer(serverId: Long): Either<ApiResourceError, Unit> {
@@ -89,9 +92,9 @@ class KtorLocalMCPServerApiClient(client: HttpClient) : BaseApiResourceClient(cl
     }
 
     override suspend fun testDraftConnection(request: TestLocalMCPServerDraftConnectionRequest): Either<ApiResourceError, TestLocalMCPServerConnectionResponse> =
-        safeApiCall {
+        safeSignedJsonApiCall(request, TestLocalMCPServerDraftConnectionRequest.serializer()) { signedRequest ->
             client.post(LocalMCPServerResource.TestDraftConnection()) {
-                setBody(request)
+                applyDetachedSignedJsonBody(signedRequest)
             }.body<TestLocalMCPServerConnectionResponse>()
         }
 

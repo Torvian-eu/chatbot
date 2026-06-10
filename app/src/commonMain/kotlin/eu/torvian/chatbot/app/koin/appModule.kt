@@ -197,7 +197,11 @@ fun appModule(config: AppConfiguration): Module = module {
         KtorToolApiClient(get())
     }
     single<LocalMCPServerApi> {
-        KtorLocalMCPServerApiClient(get())
+        KtorLocalMCPServerApiClient(
+            client = get(),
+            json = get(),
+            requestSigningService = get()
+        )
     }
     single<LocalMCPToolApi> {
         KtorLocalMCPToolApiClient(get())

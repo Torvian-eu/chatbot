@@ -3,26 +3,20 @@ package eu.torvian.chatbot.app.service.api.ktor
 import arrow.core.Either
 import eu.torvian.chatbot.app.service.api.ApiResourceError
 import eu.torvian.chatbot.app.service.api.LocalMCPServerApi
+import eu.torvian.chatbot.app.service.auth.DeviceIdentityError
+import eu.torvian.chatbot.app.service.auth.DeviceIdentityService
+import eu.torvian.chatbot.app.service.security.DefaultRequestSigningService
+import eu.torvian.chatbot.app.service.security.RequestSigningService
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.LocalMCPServerResource
 import eu.torvian.chatbot.common.api.resources.href
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
-import eu.torvian.chatbot.common.models.api.mcp.CreateLocalMCPServerRequest
-import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto
-import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
-import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
-import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerConnectionResponse
-import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerDraftConnectionRequest
-import eu.torvian.chatbot.common.models.api.mcp.UpdateLocalMCPServerRequest
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.mock.MockEngine
-import io.ktor.client.engine.mock.respond
-import io.ktor.http.HttpHeaders
-import io.ktor.http.HttpMethod
-import io.ktor.http.HttpStatusCode
-import io.ktor.http.headersOf
+import eu.torvian.chatbot.common.models.api.mcp.*
+import eu.torvian.chatbot.common.security.*
+import io.ktor.client.*
+import io.ktor.client.engine.mock.*
+import io.ktor.client.request.*
+import io.ktor.http.*
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
@@ -40,13 +34,68 @@ class KtorLocalMCPServerApiClientTest {
      * Builds an API client backed by the provided [mockEngine].
      *
      * @param mockEngine Ktor mock engine used to assert and return HTTP responses.
+     * @param requestSigningService Deterministic signing service used for MCP create/update requests.
      * @return Configured [LocalMCPServerApi] instance.
      */
-    private fun createTestClient(mockEngine: MockEngine): LocalMCPServerApi {
+    private fun createTestClient(
+        mockEngine: MockEngine,
+        requestSigningService: RequestSigningService = createRequestSigningService()
+    ): LocalMCPServerApi {
         val httpClient = HttpClient(mockEngine) {
             configureHttpClient("http://localhost", json)
         }
-        return KtorLocalMCPServerApiClient(httpClient)
+        return KtorLocalMCPServerApiClient(
+            client = httpClient,
+            json = json,
+            requestSigningService = requestSigningService
+        )
+    }
+
+    /**
+     * Creates a deterministic signing service so detached header assertions stay stable across test runs.
+     *
+     * @return Signing service with fixed signer metadata, nonce, timestamp, and signature result.
+     */
+    private fun createRequestSigningService(): RequestSigningService = DefaultRequestSigningService(
+        deviceIdentityService = object : DeviceIdentityService {
+            override suspend fun getOrCreateDeviceId(): Either<DeviceIdentityError, String> = Either.Right("device-123")
+
+            override suspend fun getOrCreateSigningKeyPair(): Either<DeviceIdentityError, AsymmetricKeyPair> =
+                Either.Right(AsymmetricKeyPair(publicKey = byteArrayOf(1), privateKey = byteArrayOf(9, 8, 7)))
+        },
+        cryptoProvider = object : AsymmetricCryptoProvider {
+            override suspend fun generateKeyPair(): Either<AsymmetricCryptoError, AsymmetricKeyPair> {
+                return Either.Left(AsymmetricCryptoError.KeyGenerationFailed("Unused in API-client tests"))
+            }
+
+            override suspend fun sign(data: String, privateKey: ByteArray): Either<AsymmetricCryptoError, String> {
+                return Either.Right("signature-abc")
+            }
+
+            override suspend fun verify(
+                data: String,
+                signature: String,
+                publicKey: ByteArray
+            ): Either<AsymmetricCryptoError, Boolean> {
+                return Either.Left(AsymmetricCryptoError.SignatureVerificationFailed("Unused in API-client tests"))
+            }
+        },
+        json = json,
+        currentTimeProvider = { 1_700_000_000_123L },
+        nonceGenerator = { "nonce-xyz" }
+    )
+
+    /**
+     * Verifies that [request] carries both the exact signed JSON payload and the detached signature headers.
+     *
+     * @param request Captured outbound request from the Ktor mock engine.
+     * @param signedRequest Expected detached-signing result used by the API client.
+     */
+    private suspend fun assertSignedMutationRequest(request: HttpRequestData, signedRequest: SignedRequest) {
+        assertEquals(signedRequest.payload, request.body.toByteArray().decodeToString())
+        signedRequest.toDetachedSignatureHeaders().forEach { (headerName, headerValue) ->
+            assertEquals(headerValue, request.headers[headerName])
+        }
     }
 
     /**
@@ -108,17 +157,7 @@ class KtorLocalMCPServerApiClientTest {
     @Test
     fun `createServer - success sends root endpoint and returns canonical payload`() = runTest {
         val created = dto(55L)
-        val mockEngine = MockEngine { request ->
-            assertEquals(HttpMethod.Post, request.method)
-            assertEquals(href(LocalMCPServerResource()), request.url.encodedPath)
-            respond(
-                content = json.encodeToString(created),
-                status = HttpStatusCode.Created,
-                headers = headersOf(HttpHeaders.ContentType, "application/json")
-            )
-        }
-
-        val api = createTestClient(mockEngine)
+        val signingService = createRequestSigningService()
         val createRequest = CreateLocalMCPServerRequest(
             workerId = created.workerId,
             name = created.name,
@@ -134,6 +173,26 @@ class KtorLocalMCPServerApiClientTest {
             environmentVariables = created.environmentVariables,
             secretEnvironmentVariables = created.secretEnvironmentVariables
         )
+        val expectedSignedRequest = when (
+            val result = signingService.signPayload(
+                json.encodeToString(CreateLocalMCPServerRequest.serializer(), createRequest)
+            )
+        ) {
+            is Either.Left -> fail("Expected test signing to succeed but got ${result.value.message}")
+            is Either.Right -> result.value
+        }
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Post, request.method)
+            assertEquals(href(LocalMCPServerResource()), request.url.encodedPath)
+            assertSignedMutationRequest(request, expectedSignedRequest)
+            respond(
+                content = json.encodeToString(created),
+                status = HttpStatusCode.Created,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+
+        val api = createTestClient(mockEngine, signingService)
         when (val result = api.createServer(createRequest)) {
             is Either.Left -> fail("Expected success but got ${result.value}")
             is Either.Right -> assertEquals(55L, result.value.id)
@@ -142,17 +201,7 @@ class KtorLocalMCPServerApiClientTest {
 
     @Test
     fun `updateServer - server error maps to ApiResourceError_ServerError`() = runTest {
-        val mockEngine = MockEngine { request ->
-            assertEquals(HttpMethod.Put, request.method)
-            assertEquals(href(LocalMCPServerResource.ById(id = 42L)), request.url.encodedPath)
-            respond(
-                content = json.encodeToString(apiError(CommonApiErrorCodes.NOT_FOUND, "MCP server not found")),
-                status = HttpStatusCode.NotFound,
-                headers = headersOf(HttpHeaders.ContentType, "application/json")
-            )
-        }
-
-        val api = createTestClient(mockEngine)
+        val signingService = createRequestSigningService()
         val updateRequest = UpdateLocalMCPServerRequest(
             workerId = 99L,
             name = "Updated",
@@ -168,6 +217,26 @@ class KtorLocalMCPServerApiClientTest {
             environmentVariables = listOf(LocalMCPEnvironmentVariableDto("API_URL", "https://example.test")),
             secretEnvironmentVariables = listOf(LocalMCPEnvironmentVariableDto("TOKEN", "secret-token"))
         )
+        val expectedSignedRequest = when (
+            val result = signingService.signPayload(
+                json.encodeToString(UpdateLocalMCPServerRequest.serializer(), updateRequest)
+            )
+        ) {
+            is Either.Left -> fail("Expected test signing to succeed but got ${result.value.message}")
+            is Either.Right -> result.value
+        }
+        val mockEngine = MockEngine { request ->
+            assertEquals(HttpMethod.Put, request.method)
+            assertEquals(href(LocalMCPServerResource.ById(id = 42L)), request.url.encodedPath)
+            assertSignedMutationRequest(request, expectedSignedRequest)
+            respond(
+                content = json.encodeToString(apiError(CommonApiErrorCodes.NOT_FOUND, "MCP server not found")),
+                status = HttpStatusCode.NotFound,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+
+        val api = createTestClient(mockEngine, signingService)
         when (val result = api.updateServer(serverId = 42L, request = updateRequest)) {
             is Either.Right -> fail("Expected failure but got ${result.value}")
             is Either.Left -> {
@@ -255,10 +324,10 @@ class KtorLocalMCPServerApiClientTest {
     }
 
     /**
-     * Verifies parsing and routing for draft runtime connection tests.
+     * Verifies parsing and routing for draft runtime connection tests with detached signing.
      */
     @Test
-    fun `testDraftConnection - success parses draft test payload`() = runTest {
+    fun `testDraftConnection - success parses draft test payload with signed headers`() = runTest {
         val payload = TestLocalMCPServerConnectionResponse(
             serverId = null,
             success = true,
@@ -274,9 +343,19 @@ class KtorLocalMCPServerApiClientTest {
             environmentVariables = listOf(LocalMCPEnvironmentVariableDto("API_URL", "https://example.test")),
             secretEnvironmentVariables = listOf(LocalMCPEnvironmentVariableDto("TOKEN", "secret"))
         )
+        val signingService = createRequestSigningService()
+        val expectedSignedRequest = when (
+            val result = signingService.signPayload(
+                json.encodeToString(TestLocalMCPServerDraftConnectionRequest.serializer(), request)
+            )
+        ) {
+            is Either.Left -> fail("Expected test signing to succeed but got ${result.value.message}")
+            is Either.Right -> result.value
+        }
         val mockEngine = MockEngine { httpRequest ->
             assertEquals(HttpMethod.Post, httpRequest.method)
             assertEquals(href(LocalMCPServerResource.TestDraftConnection()), httpRequest.url.encodedPath)
+            assertSignedMutationRequest(httpRequest, expectedSignedRequest)
             respond(
                 content = json.encodeToString(payload),
                 status = HttpStatusCode.OK,
@@ -284,7 +363,7 @@ class KtorLocalMCPServerApiClientTest {
             )
         }
 
-        val api = createTestClient(mockEngine)
+        val api = createTestClient(mockEngine, signingService)
         when (val result = api.testDraftConnection(request)) {
             is Either.Left -> fail("Expected success but got ${result.value}")
             is Either.Right -> {
@@ -393,6 +472,4 @@ class KtorLocalMCPServerApiClientTest {
         }
     }
 }
-
-
 
