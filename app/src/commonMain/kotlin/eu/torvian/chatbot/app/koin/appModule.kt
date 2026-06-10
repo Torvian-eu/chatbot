@@ -328,7 +328,7 @@ fun appModule(config: AppConfiguration): Module = module {
     }
 
     factory<SendMessageUseCase> { (chatState: ChatState) ->
-        SendMessageUseCase(get<SessionRepository>(), chatState, get())
+        SendMessageUseCase(get<SessionRepository>(), get<ToolRepository>(), get(), chatState, get())
     }
 
     factory<EditMessageUseCase> { (chatState: ChatState) ->

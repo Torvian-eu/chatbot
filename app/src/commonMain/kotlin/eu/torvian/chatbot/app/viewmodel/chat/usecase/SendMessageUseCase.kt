@@ -1,30 +1,42 @@
 package eu.torvian.chatbot.app.viewmodel.chat.usecase
-
 import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.error_sending_message_short
 import eu.torvian.chatbot.app.generated.resources.warning_model_or_settings_unavailable
 import eu.torvian.chatbot.app.repository.SessionRepository
+import eu.torvian.chatbot.app.repository.ToolRepository
+import eu.torvian.chatbot.app.service.security.RequestSigningService
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.models.api.core.ChatClientEvent
 import eu.torvian.chatbot.common.models.api.core.ChatEvent
 import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolExecutionAuthorization
 import eu.torvian.chatbot.common.models.api.core.ProcessNewMessageRequest
 import eu.torvian.chatbot.common.models.api.tool.ToolCallApprovalResponse
 import eu.torvian.chatbot.common.models.core.ChatMessage
-import kotlinx.coroutines.flow.MutableSharedFlow
+import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
+import eu.torvian.chatbot.common.models.tool.ToolCall
+import eu.torvian.chatbot.common.models.tool.UserToolApprovalPreference
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 
 /**
  * Use case for sending messages in chat sessions.
  * Handles both streaming and non-streaming message sending based on settings.
+ *
+ * @property sessionRepository Repository responsible for chat message transport and session updates.
+ * @property toolRepository Repository used to resolve tool definitions and cached approval preferences.
+ * @property requestSigningService Service that signs Local MCP authorization payloads on-device.
+ * @property state Shared chat UI state observed and updated during message sending.
+ * @property notificationService Notification sink for repository, API, and signing errors.
  */
 class SendMessageUseCase(
     private val sessionRepository: SessionRepository,
+    private val toolRepository: ToolRepository,
+    private val requestSigningService: RequestSigningService,
     private val state: ChatState,
     private val notificationService: NotificationService
 ) {
@@ -32,46 +44,187 @@ class SendMessageUseCase(
     private val logger = kmpLogger<SendMessageUseCase>()
 
     /**
-     * Flow for sending tool call approval responses during message processing.
-     * This is used by both streaming and non-streaming message flows.
+     * Flow for emitting follow-up client events during an active chat WebSocket session.
+     *
+     * This carries either plain approval responses for regular tools or signed Local MCP approvals that
+     * the server can forward to the worker.
      */
-    private val toolApprovalFlow = MutableSharedFlow<ToolCallApprovalResponse>()
+    private val toolApprovalFlow = MutableSharedFlow<ChatClientEvent>()
 
     /**
      * Approves a tool call and allows it to execute.
      *
-     * @param toolCallId The ID of the tool call to approve
+     * Local MCP tool approvals are signed on-device before being emitted so the worker can verify them.
+     *
+     * @param toolCall Tool call to approve.
      */
-    suspend fun approveToolCall(toolCallId: Long) {
-        logger.debug("Approving tool call: $toolCallId")
-        toolApprovalFlow.emit(
-            ToolCallApprovalResponse(
-                toolCallId = toolCallId,
-                approved = true,
-                denialReason = null
-            )
-        )
-        // The server will update the tool call to EXECUTING and send ToolExecutionCompleted event
-        // Repository will be updated by server response
+    suspend fun approveToolCall(toolCall: ToolCall) {
+        logger.debug("Approving tool call: ${toolCall.id}")
+        emitApprovalEvent(toolCall = toolCall, approved = true, denialReason = null)
     }
 
     /**
      * Denies a tool call and prevents it from executing.
      *
-     * @param toolCallId The ID of the tool call to deny
-     * @param reason Optional reason for denying the tool call
+     * @param toolCall Tool call to deny.
+     * @param reason Optional reason for denying the tool call.
      */
-    suspend fun denyToolCall(toolCallId: Long, reason: String?) {
-        logger.debug("Denying tool call: $toolCallId, reason: $reason")
+    suspend fun denyToolCall(toolCall: ToolCall, reason: String?) {
+        logger.debug("Denying tool call: ${toolCall.id}, reason: $reason")
+        emitApprovalEvent(toolCall = toolCall, approved = false, denialReason = reason)
+    }
+
+    /**
+     * Emits either a plain approval response or a signed Local MCP approval event for [toolCall].
+     *
+     * @param toolCall Tool call the user approved or denied.
+     * @param approved Whether execution should proceed.
+     * @param denialReason Optional denial reason supplied by the user or an auto-deny preference.
+     */
+    private suspend fun emitApprovalEvent(
+        toolCall: ToolCall,
+        approved: Boolean,
+        denialReason: String?
+    ) {
+        val localMcpTool = findLocalMcpToolDefinition(toolCall)
+        if (localMcpTool == null) {
+            toolApprovalFlow.emit(
+                ChatClientEvent.ToolCallApproval(
+                    ToolCallApprovalResponse(
+                        toolCallId = toolCall.id,
+                        approved = approved,
+                        denialReason = denialReason
+                    )
+                )
+            )
+            return
+        }
+
+        emitLocalMcpApprovalEvent(
+            toolCall = toolCall,
+            toolDefinition = localMcpTool,
+            approved = approved,
+            denialReason = denialReason
+        )
+    }
+
+    /**
+     * Builds, signs, and emits a Local MCP authorization event for one tool call.
+     *
+     * @param toolCall Tool call the app is authorizing.
+     * @param toolDefinition Resolved Local MCP tool definition.
+     * @param approved Whether execution should proceed.
+     * @param denialReason Optional denial reason supplied by the user or an auto-deny preference.
+     */
+    private suspend fun emitLocalMcpApprovalEvent(
+        toolCall: ToolCall,
+        toolDefinition: LocalMCPToolDefinition,
+        approved: Boolean,
+        denialReason: String?
+    ) {
+        val currentSession = state.currentSession.value
+        if (currentSession == null) {
+            notificationService.genericError(
+                shortMessage = "Failed to authorize Local MCP tool call",
+                detailedMessage = "No active session is available for tool call ${toolCall.id}."
+            )
+            return
+        }
+
+        val authorization = LocalMCPToolExecutionAuthorization(
+            toolCallId = toolCall.id,
+            sessionId = currentSession.id,
+            messageId = toolCall.messageId,
+            toolDefinitionId = toolDefinition.id,
+            toolName = toolCall.toolName,
+            serverId = toolDefinition.serverId,
+            mcpToolName = toolDefinition.mcpToolName,
+            input = toolCall.input,
+            approved = approved,
+            denialReason = denialReason
+        )
+
+        val signedRequest = requestSigningService.signRequest(
+            request = authorization,
+            serializer = LocalMCPToolExecutionAuthorization.serializer()
+        ).fold(
+            ifLeft = { error ->
+                notificationService.genericError(
+                    shortMessage = "Failed to authorize Local MCP tool call",
+                    detailedMessage = error.message,
+                    originalThrowable = error.cause
+                )
+                return
+            },
+            ifRight = { it }
+        )
+
+        // Preserve the exact signed payload object alongside its detached signature for the server transport.
         toolApprovalFlow.emit(
-            ToolCallApprovalResponse(
-                toolCallId = toolCallId,
-                approved = false,
-                denialReason = reason
+            ChatClientEvent.LocalMcpToolCallApproval(
+                authorization = authorization,
+                signedRequest = signedRequest
             )
         )
-        // The server will update the tool call to USER_DENIED and send ToolExecutionCompleted event
-        // Repository will be updated by server response
+    }
+
+    /**
+     * Resolves the Local MCP tool definition for [toolCall] when the current tool cache contains one.
+     *
+     * @param toolCall Tool call whose definition should be resolved.
+     * @return Matching [LocalMCPToolDefinition] or `null` when the tool is not Local MCP or the cache lacks it.
+     */
+    private suspend fun findLocalMcpToolDefinition(toolCall: ToolCall): LocalMCPToolDefinition? {
+        val toolDefinitionId = toolCall.toolDefinitionId ?: return null
+        val cachedDefinition = toolRepository.tools.value.dataOrNull
+            ?.firstOrNull { toolDefinition -> toolDefinition.id == toolDefinitionId } as? LocalMCPToolDefinition
+        if (cachedDefinition != null) {
+            return cachedDefinition
+        }
+
+        return toolRepository.getToolById(toolDefinitionId).fold(
+            ifLeft = { null },
+            ifRight = { it as? LocalMCPToolDefinition }
+        )
+    }
+
+    /**
+     * Returns the cached approval preference for [toolDefinitionId], if one is currently loaded.
+     *
+     * @param toolDefinitionId Tool definition whose preference should be inspected.
+     * @return Matching approval preference or `null` when no preference is cached.
+     */
+    private fun findApprovalPreference(toolDefinitionId: Long): UserToolApprovalPreference? {
+        return toolRepository.toolApprovalPreferences.value.dataOrNull
+            ?.firstOrNull { preference -> preference.toolDefinitionId == toolDefinitionId }
+    }
+
+    /**
+     * Reacts to a server approval request and auto-signs Local MCP decisions when the app already has a user
+     * preference cached for the referenced tool.
+     *
+     * Non-Local-MCP auto-approval continues to be handled on the server, so this helper only participates in
+     * the Local MCP trust chain.
+     *
+     * @param toolCall Tool call now awaiting approval on the server.
+     */
+    private suspend fun handleToolCallApprovalRequested(toolCall: ToolCall) {
+        logger.debug("Tool call approval requested: ${toolCall.toolName}")
+
+        val localMcpTool = findLocalMcpToolDefinition(toolCall) ?: return
+        val preference = findApprovalPreference(localMcpTool.id) ?: return
+        val denialReason = if (preference.autoApprove) {
+            null
+        } else {
+            preference.denialReason ?: "Auto-denied by user preference"
+        }
+
+        emitLocalMcpApprovalEvent(
+            toolCall = toolCall,
+            toolDefinition = localMcpTool,
+            approved = preference.autoApprove,
+            denialReason = denialReason
+        )
     }
 
     /**
@@ -147,12 +300,9 @@ class SendMessageUseCase(
         // Create the main client-to-server event flow by merging the initial message request
         // with any approval responses produced by the UI.
         val messageEvents: Flow<ChatClientEvent> = flowOf(ChatClientEvent.ProcessNewMessage(request))
-        val approvalEvents: Flow<ChatClientEvent> = toolApprovalFlow.map { response ->
-            ChatClientEvent.ToolCallApproval(response)
-        }
         val clientEvents: Flow<ChatClientEvent> = merge(
             messageEvents,
-            approvalEvents
+            toolApprovalFlow
         )
 
         // Call the repository with the combined event flow and collect server responses.
@@ -176,9 +326,7 @@ class SendMessageUseCase(
                         }
 
                         is ChatStreamEvent.ToolCallApprovalRequested -> {
-                            // Tool call approval request received - repository will update cache with AWAITING_APPROVAL status
-                            // User can click the badge to approve/deny via ToolCallDetailsDialog
-                            logger.debug("Tool call approval requested: ${chatUpdate.toolCall.toolName}")
+                            handleToolCallApprovalRequested(chatUpdate.toolCall)
                         }
 
                         is ChatStreamEvent.ErrorOccurred -> {
@@ -209,12 +357,9 @@ class SendMessageUseCase(
         // Create the main client-to-server event flow by merging the initial message request
         // with any approval responses produced by the UI.
         val messageEvents: Flow<ChatClientEvent> = flowOf(ChatClientEvent.ProcessNewMessage(request))
-        val approvalEvents: Flow<ChatClientEvent> = toolApprovalFlow.map { response ->
-            ChatClientEvent.ToolCallApproval(response)
-        }
         val clientEvents: Flow<ChatClientEvent> = merge(
             messageEvents,
-            approvalEvents
+            toolApprovalFlow
         )
 
         // Call the repository with the combined event flow and collect server responses.
@@ -239,9 +384,7 @@ class SendMessageUseCase(
 
 
                         is ChatEvent.ToolCallApprovalRequested -> {
-                            // Tool call approval request received - repository will update cache with AWAITING_APPROVAL status
-                            // User can click the badge to approve/deny via ToolCallDetailsDialog
-                            logger.debug("Tool call approval requested: ${event.toolCall.toolName}")
+                            handleToolCallApprovalRequested(event.toolCall)
                         }
 
                         is ChatEvent.ErrorOccurred -> {
