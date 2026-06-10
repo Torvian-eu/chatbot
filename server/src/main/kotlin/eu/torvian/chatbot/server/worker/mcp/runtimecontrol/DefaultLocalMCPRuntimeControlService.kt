@@ -6,6 +6,7 @@ import arrow.core.raise.withError
 import eu.torvian.chatbot.common.models.api.mcp.*
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpDiscoveredToolData
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
+import eu.torvian.chatbot.common.security.SignedRequest
 import eu.torvian.chatbot.server.service.core.LocalMCPServerService
 import eu.torvian.chatbot.server.service.core.LocalMCPToolDefinitionService
 import eu.torvian.chatbot.server.service.core.error.mcp.LocalMCPServerNotFoundError
@@ -137,15 +138,19 @@ class DefaultLocalMCPRuntimeControlService(
 
     override suspend fun testDraftConnection(
         userId: Long,
-        request: TestLocalMCPServerDraftConnectionRequest
+        request: TestLocalMCPServerDraftConnectionRequest,
+        signedRequest: SignedRequest
     ): Either<LocalMCPRuntimeControlError, TestLocalMCPServerConnectionResponse> = either {
         withError({ error: LocalMCPServerServiceError -> error.toRuntimeControlError() }) {
             localMCPServerService.validateWorkerOwnership(userId, request.workerId).bind()
         }
 
         val result = withError({ it.toRuntimeControlError(workerId = request.workerId) }) {
-            localMCPRuntimeCommandDispatchService.testDraftConnection(workerId = request.workerId, request = request)
-                .bind()
+            localMCPRuntimeCommandDispatchService.testDraftConnection(
+                workerId = request.workerId,
+                request = request,
+                signedRequest = signedRequest
+            ).bind()
         }
 
         TestLocalMCPServerConnectionResponse(

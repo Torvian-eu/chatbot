@@ -6,6 +6,7 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProt
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
+import eu.torvian.chatbot.common.models.api.mcp.SignedLocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRequestPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerControlErrorResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpDiscoveredToolData
@@ -25,6 +26,7 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpSer
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerUpdateCommandData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerUpdateResultData
+import eu.torvian.chatbot.common.security.SignedRequest
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlin.test.Test
@@ -266,18 +268,27 @@ class WorkerMcpServerControlProtocolMappingsTest {
     @Test
     fun `cache sync create update and delete payloads encode and decode`() {
         val server = testServer(serverId = 88L)
+        val signedServer = SignedLocalMCPServerDto(server = server, signedRequest = signedRequest())
 
-        val createRequestPayload = WorkerMcpServerCreateCommandData(server = server)
+        val createRequestPayload = WorkerMcpServerCreateCommandData(signedServer = signedServer)
             .toWorkerCommandRequestPayload()
             .getOrElse { error("Expected create request mapping success: $it") }
         assertEquals(WorkerProtocolCommandTypes.MCP_SERVER_CREATE, createRequestPayload.commandType)
-        assertEquals(server, createRequestPayload.toWorkerMcpServerCreateCommandData().getOrElse { error(it) }.server)
+        assertEquals(
+            signedServer,
+            createRequestPayload.toWorkerMcpServerCreateCommandData().getOrElse { error(it) }.signedServer
+        )
 
-        val updateRequestPayload = WorkerMcpServerUpdateCommandData(server = server.copy(name = "filesystem-v2"))
+        val updateRequestPayload = WorkerMcpServerUpdateCommandData(
+            signedServer = signedServer.copy(server = server.copy(name = "filesystem-v2"))
+        )
             .toWorkerCommandRequestPayload()
             .getOrElse { error("Expected update request mapping success: $it") }
         assertEquals(WorkerProtocolCommandTypes.MCP_SERVER_UPDATE, updateRequestPayload.commandType)
-        assertEquals("filesystem-v2", updateRequestPayload.toWorkerMcpServerUpdateCommandData().getOrElse { error(it) }.server.name)
+        assertEquals(
+            "filesystem-v2",
+            updateRequestPayload.toWorkerMcpServerUpdateCommandData().getOrElse { error(it) }.signedServer.server.name
+        )
 
         val deleteRequestPayload = WorkerMcpServerDeleteCommandData(serverId = server.id)
             .toWorkerCommandRequestPayload()
@@ -327,6 +338,19 @@ class WorkerMcpServerControlProtocolMappingsTest {
         command = "npx",
         createdAt = Instant.fromEpochMilliseconds(1_700_000_000_000),
         updatedAt = Instant.fromEpochMilliseconds(1_700_000_100_000)
+    )
+
+    /**
+     * Builds deterministic detached signed-request metadata for protocol round-trip tests.
+     *
+     * @return Signed request fixture used inside create/update cache-sync payloads.
+     */
+    private fun signedRequest(): SignedRequest = SignedRequest(
+        payload = "{\"workerId\":7,\"name\":\"filesystem\",\"command\":\"npx\"}",
+        signature = "signature-base64",
+        signerId = "device-1",
+        timestamp = 1_700_000_000_000,
+        nonce = "nonce-1"
     )
 }
 

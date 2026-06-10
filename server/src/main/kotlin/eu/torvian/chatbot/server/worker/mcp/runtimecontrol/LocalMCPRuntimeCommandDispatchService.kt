@@ -1,9 +1,10 @@
 package eu.torvian.chatbot.server.worker.mcp.runtimecontrol
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
+import eu.torvian.chatbot.common.models.api.mcp.SignedLocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerDraftConnectionRequest
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerCreateResultData
+import eu.torvian.chatbot.common.security.SignedRequest
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDeleteResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerGetRuntimeStatusResultData
@@ -95,24 +96,24 @@ interface LocalMCPRuntimeCommandDispatchService {
      * Dispatches `mcp.server.create` to a worker and returns decoded cache-sync result data.
      *
      * @param workerId Worker identifier targeted for command dispatch.
-     * @param server Local MCP server configuration to upsert in worker cache.
+     * @param signedServer Local MCP server configuration plus detached signed-request metadata.
      * @return Either orchestration error or typed create result data.
      */
     suspend fun createServer(
         workerId: Long,
-        server: LocalMCPServerDto
+        signedServer: SignedLocalMCPServerDto
     ): Either<LocalMCPRuntimeCommandDispatchError, WorkerMcpServerCreateResultData>
 
     /**
      * Dispatches `mcp.server.update` to a worker and returns decoded cache-sync result data.
      *
      * @param workerId Worker identifier targeted for command dispatch.
-     * @param server Local MCP server configuration to upsert in worker cache.
+     * @param signedServer Local MCP server configuration plus detached signed-request metadata.
      * @return Either orchestration error or typed update result data.
      */
     suspend fun updateServer(
         workerId: Long,
-        server: LocalMCPServerDto
+        signedServer: SignedLocalMCPServerDto
     ): Either<LocalMCPRuntimeCommandDispatchError, WorkerMcpServerUpdateResultData>
 
     /**
@@ -132,10 +133,12 @@ interface LocalMCPRuntimeCommandDispatchService {
      *
      * @param workerId Worker identifier targeted for command dispatch.
      * @param request Draft server configuration to test.
+     * @param signedRequest Detached signed request authorizing this transient draft execution.
      * @return Either orchestration error or typed test-draft-connection result data.
      */
     suspend fun testDraftConnection(
         workerId: Long,
-        request: TestLocalMCPServerDraftConnectionRequest
+        request: TestLocalMCPServerDraftConnectionRequest,
+        signedRequest: SignedRequest
     ): Either<LocalMCPRuntimeCommandDispatchError, WorkerMcpServerTestDraftConnectionResultData>
 }

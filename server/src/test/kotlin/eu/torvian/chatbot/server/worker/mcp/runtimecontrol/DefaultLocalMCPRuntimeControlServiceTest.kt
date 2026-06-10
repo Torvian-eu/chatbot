@@ -7,6 +7,7 @@ import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerDraftConnectionRequest
+import eu.torvian.chatbot.common.security.SignedRequest
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpDiscoveredToolData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerDiscoverToolsResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestDraftConnectionResultData
@@ -143,24 +144,31 @@ class DefaultLocalMCPRuntimeControlServiceTest {
             environmentVariables = emptyList(),
             secretEnvironmentVariables = emptyList()
         )
+        val signedRequest = SignedRequest(
+            payload = "{\"workerId\":3,\"name\":\"filesystem-draft\",\"command\":\"npx\"}",
+            signature = "signature-base64",
+            signerId = "device-1",
+            timestamp = 1_700_000_000_000,
+            nonce = "nonce-1"
+        )
 
         coEvery { localMCPServerService.validateWorkerOwnership(userId = 9L, workerId = 3L) } returns Unit.right()
         coEvery {
-            commandDispatchService.testDraftConnection(workerId = 3L, request = request)
+            commandDispatchService.testDraftConnection(workerId = 3L, request = request, signedRequest = signedRequest)
         } returns WorkerMcpServerTestDraftConnectionResultData(
             success = true,
             discoveredToolCount = 5,
             message = "draft ok"
         ).right()
 
-        val result = service.testDraftConnection(userId = 9L, request = request).requireRight()
+        val result = service.testDraftConnection(userId = 9L, request = request, signedRequest = signedRequest).requireRight()
 
         assertEquals(true, result.success)
         assertEquals(5, result.discoveredToolCount)
         assertEquals("draft ok", result.message)
         coVerify(exactly = 1) { localMCPServerService.validateWorkerOwnership(userId = 9L, workerId = 3L) }
         coVerify(exactly = 1) {
-            commandDispatchService.testDraftConnection(workerId = 3L, request = request)
+            commandDispatchService.testDraftConnection(workerId = 3L, request = request, signedRequest = signedRequest)
         }
     }
 
@@ -175,16 +183,23 @@ class DefaultLocalMCPRuntimeControlServiceTest {
             environmentVariables = emptyList(),
             secretEnvironmentVariables = emptyList()
         )
+        val signedRequest = SignedRequest(
+            payload = "{\"workerId\":3,\"name\":\"filesystem-draft\",\"command\":\"npx\"}",
+            signature = "signature-base64",
+            signerId = "device-1",
+            timestamp = 1_700_000_000_000,
+            nonce = "nonce-1"
+        )
 
         coEvery { localMCPServerService.validateWorkerOwnership(userId = 9L, workerId = 3L) } returns
             LocalMCPServerWorkerOwnershipMismatchError(userId = 9L, workerId = 3L, workerOwnerUserId = 10L).left()
 
-        val result = service.testDraftConnection(userId = 9L, request = request)
+        val result = service.testDraftConnection(userId = 9L, request = request, signedRequest = signedRequest)
 
         assertTrue(result.isLeft())
         coVerify(exactly = 1) { localMCPServerService.validateWorkerOwnership(userId = 9L, workerId = 3L) }
         coVerify(exactly = 0) {
-            commandDispatchService.testDraftConnection(workerId = 3L, request = request)
+            commandDispatchService.testDraftConnection(workerId = 3L, request = request, signedRequest = signedRequest)
         }
     }
 
