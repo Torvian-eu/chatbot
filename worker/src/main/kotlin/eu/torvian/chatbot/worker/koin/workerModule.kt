@@ -109,6 +109,12 @@ fun workerModule(
             verificationService = get()
         )
     }
+    single<SignedMcpServerDraftConfigValidator> {
+        DefaultSignedMcpServerDraftConfigValidator(
+            json = get(),
+            verificationService = get()
+        )
+    }
     single<AssignedConfigBootstrapper> {
         AssignedConfigBootstrapper(
             mcpServerApi = get(),
@@ -128,6 +134,8 @@ fun workerModule(
     single<McpRuntimeCommandExecutor> {
         McpRuntimeCommandExecutorImpl(
             runtimeService = get(),
+            signedMcpServerConfigValidator = get(),
+            signedMcpServerDraftConfigValidator = get(),
             configStore = get()
         )
     }

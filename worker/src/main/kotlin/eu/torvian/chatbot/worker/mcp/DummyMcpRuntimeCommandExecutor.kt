@@ -66,13 +66,13 @@ class DummyMcpRuntimeCommandExecutor : McpRuntimeCommandExecutor {
     override suspend fun createServer(
         request: WorkerMcpServerCreateCommandData
     ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerCreateResultData> {
-        return WorkerMcpServerCreateResultData(serverId = request.server.id).right()
+        return WorkerMcpServerCreateResultData(serverId = request.signedServer.server.id).right()
     }
 
     override suspend fun updateServer(
         request: WorkerMcpServerUpdateCommandData
     ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerUpdateResultData> {
-        return WorkerMcpServerUpdateResultData(serverId = request.server.id).right()
+        return WorkerMcpServerUpdateResultData(serverId = request.signedServer.server.id).right()
     }
 
     override suspend fun deleteServer(
