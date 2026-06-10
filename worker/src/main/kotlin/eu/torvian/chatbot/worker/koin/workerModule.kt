@@ -11,6 +11,8 @@ import eu.torvian.chatbot.worker.auth.WorkerAuthApi
 import eu.torvian.chatbot.worker.auth.WorkerAuthManager
 import eu.torvian.chatbot.worker.auth.WorkerAuthManagerImpl
 import eu.torvian.chatbot.worker.auth.WorkerAuthenticatedRequestExecutor
+import eu.torvian.chatbot.common.security.AsymmetricCryptoProvider
+import eu.torvian.chatbot.common.security.JvmAsymmetricCryptoProvider
 import eu.torvian.chatbot.worker.config.RuntimeConfig
 import eu.torvian.chatbot.worker.mcp.InMemoryMcpServerConfigStore
 import eu.torvian.chatbot.worker.mcp.JvmMcpProcessManager
@@ -24,6 +26,7 @@ import eu.torvian.chatbot.worker.mcp.McpRuntimeCommandExecutor
 import eu.torvian.chatbot.worker.mcp.McpRuntimeCommandExecutorImpl
 import eu.torvian.chatbot.worker.mcp.McpToolCallExecutor
 import eu.torvian.chatbot.worker.mcp.McpToolCallExecutorImpl
+import eu.torvian.chatbot.worker.config.TrustedSigner
 import eu.torvian.chatbot.worker.mcp.api.AssignedConfigBootstrapper
 import eu.torvian.chatbot.worker.mcp.api.KtorWorkerMcpServerApi
 import eu.torvian.chatbot.worker.mcp.api.WorkerMcpServerApi
@@ -52,6 +55,8 @@ import eu.torvian.chatbot.worker.protocol.transport.TransportConnectionLoopRunne
 import eu.torvian.chatbot.worker.runtime.WorkerRuntime
 import eu.torvian.chatbot.worker.runtime.WorkerRuntimeImpl
 import eu.torvian.chatbot.worker.service.api.WorkerMetadataService
+import eu.torvian.chatbot.worker.service.security.DefaultVerificationService
+import eu.torvian.chatbot.worker.service.security.VerificationService
 import io.ktor.client.*
 import io.ktor.client.engine.okhttp.*
 import io.ktor.client.plugins.*
@@ -83,6 +88,15 @@ fun workerModule(
     tokenPath: Path,
     privateKeyPem: String
 ) = module {
+    single<RuntimeConfig> { config }
+    single<List<TrustedSigner>> { get<RuntimeConfig>().trustedSigners }
+    single<AsymmetricCryptoProvider> { JvmAsymmetricCryptoProvider() }
+    single<VerificationService> {
+        DefaultVerificationService(
+            trustedSigners = get(),
+            cryptoProvider = get()
+        )
+    }
     single<HttpClient> { createWorkerHttpClient(config.server.baseUrl) }
     single<WorkerMetadataService> { WorkerMetadataService(get()) }
     single<ServiceTokenStore> { FileServiceTokenStore(tokenPath) }
