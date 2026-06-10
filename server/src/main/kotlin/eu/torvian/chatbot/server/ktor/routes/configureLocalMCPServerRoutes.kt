@@ -4,23 +4,27 @@ import arrow.core.raise.either
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.api.resources.LocalMCPServerResource
 import eu.torvian.chatbot.common.models.api.mcp.CreateLocalMCPServerRequest
-import eu.torvian.chatbot.common.models.api.mcp.UpdateLocalMCPServerRequest
 import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerDraftConnectionRequest
+import eu.torvian.chatbot.common.models.api.mcp.UpdateLocalMCPServerRequest
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.ktor.auth.getWorkerId
 import eu.torvian.chatbot.server.service.core.LocalMCPServerService
 import eu.torvian.chatbot.server.service.core.error.mcp.LocalMCPServerServiceError
 import eu.torvian.chatbot.server.service.core.error.mcp.toApiError
+import eu.torvian.chatbot.server.worker.mcp.configsync.LocalMCPServerConfigSyncError
 import eu.torvian.chatbot.server.worker.mcp.configsync.LocalMCPServerConfigSyncService
+import eu.torvian.chatbot.server.worker.mcp.configsync.toApiError
 import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.LocalMCPRuntimeControlError
 import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.LocalMCPRuntimeControlService
 import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.toApiError
 import io.ktor.http.*
 import io.ktor.server.auth.*
-import io.ktor.server.request.*
 import io.ktor.server.resources.*
+import io.ktor.server.resources.post
+import io.ktor.server.resources.put
 import io.ktor.server.routing.Route
+import kotlinx.serialization.json.Json
 
 /**
  * Configures routes related to Local MCP Server management (/api/v1/local-mcp-servers)
@@ -29,24 +33,24 @@ import io.ktor.server.routing.Route
  * User JWT routes expose full CRUD for server-owned Local MCP configuration.
  * Worker JWT routes expose read-only retrieval for worker-assigned servers.
  *
- * @param localMCPServerService The service handling Local MCP Server business logic
- * @param localMCPRuntimeControlService The service handling runtime control operations
- * @param localMCPServerConfigSyncService The service handling best-effort worker config synchronization
+ * @param localMCPServerService The service handling Local MCP Server business logic.
+ * @param localMCPRuntimeControlService The service handling runtime control operations.
+ * @param localMCPServerConfigSyncService The service orchestrating write persistence together with worker sync.
+ * @param json JSON codec used to decode the exact raw request body after it has been captured for signature persistence.
  */
 fun Route.configureLocalMCPServerRoutes(
     localMCPServerService: LocalMCPServerService,
     localMCPRuntimeControlService: LocalMCPRuntimeControlService,
     localMCPServerConfigSyncService: LocalMCPServerConfigSyncService,
+    json: Json,
 ) {
     authenticate(AuthSchemes.USER_JWT) {
         post<LocalMCPServerResource> {
             val userId = call.getUserId()
-            val request = call.receive<CreateLocalMCPServerRequest>()
             val result = either {
-                withError({ error: LocalMCPServerServiceError -> error.toApiError() }) {
-                    val server = localMCPServerService.createServer(userId, request).bind()
-                    localMCPServerConfigSyncService.syncCreated(server)
-                    server
+                val (request, signedRequest) = receiveDetachedSignedRequest<CreateLocalMCPServerRequest>(json).bind()
+                withError({ error: LocalMCPServerConfigSyncError -> error.toApiError() }) {
+                    localMCPServerConfigSyncService.createSignedServer(userId, request, signedRequest).bind()
                 }
             }
             call.respondEither(result, HttpStatusCode.Created)
@@ -94,16 +98,15 @@ fun Route.configureLocalMCPServerRoutes(
 
         put<LocalMCPServerResource.ById> { resource ->
             val userId = call.getUserId()
-            val request = call.receive<UpdateLocalMCPServerRequest>()
             val result = either {
-                withError({ error: LocalMCPServerServiceError -> error.toApiError() }) {
-                    val oldServer = localMCPServerService.getServerById(userId, resource.id).bind()
-                    val updatedServer = localMCPServerService.updateServer(userId, resource.id, request).bind()
-                    localMCPServerConfigSyncService.syncUpdated(
-                        previousWorkerId = oldServer.workerId,
-                        server = updatedServer
-                    )
-                    updatedServer
+                val (request, signedRequest) = receiveDetachedSignedRequest<UpdateLocalMCPServerRequest>(json).bind()
+                withError({ error: LocalMCPServerConfigSyncError -> error.toApiError() }) {
+                    localMCPServerConfigSyncService.updateSignedServer(
+                        userId = userId,
+                        serverId = resource.id,
+                        request = request,
+                        signedRequest = signedRequest
+                    ).bind()
                 }
             }
             call.respondEither(result)
@@ -112,10 +115,8 @@ fun Route.configureLocalMCPServerRoutes(
         delete<LocalMCPServerResource.ById> { resource ->
             val userId = call.getUserId()
             val result = either {
-                withError({ error: LocalMCPServerServiceError -> error.toApiError() }) {
-                    val server = localMCPServerService.getServerById(userId, resource.id).bind()
-                    localMCPServerService.deleteServer(userId, resource.id).bind()
-                    localMCPServerConfigSyncService.syncDeleted(workerId = server.workerId, serverId = server.id)
+                withError({ error: LocalMCPServerConfigSyncError -> error.toApiError() }) {
+                    localMCPServerConfigSyncService.deleteServer(userId, resource.id).bind()
                 }
             }
             call.respondEither(result, HttpStatusCode.NoContent)
@@ -153,10 +154,10 @@ fun Route.configureLocalMCPServerRoutes(
 
         post<LocalMCPServerResource.TestDraftConnection> {
             val userId = call.getUserId()
-            val request = call.receive<TestLocalMCPServerDraftConnectionRequest>()
             val result = either {
+                val (request, signedRequest) = receiveDetachedSignedRequest<TestLocalMCPServerDraftConnectionRequest>(json).bind()
                 withError({ error: LocalMCPRuntimeControlError -> error.toApiError() }) {
-                    localMCPRuntimeControlService.testDraftConnection(userId, request).bind()
+                    localMCPRuntimeControlService.testDraftConnection(userId, request, signedRequest).bind()
                 }
             }
             call.respondEither(result)
@@ -178,11 +179,10 @@ fun Route.configureLocalMCPServerRoutes(
             val workerId = call.getWorkerId()
             val result = either {
                 withError({ error: LocalMCPServerServiceError -> error.toApiError() }) {
-                    localMCPServerService.getServersByWorkerId(workerId).bind()
+                    localMCPServerService.getSignedServersByWorkerId(workerId).bind()
                 }
             }
             call.respondEither(result)
         }
     }
 }
-

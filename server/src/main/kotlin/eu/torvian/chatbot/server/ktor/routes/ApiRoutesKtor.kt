@@ -174,7 +174,8 @@ class ApiRoutesKtor(
         route.configureLocalMCPServerRoutes(
             localMCPServerService = localMCPServerService,
             localMCPRuntimeControlService = localMCPRuntimeControlService,
-            localMCPServerConfigSyncService = localMCPServerConfigSyncService
+            localMCPServerConfigSyncService = localMCPServerConfigSyncService,
+            json = json
         )
     }
 

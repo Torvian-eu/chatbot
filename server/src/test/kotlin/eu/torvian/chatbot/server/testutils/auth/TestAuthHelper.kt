@@ -2,6 +2,8 @@ package eu.torvian.chatbot.server.testutils.auth
 
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
+import eu.torvian.chatbot.common.security.SignedRequest
+import eu.torvian.chatbot.common.security.toDetachedSignatureHeaders
 import eu.torvian.chatbot.server.data.entities.UserEntity
 import eu.torvian.chatbot.common.models.user.UserStatus
 import eu.torvian.chatbot.server.data.entities.UserSessionEntity
@@ -180,4 +182,16 @@ fun HttpRequestBuilder.offerWebSocketAuthSubprotocolMarker(
     marker: String = CommonWebSocketProtocols.CHATBOT_AUTH
 ) {
     header(HttpHeaders.SecWebSocketProtocol, marker)
+}
+
+/**
+ * Applies detached signed-request headers to an outgoing HTTP request while leaving the payload as the normal body.
+ *
+ * @receiver Request builder that should carry the detached signature metadata.
+ * @param signedRequest Detached signed request whose metadata should be copied into HTTP headers.
+ */
+fun HttpRequestBuilder.applyDetachedSignedRequestHeaders(signedRequest: SignedRequest) {
+    signedRequest.toDetachedSignatureHeaders().forEach { (headerName, headerValue) ->
+        header(headerName, headerValue)
+    }
 }
