@@ -1,8 +1,11 @@
 package eu.torvian.chatbot.server.service.mcp
 
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolExecutionAuthorization
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallRequest
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.WorkerMcpToolCallProtocolMappingError
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
+import eu.torvian.chatbot.common.models.tool.ToolCall
+import eu.torvian.chatbot.common.security.SignedRequest
 import eu.torvian.chatbot.server.data.dao.LocalMCPServerDao
 import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchError
 import eu.torvian.chatbot.server.worker.mcp.toolcall.LocalMCPToolCallDispatchError
@@ -25,27 +28,41 @@ class LocalMCPExecutor(
     /**
      * Executes a Local MCP tool on the worker assigned to the tool's server.
      *
+     * The request relayed to the worker intentionally contains both the actual execution command and the
+     * detached app authorization snapshot. The worker verifies that they still match before running the tool.
+     *
+     * @param sessionId Session that owns the tool call.
      * @param toolDefinition The tool definition, including the owning Local MCP server ID.
-     * @param toolCallId Unique identifier for the tool call.
-     * @param inputJson JSON input for the tool (may be null or invalid JSON).
+     * @param toolCall Persisted tool-call record to execute.
+     * @param authorization App-approved execution authorization that should match the tool call.
+     * @param signedAuthorization Detached signature metadata for [authorization].
      * @return A single execution outcome event containing either the worker result or a structured error.
      */
     suspend fun executeTool(
+        sessionId: Long,
         toolDefinition: LocalMCPToolDefinition,
-        toolCallId: Long,
-        inputJson: String?
+        toolCall: ToolCall,
+        authorization: LocalMCPToolExecutionAuthorization,
+        signedAuthorization: SignedRequest
     ): LocalMCPExecutorEvent {
         val request = LocalMCPToolCallRequest(
-            toolCallId = toolCallId,
+            toolCallId = toolCall.id,
+            sessionId = sessionId,
+            messageId = toolCall.messageId,
+            toolDefinitionId = toolDefinition.id,
+            toolName = toolCall.toolName,
             serverId = toolDefinition.serverId,
-            toolName = toolDefinition.mcpToolName,
-            inputJson = inputJson
+            mcpToolName = toolDefinition.mcpToolName,
+            inputJson = toolCall.input,
+            approved = authorization.approved,
+            denialReason = authorization.denialReason,
+            signedAuthorization = signedAuthorization
         )
 
         val workerId = localMCPServerDao.getServerById(toolDefinition.serverId).fold(
             ifLeft = {
                 return LocalMCPExecutorEvent.ToolExecutionError(
-                    toolCallId = toolCallId,
+                    toolCallId = toolCall.id,
                     error = LocalMCPExecutorError.OtherError(
                         "Local MCP server ${toolDefinition.serverId} was not found"
                     )
@@ -58,7 +75,7 @@ class LocalMCPExecutor(
             .fold(
                 ifLeft = { error ->
                     LocalMCPExecutorEvent.ToolExecutionError(
-                        toolCallId = toolCallId,
+                        toolCallId = toolCall.id,
                         error = error.toExecutorError()
                     )
                 },

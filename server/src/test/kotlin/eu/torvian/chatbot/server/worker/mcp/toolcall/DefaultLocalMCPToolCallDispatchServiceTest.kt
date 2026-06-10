@@ -9,6 +9,7 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProt
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toLocalMcpToolCallRequest
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerCommandResultPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRequestPayload
+import eu.torvian.chatbot.common.security.SignedRequest
 import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchError
 import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchService
 import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchSuccess
@@ -40,9 +41,16 @@ class DefaultLocalMCPToolCallDispatchServiceTest {
     fun `dispatch tool call decodes successful result`() = runTest {
         val request = LocalMCPToolCallRequest(
             toolCallId = 44L,
-            serverId = 9L,
+            sessionId = 1L,
+            messageId = 2L,
+            toolDefinitionId = 3L,
             toolName = "list_files",
-            inputJson = "{\"path\":\".\"}"
+            serverId = 9L,
+            mcpToolName = "list_files_runtime",
+            inputJson = "{\"path\":\".\"}",
+            approved = true,
+            denialReason = null,
+            signedAuthorization = signedRequest()
         )
         val payloadSlot = slot<WorkerCommandRequestPayload>()
         val expectedResult = LocalMCPToolCallResult(
@@ -73,9 +81,16 @@ class DefaultLocalMCPToolCallDispatchServiceTest {
     fun `dispatch tool call decodes worker error result`() = runTest {
         val request = LocalMCPToolCallRequest(
             toolCallId = 45L,
-            serverId = 9L,
+            sessionId = 1L,
+            messageId = 2L,
+            toolDefinitionId = 3L,
             toolName = "list_files",
-            inputJson = null
+            serverId = 9L,
+            mcpToolName = "list_files_runtime",
+            inputJson = null,
+            approved = true,
+            denialReason = null,
+            signedAuthorization = signedRequest()
         )
         val expectedResult = LocalMCPToolCallResult(
             toolCallId = request.toolCallId,
@@ -106,9 +121,16 @@ class DefaultLocalMCPToolCallDispatchServiceTest {
     fun `dispatch tool call maps worker dispatch failure`() = runTest {
         val request = LocalMCPToolCallRequest(
             toolCallId = 46L,
-            serverId = 9L,
+            sessionId = 1L,
+            messageId = 2L,
+            toolDefinitionId = 3L,
             toolName = "list_files",
-            inputJson = "{}"
+            serverId = 9L,
+            mcpToolName = "list_files_runtime",
+            inputJson = "{}",
+            approved = true,
+            denialReason = null,
+            signedAuthorization = signedRequest()
         )
 
         coEvery { workerCommandDispatchService.dispatch(any(), any(), any()) } returns
@@ -142,6 +164,19 @@ class DefaultLocalMCPToolCallDispatchServiceTest {
     private fun <L, R> Either<L, R>.orError(): R = fold(
         ifLeft = { error("Unexpected mapping failure: $it") },
         ifRight = { it }
+    )
+
+    /**
+     * Builds deterministic detached signed-request metadata for worker-dispatch assertions.
+     *
+     * @return Signed request fixture.
+     */
+    private fun signedRequest(): SignedRequest = SignedRequest(
+        payload = "{\"toolCallId\":44}",
+        signature = "signature-base64",
+        signerId = "device-1",
+        timestamp = 1_700_000_000_000,
+        nonce = "nonce-1"
     )
 }
 

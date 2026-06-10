@@ -8,6 +8,7 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.codec.encodeProtocol
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolCommandTypes
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerCommandResultStatuses
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRequestPayload
+import eu.torvian.chatbot.common.security.SignedRequest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -24,9 +25,16 @@ class WorkerMcpToolCallProtocolMappingsTest {
     fun `request maps to command request payload`() {
         val request = LocalMCPToolCallRequest(
             toolCallId = 42,
-            serverId = 7,
+            sessionId = 100,
+            messageId = 200,
+            toolDefinitionId = 300,
             toolName = "searchDocs",
-            inputJson = "{\"query\":\"ktor\"}"
+            serverId = 7,
+            mcpToolName = "search_docs",
+            inputJson = "{\"query\":\"ktor\"}",
+            approved = true,
+            denialReason = null,
+            signedAuthorization = signedRequest()
         )
 
         val payload = request.toWorkerCommandRequestPayload()
@@ -44,9 +52,16 @@ class WorkerMcpToolCallProtocolMappingsTest {
     fun `command request payload maps back to local request`() {
         val request = LocalMCPToolCallRequest(
             toolCallId = 77,
-            serverId = 3,
+            sessionId = 101,
+            messageId = 201,
+            toolDefinitionId = 301,
             toolName = "listFiles",
-            inputJson = "{\"path\":\"/tmp\"}"
+            serverId = 3,
+            mcpToolName = "list_files",
+            inputJson = "{\"path\":\"/tmp\"}",
+            approved = true,
+            denialReason = null,
+            signedAuthorization = signedRequest()
         )
         val payload = request.toWorkerCommandRequestPayload()
             .getOrElse { error("Expected mapping success: $it") }
@@ -109,9 +124,16 @@ class WorkerMcpToolCallProtocolMappingsTest {
             data = encodeProtocolPayload(
                 LocalMCPToolCallRequest(
                     toolCallId = 88,
-                    serverId = 4,
+                    sessionId = 102,
+                    messageId = 202,
+                    toolDefinitionId = 302,
                     toolName = "searchDocs",
-                    inputJson = "{\"query\":\"ktor\"}"
+                    serverId = 4,
+                    mcpToolName = "search_docs",
+                    inputJson = "{\"query\":\"ktor\"}",
+                    approved = true,
+                    denialReason = null,
+                    signedAuthorization = signedRequest()
                 ),
                 "LocalMCPToolCallRequest"
             ).getOrElse { error("Failed to encode test payload: $it") }
@@ -131,4 +153,17 @@ class WorkerMcpToolCallProtocolMappingsTest {
             else -> error("Expected InvalidCommandType, got $error")
         }
     }
+
+    /**
+     * Builds deterministic detached signed-request metadata for protocol mapping assertions.
+     *
+     * @return Signed request fixture.
+     */
+    private fun signedRequest(): SignedRequest = SignedRequest(
+        payload = "{\"toolCallId\":42}",
+        signature = "signature-base64",
+        signerId = "device-1",
+        timestamp = 1_700_000_000_000,
+        nonce = "nonce-1"
+    )
 }

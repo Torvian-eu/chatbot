@@ -52,6 +52,7 @@ import org.apache.logging.log4j.Logger
 import java.util.*
 import java.util.concurrent.CancellationException
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 /**
@@ -197,7 +198,7 @@ class ChatServiceImpl(
         content: String?,
         parentMessageId: Long?,
         fileReferences: List<FileReference>,
-        toolApprovalFlow: Flow<ToolCallApprovalResponse>
+        toolApprovalFlow: Flow<ToolCallApprovalSubmission>
     ): Flow<Either<ProcessNewMessageError, MessageEvent>> = channelFlow {
         try {
             // 1. Save user message (only if content is provided)
@@ -308,6 +309,7 @@ class ChatServiceImpl(
                 val completedToolCalls = mutableListOf<ToolCall>()
                 executeAndUpdateToolCalls(
                     userId,
+                    session.id,
                     pendingToolCalls,
                     llmConfig.tools,
                     toolApprovalFlow
@@ -369,7 +371,7 @@ class ChatServiceImpl(
         content: String?,
         parentMessageId: Long?,
         fileReferences: List<FileReference>,
-        toolApprovalFlow: Flow<ToolCallApprovalResponse>
+        toolApprovalFlow: Flow<ToolCallApprovalSubmission>
     ): Flow<Either<ProcessNewMessageError, MessageStreamEvent>> = channelFlow {
         try {
             // Step 1: Save user message (only if content is provided)
@@ -485,6 +487,7 @@ class ChatServiceImpl(
                         val completedToolCalls = mutableListOf<ToolCall>()
                         executeAndUpdateToolCalls(
                             userId,
+                            session.id,
                             pendingToolCalls,
                             llmConfig.tools,
                             toolApprovalFlow
@@ -564,13 +567,23 @@ class ChatServiceImpl(
     /**
      * Executes tool calls sequentially and updates them in the database.
      * Returns a Flow that emits execution-state transitions and completion records.
-     * Checks user approval preferences first; if not found, requests manual approval.
+     *
+     * Non-Local-MCP tools may still use server-side auto-approval preferences, while Local MCP tools always
+     * round-trip through the app so the worker receives a fresh detached authorization for each execution.
+     *
+     * @param userId User whose non-Local-MCP approval preferences may be consulted.
+     * @param sessionId Session that owns the pending tool calls.
+     * @param pendingToolCalls Pending tool calls to process sequentially.
+     * @param toolDefinitions Enabled tool definitions available to the current LLM turn.
+     * @param toolApprovalFlow Normalized client approval submissions emitted by the chat WebSocket.
+     * @return Flow of tool execution lifecycle events for persistence and client updates.
      */
     private fun executeAndUpdateToolCalls(
         userId: Long,
+        sessionId: Long,
         pendingToolCalls: List<ToolCall>,
         toolDefinitions: List<ToolDefinition>?,
-        toolApprovalFlow: Flow<ToolCallApprovalResponse>
+        toolApprovalFlow: Flow<ToolCallApprovalSubmission>
     ): Flow<ToolExecutionEvent> = channelFlow {
         pendingToolCalls.forEach { pendingToolCall ->
             if (pendingToolCall.status != ToolCallStatus.PENDING) {
@@ -582,63 +595,93 @@ class ChatServiceImpl(
             val toolDef = toolDefinitions?.find { it.id == pendingToolCall.toolDefinitionId }
                 ?: throw IllegalStateException("Tool definition ${pendingToolCall.toolDefinitionId} not found for pending tool call")
 
-            // Step 1: Check for auto-approval preference
-            val preference = toolDef.id.let { toolDefId ->
-                transactionScope.transaction {
-                    userToolApprovalPreferenceDao.getPreference(userId, toolDefId).getOrNull()
-                }
-            }
-
-            val approvalResponse = if (preference != null) {
-                // Auto-approve or auto-deny based on preference
-                logger.info("Auto-${if (preference.autoApprove) "approving" else "denying"} tool call ${pendingToolCall.id} for user $userId based on preference")
-
-                if (!preference.autoApprove) {
-                    // Auto-deny - update status and skip execution
-                    val deniedToolCall = pendingToolCall.copy(
-                        status = ToolCallStatus.USER_DENIED,
-                        denialReason = preference.denialReason ?: "Auto-denied by user preference"
-                    )
-                    toolCallDao.updateToolCall(deniedToolCall).getOrElse { error ->
-                        throw IllegalStateException("Failed to update auto-denied tool call: $error")
+            val approvalResponse = when (toolDef) {
+                is LocalMCPToolDefinition -> {
+                    // Local MCP tool calls must always round-trip through the app so each execution carries
+                    // a fresh detached authorization that the worker can verify independently of the server.
+                    val awaitingApprovalToolCall = pendingToolCall.copy(status = ToolCallStatus.AWAITING_APPROVAL)
+                    toolCallDao.updateToolCall(awaitingApprovalToolCall).getOrElse { error ->
+                        throw IllegalStateException("Failed to update tool call to AWAITING_APPROVAL: $error")
                     }
-                    send(ToolExecutionEvent.ToolCallCompleted(deniedToolCall))
-                    return@forEach
-                }
+                    send(ToolExecutionEvent.ToolCallApprovalRequested(awaitingApprovalToolCall))
 
-                // Auto-approved - create synthetic approval response
-                ToolCallApprovalResponse(
-                    toolCallId = pendingToolCall.id,
-                    approved = true,
-                    denialReason = null
-                )
-            } else {
-                // No preference found - request manual approval
-                // Step 1a: Update tool call to AWAITING_APPROVAL
-                val awaitingApprovalToolCall = pendingToolCall.copy(status = ToolCallStatus.AWAITING_APPROVAL)
-                toolCallDao.updateToolCall(awaitingApprovalToolCall).getOrElse { error ->
-                    throw IllegalStateException("Failed to update tool call to AWAITING_APPROVAL: $error")
+                    try {
+                        withTimeout(300.seconds) {
+                            toolApprovalFlow.first { submission ->
+                                submission.toolCallId == pendingToolCall.id &&
+                                        submission is ToolCallApprovalSubmission.LocalMcpSigned
+                            }
+                        }
+                    } catch (_: TimeoutCancellationException) {
+                        val deniedToolCall = pendingToolCall.copy(
+                            status = ToolCallStatus.USER_DENIED,
+                            denialReason = "Approval timeout (no response within 5 minutes)"
+                        )
+                        toolCallDao.updateToolCall(deniedToolCall).getOrElse { error ->
+                            throw IllegalStateException("Failed to update tool call after timeout: $error")
+                        }
+                        send(ToolExecutionEvent.ToolCallCompleted(deniedToolCall))
+                        return@forEach
+                    }
                 }
 
-                // Send the tool call with AWAITING_APPROVAL status to the client
-                send(ToolExecutionEvent.ToolCallApprovalRequested(awaitingApprovalToolCall))
+                else -> {
+                    val preference = toolDef.id.let { toolDefId ->
+                        transactionScope.transaction {
+                            userToolApprovalPreferenceDao.getPreference(userId, toolDefId).getOrNull()
+                        }
+                    }
 
-                // Step 1b: Wait for approval response
-                try {
-                    withTimeout(300_000) { // 5 minute timeout
-                        toolApprovalFlow.first { it.toolCallId == pendingToolCall.id }
+                    if (preference != null) {
+                        logger.info(
+                            "Auto-${if (preference.autoApprove) "approving" else "denying"} tool call ${pendingToolCall.id} for user $userId based on preference"
+                        )
+
+                        if (!preference.autoApprove) {
+                            val deniedToolCall = pendingToolCall.copy(
+                                status = ToolCallStatus.USER_DENIED,
+                                denialReason = preference.denialReason ?: "Auto-denied by user preference"
+                            )
+                            toolCallDao.updateToolCall(deniedToolCall).getOrElse { error ->
+                                throw IllegalStateException("Failed to update auto-denied tool call: $error")
+                            }
+                            send(ToolExecutionEvent.ToolCallCompleted(deniedToolCall))
+                            return@forEach
+                        }
+
+                        ToolCallApprovalSubmission.Standard(
+                            ToolCallApprovalResponse(
+                                toolCallId = pendingToolCall.id,
+                                approved = true,
+                                denialReason = null
+                            )
+                        )
+                    } else {
+                        val awaitingApprovalToolCall = pendingToolCall.copy(status = ToolCallStatus.AWAITING_APPROVAL)
+                        toolCallDao.updateToolCall(awaitingApprovalToolCall).getOrElse { error ->
+                            throw IllegalStateException("Failed to update tool call to AWAITING_APPROVAL: $error")
+                        }
+                        send(ToolExecutionEvent.ToolCallApprovalRequested(awaitingApprovalToolCall))
+
+                        try {
+                            withTimeout(300.seconds) {
+                                toolApprovalFlow.first { submission ->
+                                    submission.toolCallId == pendingToolCall.id &&
+                                            submission is ToolCallApprovalSubmission.Standard
+                                }
+                            }
+                        } catch (_: TimeoutCancellationException) {
+                            val deniedToolCall = pendingToolCall.copy(
+                                status = ToolCallStatus.USER_DENIED,
+                                denialReason = "Approval timeout (no response within 5 minutes)"
+                            )
+                            toolCallDao.updateToolCall(deniedToolCall).getOrElse { error ->
+                                throw IllegalStateException("Failed to update tool call after timeout: $error")
+                            }
+                            send(ToolExecutionEvent.ToolCallCompleted(deniedToolCall))
+                            return@forEach
+                        }
                     }
-                } catch (_: TimeoutCancellationException) {
-                    // Timeout - treat as denial
-                    val deniedToolCall = pendingToolCall.copy(
-                        status = ToolCallStatus.USER_DENIED,
-                        denialReason = "Approval timeout (no response within 5 minutes)"
-                    )
-                    toolCallDao.updateToolCall(deniedToolCall).getOrElse { error ->
-                        throw IllegalStateException("Failed to update tool call after timeout: $error")
-                    }
-                    send(ToolExecutionEvent.ToolCallCompleted(deniedToolCall))
-                    return@forEach
                 }
             }
 
@@ -665,11 +708,17 @@ class ChatServiceImpl(
 
             when (toolDef) {
                 is LocalMCPToolDefinition -> {
+                    val localApproval = approvalResponse as? ToolCallApprovalSubmission.LocalMcpSigned
+                        ?: throw IllegalStateException(
+                            "Local MCP tool call ${pendingToolCall.id} did not receive a signed Local MCP approval submission"
+                        )
                     val startTime = Clock.System.now()
                     when (val event = localMcpExecutor.executeTool(
+                        sessionId = sessionId,
                         toolDefinition = toolDef,
-                        toolCallId = pendingToolCall.id,
-                        inputJson = pendingToolCall.input
+                        toolCall = pendingToolCall,
+                        authorization = localApproval.authorization,
+                        signedAuthorization = localApproval.signedRequest
                     )) {
                         is LocalMCPExecutorEvent.ToolExecutionResult -> {
                             val durationMs = (Clock.System.now() - startTime).inWholeMilliseconds

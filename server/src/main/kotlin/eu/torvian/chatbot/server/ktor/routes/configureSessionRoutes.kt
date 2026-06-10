@@ -15,6 +15,7 @@ import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.ktor.mappers.toChatEvent
 import eu.torvian.chatbot.server.ktor.mappers.toChatStreamEvent
 import eu.torvian.chatbot.server.service.core.*
+import eu.torvian.chatbot.server.service.core.ToolCallApprovalSubmission
 import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageError
 import eu.torvian.chatbot.server.service.core.error.message.toApiError
 import eu.torvian.chatbot.server.service.core.error.session.*
@@ -265,10 +266,20 @@ fun Route.configureSessionRoutes(
                     .map { frame -> json.decodeFromString<ChatClientEvent>(frame.readText()) }
                     .shareIn(this, SharingStarted.Eagerly)
 
-                // Step 3a: Create flow for tool call approval responses
-                val approvalResponseFlow = clientEventFlow
-                    .filterIsInstance<ChatClientEvent.ToolCallApproval>()
-                    .map { event -> event.response }
+                // Step 3a: Normalize both regular and Local MCP approvals into one server-facing stream.
+                val approvalResponseFlow: Flow<ToolCallApprovalSubmission> = merge(
+                    clientEventFlow
+                        .filterIsInstance<ChatClientEvent.ToolCallApproval>()
+                        .map { event -> ToolCallApprovalSubmission.Standard(event.response) },
+                    clientEventFlow
+                        .filterIsInstance<ChatClientEvent.LocalMcpToolCallApproval>()
+                        .map { event ->
+                            ToolCallApprovalSubmission.LocalMcpSigned(
+                                authorization = event.authorization,
+                                signedRequest = event.signedRequest
+                            )
+                        }
+                )
 
                 // Step 4: Start processing and stream events back to the client
                 val eventFlow = if (request.isStreaming) {
