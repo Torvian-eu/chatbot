@@ -67,3 +67,14 @@ data class LocalMCPServerSecretResolutionError(
  * @property reason Human-readable explanation of the invalid state.
  */
 data class LocalMCPServerValidationError(val reason: String) : LocalMCPServerServiceError
+
+/**
+ * The signer referenced by detached request-signing metadata is not registered to the authenticated user.
+ *
+ * @property userId User identifier from authentication context.
+ * @property signerId Client device identifier provided by detached signing metadata.
+ */
+data class LocalMCPServerUnknownSignerDeviceError(
+    val userId: Long,
+    val signerId: String
+) : LocalMCPServerServiceError

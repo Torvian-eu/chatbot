@@ -59,4 +59,12 @@ fun LocalMCPServerServiceError.toApiError(): ApiError = when (this) {
 
     is LocalMCPServerValidationError ->
         apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid Local MCP server configuration", "reason" to reason)
+
+    is LocalMCPServerUnknownSignerDeviceError ->
+        apiError(
+            CommonApiErrorCodes.PERMISSION_DENIED,
+            "Signed request was created by an unknown device",
+            "userId" to userId.toString(),
+            "signerId" to signerId
+        )
 }

@@ -3,7 +3,9 @@ package eu.torvian.chatbot.server.service.core
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.api.mcp.CreateLocalMCPServerRequest
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
+import eu.torvian.chatbot.common.models.api.mcp.SignedLocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.UpdateLocalMCPServerRequest
+import eu.torvian.chatbot.common.security.SignedRequest
 import eu.torvian.chatbot.server.service.core.error.mcp.LocalMCPServerServiceError
 
 /**
@@ -11,15 +13,17 @@ import eu.torvian.chatbot.server.service.core.error.mcp.LocalMCPServerServiceErr
  */
 interface LocalMCPServerService {
     /**
-     * Creates a fully configured Local MCP server.
+     * Creates a Local MCP server from a detached signed request and stores the signature snapshot atomically.
      *
      * @param userId Owning user identifier.
-     * @param request Full create payload.
+     * @param request Parsed create request body.
+     * @param signedRequest Detached signing metadata plus the exact raw request body string.
      * @return Either service error or created server payload.
      */
-    suspend fun createServer(
+    suspend fun createSignedServer(
         userId: Long,
-        request: CreateLocalMCPServerRequest
+        request: CreateLocalMCPServerRequest,
+        signedRequest: SignedRequest
     ): Either<LocalMCPServerServiceError, LocalMCPServerDto>
 
     /**
@@ -43,18 +47,58 @@ interface LocalMCPServerService {
     ): Either<LocalMCPServerServiceError, LocalMCPServerDto>
 
     /**
-     * Updates a fully configured user-owned Local MCP server.
+     * Updates a Local MCP server from a detached signed request and stores the signature snapshot atomically.
      *
      * @param userId Owning user identifier.
      * @param serverId Target server identifier.
-     * @param request Full update payload.
+     * @param request Parsed update request body.
+     * @param signedRequest Detached signing metadata plus the exact raw request body string.
      * @return Either service error or updated server payload.
      */
-    suspend fun updateServer(
+    suspend fun updateSignedServer(
         userId: Long,
         serverId: Long,
-        request: UpdateLocalMCPServerRequest
+        request: UpdateLocalMCPServerRequest,
+        signedRequest: SignedRequest
     ): Either<LocalMCPServerServiceError, LocalMCPServerDto>
+
+    /**
+     * Resolves the currently persisted Local MCP state for one server and one signer identity.
+     *
+     * Compensation uses this signer-scoped snapshot instead of worker-facing signed DTOs because it must capture
+     * both the normalized server configuration and whether a specific signer had a detached signature row.
+     * If the signer device row no longer exists, the snapshot is still returned with the provided `signerId` and
+     * a null detached request so the compensation contract can still represent "unsigned for signer X".
+     *
+     * @param userId Owning user identifier.
+     * @param serverId Target server identifier.
+     * @param signerId Client-side signer identifier whose detached signature row should be resolved.
+     * @return Either service error or the signer-scoped compensation snapshot.
+     */
+    suspend fun getServerSignerSnapshot(
+        userId: Long,
+        serverId: Long,
+        signerId: String
+    ): Either<LocalMCPServerServiceError, LocalMCPServerSignerSnapshot>
+
+    /**
+     * Restores a previously persisted Local MCP snapshot directly at the persistence layer.
+     *
+     * This operation is intended for compensation flows after worker synchronization fails.
+     * The implementation must restore normalized server configuration from the supplied signer-scoped snapshot,
+     * then reconcile that signer's detached signature row.
+     * Compensation is device-scoped because signature persistence is keyed by `(serverId, userDeviceId)`.
+     *
+     * @param userId Owning user identifier.
+     * @param serverId Target server identifier.
+     * @param snapshot Previously persisted signer-scoped snapshot to restore.
+     * @return Either service error or the restored snapshot result.
+     */
+    suspend fun restoreServerSnapshot(
+        userId: Long,
+        serverId: Long,
+        snapshot: LocalMCPServerSignerSnapshot
+    ): Either<LocalMCPServerServiceError, LocalMCPServerSignerSnapshot>
 
     /**
      * Deletes a user-owned Local MCP server and linked tools.
@@ -69,12 +113,17 @@ interface LocalMCPServerService {
     ): Either<LocalMCPServerServiceError, Unit>
 
     /**
-     * Lists Local MCP servers assigned to a specific worker.
+     * Lists worker-assigned Local MCP servers together with their latest detached signed snapshots.
+     *
+     * The worker bootstrap flow needs both the persisted DTO and the exact detached authorization metadata
+     * so it can re-verify trust locally before caching executable configuration.
      *
      * @param workerId Worker identifier.
-     * @return Either service error or worker-assigned server list.
+     * @return Either service error or worker-assigned signed server list.
      */
-    suspend fun getServersByWorkerId(workerId: Long): Either<LocalMCPServerServiceError, List<LocalMCPServerDto>>
+    suspend fun getSignedServersByWorkerId(
+        workerId: Long
+    ): Either<LocalMCPServerServiceError, List<SignedLocalMCPServerDto>>
 
     /**
      * Validates that the given user owns the given server.

@@ -18,7 +18,9 @@ import eu.torvian.chatbot.server.service.setup.ToolDefinitionInitializer
 import eu.torvian.chatbot.server.service.setup.UserAccountInitializer
 import eu.torvian.chatbot.server.service.tool.ToolExecutorFactory
 import eu.torvian.chatbot.server.worker.mcp.configsync.DefaultLocalMCPServerConfigSyncService
+import eu.torvian.chatbot.server.worker.mcp.configsync.DefaultLocalMCPServerWorkerSyncService
 import eu.torvian.chatbot.server.worker.mcp.configsync.LocalMCPServerConfigSyncService
+import eu.torvian.chatbot.server.worker.mcp.configsync.LocalMCPServerWorkerSyncService
 import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.DefaultLocalMCPRuntimeCommandDispatchService
 import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.DefaultLocalMCPRuntimeControlService
 import eu.torvian.chatbot.server.worker.mcp.runtimecontrol.LocalMCPRuntimeCommandDispatchService
@@ -63,10 +65,11 @@ fun serviceModule() = module {
     }
     single<ToolService> { ToolServiceImpl(get(), get(), get(), get(), get()) }
     single<ToolCallService> { ToolCallServiceImpl(get(), get()) }
-    single<LocalMCPServerService> { LocalMCPServerServiceImpl(get(), get(), get(), get(), get()) }
+    single<LocalMCPServerService> { LocalMCPServerServiceImpl(get(), get(), get(), get(), get(), get(), get()) }
     single<LocalMCPRuntimeCommandDispatchService> { DefaultLocalMCPRuntimeCommandDispatchService(get()) }
+    single<LocalMCPServerWorkerSyncService> { DefaultLocalMCPServerWorkerSyncService(get()) }
     single<LocalMCPRuntimeControlService> { DefaultLocalMCPRuntimeControlService(get(), get(), get()) }
-    single<LocalMCPServerConfigSyncService> { DefaultLocalMCPServerConfigSyncService(get()) }
+    single<LocalMCPServerConfigSyncService> { DefaultLocalMCPServerConfigSyncService(get(), get()) }
     single<LocalMCPToolDefinitionService> { LocalMCPToolDefinitionServiceImpl(get(), get(), get(), get(), get()) }
     single<LocalMCPToolCallDispatchService> { DefaultLocalMCPToolCallDispatchService(get()) }
     single<LocalMCPExecutor> { LocalMCPExecutor(get(), get()) }
