@@ -130,7 +130,19 @@ fun workerModule(
             processManager = get()
         )
     }
-    single<McpToolCallExecutor> { McpToolCallExecutorImpl(runtimeService = get(), json = get()) }
+    single<LocalMCPToolExecutionAuthorizationValidator> {
+        DefaultLocalMCPToolExecutionAuthorizationValidator(
+            json = get(),
+            verificationService = get()
+        )
+    }
+    single<McpToolCallExecutor> {
+        McpToolCallExecutorImpl(
+            authorizationValidator = get(),
+            runtimeService = get(),
+            json = get()
+        )
+    }
     single<McpRuntimeCommandExecutor> {
         McpRuntimeCommandExecutorImpl(
             runtimeService = get(),

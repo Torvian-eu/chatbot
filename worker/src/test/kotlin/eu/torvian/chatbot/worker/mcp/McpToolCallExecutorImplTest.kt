@@ -4,6 +4,7 @@ import arrow.core.Either
 import arrow.core.right
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallRequest
+import eu.torvian.chatbot.common.security.SignedRequest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlin.test.Test
@@ -25,15 +26,16 @@ class McpToolCallExecutorImplTest {
             result = Either.Right(McpToolCallOutcome(isError = false, textContent = "ok"))
         )
         val executor =
-            McpToolCallExecutorImpl(runtimeService = runtimeService, json = Json { ignoreUnknownKeys = true })
+            McpToolCallExecutorImpl(
+                authorizationValidator = StaticAuthorizationValidator(
+                    LocalMCPToolExecutionAuthorizationValidationResult.Authorized
+                ),
+                runtimeService = runtimeService,
+                json = Json { ignoreUnknownKeys = true }
+            )
 
         val result = executor.execute(
-            LocalMCPToolCallRequest(
-                toolCallId = 55,
-                serverId = 10,
-                toolName = "searchDocs",
-                inputJson = "{invalid"
-            )
+            validRequest().copy(toolCallId = 55, inputJson = "{invalid")
         )
 
         assertTrue(result.isError)
@@ -56,7 +58,13 @@ class McpToolCallExecutorImplTest {
             )
         )
         val executor =
-            McpToolCallExecutorImpl(runtimeService = runtimeService, json = Json { ignoreUnknownKeys = true })
+            McpToolCallExecutorImpl(
+                authorizationValidator = StaticAuthorizationValidator(
+                    LocalMCPToolExecutionAuthorizationValidationResult.Authorized
+                ),
+                runtimeService = runtimeService,
+                json = Json { ignoreUnknownKeys = true }
+            )
 
         val result = executor.execute(validRequest())
 
@@ -79,7 +87,13 @@ class McpToolCallExecutorImplTest {
             )
         )
         val executor =
-            McpToolCallExecutorImpl(runtimeService = runtimeService, json = Json { ignoreUnknownKeys = true })
+            McpToolCallExecutorImpl(
+                authorizationValidator = StaticAuthorizationValidator(
+                    LocalMCPToolExecutionAuthorizationValidationResult.Authorized
+                ),
+                runtimeService = runtimeService,
+                json = Json { ignoreUnknownKeys = true }
+            )
 
         val result = executor.execute(validRequest())
 
@@ -102,13 +116,62 @@ class McpToolCallExecutorImplTest {
             )
         )
         val executor =
-            McpToolCallExecutorImpl(runtimeService = runtimeService, json = Json { ignoreUnknownKeys = true })
+            McpToolCallExecutorImpl(
+                authorizationValidator = StaticAuthorizationValidator(
+                    LocalMCPToolExecutionAuthorizationValidationResult.Authorized
+                ),
+                runtimeService = runtimeService,
+                json = Json { ignoreUnknownKeys = true }
+            )
 
         val result = executor.execute(validRequest())
 
         assertTrue(result.isError)
         assertEquals("{\"code\":\"TOOL_TIMEOUT\"}", result.errorMessage)
         assertEquals(1, runtimeService.callCount)
+    }
+
+    /**
+     * Verifies that worker-side authorization failures are surfaced as structured security errors and do not
+     * reach the MCP runtime.
+     */
+    @Test
+    fun `authorization rejection returns structured security error without runtime service call`() = kotlinx.coroutines.test.runTest {
+        val runtimeService = RecordingRuntimeService(
+            result = Either.Right(McpToolCallOutcome(isError = false, textContent = "ok"))
+        )
+        val executor = McpToolCallExecutorImpl(
+            authorizationValidator = StaticAuthorizationValidator(
+                LocalMCPToolExecutionAuthorizationValidationResult.RequestMismatch(
+                    mismatchedFields = listOf("input")
+                )
+            ),
+            runtimeService = runtimeService,
+            json = Json { ignoreUnknownKeys = true }
+        )
+
+        val result = executor.execute(validRequest())
+
+        assertTrue(result.isError)
+        assertEquals("LOCAL_MCP_AUTH_REQUEST_MISMATCH", result.errorCode)
+        assertEquals(0, runtimeService.callCount)
+    }
+
+    /**
+     * Fixed authorization validator used to make executor tests deterministic.
+     *
+     * @property result Validation result returned for every request.
+     */
+    private class StaticAuthorizationValidator(
+        private val result: LocalMCPToolExecutionAuthorizationValidationResult
+    ) : LocalMCPToolExecutionAuthorizationValidator {
+        /**
+         * @param request Tool-call request supplied to the worker executor.
+         * @return Preconfigured validation result.
+         */
+        override suspend fun validate(request: LocalMCPToolCallRequest): LocalMCPToolExecutionAuthorizationValidationResult {
+            return result
+        }
     }
 
     /**
@@ -176,10 +239,30 @@ class McpToolCallExecutorImplTest {
     private fun validRequest(): LocalMCPToolCallRequest {
         return LocalMCPToolCallRequest(
             toolCallId = 123,
-            serverId = 10,
+            sessionId = 1,
+            messageId = 2,
+            toolDefinitionId = 3,
             toolName = "searchDocs",
-            inputJson = "{\"query\":\"ktor\"}"
+            serverId = 10,
+            mcpToolName = "search_docs",
+            inputJson = "{\"query\":\"ktor\"}",
+            approved = true,
+            denialReason = null,
+            signedAuthorization = signedRequest()
         )
     }
+
+    /**
+     * Builds deterministic detached signed-request metadata for executor tests.
+     *
+     * @return Signed request fixture.
+     */
+    private fun signedRequest(): SignedRequest = SignedRequest(
+        payload = "{\"toolCallId\":123}",
+        signature = "signature-base64",
+        signerId = "device-1",
+        timestamp = 1_700_000_000_000,
+        nonce = "nonce-1"
+    )
 }
 

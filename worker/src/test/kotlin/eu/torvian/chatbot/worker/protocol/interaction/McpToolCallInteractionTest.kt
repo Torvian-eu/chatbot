@@ -6,6 +6,7 @@ import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallResult
 import eu.torvian.chatbot.common.models.api.worker.protocol.core.WorkerProtocolMessage
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolMessageTypes
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerCommandRequestPayload
+import eu.torvian.chatbot.common.security.SignedRequest
 import eu.torvian.chatbot.worker.mcp.McpToolCallExecutor
 import eu.torvian.chatbot.worker.protocol.transport.OutboundMessageEmitter
 import eu.torvian.chatbot.worker.protocol.ids.MessageIdProvider
@@ -84,9 +85,16 @@ class McpToolCallInteractionTest {
     ): McpToolCallInteraction {
         val requestPayload = LocalMCPToolCallRequest(
             toolCallId = 900,
-            serverId = 4,
+            sessionId = 100,
+            messageId = 200,
+            toolDefinitionId = 300,
             toolName = "searchDocs",
-            inputJson = "{\"query\":\"ktor\"}"
+            serverId = 4,
+            mcpToolName = "search_docs",
+            inputJson = "{\"query\":\"ktor\"}",
+            approved = true,
+            denialReason = null,
+            signedAuthorization = signedRequest()
         ).toWorkerCommandRequestPayload()
             .getOrElse { error("Failed to build request payload for test: $it") }
 
@@ -199,5 +207,18 @@ class McpToolCallInteractionTest {
             return "msg-$counter"
         }
     }
+
+    /**
+     * Builds deterministic detached signed-request metadata for interaction tests.
+     *
+     * @return Signed request fixture.
+     */
+    private fun signedRequest(): SignedRequest = SignedRequest(
+        payload = "{\"toolCallId\":900}",
+        signature = "signature-base64",
+        signerId = "device-1",
+        timestamp = 1_700_000_000_000,
+        nonce = "nonce-1"
+    )
 }
 
