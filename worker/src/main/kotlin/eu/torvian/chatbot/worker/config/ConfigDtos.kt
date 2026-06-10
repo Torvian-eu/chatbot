@@ -41,13 +41,29 @@ data class SetupConfigDto(
  * @property identity Worker identity and certificate configuration (nullable).
  * @property storage File path configuration for secrets and token storage (nullable).
  * @property auth Authentication timing and skew configuration (nullable).
+ * @property trustedSigners Authorized E2EA signers trusted by this worker (nullable).
  */
 @Serializable
 data class RuntimeConfigDto(
     val server: ServerConfigDto? = null,
     val identity: IdentityConfigDto? = null,
     val storage: StorageConfigDto? = null,
-    val auth: AuthConfigDto? = null
+    val auth: AuthConfigDto? = null,
+    val trustedSigners: List<TrustedSignerDto>? = null
+)
+
+/**
+ * DTO for a signer whose E2EA signatures are trusted by the worker.
+ *
+ * @property signerId Stable identifier emitted by signed envelopes for the signer.
+ * @property publicKeyBase64 Base64-encoded public key used to verify signatures from this signer.
+ * @property permissions Permission tokens granted to signatures produced by this signer.
+ */
+@Serializable
+data class TrustedSignerDto(
+    val signerId: String,
+    val publicKeyBase64: String,
+    val permissions: List<String>
 )
 
 /**

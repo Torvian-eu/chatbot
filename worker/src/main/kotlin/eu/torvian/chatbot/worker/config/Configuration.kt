@@ -18,13 +18,47 @@ data class Configuration(
  * @property identity Worker identity and certificate material.
  * @property storage Secrets and token file paths.
  * @property auth Authentication timing configuration.
+ * @property trustedSigners Authorized E2EA signers trusted by this worker.
  */
 data class RuntimeConfig(
     val server: ServerConfig,
     val identity: IdentityConfig,
     val storage: StorageConfig,
-    val auth: AuthConfig
+    val auth: AuthConfig,
+    val trustedSigners: List<TrustedSigner>
 )
+
+/**
+ * Authorized signer whose E2EA signatures may be accepted by worker-side verification.
+ *
+ * The public key is stored in binary form so verification services can consume it without
+ * repeatedly decoding configuration text at runtime.
+ *
+ * @property signerId Stable identifier expected in signed envelopes.
+ * @property publicKey Decoded public key bytes used for signature verification.
+ * @property permissions Permission tokens granted to signatures produced by this signer.
+ */
+data class TrustedSigner(
+    val signerId: String,
+    val publicKey: ByteArray,
+    val permissions: List<String>
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is TrustedSigner) return false
+
+        return signerId == other.signerId &&
+            publicKey.contentEquals(other.publicKey) &&
+            permissions == other.permissions
+    }
+
+    override fun hashCode(): Int {
+        var result = signerId.hashCode()
+        result = 31 * result + publicKey.contentHashCode()
+        result = 31 * result + permissions.hashCode()
+        return result
+    }
+}
 
 /**
  * Server connection configuration for the worker.

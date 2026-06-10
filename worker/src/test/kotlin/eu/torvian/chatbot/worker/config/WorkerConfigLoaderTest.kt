@@ -6,7 +6,9 @@ import kotlin.io.path.Path
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.writeText
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class WorkerConfigLoaderTest {
@@ -35,6 +37,69 @@ class WorkerConfigLoaderTest {
         assertEquals("./secrets.json", config?.worker?.storage?.secretsJsonPath)
         assertEquals("./token.json", config?.worker?.storage?.tokenFilePath)
         assertEquals(75, config?.worker?.auth?.refreshSkewSeconds)
+        assertEquals(emptyList(), config?.worker?.trustedSigners)
+    }
+
+    /**
+     * Verifies that populated trust-store entries are accepted and their public keys are decoded once.
+     */
+    @Test
+    fun `loads trusted signers and decodes Base64 public keys`() {
+        val result = loadConfigWithOverrides(
+            trustedSignersJson = """
+                [
+                  {
+                    "signerId": "device-1",
+                    "publicKeyBase64": "ChD/",
+                    "permissions": ["mcp:write"]
+                  }
+                ]
+            """.trimIndent()
+        )
+
+        assertTrue(result.isRight())
+        val signer = result.getOrNull()?.worker?.trustedSigners?.single()
+        assertEquals("device-1", signer?.signerId)
+        assertContentEquals(byteArrayOf(0x0A, 0x10, 0xFF.toByte()), signer?.publicKey)
+        assertEquals(listOf("mcp:write"), signer?.permissions)
+    }
+
+    /**
+     * Verifies that domain equality treats decoded public keys as value data rather than array identities.
+     */
+    @Test
+    fun `trusted signer equality compares public key contents`() {
+        val first = TrustedSigner("device-1", byteArrayOf(0x0A, 0x10), listOf("mcp:write"))
+        val sameContent = TrustedSigner("device-1", byteArrayOf(0x0A, 0x10), listOf("mcp:write"))
+        val differentKey = TrustedSigner("device-1", byteArrayOf(0x0A, 0x11), listOf("mcp:write"))
+
+        assertEquals(first, sameContent)
+        assertEquals(first.hashCode(), sameContent.hashCode())
+        assertNotEquals(first, differentKey)
+    }
+
+    /**
+     * Verifies that malformed trust-store key material fails during configuration assembly.
+     */
+    @Test
+    fun `rejects invalid trusted signer public key Base64`() {
+        val result = loadConfigWithOverrides(
+            trustedSignersJson = """
+                [
+                  {
+                    "signerId": "device-1",
+                    "publicKeyBase64": "not-base64!",
+                    "permissions": []
+                  }
+                ]
+            """.trimIndent()
+        )
+
+        assertTrue(result.isLeft())
+        val error = result.swap().getOrNull() as? WorkerConfigError.ConfigInvalid
+        assertTrue(error != null)
+        assertTrue(error.description.contains("worker.trustedSigners[0].publicKeyBase64"))
+        assertTrue(error.description.contains("valid Base64"))
     }
 
     @Test
@@ -336,6 +401,19 @@ class WorkerConfigLoaderTest {
         }
     }
 
+    /**
+     * Writes a temporary config using defaults plus selected overrides, then loads the strict domain model.
+     *
+     * @param serverBaseUrl Server URL to place in the base config.
+     * @param workerUid Worker identity UID to place in the base config.
+     * @param certificateFingerprint Certificate fingerprint to place in the base config.
+     * @param certificatePem Certificate PEM to place in the base config.
+     * @param secretsJsonPath Secrets file path to place in the base config.
+     * @param tokenFilePath Token file path to place in the base config.
+     * @param refreshSkewSeconds Token refresh skew to place in the base config.
+     * @param trustedSignersJson Raw JSON array to place in `worker.trustedSigners`.
+     * @return Either a logical configuration error or the assembled domain configuration.
+     */
     private fun loadConfigWithOverrides(
         serverBaseUrl: String = "https://example.test",
         workerUid: String = "worker-7",
@@ -343,7 +421,8 @@ class WorkerConfigLoaderTest {
         certificatePem: String = "pem",
         secretsJsonPath: String = "./secrets.json",
         tokenFilePath: String = "./token.json",
-        refreshSkewSeconds: Long = 60
+        refreshSkewSeconds: Long = 60,
+        trustedSignersJson: String = "[]"
     ): Either<WorkerConfigError, Configuration> {
         val tempDir = createTempDirectory("worker-config-test")
         writeBaseConfig(
@@ -354,7 +433,8 @@ class WorkerConfigLoaderTest {
             certificatePem = certificatePem,
             secretsJsonPath = secretsJsonPath,
             tokenFilePath = tokenFilePath,
-            refreshSkewSeconds = refreshSkewSeconds
+            refreshSkewSeconds = refreshSkewSeconds,
+            trustedSignersJson = trustedSignersJson
         )
         tempDir.resolve("setup.json").writeText("{}")
         tempDir.resolve("env-mapping.json").writeText("{}")
@@ -369,6 +449,20 @@ class WorkerConfigLoaderTest {
         }
     }
 
+    /**
+     * Writes a base worker application config file for config-loader tests.
+     *
+     * @param configDir Directory that receives `application.json`.
+     * @param serverBaseUrl Server URL to write.
+     * @param workerUid Worker identity UID to write.
+     * @param displayName Worker display name to write.
+     * @param certificateFingerprint Certificate fingerprint to write.
+     * @param certificatePem Certificate PEM to write.
+     * @param secretsJsonPath Secrets file path to write.
+     * @param tokenFilePath Token file path to write.
+     * @param refreshSkewSeconds Token refresh skew to write.
+     * @param trustedSignersJson Raw JSON array to write as `worker.trustedSigners`.
+     */
     private fun writeBaseConfig(
         configDir: java.nio.file.Path,
         serverBaseUrl: String,
@@ -378,7 +472,8 @@ class WorkerConfigLoaderTest {
         certificatePem: String = "pem",
         secretsJsonPath: String = "./secrets.json",
         tokenFilePath: String = "./token.json",
-        refreshSkewSeconds: Long = 60
+        refreshSkewSeconds: Long = 60,
+        trustedSignersJson: String = "[]"
     ) {
         configDir.resolve("application.json").writeText(
             """
@@ -399,7 +494,8 @@ class WorkerConfigLoaderTest {
                 },
                 "auth": {
                   "refreshSkewSeconds": $refreshSkewSeconds
-                }
+                },
+                "trustedSigners": $trustedSignersJson
               }
             }
             """.trimIndent()
