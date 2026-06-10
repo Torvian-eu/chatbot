@@ -4,7 +4,10 @@ import arrow.core.Either
 import arrow.core.flatMap
 import arrow.core.left
 import arrow.core.right
+import eu.torvian.chatbot.common.models.api.mcp.SignedLocalMCPServerDto
 import eu.torvian.chatbot.worker.mcp.McpServerConfigStore
+import eu.torvian.chatbot.worker.mcp.SignedMcpServerConfigValidationResult
+import eu.torvian.chatbot.worker.mcp.SignedMcpServerConfigValidator
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 
@@ -16,10 +19,12 @@ import org.apache.logging.log4j.Logger
  * the MCP runtime service can resolve server configuration without network calls.
  *
  * @property mcpServerApi HTTP API client for fetching assigned server configs.
+ * @property signedMcpServerConfigValidator Authorization validator used before cached configs are trusted.
  * @property configStore Local config store to populate with assigned servers.
  */
 class AssignedConfigBootstrapper(
     private val mcpServerApi: WorkerMcpServerApi,
+    private val signedMcpServerConfigValidator: SignedMcpServerConfigValidator,
     private val configStore: McpServerConfigStore
 ) {
 
@@ -40,8 +45,13 @@ class AssignedConfigBootstrapper(
             }
             .flatMap { servers ->
                 try {
-                    logger.info("Populating config store with {} assigned servers", servers.size)
-                    configStore.replaceAll(servers)
+                    val authorizedServers = authorizeBootstrapServers(servers)
+                    logger.info(
+                        "Populating config store with {} verified assigned servers out of {} received",
+                        authorizedServers.size,
+                        servers.size
+                    )
+                    configStore.replaceAll(authorizedServers)
                     logger.info("Successfully bootstrapped assigned MCP server configurations")
                     Unit.right()
                 } catch (e: Exception) {
@@ -49,6 +59,37 @@ class AssignedConfigBootstrapper(
                     AssignedConfigBootstrapError.StoreFailed(e.message ?: "Unknown error").left()
                 }
             }
+    }
+
+    /**
+     * Filters bootstrap payloads down to the configurations that pass worker-side signed-request validation.
+     *
+     * One bad config must not block other valid configs from loading, so each entry is validated independently
+     * and only accepted entries are returned to the caller.
+     *
+     * @param servers Worker-facing configs fetched from the server bootstrap endpoint.
+     * @return Only the relayed server DTOs that the worker can authorize locally.
+     */
+    private suspend fun authorizeBootstrapServers(servers: List<SignedLocalMCPServerDto>) = buildList {
+        servers.forEach { signedServer ->
+            when (
+                val validation = signedMcpServerConfigValidator.validate(
+                    server = signedServer.server,
+                    signedRequest = signedServer.signedRequest
+                )
+            ) {
+                SignedMcpServerConfigValidationResult.Authorized -> add(signedServer.server)
+                is SignedMcpServerConfigValidationResult.Rejected -> {
+                    logger.warn(
+                        "Rejected assigned MCP server {} during bootstrap (code={}, message={}, details={})",
+                        signedServer.server.id,
+                        validation.code,
+                        validation.message,
+                        validation.details
+                    )
+                }
+            }
+        }
     }
 
     companion object {
