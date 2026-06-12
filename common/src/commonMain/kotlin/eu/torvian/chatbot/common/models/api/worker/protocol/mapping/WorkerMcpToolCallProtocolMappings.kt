@@ -2,8 +2,8 @@ package eu.torvian.chatbot.common.models.api.worker.protocol.mapping
 
 import arrow.core.Either
 import arrow.core.raise.either
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallRequest
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallResult
+import eu.torvian.chatbot.common.models.api.mcp.SignedLocalMCPToolExecutionRequest
 import eu.torvian.chatbot.common.models.api.worker.protocol.codec.WorkerProtocolCodecError
 import eu.torvian.chatbot.common.models.api.worker.protocol.codec.decodeProtocolPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.codec.encodeProtocolPayload
@@ -13,17 +13,17 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerComman
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandResultPayload
 
 /**
- * Maps a local MCP tool-call request to a typed worker command-request payload.
+ * Maps a signed Local MCP tool execution request to a typed worker command-request payload.
  *
- * @receiver Local MCP request produced by the application-side tool-call flow.
+ * @receiver Signed authorization request with detached signature metadata.
  * @return Either a worker payload or a logical mapping error.
  */
-fun LocalMCPToolCallRequest.toWorkerCommandRequestPayload():
+fun SignedLocalMCPToolExecutionRequest.toWorkerCommandRequestPayload():
         Either<WorkerMcpToolCallProtocolMappingError, WorkerCommandRequestPayload> = either {
 
     val data = encodeProtocolPayload(
         value = this@toWorkerCommandRequestPayload,
-        targetType = "LocalMCPToolCallRequest"
+        targetType = "SignedLocalMCPToolExecutionRequest"
     ).mapLeft { it.toToolCallMappingError() }
         .bind()
 
@@ -34,12 +34,12 @@ fun LocalMCPToolCallRequest.toWorkerCommandRequestPayload():
 }
 
 /**
- * Maps a typed worker command-request payload back to a local MCP tool-call request.
+ * Maps a typed worker command-request payload back to a signed Local MCP tool execution request.
  *
  * @receiver Command-request payload decoded from the worker protocol envelope.
- * @return Either the local MCP request DTO or a logical mapping error.
+ * @return Either the signed execution request DTO or a logical mapping error.
  */
-fun WorkerCommandRequestPayload.toLocalMcpToolCallRequest(): Either<WorkerMcpToolCallProtocolMappingError, LocalMCPToolCallRequest> =
+fun WorkerCommandRequestPayload.toSignedLocalMcpToolExecutionRequest(): Either<WorkerMcpToolCallProtocolMappingError, SignedLocalMCPToolExecutionRequest> =
     either {
         if (commandType != WorkerProtocolCommandTypes.MCP_TOOL_CALL) {
             raise(
@@ -50,9 +50,9 @@ fun WorkerCommandRequestPayload.toLocalMcpToolCallRequest(): Either<WorkerMcpToo
             )
         }
 
-        decodeProtocolPayload<LocalMCPToolCallRequest>(
+        decodeProtocolPayload<SignedLocalMCPToolExecutionRequest>(
             payload = data,
-            targetType = "LocalMCPToolCallRequest"
+            targetType = "SignedLocalMCPToolExecutionRequest"
         ).mapLeft { it.toToolCallMappingError() }
             .bind()
     }

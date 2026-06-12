@@ -1,19 +1,23 @@
 package eu.torvian.chatbot.worker.mcp
 
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallRequest
+import eu.torvian.chatbot.common.security.SignedRequest
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolExecutionAuthorization
 
 /**
- * Validates that a relayed Local MCP tool-call request carries a fresh detached app authorization and that
- * the signed payload still matches the execution command the worker was asked to run.
+ * Validates detached app authorization for Local MCP tool execution requests.
+ *
+ * The validator verifies the detached signature and decodes the authorized execution intent,
+ * making the signed [LocalMCPToolExecutionAuthorization] the single source of truth for
+ * execution parameters.
  */
 interface LocalMCPToolExecutionAuthorizationValidator {
     /**
-     * Verifies the detached authorization embedded in [request].
+     * Verifies and decodes the detached authorization.
      *
-     * @param request Worker-facing Local MCP execution request.
-     * @return Structured authorization decision that callers can log or surface to the server.
+     * @param signedRequest Detached signature metadata and signed authorization payload from the app.
+     * @return Structured authorization decision carrying either a rejection reason or the decoded authorization.
      */
     suspend fun validate(
-        request: LocalMCPToolCallRequest
+        signedRequest: SignedRequest
     ): LocalMCPToolExecutionAuthorizationValidationResult
 }

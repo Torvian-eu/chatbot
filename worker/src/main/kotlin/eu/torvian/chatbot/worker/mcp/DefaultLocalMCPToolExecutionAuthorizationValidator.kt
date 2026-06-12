@@ -1,8 +1,8 @@
 package eu.torvian.chatbot.worker.mcp
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallRequest
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolExecutionAuthorization
+import eu.torvian.chatbot.common.security.SignedRequest
 import eu.torvian.chatbot.worker.service.security.VerificationError
 import eu.torvian.chatbot.worker.service.security.VerificationOptions
 import eu.torvian.chatbot.worker.service.security.VerificationService
@@ -11,6 +11,9 @@ import kotlinx.serialization.json.Json
 
 /**
  * Default implementation of [LocalMCPToolExecutionAuthorizationValidator].
+ *
+ * Verifies the detached signature and decodes the authorization payload to serve as the
+ * single source of truth for execution parameters.
  *
  * @property json JSON codec used to deserialize the exact signed authorization payload string.
  * @property verificationService Worker trust-store verifier used for detached signature validation.
@@ -22,10 +25,10 @@ class DefaultLocalMCPToolExecutionAuthorizationValidator(
     private val authorizationWindowSeconds: Long = 60
 ) : LocalMCPToolExecutionAuthorizationValidator {
     override suspend fun validate(
-        request: LocalMCPToolCallRequest
+        signedRequest: SignedRequest
     ): LocalMCPToolExecutionAuthorizationValidationResult {
-        val signedRequest = request.signedAuthorization
-            ?: return LocalMCPToolExecutionAuthorizationValidationResult.MissingSignedRequest
+        // Best-effort decode of authorization from payload for use in success and rejection paths.
+        val decodedAuthorization = decodeSignedPayload(signedRequest.payload)
 
         return when (
             val verificationResult = verificationService.verify(
@@ -36,25 +39,22 @@ class DefaultLocalMCPToolExecutionAuthorizationValidator(
                 )
             )
         ) {
-            is Either.Left -> verificationResult.value.toValidationFailure()
+            is Either.Left -> verificationResult.value.toValidationFailure(decodedAuthorization?.toolCallId)
             is Either.Right -> {
-                val signedAuthorization = decodeSignedPayload(signedRequest.payload)
+                val authorization = decodedAuthorization
                     ?: return LocalMCPToolExecutionAuthorizationValidationResult.MalformedSignedPayload(
-                        details = "Signed payload could not be decoded as LocalMCPToolExecutionAuthorization"
+                        details = "Signed payload could not be decoded as LocalMCPToolExecutionAuthorization",
+                        toolCallId = null
                     )
 
-                val mismatchedFields = request.findMismatchedFields(signedAuthorization)
-                if (mismatchedFields.isNotEmpty()) {
-                    return LocalMCPToolExecutionAuthorizationValidationResult.RequestMismatch(mismatchedFields)
-                }
-
-                if (!signedAuthorization.approved) {
+                if (!authorization.approved) {
                     return LocalMCPToolExecutionAuthorizationValidationResult.Denied(
-                        denialReason = signedAuthorization.denialReason
+                        denialReason = authorization.denialReason,
+                        toolCallId = authorization.toolCallId
                     )
                 }
 
-                LocalMCPToolExecutionAuthorizationValidationResult.Authorized
+                LocalMCPToolExecutionAuthorizationValidationResult.Authorized(authorization = authorization)
             }
         }
     }
@@ -80,39 +80,23 @@ class DefaultLocalMCPToolExecutionAuthorizationValidator(
  * Converts worker verification failures into Local MCP authorization validation failures.
  *
  * @receiver Verification error produced by [VerificationService].
- * @return Structured Local MCP authorization rejection.
+ * @param toolCallId Optional tool call identifier recovered from the signed payload for result correlation.
+ * @return Structured Local MCP authorization rejection with correlated tool call ID when available.
  */
-private fun VerificationError.toValidationFailure(): LocalMCPToolExecutionAuthorizationValidationResult.Rejected = when (this) {
-    is VerificationError.UnknownSigner -> LocalMCPToolExecutionAuthorizationValidationResult.UnknownSigner(signerId = signerId)
+private fun VerificationError.toValidationFailure(
+    toolCallId: Long? = null
+): LocalMCPToolExecutionAuthorizationValidationResult.Rejected = when (this) {
+    is VerificationError.UnknownSigner -> LocalMCPToolExecutionAuthorizationValidationResult.UnknownSigner(
+        signerId = signerId,
+        toolCallId = toolCallId
+    )
     is VerificationError.InvalidSignature -> LocalMCPToolExecutionAuthorizationValidationResult.InvalidSignature(
+        toolCallId = toolCallId,
         details = cause?.toString()
     )
     is VerificationError.Expired -> LocalMCPToolExecutionAuthorizationValidationResult.ExpiredAuthorization(
         timestamp = timestamp,
-        ageSeconds = ageSeconds
+        ageSeconds = ageSeconds,
+        toolCallId = toolCallId
     )
-}
-
-/**
- * Lists Local MCP execution fields whose values differ between the relayed worker request and the signed payload.
- *
- * @receiver Worker-facing Local MCP execution request.
- * @param authorization Signed authorization payload decoded from the detached app signature.
- * @return Stable field names that callers can surface for diagnostics.
- */
-private fun LocalMCPToolCallRequest.findMismatchedFields(
-    authorization: LocalMCPToolExecutionAuthorization
-): List<String> {
-    val mismatches = mutableListOf<String>()
-    if (toolCallId != authorization.toolCallId) mismatches += "toolCallId"
-    if (sessionId != authorization.sessionId) mismatches += "sessionId"
-    if (messageId != authorization.messageId) mismatches += "messageId"
-    if (toolDefinitionId != authorization.toolDefinitionId) mismatches += "toolDefinitionId"
-    if (toolName != authorization.toolName) mismatches += "toolName"
-    if (serverId != authorization.serverId) mismatches += "serverId"
-    if (mcpToolName != authorization.mcpToolName) mismatches += "mcpToolName"
-    if (inputJson != authorization.input) mismatches += "input"
-    if (approved != authorization.approved) mismatches += "approved"
-    if (denialReason != authorization.denialReason) mismatches += "denialReason"
-    return mismatches
 }

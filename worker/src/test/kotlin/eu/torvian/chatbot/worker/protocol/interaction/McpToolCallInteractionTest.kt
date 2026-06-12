@@ -1,8 +1,8 @@
 package eu.torvian.chatbot.worker.protocol.interaction
 
 import arrow.core.getOrElse
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallRequest
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallResult
+import eu.torvian.chatbot.common.models.api.mcp.SignedLocalMCPToolExecutionRequest
 import eu.torvian.chatbot.common.models.api.worker.protocol.core.WorkerProtocolMessage
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolMessageTypes
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerCommandRequestPayload
@@ -83,18 +83,8 @@ class McpToolCallInteractionTest {
         emitter: RecordingEmitter,
         interactionId: String
     ): McpToolCallInteraction {
-        val requestPayload = LocalMCPToolCallRequest(
-            toolCallId = 900,
-            sessionId = 100,
-            messageId = 200,
-            toolDefinitionId = 300,
-            toolName = "searchDocs",
-            serverId = 4,
-            mcpToolName = "search_docs",
-            inputJson = "{\"query\":\"ktor\"}",
-            approved = true,
-            denialReason = null,
-            signedAuthorization = signedRequest()
+        val requestPayload = SignedLocalMCPToolExecutionRequest(
+            signedRequest = signedRequest()
         ).toWorkerCommandRequestPayload()
             .getOrElse { error("Failed to build request payload for test: $it") }
 
@@ -138,10 +128,10 @@ class McpToolCallInteractionTest {
         private val result: LocalMCPToolCallResult
     ) : McpToolCallExecutor {
         /**
-         * @param request Tool-call request supplied by the session.
+         * @param signedRequest Signed request supplied by the session.
          * @return Preconfigured result.
          */
-        override suspend fun execute(request: LocalMCPToolCallRequest): LocalMCPToolCallResult {
+        override suspend fun execute(signedRequest: SignedRequest): LocalMCPToolCallResult {
             return result
         }
     }
@@ -165,10 +155,10 @@ class McpToolCallInteractionTest {
         val release: CompletableDeferred<Unit> = CompletableDeferred()
 
         /**
-         * @param request Tool-call request supplied by the session.
+         * @param signedRequest Signed request supplied by the session.
          * @return Preconfigured result once released.
          */
-        override suspend fun execute(request: LocalMCPToolCallRequest): LocalMCPToolCallResult {
+        override suspend fun execute(signedRequest: SignedRequest): LocalMCPToolCallResult {
             started.complete(Unit)
             release.await()
             return result
@@ -180,10 +170,10 @@ class McpToolCallInteractionTest {
      */
     private class ThrowingExecutor : McpToolCallExecutor {
         /**
-         * @param request Tool-call request supplied by the session.
+         * @param signedRequest Signed request supplied by the session.
          * @throws IllegalStateException Always thrown to simulate an unexpected failure.
          */
-        override suspend fun execute(request: LocalMCPToolCallRequest): LocalMCPToolCallResult {
+        override suspend fun execute(signedRequest: SignedRequest): LocalMCPToolCallResult {
             throw IllegalStateException("boom")
         }
     }

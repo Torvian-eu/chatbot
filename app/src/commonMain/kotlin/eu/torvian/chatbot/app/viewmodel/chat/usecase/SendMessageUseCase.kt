@@ -1,4 +1,5 @@
 package eu.torvian.chatbot.app.viewmodel.chat.usecase
+
 import eu.torvian.chatbot.app.generated.resources.Res
 import eu.torvian.chatbot.app.generated.resources.error_sending_message_short
 import eu.torvian.chatbot.app.generated.resources.warning_model_or_settings_unavailable
@@ -11,13 +12,14 @@ import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.models.api.core.ChatClientEvent
 import eu.torvian.chatbot.common.models.api.core.ChatEvent
 import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolExecutionAuthorization
 import eu.torvian.chatbot.common.models.api.core.ProcessNewMessageRequest
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolExecutionAuthorization
 import eu.torvian.chatbot.common.models.api.tool.ToolCallApprovalResponse
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.UserToolApprovalPreference
+import eu.torvian.chatbot.common.security.SignedRequest
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.flowOf
@@ -111,6 +113,11 @@ class SendMessageUseCase(
     /**
      * Builds, signs, and emits a Local MCP authorization event for one tool call.
      *
+     * The typed [LocalMCPToolExecutionAuthorization] is created locally and signed to produce
+     * a detached [SignedRequest]. Only the signed request is emitted to the server, which relays it
+     * to the worker. The worker verifies the signature and decodes the authorization from
+     * the signed payload as the sole source of truth for execution parameters.
+     *
      * @param toolCall Tool call the app is authorizing.
      * @param toolDefinition Resolved Local MCP tool definition.
      * @param approved Whether execution should proceed.
@@ -131,6 +138,7 @@ class SendMessageUseCase(
             return
         }
 
+        // Build typed authorization locally for signing
         val authorization = LocalMCPToolExecutionAuthorization(
             toolCallId = toolCall.id,
             sessionId = currentSession.id,
@@ -159,10 +167,9 @@ class SendMessageUseCase(
             ifRight = { it }
         )
 
-        // Preserve the exact signed payload object alongside its detached signature for the server transport.
+        // Emit only the signed request; the typed authorization is serialized in signedRequest.payload
         toolApprovalFlow.emit(
             ChatClientEvent.LocalMcpToolCallApproval(
-                authorization = authorization,
                 signedRequest = signedRequest
             )
         )

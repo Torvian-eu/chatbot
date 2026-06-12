@@ -3,7 +3,7 @@ package eu.torvian.chatbot.worker.mcp
 import arrow.core.Either
 import arrow.core.right
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallRequest
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolExecutionAuthorization
 import eu.torvian.chatbot.common.security.SignedRequest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -17,26 +17,27 @@ import kotlin.test.assertTrue
  */
 class McpToolCallExecutorImplTest {
 
+    private val json = Json { ignoreUnknownKeys = true }
+
     /**
      * Verifies that malformed request JSON is mapped to a logical result error and does not hit the runtime service.
      */
     @Test
     fun `malformed json returns logical error without runtime service call`() = kotlinx.coroutines.test.runTest {
+        val authorization = buildAuthorization(input = "{invalid")
         val runtimeService = RecordingRuntimeService(
             result = Either.Right(McpToolCallOutcome(isError = false, textContent = "ok"))
         )
         val executor =
             McpToolCallExecutorImpl(
                 authorizationValidator = StaticAuthorizationValidator(
-                    LocalMCPToolExecutionAuthorizationValidationResult.Authorized
+                    LocalMCPToolExecutionAuthorizationValidationResult.Authorized(authorization)
                 ),
                 runtimeService = runtimeService,
-                json = Json { ignoreUnknownKeys = true }
+                json = json
             )
 
-        val result = executor.execute(
-            validRequest().copy(toolCallId = 55, inputJson = "{invalid")
-        )
+        val result = executor.execute(signedRequest(authorization))
 
         assertTrue(result.isError)
         assertEquals(result.errorMessage?.contains("Malformed JSON input"), true)
@@ -48,6 +49,7 @@ class McpToolCallExecutorImplTest {
      */
     @Test
     fun `runtime error becomes tool call error result`() = kotlinx.coroutines.test.runTest {
+        val authorization = buildAuthorization()
         val runtimeService = RecordingRuntimeService(
             result = Either.Left(
                 McpRuntimeError.ToolCallFailed(
@@ -60,13 +62,13 @@ class McpToolCallExecutorImplTest {
         val executor =
             McpToolCallExecutorImpl(
                 authorizationValidator = StaticAuthorizationValidator(
-                    LocalMCPToolExecutionAuthorizationValidationResult.Authorized
+                    LocalMCPToolExecutionAuthorizationValidationResult.Authorized(authorization)
                 ),
                 runtimeService = runtimeService,
-                json = Json { ignoreUnknownKeys = true }
+                json = json
             )
 
-        val result = executor.execute(validRequest())
+        val result = executor.execute(signedRequest(authorization))
 
         assertTrue(result.isError)
         assertEquals("Tool process not reachable", result.errorMessage)
@@ -78,6 +80,7 @@ class McpToolCallExecutorImplTest {
      */
     @Test
     fun `successful outcome returns text output`() = kotlinx.coroutines.test.runTest {
+        val authorization = buildAuthorization()
         val runtimeService = RecordingRuntimeService(
             result = Either.Right(
                 McpToolCallOutcome(
@@ -89,13 +92,13 @@ class McpToolCallExecutorImplTest {
         val executor =
             McpToolCallExecutorImpl(
                 authorizationValidator = StaticAuthorizationValidator(
-                    LocalMCPToolExecutionAuthorizationValidationResult.Authorized
+                    LocalMCPToolExecutionAuthorizationValidationResult.Authorized(authorization)
                 ),
                 runtimeService = runtimeService,
-                json = Json { ignoreUnknownKeys = true }
+                json = json
             )
 
-        val result = executor.execute(validRequest())
+        val result = executor.execute(signedRequest(authorization))
 
         assertFalse(result.isError)
         assertEquals("{\"items\":[\"ktor\"]}", result.output)
@@ -107,6 +110,7 @@ class McpToolCallExecutorImplTest {
      */
     @Test
     fun `error outcome maps structured content to error message`() = kotlinx.coroutines.test.runTest {
+        val authorization = buildAuthorization()
         val runtimeService = RecordingRuntimeService(
             result = Either.Right(
                 McpToolCallOutcome(
@@ -118,13 +122,13 @@ class McpToolCallExecutorImplTest {
         val executor =
             McpToolCallExecutorImpl(
                 authorizationValidator = StaticAuthorizationValidator(
-                    LocalMCPToolExecutionAuthorizationValidationResult.Authorized
+                    LocalMCPToolExecutionAuthorizationValidationResult.Authorized(authorization)
                 ),
                 runtimeService = runtimeService,
-                json = Json { ignoreUnknownKeys = true }
+                json = json
             )
 
-        val result = executor.execute(validRequest())
+        val result = executor.execute(signedRequest(authorization))
 
         assertTrue(result.isError)
         assertEquals("{\"code\":\"TOOL_TIMEOUT\"}", result.errorMessage)
@@ -142,34 +146,32 @@ class McpToolCallExecutorImplTest {
         )
         val executor = McpToolCallExecutorImpl(
             authorizationValidator = StaticAuthorizationValidator(
-                LocalMCPToolExecutionAuthorizationValidationResult.RequestMismatch(
-                    mismatchedFields = listOf("input")
-                )
+                LocalMCPToolExecutionAuthorizationValidationResult.Denied(denialReason = "User denied")
             ),
             runtimeService = runtimeService,
-            json = Json { ignoreUnknownKeys = true }
+            json = json
         )
 
-        val result = executor.execute(validRequest())
+        val result = executor.execute(signedRequest(buildAuthorization()))
 
         assertTrue(result.isError)
-        assertEquals("LOCAL_MCP_AUTH_REQUEST_MISMATCH", result.errorCode)
+        assertEquals("LOCAL_MCP_AUTH_DENIED", result.errorCode)
         assertEquals(0, runtimeService.callCount)
     }
 
     /**
      * Fixed authorization validator used to make executor tests deterministic.
      *
-     * @property result Validation result returned for every request.
+     * @property result Validation result returned for every signed request.
      */
     private class StaticAuthorizationValidator(
         private val result: LocalMCPToolExecutionAuthorizationValidationResult
     ) : LocalMCPToolExecutionAuthorizationValidator {
         /**
-         * @param request Tool-call request supplied to the worker executor.
+         * @param signedRequest Signed request supplied to the worker executor.
          * @return Preconfigured validation result.
          */
-        override suspend fun validate(request: LocalMCPToolCallRequest): LocalMCPToolExecutionAuthorizationValidationResult {
+        override suspend fun validate(signedRequest: SignedRequest): LocalMCPToolExecutionAuthorizationValidationResult {
             return result
         }
     }
@@ -232,12 +234,13 @@ class McpToolCallExecutorImplTest {
     }
 
     /**
-     * Builds a valid baseline tool-call request for test scenarios.
+     * Builds a valid baseline authorization for test scenarios.
      *
-     * @return Valid request DTO with simple JSON input.
+     * @param input Exact JSON argument string for the authorization.
+     * @return Valid authorization DTO.
      */
-    private fun validRequest(): LocalMCPToolCallRequest {
-        return LocalMCPToolCallRequest(
+    private fun buildAuthorization(input: String? = "{\"query\":\"ktor\"}"): LocalMCPToolExecutionAuthorization {
+        return LocalMCPToolExecutionAuthorization(
             toolCallId = 123,
             sessionId = 1,
             messageId = 2,
@@ -245,20 +248,20 @@ class McpToolCallExecutorImplTest {
             toolName = "searchDocs",
             serverId = 10,
             mcpToolName = "search_docs",
-            inputJson = "{\"query\":\"ktor\"}",
+            input = input,
             approved = true,
-            denialReason = null,
-            signedAuthorization = signedRequest()
+            denialReason = null
         )
     }
 
     /**
      * Builds deterministic detached signed-request metadata for executor tests.
      *
+     * @param authorization Authorization payload to sign.
      * @return Signed request fixture.
      */
-    private fun signedRequest(): SignedRequest = SignedRequest(
-        payload = "{\"toolCallId\":123}",
+    private fun signedRequest(authorization: LocalMCPToolExecutionAuthorization): SignedRequest = SignedRequest(
+        payload = json.encodeToString(LocalMCPToolExecutionAuthorization.serializer(), authorization),
         signature = "signature-base64",
         signerId = "device-1",
         timestamp = 1_700_000_000_000,

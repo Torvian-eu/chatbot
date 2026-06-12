@@ -309,7 +309,6 @@ class ChatServiceImpl(
                 val completedToolCalls = mutableListOf<ToolCall>()
                 executeAndUpdateToolCalls(
                     userId,
-                    session.id,
                     pendingToolCalls,
                     llmConfig.tools,
                     toolApprovalFlow
@@ -487,7 +486,6 @@ class ChatServiceImpl(
                         val completedToolCalls = mutableListOf<ToolCall>()
                         executeAndUpdateToolCalls(
                             userId,
-                            session.id,
                             pendingToolCalls,
                             llmConfig.tools,
                             toolApprovalFlow
@@ -572,7 +570,6 @@ class ChatServiceImpl(
      * round-trip through the app so the worker receives a fresh detached authorization for each execution.
      *
      * @param userId User whose non-Local-MCP approval preferences may be consulted.
-     * @param sessionId Session that owns the pending tool calls.
      * @param pendingToolCalls Pending tool calls to process sequentially.
      * @param toolDefinitions Enabled tool definitions available to the current LLM turn.
      * @param toolApprovalFlow Normalized client approval submissions emitted by the chat WebSocket.
@@ -580,7 +577,6 @@ class ChatServiceImpl(
      */
     private fun executeAndUpdateToolCalls(
         userId: Long,
-        sessionId: Long,
         pendingToolCalls: List<ToolCall>,
         toolDefinitions: List<ToolDefinition>?,
         toolApprovalFlow: Flow<ToolCallApprovalSubmission>
@@ -714,10 +710,8 @@ class ChatServiceImpl(
                         )
                     val startTime = Clock.System.now()
                     when (val event = localMcpExecutor.executeTool(
-                        sessionId = sessionId,
                         toolDefinition = toolDef,
                         toolCall = pendingToolCall,
-                        authorization = localApproval.authorization,
                         signedAuthorization = localApproval.signedRequest
                     )) {
                         is LocalMCPExecutorEvent.ToolExecutionResult -> {

@@ -10,7 +10,7 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProt
 import eu.torvian.chatbot.common.models.api.worker.protocol.builders.commandAccepted
 import eu.torvian.chatbot.common.models.api.worker.protocol.builders.commandRejected
 import eu.torvian.chatbot.common.models.api.worker.protocol.builders.commandResult
-import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toLocalMcpToolCallRequest
+import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toSignedLocalMcpToolExecutionRequest
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerCommandResultPayload
 import eu.torvian.chatbot.worker.mcp.McpToolCallExecutor
 import eu.torvian.chatbot.worker.protocol.transport.OutboundMessageEmitter
@@ -43,15 +43,15 @@ class McpToolCallInteraction(
      * Executes the command lifecycle and emits protocol responses.
      *
      * The interaction emits `command.accepted` immediately after payload validation and then emits
-     * `command.result` after tool execution completes.
+     * `command.result` after tool execution completes (including authorization validation and tool call).
      */
     override suspend fun start() {
-        val localRequest = requestPayload.toLocalMcpToolCallRequest().getOrElse { mappingError ->
+        val signedRequest = requestPayload.toSignedLocalMcpToolExecutionRequest().getOrElse { mappingError ->
             emitter.emit(
                 rejectedMessage(
                     replyTo = envelope.id,
                     reasonCode = WorkerProtocolRejectionReasons.INVALID_COMMAND_PAYLOAD,
-                    message = "Unable to decode mcp.tool.call payload",
+                    message = "Unable to decode mcp.tool.call signed request payload",
                     details = mappingErrorDetails(mappingError)
                 )
             )
@@ -70,7 +70,7 @@ class McpToolCallInteraction(
         // Extension point for future interactive flows, for example awaiting explicit proceed.
         // val proceed = awaitNextMessage()
 
-        val executionResult = toolCallExecutor.execute(localRequest)
+        val executionResult = toolCallExecutor.execute(signedRequest.signedRequest)
         val resultPayload = executionResult.toWorkerCommandResultPayload()
             .getOrElse { mappingError ->
                 error("Unexpected failure encoding mcp.tool.call result payload: $mappingError")

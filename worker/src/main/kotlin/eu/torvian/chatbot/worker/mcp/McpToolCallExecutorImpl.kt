@@ -1,7 +1,8 @@
 package eu.torvian.chatbot.worker.mcp
 
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallRequest
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallResult
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolExecutionAuthorization
+import eu.torvian.chatbot.common.security.SignedRequest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
@@ -9,9 +10,10 @@ import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 
 /**
- * Default implementation that maps local MCP tool-call requests to runtime outcomes.
+ * Default implementation that maps Local MCP tool execution authorization and runtime calls to outcomes.
  *
- * This semantic mapper reuses the app-side mediator mapping logic in worker context:
+ * The executor validates the signed authorization once, then executes the tool using the decoded
+ * authorization as the single source of truth for execution parameters:
  * - malformed JSON input produces an immediate logical error result;
  * - runtime errors become logical tool-call errors;
  * - MCP error outcomes map to `isError = true` with structured details;
@@ -32,18 +34,20 @@ class McpToolCallExecutorImpl(
         private val logger: Logger = LogManager.getLogger(McpToolCallExecutorImpl::class.java)
     }
 
-    override suspend fun execute(request: LocalMCPToolCallRequest): LocalMCPToolCallResult {
-        when (val authorizationResult = authorizationValidator.validate(request)) {
-            LocalMCPToolExecutionAuthorizationValidationResult.Authorized -> Unit
+    override suspend fun execute(signedRequest: SignedRequest): LocalMCPToolCallResult {
+        when (val authorizationResult = authorizationValidator.validate(signedRequest)) {
+            is LocalMCPToolExecutionAuthorizationValidationResult.Authorized -> {
+                // Execute using the decoded authorization as source of truth
+                return executeAuthorizedToolCall(authorizationResult.authorization)
+            }
             is LocalMCPToolExecutionAuthorizationValidationResult.Rejected -> {
                 logger.warn(
-                    "Rejected Local MCP tool call authorization for toolCallId={} code={} details={}",
-                    request.toolCallId,
+                    "Rejected Local MCP tool call authorization code={} details={}",
                     authorizationResult.code,
                     authorizationResult.details ?: "none"
                 )
                 return LocalMCPToolCallResult(
-                    toolCallId = request.toolCallId,
+                    toolCallId = authorizationResult.toolCallId ?: 0,
                     isError = true,
                     errorMessage = authorizationResult.message,
                     errorCode = authorizationResult.code,
@@ -51,14 +55,26 @@ class McpToolCallExecutorImpl(
                 )
             }
         }
+    }
 
-        val arguments = request.inputJson
+    /**
+     * Executes a tool call using the decoded and verified authorization as the sole source of truth.
+     *
+     * @param auth Decoded and verified authorization from the app signature.
+     * @return Tool execution result with proper error handling.
+     */
+    private suspend fun executeAuthorizedToolCall(
+        auth: LocalMCPToolExecutionAuthorization
+    ): LocalMCPToolCallResult {
+
+        // Parse input JSON from the authorized payload
+        val arguments = auth.input
             ?.let { input ->
                 try {
                     json.parseToJsonElement(input).jsonObject
                 } catch (exception: Exception) {
                     return LocalMCPToolCallResult(
-                        toolCallId = request.toolCallId,
+                        toolCallId = auth.toolCallId,
                         isError = true,
                         errorMessage = "Malformed JSON input: ${exception.message}"
                     )
@@ -67,13 +83,13 @@ class McpToolCallExecutorImpl(
             ?: JsonObject(emptyMap())
 
         return runtimeService.callTool(
-            serverId = request.serverId,
-            toolName = request.mcpToolName,
+            serverId = auth.serverId,
+            toolName = auth.mcpToolName,
             arguments = arguments
         ).fold(
             ifLeft = { error ->
                 LocalMCPToolCallResult(
-                    toolCallId = request.toolCallId,
+                    toolCallId = auth.toolCallId,
                     isError = true,
                     errorMessage = error.message
                 )
@@ -82,7 +98,7 @@ class McpToolCallExecutorImpl(
                 when {
                     outcome?.isError == true -> {
                         LocalMCPToolCallResult(
-                            toolCallId = request.toolCallId,
+                            toolCallId = auth.toolCallId,
                             isError = true,
                             errorMessage = outcome.structuredContent ?: "Unknown error"
                         )
@@ -90,7 +106,7 @@ class McpToolCallExecutorImpl(
 
                     else -> {
                         LocalMCPToolCallResult(
-                            toolCallId = request.toolCallId,
+                            toolCallId = auth.toolCallId,
                             output = outcome?.textContent?.takeIf { it.isNotBlank() } ?: "{\"result\":\"Success\"}"
                         )
                     }

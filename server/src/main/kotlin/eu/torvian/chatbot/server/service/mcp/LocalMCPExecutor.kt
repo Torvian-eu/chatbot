@@ -1,7 +1,6 @@
 package eu.torvian.chatbot.server.service.mcp
 
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolExecutionAuthorization
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallRequest
+import eu.torvian.chatbot.common.models.api.mcp.SignedLocalMCPToolExecutionRequest
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.WorkerMcpToolCallProtocolMappingError
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolCall
@@ -16,10 +15,12 @@ import eu.torvian.chatbot.server.worker.mcp.toolcall.LocalMCPToolCallDispatchSer
  *
  * This service is responsible for:
  * - Resolving the assigned worker for the Local MCP server
- * - Encoding the shared Local MCP tool-call request
+ * - Forwarding the app-signed authorization to the worker
  * - Dispatching the worker command through the server-owned worker transport
  * - Translating worker/runtime failures into structured tool-execution errors
  *
+ * The worker validates the signed authorization and executes the tool using the decoded
+ * authorization as the single source of truth.
  */
 class LocalMCPExecutor(
     private val localMCPServerDao: LocalMCPServerDao,
@@ -28,35 +29,21 @@ class LocalMCPExecutor(
     /**
      * Executes a Local MCP tool on the worker assigned to the tool's server.
      *
-     * The request relayed to the worker intentionally contains both the actual execution command and the
-     * detached app authorization snapshot. The worker verifies that they still match before running the tool.
+     * Forwards only the signed authorization artifact to the worker, which becomes the sole source
+     * of truth for tool execution parameters. The worker verifies the signature before executing.
      *
-     * @param sessionId Session that owns the tool call.
      * @param toolDefinition The tool definition, including the owning Local MCP server ID.
      * @param toolCall Persisted tool-call record to execute.
-     * @param authorization App-approved execution authorization that should match the tool call.
-     * @param signedAuthorization Detached signature metadata for [authorization].
+     * @param signedAuthorization Detached signature metadata and payload for the signed authorization.
      * @return A single execution outcome event containing either the worker result or a structured error.
      */
     suspend fun executeTool(
-        sessionId: Long,
         toolDefinition: LocalMCPToolDefinition,
         toolCall: ToolCall,
-        authorization: LocalMCPToolExecutionAuthorization,
         signedAuthorization: SignedRequest
     ): LocalMCPExecutorEvent {
-        val request = LocalMCPToolCallRequest(
-            toolCallId = toolCall.id,
-            sessionId = sessionId,
-            messageId = toolCall.messageId,
-            toolDefinitionId = toolDefinition.id,
-            toolName = toolCall.toolName,
-            serverId = toolDefinition.serverId,
-            mcpToolName = toolDefinition.mcpToolName,
-            inputJson = toolCall.input,
-            approved = authorization.approved,
-            denialReason = authorization.denialReason,
-            signedAuthorization = signedAuthorization
+        val request = SignedLocalMCPToolExecutionRequest(
+            signedRequest = signedAuthorization
         )
 
         val workerId = localMCPServerDao.getServerById(toolDefinition.serverId).fold(

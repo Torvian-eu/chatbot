@@ -2,7 +2,6 @@ package eu.torvian.chatbot.worker.mcp
 
 import arrow.core.left
 import arrow.core.right
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallRequest
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolExecutionAuthorization
 import eu.torvian.chatbot.common.security.SignedRequest
 import eu.torvian.chatbot.worker.service.security.VerificationError
@@ -22,65 +21,48 @@ class DefaultLocalMCPToolExecutionAuthorizationValidatorTest {
     private val json = Json { ignoreUnknownKeys = true }
 
     /**
-     * Verifies that a valid signed authorization matching the relayed request is accepted.
+     * Verifies that a valid signed authorization is decoded and returned as Authorized.
      */
     @Test
-    fun `validate returns authorized when signed payload matches request`() = runTest {
-        val request = buildRequest()
+    fun `validate returns authorized with decoded authorization when signature is valid`() = runTest {
+        val authorization = buildAuthorization()
+        val signedRequest = signedRequest(authorization)
         val validator = DefaultLocalMCPToolExecutionAuthorizationValidator(
             json = json,
             verificationService = StaticVerificationService(emptyList<String>().right())
         )
 
-        val result = validator.validate(request)
+        val result = validator.validate(signedRequest)
 
-        assertEquals(LocalMCPToolExecutionAuthorizationValidationResult.Authorized, result)
-    }
-
-    /**
-     * Verifies that mismatched request fields are rejected with explicit diagnostics.
-     */
-    @Test
-    fun `validate rejects request mismatch`() = runTest {
-        val request = buildRequest(inputJson = "{\"query\":\"changed\"}")
-        val validator = DefaultLocalMCPToolExecutionAuthorizationValidator(
-            json = json,
-            verificationService = StaticVerificationService(emptyList<String>().right())
-        )
-
-        val result = validator.validate(request)
-
-        val rejection = assertIs<LocalMCPToolExecutionAuthorizationValidationResult.RequestMismatch>(result)
-        assertEquals(listOf("input"), rejection.mismatchedFields)
+        val authorized = assertIs<LocalMCPToolExecutionAuthorizationValidationResult.Authorized>(result)
+        assertEquals(authorization, authorized.authorization)
     }
 
     /**
      * Verifies that denied signed authorizations are rejected even when the signature is otherwise valid.
      */
     @Test
-    fun `validate rejects denied authorization`() = runTest {
+    fun `validate rejects denied authorization with toolCallId from payload`() = runTest {
         val deniedAuthorization = buildAuthorization(approved = false, denialReason = "User denied")
-        val request = buildRequest(
-            approved = false,
-            denialReason = "User denied",
-            signedAuthorization = signedRequest(deniedAuthorization)
-        )
+        val signedRequest = signedRequest(deniedAuthorization)
         val validator = DefaultLocalMCPToolExecutionAuthorizationValidator(
             json = json,
             verificationService = StaticVerificationService(emptyList<String>().right())
         )
 
-        val result = validator.validate(request)
+        val result = validator.validate(signedRequest)
 
         val rejection = assertIs<LocalMCPToolExecutionAuthorizationValidationResult.Denied>(result)
         assertEquals("User denied", rejection.denialReason)
+        assertEquals(deniedAuthorization.toolCallId, rejection.toolCallId)
     }
 
     /**
-     * Verifies that verification failures are mapped to worker-facing authorization rejections.
+     * Verifies that verification failures are mapped to worker-facing authorization rejections with tool call ID.
      */
     @Test
-    fun `validate rejects unknown signer`() = runTest {
+    fun `validate rejects unknown signer with toolCallId from payload`() = runTest {
+        val authorization = buildAuthorization()
         val validator = DefaultLocalMCPToolExecutionAuthorizationValidator(
             json = json,
             verificationService = StaticVerificationService(
@@ -88,10 +70,53 @@ class DefaultLocalMCPToolExecutionAuthorizationValidatorTest {
             )
         )
 
-        val result = validator.validate(buildRequest())
+        val result = validator.validate(signedRequest(authorization))
 
         val rejection = assertIs<LocalMCPToolExecutionAuthorizationValidationResult.UnknownSigner>(result)
         assertEquals("device-9", rejection.signerId)
+        assertEquals(authorization.toolCallId, rejection.toolCallId)
+    }
+
+    /**
+     * Verifies that expired authorizations are rejected with tool call ID from payload.
+     */
+    @Test
+    fun `validate rejects expired authorization with toolCallId from payload`() = runTest {
+        val authorization = buildAuthorization()
+        val validator = DefaultLocalMCPToolExecutionAuthorizationValidator(
+            json = json,
+            verificationService = StaticVerificationService(
+                VerificationError.Expired(timestamp = 1_700_000_000_000, ageSeconds = 120).left()
+            )
+        )
+
+        val result = validator.validate(signedRequest(authorization))
+
+        val rejection = assertIs<LocalMCPToolExecutionAuthorizationValidationResult.ExpiredAuthorization>(result)
+        assertEquals(authorization.toolCallId, rejection.toolCallId)
+    }
+
+    /**
+     * Verifies that malformed payloads result in null toolCallId.
+     */
+    @Test
+    fun `validate rejects malformed payload with null toolCallId`() = runTest {
+        val validator = DefaultLocalMCPToolExecutionAuthorizationValidator(
+            json = json,
+            verificationService = StaticVerificationService(emptyList<String>().right())
+        )
+        val malformedRequest = SignedRequest(
+            payload = "{not-valid-json",
+            signature = "signature",
+            signerId = "device-1",
+            timestamp = 1_700_000_000_000,
+            nonce = "nonce-1"
+        )
+
+        val result = validator.validate(malformedRequest)
+
+        val rejection = assertIs<LocalMCPToolExecutionAuthorizationValidationResult.MalformedSignedPayload>(result)
+        assertEquals(null, rejection.toolCallId)
     }
 
     /**
@@ -116,37 +141,7 @@ class DefaultLocalMCPToolExecutionAuthorizationValidatorTest {
     }
 
     /**
-     * Builds a worker request fixture aligned with [buildAuthorization] by default.
-     *
-     * @param inputJson Exact JSON argument string to relay to the worker.
-     * @param approved Approval flag relayed with the request.
-     * @param denialReason Optional denial reason relayed with the request.
-     * @param signedAuthorization Detached signed authorization to attach to the request.
-     * @return Local MCP worker request fixture.
-     */
-    private fun buildRequest(
-        inputJson: String? = "{\"query\":\"ktor\"}",
-        approved: Boolean = true,
-        denialReason: String? = null,
-        signedAuthorization: SignedRequest = signedRequest(buildAuthorization())
-    ): LocalMCPToolCallRequest {
-        return LocalMCPToolCallRequest(
-            toolCallId = 123,
-            sessionId = 1,
-            messageId = 2,
-            toolDefinitionId = 3,
-            toolName = "searchDocs",
-            serverId = 10,
-            mcpToolName = "search_docs",
-            inputJson = inputJson,
-            approved = approved,
-            denialReason = denialReason,
-            signedAuthorization = signedAuthorization
-        )
-    }
-
-    /**
-     * Builds the signed authorization payload that the worker should compare against the relayed request.
+     * Builds the signed authorization payload for the worker to validate and execute.
      *
      * @param approved Whether the authorization approves execution.
      * @param denialReason Optional denial reason to include in the payload.

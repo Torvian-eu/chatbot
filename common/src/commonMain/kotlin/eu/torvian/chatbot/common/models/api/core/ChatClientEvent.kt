@@ -36,15 +36,15 @@ sealed interface ChatClientEvent {
     /**
      * An event sent by the client to authorize one Local MCP tool call with an app-generated detached signature.
      *
-     * The signed payload must match [authorization] exactly so downstream worker verification can bind the
-     * approval decision to the relayed execution command.
+     * The signed [SignedRequest.payload] contains the exact serialized JSON of [LocalMCPToolExecutionAuthorization],
+     * which the server relays to the worker. The worker verifies the signature and decodes the authorization
+     * from [signedRequest].payload as the sole source of truth for execution parameters.
      *
-     * @property authorization Exact Local MCP execution authorization payload approved by the app.
-     * @property signedRequest Detached signature metadata for [authorization].
+     * @property signedRequest Detached signature metadata and the exact Local MCP execution authorization payload
+     *   (serialized as [LocalMCPToolExecutionAuthorization] JSON) signed by the app.
      */
     @Serializable
     data class LocalMcpToolCallApproval(
-        val authorization: LocalMCPToolExecutionAuthorization,
         val signedRequest: SignedRequest
     ) : ChatClientEvent
 }

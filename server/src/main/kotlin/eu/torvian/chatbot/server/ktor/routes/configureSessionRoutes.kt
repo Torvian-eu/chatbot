@@ -275,7 +275,6 @@ fun Route.configureSessionRoutes(
                         .filterIsInstance<ChatClientEvent.LocalMcpToolCallApproval>()
                         .map { event ->
                             ToolCallApprovalSubmission.LocalMcpSigned(
-                                authorization = event.authorization,
                                 signedRequest = event.signedRequest
                             )
                         }
