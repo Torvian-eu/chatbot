@@ -15,7 +15,7 @@ import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.ktor.mappers.toChatEvent
 import eu.torvian.chatbot.server.ktor.mappers.toChatStreamEvent
 import eu.torvian.chatbot.server.service.core.*
-import eu.torvian.chatbot.server.service.core.ToolCallApprovalSubmission
+import eu.torvian.chatbot.server.service.core.toolcall.ToolCallApprovalSubmission
 import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageError
 import eu.torvian.chatbot.server.service.core.error.message.toApiError
 import eu.torvian.chatbot.server.service.core.error.session.*

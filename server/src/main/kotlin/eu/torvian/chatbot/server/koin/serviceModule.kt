@@ -7,6 +7,8 @@ import eu.torvian.chatbot.common.security.PasswordValidator
 import eu.torvian.chatbot.server.config.AppConfiguration
 import eu.torvian.chatbot.server.service.core.*
 import eu.torvian.chatbot.server.service.core.impl.*
+import eu.torvian.chatbot.server.service.core.toolcall.DefaultToolCallOrchestrator
+import eu.torvian.chatbot.server.service.core.toolcall.ToolCallOrchestrator
 import eu.torvian.chatbot.server.service.email.LoggingMailService
 import eu.torvian.chatbot.server.service.email.MailService
 import eu.torvian.chatbot.server.service.email.SmtpMailService
@@ -46,10 +48,9 @@ fun serviceModule() = module {
     single<ModelSettingsService> { ModelSettingsServiceImpl(get(), get(), get(), get(), get(), get(), get()) }
     single<LLMProviderService> { LLMProviderServiceImpl(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     single<MessageService> { MessageServiceImpl(get(), get(), get()) }
+    single<ToolCallOrchestrator> { DefaultToolCallOrchestrator(get(), get(), get(), get(), get()) }
     single<ChatService> {
         ChatServiceImpl(
-            get(),
-            get(),
             get(),
             get(),
             get(),

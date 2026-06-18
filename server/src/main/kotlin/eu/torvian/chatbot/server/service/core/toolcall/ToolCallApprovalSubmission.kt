@@ -1,4 +1,4 @@
-package eu.torvian.chatbot.server.service.core
+package eu.torvian.chatbot.server.service.core.toolcall
 
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolExecutionAuthorization
 import eu.torvian.chatbot.common.models.api.tool.ToolCallApprovalResponse

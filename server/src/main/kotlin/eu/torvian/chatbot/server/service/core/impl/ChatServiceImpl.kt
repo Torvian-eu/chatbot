@@ -8,20 +8,17 @@ import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import arrow.core.right
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
-import eu.torvian.chatbot.common.models.api.tool.ToolCallApprovalResponse
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.llm.*
-import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
 import eu.torvian.chatbot.server.data.dao.ToolCallDao
-import eu.torvian.chatbot.server.data.dao.UserToolApprovalPreferenceDao
 import eu.torvian.chatbot.server.data.dao.error.MessageError
 import eu.torvian.chatbot.server.data.dao.error.SessionError
 import eu.torvian.chatbot.server.service.core.*
@@ -30,19 +27,16 @@ import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageEr
 import eu.torvian.chatbot.server.service.core.error.model.GetModelError
 import eu.torvian.chatbot.server.service.core.error.provider.GetProviderError
 import eu.torvian.chatbot.server.service.core.error.settings.GetSettingsByIdError
+import eu.torvian.chatbot.server.service.core.toolcall.ToolCallApprovalSubmission
+import eu.torvian.chatbot.server.service.core.toolcall.ToolCallExecutionEvent
+import eu.torvian.chatbot.server.service.core.toolcall.ToolCallOrchestrator
 import eu.torvian.chatbot.server.service.llm.*
-import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutor
-import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutorEvent
 import eu.torvian.chatbot.server.service.security.CredentialManager
 import eu.torvian.chatbot.server.service.security.error.CredentialError
-import eu.torvian.chatbot.server.service.tool.ToolExecutorFactory
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.buildJsonObject
@@ -52,7 +46,6 @@ import org.apache.logging.log4j.Logger
 import java.util.*
 import java.util.concurrent.CancellationException
 import kotlin.time.Clock
-import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 /**
@@ -64,15 +57,13 @@ class ChatServiceImpl(
     private val sessionDao: SessionDao,
     private val llmApiClient: LLMApiClient,
     private val toolCallDao: ToolCallDao,
-    private val toolExecutorFactory: ToolExecutorFactory,
+    private val toolCallOrchestrator: ToolCallOrchestrator,
     private val toolService: ToolService,
     private val llmModelService: LLMModelService,
     private val modelSettingsService: ModelSettingsService,
     private val llmProviderService: LLMProviderService,
     private val credentialManager: CredentialManager,
     private val transactionScope: TransactionScope,
-    private val localMcpExecutor: LocalMCPExecutor,
-    private val userToolApprovalPreferenceDao: UserToolApprovalPreferenceDao,
 ) : ChatService {
 
     companion object {
@@ -307,7 +298,7 @@ class ChatServiceImpl(
                 // Execute tools and update database (emits events as tools complete)
                 // Only execute the valid, pending tool calls
                 val completedToolCalls = mutableListOf<ToolCall>()
-                executeAndUpdateToolCalls(
+                toolCallOrchestrator.executeAndUpdateToolCalls(
                     userId,
                     pendingToolCalls,
                     llmConfig.tools,
@@ -315,17 +306,16 @@ class ChatServiceImpl(
                 )
                     .collect { event ->
                         when (event) {
-                            is ToolExecutionEvent.ToolCallExecuting -> {
+                            is ToolCallExecutionEvent.ToolCallExecuting -> {
                                 send(MessageEvent.ToolCallExecuting(event.toolCall).right())
                             }
 
-                            is ToolExecutionEvent.ToolCallCompleted -> {
+                            is ToolCallExecutionEvent.ToolCallCompleted -> {
                                 completedToolCalls.add(event.toolCall)
                                 send(MessageEvent.ToolExecutionCompleted(event.toolCall).right())
                             }
 
-
-                            is ToolExecutionEvent.ToolCallApprovalRequested -> {
+                            is ToolCallExecutionEvent.ToolCallApprovalRequested -> {
                                 send(MessageEvent.ToolCallApprovalRequested(event.toolCall).right())
                             }
                         }
@@ -484,7 +474,7 @@ class ChatServiceImpl(
                         // Execute tools and update database (emits events as tools complete)
                         // Only execute the valid, pending tool calls
                         val completedToolCalls = mutableListOf<ToolCall>()
-                        executeAndUpdateToolCalls(
+                        toolCallOrchestrator.executeAndUpdateToolCalls(
                             userId,
                             pendingToolCalls,
                             llmConfig.tools,
@@ -492,17 +482,16 @@ class ChatServiceImpl(
                         )
                             .collect { event ->
                                 when (event) {
-                                    is ToolExecutionEvent.ToolCallExecuting -> {
+                                    is ToolCallExecutionEvent.ToolCallExecuting -> {
                                         send(MessageStreamEvent.ToolCallExecuting(event.toolCall).right())
                                     }
 
-                                    is ToolExecutionEvent.ToolCallCompleted -> {
+                                    is ToolCallExecutionEvent.ToolCallCompleted -> {
                                         completedToolCalls.add(event.toolCall)
                                         send(MessageStreamEvent.ToolExecutionCompleted(event.toolCall).right())
                                     }
 
-
-                                    is ToolExecutionEvent.ToolCallApprovalRequested -> {
+                                    is ToolCallExecutionEvent.ToolCallApprovalRequested -> {
                                         send(MessageStreamEvent.ToolCallApprovalRequested(event.toolCall).right())
                                     }
                                 }
@@ -562,228 +551,7 @@ class ChatServiceImpl(
         }
     }
 
-    /**
-     * Executes tool calls sequentially and updates them in the database.
-     * Returns a Flow that emits execution-state transitions and completion records.
-     *
-     * Non-Local-MCP tools may still use server-side auto-approval preferences, while Local MCP tools always
-     * round-trip through the app so the worker receives a fresh detached authorization for each execution.
-     *
-     * @param userId User whose non-Local-MCP approval preferences may be consulted.
-     * @param pendingToolCalls Pending tool calls to process sequentially.
-     * @param toolDefinitions Enabled tool definitions available to the current LLM turn.
-     * @param toolApprovalFlow Normalized client approval submissions emitted by the chat WebSocket.
-     * @return Flow of tool execution lifecycle events for persistence and client updates.
-     */
-    private fun executeAndUpdateToolCalls(
-        userId: Long,
-        pendingToolCalls: List<ToolCall>,
-        toolDefinitions: List<ToolDefinition>?,
-        toolApprovalFlow: Flow<ToolCallApprovalSubmission>
-    ): Flow<ToolExecutionEvent> = channelFlow {
-        pendingToolCalls.forEach { pendingToolCall ->
-            if (pendingToolCall.status != ToolCallStatus.PENDING) {
-                send(ToolExecutionEvent.ToolCallCompleted(pendingToolCall))
-                return@forEach // Skip to next tool call
-            }
 
-            // Find tool definition
-            val toolDef = toolDefinitions?.find { it.id == pendingToolCall.toolDefinitionId }
-                ?: throw IllegalStateException("Tool definition ${pendingToolCall.toolDefinitionId} not found for pending tool call")
-
-            val approvalResponse = when (toolDef) {
-                is LocalMCPToolDefinition -> {
-                    // Local MCP tool calls must always round-trip through the app so each execution carries
-                    // a fresh detached authorization that the worker can verify independently of the server.
-                    val awaitingApprovalToolCall = pendingToolCall.copy(status = ToolCallStatus.AWAITING_APPROVAL)
-                    toolCallDao.updateToolCall(awaitingApprovalToolCall).getOrElse { error ->
-                        throw IllegalStateException("Failed to update tool call to AWAITING_APPROVAL: $error")
-                    }
-                    send(ToolExecutionEvent.ToolCallApprovalRequested(awaitingApprovalToolCall))
-
-                    try {
-                        withTimeout(300.seconds) {
-                            toolApprovalFlow.first { submission ->
-                                submission.toolCallId == pendingToolCall.id &&
-                                        submission is ToolCallApprovalSubmission.LocalMcpSigned
-                            }
-                        }
-                    } catch (_: TimeoutCancellationException) {
-                        val deniedToolCall = pendingToolCall.copy(
-                            status = ToolCallStatus.USER_DENIED,
-                            denialReason = "Approval timeout (no response within 5 minutes)"
-                        )
-                        toolCallDao.updateToolCall(deniedToolCall).getOrElse { error ->
-                            throw IllegalStateException("Failed to update tool call after timeout: $error")
-                        }
-                        send(ToolExecutionEvent.ToolCallCompleted(deniedToolCall))
-                        return@forEach
-                    }
-                }
-
-                else -> {
-                    val preference = toolDef.id.let { toolDefId ->
-                        transactionScope.transaction {
-                            userToolApprovalPreferenceDao.getPreference(userId, toolDefId).getOrNull()
-                        }
-                    }
-
-                    if (preference != null) {
-                        logger.info(
-                            "Auto-${if (preference.autoApprove) "approving" else "denying"} tool call ${pendingToolCall.id} for user $userId based on preference"
-                        )
-
-                        if (!preference.autoApprove) {
-                            val deniedToolCall = pendingToolCall.copy(
-                                status = ToolCallStatus.USER_DENIED,
-                                denialReason = preference.denialReason ?: "Auto-denied by user preference"
-                            )
-                            toolCallDao.updateToolCall(deniedToolCall).getOrElse { error ->
-                                throw IllegalStateException("Failed to update auto-denied tool call: $error")
-                            }
-                            send(ToolExecutionEvent.ToolCallCompleted(deniedToolCall))
-                            return@forEach
-                        }
-
-                        ToolCallApprovalSubmission.Standard(
-                            ToolCallApprovalResponse(
-                                toolCallId = pendingToolCall.id,
-                                approved = true,
-                                denialReason = null
-                            )
-                        )
-                    } else {
-                        val awaitingApprovalToolCall = pendingToolCall.copy(status = ToolCallStatus.AWAITING_APPROVAL)
-                        toolCallDao.updateToolCall(awaitingApprovalToolCall).getOrElse { error ->
-                            throw IllegalStateException("Failed to update tool call to AWAITING_APPROVAL: $error")
-                        }
-                        send(ToolExecutionEvent.ToolCallApprovalRequested(awaitingApprovalToolCall))
-
-                        try {
-                            withTimeout(300.seconds) {
-                                toolApprovalFlow.first { submission ->
-                                    submission.toolCallId == pendingToolCall.id &&
-                                            submission is ToolCallApprovalSubmission.Standard
-                                }
-                            }
-                        } catch (_: TimeoutCancellationException) {
-                            val deniedToolCall = pendingToolCall.copy(
-                                status = ToolCallStatus.USER_DENIED,
-                                denialReason = "Approval timeout (no response within 5 minutes)"
-                            )
-                            toolCallDao.updateToolCall(deniedToolCall).getOrElse { error ->
-                                throw IllegalStateException("Failed to update tool call after timeout: $error")
-                            }
-                            send(ToolExecutionEvent.ToolCallCompleted(deniedToolCall))
-                            return@forEach
-                        }
-                    }
-                }
-            }
-
-            // Step 2: Handle approval decision
-            if (!approvalResponse.approved) {
-                // User denied - update status and skip execution
-                val deniedToolCall = pendingToolCall.copy(
-                    status = ToolCallStatus.USER_DENIED,
-                    denialReason = approvalResponse.denialReason
-                )
-                toolCallDao.updateToolCall(deniedToolCall).getOrElse { error ->
-                    throw IllegalStateException("Failed to update denied tool call: $error")
-                }
-                send(ToolExecutionEvent.ToolCallCompleted(deniedToolCall))
-                return@forEach
-            }
-
-            // Tool approved - update to EXECUTING and proceed with execution
-            val executingToolCall = pendingToolCall.copy(status = ToolCallStatus.EXECUTING)
-            toolCallDao.updateToolCall(executingToolCall).getOrElse { error ->
-                throw IllegalStateException("Failed to update tool call to EXECUTING: $error")
-            }
-            send(ToolExecutionEvent.ToolCallExecuting(executingToolCall))
-
-            when (toolDef) {
-                is LocalMCPToolDefinition -> {
-                    val localApproval = approvalResponse as? ToolCallApprovalSubmission.LocalMcpSigned
-                        ?: throw IllegalStateException(
-                            "Local MCP tool call ${pendingToolCall.id} did not receive a signed Local MCP approval submission"
-                        )
-                    val startTime = Clock.System.now()
-                    when (val event = localMcpExecutor.executeTool(
-                        toolDefinition = toolDef,
-                        toolCall = pendingToolCall,
-                        signedAuthorization = localApproval.signedRequest
-                    )) {
-                        is LocalMCPExecutorEvent.ToolExecutionResult -> {
-                            val durationMs = (Clock.System.now() - startTime).inWholeMilliseconds
-                            val updatedToolCall = pendingToolCall.copy(
-                                output = event.result.output,
-                                status = if (event.result.isError) ToolCallStatus.ERROR else ToolCallStatus.SUCCESS,
-                                errorMessage = event.result.errorMessage,
-                                durationMs = durationMs
-                            )
-                            toolCallDao.updateToolCall(updatedToolCall).getOrElse { error ->
-                                throw IllegalStateException("Failed to update tool call: $error")
-                            }
-                            send(ToolExecutionEvent.ToolCallCompleted(updatedToolCall))
-                        }
-
-                        is LocalMCPExecutorEvent.ToolExecutionError -> {
-                            val durationMs = (Clock.System.now() - startTime).inWholeMilliseconds
-                            val updatedToolCall = pendingToolCall.copy(
-                                status = ToolCallStatus.ERROR,
-                                errorMessage = event.error.message,
-                                durationMs = durationMs
-                            )
-                            toolCallDao.updateToolCall(updatedToolCall).getOrElse { error ->
-                                throw IllegalStateException("Failed to update tool call: $error")
-                            }
-                            send(ToolExecutionEvent.ToolCallCompleted(updatedToolCall))
-                        }
-                    }
-                }
-
-                else -> { // Non-MCP tool
-                    val startTime = Clock.System.now()
-                    // Get executor for this tool type
-                    val executor = toolExecutorFactory.getExecutor(toolDef.type).getOrElse { error ->
-                        throw IllegalStateException("Failed to get executor for tool type ${toolDef.type}: $error")
-                    }
-
-                    // Execute the tool
-                    val result = executor.executeTool(toolDef, pendingToolCall.input)
-                    val endTime = Clock.System.now()
-                    val durationMs = (endTime - startTime).inWholeMilliseconds
-
-                    // Create updated tool call from result
-                    val updatedToolCall = result.fold(
-                        ifLeft = { error ->
-                            pendingToolCall.copy(
-                                status = ToolCallStatus.ERROR,
-                                errorMessage = error.toString(),
-                                durationMs = durationMs
-                            )
-                        },
-                        ifRight = { output ->
-                            pendingToolCall.copy(
-                                output = output,
-                                status = ToolCallStatus.SUCCESS,
-                                durationMs = durationMs
-                            )
-                        }
-                    )
-
-                    // Update in database
-                    toolCallDao.updateToolCall(updatedToolCall).getOrElse { error ->
-                        throw IllegalStateException("Failed to update tool call: $error")
-                    }
-
-                    // Emit the completed tool call
-                    send(ToolExecutionEvent.ToolCallCompleted(updatedToolCall))
-                }
-            }
-        }
-    }
 
     /**
      * Builds the conversation context for an LLM request.
@@ -1135,15 +903,7 @@ class ChatServiceImpl(
         val arguments: StringBuilder
     )
 
-    /**
-     * Private sealed interface to represent events from the tool execution logic.
-     * This allows `executeAndUpdateToolCalls` to communicate execution transitions and completion outcomes.
-     */
-    private sealed interface ToolExecutionEvent {
-        data class ToolCallExecuting(val toolCall: ToolCall) : ToolExecutionEvent
-        data class ToolCallCompleted(val toolCall: ToolCall) : ToolExecutionEvent
-        data class ToolCallApprovalRequested(val toolCall: ToolCall) : ToolExecutionEvent
-    }
+
 
     /**
      * Builds the content for a tool result message based on the tool call status and output.

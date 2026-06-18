@@ -11,18 +11,16 @@ import eu.torvian.chatbot.common.models.llm.*
 import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
 import eu.torvian.chatbot.server.data.dao.ToolCallDao
-import eu.torvian.chatbot.server.data.dao.UserToolApprovalPreferenceDao
 import eu.torvian.chatbot.server.data.dao.error.MessageError
 import eu.torvian.chatbot.server.data.dao.error.SessionError
 import eu.torvian.chatbot.server.service.core.*
 import eu.torvian.chatbot.server.service.core.error.message.ProcessNewMessageError
 import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageError
+import eu.torvian.chatbot.server.service.core.toolcall.ToolCallOrchestrator
 import eu.torvian.chatbot.server.service.llm.LLMApiClient
 import eu.torvian.chatbot.server.service.llm.LLMCompletionError
 import eu.torvian.chatbot.server.service.llm.LLMCompletionResult
-import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutor
 import eu.torvian.chatbot.server.service.security.CredentialManager
-import eu.torvian.chatbot.server.service.tool.ToolExecutorFactory
 import io.mockk.clearMocks
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -57,10 +55,8 @@ class ChatServiceImplTest {
     private lateinit var credentialManager: CredentialManager
     private lateinit var toolService: ToolService
     private lateinit var toolCallDao: ToolCallDao
-    private lateinit var toolExecutorFactory: ToolExecutorFactory
     private lateinit var transactionScope: TransactionScope
-    private lateinit var localMcpExecutor: LocalMCPExecutor
-    private lateinit var userToolApprovalPreferenceDao: UserToolApprovalPreferenceDao
+    private lateinit var toolCallOrchestrator: ToolCallOrchestrator
 
     // Class under test
     private lateinit var chatService: ChatServiceImpl
@@ -171,21 +167,18 @@ class ChatServiceImplTest {
         credentialManager = mockk()
         toolService = mockk()
         toolCallDao = mockk()
-        toolExecutorFactory = mockk()
         transactionScope = mockk()
-        localMcpExecutor = mockk()
-        userToolApprovalPreferenceDao = mockk()
+        toolCallOrchestrator = mockk()
 
         // Create the service instance with mocked dependencies
         chatService = ChatServiceImpl(
-            messageDao, sessionDao, llmApiClient, toolCallDao, toolExecutorFactory, toolService, llmModelService,
-            modelSettingsService, llmProviderService, credentialManager, transactionScope, localMcpExecutor,
-            userToolApprovalPreferenceDao
+            messageDao, sessionDao, llmApiClient, toolCallDao, toolCallOrchestrator, toolService, llmModelService,
+            modelSettingsService, llmProviderService, credentialManager, transactionScope
         )
 
-        // Mock the transaction scope to execute blocks directly
-        coEvery { transactionScope.transaction(any<suspend () -> Any>()) } coAnswers {
-            val block = firstArg<suspend () -> Any>()
+        // Mock the transaction scope to execute blocks directly.
+        coEvery { transactionScope.transaction(any<suspend () -> Any?>()) } coAnswers {
+            val block = firstArg<suspend () -> Any?>()
             block()
         }
     }
@@ -196,8 +189,7 @@ class ChatServiceImplTest {
         clearMocks(
             messageDao, sessionDao, llmModelService, modelSettingsService,
             llmProviderService, llmApiClient, credentialManager, toolService,
-            toolCallDao, toolExecutorFactory, transactionScope, localMcpExecutor,
-            userToolApprovalPreferenceDao
+            toolCallDao, transactionScope, toolCallOrchestrator
         )
     }
 
@@ -620,4 +612,6 @@ class ChatServiceImplTest {
 
         coVerify(exactly = 1) { llmApiClient.completeChat(any(), any(), any(), any(), any(), any()) }
     }
+
+
 }
