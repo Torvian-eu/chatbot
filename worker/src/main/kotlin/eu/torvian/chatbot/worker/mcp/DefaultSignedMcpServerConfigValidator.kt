@@ -6,20 +6,17 @@ import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.UpdateLocalMCPServerRequest
 import eu.torvian.chatbot.common.security.SignedRequest
+import eu.torvian.chatbot.common.security.decodePayloadOrNull
 import eu.torvian.chatbot.worker.service.security.VerificationError
 import eu.torvian.chatbot.worker.service.security.VerificationOptions
 import eu.torvian.chatbot.worker.service.security.VerificationService
-import kotlinx.serialization.SerializationException
-import kotlinx.serialization.json.Json
 
 /**
  * Default implementation of [SignedMcpServerConfigValidator].
  *
- * @property json JSON codec used to deserialize the exact signed payload string without rewriting it.
  * @property verificationService Worker trust-store verifier used for detached signature validation.
  */
 class DefaultSignedMcpServerConfigValidator(
-    private val json: Json,
     private val verificationService: VerificationService
 ) : SignedMcpServerConfigValidator {
     override suspend fun validate(
@@ -63,44 +60,28 @@ class DefaultSignedMcpServerConfigValidator(
      * @return Normalized request-derived fields, or `null` when the payload is not a supported MCP request.
      */
     private fun decodeSignedPayload(signedRequest: SignedRequest): NormalizedSignedMcpServerPayload? {
-        decodeCreatePayload(signedRequest.payload)?.let { return it }
-        decodeUpdatePayload(signedRequest.payload)?.let { return it }
+        decodeCreatePayload(signedRequest)?.let { return it }
+        decodeUpdatePayload(signedRequest)?.let { return it }
         return null
     }
 
     /**
      * Attempts to decode the signed payload as a create request.
      *
-     * @param payload Exact serialized JSON body that was signed by the client.
+     * @param signedRequest Detached signed request whose payload should match a create request.
      * @return Normalized fields when decoding succeeds, or `null` on unsupported payload shape.
      */
-    private fun decodeCreatePayload(payload: String): NormalizedSignedMcpServerPayload? =
-        decodePayloadOrNull<CreateLocalMCPServerRequest>(payload)?.toNormalizedSignedPayload()
+    private fun decodeCreatePayload(signedRequest: SignedRequest): NormalizedSignedMcpServerPayload? =
+        signedRequest.decodePayloadOrNull<CreateLocalMCPServerRequest>()?.toNormalizedSignedPayload()
 
     /**
      * Attempts to decode the signed payload as an update request.
      *
-     * @param payload Exact serialized JSON body that was signed by the client.
+     * @param signedRequest Detached signed request whose payload should match an update request.
      * @return Normalized fields when decoding succeeds, or `null` on unsupported payload shape.
      */
-    private fun decodeUpdatePayload(payload: String): NormalizedSignedMcpServerPayload? =
-        decodePayloadOrNull<UpdateLocalMCPServerRequest>(payload)?.toNormalizedSignedPayload()
-
-    /**
-     * Decodes one supported signed payload type while suppressing malformed or unsupported JSON failures.
-     *
-     * @param payload Exact serialized JSON body that was signed by the client.
-     * @return Decoded payload instance, or `null` when the payload is not compatible with [T].
-     */
-    private inline fun <reified T> decodePayloadOrNull(payload: String): T? {
-        return try {
-            json.decodeFromString<T>(payload)
-        } catch (_: SerializationException) {
-            null
-        } catch (_: IllegalArgumentException) {
-            null
-        }
-    }
+    private fun decodeUpdatePayload(signedRequest: SignedRequest): NormalizedSignedMcpServerPayload? =
+        signedRequest.decodePayloadOrNull<UpdateLocalMCPServerRequest>()?.toNormalizedSignedPayload()
 }
 
 /**

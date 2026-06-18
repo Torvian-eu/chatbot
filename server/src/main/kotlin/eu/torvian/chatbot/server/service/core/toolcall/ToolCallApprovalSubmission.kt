@@ -3,8 +3,8 @@ package eu.torvian.chatbot.server.service.core.toolcall
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolExecutionAuthorization
 import eu.torvian.chatbot.common.models.api.tool.ToolCallApprovalResponse
 import eu.torvian.chatbot.common.security.SignedRequest
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.SerializationException
+import eu.torvian.chatbot.common.security.SignedRequestPayloadDecodingResult
+import eu.torvian.chatbot.common.security.decodePayload
 
 /**
  * Normalized approval submissions received from the chat WebSocket client.
@@ -50,7 +50,8 @@ sealed interface ToolCallApprovalSubmission {
     data class LocalMcpSigned(
         val signedRequest: SignedRequest
     ) : ToolCallApprovalSubmission {
-        private val decodedMetadata by lazy { decodeAuthorizationMetadata(signedRequest.payload) }
+        /** Cached authorization metadata derived from the shared signed-payload decoder. */
+        private val decodedMetadata by lazy { decodeAuthorizationMetadata(signedRequest) }
 
         override val toolCallId: Long
             get() = decodedMetadata.toolCallId
@@ -75,39 +76,43 @@ sealed interface ToolCallApprovalSubmission {
         )
 
         companion object {
-            private val json = Json { ignoreUnknownKeys = true }
-
             /**
-             * Decodes authorization metadata from the signed payload string.
+             * Decodes authorization metadata from the signed payload carried by one detached request.
              *
              * Attempts to extract [toolCallId], [approved], and [denialReason] from the
              * exact JSON payload that was signed by the app.
              *
-             * @param payload Exact serialized authorization JSON string.
-             * @return Decoded metadata, or a safe default if payload is malformed.
+             * @param signedRequest Detached signed request carrying the exact serialized authorization payload.
+             * @return Decoded metadata, or a safe default if payload is malformed or incompatible.
              */
-            private fun decodeAuthorizationMetadata(payload: String): AuthorizationMetadata {
-                return try {
-                    val auth = json.decodeFromString<LocalMCPToolExecutionAuthorization>(payload)
-                    AuthorizationMetadata(
-                        toolCallId = auth.toolCallId,
-                        approved = auth.approved,
-                        denialReason = auth.denialReason
-                    )
-                } catch (_: SerializationException) {
-                    // Payload could not be decoded; return a safe default that will likely
-                    // not match any real tool call ID. The actual validation happens on the worker.
-                    AuthorizationMetadata(
-                        toolCallId = -1L,
-                        approved = false,
-                        denialReason = "Failed to decode signed authorization metadata"
-                    )
-                } catch (_: IllegalArgumentException) {
-                    AuthorizationMetadata(
-                        toolCallId = -1L,
-                        approved = false,
-                        denialReason = "Invalid signed authorization metadata"
-                    )
+            private fun decodeAuthorizationMetadata(signedRequest: SignedRequest): AuthorizationMetadata {
+                return when (val decodingResult = signedRequest.decodePayload<LocalMCPToolExecutionAuthorization>()) {
+                    is SignedRequestPayloadDecodingResult.Decoded -> {
+                        val auth = decodingResult.value
+                        AuthorizationMetadata(
+                            toolCallId = auth.toolCallId,
+                            approved = auth.approved,
+                            denialReason = auth.denialReason
+                        )
+                    }
+
+                    // Payload could not be decoded; return a safe default that will likely not
+                    // match any real tool call ID. The actual validation happens on the worker.
+                    SignedRequestPayloadDecodingResult.MalformedPayload -> {
+                        AuthorizationMetadata(
+                            toolCallId = -1L,
+                            approved = false,
+                            denialReason = "Failed to decode signed authorization metadata"
+                        )
+                    }
+
+                    SignedRequestPayloadDecodingResult.InvalidPayload -> {
+                        AuthorizationMetadata(
+                            toolCallId = -1L,
+                            approved = false,
+                            denialReason = "Invalid signed authorization metadata"
+                        )
+                    }
                 }
             }
         }

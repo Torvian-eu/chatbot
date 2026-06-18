@@ -8,7 +8,6 @@ import eu.torvian.chatbot.worker.service.security.VerificationError
 import eu.torvian.chatbot.worker.service.security.VerificationOptions
 import eu.torvian.chatbot.worker.service.security.VerificationService
 import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -17,9 +16,6 @@ import kotlin.test.assertIs
  * Unit tests for [DefaultLocalMCPToolExecutionAuthorizationValidator].
  */
 class DefaultLocalMCPToolExecutionAuthorizationValidatorTest {
-    /** Shared JSON codec used to serialize and deserialize exact signed authorization payloads. */
-    private val json = Json { ignoreUnknownKeys = true }
-
     /**
      * Verifies that a valid signed authorization is decoded and returned as Authorized.
      */
@@ -28,7 +24,6 @@ class DefaultLocalMCPToolExecutionAuthorizationValidatorTest {
         val authorization = buildAuthorization()
         val signedRequest = signedRequest(authorization)
         val validator = DefaultLocalMCPToolExecutionAuthorizationValidator(
-            json = json,
             verificationService = StaticVerificationService(emptyList<String>().right())
         )
 
@@ -46,7 +41,6 @@ class DefaultLocalMCPToolExecutionAuthorizationValidatorTest {
         val deniedAuthorization = buildAuthorization(approved = false, denialReason = "User denied")
         val signedRequest = signedRequest(deniedAuthorization)
         val validator = DefaultLocalMCPToolExecutionAuthorizationValidator(
-            json = json,
             verificationService = StaticVerificationService(emptyList<String>().right())
         )
 
@@ -64,7 +58,6 @@ class DefaultLocalMCPToolExecutionAuthorizationValidatorTest {
     fun `validate rejects unknown signer with toolCallId from payload`() = runTest {
         val authorization = buildAuthorization()
         val validator = DefaultLocalMCPToolExecutionAuthorizationValidator(
-            json = json,
             verificationService = StaticVerificationService(
                 VerificationError.UnknownSigner(signerId = "device-9").left()
             )
@@ -84,7 +77,6 @@ class DefaultLocalMCPToolExecutionAuthorizationValidatorTest {
     fun `validate rejects expired authorization with toolCallId from payload`() = runTest {
         val authorization = buildAuthorization()
         val validator = DefaultLocalMCPToolExecutionAuthorizationValidator(
-            json = json,
             verificationService = StaticVerificationService(
                 VerificationError.Expired(timestamp = 1_700_000_000_000, ageSeconds = 120).left()
             )
@@ -102,7 +94,6 @@ class DefaultLocalMCPToolExecutionAuthorizationValidatorTest {
     @Test
     fun `validate rejects malformed payload with null toolCallId`() = runTest {
         val validator = DefaultLocalMCPToolExecutionAuthorizationValidator(
-            json = json,
             verificationService = StaticVerificationService(emptyList<String>().right())
         )
         val malformedRequest = SignedRequest(
@@ -174,7 +165,7 @@ class DefaultLocalMCPToolExecutionAuthorizationValidatorTest {
     private fun signedRequest(
         authorization: LocalMCPToolExecutionAuthorization
     ): SignedRequest = SignedRequest(
-        payload = json.encodeToString(LocalMCPToolExecutionAuthorization.serializer(), authorization),
+        payload = kotlinx.serialization.json.Json.encodeToString(LocalMCPToolExecutionAuthorization.serializer(), authorization),
         signature = "signature-base64",
         signerId = "device-1",
         timestamp = 1_700_000_000_000,

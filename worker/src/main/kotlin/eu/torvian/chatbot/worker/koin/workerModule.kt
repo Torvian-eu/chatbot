@@ -105,13 +105,11 @@ fun workerModule(
     }
     single<SignedMcpServerConfigValidator> {
         DefaultSignedMcpServerConfigValidator(
-            json = get(),
             verificationService = get()
         )
     }
     single<SignedMcpServerDraftConfigValidator> {
         DefaultSignedMcpServerDraftConfigValidator(
-            json = get(),
             verificationService = get()
         )
     }
@@ -132,7 +130,6 @@ fun workerModule(
     }
     single<LocalMCPToolExecutionAuthorizationValidator> {
         DefaultLocalMCPToolExecutionAuthorizationValidator(
-            json = get(),
             verificationService = get()
         )
     }

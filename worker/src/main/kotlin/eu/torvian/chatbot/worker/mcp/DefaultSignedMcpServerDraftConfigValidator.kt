@@ -3,20 +3,16 @@ package eu.torvian.chatbot.worker.mcp
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerDraftConnectionRequest
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestDraftConnectionCommandData
-import eu.torvian.chatbot.common.security.SignedRequest
+import eu.torvian.chatbot.common.security.decodePayloadOrNull
 import eu.torvian.chatbot.worker.service.security.VerificationError
 import eu.torvian.chatbot.worker.service.security.VerificationService
-import kotlinx.serialization.SerializationException
-import kotlinx.serialization.json.Json
 
 /**
  * Default implementation of [SignedMcpServerDraftConfigValidator].
  *
- * @property json JSON codec used to deserialize the exact signed payload string without rewriting it.
  * @property verificationService Worker trust-store verifier used for detached signature validation.
  */
 class DefaultSignedMcpServerDraftConfigValidator(
-    private val json: Json,
     private val verificationService: VerificationService
 ) : SignedMcpServerDraftConfigValidator {
 
@@ -31,7 +27,7 @@ class DefaultSignedMcpServerDraftConfigValidator(
         ) {
             is Either.Left -> verificationResult.value.toValidationFailure()
             is Either.Right -> {
-                val signedPayload = decodeSignedPayload(signedRequest)
+                val signedPayload = signedRequest.decodePayloadOrNull<TestLocalMCPServerDraftConnectionRequest>()
                     ?: return SignedMcpServerDraftConfigValidationResult.MalformedSignedPayload(
                         details = "Signed payload could not be decoded as TestLocalMCPServerDraftConnectionRequest"
                     )
@@ -43,27 +39,6 @@ class DefaultSignedMcpServerDraftConfigValidator(
                     SignedMcpServerDraftConfigValidationResult.DtoMismatch(mismatchedFields)
                 }
             }
-        }
-    }
-
-    /**
-     * Deserializes the exact signed payload as a [TestLocalMCPServerDraftConnectionRequest].
-     *
-     * @param signedRequest Detached signed request carrying the exact serialized payload string.
-     * @return Decoded draft request, or `null` when the payload is malformed or not a draft request.
-     */
-    private fun decodeSignedPayload(
-        signedRequest: SignedRequest
-    ): TestLocalMCPServerDraftConnectionRequest? {
-        return try {
-            json.decodeFromString(
-                TestLocalMCPServerDraftConnectionRequest.serializer(),
-                signedRequest.payload
-            )
-        } catch (_: SerializationException) {
-            null
-        } catch (_: IllegalArgumentException) {
-            null
         }
     }
 }

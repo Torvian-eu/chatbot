@@ -106,7 +106,6 @@ class DefaultSignedMcpServerConfigValidatorTest {
      */
     private fun validator(keyPair: AsymmetricKeyPair): SignedMcpServerConfigValidator =
         DefaultSignedMcpServerConfigValidator(
-            json = json,
             verificationService = DefaultVerificationService(
                 trustedSigners = listOf(TrustedSigner(signerId, keyPair.publicKey, permissions)),
                 cryptoProvider = cryptoProvider
