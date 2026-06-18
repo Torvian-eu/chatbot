@@ -1,15 +1,17 @@
 package eu.torvian.chatbot.worker.mcp
 
-import arrow.core.Either
 import eu.torvian.chatbot.common.models.api.mcp.CreateLocalMCPServerRequest
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.UpdateLocalMCPServerRequest
 import eu.torvian.chatbot.common.security.SignedRequest
+import eu.torvian.chatbot.common.security.SignedRequestPayloadDecodingResult
 import eu.torvian.chatbot.common.security.decodePayloadOrNull
 import eu.torvian.chatbot.worker.service.security.VerificationError
 import eu.torvian.chatbot.worker.service.security.VerificationOptions
+import eu.torvian.chatbot.worker.service.security.VerifiedSignedPayloadResult
 import eu.torvian.chatbot.worker.service.security.VerificationService
+import eu.torvian.chatbot.worker.service.security.verifyAndDecodeSignedPayload
 
 /**
  * Default implementation of [SignedMcpServerConfigValidator].
@@ -23,29 +25,31 @@ class DefaultSignedMcpServerConfigValidator(
         server: LocalMCPServerDto,
         signedRequest: SignedRequest?
     ): SignedMcpServerConfigValidationResult {
-        if (signedRequest == null) {
-            return SignedMcpServerConfigValidationResult.MissingSignedRequest
-        }
-
         return when (
-            val verificationResult = verificationService.verify(
+            val validationResult = verificationService.verifyAndDecodeSignedPayload(
                 signedRequest = signedRequest,
-                options = VerificationOptions(checkExpiration = false)
+                options = VerificationOptions(checkExpiration = false),
+                decodePayload = ::decodeSignedPayload
             )
         ) {
-            is Either.Left -> verificationResult.value.toValidationFailure()
-            is Either.Right -> {
-                val signedPayload = decodeSignedPayload(signedRequest)
-                    ?: return SignedMcpServerConfigValidationResult.MalformedSignedPayload(
-                        details = "Signed payload could not be decoded as either CreateLocalMCPServerRequest or UpdateLocalMCPServerRequest"
-                    )
+            null -> SignedMcpServerConfigValidationResult.MissingSignedRequest
 
-                val mismatchedFields = server.findMismatchedFields(signedPayload)
+            is VerifiedSignedPayloadResult.VerificationFailed -> validationResult.error.toValidationFailure()
+
+            is VerifiedSignedPayloadResult.Verified -> {
+                val mismatchedFields = server.findMismatchedFields(validationResult.payload)
                 if (mismatchedFields.isEmpty()) {
                     SignedMcpServerConfigValidationResult.Authorized
                 } else {
                     SignedMcpServerConfigValidationResult.DtoMismatch(mismatchedFields)
                 }
+            }
+
+            VerifiedSignedPayloadResult.MalformedPayload,
+            VerifiedSignedPayloadResult.InvalidPayload -> {
+                SignedMcpServerConfigValidationResult.MalformedSignedPayload(
+                    details = "Signed payload could not be decoded as either CreateLocalMCPServerRequest or UpdateLocalMCPServerRequest"
+                )
             }
         }
     }
@@ -57,12 +61,21 @@ class DefaultSignedMcpServerConfigValidator(
      * both request shapes and compares only the request-derived fields shared with the persisted DTO.
      *
      * @param signedRequest Detached signed request carrying the exact serialized payload string.
-     * @return Normalized request-derived fields, or `null` when the payload is not a supported MCP request.
+     * @return Structured decoding result for normalized request-derived fields.
      */
-    private fun decodeSignedPayload(signedRequest: SignedRequest): NormalizedSignedMcpServerPayload? {
-        decodeCreatePayload(signedRequest)?.let { return it }
-        decodeUpdatePayload(signedRequest)?.let { return it }
-        return null
+    private fun decodeSignedPayload(
+        signedRequest: SignedRequest
+    ): SignedRequestPayloadDecodingResult<NormalizedSignedMcpServerPayload> {
+        decodeCreatePayload(signedRequest)?.let { payload ->
+            return SignedRequestPayloadDecodingResult.Decoded(payload)
+        }
+        decodeUpdatePayload(signedRequest)?.let { payload ->
+            return SignedRequestPayloadDecodingResult.Decoded(payload)
+        }
+
+        // The current validator intentionally collapses unsupported create/update payload shapes into
+        // the existing malformed-payload rejection model.
+        return SignedRequestPayloadDecodingResult.MalformedPayload
     }
 
     /**

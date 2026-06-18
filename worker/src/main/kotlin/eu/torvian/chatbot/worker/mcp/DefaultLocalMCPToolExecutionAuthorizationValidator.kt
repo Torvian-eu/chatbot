@@ -1,13 +1,12 @@
 package eu.torvian.chatbot.worker.mcp
 
-import arrow.core.Either
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolExecutionAuthorization
-import eu.torvian.chatbot.common.security.SignedRequestPayloadDecodingResult
 import eu.torvian.chatbot.common.security.SignedRequest
-import eu.torvian.chatbot.common.security.decodePayload
 import eu.torvian.chatbot.worker.service.security.VerificationError
 import eu.torvian.chatbot.worker.service.security.VerificationOptions
+import eu.torvian.chatbot.worker.service.security.VerifiedSignedPayloadResult
 import eu.torvian.chatbot.worker.service.security.VerificationService
+import eu.torvian.chatbot.worker.service.security.verifyAndDecodeSignedPayload
 
 /**
  * Default implementation of [LocalMCPToolExecutionAuthorizationValidator].
@@ -25,17 +24,8 @@ class DefaultLocalMCPToolExecutionAuthorizationValidator(
     override suspend fun validate(
         signedRequest: SignedRequest
     ): LocalMCPToolExecutionAuthorizationValidationResult {
-        // Best-effort decode of authorization from payload for use in success and rejection paths.
-        val decodedAuthorization = when (
-            val decodingResult = signedRequest.decodePayload<LocalMCPToolExecutionAuthorization>()
-        ) {
-            is SignedRequestPayloadDecodingResult.Decoded -> decodingResult.value
-            SignedRequestPayloadDecodingResult.MalformedPayload,
-            SignedRequestPayloadDecodingResult.InvalidPayload -> null
-        }
-
         return when (
-            val verificationResult = verificationService.verify(
+            val validationResult = verificationService.verifyAndDecodeSignedPayload<LocalMCPToolExecutionAuthorization>(
                 signedRequest = signedRequest,
                 options = VerificationOptions(
                     checkExpiration = true,
@@ -43,14 +33,12 @@ class DefaultLocalMCPToolExecutionAuthorizationValidator(
                 )
             )
         ) {
-            is Either.Left -> verificationResult.value.toValidationFailure(decodedAuthorization?.toolCallId)
-            is Either.Right -> {
-                val authorization = decodedAuthorization
-                    ?: return LocalMCPToolExecutionAuthorizationValidationResult.MalformedSignedPayload(
-                        details = "Signed payload could not be decoded as LocalMCPToolExecutionAuthorization",
-                        toolCallId = null
-                    )
+            is VerifiedSignedPayloadResult.VerificationFailed -> {
+                validationResult.error.toValidationFailure(validationResult.decodedPayload?.toolCallId)
+            }
 
+            is VerifiedSignedPayloadResult.Verified -> {
+                val authorization = validationResult.payload
                 if (!authorization.approved) {
                     return LocalMCPToolExecutionAuthorizationValidationResult.Denied(
                         denialReason = authorization.denialReason,
@@ -59,6 +47,14 @@ class DefaultLocalMCPToolExecutionAuthorizationValidator(
                 }
 
                 LocalMCPToolExecutionAuthorizationValidationResult.Authorized(authorization = authorization)
+            }
+
+            VerifiedSignedPayloadResult.MalformedPayload,
+            VerifiedSignedPayloadResult.InvalidPayload -> {
+                LocalMCPToolExecutionAuthorizationValidationResult.MalformedSignedPayload(
+                    details = "Signed payload could not be decoded as LocalMCPToolExecutionAuthorization",
+                    toolCallId = null
+                )
             }
         }
     }

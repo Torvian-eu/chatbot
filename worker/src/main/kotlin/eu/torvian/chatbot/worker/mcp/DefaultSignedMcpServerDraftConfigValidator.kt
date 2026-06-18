@@ -1,11 +1,11 @@
 package eu.torvian.chatbot.worker.mcp
 
-import arrow.core.Either
 import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerDraftConnectionRequest
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestDraftConnectionCommandData
-import eu.torvian.chatbot.common.security.decodePayloadOrNull
 import eu.torvian.chatbot.worker.service.security.VerificationError
+import eu.torvian.chatbot.worker.service.security.VerifiedSignedPayloadResult
 import eu.torvian.chatbot.worker.service.security.VerificationService
+import eu.torvian.chatbot.worker.service.security.verifyAndDecodeSignedPayload
 
 /**
  * Default implementation of [SignedMcpServerDraftConfigValidator].
@@ -19,25 +19,29 @@ class DefaultSignedMcpServerDraftConfigValidator(
     override suspend fun validate(
         request: WorkerMcpServerTestDraftConnectionCommandData
     ): SignedMcpServerDraftConfigValidationResult {
-        val signedRequest = request.signedRequest
-            ?: return SignedMcpServerDraftConfigValidationResult.MissingSignedRequest
-
         return when (
-            val verificationResult = verificationService.verify(signedRequest = signedRequest)
+            val validationResult = verificationService.verifyAndDecodeSignedPayload<TestLocalMCPServerDraftConnectionRequest>(
+                signedRequest = request.signedRequest
+            )
         ) {
-            is Either.Left -> verificationResult.value.toValidationFailure()
-            is Either.Right -> {
-                val signedPayload = signedRequest.decodePayloadOrNull<TestLocalMCPServerDraftConnectionRequest>()
-                    ?: return SignedMcpServerDraftConfigValidationResult.MalformedSignedPayload(
-                        details = "Signed payload could not be decoded as TestLocalMCPServerDraftConnectionRequest"
-                    )
+            null -> SignedMcpServerDraftConfigValidationResult.MissingSignedRequest
 
-                val mismatchedFields = request.findMismatchedFields(signedPayload)
+            is VerifiedSignedPayloadResult.VerificationFailed -> validationResult.error.toValidationFailure()
+
+            is VerifiedSignedPayloadResult.Verified -> {
+                val mismatchedFields = request.findMismatchedFields(validationResult.payload)
                 if (mismatchedFields.isEmpty()) {
                     SignedMcpServerDraftConfigValidationResult.Authorized
                 } else {
                     SignedMcpServerDraftConfigValidationResult.DtoMismatch(mismatchedFields)
                 }
+            }
+
+            VerifiedSignedPayloadResult.MalformedPayload,
+            VerifiedSignedPayloadResult.InvalidPayload -> {
+                SignedMcpServerDraftConfigValidationResult.MalformedSignedPayload(
+                    details = "Signed payload could not be decoded as TestLocalMCPServerDraftConnectionRequest"
+                )
             }
         }
     }
