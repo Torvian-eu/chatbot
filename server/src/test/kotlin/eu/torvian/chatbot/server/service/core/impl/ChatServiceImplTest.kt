@@ -3,20 +3,16 @@ package eu.torvian.chatbot.server.service.core.impl
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
-import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.llm.*
-import eu.torvian.chatbot.server.data.dao.MessageDao
-import eu.torvian.chatbot.server.data.dao.SessionDao
-import eu.torvian.chatbot.server.data.dao.error.MessageError
-import eu.torvian.chatbot.server.data.dao.error.SessionError
 import eu.torvian.chatbot.server.service.core.*
+import eu.torvian.chatbot.server.service.core.chat.preparation.ConversationTurnPreparationService
+import eu.torvian.chatbot.server.service.core.chat.preparation.PreparedConversationTurn
 import eu.torvian.chatbot.server.service.core.chat.turn.ConversationTurnEvent
 import eu.torvian.chatbot.server.service.core.chat.turn.ConversationTurnOrchestrator
 import eu.torvian.chatbot.server.service.core.error.message.ProcessNewMessageError
 import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageError
 import eu.torvian.chatbot.server.service.llm.LLMCompletionError
-import eu.torvian.chatbot.server.service.security.CredentialManager
 import io.mockk.*
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
@@ -26,29 +22,19 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
-import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
 import kotlin.time.Instant
 
 /**
  * Unit tests for [ChatServiceImpl].
  *
- * This test suite verifies that [ChatServiceImpl] correctly orchestrates
- * calls to the underlying DAOs and services, and handles business logic validation.
- * All dependencies are mocked using MockK.
+ * This test suite verifies that [ChatServiceImpl] delegates validation/preparation and correctly maps
+ * orchestrator events onto the public service API.
  */
 class ChatServiceImplTest {
 
     // Mocked dependencies
-    private lateinit var messageDao: MessageDao
-    private lateinit var sessionDao: SessionDao
-    private lateinit var llmModelService: LLMModelService
-    private lateinit var modelSettingsService: ModelSettingsService
-    private lateinit var llmProviderService: LLMProviderService
-    private lateinit var credentialManager: CredentialManager
-    private lateinit var toolService: ToolService
-    private lateinit var transactionScope: TransactionScope
     private lateinit var conversationTurnOrchestrator: ConversationTurnOrchestrator
+    private lateinit var conversationTurnPreparationService: ConversationTurnPreparationService
 
     // Class under test
     private lateinit var chatService: ChatServiceImpl
@@ -130,196 +116,47 @@ class ChatServiceImplTest {
      */
     @BeforeEach
     fun setUp() {
-        // Create mocks for all dependencies
-        messageDao = mockk()
-        sessionDao = mockk()
-        llmModelService = mockk()
-        modelSettingsService = mockk()
-        llmProviderService = mockk()
-        credentialManager = mockk()
-        toolService = mockk()
-        transactionScope = mockk()
         conversationTurnOrchestrator = mockk()
+        conversationTurnPreparationService = mockk()
 
-        // Create the service instance with mocked dependencies
         chatService = ChatServiceImpl(
-            messageDao,
-            sessionDao,
-            toolService,
-            llmModelService,
-            modelSettingsService,
-            llmProviderService,
-            credentialManager,
-            transactionScope,
-            conversationTurnOrchestrator
+            conversationTurnOrchestrator,
+            conversationTurnPreparationService
         )
-
-        // Mock the transaction scope to execute blocks directly.
-        coEvery { transactionScope.transaction(any<suspend () -> Any?>()) } coAnswers {
-            @Suppress("UNCHECKED_CAST")
-            val block = invocation.args[0] as suspend () -> Any?
-            block()
-        }
     }
 
     @AfterEach
     fun tearDown() {
-        // Clear all mocks after each test to ensure isolation
-        clearMocks(
-            messageDao, sessionDao, llmModelService, modelSettingsService,
-            llmProviderService, credentialManager, toolService,
-            transactionScope, conversationTurnOrchestrator
-        )
+        clearMocks(conversationTurnOrchestrator, conversationTurnPreparationService)
     }
 
-    // --- validateProcessNewMessageRequest Tests ---
+    // --- validateProcessNewMessageRequest delegation tests ---
 
     @Test
-    fun `validateProcessNewMessageRequest should return ModelConfigurationError when content is null and parentMessageId is null`() =
-        runTest {
-            // Arrange
-            val sessionId = 1L
+    fun `validateProcessNewMessageRequest should delegate to preparation service and map prepared turn`() = runTest {
+        val preparedTurn = PreparedConversationTurn(testSession, testLlmConfig)
+        coEvery {
+            conversationTurnPreparationService.prepareNewMessageTurn(1L, "test content", 2L, true)
+        } returns preparedTurn.right()
 
-            // Act - Branch & Continue mode requires parentMessageId when content is null
-            val result = chatService.validateProcessNewMessageRequest(sessionId, null, null, false)
+        val result = chatService.validateProcessNewMessageRequest(1L, "test content", 2L, true)
 
-            // Assert
-            assertTrue(result.isLeft(), "Should return Left when content is null and parentMessageId is null")
-            val error = result.leftOrNull()
-            assertNotNull(error, "Error should not be null")
-            assertIs<ValidateNewMessageError.ModelConfigurationError>(error, "Should be ModelConfigurationError")
-            assertTrue(
-                error.message.contains("Branch & Continue"),
-                "Error message should mention Branch & Continue mode"
-            )
-            coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
+        assertEquals((testSession to testLlmConfig).right(), result)
+        coVerify(exactly = 1) {
+            conversationTurnPreparationService.prepareNewMessageTurn(1L, "test content", 2L, true)
         }
-
-    @Test
-    fun `validateProcessNewMessageRequest should return SessionNotFound when session does not exist`() = runTest {
-        // Arrange
-        val sessionId = 999L
-        val daoError = SessionError.SessionNotFound(sessionId)
-        coEvery { sessionDao.getSessionById(sessionId) } returns daoError.left()
-
-        // Act
-        val result = chatService.validateProcessNewMessageRequest(sessionId, "test content", null, false)
-
-        // Assert
-        assertTrue(result.isLeft(), "Should return Left for non-existent session")
-        val error = result.leftOrNull()
-        assertNotNull(error, "Error should not be null")
-        assertIs<ValidateNewMessageError.SessionNotFound>(error, "Should be SessionNotFound error")
-        assertEquals(sessionId, error.sessionId)
-        coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
     }
 
     @Test
-    fun `validateProcessNewMessageRequest should return ModelConfigurationError when no model is selected`() = runTest {
-        // Arrange
-        val sessionId = 1L
-        val sessionWithoutModel = testSession.copy(currentModelId = null)
-        coEvery { sessionDao.getSessionById(sessionId) } returns sessionWithoutModel.right()
+    fun `validateProcessNewMessageRequest should return preparation errors unchanged`() = runTest {
+        val error = ValidateNewMessageError.SessionNotFound(999L)
+        coEvery {
+            conversationTurnPreparationService.prepareNewMessageTurn(999L, "test content", null, false)
+        } returns error.left()
 
-        // Act
-        val result = chatService.validateProcessNewMessageRequest(sessionId, "test content", null, false)
+        val result = chatService.validateProcessNewMessageRequest(999L, "test content", null, false)
 
-        // Assert
-        assertTrue(result.isLeft(), "Should return Left when no model is selected")
-        val error = result.leftOrNull()
-        assertNotNull(error, "Error should not be null")
-        assertIs<ValidateNewMessageError.ModelConfigurationError>(error, "Should be ModelConfigurationError")
-        assertEquals(
-            "No model selected for session $sessionId",
-            error.message
-        )
-        coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
-    }
-
-    @Test
-    fun `validateProcessNewMessageRequest should return ModelConfigurationError when no settings are selected`() =
-        runTest {
-            // Arrange
-            val sessionId = 1L
-            val sessionWithoutSettings = testSession.copy(currentSettingsId = null)
-            coEvery { sessionDao.getSessionById(sessionId) } returns sessionWithoutSettings.right()
-            coEvery { llmModelService.getModelById(sessionWithoutSettings.currentModelId!!) } returns testModel.right()
-
-            // Act
-            val result = chatService.validateProcessNewMessageRequest(sessionId, "test content", null, false)
-
-            // Assert
-            assertTrue(result.isLeft(), "Should return Left when no settings are selected")
-            val error = result.leftOrNull()
-            assertNotNull(error, "Error should not be null")
-            assertIs<ValidateNewMessageError.ModelConfigurationError>(error, "Should be ModelConfigurationError")
-            assertEquals(
-                "No settings selected for session $sessionId",
-                error.message
-            )
-            coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-            coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
-        }
-
-    @Test
-    fun `validateProcessNewMessageRequest should return ParentNotInSession when parent message does not exist`() =
-        runTest {
-            // Arrange
-            val sessionId = 1L
-            val parentMessageId = 999L
-            val daoError = MessageError.MessageNotFound(parentMessageId)
-
-            coEvery { sessionDao.getSessionById(sessionId) } returns testSession.right()
-            coEvery { messageDao.getMessageById(parentMessageId) } returns daoError.left()
-
-            // Act
-            val result = chatService.validateProcessNewMessageRequest(sessionId, "test content", parentMessageId, false)
-
-            // Assert
-            assertTrue(result.isLeft(), "Should return Left for parent not found")
-            val error = result.leftOrNull()
-            assertNotNull(error, "Error should not be null")
-            assertIs<ValidateNewMessageError.ParentNotInSession>(error, "Should be ParentNotInSession error")
-            assertEquals(sessionId, error.sessionId)
-            assertEquals(parentMessageId, error.parentId)
-
-            coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-            coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
-            coVerify(exactly = 1) { messageDao.getMessageById(parentMessageId) }
-        }
-
-    @Test
-    fun `validateProcessNewMessageRequest should return session and LLMConfig when validation succeeds`() = runTest {
-        // Arrange
-        val sessionId = 1L
-        val streamingSettings = testSettings.copy(stream = true)
-        coEvery { sessionDao.getSessionById(sessionId) } returns testSession.right()
-        coEvery { llmModelService.getModelById(testSession.currentModelId!!) } returns testModel.right()
-        coEvery { modelSettingsService.getSettingsById(testSession.currentSettingsId!!) } returns streamingSettings.right()
-        coEvery { llmProviderService.getProviderById(testModel.providerId) } returns testProvider.right()
-        coEvery { credentialManager.getCredential(testProvider.apiKeyId!!) } returns "test-api-key".right()
-        coEvery { toolService.getEnabledToolsForSession(sessionId) } returns emptyList()
-
-        // Act
-        val result = chatService.validateProcessNewMessageRequest(sessionId, "test content", null, true)
-
-        // Assert
-        assertTrue(result.isRight(), "Should return Right for successful validation")
-        val (session, llmConfig) = result.getOrNull()!!
-        assertEquals(testSession, session, "Should return the correct session")
-        assertEquals(testProvider, llmConfig.provider, "Should return correct provider")
-        assertEquals(testModel, llmConfig.model, "Should return correct model")
-        assertEquals(streamingSettings, llmConfig.settings, "Should return correct settings")
-        assertEquals("test-api-key", llmConfig.apiKey, "Should return correct API key")
-
-        coVerify(exactly = 1) { transactionScope.transaction(any<suspend () -> Any>()) }
-        coVerify(exactly = 1) { sessionDao.getSessionById(sessionId) }
-        coVerify(exactly = 1) { llmModelService.getModelById(testSession.currentModelId!!) }
-        coVerify(exactly = 1) { modelSettingsService.getSettingsById(testSession.currentSettingsId!!) }
-        coVerify(exactly = 1) { llmProviderService.getProviderById(testModel.providerId) }
-        coVerify(exactly = 1) { credentialManager.getCredential(testProvider.apiKeyId!!) }
+        assertEquals(error.left(), result)
     }
 
     // --- processNewMessage Tests ---
