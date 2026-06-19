@@ -12,6 +12,8 @@ import eu.torvian.chatbot.server.service.core.chat.content.FileReferenceContentB
 import eu.torvian.chatbot.server.service.core.chat.content.ToolResultContentBuilder
 import eu.torvian.chatbot.server.service.core.chat.context.ChatContextBuilder
 import eu.torvian.chatbot.server.service.core.chat.context.DefaultChatContextBuilder
+import eu.torvian.chatbot.server.service.core.chat.turn.ConversationTurnOrchestrator
+import eu.torvian.chatbot.server.service.core.chat.turn.DefaultConversationTurnOrchestrator
 import eu.torvian.chatbot.server.service.core.impl.*
 import eu.torvian.chatbot.server.service.core.toolcall.DefaultToolCallOrchestrator
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallOrchestrator
@@ -58,12 +60,11 @@ fun serviceModule() = module {
     single<FileReferenceContentBuilder> { DefaultFileReferenceContentBuilder() }
     single<ToolResultContentBuilder> { DefaultToolResultContentBuilder() }
     single<ChatContextBuilder> { DefaultChatContextBuilder(get(), get()) }
+    single<ConversationTurnOrchestrator> {
+        DefaultConversationTurnOrchestrator(get(), get(), get(), get(), get(), get(), get(), get())
+    }
     single<ChatService> {
         ChatServiceImpl(
-            get(),
-            get(),
-            get(),
-            get(),
             get(),
             get(),
             get(),
