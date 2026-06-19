@@ -1,7 +1,6 @@
 package eu.torvian.chatbot.server.service.core.chat.turn
 
 import arrow.core.right
-import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
@@ -13,13 +12,13 @@ import eu.torvian.chatbot.common.models.tool.MiscToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
 import eu.torvian.chatbot.common.models.tool.ToolType
-import eu.torvian.chatbot.server.data.dao.MessageDao
-import eu.torvian.chatbot.server.data.dao.SessionDao
-import eu.torvian.chatbot.server.data.dao.ToolCallDao
 import eu.torvian.chatbot.server.service.core.LLMConfig
 import eu.torvian.chatbot.server.service.core.chat.content.DefaultFileReferenceContentBuilder
 import eu.torvian.chatbot.server.service.core.chat.content.DefaultToolResultContentBuilder
 import eu.torvian.chatbot.server.service.core.chat.context.DefaultChatContextBuilder
+import eu.torvian.chatbot.server.service.core.chat.persistence.ConversationTurnPersistence
+import eu.torvian.chatbot.server.service.core.chat.persistence.PersistedAssistantMessage
+import eu.torvian.chatbot.server.service.core.chat.persistence.PersistedUserMessage
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallExecutionEvent
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallOrchestrator
 import eu.torvian.chatbot.server.service.llm.LLMApiClient
@@ -43,12 +42,9 @@ import kotlin.time.Instant
  * Verifies the extracted turn orchestrator keeps the shared assistant/tool loop behavior intact.
  */
 class DefaultConversationTurnOrchestratorTest {
-    private lateinit var messageDao: MessageDao
-    private lateinit var sessionDao: SessionDao
     private lateinit var llmApiClient: LLMApiClient
-    private lateinit var toolCallDao: ToolCallDao
     private lateinit var toolCallOrchestrator: ToolCallOrchestrator
-    private lateinit var transactionScope: TransactionScope
+    private lateinit var conversationTurnPersistence: ConversationTurnPersistence
     private lateinit var orchestrator: DefaultConversationTurnOrchestrator
 
     private val baseInstant = Instant.fromEpochMilliseconds(1234567890000L)
@@ -99,32 +95,20 @@ class DefaultConversationTurnOrchestratorTest {
      */
     @BeforeEach
     fun setUp() {
-        messageDao = mockk()
-        sessionDao = mockk()
         llmApiClient = mockk()
-        toolCallDao = mockk()
         toolCallOrchestrator = mockk()
-        transactionScope = mockk()
+        conversationTurnPersistence = mockk()
 
         orchestrator = DefaultConversationTurnOrchestrator(
-            messageDao = messageDao,
-            sessionDao = sessionDao,
             llmApiClient = llmApiClient,
-            toolCallDao = toolCallDao,
             toolCallOrchestrator = toolCallOrchestrator,
-            transactionScope = transactionScope,
             toolResultContentBuilder = DefaultToolResultContentBuilder(),
             chatContextBuilder = DefaultChatContextBuilder(
                 fileReferenceContentBuilder = DefaultFileReferenceContentBuilder(),
                 toolResultContentBuilder = DefaultToolResultContentBuilder()
-            )
+            ),
+            conversationTurnPersistence = conversationTurnPersistence
         )
-
-        coEvery { transactionScope.transaction(any<suspend () -> Any?>()) } coAnswers {
-            @Suppress("UNCHECKED_CAST")
-            val block = invocation.args[0] as suspend () -> Any?
-            block()
-        }
     }
 
     /**
@@ -132,7 +116,7 @@ class DefaultConversationTurnOrchestratorTest {
      */
     @AfterEach
     fun tearDown() {
-        clearMocks(messageDao, sessionDao, llmApiClient, toolCallDao, toolCallOrchestrator, transactionScope)
+        clearMocks(llmApiClient, toolCallOrchestrator, conversationTurnPersistence)
     }
 
     /**
@@ -175,25 +159,19 @@ class DefaultConversationTurnOrchestratorTest {
         )
 
         coEvery {
-            messageDao.insertMessage(testSession.id, null, any(), ChatMessage.Role.USER, "Hello", null, null, any())
-        } returns userMessage.right()
-        coEvery { sessionDao.updateSessionLeafMessageId(testSession.id, userMessage.id) } returns Unit.right()
-        coEvery { messageDao.getMessageById(userMessage.id) } returns userMessage.right()
-        coEvery { toolCallDao.getToolCallsBySessionId(testSession.id) } returns emptyList()
+            conversationTurnPersistence.saveUserMessage(testSession.id, "Hello", null, any())
+        } returns PersistedUserMessage(userMessage, null)
+        coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
         coEvery { llmApiClient.completeChat(any(), any(), any(), any(), any(), any()) } returns completion.right()
         coEvery {
-            messageDao.insertMessage(
+            conversationTurnPersistence.saveAssistantMessage(
                 testSession.id,
-                userMessage.id,
-                any(),
-                ChatMessage.Role.ASSISTANT,
                 assistantMessage.content,
-                testModel.id,
-                testSettings.id,
-                any()
+                userMessage.id,
+                testModel,
+                testSettings
             )
-        } returns assistantMessage.right()
-        coEvery { sessionDao.updateSessionLeafMessageId(testSession.id, assistantMessage.id) } returns Unit.right()
+        } returns PersistedAssistantMessage(assistantMessage, userMessage)
 
         val events = orchestrator.processNonStreamingTurn(
             ConversationTurnRequest(
@@ -314,60 +292,37 @@ class DefaultConversationTurnOrchestratorTest {
         val capturedContexts = mutableListOf<List<RawChatMessage>>()
 
         coEvery {
-            messageDao.insertMessage(testSession.id, null, any(), ChatMessage.Role.USER, "Find docs", null, null, any())
-        } returns userMessage.right()
-        coEvery { sessionDao.updateSessionLeafMessageId(testSession.id, userMessage.id) } returns Unit.right()
-        coEvery { toolCallDao.getToolCallsBySessionId(testSession.id) } returns emptyList()
+            conversationTurnPersistence.saveUserMessage(testSession.id, "Find docs", null, any())
+        } returns PersistedUserMessage(userMessage, null)
+        coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
         coEvery {
             llmApiClient.completeChat(capture(capturedContexts), any(), any(), any(), any(), any())
         } returnsMany listOf(firstCompletion.right(), secondCompletion.right())
         coEvery {
-            messageDao.insertMessage(
+            conversationTurnPersistence.saveAssistantMessage(
                 testSession.id,
-                userMessage.id,
-                any(),
-                ChatMessage.Role.ASSISTANT,
                 assistantToolMessage.content,
-                testModel.id,
-                testSettings.id,
-                any()
+                userMessage.id,
+                testModel,
+                testSettings
             )
-        } returns assistantToolMessage.right()
+        } returns PersistedAssistantMessage(assistantToolMessage, userMessage)
         coEvery {
-            messageDao.insertMessage(
+            conversationTurnPersistence.saveAssistantMessage(
                 testSession.id,
-                assistantToolMessage.id,
-                any(),
-                ChatMessage.Role.ASSISTANT,
                 assistantFinalMessage.content,
-                testModel.id,
-                testSettings.id,
-                any()
-            )
-        } returns assistantFinalMessage.right()
-        coEvery {
-            sessionDao.updateSessionLeafMessageId(testSession.id, assistantToolMessage.id)
-        } returns Unit.right()
-        coEvery {
-            sessionDao.updateSessionLeafMessageId(testSession.id, assistantFinalMessage.id)
-        } returns Unit.right()
-        coEvery { messageDao.getMessageById(userMessage.id) } returns userMessage.right()
-        coEvery { messageDao.getMessageById(assistantToolMessage.id) } returns assistantToolMessage.right()
-        coEvery {
-            toolCallDao.insertToolCall(
                 assistantToolMessage.id,
-                toolDefinition.id,
-                toolDefinition.name,
-                pendingToolCall.toolCallId,
-                pendingToolCall.input,
-                null,
-                ToolCallStatus.PENDING,
-                null,
-                null,
-                any(),
-                null
+                testModel,
+                testSettings
             )
-        } returns pendingToolCall.right()
+        } returns PersistedAssistantMessage(assistantFinalMessage, assistantToolMessage)
+        coEvery {
+            conversationTurnPersistence.persistPendingToolCalls(
+                assistantToolMessage.id,
+                any(),
+                listOf(toolDefinition)
+            )
+        } returns listOf(pendingToolCall)
         every {
             toolCallOrchestrator.executeAndUpdateToolCalls(1L, listOf(pendingToolCall), listOf(toolDefinition), any())
         } returns flowOf(
@@ -429,24 +384,18 @@ class DefaultConversationTurnOrchestratorTest {
         val assistantFinishedMessage = assistantStartedMessage.copy(content = "Hello there")
 
         coEvery {
-            messageDao.insertMessage(testSession.id, null, any(), ChatMessage.Role.USER, "Hello", null, null, any())
-        } returns userMessage.right()
-        coEvery { sessionDao.updateSessionLeafMessageId(testSession.id, userMessage.id) } returns Unit.right()
-        coEvery { toolCallDao.getToolCallsBySessionId(testSession.id) } returns emptyList()
+            conversationTurnPersistence.saveUserMessage(testSession.id, "Hello", null, any())
+        } returns PersistedUserMessage(userMessage, null)
+        coEvery { conversationTurnPersistence.loadSessionToolCalls(testSession.id) } returns emptyList()
         coEvery {
-            messageDao.insertMessage(
+            conversationTurnPersistence.saveAssistantMessage(
                 testSession.id,
-                userMessage.id,
-                any(),
-                ChatMessage.Role.ASSISTANT,
                 "",
-                testModel.id,
-                streamingSettings.id,
-                any()
+                userMessage.id,
+                testModel,
+                streamingSettings
             )
-        } returns assistantStartedMessage.right()
-        coEvery { sessionDao.updateSessionLeafMessageId(testSession.id, assistantStartedMessage.id) } returns Unit.right()
-        coEvery { messageDao.getMessageById(userMessage.id) } returns userMessage.right()
+        } returns PersistedAssistantMessage(assistantStartedMessage, userMessage)
         coEvery {
             llmApiClient.completeChatStreaming(any(), any(), any(), any(), any(), any())
         } returns flowOf(
@@ -454,7 +403,9 @@ class DefaultConversationTurnOrchestratorTest {
             LLMStreamChunk.ContentChunk("there", finishReason = "stop").right(),
             LLMStreamChunk.Done.right()
         )
-        coEvery { messageDao.updateMessageContent(assistantStartedMessage.id, "Hello there") } returns assistantFinishedMessage.right()
+        coEvery {
+            conversationTurnPersistence.updateAssistantMessageContent(assistantStartedMessage.id, "Hello there")
+        } returns assistantFinishedMessage
 
         val events = orchestrator.processStreamingTurn(
             ConversationTurnRequest(
@@ -476,6 +427,8 @@ class DefaultConversationTurnOrchestratorTest {
         assertIs<ConversationTurnEvent.AssistantMessageFinished>(events[4])
         assertEquals(ConversationTurnEvent.TurnCompleted, events[5])
 
-        coVerify(exactly = 1) { messageDao.updateMessageContent(assistantStartedMessage.id, "Hello there") }
+        coVerify(exactly = 1) {
+            conversationTurnPersistence.updateAssistantMessageContent(assistantStartedMessage.id, "Hello there")
+        }
     }
 }

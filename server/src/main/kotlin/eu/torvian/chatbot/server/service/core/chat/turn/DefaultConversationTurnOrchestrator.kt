@@ -1,20 +1,15 @@
 package eu.torvian.chatbot.server.service.core.chat.turn
 
 import arrow.core.getOrElse
-import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.core.ChatMessage
-import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.tool.ToolCall
-import eu.torvian.chatbot.common.models.tool.ToolCallStatus
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
-import eu.torvian.chatbot.server.data.dao.MessageDao
-import eu.torvian.chatbot.server.data.dao.SessionDao
-import eu.torvian.chatbot.server.data.dao.ToolCallDao
 import eu.torvian.chatbot.server.service.core.chat.content.ToolResultContentBuilder
 import eu.torvian.chatbot.server.service.core.chat.context.ChatContextBuilder
+import eu.torvian.chatbot.server.service.core.chat.persistence.ConversationTurnPersistence
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallExecutionEvent
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallOrchestrator
 import eu.torvian.chatbot.server.service.llm.LLMApiClient
@@ -29,29 +24,22 @@ import kotlinx.coroutines.withContext
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 import java.util.concurrent.CancellationException
-import kotlin.time.Clock
 
 /**
  * Default implementation that owns the shared assistant/tool loop for a single conversation turn.
  *
- * @property messageDao DAO used to persist chat messages.
- * @property sessionDao DAO used to update the session leaf pointer.
  * @property llmApiClient Client used for streaming and non-streaming LLM calls.
- * @property toolCallDao DAO used to persist tool-call records.
  * @property toolCallOrchestrator Collaborator that handles approval and tool execution.
- * @property transactionScope Transaction wrapper for atomic persistence operations.
  * @property toolResultContentBuilder Serializer for completed tool results appended back into context.
  * @property chatContextBuilder Builder that reconstructs the threaded LLM context.
+ * @property conversationTurnPersistence Collaborator that owns message and tool-call persistence workflow.
  */
 class DefaultConversationTurnOrchestrator(
-    private val messageDao: MessageDao,
-    private val sessionDao: SessionDao,
     private val llmApiClient: LLMApiClient,
-    private val toolCallDao: ToolCallDao,
     private val toolCallOrchestrator: ToolCallOrchestrator,
-    private val transactionScope: TransactionScope,
     private val toolResultContentBuilder: ToolResultContentBuilder,
     private val chatContextBuilder: ChatContextBuilder,
+    private val conversationTurnPersistence: ConversationTurnPersistence,
 ) : ConversationTurnOrchestrator {
 
     companion object {
@@ -117,7 +105,7 @@ class DefaultConversationTurnOrchestrator(
             val assistantStep = processAssistantStep(request, currentContext, lastMessageId, emit) ?: break
             lastMessageId = assistantStep.assistantMessage.id
 
-            val pendingToolCalls = persistPendingToolCalls(
+            val pendingToolCalls = conversationTurnPersistence.persistPendingToolCalls(
                 messageId = assistantStep.assistantMessage.id,
                 toolCallRequests = assistantStep.toolCallRequests,
                 enabledTools = request.llmConfig.tools
@@ -147,14 +135,19 @@ class DefaultConversationTurnOrchestrator(
     ): PreparedTurnState {
         var lastMessageId: Long
         val updatedSessionMessages = if (request.content != null) {
-            val userMessage = saveUserMessage(
+            val userMessage = conversationTurnPersistence.saveUserMessage(
                 sessionId = request.session.id,
                 content = request.content,
                 parentMessageId = request.parentMessageId,
                 fileReferences = request.fileReferences
-            ).let { (savedMessage, updatedParentMessage) ->
-                emit(ConversationTurnEvent.UserMessageSaved(savedMessage, updatedParentMessage))
-                savedMessage
+            ).let { persistedUserMessage ->
+                emit(
+                    ConversationTurnEvent.UserMessageSaved(
+                        persistedUserMessage.userMessage,
+                        persistedUserMessage.updatedParentMessage
+                    )
+                )
+                persistedUserMessage.userMessage
             }
             lastMessageId = userMessage.id
             request.session.messages + userMessage
@@ -165,7 +158,7 @@ class DefaultConversationTurnOrchestrator(
             request.session.messages
         }
 
-        val sessionToolCalls = toolCallDao.getToolCallsBySessionId(request.session.id).sortedBy { it.id }
+        val sessionToolCalls = conversationTurnPersistence.loadSessionToolCalls(request.session.id)
         val currentContext = chatContextBuilder.buildContext(
             startingMessageId = lastMessageId,
             sessionMessages = updatedSessionMessages,
@@ -219,15 +212,20 @@ class DefaultConversationTurnOrchestrator(
             return null
         }
 
-        val assistantMessage = saveAssistantMessage(
+        val assistantMessage = conversationTurnPersistence.saveAssistantMessage(
             sessionId = request.session.id,
             content = choice.content ?: "",
             parentMessageId = parentMessageId,
             model = request.llmConfig.model,
             settings = request.llmConfig.settings
-        ).let { (savedMessage, updatedParentMessage) ->
-            emit(ConversationTurnEvent.AssistantMessageSaved(savedMessage, updatedParentMessage))
-            savedMessage
+        ).let { persistedAssistantMessage ->
+            emit(
+                ConversationTurnEvent.AssistantMessageSaved(
+                    persistedAssistantMessage.assistantMessage,
+                    persistedAssistantMessage.updatedParentMessage
+                )
+            )
+            persistedAssistantMessage.assistantMessage
         }
 
         if (choice.finishReason != "tool_calls" || choice.toolCalls.isNullOrEmpty()) {
@@ -257,15 +255,20 @@ class DefaultConversationTurnOrchestrator(
         parentMessageId: Long,
         emit: suspend (ConversationTurnEvent) -> Unit
     ): AssistantStepOutcome? {
-        val assistantMessage = saveAssistantMessage(
+        val assistantMessage = conversationTurnPersistence.saveAssistantMessage(
             sessionId = request.session.id,
             content = "",
             parentMessageId = parentMessageId,
             model = request.llmConfig.model,
             settings = request.llmConfig.settings
-        ).let { (savedMessage, updatedParentMessage) ->
-            emit(ConversationTurnEvent.AssistantMessageStarted(savedMessage, updatedParentMessage))
-            savedMessage
+        ).let { persistedAssistantMessage ->
+            emit(
+                ConversationTurnEvent.AssistantMessageStarted(
+                    persistedAssistantMessage.assistantMessage,
+                    persistedAssistantMessage.updatedParentMessage
+                )
+            )
+            persistedAssistantMessage.assistantMessage
         }
 
         var assistantStepOutcome: AssistantStepOutcome? = null
@@ -291,7 +294,7 @@ class DefaultConversationTurnOrchestrator(
                 )
             },
             onStreamComplete = { finalContent, toolCallRequests, finishReason ->
-                val updatedAssistantMessage = updateAssistantMessageContent(
+                val updatedAssistantMessage = conversationTurnPersistence.updateAssistantMessageContent(
                     messageId = assistantMessage.id,
                     content = finalContent
                 )
@@ -320,7 +323,7 @@ class DefaultConversationTurnOrchestrator(
                     logger.info(
                         "Saving partial content for cancelled message ${assistantMessage.id}: ${partialContent.length} characters"
                     )
-                    updateAssistantMessageContent(
+                    conversationTurnPersistence.updateAssistantMessageContent(
                         messageId = assistantMessage.id,
                         content = partialContent
                     )
@@ -331,43 +334,6 @@ class DefaultConversationTurnOrchestrator(
         )
 
         return assistantStepOutcome
-    }
-
-    /**
-     * Persists tool-call requests received from the LLM.
-     *
-     * @param messageId Assistant message that owns the tool calls.
-     * @param toolCallRequests Tool-call requests emitted by the LLM.
-     * @param enabledTools Enabled tool definitions available for the turn.
-     * @return Persisted tool-call records in their initial statuses.
-     */
-    private suspend fun persistPendingToolCalls(
-        messageId: Long,
-        toolCallRequests: List<LLMCompletionResult.CompletionChoice.ToolCallRequest>,
-        enabledTools: List<ToolDefinition>?
-    ): List<ToolCall> {
-        return toolCallRequests.map { toolCallRequest ->
-            val toolDefinition = enabledTools?.find { it.name == toolCallRequest.name }
-            toolCallDao.insertToolCall(
-                messageId = messageId,
-                toolDefinitionId = toolDefinition?.id,
-                toolName = toolCallRequest.name,
-                toolCallId = toolCallRequest.toolCallId,
-                input = toolCallRequest.arguments,
-                output = null,
-                status = if (toolDefinition == null) ToolCallStatus.ERROR else ToolCallStatus.PENDING,
-                errorMessage = if (toolDefinition == null) {
-                    "Tool '${toolCallRequest.name}' not found in enabled tools"
-                } else {
-                    null
-                },
-                denialReason = null,
-                executedAt = Clock.System.now(),
-                durationMs = null
-            ).getOrElse { error ->
-                throw IllegalStateException("Failed to insert tool call: $error")
-            }
-        }
     }
 
     /**
@@ -442,119 +408,6 @@ class DefaultConversationTurnOrchestrator(
         }
 
         return currentContext + assistantContextMessage + toolResultMessages
-    }
-
-    /**
-     * Saves a new user message and updates the session leaf and optional parent linkage.
-     *
-     * @param sessionId Session receiving the user message.
-     * @param content Raw user content.
-     * @param parentMessageId Optional parent message for threaded continuation.
-     * @param fileReferences File references attached to the user message.
-     * @return Pair of the saved user message and the refreshed parent message, when present.
-     */
-    private suspend fun saveUserMessage(
-        sessionId: Long,
-        content: String,
-        parentMessageId: Long?,
-        fileReferences: List<eu.torvian.chatbot.common.models.core.FileReference> = emptyList()
-    ): Pair<ChatMessage.UserMessage, ChatMessage?> = transactionScope.transaction {
-        val userMessage = messageDao.insertMessage(
-            sessionId = sessionId,
-            targetMessageId = parentMessageId,
-            position = MessageInsertPosition.APPEND,
-            role = ChatMessage.Role.USER,
-            content = content,
-            modelId = null,
-            settingsId = null,
-            fileReferences = fileReferences
-        ).getOrElse { daoError ->
-            throw IllegalStateException(
-                "Failed to insert user message. Session id: $sessionId. " +
-                    "Parent message id: $parentMessageId. Error: $daoError"
-            )
-        } as ChatMessage.UserMessage
-
-        sessionDao.updateSessionLeafMessageId(sessionId, userMessage.id).getOrElse { updateError ->
-            throw IllegalStateException(
-                "Failed to update session leaf message ID. Session id: $sessionId. " +
-                    "New leaf message id: ${userMessage.id}. Error: $updateError"
-            )
-        }
-
-        val updatedParentMessage = parentMessageId?.let { id ->
-            messageDao.getMessageById(id).getOrElse { daoError ->
-                throw IllegalStateException(
-                    "Failed to retrieve updated parent message. Parent message id: $id. Error: $daoError"
-                )
-            }
-        }
-
-        userMessage to updatedParentMessage
-    }
-
-    /**
-     * Saves a new assistant message and updates the session leaf and parent linkage.
-     *
-     * @param sessionId Session receiving the assistant message.
-     * @param content Assistant content to persist.
-     * @param parentMessageId Parent message that the assistant replies to.
-     * @param model Model metadata associated with the assistant message.
-     * @param settings Settings metadata associated with the assistant message.
-     * @return Pair of the saved assistant message and the refreshed parent message.
-     */
-    private suspend fun saveAssistantMessage(
-        sessionId: Long,
-        content: String,
-        parentMessageId: Long,
-        model: LLMModel,
-        settings: ChatModelSettings
-    ): Pair<ChatMessage.AssistantMessage, ChatMessage> = transactionScope.transaction {
-        val assistantMessage = messageDao.insertMessage(
-            sessionId = sessionId,
-            targetMessageId = parentMessageId,
-            position = MessageInsertPosition.APPEND,
-            role = ChatMessage.Role.ASSISTANT,
-            content = content,
-            modelId = model.id,
-            settingsId = settings.id
-        ).getOrElse { daoError ->
-            throw IllegalStateException(
-                "Failed to insert assistant message. Session id: $sessionId. " +
-                    "Parent message id: $parentMessageId. Error: $daoError"
-            )
-        } as ChatMessage.AssistantMessage
-
-        sessionDao.updateSessionLeafMessageId(sessionId, assistantMessage.id).getOrElse { updateError ->
-            throw IllegalStateException(
-                "Failed to update session leaf message ID. Session id: $sessionId. " +
-                    "New leaf message id: ${assistantMessage.id}. Error: $updateError"
-            )
-        }
-
-        val updatedParentMessage = messageDao.getMessageById(parentMessageId).getOrElse { daoError ->
-            throw IllegalStateException(
-                "Failed to retrieve updated parent message. Parent message id: $parentMessageId. Error: $daoError"
-            )
-        }
-
-        assistantMessage to updatedParentMessage
-    }
-
-    /**
-     * Persists the final content of a streaming assistant message.
-     *
-     * @param messageId Assistant message to update.
-     * @param content Final accumulated content.
-     * @return Updated assistant message.
-     */
-    private suspend fun updateAssistantMessageContent(
-        messageId: Long,
-        content: String
-    ): ChatMessage.AssistantMessage = transactionScope.transaction {
-        messageDao.updateMessageContent(messageId, content).getOrElse { error ->
-            throw IllegalStateException("Failed to update assistant message content: $error")
-        } as ChatMessage.AssistantMessage
     }
 
     /**
