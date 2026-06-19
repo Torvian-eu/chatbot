@@ -22,6 +22,8 @@ import eu.torvian.chatbot.server.data.dao.ToolCallDao
 import eu.torvian.chatbot.server.data.dao.error.MessageError
 import eu.torvian.chatbot.server.data.dao.error.SessionError
 import eu.torvian.chatbot.server.service.core.*
+import eu.torvian.chatbot.server.service.core.chat.content.ToolResultContentBuilder
+import eu.torvian.chatbot.server.service.core.chat.context.ChatContextBuilder
 import eu.torvian.chatbot.server.service.core.error.message.ProcessNewMessageError
 import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageError
 import eu.torvian.chatbot.server.service.core.error.model.GetModelError
@@ -37,16 +39,10 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.withContext
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
-import java.util.*
 import java.util.concurrent.CancellationException
 import kotlin.time.Clock
-import kotlin.time.Instant
 
 /**
  * Service for processing new chat messages and managing the conversation flow.
@@ -64,6 +60,8 @@ class ChatServiceImpl(
     private val llmProviderService: LLMProviderService,
     private val credentialManager: CredentialManager,
     private val transactionScope: TransactionScope,
+    private val toolResultContentBuilder: ToolResultContentBuilder,
+    private val chatContextBuilder: ChatContextBuilder,
 ) : ChatService {
 
     companion object {
@@ -213,10 +211,17 @@ class ChatServiceImpl(
                 session.messages
             }
 
-            // 2. Build context
-            var currentContext: List<RawChatMessage> = buildContext(lastMessageId, updatedSessionMessages, session.id)
+            // 2. Load persisted tool-call history
+            val sessionToolCalls = toolCallDao.getToolCallsBySessionId(session.id).sortedBy { it.id }
 
-            // 3. Tool calling loop
+            // 3. Build context
+            var currentContext: List<RawChatMessage> = chatContextBuilder.buildContext(
+                startingMessageId = lastMessageId,
+                sessionMessages = updatedSessionMessages,
+                toolCalls = sessionToolCalls
+            )
+
+            // 4. Tool calling loop
             var iterationCount = 0
             while (iterationCount < MAX_TOOL_CALLING_ITERATIONS) {
                 iterationCount++
@@ -336,7 +341,7 @@ class ChatServiceImpl(
                 // Add tool result messages to context
                 currentContext = currentContext + completedToolCalls.map { toolCall ->
                     RawChatMessage.Tool(
-                        content = buildToolResultContent(toolCall),
+                        content = toolResultContentBuilder.build(toolCall),
                         toolCallId = toolCall.toolCallId ?: "",
                         name = toolCall.toolName
                     )
@@ -384,14 +389,21 @@ class ChatServiceImpl(
                 session.messages
             }
 
-            // Step 2: Build context
-            var currentContext: List<RawChatMessage> = buildContext(lastMessageId, updatedSessionMessages, session.id)
+            // Step 2: Load persisted tool-call history
+            val sessionToolCalls = toolCallDao.getToolCallsBySessionId(session.id).sortedBy { it.id }
+
+            // Step 3: Build context
+            var currentContext: List<RawChatMessage> = chatContextBuilder.buildContext(
+                startingMessageId = lastMessageId,
+                sessionMessages = updatedSessionMessages,
+                toolCalls = sessionToolCalls
+            )
             var continueLoop = true
             var iterationCount = 0
 
             while (continueLoop && iterationCount < MAX_TOOL_CALLING_ITERATIONS) {
                 iterationCount++
-                // Step 3: Create and save a new empty assistant message to the database
+                // Step 4: Create and save a new empty assistant message to the database
                 val assistantMessage = saveAssistantMessage(
                     sessionId = session.id,
                     content = "",
@@ -512,7 +524,7 @@ class ChatServiceImpl(
                         // Add tool result messages to context
                         currentContext = currentContext + completedToolCalls.map { toolCall ->
                             RawChatMessage.Tool(
-                                content = buildToolResultContent(toolCall),
+                                content = toolResultContentBuilder.build(toolCall),
                                 toolCallId = toolCall.toolCallId ?: "",
                                 name = toolCall.toolName
                             )
@@ -550,112 +562,6 @@ class ChatServiceImpl(
             send(MessageStreamEvent.StreamCompleted.right())
         }
     }
-
-
-
-    /**
-     * Builds the conversation context for an LLM request.
-     *
-     * This method constructs a list of [RawChatMessage] objects representing the conversation
-     * thread from root to the starting message. It includes:
-     * - User messages
-     * - Assistant messages (with linked tool calls)
-     * - Tool result messages (reconstructed from ToolCall records)
-     *
-     * The context includes only messages in the current thread (following parentMessageId
-     * links from current to root), not all messages in the session. This supports branching
-     * conversations where users can create alternative response paths.
-     *
-     * @param startingMessageId The ID of the message to start building context from (inclusive)
-     * @param sessionMessages All messages in the session (for efficient lookup)
-     * @param sessionId The session ID (for fetching tool calls)
-     * @return List of [RawChatMessage] objects in chronological order (root to starting message)
-     */
-    private suspend fun buildContext(
-        startingMessageId: Long,
-        sessionMessages: List<ChatMessage>,
-        sessionId: Long
-    ): List<RawChatMessage> {
-        // Fetch all tool calls for the session, sorted by id
-        val allToolCalls = toolCallDao.getToolCallsBySessionId(sessionId).sortedBy { it.id }
-
-        // Build message map for efficient lookup
-        val messageMap = sessionMessages.associateBy { it.id }
-
-        // Traverse up the tree from the starting message to build the thread
-        val threadMessages = mutableListOf<ChatMessage>()
-        var currentMessage: ChatMessage? = messageMap[startingMessageId]
-        val visitedIds = mutableSetOf<Long>()
-
-        while (currentMessage != null && !visitedIds.contains(currentMessage.id)) {
-            visitedIds.add(currentMessage.id)
-            threadMessages.add(currentMessage)
-            currentMessage = currentMessage.parentMessageId?.let { messageMap[it] }
-        }
-
-        // Reverse to get chronological order (root to current)
-        threadMessages.reverse()
-
-        // Convert thread messages to RawChatMessage objects
-        val rawContext = mutableListOf<RawChatMessage>()
-
-        threadMessages.forEach { message ->
-            when (message) {
-                is ChatMessage.UserMessage -> {
-                    // Convert user message with file references embedded in content
-                    val contentWithFileRefs = buildContentWithFileReferences(message.content, message.fileReferences)
-                    rawContext.add(RawChatMessage.User(contentWithFileRefs))
-                }
-
-                is ChatMessage.AssistantMessage -> {
-                    // Get tool calls for this message
-                    val messageToolCalls = allToolCalls.filter { it.messageId == message.id }
-
-                    // Convert assistant message with tool calls
-                    val toolCalls = if (messageToolCalls.isNotEmpty()) {
-                        messageToolCalls.map { tc ->
-                            RawChatMessage.Assistant.ToolCall(
-                                id = tc.toolCallId,
-                                name = tc.toolName,
-                                arguments = tc.input
-                            )
-                        }
-                    } else {
-                        null
-                    }
-
-                    rawContext.add(
-                        RawChatMessage.Assistant(
-                            content = message.content,
-                            toolCalls = toolCalls
-                        )
-                    )
-
-                    // Only add results for completed/errored/denied tools
-                    messageToolCalls
-                        .filter {
-                            it.status in setOf(
-                                ToolCallStatus.SUCCESS,
-                                ToolCallStatus.ERROR,
-                                ToolCallStatus.USER_DENIED
-                            )
-                        }
-                        .forEach { toolCall ->
-                            rawContext.add(
-                                RawChatMessage.Tool(
-                                    content = buildToolResultContent(toolCall),
-                                    toolCallId = toolCall.toolCallId ?: "",
-                                    name = toolCall.toolName
-                                )
-                            )
-                        }
-                }
-            }
-        }
-
-        return rawContext
-    }
-
     /**
      * Saves user message and updates relationships.
      */
@@ -902,141 +808,4 @@ class ChatServiceImpl(
         var name: String,
         val arguments: StringBuilder
     )
-
-
-
-    /**
-     * Builds the content for a tool result message based on the tool call status and output.
-     *
-     * @param toolCall The tool call record to build content for
-     */
-    private fun buildToolResultContent(toolCall: ToolCall): String {
-        return when (toolCall.status) {
-            ToolCallStatus.ERROR -> {
-                buildJsonObject {
-                    put("error", toolCall.errorMessage ?: "Unknown error")
-                }.toString()
-            }
-
-            ToolCallStatus.USER_DENIED -> {
-                buildJsonObject {
-                    put("user_denied", "Tool call was denied by user.")
-                    put("reason", toolCall.denialReason ?: "No reason provided")
-                }.toString()
-            }
-
-            else -> {
-                // For SUCCESS or any other completed status, if output exists use it as-is.
-                // If output is null or blank, provide an empty JSON object.
-                val output = toolCall.output
-                if (output.isNullOrBlank()) {
-                    buildJsonObject { }.toString()
-                } else {
-                    output
-                }
-            }
-        }
-    }
-
-    /**
-     * Builds the message content with file references for LLM context.
-     *
-     * For inline references (with inlinePosition set):
-     * - Inserts the file content at the specified position with a header showing the file path
-     * - Or inserts a reference placeholder if no content is included
-     *
-     * For non-inline references:
-     * - Appends a list of referenced files at the end of the message
-     * - Includes file content if available, otherwise just metadata
-     *
-     * @param content The original message content
-     * @param fileReferences The list of file references to include
-     * @return The content with file references embedded
-     */
-    private fun buildContentWithFileReferences(
-        content: String,
-        fileReferences: List<FileReference>
-    ): String {
-        if (fileReferences.isEmpty()) return content
-
-        // Separate inline and non-inline references
-        val inlineRefs = fileReferences.filter { it.isInline }.sortedByDescending { it.inlinePosition ?: 0 }
-        val nonInlineRefs = fileReferences.filter { !it.isInline }
-
-        var result = content
-
-        // Helper function to format file header with metadata
-        fun formatFileHeader(ref: FileReference): String {
-            val header = buildString {
-                append("--- ${ref.relativePath}")
-                append(" [${formatFileSize(ref.fileSize)}, ${ref.mimeType}, ${formatLastModified(ref.lastModified)}]")
-                append(" ---")
-            }
-            return header
-        }
-
-        // Helper function to format file reference without content
-        fun formatFileReference(ref: FileReference): String {
-            return "[reference: ${ref.relativePath} (${formatFileSize(ref.fileSize)}, ${ref.mimeType})]"
-        }
-
-        // Process inline references (in reverse order to maintain positions)
-        for (ref in inlineRefs) {
-            val position = ref.inlinePosition ?: continue
-            val insertion = if (ref.content != null) {
-                "\n${formatFileHeader(ref)}\n${ref.content}\n--- end ${ref.fileName} ---\n"
-            } else {
-                "\n${formatFileReference(ref)}\n"
-            }
-
-            // Insert at position, clamped to valid range
-            val insertPos = position.coerceIn(0, result.length)
-            result = result.take(insertPos) + insertion + result.substring(insertPos)
-        }
-
-        // Append non-inline references at the end
-        if (nonInlineRefs.isNotEmpty()) {
-            result += "\n\n--- Attached Files ---"
-
-            for (ref in nonInlineRefs) {
-                result += if (ref.content != null) {
-                    // Include file content if available
-                    "\n\n${formatFileHeader(ref)}\n${ref.content}\n--- end ${ref.fileName} ---"
-                } else {
-                    // Show metadata for reference-only files
-                    "\n${formatFileReference(ref)}"
-                }
-            }
-        }
-
-        return result
-    }
-
-    /**
-     * Formats file size in bytes to a human-readable string.
-     */
-    private fun formatFileSize(bytes: Long): String {
-        return when {
-            bytes < 1024 -> "$bytes B"
-            bytes < 1024 * 1024 -> "${bytes / 1024} KB"
-            bytes < 1024 * 1024 * 1024 -> "${String.format(Locale.ROOT, "%.2f", bytes / (1024.0 * 1024.0))} MB"
-            else -> "${String.format(Locale.ROOT, "%.2f", bytes / (1024.0 * 1024.0 * 1024.0))} GB"
-        }
-    }
-
-    /**
-     * Formats an Instant to a human-readable date/time string.
-     */
-    private fun formatLastModified(instant: Instant): String {
-        val tz = TimeZone.currentSystemDefault()
-        val localDateTime = instant.toLocalDateTime(tz)
-        return "${localDateTime.date} ${
-            String.format(
-                Locale.ROOT,
-                "%02d:%02d",
-                localDateTime.hour,
-                localDateTime.minute
-            )
-        }"
-    }
 }

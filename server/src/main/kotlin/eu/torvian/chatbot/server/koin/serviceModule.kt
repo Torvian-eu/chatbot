@@ -6,6 +6,12 @@ import eu.torvian.chatbot.common.security.EncryptionService
 import eu.torvian.chatbot.common.security.PasswordValidator
 import eu.torvian.chatbot.server.config.AppConfiguration
 import eu.torvian.chatbot.server.service.core.*
+import eu.torvian.chatbot.server.service.core.chat.content.DefaultFileReferenceContentBuilder
+import eu.torvian.chatbot.server.service.core.chat.content.DefaultToolResultContentBuilder
+import eu.torvian.chatbot.server.service.core.chat.content.FileReferenceContentBuilder
+import eu.torvian.chatbot.server.service.core.chat.content.ToolResultContentBuilder
+import eu.torvian.chatbot.server.service.core.chat.context.ChatContextBuilder
+import eu.torvian.chatbot.server.service.core.chat.context.DefaultChatContextBuilder
 import eu.torvian.chatbot.server.service.core.impl.*
 import eu.torvian.chatbot.server.service.core.toolcall.DefaultToolCallOrchestrator
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallOrchestrator
@@ -49,8 +55,13 @@ fun serviceModule() = module {
     single<LLMProviderService> { LLMProviderServiceImpl(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     single<MessageService> { MessageServiceImpl(get(), get(), get()) }
     single<ToolCallOrchestrator> { DefaultToolCallOrchestrator(get(), get(), get(), get(), get()) }
+    single<FileReferenceContentBuilder> { DefaultFileReferenceContentBuilder() }
+    single<ToolResultContentBuilder> { DefaultToolResultContentBuilder() }
+    single<ChatContextBuilder> { DefaultChatContextBuilder(get(), get()) }
     single<ChatService> {
         ChatServiceImpl(
+            get(),
+            get(),
             get(),
             get(),
             get(),

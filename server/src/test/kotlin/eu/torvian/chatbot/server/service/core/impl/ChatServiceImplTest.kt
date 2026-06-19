@@ -14,6 +14,9 @@ import eu.torvian.chatbot.server.data.dao.ToolCallDao
 import eu.torvian.chatbot.server.data.dao.error.MessageError
 import eu.torvian.chatbot.server.data.dao.error.SessionError
 import eu.torvian.chatbot.server.service.core.*
+import eu.torvian.chatbot.server.service.core.chat.content.DefaultFileReferenceContentBuilder
+import eu.torvian.chatbot.server.service.core.chat.content.DefaultToolResultContentBuilder
+import eu.torvian.chatbot.server.service.core.chat.context.DefaultChatContextBuilder
 import eu.torvian.chatbot.server.service.core.error.message.ProcessNewMessageError
 import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageError
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallOrchestrator
@@ -155,6 +158,9 @@ class ChatServiceImplTest {
         )
     )
 
+    /**
+     * Recreates the chat service with fresh mocks and explicit helper collaborators for each test.
+     */
     @BeforeEach
     fun setUp() {
         // Create mocks for all dependencies
@@ -170,15 +176,23 @@ class ChatServiceImplTest {
         transactionScope = mockk()
         toolCallOrchestrator = mockk()
 
+        val toolResultContentBuilder = DefaultToolResultContentBuilder()
+        val chatContextBuilder = DefaultChatContextBuilder(
+            fileReferenceContentBuilder = DefaultFileReferenceContentBuilder(),
+            toolResultContentBuilder = toolResultContentBuilder
+        )
+
         // Create the service instance with mocked dependencies
         chatService = ChatServiceImpl(
             messageDao, sessionDao, llmApiClient, toolCallDao, toolCallOrchestrator, toolService, llmModelService,
-            modelSettingsService, llmProviderService, credentialManager, transactionScope
+            modelSettingsService, llmProviderService, credentialManager, transactionScope,
+            toolResultContentBuilder, chatContextBuilder
         )
 
         // Mock the transaction scope to execute blocks directly.
         coEvery { transactionScope.transaction(any<suspend () -> Any?>()) } coAnswers {
-            val block = firstArg<suspend () -> Any?>()
+            @Suppress("UNCHECKED_CAST")
+            val block = invocation.args[0] as suspend () -> Any?
             block()
         }
     }
