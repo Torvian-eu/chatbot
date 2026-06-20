@@ -48,6 +48,23 @@ interface WorkerConfigLoader {
     ): Either<WorkerConfigError, AppConfigDto>
 
     /**
+     * Loads a single config layer DTO without merging any other layers.
+     *
+     * This is used by focused mutation flows that own exactly one persisted file, such as
+     * updating `application.json` while preserving other layering semantics.
+     *
+     * @param configDir Worker config directory.
+     * @param fileName Layer file name to read (for example `application.json`).
+     * @param optional Whether the layer may be absent without failing the read.
+     * @return Either a logical configuration error or the decoded DTO from that layer.
+     */
+    fun loadLayerDto(
+        configDir: Path,
+        fileName: String,
+        optional: Boolean = false
+    ): Either<WorkerConfigError, AppConfigDto>
+
+    /**
      * Saves a root DTO into a specific config layer file.
      *
      * Atomically writes the serialized DTO to the specified layer file, creating

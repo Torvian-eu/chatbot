@@ -14,4 +14,4 @@ fi
 echo "Launching worker..."
 
 # Replace the shell process with the Java process so signal handling works correctly
-exec java $JAVA_OPTS -cp "lib/*" eu.torvian.chatbot.worker.main.WorkerMain
+exec java $JAVA_OPTS -cp "lib/*" eu.torvian.chatbot.worker.main.WorkerMain "$@"

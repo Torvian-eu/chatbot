@@ -78,6 +78,31 @@ class DefaultWorkerConfigLoader : WorkerConfigLoader {
     }
 
     /**
+     * Loads a single persisted config layer without merging any overlay layers.
+     *
+     * This keeps mutation flows focused on the file they own so saving the DTO back cannot
+     * accidentally flatten values from higher-precedence sources.
+     *
+     * @param configDir Worker config directory.
+     * @param fileName Layer file name to load.
+     * @param optional Whether a missing layer should resolve to an empty DTO.
+     * @return Either a logical configuration error or the decoded DTO for that layer.
+     */
+    override fun loadLayerDto(
+        configDir: Path,
+        fileName: String,
+        optional: Boolean
+    ): Either<WorkerConfigError, AppConfigDto> = either {
+        val normalizedConfigDir = normalizeAndEnsureConfigDir(configDir)
+        val layer = loadLayer(normalizedConfigDir, fileName, optional)
+        try {
+            json.decodeFromJsonElement(AppConfigDto.serializer(), layer)
+        } catch (e: SerializationException) {
+            raise(WorkerConfigError.ConfigInvalid("Failed to parse JSON at ${resolveLayerPath(normalizedConfigDir, fileName)}: ${e.message}"))
+        }
+    }
+
+    /**
      * Saves a root DTO into a specific config layer file.
      *
      * Atomically writes the serialized DTO to the specified layer file, creating
