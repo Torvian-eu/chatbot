@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.worker.mcp
 
 import arrow.core.Either
+import arrow.core.flatMap
 import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerControlErrorResultData
@@ -34,10 +35,13 @@ import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
  * [McpRuntimeService], while mapping runtime errors to protocol result DTOs.
  *
  * @property runtimeService Worker runtime service that performs MCP process/client operations.
+ * @property signedMcpServerConfigValidator Authorization validator used before trusting relayed config sync payloads.
  * @property configStore Worker-local assigned MCP server cache updated by create/update/delete sync commands.
  */
 class McpRuntimeCommandExecutorImpl(
     private val runtimeService: McpRuntimeService,
+    private val signedMcpServerConfigValidator: SignedMcpServerConfigValidator,
+    private val signedMcpServerDraftConfigValidator: SignedMcpServerDraftConfigValidator,
     private val configStore: McpServerConfigStore
 ) : McpRuntimeCommandExecutor {
 
@@ -116,18 +120,24 @@ class McpRuntimeCommandExecutorImpl(
     override suspend fun createServer(
         request: WorkerMcpServerCreateCommandData
     ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerCreateResultData> {
-        return runConfigSyncCommand(serverId = request.server.id) {
-            configStore.upsertServer(request.server)
-            WorkerMcpServerCreateResultData(serverId = request.server.id)
+        val server = request.signedServer.server
+        return authorizeConfigSync(server, request.signedServer.signedRequest).flatMap {
+            runConfigSyncCommand(serverId = server.id) {
+                configStore.upsertServer(server)
+                WorkerMcpServerCreateResultData(serverId = server.id)
+            }
         }
     }
 
     override suspend fun updateServer(
         request: WorkerMcpServerUpdateCommandData
     ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerUpdateResultData> {
-        return runConfigSyncCommand(serverId = request.server.id) {
-            configStore.upsertServer(request.server)
-            WorkerMcpServerUpdateResultData(serverId = request.server.id)
+        val server = request.signedServer.server
+        return authorizeConfigSync(server, request.signedServer.signedRequest).flatMap {
+            runConfigSyncCommand(serverId = server.id) {
+                configStore.upsertServer(server)
+                WorkerMcpServerUpdateResultData(serverId = server.id)
+            }
         }
     }
 
@@ -145,6 +155,18 @@ class McpRuntimeCommandExecutorImpl(
     ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerTestDraftConnectionResultData> {
         // Use a temporary runtime-only identifier so draft tests do not collide with tracked servers.
         val tempServerId = -System.currentTimeMillis()
+
+        when (val validationResult = signedMcpServerDraftConfigValidator.validate(request)) {
+            SignedMcpServerDraftConfigValidationResult.Authorized -> { /* proceed */ }
+            is SignedMcpServerDraftConfigValidationResult.Rejected -> {
+                return WorkerMcpServerControlErrorResultData(
+                    serverId = tempServerId,
+                    code = validationResult.code,
+                    message = validationResult.message,
+                    details = validationResult.details
+                ).left()
+            }
+        }
 
         val config = LocalMCPServerDto(
             id = tempServerId,
@@ -191,6 +213,33 @@ class McpRuntimeCommandExecutorImpl(
                 code = "CONFIG_SYNC_FAILED",
                 message = "Failed to apply MCP server config sync command",
                 details = exception.message
+            ).left()
+        }
+    }
+
+    /**
+     * Validates one relayed config-sync payload before the worker trusts and caches it.
+     *
+     * @param server Relayed Local MCP server configuration.
+     * @param signedRequest Detached signed request associated with [server], when present.
+     * @return Either an authorization failure payload or `Unit` when the payload is trusted.
+     */
+    private suspend fun authorizeConfigSync(
+        server: LocalMCPServerDto,
+        signedRequest: eu.torvian.chatbot.common.security.SignedRequest?
+    ): Either<WorkerMcpServerControlErrorResultData, Unit> {
+        return when (
+            val validation = signedMcpServerConfigValidator.validate(
+                server = server,
+                signedRequest = signedRequest
+            )
+        ) {
+            SignedMcpServerConfigValidationResult.Authorized -> Unit.right()
+            is SignedMcpServerConfigValidationResult.Rejected -> WorkerMcpServerControlErrorResultData(
+                serverId = server.id,
+                code = validation.code,
+                message = validation.message,
+                details = validation.details
             ).left()
         }
     }

@@ -9,9 +9,11 @@ import eu.torvian.chatbot.app.service.clipboard.ClipboardService
 import eu.torvian.chatbot.app.service.clipboard.ClipboardServiceAndroid
 import eu.torvian.chatbot.app.service.security.CertificateStorage
 import eu.torvian.chatbot.app.service.security.FileSystemCertificateStorage
-import eu.torvian.chatbot.common.security.AESCryptoProvider
+import eu.torvian.chatbot.common.security.AsymmetricCryptoProvider
 import eu.torvian.chatbot.common.security.CryptoProvider
 import eu.torvian.chatbot.common.security.EncryptionService
+import eu.torvian.chatbot.common.security.JvmAsymmetricCryptoProvider
+import eu.torvian.chatbot.common.security.AESCryptoProvider
 import kotlinx.io.files.Path
 import org.koin.android.ext.koin.androidContext
 import org.koin.dsl.module
@@ -31,6 +33,10 @@ fun androidModule(config: AppConfiguration) = module {
 
     single<EncryptionService> {
         EncryptionService(get())
+    }
+
+    single<AsymmetricCryptoProvider> {
+        JvmAsymmetricCryptoProvider()
     }
 
     single<TokenStorage> {

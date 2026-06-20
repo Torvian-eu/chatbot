@@ -462,7 +462,7 @@ class ChatViewModel(
      */
     private fun approveToolCall(toolCall: ToolCall) {
         backgroundScope.launch {
-            sendMessageUC.approveToolCall(toolCall.id)
+            sendMessageUC.approveToolCall(toolCall)
         }
     }
 
@@ -471,7 +471,7 @@ class ChatViewModel(
      */
     private fun denyToolCall(toolCall: ToolCall, reason: String?) {
         backgroundScope.launch {
-            sendMessageUC.denyToolCall(toolCall.id, reason)
+            sendMessageUC.denyToolCall(toolCall, reason)
         }
     }
 

@@ -103,3 +103,8 @@ sourceSets {
     }
 }
 
+tasks.withType<Test> {
+    jvmArgs(
+        "--sun-misc-unsafe-memory-access=allow" // Allow unsafe memory access for testing purposes (needed for MockK)
+    )
+}

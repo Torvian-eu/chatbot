@@ -86,6 +86,7 @@ class DefaultAuthRepository(
             val errorMessage = when (error) {
                 is DeviceIdentityError.PersistenceFailure -> error.message
                 is DeviceIdentityError.ReadFailure -> error.message
+                is DeviceIdentityError.KeyGenerationFailure -> error.message
             }
             RepositoryError.OtherError("Failed to resolve device identity: $errorMessage")
         }) {
@@ -482,6 +483,7 @@ class DefaultAuthRepository(
             val errorMessage = when (error) {
                 is DeviceIdentityError.PersistenceFailure -> error.message
                 is DeviceIdentityError.ReadFailure -> error.message
+                is DeviceIdentityError.KeyGenerationFailure -> error.message
             }
             RepositoryError.OtherError("Failed to resolve device identity: $errorMessage")
         }) {

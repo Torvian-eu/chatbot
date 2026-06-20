@@ -5,6 +5,8 @@ import arrow.core.raise.Raise
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import java.net.URI
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 
 /**
  * Strict assembly and validation helpers for worker configuration.
@@ -41,6 +43,9 @@ fun AppConfigDto.toDomain(): Either<WorkerConfigError, Configuration> = either {
     val secretsJsonPath = required("worker.storage.secretsJsonPath", storageDto.secretsJsonPath)
     val tokenFilePath = required("worker.storage.tokenFilePath", storageDto.tokenFilePath)
     val refreshSkewSeconds = authDto.refreshSkewSeconds ?: 60L
+    val trustedSigners = worker.trustedSigners.orEmpty().mapIndexed { index, signerDto ->
+        trustedSignerToDomain(signerDto, index)
+    }
 
     validateServerBaseUrl(baseUrl)
     ensure(uid.isNotBlank()) {
@@ -83,9 +88,68 @@ fun AppConfigDto.toDomain(): Either<WorkerConfigError, Configuration> = either {
             ),
             auth = AuthConfig(
                 refreshSkewSeconds = refreshSkewSeconds
-            )
+            ),
+            trustedSigners = trustedSigners
         )
     )
+}
+
+/**
+ * Converts a trusted signer DTO into the strict domain representation.
+ *
+ * Validation is performed while assembling configuration so invalid trust-store entries fail
+ * startup before worker services attempt to verify any signed payloads.
+ *
+ * @receiver The [Raise] context used to propagate configuration errors.
+ * @param dto Nullable-layer DTO entry to validate and decode.
+ * @param index Zero-based index of the signer entry within `worker.trustedSigners`.
+ * @return The decoded trusted signer domain model.
+ * @throws WorkerConfigError.ConfigInvalid if the signer identifier or public key is invalid via Raise DSL.
+ */
+private fun Raise<WorkerConfigError>.trustedSignerToDomain(dto: TrustedSignerDto, index: Int): TrustedSigner {
+    val signerPath = "worker.trustedSigners[$index]"
+    ensure(dto.signerId.isNotBlank()) {
+        WorkerConfigError.ConfigInvalid("$signerPath.signerId must not be blank")
+    }
+
+    return TrustedSigner(
+        signerId = dto.signerId,
+        publicKey = decodeBase64ByteArray("$signerPath.publicKeyBase64", dto.publicKeyBase64),
+        permissions = dto.permissions
+    )
+}
+
+/**
+ * Decodes a Base64 byte string into binary configuration data.
+ *
+ * The decoder is intentionally strict: whitespace is only tolerated around the whole value,
+ * and the value must contain at least one byte. This keeps
+ * configuration mistakes visible at startup instead of deferring them to signature verification.
+ *
+ * @receiver The [Raise] context used to propagate configuration errors.
+ * @param path Configuration path used in validation error messages.
+ * @param rawValue Base64 string to decode.
+ * @return Decoded bytes represented by [rawValue].
+ * @throws WorkerConfigError.ConfigInvalid if the value is blank, not valid Base64, or decodes to no bytes via Raise DSL.
+ */
+@OptIn(ExperimentalEncodingApi::class)
+private fun Raise<WorkerConfigError>.decodeBase64ByteArray(path: String, rawValue: String): ByteArray {
+    val value = rawValue.trim()
+    ensure(value.isNotEmpty()) {
+        WorkerConfigError.ConfigInvalid("$path must not be blank")
+    }
+
+    val bytes = try {
+        Base64.decode(value)
+    } catch (_: IllegalArgumentException) {
+        raise(WorkerConfigError.ConfigInvalid("$path must be valid Base64"))
+    }
+
+    ensure(bytes.isNotEmpty()) {
+        WorkerConfigError.ConfigInvalid("$path must decode to at least one byte")
+    }
+
+    return bytes
 }
 
 /**

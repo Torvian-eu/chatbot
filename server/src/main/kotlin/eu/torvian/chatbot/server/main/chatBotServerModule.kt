@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.main
 
 import eu.torvian.chatbot.common.misc.di.KoinDIContainer
+import eu.torvian.chatbot.common.security.SignedRequestHttpHeaders
 import eu.torvian.chatbot.server.config.AppConfiguration
 import eu.torvian.chatbot.server.koin.*
 import eu.torvian.chatbot.server.ktor.configureKtor
@@ -63,6 +64,9 @@ fun Application.chatBotServerModule(config: AppConfiguration, serverControl: Ser
         // If there are any other custom headers, add them here:
         // allowHeader("X-Custom-Header")
         allowHeader("X-Device-Id")
+        SignedRequestHttpHeaders.all.forEach { headerName ->
+            allowHeader(headerName)
+        }
 
         // set maxAge to cache preflight responses
         maxAgeInSeconds = 3600 // Cache preflight response for 1 hour

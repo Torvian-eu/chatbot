@@ -5,6 +5,7 @@ import arrow.core.getOrElse
 import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
+import eu.torvian.chatbot.common.models.api.mcp.SignedLocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
 import eu.torvian.chatbot.common.models.api.worker.protocol.codec.decodeProtocolPayload
@@ -15,6 +16,7 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProt
 import eu.torvian.chatbot.common.models.api.worker.protocol.core.WorkerProtocolMessage
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.*
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.*
+import eu.torvian.chatbot.common.security.SignedRequest
 import eu.torvian.chatbot.worker.mcp.DummyMcpRuntimeCommandExecutor
 import eu.torvian.chatbot.worker.mcp.McpRuntimeCommandExecutor
 import eu.torvian.chatbot.worker.protocol.ids.MessageIdProvider
@@ -72,6 +74,7 @@ class McpRuntimeCommandInteractionTest {
             SupportedCommandScenario(
                 commandType = WorkerProtocolCommandTypes.MCP_SERVER_TEST_DRAFT_CONNECTION,
                 requestPayload = WorkerMcpServerTestDraftConnectionCommandData(
+                    workerId = 1L,
                     name = "draft-filesystem",
                     command = "npx"
                 ).toWorkerCommandRequestPayload().orError(),
@@ -112,7 +115,7 @@ class McpRuntimeCommandInteractionTest {
             ),
             SupportedCommandScenario(
                 commandType = WorkerProtocolCommandTypes.MCP_SERVER_CREATE,
-                requestPayload = WorkerMcpServerCreateCommandData(server = testServerDto(serverId = 19L))
+                requestPayload = WorkerMcpServerCreateCommandData(signedServer = signedServerDto(serverId = 19L))
                     .toWorkerCommandRequestPayload()
                     .orError(),
                 verifyResult = { resultPayload, commandType ->
@@ -122,7 +125,7 @@ class McpRuntimeCommandInteractionTest {
             ),
             SupportedCommandScenario(
                 commandType = WorkerProtocolCommandTypes.MCP_SERVER_UPDATE,
-                requestPayload = WorkerMcpServerUpdateCommandData(server = testServerDto(serverId = 20L))
+                requestPayload = WorkerMcpServerUpdateCommandData(signedServer = signedServerDto(serverId = 20L))
                     .toWorkerCommandRequestPayload()
                     .orError(),
                 verifyResult = { resultPayload, commandType ->
@@ -375,6 +378,23 @@ class McpRuntimeCommandInteractionTest {
     )
 
     /**
+     * Wraps a test Local MCP server DTO with deterministic detached signed-request metadata.
+     *
+     * @param serverId Persisted server identifier used in command assertions.
+     * @return Signed Local MCP server DTO fixture.
+     */
+    private fun signedServerDto(serverId: Long): SignedLocalMCPServerDto = SignedLocalMCPServerDto(
+        server = testServerDto(serverId),
+        signedRequest = SignedRequest(
+            payload = "{\"workerId\":6,\"name\":\"filesystem\",\"command\":\"npx\"}",
+            signature = "signature-base64",
+            signerId = "device-1",
+            timestamp = 1_700_000_000_000,
+            nonce = "nonce-1"
+        )
+    )
+
+    /**
      * Fixture for a supported command-type lifecycle scenario.
      *
      * @property commandType Command type expected for result decoding.
@@ -521,7 +541,7 @@ class McpRuntimeCommandInteractionTest {
         override suspend fun createServer(
             request: WorkerMcpServerCreateCommandData
         ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerCreateResultData> =
-            WorkerMcpServerCreateResultData(serverId = request.server.id).right()
+            WorkerMcpServerCreateResultData(serverId = request.signedServer.server.id).right()
 
         /**
          * @param request Typed update-config command input data.
@@ -530,7 +550,7 @@ class McpRuntimeCommandInteractionTest {
         override suspend fun updateServer(
             request: WorkerMcpServerUpdateCommandData
         ): Either<WorkerMcpServerControlErrorResultData, WorkerMcpServerUpdateResultData> =
-            WorkerMcpServerUpdateResultData(serverId = request.server.id).right()
+            WorkerMcpServerUpdateResultData(serverId = request.signedServer.server.id).right()
 
         /**
          * @param request Typed delete-config command input data.

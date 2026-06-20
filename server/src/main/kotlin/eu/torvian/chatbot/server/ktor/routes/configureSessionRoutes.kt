@@ -1,22 +1,16 @@
 package eu.torvian.chatbot.server.ktor.routes
 
-import arrow.core.getOrElse
 import arrow.core.raise.either
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.api.AccessMode
-import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.CommonWebSocketProtocols
-import eu.torvian.chatbot.common.api.apiError
 import eu.torvian.chatbot.common.api.resources.SessionResource
 import eu.torvian.chatbot.common.models.api.core.*
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
-import eu.torvian.chatbot.server.ktor.mappers.toChatEvent
-import eu.torvian.chatbot.server.ktor.mappers.toChatStreamEvent
+import eu.torvian.chatbot.server.ktor.websocket.session.SessionMessagesWebSocketHandler
 import eu.torvian.chatbot.server.service.core.*
-import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageError
-import eu.torvian.chatbot.server.service.core.error.message.toApiError
 import eu.torvian.chatbot.server.service.core.error.session.*
 import eu.torvian.chatbot.server.service.security.AuthorizationService
 import io.ktor.http.*
@@ -25,12 +19,7 @@ import io.ktor.server.request.*
 import io.ktor.server.resources.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.Route
-import io.ktor.websocket.*
-import kotlinx.coroutines.channels.ClosedReceiveChannelException
-import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.Json
-import org.apache.logging.log4j.LogManager
-import org.apache.logging.log4j.Logger
 
 /**
  * Configures routes related to Sessions (/api/v1/sessions) using Ktor Resources.
@@ -43,7 +32,11 @@ fun Route.configureSessionRoutes(
     authorizationService: AuthorizationService,
     json: Json
 ) {
-    val logger: Logger = LogManager.getLogger("SessionRoutes")
+    val sessionMessagesWebSocketHandler = SessionMessagesWebSocketHandler(
+        chatService = chatService,
+        authorizationService = authorizationService,
+        json = json
+    )
 
     authenticate(AuthSchemes.USER_JWT) {
         // GET /api/v1/sessions - List all sessions for authenticated user
@@ -206,138 +199,16 @@ fun Route.configureSessionRoutes(
             }
             call.respondEither(result, HttpStatusCode.Created)
         }
+
         // WebSocket /api/v1/sessions/{sessionId}/messages - Process a new message for a session
         webSocket<SessionResource.ById.Messages>(protocol = CommonWebSocketProtocols.CHATBOT_AUTH) { resource ->
             val sessionId = resource.parent.sessionId
             val userId = call.getUserId()
-
-            logger.info(
-                "WS open: sessionId=$sessionId, userId=$userId"
+            sessionMessagesWebSocketHandler.handle(
+                socket = this,
+                userId = userId,
+                sessionId = sessionId
             )
-
-            var request: ProcessNewMessageRequest? = null
-            try {
-                // Step 1: Receive the initial request frame from the client
-                val initialFrame = incoming.receive() as? Frame.Text
-                    ?: return@webSocket close(
-                        CloseReason(
-                            CloseReason.Codes.VIOLATED_POLICY,
-                            "Invalid frame type for initial request"
-                        )
-                    )
-                val initialEvent = json.decodeFromString<ChatClientEvent>(initialFrame.readText())
-
-                request = (initialEvent as? ChatClientEvent.ProcessNewMessage)?.request
-                    ?: return@webSocket close(
-                        CloseReason(
-                            CloseReason.Codes.VIOLATED_POLICY,
-                            "First message must be ProcessNewMessage"
-                        )
-                    )
-
-                // Step 2: Perform validation
-                val validationResult = either {
-                    requireSessionAccess(authorizationService, userId, sessionId, AccessMode.WRITE)
-                    withError({ validateError: ValidateNewMessageError -> validateError.toApiError() }) {
-                        chatService.validateProcessNewMessageRequest(
-                            sessionId,
-                            request.content,
-                            request.parentMessageId,
-                            request.isStreaming
-                        ).bind()
-                    }
-                }
-
-                val (session, llmConfig) = validationResult.getOrElse { apiError ->
-                    logger.error("Validation failed for session $sessionId: $apiError")
-                    val errorFrame = if (request.isStreaming) {
-                        json.encodeToString(ChatStreamEvent.ErrorOccurred(apiError) as ChatStreamEvent)
-                    } else {
-                        json.encodeToString(ChatEvent.ErrorOccurred(apiError) as ChatEvent)
-                    }
-                    outgoing.send(Frame.Text(errorFrame))
-                    close(CloseReason(CloseReason.Codes.NORMAL, "Validation failed"))
-                    return@webSocket
-                }
-                // Step 3: Create shared flow for incoming client events
-                val clientEventFlow = incoming.receiveAsFlow()
-                    .filterIsInstance<Frame.Text>()
-                    .map { frame -> json.decodeFromString<ChatClientEvent>(frame.readText()) }
-                    .shareIn(this, SharingStarted.Eagerly)
-
-                // Step 3a: Create flow for tool call approval responses
-                val approvalResponseFlow = clientEventFlow
-                    .filterIsInstance<ChatClientEvent.ToolCallApproval>()
-                    .map { event -> event.response }
-
-                // Step 4: Start processing and stream events back to the client
-                val eventFlow = if (request.isStreaming) {
-                    chatService.processNewMessageStreaming(
-                        userId,
-                        session,
-                        llmConfig,
-                        request.content,
-                        request.parentMessageId,
-                        request.fileReferences,
-                        approvalResponseFlow
-                    )
-                } else {
-                    chatService.processNewMessage(
-                        userId,
-                        session,
-                        llmConfig,
-                        request.content,
-                        request.parentMessageId,
-                        request.fileReferences,
-                        approvalResponseFlow
-                    )
-                }
-
-                eventFlow.collect { eitherEvent ->
-                    eitherEvent.fold(
-                        ifLeft = { processError ->
-                            val apiError = processError.toApiError()
-                            val errorFrame = if (request.isStreaming) {
-                                json.encodeToString(ChatStreamEvent.ErrorOccurred(apiError) as ChatStreamEvent)
-                            } else {
-                                json.encodeToString(ChatEvent.ErrorOccurred(apiError) as ChatEvent)
-                            }
-                            outgoing.send(Frame.Text(errorFrame))
-                        },
-                        ifRight = { event ->
-                            val frameData = when (event) {
-                                is MessageEvent -> json.encodeToString(event.toChatEvent())
-                                is MessageStreamEvent -> json.encodeToString(event.toChatStreamEvent())
-                                else -> ""
-                            }
-                            if (frameData.isNotEmpty()) {
-                                outgoing.send(Frame.Text(frameData))
-                            }
-                        }
-                    )
-                }
-
-            } catch (e: ClosedReceiveChannelException) {
-                logger.debug("WebSocket client channel closed for session $sessionId: ${e.message}")
-            } catch (e: Exception) {
-                logger.error("Error in WebSocket session for session $sessionId: ${e.message}", e)
-                val internalApiError = apiError(CommonApiErrorCodes.INTERNAL, "An unexpected error occurred.")
-                val errorFrame = if (request?.isStreaming == true) {
-                    json.encodeToString(ChatStreamEvent.ErrorOccurred(internalApiError) as ChatStreamEvent)
-                } else {
-                    json.encodeToString(ChatEvent.ErrorOccurred(internalApiError) as ChatEvent)
-                }
-                runCatching {
-                    outgoing.send(Frame.Text(errorFrame))
-                }.onFailure { sendError ->
-                    logger.debug("Skipping internal error frame for session $sessionId: ${sendError.message}")
-                }
-            } finally {
-                // The WebSocket session will be closed automatically when the block finishes.
-                logger.info(
-                    "WebSocket closed: sessionId=$sessionId}"
-                )
-            }
         }
 
         // GET /api/v1/sessions/{sessionId}/toolcalls - Get all tool calls for a session

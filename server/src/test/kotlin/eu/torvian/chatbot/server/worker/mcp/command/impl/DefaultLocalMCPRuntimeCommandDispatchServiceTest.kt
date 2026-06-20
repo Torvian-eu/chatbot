@@ -16,6 +16,7 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerMcpS
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
+import eu.torvian.chatbot.common.models.api.mcp.SignedLocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRejectedPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRequestPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandResultPayload
@@ -29,6 +30,7 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpSer
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerStopResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerTestConnectionResultData
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpServerUpdateResultData
+import eu.torvian.chatbot.common.security.SignedRequest
 import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchError
 import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchSuccess
 import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchService
@@ -392,6 +394,7 @@ class DefaultLocalMCPRuntimeCommandDispatchServiceTest {
     fun `create server builds create command request payload`() = runTest {
         val payloadSlot = slot<WorkerCommandRequestPayload>()
         val server = testServer(serverId = 22L)
+        val signedServer = SignedLocalMCPServerDto(server = server, signedRequest = signedRequest())
         coEvery { workerCommandDispatchService.dispatch(30L, capture(payloadSlot), any()) } returns
             WorkerCommandDispatchSuccess(
                 workerId = 30L,
@@ -402,11 +405,11 @@ class DefaultLocalMCPRuntimeCommandDispatchServiceTest {
                     .orError()
             ).right()
 
-        val result = service.createServer(workerId = 30L, server = server).requireRight()
+        val result = service.createServer(workerId = 30L, signedServer = signedServer).requireRight()
 
         assertEquals(server.id, result.serverId)
         assertEquals(WorkerProtocolCommandTypes.MCP_SERVER_CREATE, payloadSlot.captured.commandType)
-        assertEquals(server, payloadSlot.captured.toWorkerMcpServerCreateCommandData().orError().server)
+        assertEquals(signedServer, payloadSlot.captured.toWorkerMcpServerCreateCommandData().orError().signedServer)
     }
 
     /**
@@ -416,6 +419,7 @@ class DefaultLocalMCPRuntimeCommandDispatchServiceTest {
     fun `update server builds update command request payload`() = runTest {
         val payloadSlot = slot<WorkerCommandRequestPayload>()
         val server = testServer(serverId = 23L)
+        val signedServer = SignedLocalMCPServerDto(server = server, signedRequest = signedRequest())
         coEvery { workerCommandDispatchService.dispatch(31L, capture(payloadSlot), any()) } returns
             WorkerCommandDispatchSuccess(
                 workerId = 31L,
@@ -426,11 +430,11 @@ class DefaultLocalMCPRuntimeCommandDispatchServiceTest {
                     .orError()
             ).right()
 
-        val result = service.updateServer(workerId = 31L, server = server).requireRight()
+        val result = service.updateServer(workerId = 31L, signedServer = signedServer).requireRight()
 
         assertEquals(server.id, result.serverId)
         assertEquals(WorkerProtocolCommandTypes.MCP_SERVER_UPDATE, payloadSlot.captured.commandType)
-        assertEquals(server, payloadSlot.captured.toWorkerMcpServerUpdateCommandData().orError().server)
+        assertEquals(signedServer, payloadSlot.captured.toWorkerMcpServerUpdateCommandData().orError().signedServer)
     }
 
     /**
@@ -470,6 +474,19 @@ class DefaultLocalMCPRuntimeCommandDispatchServiceTest {
         command = "npx",
         createdAt = Instant.fromEpochMilliseconds(1_700_000_000_000),
         updatedAt = Instant.fromEpochMilliseconds(1_700_000_100_000)
+    )
+
+    /**
+     * Builds deterministic detached signed-request metadata for cache-sync command assertions.
+     *
+     * @return Signed request fixture.
+     */
+    private fun signedRequest(): SignedRequest = SignedRequest(
+        payload = "{\"workerId\":30,\"name\":\"filesystem\",\"command\":\"npx\"}",
+        signature = "signature-base64",
+        signerId = "device-1",
+        timestamp = 1_700_000_000_000,
+        nonce = "nonce-1"
     )
 
     /**

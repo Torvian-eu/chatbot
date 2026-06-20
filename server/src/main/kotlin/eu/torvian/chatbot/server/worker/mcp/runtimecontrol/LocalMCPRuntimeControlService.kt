@@ -5,6 +5,7 @@ import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
 import eu.torvian.chatbot.common.models.api.mcp.RefreshMCPToolsResponse
 import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerConnectionResponse
 import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerDraftConnectionRequest
+import eu.torvian.chatbot.common.security.SignedRequest
 
 /**
  * Service abstraction for server-owned runtime control operations of Local MCP servers.
@@ -81,10 +82,12 @@ interface LocalMCPRuntimeControlService {
      *
      * @param userId Authenticated user identifier.
      * @param request Draft server configuration to test.
+     * @param signedRequest Detached signed request authorizing this transient draft execution.
      * @return Either runtime-control error or deterministic connection-test response.
      */
     suspend fun testDraftConnection(
         userId: Long,
-        request: TestLocalMCPServerDraftConnectionRequest
+        request: TestLocalMCPServerDraftConnectionRequest,
+        signedRequest: SignedRequest
     ): Either<LocalMCPRuntimeControlError, TestLocalMCPServerConnectionResponse>
 }

@@ -1,29 +1,12 @@
 package eu.torvian.chatbot.worker.koin
 
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolCommandTypes
-import eu.torvian.chatbot.worker.auth.ChallengeSigner
-import eu.torvian.chatbot.worker.auth.DefaultWorkerAuthenticatedRequestExecutor
-import eu.torvian.chatbot.worker.auth.FileServiceTokenStore
-import eu.torvian.chatbot.worker.auth.KtorWorkerAuthApi
-import eu.torvian.chatbot.worker.auth.PemChallengeSigner
-import eu.torvian.chatbot.worker.auth.ServiceTokenStore
-import eu.torvian.chatbot.worker.auth.WorkerAuthApi
-import eu.torvian.chatbot.worker.auth.WorkerAuthManager
-import eu.torvian.chatbot.worker.auth.WorkerAuthManagerImpl
-import eu.torvian.chatbot.worker.auth.WorkerAuthenticatedRequestExecutor
+import eu.torvian.chatbot.common.security.AsymmetricCryptoProvider
+import eu.torvian.chatbot.common.security.JvmAsymmetricCryptoProvider
+import eu.torvian.chatbot.worker.auth.*
 import eu.torvian.chatbot.worker.config.RuntimeConfig
-import eu.torvian.chatbot.worker.mcp.InMemoryMcpServerConfigStore
-import eu.torvian.chatbot.worker.mcp.JvmMcpProcessManager
-import eu.torvian.chatbot.worker.mcp.McpRuntimeService
-import eu.torvian.chatbot.worker.mcp.McpRuntimeServiceImpl
-import eu.torvian.chatbot.worker.mcp.McpServerConfigStore
-import eu.torvian.chatbot.worker.mcp.McpProcessManager
-import eu.torvian.chatbot.worker.mcp.McpClientService
-import eu.torvian.chatbot.worker.mcp.McpClientServiceImpl
-import eu.torvian.chatbot.worker.mcp.McpRuntimeCommandExecutor
-import eu.torvian.chatbot.worker.mcp.McpRuntimeCommandExecutorImpl
-import eu.torvian.chatbot.worker.mcp.McpToolCallExecutor
-import eu.torvian.chatbot.worker.mcp.McpToolCallExecutorImpl
+import eu.torvian.chatbot.worker.config.TrustedSigner
+import eu.torvian.chatbot.worker.mcp.*
 import eu.torvian.chatbot.worker.mcp.api.AssignedConfigBootstrapper
 import eu.torvian.chatbot.worker.mcp.api.KtorWorkerMcpServerApi
 import eu.torvian.chatbot.worker.mcp.api.WorkerMcpServerApi
@@ -33,25 +16,21 @@ import eu.torvian.chatbot.worker.protocol.factory.ToolCallInteractionFactory
 import eu.torvian.chatbot.worker.protocol.handshake.HelloStarter
 import eu.torvian.chatbot.worker.protocol.handshake.InMemorySessionHandshakeContext
 import eu.torvian.chatbot.worker.protocol.handshake.SessionHandshakeContext
-import eu.torvian.chatbot.worker.protocol.ids.UuidInteractionIdProvider
-import eu.torvian.chatbot.worker.protocol.ids.UuidMessageIdProvider
 import eu.torvian.chatbot.worker.protocol.ids.InteractionIdProvider
 import eu.torvian.chatbot.worker.protocol.ids.MessageIdProvider
+import eu.torvian.chatbot.worker.protocol.ids.UuidInteractionIdProvider
+import eu.torvian.chatbot.worker.protocol.ids.UuidMessageIdProvider
 import eu.torvian.chatbot.worker.protocol.registry.InMemoryInteractionRegistry
 import eu.torvian.chatbot.worker.protocol.registry.InteractionRegistry
 import eu.torvian.chatbot.worker.protocol.routing.CommandRequestProcessor
 import eu.torvian.chatbot.worker.protocol.routing.IncomingMessageProcessor
 import eu.torvian.chatbot.worker.protocol.routing.WorkerProtocolMessageRouter
-import eu.torvian.chatbot.worker.protocol.transport.OutboundMessageEmitter
-import eu.torvian.chatbot.worker.protocol.transport.OutboundMessageEmitterHolder
-import eu.torvian.chatbot.worker.protocol.transport.WebSocketConnectionLoop
-import eu.torvian.chatbot.worker.protocol.transport.WebSocketMessageCodec
-import eu.torvian.chatbot.worker.protocol.transport.WebSocketSessionRunner
-import eu.torvian.chatbot.worker.protocol.transport.WebSocketTransportConfig
-import eu.torvian.chatbot.worker.protocol.transport.TransportConnectionLoopRunner
+import eu.torvian.chatbot.worker.protocol.transport.*
 import eu.torvian.chatbot.worker.runtime.WorkerRuntime
 import eu.torvian.chatbot.worker.runtime.WorkerRuntimeImpl
 import eu.torvian.chatbot.worker.service.api.WorkerMetadataService
+import eu.torvian.chatbot.worker.service.security.DefaultVerificationService
+import eu.torvian.chatbot.worker.service.security.VerificationService
 import io.ktor.client.*
 import io.ktor.client.engine.okhttp.*
 import io.ktor.client.plugins.*
@@ -83,6 +62,15 @@ fun workerModule(
     tokenPath: Path,
     privateKeyPem: String
 ) = module {
+    single<RuntimeConfig> { config }
+    single<List<TrustedSigner>> { get<RuntimeConfig>().trustedSigners }
+    single<AsymmetricCryptoProvider> { JvmAsymmetricCryptoProvider() }
+    single<VerificationService> {
+        DefaultVerificationService(
+            trustedSigners = get(),
+            cryptoProvider = get()
+        )
+    }
     single<HttpClient> { createWorkerHttpClient(config.server.baseUrl) }
     single<WorkerMetadataService> { WorkerMetadataService(get()) }
     single<ServiceTokenStore> { FileServiceTokenStore(tokenPath) }
@@ -115,9 +103,20 @@ fun workerModule(
             authenticatedRequestExecutor = get()
         )
     }
+    single<SignedMcpServerConfigValidator> {
+        DefaultSignedMcpServerConfigValidator(
+            verificationService = get()
+        )
+    }
+    single<SignedMcpServerDraftConfigValidator> {
+        DefaultSignedMcpServerDraftConfigValidator(
+            verificationService = get()
+        )
+    }
     single<AssignedConfigBootstrapper> {
         AssignedConfigBootstrapper(
             mcpServerApi = get(),
+            signedMcpServerConfigValidator = get(),
             configStore = get()
         )
     }
@@ -129,10 +128,23 @@ fun workerModule(
             processManager = get()
         )
     }
-    single<McpToolCallExecutor> { McpToolCallExecutorImpl(runtimeService = get(), json = get()) }
+    single<LocalMCPToolExecutionAuthorizationValidator> {
+        DefaultLocalMCPToolExecutionAuthorizationValidator(
+            verificationService = get()
+        )
+    }
+    single<McpToolCallExecutor> {
+        McpToolCallExecutorImpl(
+            authorizationValidator = get(),
+            runtimeService = get(),
+            json = get()
+        )
+    }
     single<McpRuntimeCommandExecutor> {
         McpRuntimeCommandExecutorImpl(
             runtimeService = get(),
+            signedMcpServerConfigValidator = get(),
+            signedMcpServerDraftConfigValidator = get(),
             configStore = get()
         )
     }

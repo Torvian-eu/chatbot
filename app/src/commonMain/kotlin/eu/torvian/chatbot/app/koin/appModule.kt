@@ -11,6 +11,10 @@ import eu.torvian.chatbot.app.service.mcp.LocalMCPServerManager
 import eu.torvian.chatbot.app.service.mcp.LocalMCPServerManagerImpl
 import eu.torvian.chatbot.app.service.misc.EventBus
 import eu.torvian.chatbot.app.service.security.CertificateTrustService
+import eu.torvian.chatbot.app.service.security.DefaultRequestSigningService
+import eu.torvian.chatbot.app.service.security.RequestSigningService
+import eu.torvian.chatbot.app.startup.AppStartupInitializer
+import eu.torvian.chatbot.app.startup.DefaultAppStartupInitializer
 import eu.torvian.chatbot.app.viewmodel.*
 import eu.torvian.chatbot.app.viewmodel.admin.UserGroupManagementViewModel
 import eu.torvian.chatbot.app.viewmodel.admin.UserManagementViewModel
@@ -106,7 +110,26 @@ fun appModule(config: AppConfiguration): Module = module {
 
     // Device identity service for persistent device ID
     single<DeviceIdentityService> {
-        DefaultDeviceIdentityService(storage = get())
+        DefaultDeviceIdentityService(
+            storage = get(),
+            cryptoProvider = get()
+        )
+    }
+
+    // Generic request-signing service for detached protocol-level signatures.
+    single<RequestSigningService> {
+        DefaultRequestSigningService(
+            deviceIdentityService = get(),
+            cryptoProvider = get(),
+            json = get()
+        )
+    }
+
+    // Generic startup initializer that runs once when the app reaches the ready state
+    single<AppStartupInitializer> {
+        DefaultAppStartupInitializer(
+            deviceIdentityService = get()
+        )
     }
 
     // Default HttpClient (authenticated) for backward compatibility
@@ -174,7 +197,11 @@ fun appModule(config: AppConfiguration): Module = module {
         KtorToolApiClient(get())
     }
     single<LocalMCPServerApi> {
-        KtorLocalMCPServerApiClient(get())
+        KtorLocalMCPServerApiClient(
+            client = get(),
+            json = get(),
+            requestSigningService = get()
+        )
     }
     single<LocalMCPToolApi> {
         KtorLocalMCPToolApiClient(get())
@@ -301,7 +328,7 @@ fun appModule(config: AppConfiguration): Module = module {
     }
 
     factory<SendMessageUseCase> { (chatState: ChatState) ->
-        SendMessageUseCase(get<SessionRepository>(), chatState, get())
+        SendMessageUseCase(get<SessionRepository>(), get<ToolRepository>(), get(), chatState, get())
     }
 
     factory<EditMessageUseCase> { (chatState: ChatState) ->

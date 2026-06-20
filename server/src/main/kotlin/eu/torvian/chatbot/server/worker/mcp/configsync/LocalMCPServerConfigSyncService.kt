@@ -1,39 +1,64 @@
 package eu.torvian.chatbot.server.worker.mcp.configsync
 
+import arrow.core.Either
+import eu.torvian.chatbot.common.models.api.mcp.CreateLocalMCPServerRequest
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
+import eu.torvian.chatbot.common.models.api.mcp.UpdateLocalMCPServerRequest
+import eu.torvian.chatbot.common.security.SignedRequest
 
 /**
- * Coordinates best-effort propagation of Local MCP server configuration changes to the assigned worker.
+ * Coordinates Local MCP server write operations together with worker cache synchronization.
  *
- * The contract keeps orchestration policy in one place so the HTTP layer can remain transport-focused
- * while the implementation decides whether an update is a same-worker patch or a worker reassignment.
+ * The HTTP layer delegates create, update, and delete orchestration here so routes remain
+ * transport-focused while this contract owns the worker-sync and compensation policy.
  */
 interface LocalMCPServerConfigSyncService {
     /**
-     * Pushes a newly created Local MCP server configuration to the assigned worker cache.
+     * Creates a signed Local MCP server and synchronizes it to the assigned worker.
      *
-     * @param server Newly created Local MCP server configuration.
+     * If worker synchronization fails after persistence succeeds, the implementation must attempt
+     * to delete the newly created server as compensation before returning the sync failure.
+     *
+     * @param userId Authenticated user performing the mutation.
+     * @param request Create payload to persist.
+     * @param signedRequest Detached signing metadata for the exact raw request body.
+     * @return Either orchestration error or the created Local MCP server DTO.
      */
-    suspend fun syncCreated(server: LocalMCPServerDto)
+    suspend fun createSignedServer(
+        userId: Long,
+        request: CreateLocalMCPServerRequest,
+        signedRequest: SignedRequest
+    ): Either<LocalMCPServerConfigSyncError, LocalMCPServerDto>
 
     /**
-     * Pushes an updated Local MCP server configuration to the assigned worker cache.
+     * Updates a signed Local MCP server and synchronizes the mutation to the relevant worker caches.
      *
-     * Same-worker updates are forwarded as in-place worker updates. When the worker changes,
-     * the stale cache entry is removed from the previous worker before creating the server on the new worker
-     * so the worker cache does not keep serving the old assignment.
+     * If worker synchronization fails after persistence succeeds, the implementation must attempt
+     * to restore the previously persisted configuration before returning the sync failure.
      *
-     * @param server Updated Local MCP server configuration after the update was persisted.
-     * @param previousWorkerId Worker identifier that owned the server before the update.
+     * @param userId Authenticated user performing the mutation.
+     * @param serverId Server identifier being updated.
+     * @param request Update payload to persist.
+     * @param signedRequest Detached signing metadata for the exact raw request body.
+     * @return Either orchestration error or the updated Local MCP server DTO.
      */
-    suspend fun syncUpdated(server: LocalMCPServerDto, previousWorkerId: Long)
+    suspend fun updateSignedServer(
+        userId: Long,
+        serverId: Long,
+        request: UpdateLocalMCPServerRequest,
+        signedRequest: SignedRequest
+    ): Either<LocalMCPServerConfigSyncError, LocalMCPServerDto>
 
     /**
-     * Removes a deleted Local MCP server configuration from the assigned worker cache.
+     * Deletes a Local MCP server and propagates the removal to the assigned worker cache.
      *
-     * @param workerId Worker identifier that previously owned the server configuration.
-     * @param serverId Local MCP server identifier to remove.
+     * @param userId Authenticated user performing the mutation.
+     * @param serverId Server identifier to delete.
+     * @return Either orchestration error or Unit when the delete flow completes.
      */
-    suspend fun syncDeleted(workerId: Long, serverId: Long)
+    suspend fun deleteServer(
+        userId: Long,
+        serverId: Long
+    ): Either<LocalMCPServerConfigSyncError, Unit>
 }
 

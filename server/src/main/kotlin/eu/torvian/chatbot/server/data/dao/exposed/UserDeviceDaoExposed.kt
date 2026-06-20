@@ -20,6 +20,14 @@ import org.jetbrains.exposed.v1.jdbc.update
 class UserDeviceDaoExposed(
     private val transactionScope: TransactionScope
 ) : UserDeviceDao {
+    override suspend fun getDeviceById(id: Long): UserDeviceEntity? =
+        transactionScope.transaction {
+            UserDevicesTable.selectAll()
+                .where { UserDevicesTable.id eq id }
+                .singleOrNull()
+                ?.toUserDeviceEntity()
+        }
+
     override suspend fun getDeviceByClientId(userId: Long, clientDeviceId: String): UserDeviceEntity? =
         transactionScope.transaction {
             UserDevicesTable.selectAll()

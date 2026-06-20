@@ -1,7 +1,9 @@
 package eu.torvian.chatbot.common.models.api.worker.protocol.payload
 
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
+import eu.torvian.chatbot.common.models.api.mcp.SignedLocalMCPServerDto
+import eu.torvian.chatbot.common.security.SignedRequest
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 
@@ -64,21 +66,23 @@ data object WorkerMcpServerListRuntimeStatusesCommandData
 /**
  * Request data carried by `mcp.server.create` worker commands.
  *
- * @property server Persisted Local MCP server configuration to upsert in worker cache.
+ * @property signedServer Persisted Local MCP server configuration plus detached signed-request metadata
+ *   needed for worker-side authorization.
  */
 @Serializable
 data class WorkerMcpServerCreateCommandData(
-    val server: LocalMCPServerDto
+    val signedServer: SignedLocalMCPServerDto
 )
 
 /**
  * Request data carried by `mcp.server.update` worker commands.
  *
- * @property server Persisted Local MCP server configuration to upsert in worker cache.
+ * @property signedServer Persisted Local MCP server configuration plus detached signed-request metadata
+ *   needed for worker-side authorization.
  */
 @Serializable
 data class WorkerMcpServerUpdateCommandData(
-    val server: LocalMCPServerDto
+    val signedServer: SignedLocalMCPServerDto
 )
 
 /**
@@ -224,21 +228,25 @@ data class WorkerMcpServerControlErrorResultData(
 /**
  * Request data carried by `mcp.server.test_draft_connection` worker commands.
  *
+ * @property workerId Target worker identifier the draft request was intended for.
  * @property name User-facing display name.
  * @property command Process command used to start the MCP server.
  * @property arguments Process argument list.
  * @property workingDirectory Optional working directory for process execution.
  * @property environmentVariables Non-secret environment variables.
  * @property secretEnvironmentVariables Secret environment variables, returned in plaintext for runtime use.
+ * @property signedRequest Detached signed request authorizing this transient draft execution.
  */
 @Serializable
 data class WorkerMcpServerTestDraftConnectionCommandData(
+    val workerId: Long,
     val name: String,
     val command: String,
     val arguments: List<String> = emptyList(),
     val workingDirectory: String? = null,
-    val environmentVariables: List<eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto> = emptyList(),
-    val secretEnvironmentVariables: List<eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto> = emptyList()
+    val environmentVariables: List<LocalMCPEnvironmentVariableDto> = emptyList(),
+    val secretEnvironmentVariables: List<LocalMCPEnvironmentVariableDto> = emptyList(),
+    val signedRequest: SignedRequest? = null
 )
 
 /**

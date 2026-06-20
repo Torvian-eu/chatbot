@@ -2,8 +2,9 @@ package eu.torvian.chatbot.server.worker.mcp.runtimecontrol
 
 import arrow.core.Either
 import arrow.core.raise.either
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
+import eu.torvian.chatbot.common.models.api.mcp.SignedLocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.TestLocalMCPServerDraftConnectionRequest
+import eu.torvian.chatbot.common.security.SignedRequest
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerCommandResultStatuses
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolCommandTypes
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.*
@@ -125,12 +126,12 @@ class DefaultLocalMCPRuntimeCommandDispatchService(
 
     override suspend fun createServer(
         workerId: Long,
-        server: LocalMCPServerDto
+        signedServer: SignedLocalMCPServerDto
     ): Either<LocalMCPRuntimeCommandDispatchError, WorkerMcpServerCreateResultData> =
         dispatchAndDecode(
             workerId = workerId,
             commandType = WorkerProtocolCommandTypes.MCP_SERVER_CREATE,
-            requestPayload = WorkerMcpServerCreateCommandData(server = server).toWorkerCommandRequestPayload(),
+            requestPayload = WorkerMcpServerCreateCommandData(signedServer = signedServer).toWorkerCommandRequestPayload(),
             decodeSuccessResult = { result, completedCommandType ->
                 result.toWorkerMcpServerCreateResultData(completedCommandType)
             },
@@ -141,12 +142,12 @@ class DefaultLocalMCPRuntimeCommandDispatchService(
 
     override suspend fun updateServer(
         workerId: Long,
-        server: LocalMCPServerDto
+        signedServer: SignedLocalMCPServerDto
     ): Either<LocalMCPRuntimeCommandDispatchError, WorkerMcpServerUpdateResultData> =
         dispatchAndDecode(
             workerId = workerId,
             commandType = WorkerProtocolCommandTypes.MCP_SERVER_UPDATE,
-            requestPayload = WorkerMcpServerUpdateCommandData(server = server).toWorkerCommandRequestPayload(),
+            requestPayload = WorkerMcpServerUpdateCommandData(signedServer = signedServer).toWorkerCommandRequestPayload(),
             decodeSuccessResult = { result, completedCommandType ->
                 result.toWorkerMcpServerUpdateResultData(completedCommandType)
             },
@@ -173,18 +174,21 @@ class DefaultLocalMCPRuntimeCommandDispatchService(
 
     override suspend fun testDraftConnection(
         workerId: Long,
-        request: TestLocalMCPServerDraftConnectionRequest
+        request: TestLocalMCPServerDraftConnectionRequest,
+        signedRequest: SignedRequest
     ): Either<LocalMCPRuntimeCommandDispatchError, WorkerMcpServerTestDraftConnectionResultData> =
         dispatchAndDecode(
             workerId = workerId,
             commandType = WorkerProtocolCommandTypes.MCP_SERVER_TEST_DRAFT_CONNECTION,
             requestPayload = WorkerMcpServerTestDraftConnectionCommandData(
+                workerId = workerId,
                 name = request.name,
                 command = request.command,
                 arguments = request.arguments,
                 workingDirectory = request.workingDirectory,
                 environmentVariables = request.environmentVariables,
-                secretEnvironmentVariables = request.secretEnvironmentVariables
+                secretEnvironmentVariables = request.secretEnvironmentVariables,
+                signedRequest = signedRequest
             ).toWorkerCommandRequestPayload(),
             decodeSuccessResult = { result, completedCommandType ->
                 result.toWorkerMcpServerTestDraftConnectionResultData(completedCommandType)

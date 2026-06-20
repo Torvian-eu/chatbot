@@ -7,6 +7,14 @@ import eu.torvian.chatbot.server.data.entities.UserDeviceEntity
  */
 interface UserDeviceDao {
     /**
+     * Looks up a registered device by its internal identifier.
+     *
+     * @param id Internal device-row identifier.
+     * @return The matching device record, or null when it no longer exists.
+     */
+    suspend fun getDeviceById(id: Long): UserDeviceEntity?
+
+    /**
      * Looks up a registered device by the owning user and client-side UUID.
      *
      * @param userId Owning user identifier.

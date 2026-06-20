@@ -190,6 +190,11 @@ enum class Table {
     LOCAL_MCP_TOOL_DEFINITIONS,
 
     /**
+     * Table for storing signed Local MCP server configuration snapshots.
+     */
+    LOCAL_MCP_SERVER_SIGNATURES,
+
+    /**
      * Table for storing failed login attempts for lockout enforcement.
      */
     FAILED_LOGIN_ATTEMPTS,

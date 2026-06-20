@@ -22,7 +22,8 @@
     },
     "auth": {
       "refreshSkewSeconds": 60
-    }
+    },
+    "trustedSigners": []
   }
 }
 

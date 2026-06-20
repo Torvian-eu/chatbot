@@ -2,14 +2,16 @@ package eu.torvian.chatbot.server.worker.mcp.toolcall
 
 import arrow.core.Either
 import arrow.core.raise.either
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallRequest
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallResult
+import eu.torvian.chatbot.common.models.api.mcp.SignedLocalMCPToolExecutionRequest
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toLocalMCPToolCallResult
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerCommandRequestPayload
 import eu.torvian.chatbot.server.worker.command.WorkerCommandDispatchService
 
 /**
  * Default implementation of the worker-backed Local MCP tool-call dispatch adapter.
+ *
+ * Converts the signed authorization request to a worker command payload and dispatches it.
  *
  * @property workerCommandDispatchService Generic worker command dispatcher.
  */
@@ -18,7 +20,7 @@ class DefaultLocalMCPToolCallDispatchService(
 ) : LocalMCPToolCallDispatchService {
     override suspend fun dispatchToolCall(
         workerId: Long,
-        request: LocalMCPToolCallRequest
+        request: SignedLocalMCPToolExecutionRequest
     ): Either<LocalMCPToolCallDispatchError, LocalMCPToolCallResult> = either {
         val requestPayload = request.toWorkerCommandRequestPayload()
             .mapLeft { mappingError -> LocalMCPToolCallDispatchError.RequestMappingFailed(mappingError) }

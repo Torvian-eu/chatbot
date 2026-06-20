@@ -32,7 +32,7 @@ kotlin {
     // Primary target for Desktop backend-frontend logic
     jvm("desktop") {
         compilerOptions {
-            jvmTarget = JvmTarget.JVM_21
+            jvmTarget.set(JvmTarget.fromTarget(libs.versions.javaVersion.get()))
         }
 
         testRuns["test"].executionTask.configure {
@@ -81,7 +81,7 @@ kotlin {
     androidTarget {
         @OptIn(ExperimentalKotlinGradlePluginApi::class)
         compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_11)
+            jvmTarget.set(JvmTarget.fromTarget(libs.versions.javaAndroid.get()))
         }
     }
 
@@ -269,6 +269,11 @@ compose.desktop {
             // macos { ... }
         }
 
+        jvmArgs += listOf(
+            "--enable-native-access=ALL-UNNAMED", // Required for Skiko native access to work properly
+            "-Duser.language=en",
+            "-Duser.country=US"
+        )
         // Uncomment to test with Spanish locale
 //        jvmArgs += "-Duser.language=es"
 //        jvmArgs += "-Duser.country=ES" // Optional, for regional variants like es-ES
@@ -376,6 +381,13 @@ afterEvaluate {
     }
 }
 
+tasks.withType<Test> {
+    jvmArgs(
+        "--enable-native-access=ALL-UNNAMED",
+        "--sun-misc-unsafe-memory-access=allow" // Allow unsafe memory access for testing purposes (needed for MockK)
+    )
+}
+
 compose {
     resources {
         // Set the package name for generated resources
@@ -405,8 +417,9 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        val javaAndroidVal = libs.versions.javaAndroid.get()
+        sourceCompatibility = JavaVersion.toVersion(javaAndroidVal)
+        targetCompatibility = JavaVersion.toVersion(javaAndroidVal)
     }
 }
 

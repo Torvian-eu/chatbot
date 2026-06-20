@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.app.compose.startup
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -9,11 +10,13 @@ import eu.torvian.chatbot.app.compose.AppTheme
 import eu.torvian.chatbot.app.compose.setup.SetupScreen
 import eu.torvian.chatbot.app.config.ClientConfigLoader
 import eu.torvian.chatbot.app.config.AppConfiguration
+import eu.torvian.chatbot.app.startup.AppStartupInitializer
 import eu.torvian.chatbot.app.viewmodel.AppViewModel
 import eu.torvian.chatbot.app.viewmodel.startup.LoadStartupConfigurationUseCase
 import eu.torvian.chatbot.app.viewmodel.startup.StartupState
 import eu.torvian.chatbot.app.viewmodel.startup.StartupViewModel
 import org.koin.compose.KoinApplication
+import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.KoinApplication
 import org.koin.dsl.koinConfiguration
@@ -90,6 +93,11 @@ fun CommonAppLifecycleManager(
                 content = {
                     val appViewModel: AppViewModel = koinViewModel()
                     val currentTheme by appViewModel.currentTheme.collectAsState()
+
+                    val startupInitializer: AppStartupInitializer = koinInject()
+                    LaunchedEffect(Unit) {
+                        startupInitializer.initialize()
+                    }
 
                     AppTheme(currentTheme) {
                         AppShell()

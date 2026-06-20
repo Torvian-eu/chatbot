@@ -1,5 +1,5 @@
 // Define global project metadata
-val projectVersion = "0.5.1"
+val projectVersion = "0.6.0-SNAPSHOT"
 val projectName = "chatbot"
 val projectGroup = "eu.torvian"
 

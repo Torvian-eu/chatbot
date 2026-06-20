@@ -4,6 +4,8 @@ import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
+import eu.torvian.chatbot.common.models.api.mcp.SignedLocalMCPServerDto
+import eu.torvian.chatbot.common.security.SignedRequest
 import eu.torvian.chatbot.worker.auth.WorkerAuthenticatedRequestError
 import eu.torvian.chatbot.worker.auth.WorkerAuthenticatedRequestExecutor
 import eu.torvian.chatbot.worker.auth.WorkerAuthManagerError
@@ -39,15 +41,21 @@ class KtorWorkerMcpServerApiTest {
     @Test
     fun `successful response from executor is mapped`() = runTest {
         val mockServers = listOf(
-            LocalMCPServerDto(
-                id = 1, userId = 10, workerId = 20, name = "server1",
-                command = "cmd1", createdAt = Instant.fromEpochMilliseconds(1000),
-                updatedAt = Instant.fromEpochMilliseconds(2000)
+            SignedLocalMCPServerDto(
+                server = LocalMCPServerDto(
+                    id = 1, userId = 10, workerId = 20, name = "server1",
+                    command = "cmd1", createdAt = Instant.fromEpochMilliseconds(1000),
+                    updatedAt = Instant.fromEpochMilliseconds(2000)
+                ),
+                signedRequest = signedRequest(payload = "{\"name\":\"server1\"}")
             ),
-            LocalMCPServerDto(
-                id = 2, userId = 10, workerId = 20, name = "server2",
-                command = "cmd2", createdAt = Instant.fromEpochMilliseconds(1000),
-                updatedAt = Instant.fromEpochMilliseconds(2000)
+            SignedLocalMCPServerDto(
+                server = LocalMCPServerDto(
+                    id = 2, userId = 10, workerId = 20, name = "server2",
+                    command = "cmd2", createdAt = Instant.fromEpochMilliseconds(1000),
+                    updatedAt = Instant.fromEpochMilliseconds(2000)
+                ),
+                signedRequest = signedRequest(payload = "{\"name\":\"server2\"}")
             )
         )
         val executor = FakeExecutor(result = mockServers.right())
@@ -60,6 +68,7 @@ class KtorWorkerMcpServerApiTest {
 
         assertTrue(result.isRight())
         assertEquals(2, result.getOrNull()?.size)
+        assertEquals("server1", result.getOrNull()?.first()?.server?.name)
     }
 
     /**
@@ -152,7 +161,7 @@ class KtorWorkerMcpServerApiTest {
          *
          * Either a success (list of servers) or an error, depending on test scenario.
          */
-        private val result: Either<WorkerAuthenticatedRequestError, List<LocalMCPServerDto>>
+        private val result: Either<WorkerAuthenticatedRequestError, List<SignedLocalMCPServerDto>>
     ) : WorkerAuthenticatedRequestExecutor {
         /**
          * Returns the pre-configured result, ignoring the operation and block.
@@ -172,4 +181,18 @@ class KtorWorkerMcpServerApiTest {
             return result as Either<WorkerAuthenticatedRequestError, T>
         }
     }
+
+    /**
+     * Builds deterministic detached signed-request metadata for assigned-server API tests.
+     *
+     * @param payload Exact signed payload string to carry in the fixture.
+     * @return Signed request fixture.
+     */
+    private fun signedRequest(payload: String): SignedRequest = SignedRequest(
+        payload = payload,
+        signature = "signature-base64",
+        signerId = "device-1",
+        timestamp = 1_700_000_000_000,
+        nonce = "nonce-1"
+    )
 }

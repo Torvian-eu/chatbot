@@ -1,11 +1,11 @@
 package eu.torvian.chatbot.server.service.core
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.api.tool.ToolCallApprovalResponse
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.server.service.core.error.message.ProcessNewMessageError
 import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageError
+import eu.torvian.chatbot.server.service.core.toolcall.ToolCallApprovalSubmission
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -48,14 +48,14 @@ interface ChatService {
      * 3. AssistantMessageSaved - Final response from LLM
      * 4. StreamCompleted - End of processing
      *
-     * @param userId The ID of the user making the request (used for auto-approval preferences).
+     * @param userId The ID of the user making the request (used for non-Local-MCP auto-approval preferences).
      * @param session The session the message belongs to.
      * @param llmConfig The LLM configuration to use for the request.
      * @param content The user's message content. When null, no new user message is created and the
      *                assistant continues from the [parentMessageId] message (Branch & Continue mode).
      * @param parentMessageId Optional ID of the message being replied to. Must be non-null when [content] is null.
      * @param fileReferences Optional list of file references attached to the message.
-     * @param toolApprovalFlow A flow of tool call approval decisions from the client.
+     * @param toolApprovalFlow A flow of tool-call approval submissions from the client.
      * @return A Flow of Either<ProcessNewMessageError, MessageEvent>.
      *         The flow emits MessageEvent objects as processing progresses,
      *         or ProcessNewMessageError if an error occurs.
@@ -67,7 +67,7 @@ interface ChatService {
         content: String?,
         parentMessageId: Long? = null,
         fileReferences: List<FileReference> = emptyList(),
-        toolApprovalFlow: Flow<ToolCallApprovalResponse>
+        toolApprovalFlow: Flow<ToolCallApprovalSubmission>
     ): Flow<Either<ProcessNewMessageError, MessageEvent>>
 
     /**
@@ -103,7 +103,7 @@ interface ChatService {
      * - Multiple assistant messages may be created during tool calling loops
      * - All operations emit events for real-time UI updates via SSE
      *
-     * @param userId The ID of the user making the request (used for auto-approval preferences).
+     * @param userId The ID of the user making the request (used for non-Local-MCP auto-approval preferences).
      * @param session The session the message belongs to.
      * @param llmConfig The LLM configuration to use for the request (model, provider, settings, tools).
      * @param content The user's message content. When null, no new user message is created and the
@@ -112,7 +112,7 @@ interface ChatService {
      *                        message will be threaded as a child of this message. Must be non-null
      *                        when [content] is null.
      * @param fileReferences Optional list of file references attached to the message.
-     * @param toolApprovalFlow A flow of tool call approval decisions from the client.
+     * @param toolApprovalFlow A flow of tool-call approval submissions from the client.
      * @return A Flow of Either<ProcessNewMessageError, MessageStreamEvent>.
      *
      * @see MessageStreamEvent for detailed event type documentation
@@ -125,6 +125,6 @@ interface ChatService {
         content: String?,
         parentMessageId: Long? = null,
         fileReferences: List<FileReference> = emptyList(),
-        toolApprovalFlow: Flow<ToolCallApprovalResponse>
+        toolApprovalFlow: Flow<ToolCallApprovalSubmission>
     ): Flow<Either<ProcessNewMessageError, MessageStreamEvent>>
 }

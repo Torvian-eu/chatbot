@@ -53,7 +53,8 @@ application {
     mainClass.set("eu.torvian.chatbot.server.main.ServerMain")
     applicationDefaultJvmArgs = listOf(
         "-Xmx2G", // Max heap size
-        "-Xms512M" // Initial heap size
+        "-Xms512M", // Initial heap size
+        "--enable-native-access=ALL-UNNAMED" // Enable native access for all unnamed modules to allow loading native libraries (e.g. SQLite JDBC) without module system issues
     )
 }
 
@@ -84,6 +85,14 @@ tasks {
         enabled = false
     }
 }
+
+tasks.withType<Test> {
+    jvmArgs(
+        "--enable-native-access=ALL-UNNAMED",
+        "--sun-misc-unsafe-memory-access=allow" // Allow unsafe memory access for testing purposes (needed for MockK)
+    )
+}
+
 
 // Configure ALL distributions (Main and Shadow) at once
 distributions.configureEach {

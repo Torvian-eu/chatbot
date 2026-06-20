@@ -1,11 +1,12 @@
 package eu.torvian.chatbot.app.service.auth
 
 import arrow.core.Either
+import eu.torvian.chatbot.common.security.AsymmetricKeyPair
 
 /**
  * Interface for storing and retrieving device identity.
  *
- * This is a simple key-value storage abstraction for the device ID.
+ * This is a simple key-value storage abstraction for the device ID and signing key pair.
  */
 interface DeviceIdentityStorage {
 
@@ -23,6 +24,21 @@ interface DeviceIdentityStorage {
      * @return Either a storage error or Unit on success
      */
     suspend fun saveDeviceId(deviceId: String): Either<DeviceIdentityStorageError, Unit>
+
+    /**
+     * Retrieves a stored signing key pair.
+     *
+     * @return Either a storage error or the stored key pair (null if not set)
+     */
+    suspend fun loadSigningKeyPair(): Either<DeviceIdentityStorageError, AsymmetricKeyPair?>
+
+    /**
+     * Stores the signing key pair.
+     *
+     * @param keyPair The key pair to store
+     * @return Either a storage error or Unit on success
+     */
+    suspend fun saveSigningKeyPair(keyPair: AsymmetricKeyPair): Either<DeviceIdentityStorageError, Unit>
 }
 
 /**

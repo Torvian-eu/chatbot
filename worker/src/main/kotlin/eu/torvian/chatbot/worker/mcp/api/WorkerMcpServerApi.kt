@@ -1,7 +1,7 @@
 package eu.torvian.chatbot.worker.mcp.api
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
+import eu.torvian.chatbot.common.models.api.mcp.SignedLocalMCPServerDto
 import eu.torvian.chatbot.worker.auth.WorkerAuthManagerError
 
 /**
@@ -14,9 +14,9 @@ interface WorkerMcpServerApi {
     /**
      * Fetches all MCP server configurations assigned to this worker.
      *
-     * @return List of assigned server configurations or a logical API error.
+     * @return List of assigned server configurations plus detached signature metadata, or a logical API error.
      */
-    suspend fun getAssignedServers(): Either<WorkerMcpServerApiError, List<LocalMCPServerDto>>
+    suspend fun getAssignedServers(): Either<WorkerMcpServerApiError, List<SignedLocalMCPServerDto>>
 }
 
 /**

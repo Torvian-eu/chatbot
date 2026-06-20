@@ -69,7 +69,7 @@ kotlin {
 
     androidTarget {
         compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_11)
+            jvmTarget.set(JvmTarget.fromTarget(libs.versions.javaAndroid.get()))
         }
     }
 
@@ -100,6 +100,17 @@ kotlin {
         commonTest.dependencies {
             implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutines.test)
+        }
+
+        wasmJsMain.dependencies {
+            // Kotlinx Browser for WASM JS interop (Int8Array, JsAny, Promise)
+            implementation(libs.kotlinx.browser)
+        }
+
+        desktopAndroidMain.dependencies {
+            // BouncyCastle for RSA signing
+            implementation(libs.bouncycastle.prov)
+            implementation(libs.bouncycastle.pkix)
         }
 
         desktopMain.dependencies {
@@ -133,8 +144,15 @@ kotlin {
             }
         }
         compileOptions {
-            sourceCompatibility = JavaVersion.VERSION_11
-            targetCompatibility = JavaVersion.VERSION_11
+            val javaAndroidVal = libs.versions.javaAndroid.get()
+            sourceCompatibility = JavaVersion.toVersion(javaAndroidVal)
+            targetCompatibility = JavaVersion.toVersion(javaAndroidVal)
         }
     }
+}
+
+tasks.withType<Test> {
+    jvmArgs(
+        "--sun-misc-unsafe-memory-access=allow" // Allow unsafe memory access for testing purposes (needed for MockK)
+    )
 }

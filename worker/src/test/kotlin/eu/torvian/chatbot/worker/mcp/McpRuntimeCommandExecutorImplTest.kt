@@ -7,7 +7,9 @@ import arrow.core.right
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStateDto
 import eu.torvian.chatbot.common.models.api.mcp.LocalMcpServerRuntimeStatusDto
+import eu.torvian.chatbot.common.models.api.mcp.SignedLocalMCPServerDto
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.*
+import eu.torvian.chatbot.common.security.SignedRequest
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -28,6 +30,8 @@ class McpRuntimeCommandExecutorImplTest {
     fun `start maps runtime success`() = runTest {
         val executor = McpRuntimeCommandExecutorImpl(
             runtimeService = FakeRuntimeService(startResult = Unit.right()),
+            signedMcpServerConfigValidator = AcceptingValidator(),
+            signedMcpServerDraftConfigValidator = AcceptingDraftValidator(),
             configStore = InMemoryMcpServerConfigStore()
         )
 
@@ -43,6 +47,8 @@ class McpRuntimeCommandExecutorImplTest {
     fun `stop maps runtime success`() = runTest {
         val executor = McpRuntimeCommandExecutorImpl(
             runtimeService = FakeRuntimeService(stopResult = Unit.right()),
+            signedMcpServerConfigValidator = AcceptingValidator(),
+            signedMcpServerDraftConfigValidator = AcceptingDraftValidator(),
             configStore = InMemoryMcpServerConfigStore()
         )
 
@@ -63,6 +69,8 @@ class McpRuntimeCommandExecutorImplTest {
                     message = "runtime ok"
                 ).right()
             ),
+            signedMcpServerConfigValidator = AcceptingValidator(),
+            signedMcpServerDraftConfigValidator = AcceptingDraftValidator(),
             configStore = InMemoryMcpServerConfigStore()
         )
 
@@ -88,15 +96,25 @@ class McpRuntimeCommandExecutorImplTest {
                     message = "draft runtime ok"
                 ).right()
             ),
+            signedMcpServerConfigValidator = AcceptingValidator(),
+            signedMcpServerDraftConfigValidator = AcceptingDraftValidator(),
             configStore = InMemoryMcpServerConfigStore()
         )
 
         val result = executor.testDraftConnection(
             WorkerMcpServerTestDraftConnectionCommandData(
+                workerId = 1L,
                 name = "draft-filesystem",
                 command = "npx",
                 arguments = listOf("-y", "tool"),
-                workingDirectory = "C:/data"
+                workingDirectory = "C:/data",
+                signedRequest = SignedRequest(
+                    payload = "{\"workerId\":1,\"name\":\"draft-filesystem\",\"command\":\"npx\"}",
+                    signature = "signature-base64",
+                    signerId = "device-1",
+                    timestamp = 1_700_000_000_000,
+                    nonce = "nonce-1"
+                )
             )
         ).rightOrError()
 
@@ -121,6 +139,8 @@ class McpRuntimeCommandExecutorImplTest {
                     )
                 ).right()
             ),
+            signedMcpServerConfigValidator = AcceptingValidator(),
+            signedMcpServerDraftConfigValidator = AcceptingDraftValidator(),
             configStore = InMemoryMcpServerConfigStore()
         )
 
@@ -150,6 +170,8 @@ class McpRuntimeCommandExecutorImplTest {
             runtimeService = FakeRuntimeService(
                 startResult = McpRuntimeError.ServerConfigMissing(serverId = 20L).left()
             ),
+            signedMcpServerConfigValidator = AcceptingValidator(),
+            signedMcpServerDraftConfigValidator = AcceptingDraftValidator(),
             configStore = InMemoryMcpServerConfigStore()
         )
 
@@ -178,6 +200,8 @@ class McpRuntimeCommandExecutorImplTest {
             runtimeService = FakeRuntimeService(
                 getRuntimeStatusResult = status.right()
             ),
+            signedMcpServerConfigValidator = AcceptingValidator(),
+            signedMcpServerDraftConfigValidator = AcceptingDraftValidator(),
             configStore = InMemoryMcpServerConfigStore()
         )
 
@@ -202,6 +226,8 @@ class McpRuntimeCommandExecutorImplTest {
             runtimeService = FakeRuntimeService(
                 listRuntimeStatusesResult = listOf(status)
             ),
+            signedMcpServerConfigValidator = AcceptingValidator(),
+            signedMcpServerDraftConfigValidator = AcceptingDraftValidator(),
             configStore = InMemoryMcpServerConfigStore()
         )
 
@@ -220,11 +246,13 @@ class McpRuntimeCommandExecutorImplTest {
         val configStore = InMemoryMcpServerConfigStore()
         val executor = McpRuntimeCommandExecutorImpl(
             runtimeService = FakeRuntimeService(),
+            signedMcpServerConfigValidator = AcceptingValidator(),
+            signedMcpServerDraftConfigValidator = AcceptingDraftValidator(),
             configStore = configStore
         )
         val server = testServer(serverId = 32L)
 
-        val result = executor.createServer(WorkerMcpServerCreateCommandData(server = server)).rightOrError()
+        val result = executor.createServer(WorkerMcpServerCreateCommandData(signedServer = signedServer(server))).rightOrError()
 
         assertEquals(32L, result.serverId)
         assertEquals(server, configStore.getServer(32L))
@@ -238,16 +266,42 @@ class McpRuntimeCommandExecutorImplTest {
         val configStore = InMemoryMcpServerConfigStore()
         val executor = McpRuntimeCommandExecutorImpl(
             runtimeService = FakeRuntimeService(),
+            signedMcpServerConfigValidator = AcceptingValidator(),
+            signedMcpServerDraftConfigValidator = AcceptingDraftValidator(),
             configStore = configStore
         )
         val original = testServer(serverId = 33L)
         configStore.upsertServer(original)
         val updated = original.copy(name = "filesystem-v2")
 
-        val result = executor.updateServer(WorkerMcpServerUpdateCommandData(server = updated)).rightOrError()
+        val result = executor.updateServer(WorkerMcpServerUpdateCommandData(signedServer = signedServer(updated))).rightOrError()
 
         assertEquals(33L, result.serverId)
         assertEquals("filesystem-v2", configStore.getServer(33L)?.name)
+    }
+
+    /**
+     * Verifies unauthorized config-sync payloads are rejected before cache mutation.
+     */
+    @Test
+    fun `create server sync rejects unauthorized config payload`() = runTest {
+        val configStore = InMemoryMcpServerConfigStore()
+        val executor = McpRuntimeCommandExecutorImpl(
+            runtimeService = FakeRuntimeService(),
+            signedMcpServerConfigValidator = RejectingValidator(
+                SignedMcpServerConfigValidationResult.InvalidSignature(details = "signature mismatch")
+            ),
+            signedMcpServerDraftConfigValidator = AcceptingDraftValidator(),
+            configStore = configStore
+        )
+        val server = testServer(serverId = 35L)
+
+        val error = executor.createServer(
+            WorkerMcpServerCreateCommandData(signedServer = signedServer(server))
+        ).leftOrError()
+
+        assertEquals("MCP_CONFIG_INVALID_SIGNATURE", error.code)
+        assertEquals(null, configStore.getServer(35L))
     }
 
     /**
@@ -258,6 +312,8 @@ class McpRuntimeCommandExecutorImplTest {
         val configStore = InMemoryMcpServerConfigStore()
         val executor = McpRuntimeCommandExecutorImpl(
             runtimeService = FakeRuntimeService(),
+            signedMcpServerConfigValidator = AcceptingValidator(),
+            signedMcpServerDraftConfigValidator = AcceptingDraftValidator(),
             configStore = configStore
         )
         configStore.upsertServer(testServer(serverId = 34L))
@@ -283,6 +339,121 @@ class McpRuntimeCommandExecutorImplTest {
         createdAt = Instant.fromEpochMilliseconds(1_700_000_000_000),
         updatedAt = Instant.fromEpochMilliseconds(1_700_000_100_000)
     )
+
+    /**
+     * Wraps a Local MCP server fixture with deterministic detached signed-request metadata.
+     *
+     * @param server Local MCP server DTO under test.
+     * @return Signed server wrapper suitable for worker create/update sync commands.
+     */
+    private fun signedServer(server: LocalMCPServerDto): SignedLocalMCPServerDto = SignedLocalMCPServerDto(
+        server = server,
+        signedRequest = SignedRequest(
+            payload = "{\"workerId\":${server.workerId},\"name\":\"${server.name}\",\"command\":\"${server.command}\"}",
+            signature = "signature-base64",
+            signerId = "device-1",
+            timestamp = 1_700_000_000_000,
+            nonce = "nonce-1"
+        )
+    )
+
+    /**
+     * Verifies draft test connection is rejected when the detached signed request is invalid.
+     */
+    @Test
+    fun `test draft connection rejects unauthorized draft payload`() = runTest {
+        val executor = McpRuntimeCommandExecutorImpl(
+            runtimeService = FakeRuntimeService(),
+            signedMcpServerConfigValidator = AcceptingValidator(),
+            signedMcpServerDraftConfigValidator = RejectingDraftValidator(
+                SignedMcpServerDraftConfigValidationResult.InvalidSignature(details = "signature mismatch")
+            ),
+            configStore = InMemoryMcpServerConfigStore()
+        )
+
+        val error = executor.testDraftConnection(
+            WorkerMcpServerTestDraftConnectionCommandData(
+                workerId = 1L,
+                name = "draft-filesystem",
+                command = "npx",
+                arguments = listOf("-y", "tool"),
+                workingDirectory = "C:/data",
+                signedRequest = SignedRequest(
+                    payload = "{\"workerId\":1,\"name\":\"draft-filesystem\",\"command\":\"npx\"}",
+                    signature = "invalid-signature",
+                    signerId = "device-1",
+                    timestamp = 1_700_000_000_000,
+                    nonce = "nonce-1"
+                )
+            )
+        ).leftOrError()
+
+        assertEquals("MCP_DRAFT_INVALID_SIGNATURE", error.code)
+    }
+
+    /**
+     * Validator fixture that accepts every config-sync payload.
+     */
+    private class AcceptingValidator : SignedMcpServerConfigValidator {
+        /**
+         * @param server Ignored; every payload is accepted.
+         * @param signedRequest Ignored; every payload is accepted.
+         * @return Always authorized.
+         */
+        override suspend fun validate(
+            server: LocalMCPServerDto,
+            signedRequest: SignedRequest?
+        ): SignedMcpServerConfigValidationResult = SignedMcpServerConfigValidationResult.Authorized
+    }
+
+    /**
+     * Validator fixture that rejects every config-sync payload with one preconfigured failure.
+     *
+     * @property rejection Failure returned for every validation request.
+     */
+    private class RejectingValidator(
+        private val rejection: SignedMcpServerConfigValidationResult.Rejected
+    ) : SignedMcpServerConfigValidator {
+        /**
+         * @param server Ignored; every payload is rejected.
+         * @param signedRequest Ignored; every payload is rejected.
+         * @return Preconfigured rejection.
+         */
+        override suspend fun validate(
+            server: LocalMCPServerDto,
+            signedRequest: SignedRequest?
+        ): SignedMcpServerConfigValidationResult = rejection
+    }
+
+    /**
+     * Validator fixture that accepts every draft test payload.
+     */
+    private class AcceptingDraftValidator : SignedMcpServerDraftConfigValidator {
+        /**
+         * @param request Ignored; every payload is accepted.
+         * @return Always authorized.
+         */
+        override suspend fun validate(
+            request: WorkerMcpServerTestDraftConnectionCommandData
+        ): SignedMcpServerDraftConfigValidationResult = SignedMcpServerDraftConfigValidationResult.Authorized
+    }
+
+    /**
+     * Validator fixture that rejects every draft test payload with one preconfigured failure.
+     *
+     * @property rejection Failure returned for every validation request.
+     */
+    private class RejectingDraftValidator(
+        private val rejection: SignedMcpServerDraftConfigValidationResult.Rejected
+    ) : SignedMcpServerDraftConfigValidator {
+        /**
+         * @param request Ignored; every payload is rejected.
+         * @return Preconfigured rejection.
+         */
+        override suspend fun validate(
+            request: WorkerMcpServerTestDraftConnectionCommandData
+        ): SignedMcpServerDraftConfigValidationResult = rejection
+    }
 
     /**
      * Fake runtime service with configurable command outcomes.

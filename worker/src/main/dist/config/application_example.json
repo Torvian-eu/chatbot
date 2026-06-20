@@ -23,6 +23,16 @@
     },
     "auth": {
       "refreshSkewSeconds": 300
-    }
+    },
+    "trustedSigners": [
+      {
+        "signerId": "uuid-of-signer-1", // app device id
+        "publicKeyBase64": "base64-encoded-public-key-of-signer-1", // app device public key in base64
+        "permissions": [
+          "permission-1-for-signer-1",
+          "permission-2-for-signer-1"
+        ]
+      }
+    ]
   }
 }
