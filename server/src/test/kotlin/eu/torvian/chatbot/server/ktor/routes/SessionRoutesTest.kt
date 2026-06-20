@@ -8,6 +8,7 @@ import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.api.core.*
+import eu.torvian.chatbot.common.models.api.tool.ToolCallApprovalResponse
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
@@ -28,6 +29,7 @@ import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -36,6 +38,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Integration tests for Session API routes.
@@ -692,6 +695,57 @@ class SessionRoutesTest {
         val messages = testDataManager.getChatMessagesForSession(testSession.id)
         assertEquals(0, messages.size, "No messages should be created on error")
     }
+
+    /**
+     * Verifies that the session-messages WebSocket still rejects any non-start event as the first frame.
+     */
+    @Test
+    fun `WS session message should close with violated policy when first event is not ProcessNewMessage`() =
+        sessionTestApplication {
+            client.webSocket(
+                urlString = href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = 999L))),
+                request = {
+                    authenticate(authToken)
+                    offerWebSocketAuthSubprotocolMarker()
+                }
+            ) {
+                val invalidInitialEvent: ChatClientEvent = ChatClientEvent.ToolCallApproval(
+                    ToolCallApprovalResponse(toolCallId = 1L, approved = true)
+                )
+                send(Frame.Text(json.encodeToString(invalidInitialEvent)))
+
+                val reason = withTimeout(5_000.milliseconds) {
+                    closeReason.await() ?: error("Expected close reason for invalid initial event")
+                }
+
+                assertEquals(CloseReason.Codes.VIOLATED_POLICY.code, reason.code)
+                assertEquals("First message must be ProcessNewMessage", reason.message)
+            }
+        }
+
+    /**
+     * Verifies that the session-messages WebSocket still requires a text frame for the initial request.
+     */
+    @Test
+    fun `WS session message should close with violated policy when initial frame is not text`() =
+        sessionTestApplication {
+            client.webSocket(
+                urlString = href(SessionResource.ById.Messages(parent = SessionResource.ById(sessionId = 999L))),
+                request = {
+                    authenticate(authToken)
+                    offerWebSocketAuthSubprotocolMarker()
+                }
+            ) {
+                send(Frame.Binary(fin = true, data = byteArrayOf(1, 2, 3)))
+
+                val reason = withTimeout(5_000.milliseconds) {
+                    closeReason.await() ?: error("Expected close reason for invalid initial frame")
+                }
+
+                assertEquals(CloseReason.Codes.VIOLATED_POLICY.code, reason.code)
+                assertEquals("Invalid frame type for initial request", reason.message)
+            }
+        }
 
     // --- 403 (Forbidden) tests for non-owner access ---
 
