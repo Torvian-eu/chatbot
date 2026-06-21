@@ -9,6 +9,7 @@ enum class SettingsCategory {
     ModelSettings,
     McpServers,
     Workers,
+    E2EASecurity,
     Appearance,
     About
 }
@@ -23,6 +24,7 @@ val SettingsCategory.displayLabel: String
         SettingsCategory.ModelSettings -> "Model Settings"
         SettingsCategory.McpServers -> "MCP Servers"
         SettingsCategory.Workers -> "Workers"
+        SettingsCategory.E2EASecurity -> "E2EA Security"
         SettingsCategory.Appearance -> "Appearance"
         SettingsCategory.About -> "About"
     }

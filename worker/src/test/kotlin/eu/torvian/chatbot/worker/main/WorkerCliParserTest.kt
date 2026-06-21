@@ -39,6 +39,26 @@ class WorkerCliParserTest {
         assertEquals("https://localhost:8443/", options.serverUrlOverride)
     }
 
+    /**
+     * Verifies that trusted-signer admin flags are surfaced verbatim by the lightweight parser.
+     */
+    @Test
+    fun `parses add trusted signer mode`() {
+        val options = WorkerCliParser.parse(
+            arrayOf(
+                "--add-trusted-signer",
+                "--signer-id=signer-7",
+                "--public-key-base64=AQID",
+                "--permissions=mcp:read,mcp:write"
+            )
+        )
+
+        assertTrue(options.addTrustedSigner)
+        assertEquals("signer-7", options.signerId)
+        assertEquals("AQID", options.publicKeyBase64)
+        assertEquals("mcp:read,mcp:write", options.permissionsCsv)
+    }
+
     @Test
     fun `ignores unknown flags without failing`() {
         val options = WorkerCliParser.parse(arrayOf("--unknown=42", "--no-op"))

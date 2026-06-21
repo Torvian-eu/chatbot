@@ -21,16 +21,18 @@ import org.apache.logging.log4j.Logger as Log4jLogger
  * Standalone worker process entrypoint.
  *
  * The worker loads its layered config directory, boots DI, and delegates runtime orchestration
- * to [WorkerRuntime]. Supports three execution modes:
+ * to [WorkerRuntime]. Supports four execution modes:
  * - Normal runtime: loads config and runs indefinitely
  * - Setup mode: runs interactive setup flow to configure the worker
  * - Single-run mode: runs one job and exits
+ * - Trusted-signer admin mode: patches `application.json` and exits before runtime boot
  *
  * @property configLoader Loader used for reading and writing layered config files.
  * @property secretsStore Store used to persist the private key to `secrets.json` during setup.
  * @property pathResolver Resolves relative storage paths against the config directory.
  * @property privateKeyProvider Resolves the PEM private key at runtime from env or secrets file.
  * @property setupManagerFactory Factory used to create the setup manager; overridden by tests.
+ * @property trustedSignerManagerFactory Factory used to create the trusted-signer admin helper; overridden by tests.
  */
 class WorkerMain(
     private val configLoader: WorkerConfigLoader = DefaultWorkerConfigLoader(),
@@ -39,6 +41,9 @@ class WorkerMain(
     private val privateKeyProvider: PrivateKeyProvider = DefaultPrivateKeyProvider(),
     private val setupManagerFactory: () -> WorkerSetupManager = {
         DefaultWorkerSetupManager(configLoader, secretsStore = secretsStore)
+    },
+    private val trustedSignerManagerFactory: () -> WorkerTrustedSignerManager = {
+        WorkerTrustedSignerManager(configLoader)
     }
 ) {
     companion object {
@@ -70,6 +75,10 @@ class WorkerMain(
      *   - `--setup` Run interactive setup flow and exit
      *   - `--once` Run a single job and exit instead of infinite runtime
      *   - `--server-url=<url>` Override server base URL during setup (use with --setup only)
+     *   - `--add-trusted-signer` Add or replace one trusted signer in `application.json` and exit
+     *   - `--signer-id=<id>` Signer identifier used with `--add-trusted-signer`
+     *   - `--public-key-base64=<base64>` Signer public key used with `--add-trusted-signer`
+     *   - `--permissions=<comma,separated,list>` Optional permissions used with `--add-trusted-signer`
      * @return Does not return normally; exits the process with status 1 on startup failure
      *         or status 0 on clean completion.
      */
@@ -89,26 +98,28 @@ class WorkerMain(
      *
      * Orchestrates the full worker startup pipeline:
      * 1. Parses CLI arguments
-     * 2. Loads configuration from layered config directory
-     * 3. Optionally runs interactive setup flow and exits cleanly on success
-     * 4. Validates configuration and creates domain model
-     * 5. Reads private key for TLS
-     * 6. Boots Koin DI container
-     * 7. Initializes HTTP client and runs worker runtime
+     * 2. Resolves the config directory and optionally performs trusted-signer admin mode
+     * 3. Loads configuration from layered config directory
+     * 4. Optionally runs interactive setup flow and exits cleanly on success
+     * 5. Validates configuration and creates domain model
+     * 6. Reads private key for TLS
+     * 7. Boots Koin DI container
+     * 8. Initializes HTTP client and runs worker runtime
      *
      * @param args Command-line arguments passed to the worker process.
      * @return Either a logical startup/runtime error or `Unit` on clean completion.
      */
     suspend fun run(args: Array<String>): Either<WorkerMainError, Unit> = either {
         val options = WorkerCliParser.parse(args)
-        ensure(!(!options.setup && options.serverUrlOverride != null)) {
-            WorkerMainError.InvalidArguments(
-                "--server-url can only be used together with --setup"
-            )
-        }
+        validateCliOptions(options).bind()
 
         val configDir = configLoader.resolveConfigDir(options.configPathOverride)
         logger.info("Resolved worker config directory: {}", configDir)
+
+        if (options.addTrustedSigner) {
+            runTrustedSignerAdminMode(configDir, options).bind()
+            return@either
+        }
 
         // Phase 1: Load the DTO (nullable/partial).
         var currentDto = configLoader.loadAppConfigDto(configDir)
@@ -202,6 +213,77 @@ class WorkerMain(
         val setupManager = setupManagerFactory()
         return setupManager.run(configDir, mergedConfig, serverUrlOverride)
             .mapLeft { WorkerMainError.Setup(it) }
+    }
+
+    /**
+     * Validates command-line argument combinations before worker startup proceeds.
+     *
+     * @param options Parsed command-line options.
+     * @return Either an invalid-arguments error or `Unit` when the options are acceptable.
+     */
+    private fun validateCliOptions(options: WorkerCliOptions): Either<WorkerMainError.InvalidArguments, Unit> = either {
+        ensure(!(!options.setup && options.serverUrlOverride != null)) {
+            WorkerMainError.InvalidArguments(
+                "--server-url can only be used together with --setup"
+            )
+        }
+
+        ensure(!(options.addTrustedSigner && options.signerId == null)) {
+            WorkerMainError.InvalidArguments(
+                "--signer-id is required when --add-trusted-signer is used"
+            )
+        }
+
+        ensure(!(options.addTrustedSigner && options.publicKeyBase64 == null)) {
+            WorkerMainError.InvalidArguments(
+                "--public-key-base64 is required when --add-trusted-signer is used"
+            )
+        }
+
+        val hasSignerSpecificFlags = options.signerId != null ||
+            options.publicKeyBase64 != null ||
+            options.permissionsCsv != null
+        ensure(!(hasSignerSpecificFlags && !options.addTrustedSigner)) {
+            WorkerMainError.InvalidArguments(
+                "--signer-id, --public-key-base64, and --permissions can only be used together with --add-trusted-signer"
+            )
+        }
+    }
+
+    /**
+     * Runs the trusted-signer admin mode and exits before runtime bootstrap.
+     *
+     * @param configDir Worker config directory containing `application.json`.
+     * @param options Parsed CLI options for trusted-signer admin mode.
+     * @return Either a logical startup error or `Unit` when the signer update completed.
+     */
+    private fun runTrustedSignerAdminMode(
+        configDir: Path,
+        options: WorkerCliOptions
+    ): Either<WorkerMainError, Unit> {
+        val trustedSignerManager = trustedSignerManagerFactory()
+        return trustedSignerManager.addOrUpdateTrustedSigner(
+            configDir = configDir,
+            signerId = options.signerId.orEmpty(),
+            publicKeyBase64 = options.publicKeyBase64.orEmpty(),
+            permissionsCsv = options.permissionsCsv
+        ).mapLeft { error ->
+            when (error) {
+                is WorkerTrustedSignerManagerError.InvalidInput ->
+                    WorkerMainError.InvalidArguments(error.error.description)
+
+                is WorkerTrustedSignerManagerError.Config ->
+                    WorkerMainError.Config(error.error)
+            }
+        }.map {
+            val operation = if (it.replacedExisting) "Updated" else "Added"
+            logger.info(
+                "{} trusted signer '{}' in {}",
+                operation,
+                it.signerId,
+                it.applicationConfigPath
+            )
+        }
     }
 
 }
