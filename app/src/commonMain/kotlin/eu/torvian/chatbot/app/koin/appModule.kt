@@ -29,6 +29,7 @@ import eu.torvian.chatbot.app.viewmodel.common.CoroutineScopeProvider
 import eu.torvian.chatbot.app.viewmodel.common.DefaultCoroutineScopeProvider
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.app.viewmodel.settings.AboutViewModel
+import eu.torvian.chatbot.app.viewmodel.settings.E2EASecurityViewModel
 import io.ktor.client.*
 import io.ktor.client.plugins.logging.*
 import kotlinx.coroutines.CoroutineScope
@@ -488,6 +489,13 @@ fun appModule(config: AppConfiguration): Module = module {
     viewModel {
         PreferencesViewModel(
             userPreferenceRepository = get(),
+            notificationService = get()
+        )
+    }
+    viewModel {
+        E2EASecurityViewModel(
+            deviceIdentityService = get(),
+            clipboardService = get(),
             notificationService = get()
         )
     }

@@ -128,6 +128,12 @@ fun SettingsScreen(
                         breadcrumbSegments = breadcrumbs
                     }
 
+                    SettingsCategory.E2EASecurity -> E2EASecurityTabRoute(
+                        categoryResetSignal = categoryResetSignal
+                    ) { breadcrumbs ->
+                        breadcrumbSegments = breadcrumbs
+                    }
+
                     SettingsCategory.Appearance -> AppearanceTabRoute(
                         authState = authState,
                         categoryResetSignal = categoryResetSignal
