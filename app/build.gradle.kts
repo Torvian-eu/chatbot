@@ -3,7 +3,6 @@ import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpackConfig
-import org.gradle.api.tasks.Sync
 
 /**
  * Build configuration for the `app-shared` module.
@@ -29,11 +28,13 @@ repositories {
 
 // Define the Kotlin targets for this multiplatform module
 kotlin {
+    jvmToolchain {
+        languageVersion.set(JavaLanguageVersion.of(libs.versions.javaVersion.get().toInt()))
+        vendor.set(JvmVendorSpec.ADOPTIUM)
+    }
+
     // Primary target for Desktop backend-frontend logic
     jvm("desktop") {
-        compilerOptions {
-            jvmTarget.set(JvmTarget.fromTarget(libs.versions.javaVersion.get()))
-        }
 
         testRuns["test"].executionTask.configure {
             // Use JUnit 5 Platform for testing
@@ -347,6 +348,7 @@ afterEvaluate {
                         println("WARNING: Windows batch file not found at ${batchFile.absolutePath}")
                     }
                 }
+
                 os.contains("mac") || os.contains("darwin") -> {
                     // macOS: copy shell script
                     val shellScript = unixShellScript.asFile
@@ -360,6 +362,7 @@ afterEvaluate {
                         println("WARNING: Shell script not found at ${shellScript.absolutePath}")
                     }
                 }
+
                 os.contains("nux") || os.contains("nix") -> {
                     // Linux: copy shell script
                     val shellScript = unixShellScript.asFile
@@ -373,6 +376,7 @@ afterEvaluate {
                         println("WARNING: Shell script not found at ${shellScript.absolutePath}")
                     }
                 }
+
                 else -> {
                     println("WARNING: Unknown OS '${os}', no launcher script copied")
                 }

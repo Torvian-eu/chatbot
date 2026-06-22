@@ -1,6 +1,5 @@
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpackConfig
 
 /**
@@ -24,10 +23,13 @@ repositories {
 }
 
 kotlin {
+    jvmToolchain {
+        languageVersion.set(JavaLanguageVersion.of(libs.versions.javaVersion.get().toInt()))
+        vendor.set(JvmVendorSpec.ADOPTIUM)
+    }
+
+    // Primary target for Desktop backend-frontend logic
     jvm("desktop") {
-        compilerOptions {
-            jvmTarget = JvmTarget.JVM_21
-        }
 
         testRuns["test"].executionTask.configure {
             // Use JUnit 5 Platform for testing
