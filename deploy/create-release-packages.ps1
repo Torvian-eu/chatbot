@@ -45,7 +45,7 @@ $WslPackagePath = "/mnt/" + $WinPathRaw.Replace(":", "").Replace("\", "/").ToLow
 
 # Use 'bash -l -c' to ensure the environment (SSH keys, etc.) is loaded
 $LinuxTarName = "Chatbot_client_linux_x64_$ReleaseTag.tar.gz"
-$LinuxCommands = "cd $WslProjectPath && git pull origin master && chmod +x gradlew && ./gradlew :app:createDistributable && cd app/build/compose/binaries/main/app/Chatbot && tar -czf ../$LinuxTarName . && mv ../$LinuxTarName '$WslPackagePath/'"
+$LinuxCommands = "cd $WslProjectPath && git pull origin master && ./gradlew :app:createDistributable && cd app/build/compose/binaries/main/app/Chatbot && tar -czf ../$LinuxTarName . && mv ../$LinuxTarName '$WslPackagePath/'"
 
 Write-Host "Executing Linux build commands..." -ForegroundColor Gray
 wsl -d $WslDistro bash -l -c $LinuxCommands
