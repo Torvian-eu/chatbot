@@ -1,5 +1,5 @@
 # 1. Base image
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:25-jre
 
 # Set environment to non-interactive to avoid prompts
 ARG DEBIAN_FRONTEND=noninteractive
