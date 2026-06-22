@@ -4,6 +4,7 @@ import org.gradle.api.artifacts.VersionCatalog
 import org.gradle.api.artifacts.VersionCatalogsExtension
 import org.gradle.api.tasks.testing.Test
 import org.gradle.jvm.toolchain.JavaLanguageVersion
+import org.gradle.jvm.toolchain.JvmVendorSpec
 import org.gradle.kotlin.dsl.getByType
 import org.gradle.kotlin.dsl.withType
 import org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension
@@ -108,7 +109,11 @@ class CommonModuleConventionPlugin : Plugin<Project> {
                     }
 
                 languageVersion.set(JavaLanguageVersion.of(javaVersion))
-                logger.lifecycle("✅ Configured Java toolchain with version: $javaVersion")
+
+                // Enforce Adoptium (Temurin) globally for JVM modules
+                vendor.set(JvmVendorSpec.ADOPTIUM)
+
+                logger.lifecycle("✅ Configured Java toolchain with version: $javaVersion (Adoptium)")
             }
         }
     }

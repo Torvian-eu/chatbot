@@ -39,3 +39,8 @@ pluginManagement {
         mavenCentral()
     }
 }
+
+// Apply Foojay toolchain resolver to enable automatic JDK downloading
+plugins {
+    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
+}
