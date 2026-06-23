@@ -5,6 +5,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import eu.torvian.chatbot.app.compose.chatarea.ChatAreaActions
 import eu.torvian.chatbot.app.compose.chatarea.ChatAreaState
 import eu.torvian.chatbot.app.compose.chatarea.ChatTopBarContent
+import eu.torvian.chatbot.app.compose.chatarea.SearchDirection
+import eu.torvian.chatbot.app.compose.chatarea.findSearchMatches
+import eu.torvian.chatbot.app.compose.chatarea.navigateSearchIndex
+import eu.torvian.chatbot.app.compose.chatarea.normalizeSearchIndex
 import eu.torvian.chatbot.app.compose.sessionlist.SessionListActions
 import eu.torvian.chatbot.app.compose.sessionlist.SessionListState
 import eu.torvian.chatbot.app.compose.topbar.TopBarContentProvider
@@ -91,6 +95,21 @@ fun ChatScreen(
     val toolCallsForCurrentSession by chatViewModel.toolCallsForCurrentSession.collectAsState()
     val pendingFileReferences by chatViewModel.pendingFileReferences.collectAsState()
 
+    // --- Session-local UI state for in-session search ---
+    var isSearchActive by rememberSaveable(selectedSessionId) { mutableStateOf(false) }
+    var searchQuery by rememberSaveable(selectedSessionId) { mutableStateOf("") }
+    var currentSearchIndex by rememberSaveable(selectedSessionId) { mutableStateOf(-1) }
+    val searchResults = remember(chatDisplayedMessages, searchQuery) {
+        findSearchMatches(chatDisplayedMessages, searchQuery)
+    }
+
+    LaunchedEffect(searchResults, currentSearchIndex) {
+        val normalizedSearchIndex = normalizeSearchIndex(searchResults, currentSearchIndex)
+        if (normalizedSearchIndex != currentSearchIndex) {
+            currentSearchIndex = normalizedSearchIndex
+        }
+    }
+
     // Derive enabled tools count
     val enabledToolsCount = enabledToolsForCurrentSession.dataOrNull?.size ?: 0
 
@@ -118,7 +137,27 @@ fun ChatScreen(
                 enabledToolsCount = enabledToolsCount,
                 isSessionListCollapsed = isSessionListCollapsed,
                 onToggleSessionList = { isSessionListCollapsed = !isSessionListCollapsed },
-                onCopyThread = { chatViewModel.copyThreadToClipboard() }
+                onCopyThread = { chatViewModel.copyThreadToClipboard() },
+                isSearchActive = isSearchActive,
+                searchQuery = searchQuery,
+                currentSearchIndex = currentSearchIndex,
+                searchResultsCount = searchResults.size,
+                onShowSearch = { isSearchActive = true },
+                onCloseSearch = {
+                    isSearchActive = false
+                    searchQuery = ""
+                    currentSearchIndex = -1
+                },
+                onUpdateSearchQuery = { query ->
+                    searchQuery = query
+                    currentSearchIndex = -1
+                },
+                onNavigateSearchResult = { direction ->
+                    currentSearchIndex = navigateSearchIndex(searchResults, currentSearchIndex, direction)
+                },
+                onJumpToSearchResult = { index ->
+                    currentSearchIndex = normalizeSearchIndex(searchResults, index)
+                },
             )
         }
     )
@@ -190,7 +229,8 @@ fun ChatScreen(
         chatSessionUiState, availableModels, availableSettings, currentModel, currentSettings, modelsById,
         chatInputContent, chatReplyTargetMessage, chatEditingMessage, chatEditingContent,
         chatEditingFileReferences, chatEditingBasePathOverride, chatDisplayedMessages, chatCollapsedMessageIds,
-        chatIsSendingMessage, chatDialogState, enabledToolsCount, toolCallsMap, pendingFileReferences
+        chatIsSendingMessage, chatDialogState, enabledToolsCount, toolCallsMap, pendingFileReferences,
+        searchQuery, searchResults, currentSearchIndex, isSearchActive,
     ) {
         ChatAreaState(
             sessionUiState = chatSessionUiState,
@@ -211,10 +251,14 @@ fun ChatScreen(
             dialogState = chatDialogState,
             enabledToolsCount = enabledToolsCount,
             toolCallsMap = toolCallsMap,
-            pendingFileReferences = pendingFileReferences
+            pendingFileReferences = pendingFileReferences,
+            searchQuery = searchQuery,
+            searchResults = searchResults,
+            currentSearchIndex = currentSearchIndex,
+            isSearchActive = isSearchActive,
         )
     }
-    val chatAreaActions = remember(chatViewModel, selectedSession) {
+    val chatAreaActions = remember(chatViewModel, selectedSession, authState, searchResults) {
         object : ChatAreaActions {
             override fun onUpdateInput(newText: String) = chatViewModel.updateInput(newText)
             override fun onSendMessage() = chatViewModel.sendMessage()
@@ -241,6 +285,24 @@ fun ChatScreen(
                 chatViewModel.copyMessageToClipboard(message)
             override fun onCopyThread() =
                 chatViewModel.copyThreadToClipboard()
+            override fun onShowSearch() {
+                isSearchActive = true
+            }
+            override fun onCloseSearch() {
+                isSearchActive = false
+                searchQuery = ""
+                currentSearchIndex = -1
+            }
+            override fun onUpdateSearchQuery(query: String) {
+                searchQuery = query
+                currentSearchIndex = -1
+            }
+            override fun onNavigateSearchResult(direction: SearchDirection) {
+                currentSearchIndex = navigateSearchIndex(searchResults, currentSearchIndex, direction)
+            }
+            override fun onJumpToSearchResult(index: Int) {
+                currentSearchIndex = normalizeSearchIndex(searchResults, index)
+            }
             override fun onBranchAndContinue(message: ChatMessage) =
                 chatViewModel.sendMessage(continueFromMessage = message)
             override fun onRegenerateMessage(message: ChatMessage) =

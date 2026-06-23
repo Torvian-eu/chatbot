@@ -8,6 +8,7 @@ import androidx.compose.ui.test.v2.runComposeUiTest
 import eu.torvian.chatbot.app.compose.chatarea.ChatArea
 import eu.torvian.chatbot.app.compose.chatarea.ChatAreaActions
 import eu.torvian.chatbot.app.compose.chatarea.ChatAreaState
+import eu.torvian.chatbot.app.compose.chatarea.MessageSearchMatch
 import eu.torvian.chatbot.app.compose.common.LOADING_OVERLAY_TAG
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.toRepositoryError
@@ -26,7 +27,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
 /**
- * Tests for the ChatArea composable, focusing on retry functionality.
+ * Tests for the ChatArea composable, covering retry, rendering, and search behavior.
  */
 @OptIn(ExperimentalTestApi::class)
 class ChatAreaTest {
@@ -348,6 +349,53 @@ class ChatAreaTest {
             // Assert - Role labels should be displayed
             onNodeWithText("You:").assertIsDisplayed()
             onNodeWithText("AI:").assertIsDisplayed()
+        }
+    }
+
+    @Test
+    fun successState_currentSearchResult_expandsCollapsedMessage() {
+        val longContent = buildString {
+            append("prefix ".repeat(90))
+            append("needle-term")
+        }
+        val testMessage = userMessage(
+            id = 1L,
+            sessionId = 1L,
+            content = longContent,
+        )
+        val testSession = chatSession(
+            id = 1L,
+            name = "Search Session",
+            currentLeafMessageId = 1L,
+            messages = listOf(testMessage),
+        )
+
+        val successState = ChatAreaState(
+            sessionUiState = DataState.Success(testSession),
+            displayedMessages = listOf(testMessage),
+            collapsedMessageIds = setOf(testMessage.id),
+            searchQuery = "needle-term",
+            searchResults = listOf(
+                MessageSearchMatch(
+                    messageId = testMessage.id,
+                    occurrenceIndexInMessage = 0,
+                    startIndex = longContent.indexOf("needle-term"),
+                    endExclusive = longContent.indexOf("needle-term") + "needle-term".length,
+                )
+            ),
+            currentSearchIndex = 0,
+            isSearchActive = true,
+        )
+
+        runComposeUiTest {
+            setContent {
+                ChatArea(
+                    state = successState,
+                    actions = mockActions,
+                )
+            }
+
+            onNodeWithText("needle-term", substring = true).assertIsDisplayed()
         }
     }
 

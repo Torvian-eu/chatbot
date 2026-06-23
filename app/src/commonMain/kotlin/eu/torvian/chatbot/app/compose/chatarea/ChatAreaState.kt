@@ -32,6 +32,10 @@ import eu.torvian.chatbot.common.models.tool.ToolCall
  * @property enabledToolsCount The number of tools currently enabled for the session.
  * @property toolCallsMap Tool calls for the current session, organized by message ID.
  * @property pendingFileReferences File references attached to the current message being composed.
+ * @property searchQuery Current in-session search query.
+ * @property searchResults Ordered occurrence-level matches for the current search query.
+ * @property currentSearchIndex Currently selected search result index, or `-1` when no result is selected.
+ * @property isSearchActive Whether the chat area is currently in search mode.
  */
 data class ChatAreaState(
     val sessionUiState: DataState<RepositoryError, ChatSession> = DataState.Idle,
@@ -52,5 +56,9 @@ data class ChatAreaState(
     val dialogState: ChatAreaDialogState = ChatAreaDialogState.None,
     val enabledToolsCount: Int = 0,
     val toolCallsMap: Map<Long, List<ToolCall>> = emptyMap(),
-    val pendingFileReferences: List<FileReference> = emptyList()
+    val pendingFileReferences: List<FileReference> = emptyList(),
+    val searchQuery: String = "",
+    val searchResults: List<MessageSearchMatch> = emptyList(),
+    val currentSearchIndex: Int = -1,
+    val isSearchActive: Boolean = false,
 )

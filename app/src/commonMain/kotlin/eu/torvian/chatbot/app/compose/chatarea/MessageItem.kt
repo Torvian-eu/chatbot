@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.app.compose.chatarea
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -14,11 +15,16 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.PlainTooltipBox
@@ -28,22 +34,23 @@ import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.tool.ToolCall
 
 /**
- * Composable for the main chat message display area.
- * Handles displaying messages, loading/error states, and threading indicators.
- * (PR 20: Implement Chat Area UI (Message Display) (E1.S*))
+ * Displays one message item and adapts search occurrence geometry from content coordinates to item coordinates.
  *
  * @param message The message data.
  * @param allMessagesMap A map of all messages in the session for efficient lookup.
  * @param allRootMessageIds A sorted list of all root message IDs in the session.
  * @param actions Grouped callbacks for message item interactions.
- * @param editingMessage The message currently being edited (E3.S1, E3.S2).
- * @param editingContent The content of the message currently being edited (E3.S1, E3.S2).
+ * @param editingMessage The message currently being edited.
+ * @param editingContent The content of the message currently being edited.
  * @param editingFileReferences The file references of the message currently being edited.
  * @param editingBasePathOverride The base path override for editing file references.
  * @param modelsById Map of model IDs to LLMModel objects for displaying model names with graceful degradation.
  * @param toolCallsForMessage List of tool calls associated with this message.
  * @param isCollapsed Whether this message is currently collapsed.
  * @param isCollapsible Whether this message can be collapsed (content length > threshold).
+ * @param searchContext optional in-session search context for highlights and selected-result
+ * geometry reporting. When `null`, the message renders without search-specific measurements.
+ * @param modifier Modifier applied to the outer message container.
  */
 @Composable
 fun MessageItem(
@@ -58,7 +65,9 @@ fun MessageItem(
     modelsById: Map<Long, LLMModel> = emptyMap(),
     toolCallsForMessage: List<ToolCall> = emptyList(),
     isCollapsed: Boolean = false,
-    isCollapsible: Boolean = false
+    isCollapsible: Boolean = false,
+    searchContext: MessageSearchContext? = null,
+    modifier: Modifier = Modifier,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val hovered by interactionSource.collectIsHoveredAsState()
@@ -71,10 +80,34 @@ fun MessageItem(
         ChatMessage.Role.USER -> MaterialTheme.colorScheme.onSurfaceVariant
         ChatMessage.Role.ASSISTANT -> MaterialTheme.colorScheme.onSurface
     }
+    val isSearchResult = searchContext?.matches?.isNotEmpty() == true
+    val isCurrentSearchResult = searchContext?.selectedMatch != null
+    val searchBorderColor = when {
+        isCurrentSearchResult -> MaterialTheme.colorScheme.primary
+        isSearchResult -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.65f)
+        else -> null
+    }
+    var contentTopInItem by remember(message.id) { mutableStateOf(0f) }
+    var selectedOccurrenceCenterInContent by remember(message.id) { mutableStateOf<Float?>(null) }
+
+    LaunchedEffect(contentTopInItem, selectedOccurrenceCenterInContent, searchContext) {
+        val onSelectedOccurrenceCenterInItemChanged = searchContext?.onSelectedOccurrenceCenterInContentChanged
+            ?: return@LaunchedEffect
+        onSelectedOccurrenceCenterInItemChanged(
+            selectedOccurrenceCenterInContent?.let { contentTopInItem + it }
+        )
+    }
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
+            .then(
+                if (searchBorderColor != null) {
+                    Modifier.border(width = if (isCurrentSearchResult) 2.dp else 1.dp, color = searchBorderColor, shape = RoundedCornerShape(8.dp))
+                } else {
+                    Modifier
+                }
+            )
             .clip(RoundedCornerShape(8.dp))
             .background(containerColor)
             .hoverable(interactionSource)
@@ -123,16 +156,25 @@ fun MessageItem(
         Spacer(Modifier.height(4.dp))
 
         // Message Content - conditionally show editing UI or display content
-        MessageContent(
-            message = message,
-            isBeingEdited = editingMessage?.id == message.id,
-            editingContent = if (editingMessage?.id == message.id) editingContent else null,
-            editingFileReferences = if (editingMessage?.id == message.id) editingFileReferences else emptyList(),
-            editingBasePathOverride = if (editingMessage?.id == message.id) editingBasePathOverride else null,
-            messageActions = actions,
-            contentColor = contentColor,
-            isCollapsed = isCollapsed
-        )
+        Box(
+            modifier = Modifier.onGloballyPositioned { coordinates ->
+                contentTopInItem = coordinates.positionInParent().y
+            }
+        ) {
+            MessageContent(
+                message = message,
+                isBeingEdited = editingMessage?.id == message.id,
+                editingContent = if (editingMessage?.id == message.id) editingContent else null,
+                editingFileReferences = if (editingMessage?.id == message.id) editingFileReferences else emptyList(),
+                editingBasePathOverride = if (editingMessage?.id == message.id) editingBasePathOverride else null,
+                messageActions = actions,
+                contentColor = contentColor,
+                isCollapsed = isCollapsed,
+                searchContext = searchContext?.copy(
+                    onSelectedOccurrenceCenterInContentChanged = { selectedOccurrenceCenterInContent = it }
+                ),
+            )
+        }
 
         // Tool Call Badges (for assistant messages)
         if (message.role == ChatMessage.Role.ASSISTANT && toolCallsForMessage.isNotEmpty()) {
@@ -172,4 +214,3 @@ fun MessageItem(
         )
     }
 }
-

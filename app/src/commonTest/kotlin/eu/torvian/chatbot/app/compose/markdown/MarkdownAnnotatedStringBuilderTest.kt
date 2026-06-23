@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.app.compose.markdown
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import eu.torvian.chatbot.common.markdown.lexer.MarkdownTokenizer
 import eu.torvian.chatbot.common.markdown.model.MarkdownToken
@@ -38,6 +39,26 @@ class MarkdownAnnotatedStringBuilderTest {
         assertEquals(2, annotated.spanStyles[1].end)
         assertEquals(2, annotated.spanStyles[2].start)
         assertEquals(3, annotated.spanStyles[2].end)
+    }
+
+    /**
+     * Ensures caller-provided overlay spans are appended after markdown token styles.
+     */
+    @Test
+    fun build_appliesExtraSpanStyles() {
+        val tokenizer = FixedTokenTokenizer(emptyList())
+        val styleMapper = MarkdownStyleMapper { SpanStyle(color = Color.Red) }
+        val builder = MarkdownAnnotatedStringBuilder(tokenizer, styleMapper)
+
+        val annotated = builder.build(
+            markdown = "abc",
+            extraSpanStyles = listOf(AnnotatedString.Range(SpanStyle(background = Color.Yellow), 1, 3)),
+        )
+
+        assertEquals("abc", annotated.text)
+        assertEquals(1, annotated.spanStyles.size)
+        assertEquals(1, annotated.spanStyles[0].start)
+        assertEquals(3, annotated.spanStyles[0].end)
     }
 }
 

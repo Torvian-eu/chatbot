@@ -21,6 +21,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -40,6 +43,8 @@ import eu.torvian.chatbot.common.models.core.FileReference
  * @param messageActions Message item actions, including edit callbacks.
  * @param contentColor The color to be used for the content, respecting the current theme.
  * @param isCollapsed Whether this message content is collapsed (showing truncated preview).
+ * @param searchContext optional in-session search rendering context. When `null`, the content is
+ * rendered without highlights and without search-specific geometry tracking.
  */
 @Composable
 fun MessageContent(
@@ -50,12 +55,18 @@ fun MessageContent(
     editingBasePathOverride: String?,
     messageActions: MessageActions,
     contentColor: Color,
-    isCollapsed: Boolean = false
+    isCollapsed: Boolean = false,
+    searchContext: MessageSearchContext? = null,
 ) {
     // Preview length for truncated content
     val previewLength = 200
 
     if (isBeingEdited) {
+        LaunchedEffect(searchContext) {
+            // Editing replaces the rendered markdown block, so any previous search geometry is stale.
+            searchContext?.onSelectedOccurrenceCenterInContentChanged(null)
+        }
+
         val state = rememberTextFieldState(editingContent ?: message.content)
 
         // Sync external changes (like undo/redo from ViewModel) into the state
@@ -153,19 +164,56 @@ fun MessageContent(
             )
         }
     } else {
-        // Message is not being edited
+        val previewContent = remember(message.content) { message.content.take(previewLength) + "..." }
+        val previewSourceLength = remember(message.content) { message.content.length.coerceAtMost(previewLength) }
+        val selectedSearchMatch = searchContext?.selectedMatch
+        val effectiveIsCollapsed = isCollapsed && selectedSearchMatch == null
+        val previewHighlightSpans = if (searchContext != null) {
+            rememberSearchHighlightSpans(searchContext.matches, selectedSearchMatch, previewSourceLength)
+        } else {
+            emptyList()
+        }
+        val fullContentHighlightSpans = if (searchContext != null) {
+            rememberSearchHighlightSpans(searchContext.matches, selectedSearchMatch, message.content.length)
+        } else {
+            emptyList()
+        }
+        var expandedContentTextLayoutResult by remember(message.id, message.content) {
+            mutableStateOf<TextLayoutResult?>(null)
+        }
+
+        LaunchedEffect(
+            selectedSearchMatch,
+            effectiveIsCollapsed,
+            expandedContentTextLayoutResult,
+            searchContext?.onSelectedOccurrenceCenterInContentChanged,
+        ) {
+            val reportSelectedOccurrenceCenter = searchContext?.onSelectedOccurrenceCenterInContentChanged
+                ?: return@LaunchedEffect
+
+            if (selectedSearchMatch == null || effectiveIsCollapsed) {
+                reportSelectedOccurrenceCenter(null)
+            } else {
+                reportSelectedOccurrenceCenter(
+                    expandedContentTextLayoutResult?.let { layoutResult ->
+                        computeSelectedSearchMatchCenterY(layoutResult, selectedSearchMatch)
+                    }
+                )
+            }
+        }
+
         Column {
-            // Collapsed preview (truncated text, clickable to expand)
             AnimatedVisibility(
-                visible = isCollapsed,
+                visible = effectiveIsCollapsed,
                 enter = expandVertically(),
                 exit = shrinkVertically()
             ) {
                 SelectionContainer {
-                    Text(
-                        text = message.content.take(previewLength) + "...",
+                    MarkdownHighlightedText(
+                        markdown = previewContent,
                         style = MaterialTheme.typography.bodyLarge,
                         color = contentColor,
+                        extraSpanStyles = previewHighlightSpans,
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.clickable { messageActions.onToggleMessageCollapsed(message.id) }
@@ -173,9 +221,8 @@ fun MessageContent(
                 }
             }
 
-            // Full content (expanded view)
             AnimatedVisibility(
-                visible = !isCollapsed,
+                visible = !effectiveIsCollapsed,
                 enter = expandVertically(),
                 exit = shrinkVertically()
             ) {
@@ -183,10 +230,93 @@ fun MessageContent(
                     MarkdownHighlightedText(
                         markdown = message.content,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = contentColor
+                        color = contentColor,
+                        extraSpanStyles = fullContentHighlightSpans,
+                        onTextLayout = { textLayoutResult ->
+                            if (searchContext != null) {
+                                expandedContentTextLayoutResult = textLayoutResult
+                            }
+                        },
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * Builds remembered search highlight spans for the provided message content.
+ *
+ * @param searchMatches all matches to highlight in the rendered message.
+ * @param selectedSearchMatch currently selected occurrence in the message, if any.
+ * @param maxEndExclusive exclusive upper bound of the rendered text segment to style.
+ * @return Compose span ranges that overlay search highlighting on top of markdown styling.
+ */
+@Composable
+private fun rememberSearchHighlightSpans(
+    searchMatches: List<MessageSearchMatch>,
+    selectedSearchMatch: MessageSearchMatch?,
+    maxEndExclusive: Int,
+): List<AnnotatedString.Range<SpanStyle>> {
+    val regularHighlightColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.85f)
+    val selectedHighlightColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.95f)
+
+    return remember(searchMatches, selectedSearchMatch, maxEndExclusive, regularHighlightColor, selectedHighlightColor) {
+        buildSearchHighlightSpans(
+            searchMatches = searchMatches,
+            selectedSearchMatch = selectedSearchMatch,
+            regularHighlightColor = regularHighlightColor,
+            selectedHighlightColor = selectedHighlightColor,
+            maxEndExclusive = maxEndExclusive,
+        )
+    }
+}
+
+/**
+ * Converts occurrence-level search matches into overlay span styles for markdown text rendering.
+ *
+ * Non-selected matches receive the regular search background, while the selected occurrence is
+ * appended last with a stronger background so it visually wins if styles overlap.
+ *
+ * @param searchMatches all matches found in the message.
+ * @param selectedSearchMatch currently selected occurrence in the same message, if any.
+ * @param regularHighlightColor background used for non-selected matches.
+ * @param selectedHighlightColor background used for the selected match.
+ * @param maxEndExclusive exclusive upper bound of the rendered text segment to style.
+ * @return overlay spans suitable for [MarkdownHighlightedText].
+ */
+internal fun buildSearchHighlightSpans(
+    searchMatches: List<MessageSearchMatch>,
+    selectedSearchMatch: MessageSearchMatch?,
+    regularHighlightColor: Color,
+    selectedHighlightColor: Color,
+    maxEndExclusive: Int,
+): List<AnnotatedString.Range<SpanStyle>> {
+    val visibleMatches = searchMatches.filter { match ->
+        match.startIndex >= 0 && match.endExclusive <= maxEndExclusive && match.startIndex < match.endExclusive
+    }
+    if (visibleMatches.isEmpty()) {
+        return emptyList()
+    }
+
+    return buildList {
+        visibleMatches.filter { it != selectedSearchMatch }.forEach { match ->
+            add(
+                AnnotatedString.Range(
+                    item = SpanStyle(background = regularHighlightColor),
+                    start = match.startIndex,
+                    end = match.endExclusive,
+                )
+            )
+        }
+        visibleMatches.firstOrNull { it == selectedSearchMatch }?.let { match ->
+            add(
+                AnnotatedString.Range(
+                    item = SpanStyle(background = selectedHighlightColor),
+                    start = match.startIndex,
+                    end = match.endExclusive,
+                )
+            )
         }
     }
 }

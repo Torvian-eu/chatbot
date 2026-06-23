@@ -141,6 +141,34 @@ interface ChatAreaActions {
     fun onCopyThread()
 
     /**
+     * Callback for when the user wants to enable in-session message search.
+     */
+    fun onShowSearch()
+
+    /**
+     * Callback for when the user wants to close in-session message search.
+     */
+    fun onCloseSearch()
+
+    /**
+     * Callback for when the user updates the current search query.
+     * @param query new search query text.
+     */
+    fun onUpdateSearchQuery(query: String)
+
+    /**
+     * Callback for when the user navigates between search results.
+     * @param direction requested navigation direction.
+     */
+    fun onNavigateSearchResult(direction: SearchDirection)
+
+    /**
+     * Callback for when the user jumps directly to a search result.
+     * @param index zero-based result index to select.
+     */
+    fun onJumpToSearchResult(index: Int)
+
+    /**
      * Callback for when the user wants to branch and continue the conversation from a specific message.
      * This creates a new assistant response as a sibling of the message's children (or as the first
      * child if the message is a leaf). The LLM context will be the thread from root to the specified message.

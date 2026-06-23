@@ -20,6 +20,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ScrollbarWrapper
 import eu.torvian.chatbot.common.models.core.ChatMessage
@@ -51,6 +54,11 @@ import kotlinx.coroutines.yield
  * @param replyTargetMessage Current reply target, if replying.
  * @param isSendingMessage Whether a send/stream operation is active.
  * @param pendingFileReferences File references attached to the composer.
+ * @param searchQuery Current in-session search query.
+ * @param searchResults Ordered occurrence-level matches for the current query, used to build the
+ * per-message search contexts.
+ * @param currentSearchIndex Currently selected search result index whose message receives scroll
+ * refinement tracking.
  * @param modifier Modifier applied to the outer container.
  * @param inputFocusRequester Focus requester to programmatically control focus on the input text field.
  * @param inputTextFieldState The text field state for the input area, shared with parent.
@@ -74,6 +82,9 @@ fun MessageList(
     replyTargetMessage: ChatMessage? = null,
     isSendingMessage: Boolean = false,
     pendingFileReferences: List<FileReference> = emptyList(),
+    searchQuery: String = "",
+    searchResults: List<MessageSearchMatch> = emptyList(),
+    currentSearchIndex: Int = -1,
     modifier: Modifier = Modifier,
     inputFocusRequester: FocusRequester = remember { FocusRequester() },
     inputTextFieldState: TextFieldState = rememberTextFieldState()
@@ -81,6 +92,7 @@ fun MessageList(
     // Create ScrollState for scrollbar integration
     val scrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
+    var scrollViewportHeightPx by remember { mutableStateOf(0) }
 
     // Requesters for bringing input areas into view
     val inlineReplyInputRequester = remember { BringIntoViewRequester() }
@@ -170,11 +182,53 @@ fun MessageList(
             .sortedBy { it.createdAt } // Ensure consistent order for roots
             .map { it.id }
     }
+    val searchMatchesByMessageId = remember(searchResults) {
+        searchResults.groupBy(MessageSearchMatch::messageId)
+    }
+    val currentSearchResult = searchResults.getOrNull(currentSearchIndex)
+    var selectedMessageTopInScrollContent by remember(currentSearchResult?.messageId) {
+        mutableStateOf(0f)
+    }
+    var selectedOccurrenceCenterInItem by remember(currentSearchResult?.messageId) {
+        mutableStateOf<Float?>(null)
+    }
+    val selectedOccurrenceCenterInScrollContent = selectedOccurrenceCenterInItem?.let {
+        // Translate the selected occurrence from item coordinates into scroll-content coordinates.
+        selectedMessageTopInScrollContent + it
+    }
+
+    LaunchedEffect(
+        currentSearchResult,
+        selectedOccurrenceCenterInScrollContent,
+        scrollViewportHeightPx,
+        scrollState.maxValue,
+    ) {
+        if (currentSearchResult == null) return@LaunchedEffect
+
+        val targetCenter = selectedOccurrenceCenterInScrollContent ?: return@LaunchedEffect
+        if (scrollViewportHeightPx <= 0) return@LaunchedEffect
+
+        followTail = false
+        runProgrammaticScroll {
+            val targetScroll = computeSearchRefinementScrollTarget(
+                selectedOccurrenceCenterYInContent = targetCenter,
+                viewportHeight = scrollViewportHeightPx,
+                maxScroll = scrollState.maxValue,
+            )
+            if (targetScroll != scrollState.value) {
+                scrollState.animateScrollTo(targetScroll)
+            }
+        }
+    }
 
     Box(modifier = modifier) {
         ScrollbarWrapper(
             scrollState = scrollState,
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .onSizeChanged { size ->
+                    scrollViewportHeightPx = size.height
+                }
         ) {
             Column(
                 modifier = Modifier
@@ -185,6 +239,24 @@ fun MessageList(
             ) {
                 displayedMessages.forEach { message ->
                     key(message.id) {
+                        val isSelectedResult = message.id == currentSearchResult?.messageId
+                        val searchMatchesForMessage = searchMatchesByMessageId[message.id].orEmpty()
+                        val selectedSearchMatchForMessage = currentSearchResult?.takeIf { isSelectedResult }
+                        val itemSearchContext = if (searchMatchesForMessage.isNotEmpty() || isSelectedResult) {
+                            MessageSearchContext(
+                                searchQuery = searchQuery,
+                                matches = searchMatchesForMessage,
+                                selectedMatch = selectedSearchMatchForMessage,
+                                onSelectedOccurrenceCenterInContentChanged = { centerY ->
+                                    if (isSelectedResult) {
+                                        selectedOccurrenceCenterInItem = centerY
+                                    }
+                                },
+                            )
+                        } else {
+                            null
+                        }
+
                         MessageItem(
                             message = message,
                             allMessagesMap = allMessagesMap,
@@ -197,7 +269,19 @@ fun MessageList(
                             modelsById = modelsById, // Pass map for graceful degradation
                             toolCallsForMessage = toolCallsMap[message.id] ?: emptyList(),
                             isCollapsed = message.id in collapsedMessageIds,
-                            isCollapsible = message.content.length > collapseThreshold
+                            isCollapsible = message.content.length > collapseThreshold,
+                            searchContext = itemSearchContext,
+                            modifier = Modifier
+                                .then(
+                                    if (isSelectedResult) {
+                                        Modifier.onGloballyPositioned { coordinates ->
+                                            // Only the active search-result message reports its position for scroll refinement.
+                                            selectedMessageTopInScrollContent = coordinates.positionInParent().y
+                                        }
+                                    } else {
+                                        Modifier
+                                    }
+                                ),
                         )
 
                         // Insert expanded input area right after reply target message
