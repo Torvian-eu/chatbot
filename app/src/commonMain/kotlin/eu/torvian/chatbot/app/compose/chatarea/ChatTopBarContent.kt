@@ -7,6 +7,7 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -21,9 +22,34 @@ import eu.torvian.chatbot.common.models.llm.ModelSettings
 
 /**
  * Top bar content for the Chat screen.
- * Displays model selection, settings selection, and tool configuration.
+ * Displays model selection, settings selection, tool configuration, and in-session search.
  *
  * This composable is designed to work within a RowScope (app bar actions).
+ *
+ * @param userMenu trailing user menu composable supplied by the scaffold.
+ * @param navItems navigation item composables rendered on the left side.
+ * @param currentModel currently selected chat model.
+ * @param currentSettings currently selected settings profile.
+ * @param availableModels load state for available chat models.
+ * @param availableSettings load state for settings available for the current model.
+ * @param onSelectModel selects a model for the current session.
+ * @param onSelectSettings selects a settings profile for the current session.
+ * @param onRetryLoadModels retries loading models after a failure.
+ * @param onRetryLoadSettings retries loading settings after a failure.
+ * @param onShowToolConfig opens the tool configuration dialog.
+ * @param enabledToolsCount number of tools enabled for the session.
+ * @param isSessionListCollapsed whether the session list panel is collapsed.
+ * @param onToggleSessionList toggles the session list panel.
+ * @param onCopyThread copies the current displayed thread to the clipboard.
+ * @param isSearchActive whether top-bar search mode is currently enabled.
+ * @param searchQuery current in-session search query.
+ * @param currentSearchIndex currently selected result index, or `-1` when none is selected.
+ * @param searchResultsCount total number of matching occurrences in the current thread.
+ * @param onShowSearch enables search mode.
+ * @param onCloseSearch disables search mode and clears the current query.
+ * @param onUpdateSearchQuery updates the current search query.
+ * @param onNavigateSearchResult cycles through search results.
+ * @param onJumpToSearchResult jumps directly to a search result by zero-based index.
  */
 @Composable
 fun RowScope.ChatTopBarContent(
@@ -41,7 +67,16 @@ fun RowScope.ChatTopBarContent(
     enabledToolsCount: Int,
     isSessionListCollapsed: Boolean,
     onToggleSessionList: () -> Unit,
-    onCopyThread: () -> Unit
+    onCopyThread: () -> Unit,
+    isSearchActive: Boolean,
+    searchQuery: String,
+    currentSearchIndex: Int,
+    searchResultsCount: Int,
+    onShowSearch: () -> Unit,
+    onCloseSearch: () -> Unit,
+    onUpdateSearchQuery: (String) -> Unit,
+    onNavigateSearchResult: (SearchDirection) -> Unit,
+    onJumpToSearchResult: (Int) -> Unit,
 ) {
     // Left-aligned actions
     Row(
@@ -76,57 +111,72 @@ fun RowScope.ChatTopBarContent(
         modifier = Modifier.weight(1f),
         horizontalArrangement = Arrangement.Center
     ) {
-        // Compact model selector (icon + dropdown)
-        PlainTooltipBox(text = "Select Model") {
-            CompactModelSelector(
-                currentModel = currentModel,
-                availableModels = availableModels,
-                onSelectModel = onSelectModel,
-                onRetryLoadModels = onRetryLoadModels
+        if (isSearchActive) {
+            SearchBar(
+                query = searchQuery,
+                currentIndex = currentSearchIndex,
+                resultCount = searchResultsCount,
+                onQueryChange = onUpdateSearchQuery,
+                onNavigate = onNavigateSearchResult,
+                onJumpToResult = onJumpToSearchResult,
+                onClose = onCloseSearch,
             )
-        }
+        } else {
+            // Compact model selector (icon + dropdown)
+            PlainTooltipBox(text = "Select Model") {
+                CompactModelSelector(
+                    currentModel = currentModel,
+                    availableModels = availableModels,
+                    onSelectModel = onSelectModel,
+                    onRetryLoadModels = onRetryLoadModels
+                )
+            }
 
-        Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(8.dp))
 
-        // Compact settings selector (icon + dropdown)
-        PlainTooltipBox(text = "Select Model Settings") {
-            CompactSettingsSelector(
-                currentSettings = currentSettings,
-                availableSettings = availableSettings,
-                onSelectSettings = onSelectSettings,
-                onRetryLoadSettings = onRetryLoadSettings
-            )
-        }
+            // Compact settings selector (icon + dropdown)
+            PlainTooltipBox(text = "Select Model Settings") {
+                CompactSettingsSelector(
+                    currentSettings = currentSettings,
+                    availableSettings = availableSettings,
+                    onSelectSettings = onSelectSettings,
+                    onRetryLoadSettings = onRetryLoadSettings
+                )
+            }
 
-        Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(8.dp))
 
-        // Tool configuration button with badge
-        PlainTooltipBox(text = "Configure Tools") {
-            BadgedBox(
-                badge = {
-                    if (enabledToolsCount > 0) {
-                        Badge {
-                            Text(enabledToolsCount.toString())
+            // Tool configuration button with badge
+            PlainTooltipBox(text = "Configure Tools") {
+                BadgedBox(
+                    badge = {
+                        if (enabledToolsCount > 0) {
+                            Badge {
+                                Text(enabledToolsCount.toString())
+                            }
                         }
                     }
-                }
-            ) {
-                IconButton(
-                    onClick = onShowToolConfig,
-                    modifier = Modifier.size(48.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Build,
-                        contentDescription = "Configure Tools"
-                    )
+                    IconButton(
+                        onClick = onShowToolConfig,
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Build,
+                            contentDescription = "Configure Tools"
+                        )
+                    }
                 }
             }
+
+            Spacer(Modifier.width(8.dp))
+
+            // More actions menu
+            MoreActionsMenu(
+                onCopyThread = onCopyThread,
+                onShowSearch = onShowSearch,
+            )
         }
-
-        Spacer(Modifier.width(8.dp))
-
-        // More actions menu
-        MoreActionsMenu(onCopyThread = onCopyThread)
     }
 
     // User menu
@@ -248,11 +298,15 @@ private fun CompactSettingsSelector(
 
 /**
  * More actions menu for the chat top bar.
- * Currently includes Copy Thread action.
+ * Includes thread-level utility actions such as copy and search.
+ *
+ * @param onCopyThread copies the currently displayed thread.
+ * @param onShowSearch enables in-session search mode.
  */
 @Composable
 private fun MoreActionsMenu(
-    onCopyThread: () -> Unit
+    onCopyThread: () -> Unit,
+    onShowSearch: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
 
@@ -271,6 +325,19 @@ private fun MoreActionsMenu(
                 expanded = expanded,
                 onDismissRequest = { expanded = false }
             ) {
+                DropdownMenuItem(
+                    text = { Text("Search Messages") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = null
+                        )
+                    },
+                    onClick = {
+                        onShowSearch()
+                        expanded = false
+                    }
+                )
                 DropdownMenuItem(
                     text = { Text("Copy Thread") },
                     leadingIcon = {

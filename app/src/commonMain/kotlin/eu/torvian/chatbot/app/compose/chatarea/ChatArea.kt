@@ -13,6 +13,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.common.ErrorStateDisplay
@@ -26,6 +33,7 @@ import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Composable for the main chat message display area.
@@ -40,7 +48,22 @@ fun ChatArea(
     state: ChatAreaState,
     actions: ChatAreaActions
 ) {
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .onPreviewKeyEvent { keyEvent ->
+                // Intercept the find shortcut before focused descendants consume it.
+                if ((keyEvent.isCtrlPressed || keyEvent.isMetaPressed)
+                    && keyEvent.key == Key.F
+                    && keyEvent.type == KeyEventType.KeyDown
+                ) {
+                    actions.onShowSearch()
+                    true
+                } else {
+                    false
+                }
+            }
+    ) {
         when (state.sessionUiState) {
             DataState.Loading -> LoadingStateDisplay(modifier = Modifier.fillMaxSize())
             is DataState.Error -> ErrorStateDisplay(
@@ -66,7 +89,10 @@ fun ChatArea(
                 dialogState = state.dialogState,
                 modelsById = state.modelsById,
                 toolCallsMap = state.toolCallsMap,
-                pendingFileReferences = state.pendingFileReferences
+                pendingFileReferences = state.pendingFileReferences,
+                searchQuery = state.searchQuery,
+                searchResults = state.searchResults,
+                currentSearchIndex = state.currentSearchIndex,
             )
         }
     }
@@ -121,6 +147,9 @@ private fun IdleStateDisplay(modifier: Modifier = Modifier) {
  * @param modelsById Map of model IDs to LLMModel objects for quick lookups.
  * @param toolCallsMap Tool calls for the current session, organized by message ID.
  * @param pendingFileReferences File references attached to the current message being composed.
+ * @param searchQuery Current in-session search query.
+ * @param searchResults Ordered occurrence-level matches for the current query.
+ * @param currentSearchIndex Currently selected search result index.
  */
 @Composable
 private fun SuccessStateDisplay(
@@ -138,7 +167,10 @@ private fun SuccessStateDisplay(
     dialogState: ChatAreaDialogState,
     modelsById: Map<Long, LLMModel>,
     toolCallsMap: Map<Long, List<ToolCall>>,
-    pendingFileReferences: List<FileReference>
+    pendingFileReferences: List<FileReference>,
+    searchQuery: String,
+    searchResults: List<MessageSearchMatch>,
+    currentSearchIndex: Int,
 ) {
     val messageActions = remember(actions) {
         MessageActions(
@@ -231,7 +263,7 @@ private fun SuccessStateDisplay(
             } else {
                 val lineCount = inputContent.count { it == '\n' } + 1
                 if (lineCount > 7 || inputContent.length > 560) {
-                    delay(50)
+                    delay(50.milliseconds)
                     autoExpand = true
                     scrollToInputTrigger++
                 }
@@ -263,7 +295,7 @@ private fun SuccessStateDisplay(
             // A small delay is crucial here.
             // When collapsing, AnimatedVisibility needs a moment to 'attach'
             // the bottom InputArea to the UI tree before it can receive focus.
-            delay(150)
+            delay(150.milliseconds)
             try {
                 inputFocusRequester.requestFocus()
             } catch (_: Exception) {
@@ -291,6 +323,9 @@ private fun SuccessStateDisplay(
                 replyTargetMessage = replyTargetMessage,
                 isSendingMessage = isSendingMessage,
                 pendingFileReferences = pendingFileReferences,
+                searchQuery = searchQuery,
+                searchResults = searchResults,
+                currentSearchIndex = currentSearchIndex,
                 inputFocusRequester = inputFocusRequester,
                 inputTextFieldState = inputTextFieldState,
                 modifier = Modifier.weight(1f) // Messages take up most space

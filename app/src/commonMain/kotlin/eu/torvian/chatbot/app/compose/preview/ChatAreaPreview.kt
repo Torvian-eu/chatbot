@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import eu.torvian.chatbot.app.compose.chatarea.ChatArea
 import eu.torvian.chatbot.app.compose.chatarea.ChatAreaActions
 import eu.torvian.chatbot.app.compose.chatarea.ChatAreaState
+import eu.torvian.chatbot.app.compose.chatarea.SearchDirection
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
@@ -93,6 +94,11 @@ fun ChatAreaPreview() {
             override fun onShowToolCallDetails(toolCall: ToolCall) {}
             override fun onCopyMessage(message: ChatMessage) {}
             override fun onCopyThread() {}
+            override fun onShowSearch() {}
+            override fun onCloseSearch() {}
+            override fun onUpdateSearchQuery(query: String) {}
+            override fun onNavigateSearchResult(direction: SearchDirection) {}
+            override fun onJumpToSearchResult(index: Int) {}
             override fun onBranchAndContinue(message: ChatMessage) {}
             override fun onRegenerateMessage(message: ChatMessage) {}
             override fun onAddFileReferences() {}
