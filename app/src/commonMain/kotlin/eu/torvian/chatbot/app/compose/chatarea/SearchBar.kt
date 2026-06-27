@@ -80,8 +80,8 @@ fun SearchBar(
             value = query,
             onValueChange = onQueryChange,
             modifier = Modifier.weight(1f).focusRequester(focusRequester),
-            label = { Text("Search messages") },
-            placeholder = { Text("Find in current thread") },
+            label = { Text("Search messages", maxLines = 1) },
+            placeholder = { Text("Find in current thread", maxLines = 1) },
             singleLine = true,
             textStyle = MaterialTheme.typography.bodyMedium,
         )
