@@ -13,15 +13,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.isCtrlPressed
-import androidx.compose.ui.input.key.isMetaPressed
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import eu.torvian.chatbot.app.chat.search.MessageSearchMatch
 import eu.torvian.chatbot.app.compose.common.ErrorStateDisplay
 import eu.torvian.chatbot.app.compose.common.LoadingOverlay
 import eu.torvian.chatbot.app.domain.contracts.DataState
@@ -34,6 +29,7 @@ import eu.torvian.chatbot.common.models.tool.ToolCall
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlin.time.Duration.Companion.milliseconds
+
 
 /**
  * Composable for the main chat message display area.
@@ -257,8 +253,7 @@ private fun SuccessStateDisplay(
         LaunchedEffect(inputContent) {
             if (manualExpandToggle != null || autoExpand && inputContent.isNotEmpty()) {
                 return@LaunchedEffect
-            }
-            else if (inputContent.isEmpty()) {
+            } else if (inputContent.isEmpty()) {
                 autoExpand = false
             } else {
                 val lineCount = inputContent.count { it == '\n' } + 1

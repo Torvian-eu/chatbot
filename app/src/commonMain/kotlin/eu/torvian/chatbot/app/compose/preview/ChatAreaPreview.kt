@@ -1,10 +1,11 @@
 package eu.torvian.chatbot.app.compose.preview
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.tooling.preview.Preview
+import eu.torvian.chatbot.app.chat.search.SearchDirection
 import eu.torvian.chatbot.app.compose.chatarea.ChatArea
 import eu.torvian.chatbot.app.compose.chatarea.ChatAreaActions
 import eu.torvian.chatbot.app.compose.chatarea.ChatAreaState
-import eu.torvian.chatbot.app.compose.chatarea.SearchDirection
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
@@ -12,7 +13,6 @@ import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.tool.ToolCall
-import androidx.compose.ui.tooling.preview.Preview
 import kotlin.time.Instant
 
 @Preview

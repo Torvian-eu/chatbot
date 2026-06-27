@@ -1,5 +1,7 @@
 package eu.torvian.chatbot.app.compose.chatarea
 
+import eu.torvian.chatbot.app.chat.search.MessageSearchMatch
+
 /**
  * Bundles the in-session search state needed to render one message.
  *

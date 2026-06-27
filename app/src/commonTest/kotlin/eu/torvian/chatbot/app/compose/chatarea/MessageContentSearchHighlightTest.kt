@@ -1,8 +1,10 @@
 package eu.torvian.chatbot.app.compose.chatarea
 
 import androidx.compose.ui.graphics.Color
+import eu.torvian.chatbot.app.chat.search.MessageSearchMatch
 import kotlin.test.Test
 import kotlin.test.assertEquals
+
 
 /**
  * Verifies occurrence-level search overlay styling for rendered message content.

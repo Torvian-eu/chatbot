@@ -45,6 +45,7 @@ fun SessionListPanelPreview() {
         override fun onSaveRenamedGroup() {}
         override fun onCancelRenamingGroup() {}
         override fun onRetryLoadingSessions() {}
+        override fun onSearchClick() {}
         override fun onShowNewSessionDialog() {}
         override fun onShowRenameSessionDialog(session: ChatSessionSummary) {}
         override fun onShowDeleteSessionDialog(sessionId: Long) {}
@@ -55,6 +56,14 @@ fun SessionListPanelPreview() {
 
     SessionListPanel(
         state = mockState,
-        actions = mockActions
+        actions = mockActions,
+        isSearchDialogVisible = false,
+        searchQuery = "",
+        lastSearchQuery = "",
+        searchResultsState = DataState.Idle,
+        onDismissSearchDialog = {},
+        onUpdateSearchQuery = {},
+        onPerformSearch = {},
+        onSearchResultClick = {},
     )
 }

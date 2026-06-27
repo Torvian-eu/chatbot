@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.app.compose.chatarea
 
+import eu.torvian.chatbot.app.chat.search.MessageSearchMatch
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
@@ -9,6 +10,7 @@ import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.tool.ToolCall
+
 
 /**
  * Encapsulates all UI state relevant to the main Chat Area.

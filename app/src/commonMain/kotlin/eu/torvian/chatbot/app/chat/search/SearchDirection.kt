@@ -1,4 +1,4 @@
-package eu.torvian.chatbot.app.compose.chatarea
+package eu.torvian.chatbot.app.chat.search
 
 /**
  * Direction used when cycling through in-session search results.

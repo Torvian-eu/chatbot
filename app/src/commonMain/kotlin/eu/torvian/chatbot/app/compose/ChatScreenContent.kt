@@ -15,9 +15,12 @@ import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.chatarea.ChatArea
 import eu.torvian.chatbot.app.compose.chatarea.ChatAreaActions
 import eu.torvian.chatbot.app.compose.chatarea.ChatAreaState
+import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.compose.sessionlist.SessionListActions
 import eu.torvian.chatbot.app.compose.sessionlist.SessionListPanel
 import eu.torvian.chatbot.app.compose.sessionlist.SessionListState
+import eu.torvian.chatbot.common.models.api.core.MessageSearchResult
 
 /**
  * Composable for the main chat interface's content, including the session list and the chat area.
@@ -29,6 +32,14 @@ import eu.torvian.chatbot.app.compose.sessionlist.SessionListState
  * @param chatAreaState The current UI state contract for the chat area.
  * @param chatAreaActions The actions contract for the chat area.
  * @param isSessionListCollapsed Whether the session list panel is collapsed.
+ * @param isSearchDialogVisible Whether the cross-session search dialog is visible.
+ * @param searchQuery Current editable query for cross-session search.
+ * @param lastSearchQuery Query that produced the currently displayed cross-session results.
+ * @param searchResultsState Current search result state for the dialog.
+ * @param onDismissSearchDialog Callback that closes the dialog.
+ * @param onUpdateSearchQuery Callback for search query changes.
+ * @param onPerformSearch Callback that triggers a new cross-session search.
+ * @param onSearchResultClick Callback invoked when a cross-session search result is selected.
  */
 @Composable
 fun ChatScreenContent(
@@ -36,7 +47,15 @@ fun ChatScreenContent(
     sessionListActions: SessionListActions,
     chatAreaState: ChatAreaState,
     chatAreaActions: ChatAreaActions,
-    isSessionListCollapsed: Boolean
+    isSessionListCollapsed: Boolean,
+    isSearchDialogVisible: Boolean,
+    searchQuery: String,
+    lastSearchQuery: String,
+    searchResultsState: DataState<RepositoryError, List<MessageSearchResult>>,
+    onDismissSearchDialog: () -> Unit,
+    onUpdateSearchQuery: (String) -> Unit,
+    onPerformSearch: () -> Unit,
+    onSearchResultClick: (MessageSearchResult) -> Unit,
 ) {
     Row(modifier = Modifier.fillMaxSize()) {
         AnimatedVisibility(
@@ -54,7 +73,15 @@ fun ChatScreenContent(
                 // PR 19: Session List Panel
                 SessionListPanel(
                     state = sessionListState,
-                    actions = sessionListActions
+                    actions = sessionListActions,
+                    isSearchDialogVisible = isSearchDialogVisible,
+                    searchQuery = searchQuery,
+                    lastSearchQuery = lastSearchQuery,
+                    searchResultsState = searchResultsState,
+                    onDismissSearchDialog = onDismissSearchDialog,
+                    onUpdateSearchQuery = onUpdateSearchQuery,
+                    onPerformSearch = onPerformSearch,
+                    onSearchResultClick = onSearchResultClick,
                 )
             }
         }

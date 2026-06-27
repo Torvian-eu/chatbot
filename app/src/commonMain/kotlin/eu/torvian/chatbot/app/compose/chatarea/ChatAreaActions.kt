@@ -1,8 +1,10 @@
 package eu.torvian.chatbot.app.compose.chatarea
 
+import eu.torvian.chatbot.app.chat.search.SearchDirection
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.tool.ToolCall
+
 
 /**
  * Defines all UI actions that can be triggered from the main Chat Area.

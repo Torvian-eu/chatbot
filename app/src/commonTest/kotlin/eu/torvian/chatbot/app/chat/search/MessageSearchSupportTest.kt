@@ -1,4 +1,4 @@
-package eu.torvian.chatbot.app.compose.chatarea
+package eu.torvian.chatbot.app.chat.search
 
 import eu.torvian.chatbot.app.testutils.data.assistantMessage
 import eu.torvian.chatbot.app.testutils.data.userMessage
@@ -88,4 +88,3 @@ class MessageSearchSupportTest {
         assertEquals(listOf(0..4, 6..10, 12..16), result)
     }
 }
-

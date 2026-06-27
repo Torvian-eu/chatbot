@@ -176,6 +176,9 @@ fun appModule(config: AppConfiguration): Module = module {
     single<GroupApi> {
         KtorGroupApiClient(get())
     }
+    single<SearchApi> {
+        KtorSearchApiClient(get())
+    }
     single<ModelApi> {
         KtorModelApiClient(get())
     }
@@ -235,6 +238,9 @@ fun appModule(config: AppConfiguration): Module = module {
     }
     single<GroupRepository> {
         DefaultGroupRepository(get())
+    }
+    single<SearchRepository> {
+        DefaultSearchRepository(get())
     }
     single<UserRepository> {
         DefaultUserRepository(get())
@@ -436,6 +442,12 @@ fun appModule(config: AppConfiguration): Module = module {
         )
     }
     viewModel { SessionListViewModel(get<SessionRepository>(), get<GroupRepository>(), get<EventBus>(), get()) }
+    viewModel {
+        SearchViewModel(
+            searchRepository = get(),
+            notificationService = get()
+        )
+    }
     viewModel {
         ProviderConfigViewModel(
             get<ProviderRepository>(),

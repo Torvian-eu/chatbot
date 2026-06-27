@@ -1,4 +1,4 @@
-package eu.torvian.chatbot.app.compose.chatarea
+package eu.torvian.chatbot.app.chat.search
 
 /**
  * Represents one concrete search occurrence inside a rendered chat message.
