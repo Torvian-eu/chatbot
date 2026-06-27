@@ -2,6 +2,7 @@ package eu.torvian.chatbot.app.service.api
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.api.core.MessageSearchResult
+import eu.torvian.chatbot.common.models.api.core.MessageSearchScope
 
 /**
  * Frontend API interface for cross-session search endpoints.
@@ -16,7 +17,11 @@ interface SearchApi {
      * Corresponds to `GET /api/v1/search/messages?query=...`.
      *
      * @param query Literal query string that should be matched by the backend.
+     * @param scope Search scope controlling whether only visible threads or all threads are searched.
      * @return Either the API error or the ordered list of matching messages.
      */
-    suspend fun searchMessages(query: String): Either<ApiResourceError, List<MessageSearchResult>>
+    suspend fun searchMessages(
+        query: String,
+        scope: MessageSearchScope = MessageSearchScope.VISIBLE_THREADS_ONLY,
+    ): Either<ApiResourceError, List<MessageSearchResult>>
 }

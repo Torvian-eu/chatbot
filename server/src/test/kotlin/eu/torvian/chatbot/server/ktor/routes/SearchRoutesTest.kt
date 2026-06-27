@@ -7,6 +7,8 @@ import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.api.core.MessageSearchResult
+import eu.torvian.chatbot.common.models.api.core.MessageSearchScope
+import eu.torvian.chatbot.server.data.entities.SessionCurrentLeafEntity
 import eu.torvian.chatbot.server.testutils.auth.TestAuthHelper
 import eu.torvian.chatbot.server.testutils.auth.authenticate
 import eu.torvian.chatbot.server.testutils.data.Table
@@ -100,6 +102,7 @@ class SearchRoutesTest {
                 Table.CHAT_SESSIONS,
                 Table.CHAT_MESSAGES,
                 Table.ASSISTANT_MESSAGES,
+                Table.SESSION_CURRENT_LEAF,
                 Table.USERS,
                 Table.USER_SESSIONS,
                 Table.CHAT_SESSION_OWNERS
@@ -120,46 +123,101 @@ class SearchRoutesTest {
     }
 
     /**
-     * Verifies that the endpoint only returns matches from sessions owned by the authenticated user.
+     * Verifies that the default scope searches only the visible branch of each owned session.
      */
     @Test
-    fun `GET search messages should return only owned matches ordered by recency`() = searchTestApplication {
+    fun `GET search messages should default to visible threads only`() = searchTestApplication {
         val otherUser = authHelper.createTestUser(id = 2L, email = "other@example.com", username = "other")
-        val olderOwnedMessage = TestDefaults.chatMessage1.copy(
+        val ownedRootMessage = TestDefaults.chatMessage1.copy(
             id = 21L,
             sessionId = ownedSession1.id,
-            content = "An older message with needle inside.",
+            content = "Owned root message.",
             createdAt = TestDefaults.DEFAULT_INSTANT,
             updatedAt = TestDefaults.DEFAULT_INSTANT,
-            childrenMessageIds = emptyList()
+            childrenMessageIds = listOf(22L, 23L)
         )
-        val newerOwnedMessage = TestDefaults.chatMessage3.copy(
+        val visibleOwnedMessage = TestDefaults.chatMessage2.copy(
             id = 22L,
-            sessionId = ownedSession2.id,
-            content = "A newer message with NEEDLE for case-insensitive search.",
+            sessionId = ownedSession1.id,
+            content = "Visible branch with needle inside.",
+            createdAt = TestDefaults.DEFAULT_INSTANT,
+            updatedAt = TestDefaults.DEFAULT_INSTANT,
+            parentMessageId = ownedRootMessage.id,
+            childrenMessageIds = emptyList(),
+            modelId = TestDefaults.llmModel1.id,
+            settingsId = TestDefaults.modelSettings1.id,
+        )
+        val hiddenOwnedMessage = TestDefaults.chatMessage1.copy(
+            id = 23L,
+            sessionId = ownedSession1.id,
+            content = "Hidden sibling with needle should stay out of the default scope.",
             createdAt = TestDefaults.DEFAULT_INSTANT.plus(1.hours),
             updatedAt = TestDefaults.DEFAULT_INSTANT.plus(1.hours),
-            childrenMessageIds = emptyList()
+            parentMessageId = ownedRootMessage.id,
+            childrenMessageIds = emptyList(),
         )
-        val foreignMessage = TestDefaults.chatMessage1.copy(
-            id = 23L,
-            sessionId = foreignSession.id,
-            content = "needle from another owner should remain hidden.",
+        val newerOwnedRootMessage = TestDefaults.chatMessage3.copy(
+            id = 24L,
+            sessionId = ownedSession2.id,
+            content = "Second root message.",
+            createdAt = TestDefaults.DEFAULT_INSTANT,
+            updatedAt = TestDefaults.DEFAULT_INSTANT,
+            childrenMessageIds = listOf(25L),
+        )
+        val newerVisibleOwnedMessage = TestDefaults.chatMessage4.copy(
+            id = 25L,
+            sessionId = ownedSession2.id,
+            content = "Newest visible NEEDLE match.",
             createdAt = TestDefaults.DEFAULT_INSTANT.plus(2.hours),
             updatedAt = TestDefaults.DEFAULT_INSTANT.plus(2.hours),
-            childrenMessageIds = emptyList()
+            parentMessageId = newerOwnedRootMessage.id,
+            childrenMessageIds = emptyList(),
+            modelId = TestDefaults.llmModel2.id,
+            settingsId = TestDefaults.modelSettings2.id,
+        )
+        val foreignRootMessage = TestDefaults.chatMessage1.copy(
+            id = 26L,
+            sessionId = foreignSession.id,
+            content = "Foreign root message.",
+            createdAt = TestDefaults.DEFAULT_INSTANT.plus(2.hours),
+            updatedAt = TestDefaults.DEFAULT_INSTANT.plus(2.hours),
+            childrenMessageIds = listOf(27L)
+        )
+        val foreignLeafMessage = TestDefaults.chatMessage2.copy(
+            id = 27L,
+            sessionId = foreignSession.id,
+            content = "Foreign needle should remain hidden.",
+            createdAt = TestDefaults.DEFAULT_INSTANT.plus(3.hours),
+            updatedAt = TestDefaults.DEFAULT_INSTANT.plus(3.hours),
+            parentMessageId = foreignRootMessage.id,
+            childrenMessageIds = emptyList(),
+            modelId = TestDefaults.llmModel1.id,
+            settingsId = TestDefaults.modelSettings1.id,
         )
 
         testDataManager.insertUser(otherUser)
-        testDataManager.insertChatSession(ownedSession1)
-        testDataManager.insertChatSession(ownedSession2)
-        testDataManager.insertChatSession(foreignSession)
+        testDataManager.setup(
+            TestDataSet(
+                chatSessions = listOf(ownedSession1, ownedSession2, foreignSession),
+                chatMessages = listOf(
+                    ownedRootMessage,
+                    visibleOwnedMessage,
+                    hiddenOwnedMessage,
+                    newerOwnedRootMessage,
+                    newerVisibleOwnedMessage,
+                    foreignRootMessage,
+                    foreignLeafMessage,
+                ),
+                sessionCurrentLeaves = listOf(
+                    SessionCurrentLeafEntity(sessionId = ownedSession1.id, messageId = visibleOwnedMessage.id),
+                    SessionCurrentLeafEntity(sessionId = ownedSession2.id, messageId = newerVisibleOwnedMessage.id),
+                    SessionCurrentLeafEntity(sessionId = foreignSession.id, messageId = foreignLeafMessage.id),
+                ),
+            )
+        )
         testDataManager.insertSessionOwnership(ownedSession1.id, authHelper.defaultTestUser.id)
         testDataManager.insertSessionOwnership(ownedSession2.id, authHelper.defaultTestUser.id)
         testDataManager.insertSessionOwnership(foreignSession.id, otherUser.id)
-        testDataManager.insertChatMessage(olderOwnedMessage)
-        testDataManager.insertChatMessage(newerOwnedMessage)
-        testDataManager.insertChatMessage(foreignMessage)
 
         val response = client.get(href(SearchResource.Messages(query = "needle"))) {
             authenticate(authToken)
@@ -167,12 +225,125 @@ class SearchRoutesTest {
 
         assertEquals(HttpStatusCode.OK, response.status)
         val results = response.body<List<MessageSearchResult>>()
-        assertEquals(listOf(newerOwnedMessage.id, olderOwnedMessage.id), results.map { it.messageId })
+        assertEquals(listOf(newerVisibleOwnedMessage.id, visibleOwnedMessage.id), results.map { it.messageId })
         assertEquals(listOf(ownedSession2.name, ownedSession1.name), results.map { it.sessionName })
         assertTrue(results.all { result ->
             result.snippet.substring(result.matchStartIndex, result.matchEndExclusive)
                 .equals("needle", ignoreCase = true)
         })
+        assertTrue(results.none { it.messageId == hiddenOwnedMessage.id })
+        assertTrue(results.none { it.sessionId == foreignSession.id })
+    }
+
+    /**
+     * Verifies that opting into the all-thread scope includes hidden branches while still honoring ownership.
+     */
+    @Test
+    fun `GET search messages should include hidden branches when all threads scope is requested`() = searchTestApplication {
+        val otherUser = authHelper.createTestUser(id = 2L, email = "other@example.com", username = "other")
+        val ownedRootMessage = TestDefaults.chatMessage1.copy(
+            id = 31L,
+            sessionId = ownedSession1.id,
+            content = "Owned root message.",
+            createdAt = TestDefaults.DEFAULT_INSTANT,
+            updatedAt = TestDefaults.DEFAULT_INSTANT,
+            childrenMessageIds = listOf(32L, 33L)
+        )
+        val visibleOwnedMessage = TestDefaults.chatMessage2.copy(
+            id = 32L,
+            sessionId = ownedSession1.id,
+            content = "Visible branch with needle inside.",
+            createdAt = TestDefaults.DEFAULT_INSTANT,
+            updatedAt = TestDefaults.DEFAULT_INSTANT,
+            parentMessageId = ownedRootMessage.id,
+            childrenMessageIds = emptyList(),
+            modelId = TestDefaults.llmModel1.id,
+            settingsId = TestDefaults.modelSettings1.id,
+        )
+        val hiddenOwnedMessage = TestDefaults.chatMessage1.copy(
+            id = 33L,
+            sessionId = ownedSession1.id,
+            content = "Hidden sibling with needle becomes searchable in all-thread mode.",
+            createdAt = TestDefaults.DEFAULT_INSTANT.plus(1.hours),
+            updatedAt = TestDefaults.DEFAULT_INSTANT.plus(1.hours),
+            parentMessageId = ownedRootMessage.id,
+            childrenMessageIds = emptyList(),
+        )
+        val newerOwnedRootMessage = TestDefaults.chatMessage3.copy(
+            id = 34L,
+            sessionId = ownedSession2.id,
+            content = "Second root message.",
+            createdAt = TestDefaults.DEFAULT_INSTANT,
+            updatedAt = TestDefaults.DEFAULT_INSTANT,
+            childrenMessageIds = listOf(35L),
+        )
+        val newerVisibleOwnedMessage = TestDefaults.chatMessage4.copy(
+            id = 35L,
+            sessionId = ownedSession2.id,
+            content = "Newest visible NEEDLE match.",
+            createdAt = TestDefaults.DEFAULT_INSTANT.plus(2.hours),
+            updatedAt = TestDefaults.DEFAULT_INSTANT.plus(2.hours),
+            parentMessageId = newerOwnedRootMessage.id,
+            childrenMessageIds = emptyList(),
+            modelId = TestDefaults.llmModel2.id,
+            settingsId = TestDefaults.modelSettings2.id,
+        )
+        val foreignRootMessage = TestDefaults.chatMessage1.copy(
+            id = 36L,
+            sessionId = foreignSession.id,
+            content = "Foreign root message.",
+            createdAt = TestDefaults.DEFAULT_INSTANT.plus(2.hours),
+            updatedAt = TestDefaults.DEFAULT_INSTANT.plus(2.hours),
+            childrenMessageIds = listOf(37L)
+        )
+        val foreignLeafMessage = TestDefaults.chatMessage2.copy(
+            id = 37L,
+            sessionId = foreignSession.id,
+            content = "Foreign needle should remain hidden.",
+            createdAt = TestDefaults.DEFAULT_INSTANT.plus(3.hours),
+            updatedAt = TestDefaults.DEFAULT_INSTANT.plus(3.hours),
+            parentMessageId = foreignRootMessage.id,
+            childrenMessageIds = emptyList(),
+            modelId = TestDefaults.llmModel1.id,
+            settingsId = TestDefaults.modelSettings1.id,
+        )
+
+        testDataManager.insertUser(otherUser)
+        testDataManager.setup(
+            TestDataSet(
+                chatSessions = listOf(ownedSession1, ownedSession2, foreignSession),
+                chatMessages = listOf(
+                    ownedRootMessage,
+                    visibleOwnedMessage,
+                    hiddenOwnedMessage,
+                    newerOwnedRootMessage,
+                    newerVisibleOwnedMessage,
+                    foreignRootMessage,
+                    foreignLeafMessage,
+                ),
+                sessionCurrentLeaves = listOf(
+                    SessionCurrentLeafEntity(sessionId = ownedSession1.id, messageId = visibleOwnedMessage.id),
+                    SessionCurrentLeafEntity(sessionId = ownedSession2.id, messageId = newerVisibleOwnedMessage.id),
+                    SessionCurrentLeafEntity(sessionId = foreignSession.id, messageId = foreignLeafMessage.id),
+                ),
+            )
+        )
+        testDataManager.insertSessionOwnership(ownedSession1.id, authHelper.defaultTestUser.id)
+        testDataManager.insertSessionOwnership(ownedSession2.id, authHelper.defaultTestUser.id)
+        testDataManager.insertSessionOwnership(foreignSession.id, otherUser.id)
+
+        val response = client.get(
+            href(SearchResource.Messages(query = "needle", scope = MessageSearchScope.ALL_THREADS))
+        ) {
+            authenticate(authToken)
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val results = response.body<List<MessageSearchResult>>()
+        assertEquals(
+            listOf(newerVisibleOwnedMessage.id, hiddenOwnedMessage.id, visibleOwnedMessage.id),
+            results.map { it.messageId }
+        )
         assertTrue(results.none { it.sessionId == foreignSession.id })
     }
 

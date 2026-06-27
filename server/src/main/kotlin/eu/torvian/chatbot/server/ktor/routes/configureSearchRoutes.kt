@@ -18,7 +18,7 @@ fun Route.configureSearchRoutes(searchService: SearchService) {
     authenticate(AuthSchemes.USER_JWT) {
         get<SearchResource.Messages> { resource ->
             val userId = call.getUserId()
-            call.respondEither(searchService.searchMessages(userId, resource.query)) { error ->
+            call.respondEither(searchService.searchMessages(userId, resource.query, resource.scope)) { error ->
                 error.toApiError()
             }
         }

@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.common.api.resources
 
+import eu.torvian.chatbot.common.models.api.core.MessageSearchScope
 import io.ktor.resources.Resource
 
 /**
@@ -19,10 +20,12 @@ class SearchResource(
      *
      * @property parent Parent search resource.
      * @property query Search string supplied by the client as a query parameter.
+     * @property scope Search scope controlling whether only visible threads or all threads are searched.
      */
     @Resource("messages")
     class Messages(
         val parent: SearchResource = SearchResource(),
-        val query: String
+        val query: String,
+        val scope: MessageSearchScope = MessageSearchScope.VISIBLE_THREADS_ONLY,
     )
 }

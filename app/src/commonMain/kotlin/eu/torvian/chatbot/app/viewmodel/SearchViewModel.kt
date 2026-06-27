@@ -7,6 +7,7 @@ import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.SearchRepository
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.models.api.core.MessageSearchResult
+import eu.torvian.chatbot.common.models.api.core.MessageSearchScope
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,6 +48,16 @@ class SearchViewModel(
     private val _lastSearchQuery = MutableStateFlow("")
 
     /**
+     * Backing state for the scope currently selected in the dialog.
+     */
+    private val _searchScope = MutableStateFlow(MessageSearchScope.VISIBLE_THREADS_ONLY)
+
+    /**
+     * Backing state for the scope that produced the currently displayed result set.
+     */
+    private val _lastSearchScope = MutableStateFlow(MessageSearchScope.VISIBLE_THREADS_ONLY)
+
+    /**
      * Indicates whether the search dialog should currently be shown.
      */
     val isSearchDialogVisible: StateFlow<Boolean> = _isSearchDialogVisible.asStateFlow()
@@ -60,6 +71,16 @@ class SearchViewModel(
      * Query string that produced the current repository-backed search results.
      */
     val lastSearchQuery: StateFlow<String> = _lastSearchQuery.asStateFlow()
+
+    /**
+     * Scope currently selected in the dialog.
+     */
+    val searchScope: StateFlow<MessageSearchScope> = _searchScope.asStateFlow()
+
+    /**
+     * Scope that produced the current repository-backed search results.
+     */
+    val lastSearchScope: StateFlow<MessageSearchScope> = _lastSearchScope.asStateFlow()
 
     /**
      * Latest repository-backed search state shared with the dialog UI.
@@ -91,6 +112,15 @@ class SearchViewModel(
     }
 
     /**
+     * Updates the search scope selected in the dialog.
+     *
+     * @param scope Newly selected server-side search scope.
+     */
+    fun updateSearchScope(scope: MessageSearchScope) {
+        _searchScope.value = scope
+    }
+
+    /**
      * Executes a new cross-session search using the current query text.
      *
      * Blank input is rejected locally so an accidental dialog submit does not wipe out the
@@ -98,6 +128,7 @@ class SearchViewModel(
      */
     fun performSearch() {
         val normalizedQuery = searchQuery.value.trim()
+        val selectedScope = searchScope.value
         if (normalizedQuery.isBlank()) {
             viewModelScope.launch(uiDispatcher) {
                 notificationService.genericWarning("Enter a search query.")
@@ -107,9 +138,10 @@ class SearchViewModel(
 
         _searchQuery.value = normalizedQuery
         _lastSearchQuery.value = normalizedQuery
+        _lastSearchScope.value = selectedScope
 
         viewModelScope.launch(uiDispatcher) {
-            searchRepository.searchMessages(normalizedQuery).fold(
+            searchRepository.searchMessages(normalizedQuery, selectedScope).fold(
                 ifLeft = { error ->
                     notificationService.repositoryError(
                         error = error,
@@ -127,6 +159,7 @@ class SearchViewModel(
     fun clearSearch() {
         _searchQuery.update { "" }
         _lastSearchQuery.update { "" }
+        _lastSearchScope.update { _searchScope.value }
         searchRepository.clearSearch()
     }
 }

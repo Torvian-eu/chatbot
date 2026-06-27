@@ -17,6 +17,7 @@ import eu.torvian.chatbot.app.domain.contracts.SessionListData
 import eu.torvian.chatbot.app.domain.contracts.SessionListDialogState
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.common.models.api.core.MessageSearchResult
+import eu.torvian.chatbot.common.models.api.core.MessageSearchScope
 import eu.torvian.chatbot.common.models.core.ChatGroup
 
 /**
@@ -31,9 +32,12 @@ import eu.torvian.chatbot.common.models.core.ChatGroup
  * @param isSearchDialogVisible Whether the cross-session search dialog should be displayed.
  * @param searchQuery Current editable query for the cross-session search dialog.
  * @param lastSearchQuery Query that produced the currently rendered search results.
+ * @param searchScope Scope currently selected in the dialog.
+ * @param lastSearchScope Scope that produced the currently rendered search results.
  * @param searchResultsState Current search result state for the cross-session search dialog.
  * @param onDismissSearchDialog Callback that closes the dialog without clearing cached results.
  * @param onUpdateSearchQuery Callback for search query text changes.
+ * @param onUpdateSearchScope Callback for search scope changes.
  * @param onPerformSearch Callback that executes a new cross-session search.
  * @param onSearchResultClick Callback invoked when a search result is selected.
  */
@@ -44,9 +48,12 @@ fun SessionListPanel(
     isSearchDialogVisible: Boolean,
     searchQuery: String,
     lastSearchQuery: String,
+    searchScope: MessageSearchScope,
+    lastSearchScope: MessageSearchScope,
     searchResultsState: DataState<RepositoryError, List<MessageSearchResult>>,
     onDismissSearchDialog: () -> Unit,
     onUpdateSearchQuery: (String) -> Unit,
+    onUpdateSearchScope: (MessageSearchScope) -> Unit,
     onPerformSearch: () -> Unit,
     onSearchResultClick: (MessageSearchResult) -> Unit,
 ) {
@@ -94,9 +101,12 @@ fun SessionListPanel(
         isVisible = isSearchDialogVisible,
         query = searchQuery,
         lastSearchQuery = lastSearchQuery,
+        searchScope = searchScope,
+        lastSearchScope = lastSearchScope,
         searchResultsState = searchResultsState,
         onDismiss = onDismissSearchDialog,
         onQueryChange = onUpdateSearchQuery,
+        onScopeChange = onUpdateSearchScope,
         onSearch = onPerformSearch,
         onResultClick = onSearchResultClick,
     )

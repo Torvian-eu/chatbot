@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.service.core.impl
 
 import eu.torvian.chatbot.common.models.api.core.MessageSearchResult
+import eu.torvian.chatbot.common.models.api.core.MessageSearchScope
 import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.service.core.error.search.SearchMessagesError
 import io.mockk.clearMocks
@@ -72,13 +73,22 @@ class SearchServiceImplTest {
      */
     @Test
     fun `searchMessages should trim query clamp limit and delegate to dao`() = runTest {
-        coEvery { messageDao.searchMessagesByUserId(7L, "needle", 100) } returns expectedResults
+        coEvery {
+            messageDao.searchMessagesByUserId(7L, "needle", MessageSearchScope.ALL_THREADS, 100)
+        } returns expectedResults
 
-        val result = searchService.searchMessages(userId = 7L, query = "  needle  ", limit = 500)
+        val result = searchService.searchMessages(
+            userId = 7L,
+            query = "  needle  ",
+            scope = MessageSearchScope.ALL_THREADS,
+            limit = 500,
+        )
 
         assertTrue(result.isRight())
         assertEquals(expectedResults, result.getOrNull())
-        coVerify(exactly = 1) { messageDao.searchMessagesByUserId(7L, "needle", 100) }
+        coVerify(exactly = 1) {
+            messageDao.searchMessagesByUserId(7L, "needle", MessageSearchScope.ALL_THREADS, 100)
+        }
     }
 
     /**
@@ -90,7 +100,7 @@ class SearchServiceImplTest {
 
         assertTrue(result.isLeft())
         assertEquals(SearchMessagesError.EmptyQuery, result.leftOrNull())
-        coVerify(exactly = 0) { messageDao.searchMessagesByUserId(any(), any(), any()) }
+        coVerify(exactly = 0) { messageDao.searchMessagesByUserId(any(), any(), any(), any()) }
     }
 
     /**
@@ -107,6 +117,6 @@ class SearchServiceImplTest {
         assertIs<SearchMessagesError.QueryTooLong>(error)
         assertEquals(201, error.actualLength)
         assertEquals(200, error.maxLength)
-        coVerify(exactly = 0) { messageDao.searchMessagesByUserId(any(), any(), any()) }
+        coVerify(exactly = 0) { messageDao.searchMessagesByUserId(any(), any(), any(), any()) }
     }
 }

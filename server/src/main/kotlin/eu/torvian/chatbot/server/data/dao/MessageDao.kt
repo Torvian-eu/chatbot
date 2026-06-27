@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.data.dao
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.api.core.MessageSearchResult
+import eu.torvian.chatbot.common.models.api.core.MessageSearchScope
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
@@ -38,10 +39,16 @@ interface MessageDao {
      *
      * @param userId The owner whose sessions should be searched.
      * @param query Non-blank search string that should be matched literally.
+     * @param scope Server-side scope controlling whether only the visible branch or all threads are searched.
      * @param limit Maximum number of results to return.
      * @return Search hits ordered by descending message creation time.
      */
-    suspend fun searchMessagesByUserId(userId: Long, query: String, limit: Int): List<MessageSearchResult>
+    suspend fun searchMessagesByUserId(
+        userId: Long,
+        query: String,
+        scope: MessageSearchScope,
+        limit: Int,
+    ): List<MessageSearchResult>
 
     /**
      * Inserts a new message.

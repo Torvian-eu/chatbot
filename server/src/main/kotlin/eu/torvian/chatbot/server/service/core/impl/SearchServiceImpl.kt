@@ -4,6 +4,7 @@ import arrow.core.Either
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import eu.torvian.chatbot.common.models.api.core.MessageSearchResult
+import eu.torvian.chatbot.common.models.api.core.MessageSearchScope
 import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.service.core.SearchService
 import eu.torvian.chatbot.server.service.core.error.search.SearchMessagesError
@@ -36,7 +37,8 @@ class SearchServiceImpl(
     override suspend fun searchMessages(
         userId: Long,
         query: String,
-        limit: Int
+        scope: MessageSearchScope,
+        limit: Int,
     ): Either<SearchMessagesError, List<MessageSearchResult>> = either {
         val normalizedQuery = query.trim()
         ensure(normalizedQuery.isNotEmpty()) { SearchMessagesError.EmptyQuery }
@@ -47,7 +49,8 @@ class SearchServiceImpl(
         messageDao.searchMessagesByUserId(
             userId = userId,
             query = normalizedQuery,
-            limit = limit.coerceIn(1, MAX_RESULT_LIMIT)
+            scope = scope,
+            limit = limit.coerceIn(1, MAX_RESULT_LIMIT),
         )
     }
 }

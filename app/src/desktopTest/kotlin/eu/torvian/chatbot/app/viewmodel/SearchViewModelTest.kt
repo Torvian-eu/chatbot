@@ -6,6 +6,7 @@ import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.SearchRepository
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.common.models.api.core.MessageSearchResult
+import eu.torvian.chatbot.common.models.api.core.MessageSearchScope
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -18,7 +19,6 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -36,7 +36,7 @@ class SearchViewModelTest {
             DataState.Success(listOf(messageSearchResult()))
         )
         every { repository.searchResults } returns searchResults
-        coEvery { repository.searchMessages("hello") } returns Unit.right()
+        coEvery { repository.searchMessages("hello", MessageSearchScope.ALL_THREADS) } returns Unit.right()
         val viewModel = SearchViewModel(
             searchRepository = repository,
             notificationService = notificationService,
@@ -45,18 +45,21 @@ class SearchViewModelTest {
 
         viewModel.showSearchDialog()
         viewModel.updateSearchQuery("  hello  ")
+        viewModel.updateSearchScope(MessageSearchScope.ALL_THREADS)
         viewModel.performSearch()
         advanceUntilIdle()
 
         assertTrue(viewModel.isSearchDialogVisible.value)
         assertEquals("hello", viewModel.searchQuery.value)
         assertEquals("hello", viewModel.lastSearchQuery.value)
+        assertEquals(MessageSearchScope.ALL_THREADS, viewModel.searchScope.value)
+        assertEquals(MessageSearchScope.ALL_THREADS, viewModel.lastSearchScope.value)
         assertIs<DataState.Success<List<MessageSearchResult>>>(viewModel.searchResults.value)
-        coVerify(exactly = 1) { repository.searchMessages("hello") }
+        coVerify(exactly = 1) { repository.searchMessages("hello", MessageSearchScope.ALL_THREADS) }
     }
 
     @Test
-    fun `hideSearchDialog preserves previously loaded results`() = runTest {
+    fun `hideSearchDialog preserves previously loaded results and selected scope`() = runTest {
         val repository = mockk<SearchRepository>()
         val notificationService = mockk<NotificationService>(relaxed = true)
         every {
@@ -71,9 +74,12 @@ class SearchViewModelTest {
         )
 
         viewModel.showSearchDialog()
+        viewModel.updateSearchScope(MessageSearchScope.ALL_THREADS)
         viewModel.hideSearchDialog()
+        viewModel.showSearchDialog()
 
-        assertFalse(viewModel.isSearchDialogVisible.value)
+        assertTrue(viewModel.isSearchDialogVisible.value)
+        assertEquals(MessageSearchScope.ALL_THREADS, viewModel.searchScope.value)
         assertIs<DataState.Success<List<MessageSearchResult>>>(viewModel.searchResults.value)
     }
 
@@ -94,7 +100,7 @@ class SearchViewModelTest {
         viewModel.performSearch()
         advanceUntilIdle()
 
-        coVerify(exactly = 0) { repository.searchMessages(any()) }
+        coVerify(exactly = 0) { repository.searchMessages(any(), any()) }
         coVerify(exactly = 1) { notificationService.genericWarning("Enter a search query.") }
     }
 

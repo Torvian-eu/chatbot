@@ -105,6 +105,8 @@ fun ChatScreen(
     val isSearchDialogVisible by searchViewModel.isSearchDialogVisible.collectAsState()
     val crossSessionSearchQuery by searchViewModel.searchQuery.collectAsState()
     val lastCrossSessionSearchQuery by searchViewModel.lastSearchQuery.collectAsState()
+    val crossSessionSearchScope by searchViewModel.searchScope.collectAsState()
+    val lastCrossSessionSearchScope by searchViewModel.lastSearchScope.collectAsState()
     val crossSessionSearchResultsState by searchViewModel.searchResults.collectAsState()
 
     // Keep session-local in-session search state outside the composable body so this screen only
@@ -368,9 +370,12 @@ fun ChatScreen(
         isSearchDialogVisible = isSearchDialogVisible,
         searchQuery = crossSessionSearchQuery,
         lastSearchQuery = lastCrossSessionSearchQuery,
+        searchScope = crossSessionSearchScope,
+        lastSearchScope = lastCrossSessionSearchScope,
         searchResultsState = crossSessionSearchResultsState,
         onDismissSearchDialog = searchViewModel::hideSearchDialog,
         onUpdateSearchQuery = searchViewModel::updateSearchQuery,
+        onUpdateSearchScope = searchViewModel::updateSearchScope,
         onPerformSearch = searchViewModel::performSearch,
         onSearchResultClick = onCrossSessionSearchResultClick,
     )

@@ -8,6 +8,7 @@ import eu.torvian.chatbot.app.repository.SearchRepository
 import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.service.api.SearchApi
 import eu.torvian.chatbot.common.models.api.core.MessageSearchResult
+import eu.torvian.chatbot.common.models.api.core.MessageSearchScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,15 +39,19 @@ class DefaultSearchRepository(
      * states so the UI can render progress and preserve previous responses.
      *
      * @param query Literal query string to search for.
+     * @param scope Search scope requested by the UI.
      * @return Either the mapped repository failure or [Unit] when state updates finished.
      */
-    override suspend fun searchMessages(query: String): Either<RepositoryError, Unit> {
+    override suspend fun searchMessages(
+        query: String,
+        scope: MessageSearchScope,
+    ): Either<RepositoryError, Unit> {
         if (_searchResults.value.isLoading) {
             return Unit.right()
         }
 
         _searchResults.update { DataState.Loading }
-        return searchApi.searchMessages(query)
+        return searchApi.searchMessages(query, scope)
             .map { results ->
                 _searchResults.update { DataState.Success(results) }
             }

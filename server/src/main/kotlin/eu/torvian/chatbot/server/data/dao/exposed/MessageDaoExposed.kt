@@ -6,6 +6,7 @@ import arrow.core.raise.either
 import arrow.core.raise.ensure
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.api.core.MessageSearchResult
+import eu.torvian.chatbot.common.models.api.core.MessageSearchScope
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
@@ -16,16 +17,20 @@ import eu.torvian.chatbot.server.data.tables.AssistantMessageTable
 import eu.torvian.chatbot.server.data.tables.ChatMessageTable
 import eu.torvian.chatbot.server.data.tables.ChatSessionOwnersTable
 import eu.torvian.chatbot.server.data.tables.ChatSessionTable
+import eu.torvian.chatbot.server.data.tables.SessionCurrentLeafTable
 import eu.torvian.chatbot.server.data.tables.mappers.toAssistantMessage
 import eu.torvian.chatbot.server.data.tables.mappers.toUserMessage
 import kotlinx.serialization.json.Json
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.core.statements.StatementType
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
+import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
+import java.sql.ResultSet
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.time.Instant
@@ -57,7 +62,103 @@ class MessageDaoExposed(
          * Ellipsis inserted when the snippet is trimmed away from the full message boundaries.
          */
         private const val SNIPPET_ELLIPSIS: String = "…"
+
+        /**
+         * Alias used by the raw visible-thread query for the selected message identifier.
+         */
+        private const val SEARCH_RESULT_MESSAGE_ID_COLUMN: String = "message_id"
+
+        /**
+         * Alias used by the raw visible-thread query for the owning session identifier.
+         */
+        private const val SEARCH_RESULT_SESSION_ID_COLUMN: String = "session_id"
+
+        /**
+         * Alias used by the raw visible-thread query for the owning session name.
+         */
+        private const val SEARCH_RESULT_SESSION_NAME_COLUMN: String = "session_name"
+
+        /**
+         * Alias used by the raw visible-thread query for the message role.
+         */
+        private const val SEARCH_RESULT_MESSAGE_ROLE_COLUMN: String = "message_role"
+
+        /**
+         * Alias used by the raw visible-thread query for the full message content.
+         */
+        private const val SEARCH_RESULT_MESSAGE_CONTENT_COLUMN: String = "message_content"
+
+        /**
+         * Alias used by the raw visible-thread query for the message creation timestamp.
+         */
+        private const val SEARCH_RESULT_MESSAGE_CREATED_AT_COLUMN: String = "message_created_at"
+
+        /**
+         * Raw SQLite query used to restrict search candidates to each session's currently visible branch.
+         *
+         * The recursive CTE starts at `session_current_leaf.message_id` for every owned session and walks
+         * upward through `parent_message_id`, which excludes hidden sibling branches before any `LIKE`
+         * filtering or ordering is applied.
+         */
+        private val VISIBLE_THREADS_ONLY_SEARCH_SQL: String = """
+            WITH RECURSIVE visible_branch_messages(${SessionCurrentLeafTable.sessionId.name}, ${SessionCurrentLeafTable.messageId.name}) AS (
+                SELECT
+                    current_leaf.${SessionCurrentLeafTable.sessionId.name},
+                    current_leaf.${SessionCurrentLeafTable.messageId.name}
+                FROM ${SessionCurrentLeafTable.tableName} AS current_leaf
+                INNER JOIN ${ChatSessionOwnersTable.tableName} AS owners
+                    ON owners.${ChatSessionOwnersTable.sessionId.name} = current_leaf.${SessionCurrentLeafTable.sessionId.name}
+                WHERE owners.${ChatSessionOwnersTable.userId.name} = %USER_ID%
+
+                UNION ALL
+
+                SELECT
+                    visible_branch_messages.${SessionCurrentLeafTable.sessionId.name},
+                    message.${ChatMessageTable.parentMessageId.name}
+                FROM visible_branch_messages
+                INNER JOIN ${ChatMessageTable.tableName} AS message
+                    ON message.${ChatMessageTable.id.name} = visible_branch_messages.${SessionCurrentLeafTable.messageId.name}
+                WHERE message.${ChatMessageTable.parentMessageId.name} IS NOT NULL
+            )
+            SELECT
+                message.${ChatMessageTable.id.name} AS $SEARCH_RESULT_MESSAGE_ID_COLUMN,
+                message.${ChatMessageTable.sessionId.name} AS $SEARCH_RESULT_SESSION_ID_COLUMN,
+                session.${ChatSessionTable.name.name} AS $SEARCH_RESULT_SESSION_NAME_COLUMN,
+                message.${ChatMessageTable.role.name} AS $SEARCH_RESULT_MESSAGE_ROLE_COLUMN,
+                message.${ChatMessageTable.content.name} AS $SEARCH_RESULT_MESSAGE_CONTENT_COLUMN,
+                message.${ChatMessageTable.createdAt.name} AS $SEARCH_RESULT_MESSAGE_CREATED_AT_COLUMN
+            FROM visible_branch_messages
+            INNER JOIN ${ChatMessageTable.tableName} AS message
+                ON message.${ChatMessageTable.id.name} = visible_branch_messages.${SessionCurrentLeafTable.messageId.name}
+            INNER JOIN ${ChatSessionTable.tableName} AS session
+                ON session.${ChatSessionTable.id.name} = message.${ChatMessageTable.sessionId.name}
+            WHERE lower(message.${ChatMessageTable.content.name}) LIKE %LIKE_PATTERN% ESCAPE '$LIKE_ESCAPE_CHAR'
+            ORDER BY message.${ChatMessageTable.createdAt.name} DESC
+            LIMIT %LIMIT%
+        """.trimIndent()
     }
+
+    /**
+     * Lightweight projection containing only the fields needed to build [MessageSearchResult].
+     *
+     * Snippet construction stays in Kotlin so both DSL-backed and raw-SQL-backed search paths share the
+     * same highlighting and truncation behavior.
+     *
+     * @property sessionId Identifier of the session that owns the message.
+     * @property sessionName Human-readable name of the owning session.
+     * @property messageId Identifier of the matching message.
+     * @property messageRole Role of the message author.
+     * @property content Full message content used for snippet generation.
+     * @property createdAtMillis Creation timestamp stored in the database row.
+     */
+    private data class SearchMessageRow(
+        val sessionId: Long,
+        val sessionName: String,
+        val messageId: Long,
+        val messageRole: ChatMessage.Role,
+        val content: String,
+        val createdAtMillis: Long,
+    )
 
     override suspend fun getMessagesBySessionId(sessionId: Long): List<ChatMessage> =
         transactionScope.transaction {
@@ -96,32 +197,25 @@ class MessageDaoExposed(
             }
         }
 
-    override suspend fun searchMessagesByUserId(userId: Long, query: String, limit: Int): List<MessageSearchResult> =
+    override suspend fun searchMessagesByUserId(
+        userId: Long,
+        query: String,
+        scope: MessageSearchScope,
+        limit: Int,
+    ): List<MessageSearchResult> =
         transactionScope.transaction {
             val normalizedQuery = query.lowercase()
             val likePattern = buildContainsLikePattern(normalizedQuery)
 
-            ChatMessageTable
-                .join(
-                    ChatSessionTable,
-                    JoinType.INNER,
-                    additionalConstraint = { ChatMessageTable.sessionId eq ChatSessionTable.id }
-                )
-                .join(
-                    ChatSessionOwnersTable,
-                    JoinType.INNER,
-                    additionalConstraint = { ChatSessionTable.id eq ChatSessionOwnersTable.sessionId }
-                )
-                .selectAll()
-                .where {
-                    // SQLite has no portable ILIKE, so match via LOWER(column) LIKE LOWER(query) instead.
-                    (ChatSessionOwnersTable.userId eq userId) and
-                            (ChatMessageTable.content.lowerCase() like likePattern)
-                }
-                .orderBy(ChatMessageTable.createdAt to SortOrder.DESC)
-                .limit(limit)
-                .map { row -> row.toMessageSearchResult(query, normalizedQuery) }
-                .toList()
+            val matchedRows = when (scope) {
+                MessageSearchScope.VISIBLE_THREADS_ONLY ->
+                    searchVisibleThreadMessagesByUserId(userId = userId, likePattern = likePattern, limit = limit)
+
+                MessageSearchScope.ALL_THREADS ->
+                    searchAllThreadMessagesByUserId(userId = userId, likePattern = likePattern, limit = limit)
+            }
+
+            matchedRows.map { row -> row.toMessageSearchResult(query, normalizedQuery) }
         }
 
     override suspend fun insertMessage(
@@ -445,7 +539,111 @@ class MessageDaoExposed(
     }
 
     /**
-     * Converts a joined message/session row into a [MessageSearchResult].
+     * Executes the existing all-thread search path using the Exposed DSL.
+     *
+     * This branch intentionally preserves the pre-scope behavior so the new `ALL_THREADS` mode remains
+     * equivalent to the old implementation.
+     *
+     * @param userId Owner whose accessible sessions should be searched.
+     * @param likePattern Escaped `LIKE` pattern built from the validated query.
+     * @param limit Maximum number of rows to return.
+     * @return Matching rows ordered by recency across all owned threads.
+     */
+    private fun searchAllThreadMessagesByUserId(
+        userId: Long,
+        likePattern: String,
+        limit: Int,
+    ): List<SearchMessageRow> {
+        return ChatMessageTable
+            .join(
+                ChatSessionTable,
+                JoinType.INNER,
+                additionalConstraint = { ChatMessageTable.sessionId eq ChatSessionTable.id }
+            )
+            .join(
+                ChatSessionOwnersTable,
+                JoinType.INNER,
+                additionalConstraint = { ChatSessionTable.id eq ChatSessionOwnersTable.sessionId }
+            )
+            .selectAll()
+            .where {
+                // SQLite has no portable ILIKE, so match via LOWER(column) LIKE LOWER(query) instead.
+                (ChatSessionOwnersTable.userId eq userId) and
+                    (ChatMessageTable.content.lowerCase() like LikePattern(likePattern, LIKE_ESCAPE_CHAR))
+            }
+            .orderBy(ChatMessageTable.createdAt to SortOrder.DESC)
+            .limit(limit)
+            .map { row -> row.toSearchMessageRow() }
+            .toList()
+    }
+
+    /**
+     * Executes the visible-thread-only search path using a recursive SQLite CTE.
+     *
+     * Exposed's DSL does not currently provide an ergonomic way to express this recursive branch walk, so the
+     * raw SQL is localized here in the DAO. The query first computes the visible branch per owned session and
+     * only then applies the text search predicate, ordering, and limit.
+     *
+     * @param userId Owner whose visible branches should be searched.
+     * @param likePattern Escaped `LIKE` pattern built from the validated query.
+     * @param limit Maximum number of rows to return.
+     * @return Matching rows ordered by recency across only the visible branches.
+     */
+    private fun searchVisibleThreadMessagesByUserId(
+        userId: Long,
+        likePattern: String,
+        limit: Int,
+    ): List<SearchMessageRow> {
+        // The query is assembled from trusted numeric values plus an explicitly quoted SQL literal so the raw CTE
+        // remains injection-safe while staying localized to this DAO.
+        val sql = VISIBLE_THREADS_ONLY_SEARCH_SQL
+            .replace("%USER_ID%", userId.toString())
+            .replace("%LIKE_PATTERN%", quoteSqlLiteral(likePattern))
+            .replace("%LIMIT%", limit.toString())
+
+        return TransactionManager.current().exec(sql, explicitStatementType = StatementType.SELECT) { resultSet ->
+            buildList {
+                while (resultSet.next()) {
+                    add(resultSet.toSearchMessageRow())
+                }
+            }
+        } ?: emptyList()
+    }
+
+    /**
+     * Maps a DSL-selected row into the lightweight search projection shared by both search scopes.
+     *
+     * @return Search projection containing only the data needed for snippet generation and response ordering.
+     */
+    private fun ResultRow.toSearchMessageRow(): SearchMessageRow {
+        return SearchMessageRow(
+            sessionId = this[ChatMessageTable.sessionId].value,
+            sessionName = this[ChatSessionTable.name],
+            messageId = this[ChatMessageTable.id].value,
+            messageRole = this[ChatMessageTable.role],
+            content = this[ChatMessageTable.content],
+            createdAtMillis = this[ChatMessageTable.createdAt],
+        )
+    }
+
+    /**
+     * Maps a raw-SQL result row into the lightweight search projection shared by both search scopes.
+     *
+     * @return Search projection containing only the data needed for snippet generation and response ordering.
+     */
+    private fun ResultSet.toSearchMessageRow(): SearchMessageRow {
+        return SearchMessageRow(
+            sessionId = getLong(SEARCH_RESULT_SESSION_ID_COLUMN),
+            sessionName = getString(SEARCH_RESULT_SESSION_NAME_COLUMN),
+            messageId = getLong(SEARCH_RESULT_MESSAGE_ID_COLUMN),
+            messageRole = ChatMessage.Role.valueOf(getString(SEARCH_RESULT_MESSAGE_ROLE_COLUMN)),
+            content = getString(SEARCH_RESULT_MESSAGE_CONTENT_COLUMN),
+            createdAtMillis = getLong(SEARCH_RESULT_MESSAGE_CREATED_AT_COLUMN),
+        )
+    }
+
+    /**
+     * Converts a projected search row into a [MessageSearchResult].
      *
      * Filtering happens in SQL before rows are materialized. This mapper only derives snippet metadata for rows
      * already known to match.
@@ -454,22 +652,22 @@ class MessageDaoExposed(
      * @param normalizedQuery Lower-cased copy of [query] reused for the rare defensive fallback.
      * @return A populated search result for the matched row.
      */
-    private fun ResultRow.toMessageSearchResult(query: String, normalizedQuery: String): MessageSearchResult {
-        val content = this[ChatMessageTable.content]
-        val firstMatchIndex = findSnippetMatchIndex(content, query, normalizedQuery)
+    private fun SearchMessageRow.toMessageSearchResult(query: String, normalizedQuery: String): MessageSearchResult {
+        val fullContent = content
+        val firstMatchIndex = findSnippetMatchIndex(fullContent, query, normalizedQuery)
 
         val matchLength = query.length
-        val (snippet, matchStartIndex, matchEndExclusive) = buildSnippet(content, firstMatchIndex, matchLength)
+        val (snippet, matchStartIndex, matchEndExclusive) = buildSnippet(fullContent, firstMatchIndex, matchLength)
 
         return MessageSearchResult(
-            sessionId = this[ChatMessageTable.sessionId].value,
-            sessionName = this[ChatSessionTable.name],
-            messageId = this[ChatMessageTable.id].value,
-            messageRole = this[ChatMessageTable.role],
+            sessionId = sessionId,
+            sessionName = sessionName,
+            messageId = messageId,
+            messageRole = messageRole,
             snippet = snippet,
             matchStartIndex = matchStartIndex,
             matchEndExclusive = matchEndExclusive,
-            createdAt = Instant.fromEpochMilliseconds(this[ChatMessageTable.createdAt])
+            createdAt = Instant.fromEpochMilliseconds(createdAtMillis)
         )
     }
 
@@ -479,7 +677,7 @@ class MessageDaoExposed(
      * @param normalizedQuery Lower-cased query text that should be matched literally.
      * @return Pattern equivalent to `%query%` with `%`, `_`, and the escape character itself escaped.
      */
-    private fun buildContainsLikePattern(normalizedQuery: String): LikePattern {
+    private fun buildContainsLikePattern(normalizedQuery: String): String {
         val escapedQuery = buildString(normalizedQuery.length) {
             normalizedQuery.forEach { character ->
                 if (character == LIKE_ESCAPE_CHAR || character == '%' || character == '_') {
@@ -488,7 +686,17 @@ class MessageDaoExposed(
                 append(character)
             }
         }
-        return LikePattern("%$escapedQuery%", LIKE_ESCAPE_CHAR)
+        return "%$escapedQuery%"
+    }
+
+    /**
+     * Quotes a string for safe inclusion as a SQL literal in the localized raw CTE query.
+     *
+     * @param value Literal value that should be embedded in raw SQL.
+     * @return SQL string literal with embedded single quotes doubled.
+     */
+    private fun quoteSqlLiteral(value: String): String {
+        return "'${value.replace("'", "''")}'"
     }
 
     /**

@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalDivider
@@ -41,6 +42,7 @@ import androidx.compose.ui.window.Dialog
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.common.models.api.core.MessageSearchResult
+import eu.torvian.chatbot.common.models.api.core.MessageSearchScope
 import eu.torvian.chatbot.common.models.core.ChatMessage
 
 /**
@@ -49,9 +51,12 @@ import eu.torvian.chatbot.common.models.core.ChatMessage
  * @param isVisible Whether the dialog should be rendered.
  * @param query Current editable query text.
  * @param lastSearchQuery Query that produced the current result state.
+ * @param searchScope Scope currently selected in the dialog.
+ * @param lastSearchScope Scope that produced the current result state.
  * @param searchResultsState Current loading, success, or error state for the search request.
  * @param onDismiss Request to close the dialog while preserving state.
  * @param onQueryChange Callback for query text changes.
+ * @param onScopeChange Callback for scope changes.
  * @param onSearch Callback that executes a new search.
  * @param onResultClick Callback invoked when the user selects a search result.
  */
@@ -60,14 +65,24 @@ fun SearchDialog(
     isVisible: Boolean,
     query: String,
     lastSearchQuery: String,
+    searchScope: MessageSearchScope,
+    lastSearchScope: MessageSearchScope,
     searchResultsState: DataState<RepositoryError, List<MessageSearchResult>>,
     onDismiss: () -> Unit,
     onQueryChange: (String) -> Unit,
+    onScopeChange: (MessageSearchScope) -> Unit,
     onSearch: () -> Unit,
     onResultClick: (MessageSearchResult) -> Unit,
 ) {
     if (!isVisible) {
         return
+    }
+
+    val currentScopeIsVisibleOnly = searchScope == MessageSearchScope.VISIBLE_THREADS_ONLY
+    val lastSearchScopeLabel = if (lastSearchScope == MessageSearchScope.VISIBLE_THREADS_ONLY) {
+        "currently displayed threads only"
+    } else {
+        "all threads"
     }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -101,7 +116,7 @@ fun SearchDialog(
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Search across all of your chat sessions.",
+                                text = "Search across your sessions. By default only the currently displayed thread in each session is searched.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -132,9 +147,45 @@ fun SearchDialog(
                         }
                     }
 
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                // The product requirement calls for a single default-on checkbox, so toggling maps
+                                // directly to the two supported server scopes.
+                                onScopeChange(
+                                    if (currentScopeIsVisibleOnly) {
+                                        MessageSearchScope.ALL_THREADS
+                                    } else {
+                                        MessageSearchScope.VISIBLE_THREADS_ONLY
+                                    }
+                                )
+                            },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = currentScopeIsVisibleOnly,
+                            onCheckedChange = { isChecked ->
+                                onScopeChange(
+                                    if (isChecked) {
+                                        MessageSearchScope.VISIBLE_THREADS_ONLY
+                                    } else {
+                                        MessageSearchScope.ALL_THREADS
+                                    }
+                                )
+                            }
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "Search only currently displayed threads",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
                     if (lastSearchQuery.isNotBlank()) {
                         Text(
-                            text = "Showing results for “$lastSearchQuery”",
+                            text = "Showing results for “$lastSearchQuery” in $lastSearchScopeLabel",
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -150,7 +201,11 @@ fun SearchDialog(
                         when (searchResultsState) {
                             DataState.Idle -> {
                                 SearchDialogPlaceholder(
-                                    text = "Enter a query and run a search to look across sessions."
+                                    text = if (currentScopeIsVisibleOnly) {
+                                        "Enter a query and run a search across the currently displayed thread in each session."
+                                    } else {
+                                        "Enter a query and run a search across all threads in your sessions."
+                                    }
                                 )
                             }
 
@@ -176,7 +231,7 @@ fun SearchDialog(
                                         text = if (lastSearchQuery.isBlank()) {
                                             "No search results available."
                                         } else {
-                                            "No matches found for “$lastSearchQuery”."
+                                            "No matches found for “$lastSearchQuery” in $lastSearchScopeLabel."
                                         }
                                     )
                                 } else {
