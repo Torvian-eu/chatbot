@@ -5,6 +5,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -24,9 +25,11 @@ import eu.torvian.chatbot.app.compose.common.PlainTooltipBox
  * @param query current search query.
  * @param currentIndex currently selected result index, or `-1` when none is selected.
  * @param resultCount total number of matching occurrences.
+ * @param canReturnToPreviousThread whether search-driven navigation currently has a rollback target.
  * @param onQueryChange updates the current search query.
  * @param onNavigate cycles through the available results.
  * @param onJumpToResult jumps directly to a zero-based result index.
+ * @param onReturnToPreviousThread restores the thread that was visible before search-driven navigation.
  * @param onClose closes search mode and clears the current query.
  * @param modifier modifier applied to the outer row.
  */
@@ -35,9 +38,11 @@ fun SearchBar(
     query: String,
     currentIndex: Int,
     resultCount: Int,
+    canReturnToPreviousThread: Boolean,
     onQueryChange: (String) -> Unit,
     onNavigate: (SearchDirection) -> Unit,
     onJumpToResult: (Int) -> Unit,
+    onReturnToPreviousThread: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -90,6 +95,22 @@ fun SearchBar(
         PlainTooltipBox(text = "Jump to result") {
             TextButton(onClick = { isJumpDialogVisible = true }, enabled = resultCount > 0) {
                 Text("$selectedResultNumber/$resultCount")
+            }
+        }
+
+        if (canReturnToPreviousThread) {
+            // Keep rollback inside the active search controls because it is only meaningful
+            // while users are working in search-driven navigation.
+            PlainTooltipBox(text = "Return to previous thread") {
+                IconButton(
+                    onClick = onReturnToPreviousThread,
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Undo,
+                        contentDescription = "Return to previous thread",
+                    )
+                }
             }
         }
 

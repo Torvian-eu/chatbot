@@ -81,6 +81,7 @@ fun ChatScreen(
     // --- Collect States for ChatArea ---
     val activeChatSessionId by chatViewModel.activeSessionId.collectAsState()
     val chatSessionUiState by chatViewModel.sessionDataState.collectAsState()
+    val currentLeafMessageId = (chatSessionUiState as? DataState.Success)?.data?.currentLeafMessageId
     val availableModels by chatViewModel.availableModels.collectAsState()
     val availableSettings by chatViewModel.availableSettingsForCurrentModel.collectAsState()
     val currentModel by chatViewModel.currentModel.collectAsState()
@@ -110,7 +111,7 @@ fun ChatScreen(
     // wires UI contracts and chat/search viewmodels together.
     val chatSearchCoordinator = remember { ChatSearchCoordinator() }
     val chatSearchState by chatSearchCoordinator.uiState.collectAsState()
-    val navigationRequestVersion by chatSearchCoordinator.navigationRequestVersion.collectAsState()
+    val reconciliationVersion by chatSearchCoordinator.reconciliationVersion.collectAsState()
 
     // Derive enabled tools count
     val enabledToolsCount = enabledToolsForCurrentSession.dataOrNull?.size ?: 0
@@ -144,11 +145,15 @@ fun ChatScreen(
                 searchQuery = chatSearchState.searchQuery,
                 currentSearchIndex = chatSearchState.currentSearchIndex,
                 searchResultsCount = chatSearchState.searchResults.size,
+                canReturnToPreviousThread = chatSearchState.canReturnToPreviousThread,
                 onShowSearch = chatSearchCoordinator::showSearch,
                 onCloseSearch = chatSearchCoordinator::closeSearch,
                 onUpdateSearchQuery = chatSearchCoordinator::updateSearchQuery,
                 onNavigateSearchResult = chatSearchCoordinator::navigateSearchResult,
                 onJumpToSearchResult = chatSearchCoordinator::jumpToSearchResult,
+                onReturnToPreviousThread = {
+                    chatSearchCoordinator.returnToPreviousThread(sessionListViewModel::selectSession)
+                },
             )
         }
     )
@@ -166,7 +171,7 @@ fun ChatScreen(
 
     LaunchedEffect(
         chatSearchCoordinator,
-        navigationRequestVersion,
+        reconciliationVersion,
         authState,
         selectedSessionId,
         activeChatSessionId,
@@ -178,6 +183,7 @@ fun ChatScreen(
             selectedSessionId = selectedSessionId,
             activeChatSessionId = activeChatSessionId,
             isSessionLoaded = chatSessionUiState is DataState.Success,
+            currentLeafMessageId = currentLeafMessageId,
             displayedMessages = chatDisplayedMessages,
             onSwitchBranchToMessage = chatViewModel::switchBranchToMessage,
         )
