@@ -17,6 +17,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.*
 import kotlin.test.assertIs
+import kotlin.time.Duration.Companion.hours
 
 /**
  * Tests for [MessageDaoExposed].
@@ -466,6 +467,127 @@ class MessageDaoExposedTest {
         assertIs<InsertMessageError.ParentNotInSession>(error)
         assertEquals(testUserMessage2.id, error.parentId)
         assertEquals(testSession1.id, error.sessionId)
+    }
+
+    /**
+     * Verifies that cross-session search only returns matches from sessions owned by the requested user and
+     * preserves snippet metadata needed by the client.
+     */
+    @Test
+    fun `searchMessagesByUserId should return owned matches ordered by recency with snippet metadata`() = runTest {
+        val testUser1 = TestDefaults.user1
+        val testUser2 = TestDefaults.user2
+        val foreignSession = testSession1.copy(
+            id = 3L,
+            name = "Foreign Session"
+        )
+        val olderOwnedMatch = testUserMessage1.copy(
+            id = 11L,
+            sessionId = testSession1.id,
+            content = "Earlier note with a Needle hidden in the middle of the sentence.",
+            createdAt = TestDefaults.DEFAULT_INSTANT,
+            updatedAt = TestDefaults.DEFAULT_INSTANT,
+            childrenMessageIds = emptyList()
+        )
+        val newerOwnedMatch = testUserMessage2.copy(
+            id = 12L,
+            sessionId = testSession2.id,
+            content = "Most recent message mentioning NEEDLE so ordering can be verified.",
+            createdAt = TestDefaults.DEFAULT_INSTANT.plus(1.hours),
+            updatedAt = TestDefaults.DEFAULT_INSTANT.plus(1.hours),
+            childrenMessageIds = emptyList()
+        )
+        val foreignMatch = testUserMessage1.copy(
+            id = 13L,
+            sessionId = foreignSession.id,
+            content = "needle inside another user's session should never leak.",
+            createdAt = TestDefaults.DEFAULT_INSTANT.plus(2.hours),
+            updatedAt = TestDefaults.DEFAULT_INSTANT.plus(2.hours),
+            childrenMessageIds = emptyList()
+        )
+
+        testDataManager.createTables(setOf(Table.USERS, Table.CHAT_SESSION_OWNERS))
+        testDataManager.setup(
+            TestDataSet(
+                users = listOf(testUser1, testUser2),
+                chatGroups = listOf(testGroup1, testGroup2),
+                llmModels = listOf(testModel1, testModel2),
+                llmProviders = listOf(testProvider1, testProvider2),
+                modelSettings = listOf(testSettings1, testSettings2),
+                chatSessions = listOf(testSession1, testSession2, foreignSession),
+                chatMessages = listOf(olderOwnedMatch, newerOwnedMatch, foreignMatch)
+            )
+        )
+        testDataManager.insertSessionOwnership(testSession1.id, testUser1.id)
+        testDataManager.insertSessionOwnership(testSession2.id, testUser1.id)
+        testDataManager.insertSessionOwnership(foreignSession.id, testUser2.id)
+
+        val results = messageDao.searchMessagesByUserId(testUser1.id, "needle", limit = 10)
+
+        assertEquals(listOf(newerOwnedMatch.id, olderOwnedMatch.id), results.map { it.messageId })
+        assertEquals(listOf(testSession2.name, testSession1.name), results.map { it.sessionName })
+        assertTrue(results.all { result ->
+            result.snippet.substring(result.matchStartIndex, result.matchEndExclusive)
+                .equals("needle", ignoreCase = true)
+        })
+        assertTrue(results.none { it.sessionId == foreignSession.id })
+    }
+
+    /**
+     * Verifies that the DAO treats `LIKE` wildcard characters in the query as literal text and still honors the
+     * requested result limit after SQL-side filtering and ordering.
+     */
+    @Test
+    fun `searchMessagesByUserId should escape literal like wildcards and honor result limit`() = runTest {
+        val testUser = TestDefaults.user1
+        val newestLiteralMatch = testUserMessage1.copy(
+            id = 21L,
+            sessionId = testSession2.id,
+            content = "Newest note says progress is 100% complete.",
+            createdAt = TestDefaults.DEFAULT_INSTANT.plus(2.hours),
+            updatedAt = TestDefaults.DEFAULT_INSTANT.plus(2.hours),
+            childrenMessageIds = emptyList()
+        )
+        val olderLiteralMatch = testUserMessage2.copy(
+            id = 22L,
+            sessionId = testSession1.id,
+            content = "Older note says we reached 100% yesterday.",
+            createdAt = TestDefaults.DEFAULT_INSTANT.plus(1.hours),
+            updatedAt = TestDefaults.DEFAULT_INSTANT.plus(1.hours),
+            childrenMessageIds = emptyList()
+        )
+        val wildcardOnlyCandidate = testUserMessage1.copy(
+            id = 23L,
+            sessionId = testSession1.id,
+            content = "This mentions 100 percent but never includes the percent sign.",
+            createdAt = TestDefaults.DEFAULT_INSTANT.plus(3.hours),
+            updatedAt = TestDefaults.DEFAULT_INSTANT.plus(3.hours),
+            childrenMessageIds = emptyList()
+        )
+
+        testDataManager.createTables(setOf(Table.USERS, Table.CHAT_SESSION_OWNERS))
+        testDataManager.setup(
+            TestDataSet(
+                users = listOf(testUser),
+                chatGroups = listOf(testGroup1, testGroup2),
+                llmModels = listOf(testModel1, testModel2),
+                llmProviders = listOf(testProvider1, testProvider2),
+                modelSettings = listOf(testSettings1, testSettings2),
+                chatSessions = listOf(testSession1, testSession2),
+                chatMessages = listOf(newestLiteralMatch, olderLiteralMatch, wildcardOnlyCandidate)
+            )
+        )
+        testDataManager.insertSessionOwnership(testSession1.id, testUser.id)
+        testDataManager.insertSessionOwnership(testSession2.id, testUser.id)
+
+        val results = messageDao.searchMessagesByUserId(testUser.id, "100%", limit = 1)
+
+        assertEquals(1, results.size)
+        assertEquals(newestLiteralMatch.id, results.single().messageId)
+        assertEquals("100%", results.single().snippet.substring(
+            results.single().matchStartIndex,
+            results.single().matchEndExclusive
+        ))
     }
 
     @Test

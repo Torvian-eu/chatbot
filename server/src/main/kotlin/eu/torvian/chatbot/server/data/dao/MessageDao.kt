@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.server.data.dao
 
 import arrow.core.Either
+import eu.torvian.chatbot.common.models.api.core.MessageSearchResult
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
@@ -28,6 +29,19 @@ interface MessageDao {
      * @return Either [MessageError.MessageNotFound] if not found, or the [ChatMessage] object.
      */
     suspend fun getMessageById(id: Long): Either<MessageError.MessageNotFound, ChatMessage>
+
+    /**
+     * Searches messages across all sessions owned by the specified user.
+     *
+     * Matching is performed against the raw message content and returns a presentation-ready snippet for
+     * each hit so the API layer can respond without additional transformation.
+     *
+     * @param userId The owner whose sessions should be searched.
+     * @param query Non-blank search string that should be matched literally.
+     * @param limit Maximum number of results to return.
+     * @return Search hits ordered by descending message creation time.
+     */
+    suspend fun searchMessagesByUserId(userId: Long, query: String, limit: Int): List<MessageSearchResult>
 
     /**
      * Inserts a new message.

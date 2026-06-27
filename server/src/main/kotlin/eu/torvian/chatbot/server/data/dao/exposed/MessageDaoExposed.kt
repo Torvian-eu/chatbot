@@ -5,6 +5,7 @@ import arrow.core.getOrElse
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
+import eu.torvian.chatbot.common.models.api.core.MessageSearchResult
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.core.MessageInsertPosition
@@ -13,6 +14,8 @@ import eu.torvian.chatbot.server.data.dao.error.InsertMessageError
 import eu.torvian.chatbot.server.data.dao.error.MessageError
 import eu.torvian.chatbot.server.data.tables.AssistantMessageTable
 import eu.torvian.chatbot.server.data.tables.ChatMessageTable
+import eu.torvian.chatbot.server.data.tables.ChatSessionOwnersTable
+import eu.torvian.chatbot.server.data.tables.ChatSessionTable
 import eu.torvian.chatbot.server.data.tables.mappers.toAssistantMessage
 import eu.torvian.chatbot.server.data.tables.mappers.toUserMessage
 import kotlinx.serialization.json.Json
@@ -23,6 +26,8 @@ import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.time.Instant
 
 /**
@@ -33,7 +38,25 @@ class MessageDaoExposed(
 ) : MessageDao {
 
     companion object {
+        /**
+         * Logger used for DAO diagnostics.
+         */
         private val logger: Logger = LogManager.getLogger(MessageDaoExposed::class.java)
+
+        /**
+         * Escape character used to keep `LIKE` matching literal when user queries contain wildcard characters.
+         */
+        private const val LIKE_ESCAPE_CHAR: Char = '\\'
+
+        /**
+         * Number of surrounding characters preserved on each side of a detected match.
+         */
+        private const val SNIPPET_CONTEXT_CHAR_COUNT: Int = 120
+
+        /**
+         * Ellipsis inserted when the snippet is trimmed away from the full message boundaries.
+         */
+        private const val SNIPPET_ELLIPSIS: String = "…"
     }
 
     override suspend fun getMessagesBySessionId(sessionId: Long): List<ChatMessage> =
@@ -71,6 +94,34 @@ class MessageDaoExposed(
                     ChatMessage.Role.ASSISTANT -> query.toAssistantMessage()
                 }
             }
+        }
+
+    override suspend fun searchMessagesByUserId(userId: Long, query: String, limit: Int): List<MessageSearchResult> =
+        transactionScope.transaction {
+            val normalizedQuery = query.lowercase()
+            val likePattern = buildContainsLikePattern(normalizedQuery)
+
+            ChatMessageTable
+                .join(
+                    ChatSessionTable,
+                    JoinType.INNER,
+                    additionalConstraint = { ChatMessageTable.sessionId eq ChatSessionTable.id }
+                )
+                .join(
+                    ChatSessionOwnersTable,
+                    JoinType.INNER,
+                    additionalConstraint = { ChatSessionTable.id eq ChatSessionOwnersTable.sessionId }
+                )
+                .selectAll()
+                .where {
+                    // SQLite has no portable ILIKE, so match via LOWER(column) LIKE LOWER(query) instead.
+                    (ChatSessionOwnersTable.userId eq userId) and
+                            (ChatMessageTable.content.lowerCase() like likePattern)
+                }
+                .orderBy(ChatMessageTable.createdAt to SortOrder.DESC)
+                .limit(limit)
+                .map { row -> row.toMessageSearchResult(query, normalizedQuery) }
+                .toList()
         }
 
     override suspend fun insertMessage(
@@ -391,6 +442,102 @@ class MessageDaoExposed(
         if (deletedCount == 0) {
             throw IllegalStateException("Failed to delete message with ID $messageId")
         }
+    }
+
+    /**
+     * Converts a joined message/session row into a [MessageSearchResult].
+     *
+     * Filtering happens in SQL before rows are materialized. This mapper only derives snippet metadata for rows
+     * already known to match.
+     *
+     * @param query Search string already validated by the service layer.
+     * @param normalizedQuery Lower-cased copy of [query] reused for the rare defensive fallback.
+     * @return A populated search result for the matched row.
+     */
+    private fun ResultRow.toMessageSearchResult(query: String, normalizedQuery: String): MessageSearchResult {
+        val content = this[ChatMessageTable.content]
+        val firstMatchIndex = findSnippetMatchIndex(content, query, normalizedQuery)
+
+        val matchLength = query.length
+        val (snippet, matchStartIndex, matchEndExclusive) = buildSnippet(content, firstMatchIndex, matchLength)
+
+        return MessageSearchResult(
+            sessionId = this[ChatMessageTable.sessionId].value,
+            sessionName = this[ChatSessionTable.name],
+            messageId = this[ChatMessageTable.id].value,
+            messageRole = this[ChatMessageTable.role],
+            snippet = snippet,
+            matchStartIndex = matchStartIndex,
+            matchEndExclusive = matchEndExclusive,
+            createdAt = Instant.fromEpochMilliseconds(this[ChatMessageTable.createdAt])
+        )
+    }
+
+    /**
+     * Builds a `contains` pattern for `LIKE` while escaping wildcard characters found in user input.
+     *
+     * @param normalizedQuery Lower-cased query text that should be matched literally.
+     * @return Pattern equivalent to `%query%` with `%`, `_`, and the escape character itself escaped.
+     */
+    private fun buildContainsLikePattern(normalizedQuery: String): LikePattern {
+        val escapedQuery = buildString(normalizedQuery.length) {
+            normalizedQuery.forEach { character ->
+                if (character == LIKE_ESCAPE_CHAR || character == '%' || character == '_') {
+                    append(LIKE_ESCAPE_CHAR)
+                }
+                append(character)
+            }
+        }
+        return LikePattern("%$escapedQuery%", LIKE_ESCAPE_CHAR)
+    }
+
+    /**
+     * Locates the first match to highlight inside the original message content.
+     *
+     * The primary path uses Kotlin's case-insensitive substring search so snippet offsets are calculated against
+     * the original string. A secondary normalized lookup is kept as a narrow fallback in case the SQL
+     * `LOWER(...) LIKE ...` predicate and Kotlin's case-insensitive matching disagree on edge-case casing.
+     *
+     * @param content Full message content returned by SQL.
+     * @param query Search string already validated by the service layer.
+     * @param normalizedQuery Lower-cased copy of [query].
+     * @return Inclusive start index of the first match inside [content].
+     * @throws IllegalStateException When SQL returned a row that can no longer be highlighted consistently.
+     */
+    private fun findSnippetMatchIndex(content: String, query: String, normalizedQuery: String): Int {
+        return content.indexOf(query, ignoreCase = true)
+            .takeIf { it >= 0 }
+            ?: content.lowercase().indexOf(normalizedQuery).takeIf { it >= 0 }
+            ?: throw IllegalStateException("Search query matched in SQL but not during snippet generation.")
+    }
+
+    /**
+     * Extracts a highlighted snippet around a single match.
+     *
+     * The returned offsets are relative to the snippet itself. Ellipses are added only when the snippet no
+     * longer includes the full message boundaries, and the offsets are adjusted accordingly.
+     *
+     * @param content Full message content.
+     * @param matchIndex Inclusive match start inside [content].
+     * @param matchLength Character length of the matched query.
+     * @return Triple containing snippet text, snippet-relative match start, and snippet-relative match end.
+     */
+    private fun buildSnippet(content: String, matchIndex: Int, matchLength: Int): Triple<String, Int, Int> {
+        val windowStart = max(matchIndex - SNIPPET_CONTEXT_CHAR_COUNT, 0)
+        val windowEnd = min(matchIndex + matchLength + SNIPPET_CONTEXT_CHAR_COUNT, content.length)
+
+        val hasTrimmedPrefix = windowStart > 0
+        val hasTrimmedSuffix = windowEnd < content.length
+
+        val prefix = if (hasTrimmedPrefix) SNIPPET_ELLIPSIS else ""
+        val suffix = if (hasTrimmedSuffix) SNIPPET_ELLIPSIS else ""
+        val snippetBody = content.substring(windowStart, windowEnd)
+        val snippet = prefix + snippetBody + suffix
+
+        val matchStartIndex = prefix.length + (matchIndex - windowStart)
+        val matchEndExclusive = matchStartIndex + matchLength
+
+        return Triple(snippet, matchStartIndex, matchEndExclusive)
     }
 
     /**
