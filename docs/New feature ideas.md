@@ -37,8 +37,32 @@
 ### Make chat session importable from file/clipboard (for ChatGPT export format)
 
 ### Make messages searchable
-- Global search: add a search bar to the left panel on the chat screen, which allows the user to search for messages across all sessions. The search results should show the message content, session name, and a link to the message in the session.
-- Local search: add a search bar to the "more" menu in the top app bar, which allows the user to search for messages within the current session. The search results should show the message content, and a link to the message in the session.
+
+#### (done) Make chat messages searchable (within a single chat session)
+- add an option to the "more" menu in the top app bar, which allows the user to search for messages within the current chat session. (As an alternative it should be possible to open the search bar by pressing Ctrl+F / Cmd+F)
+- The search bar should temporarily replace the center items in the top app bar: model & model settings selector, tools selector, and more menu.
+- The search bar should have:
+  - a text input field
+  - a back and forward button to cycle through search results
+  - a label showing the current search result index and total number of results (e.g., "2/5"). Clicking the label should allow the user to manually enter a search result index to jump to.
+  - a close button to exit the search mode and restore the original top app bar items.
+- After the search is performed, it should highlight all instances of the search text found.
+- The scroll position should move to the closest instance (in relation to current scroll position).
+- The user should be able to cycle thru instances (with back/forward navigation, and manual number entry)
+
+#### (done) Make chat messages searchable (across all chat sessions)
+- Add a search icon button to the left panel on the chat screen (next to the "Add Session" button). This opens a new dialog with a search text input field and a list of search results.
+- Each search result should show:
+  - The partial message content with the search text highlighted. The search text should be surrounded by a few lines of message content, so that it appears right in the middle.
+  - Session name
+  - A link to the message in the session. Clicking the link should open the session and scroll to the search text within the message content. (We can use the local search feature to achieve this, by pre-filling the search text and selecting the correct search result index)
+- The search dialog should contain:
+  - A text input field for the search text
+  - A list of search results
+  - A search action button to perform the search
+  - A close button to close the dialog and return to the chat screen
+- Closing the dialog should not reset the search results. Reoping the dialog should show the previous search results, until a new search is performed.
+- The search should be done server-side, and should search across all chat sessions for the current user. The server should return a list of search results, which are then displayed in the dialog.
 
 ### (done) Add Save as Copy button to message edit area (in addition to Save/Cancel)
 This action saves the edited message as a new message, and creates a new branch in the conversation (also for leaf messages).
