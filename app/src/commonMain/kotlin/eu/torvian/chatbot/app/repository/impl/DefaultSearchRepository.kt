@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.app.repository.impl
 
 import arrow.core.Either
+import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
@@ -22,6 +23,11 @@ import kotlinx.coroutines.flow.update
 class DefaultSearchRepository(
     private val searchApi: SearchApi
 ) : SearchRepository {
+
+    /**
+     * Monotonic request sequence used to suppress stale completions when searches overlap.
+     */
+    private var latestRequestSequence: Long = 0
 
     /**
      * Mutable backing state storing the latest search request result.
@@ -46,26 +52,45 @@ class DefaultSearchRepository(
         query: String,
         scope: MessageSearchScope,
     ): Either<RepositoryError, Unit> {
-        if (_searchResults.value.isLoading) {
-            return Unit.right()
-        }
-
+        val requestSequence = beginSearchRequest()
         _searchResults.update { DataState.Loading }
-        return searchApi.searchMessages(query, scope)
-            .map { results ->
-                _searchResults.update { DataState.Success(results) }
-            }
-            .mapLeft { apiResourceError ->
+        return searchApi.searchMessages(query, scope).fold(
+            ifLeft = { apiResourceError ->
                 val repositoryError = apiResourceError.toRepositoryError("Failed to search messages")
-                _searchResults.update { DataState.Error(repositoryError) }
-                repositoryError
+                if (requestSequence != latestRequestSequence) {
+                    // A newer request already superseded this failure, so keep the fresher result state
+                    // and suppress an obsolete error return to the caller.
+                    Unit.right()
+                } else {
+                    _searchResults.update { DataState.Error(repositoryError) }
+                    repositoryError.left()
+                }
+            },
+            ifRight = { results ->
+                if (requestSequence == latestRequestSequence) {
+                    _searchResults.update { DataState.Success(results) }
+                }
+                Unit.right()
             }
+        )
     }
 
     /**
      * Resets the cached search result state to idle.
      */
     override fun clearSearch() {
+        latestRequestSequence += 1
         _searchResults.value = DataState.Idle
+    }
+
+
+    /**
+     * Records a new latest-request token before launching the API call.
+     *
+     * @return Sequence number that uniquely identifies the in-flight request.
+     */
+    private fun beginSearchRequest(): Long {
+        latestRequestSequence += 1
+        return latestRequestSequence
     }
 }

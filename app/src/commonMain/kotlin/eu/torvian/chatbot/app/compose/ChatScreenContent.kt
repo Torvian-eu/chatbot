@@ -15,11 +15,10 @@ import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.compose.chatarea.ChatArea
 import eu.torvian.chatbot.app.compose.chatarea.ChatAreaActions
 import eu.torvian.chatbot.app.compose.chatarea.ChatAreaState
-import eu.torvian.chatbot.app.domain.contracts.DataState
-import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.compose.sessionlist.SessionListActions
 import eu.torvian.chatbot.app.compose.sessionlist.SessionListPanel
 import eu.torvian.chatbot.app.compose.sessionlist.SessionListState
+import eu.torvian.chatbot.app.viewmodel.CrossSessionSearchUiState
 import eu.torvian.chatbot.common.models.api.core.MessageSearchResult
 import eu.torvian.chatbot.common.models.api.core.MessageSearchScope
 
@@ -33,12 +32,7 @@ import eu.torvian.chatbot.common.models.api.core.MessageSearchScope
  * @param chatAreaState The current UI state contract for the chat area.
  * @param chatAreaActions The actions contract for the chat area.
  * @param isSessionListCollapsed Whether the session list panel is collapsed.
- * @param isSearchDialogVisible Whether the cross-session search dialog is visible.
- * @param searchQuery Current editable query for cross-session search.
- * @param lastSearchQuery Query that produced the currently displayed cross-session results.
- * @param searchScope Scope currently selected in the dialog.
- * @param lastSearchScope Scope that produced the currently displayed search results.
- * @param searchResultsState Current search result state for the dialog.
+ * @param crossSessionSearchState Cohesive state for the cross-session search dialog.
  * @param onDismissSearchDialog Callback that closes the dialog.
  * @param onUpdateSearchQuery Callback for search query changes.
  * @param onUpdateSearchScope Callback for search scope changes.
@@ -52,12 +46,7 @@ fun ChatScreenContent(
     chatAreaState: ChatAreaState,
     chatAreaActions: ChatAreaActions,
     isSessionListCollapsed: Boolean,
-    isSearchDialogVisible: Boolean,
-    searchQuery: String,
-    lastSearchQuery: String,
-    searchScope: MessageSearchScope,
-    lastSearchScope: MessageSearchScope,
-    searchResultsState: DataState<RepositoryError, List<MessageSearchResult>>,
+    crossSessionSearchState: CrossSessionSearchUiState,
     onDismissSearchDialog: () -> Unit,
     onUpdateSearchQuery: (String) -> Unit,
     onUpdateSearchScope: (MessageSearchScope) -> Unit,
@@ -81,12 +70,7 @@ fun ChatScreenContent(
                 SessionListPanel(
                     state = sessionListState,
                     actions = sessionListActions,
-                    isSearchDialogVisible = isSearchDialogVisible,
-                    searchQuery = searchQuery,
-                    lastSearchQuery = lastSearchQuery,
-                    searchScope = searchScope,
-                    lastSearchScope = lastSearchScope,
-                    searchResultsState = searchResultsState,
+                    crossSessionSearchState = crossSessionSearchState,
                     onDismissSearchDialog = onDismissSearchDialog,
                     onUpdateSearchQuery = onUpdateSearchQuery,
                     onUpdateSearchScope = onUpdateSearchScope,

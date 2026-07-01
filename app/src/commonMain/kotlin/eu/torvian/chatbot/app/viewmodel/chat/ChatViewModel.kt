@@ -1,16 +1,21 @@
 package eu.torvian.chatbot.app.viewmodel.chat
 
 import androidx.lifecycle.ViewModel
+import eu.torvian.chatbot.app.chat.search.MessageSearchMatch
+import eu.torvian.chatbot.app.chat.search.SearchDirection
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.ToolCallsMap
+import eu.torvian.chatbot.app.utils.misc.kmpLogger
+import eu.torvian.chatbot.app.viewmodel.SearchNavigationIntent
+import eu.torvian.chatbot.app.viewmodel.SearchNavigationState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatAreaDialogState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.usecase.*
-import eu.torvian.chatbot.common.models.core.FileReference
-import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
+import eu.torvian.chatbot.common.models.core.FileReference
+import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.ModelSettings
 import eu.torvian.chatbot.common.models.tool.ToolCall
@@ -19,7 +24,7 @@ import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 /**
@@ -45,6 +50,7 @@ import kotlinx.coroutines.launch
  * @param copyToClipboardUC Use case for copying content to clipboard
  * @param toggleToolsUC Use case for toggling tools for sessions
  * @param fileReferenceUC Use case for managing file references
+ * @param navigationState State holder for cross-session search navigation intent.
  * @param normalScope Coroutine scope for UI operations
  * @param backgroundScope Coroutine scope for background operations (should only differ from normalScope in tests)
  */
@@ -63,9 +69,14 @@ class ChatViewModel(
     private val copyToClipboardUC: CopyToClipboardUseCase,
     private val toggleToolsUC: ToggleToolsUseCase,
     private val fileReferenceUC: FileReferenceUseCase,
+    private val navigationState: SearchNavigationState,
     private val normalScope: CoroutineScope,
     private val backgroundScope: CoroutineScope
 ) : ViewModel(normalScope) {
+
+    companion object {
+        private val logger = kmpLogger<ChatViewModel>()
+    }
 
     /**
      * Job tracking the currently active message sending operation.
@@ -177,6 +188,97 @@ class ChatViewModel(
      * File references attached to the current message being composed.
      */
     val pendingFileReferences: StateFlow<List<FileReference>> = state.pendingFileReferences
+
+    // --- In-Session Search State Properties ---
+
+    /**
+     * Whether the in-session search UI should currently be visible.
+     */
+    val isSearchActive: StateFlow<Boolean> = state.isSearchActive
+
+    /**
+     * Current query applied to the displayed messages.
+     */
+    val searchQuery: StateFlow<String> = state.searchQuery
+
+    /**
+     * Occurrence-level matches derived from the displayed messages and [searchQuery].
+     */
+    val searchResults: StateFlow<List<MessageSearchMatch>> = state.searchResults
+
+    /**
+     * Currently selected result index, or `-1` when no match is selectable.
+     */
+    val currentSearchIndex: StateFlow<Int> = state.currentSearchIndex
+
+    /**
+     * Previously displayed thread that can be restored after search-driven branch switching.
+     */
+    val rollbackTarget: StateFlow<Long?> = state.rollbackTarget
+
+    /**
+     * Whether the UI should currently offer the lightweight rollback action.
+     */
+    val canReturnToPreviousThread: Boolean
+        get() = isSearchActive.value &&
+                rollbackTarget.value != null
+
+    init {
+        // Observe navigation intent and react when this VM is active for the target session
+        // and the session data is loaded. This handles all cases:
+        // - Intent arrives before session load completes
+        // - Session load completes after intent is already present
+        // - Session becomes active later
+        combine(
+            navigationState.intent,
+            activeSessionId,
+            sessionDataState
+        ) { intent, activeId, sessionData ->
+            Triple(intent, activeId, sessionData)
+        }
+            .filter { (intent, activeId, sessionData) ->
+                intent != null && activeId == intent.sessionId && sessionData is DataState.Success
+            }
+            .onEach { (intent, _, _) ->
+                intent?.let { safeIntent ->
+                    processNavigationIntent(safeIntent)
+                }
+            }
+            .launchIn(backgroundScope)
+    }
+
+    /**
+     * Processes a navigation intent sequentially, awaiting branch switch before search activation.
+     *
+     * @param intent The navigation intent to process.
+     */
+    private suspend fun processNavigationIntent(intent: SearchNavigationIntent) {
+        // Get current leaf before any potential branch switch
+        val currentLeafBeforeSwitch = (sessionDataState.value as? DataState.Success)?.data?.currentLeafMessageId
+
+        // Check if target message is already visible in current branch
+        val isMessageVisible = displayedMessages.value.any { it.id == intent.messageId }
+
+        if (isMessageVisible) {
+            // No branch switch needed, no rollback target
+            state.setRollbackTarget(null)
+        } else {
+            // Branch switch needed - capture current leaf as rollback target
+            state.setRollbackTarget(currentLeafBeforeSwitch)
+            switchBranchUC.execute(intent.messageId)
+        }
+
+        // Set the pending target and query - the search result derivation flow will
+        // consume the pending target and select the index when results are computed
+        state.setPendingSearchMessageTarget(intent.messageId)
+        state.updateSearchQuery(intent.query)
+        state.showSearch()
+
+        // Clear the intent so it's not reprocessed
+        navigationState.clearIntent()
+
+        logger.debug("Processed navigation intent: session ${intent.sessionId}, message ${intent.messageId}")
+    }
 
     // --- Public Action Functions (Delegated to Use Cases) ---
 
@@ -348,9 +450,11 @@ class ChatViewModel(
 
     /**
      * Switches the currently displayed chat branch to the one that includes the given message ID.
+     *
+     * @return Job that can be used to wait for the branch switch to complete.
      */
-    fun switchBranchToMessage(targetMessageId: Long) {
-        normalScope.launch {
+    fun switchBranchToMessage(targetMessageId: Long): Job {
+        return normalScope.launch {
             switchBranchUC.execute(targetMessageId)
         }
     }
@@ -371,6 +475,67 @@ class ChatViewModel(
         normalScope.launch {
             selectSettingsUC.execute(settingsId)
         }
+    }
+
+    // --- In-Session Search Actions ---
+
+    /**
+     * Shows the in-session search UI without changing the current query.
+     */
+    fun showSearch() {
+        state.showSearch()
+    }
+
+    /**
+     * Closes the in-session search UI and clears the active query and selection.
+     *
+     * The rollback state is intentionally preserved so users can still return after dismissing search
+     * and reopening it in the same session context.
+     */
+    fun closeSearch() {
+        state.closeSearch()
+    }
+
+    /**
+     * Replaces the active query and resets the selected occurrence.
+     *
+     * The resulting occurrence list is re-derived from the currently displayed messages.
+     *
+     * @param query New query entered by the user.
+     */
+    fun updateSearchQuery(query: String) {
+        state.updateSearchQuery(query)
+    }
+
+    /**
+     * Moves the selected occurrence forward or backward through the current result set.
+     *
+     * @param direction Requested navigation direction.
+     */
+    fun navigateSearchResult(direction: SearchDirection) {
+        state.navigateSearchResult(direction)
+    }
+
+    /**
+     * Selects a concrete occurrence index directly.
+     *
+     * @param index Zero-based result index requested by the UI.
+     */
+    fun jumpToSearchResult(index: Int) {
+        state.jumpToSearchResult(index)
+    }
+
+    /**
+     * Starts restoration of the previously displayed thread when a rollback target is available.
+     * Clears the rollback target after initiating the switch, so the button disappears
+     * once the rollback action has been used.
+     */
+    fun returnToPreviousThread() {
+        val rollbackTarget = rollbackTarget.value ?: return
+        // Clear rollback target immediately so button disappears after use
+        state.setRollbackTarget(null)
+        switchBranchToMessage(rollbackTarget)
+        closeSearch()
     }
 
     // --- File Reference Management ---
@@ -591,7 +756,8 @@ class ChatViewModel(
      * Handles the request to insert a message (show dialog with pre-bound actions).
      */
     fun onRequestInsertMessage(message: ChatMessage) {
-        state.setDialogState(ChatAreaDialogState.InsertMessage(
+        state.setDialogState(
+            ChatAreaDialogState.InsertMessage(
             targetMessage = message,
             onConfirm = { position, role, content ->
                 confirmInsertMessage(message.id, position, role, content)

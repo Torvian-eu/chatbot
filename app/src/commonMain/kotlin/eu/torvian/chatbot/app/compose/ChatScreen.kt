@@ -2,20 +2,17 @@ package eu.torvian.chatbot.app.compose
 
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import eu.torvian.chatbot.app.chat.search.ChatSearchCoordinator
 import eu.torvian.chatbot.app.chat.search.SearchDirection
 import eu.torvian.chatbot.app.compose.chatarea.ChatAreaActions
 import eu.torvian.chatbot.app.compose.chatarea.ChatAreaState
 import eu.torvian.chatbot.app.compose.chatarea.ChatTopBarContent
-import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.compose.sessionlist.SessionListActions
 import eu.torvian.chatbot.app.compose.sessionlist.SessionListState
 import eu.torvian.chatbot.app.compose.topbar.TopBarContentProvider
 import eu.torvian.chatbot.app.repository.AuthState
-import eu.torvian.chatbot.app.viewmodel.SearchViewModel
+import eu.torvian.chatbot.app.viewmodel.CrossSessionSearchViewModel
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
 import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
-import eu.torvian.chatbot.common.models.api.core.MessageSearchResult
 import eu.torvian.chatbot.common.models.core.ChatGroup
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
@@ -52,7 +49,7 @@ fun ChatScreen(
     sessionListViewModel: SessionListViewModel = koinViewModel(),
     authState: AuthState
 ) {
-    val searchViewModel: SearchViewModel = koinViewModel()
+    val crossSessionSearchViewModel: CrossSessionSearchViewModel = koinViewModel()
 
     // Collect selected session first — its ID is used as the key for the ChatViewModel.
     val selectedSession by sessionListViewModel.selectedSession.collectAsState()
@@ -81,7 +78,6 @@ fun ChatScreen(
     // --- Collect States for ChatArea ---
     val activeChatSessionId by chatViewModel.activeSessionId.collectAsState()
     val chatSessionUiState by chatViewModel.sessionDataState.collectAsState()
-    val currentLeafMessageId = (chatSessionUiState as? DataState.Success)?.data?.currentLeafMessageId
     val availableModels by chatViewModel.availableModels.collectAsState()
     val availableSettings by chatViewModel.availableSettingsForCurrentModel.collectAsState()
     val currentModel by chatViewModel.currentModel.collectAsState()
@@ -102,18 +98,14 @@ fun ChatScreen(
     val pendingFileReferences by chatViewModel.pendingFileReferences.collectAsState()
 
     // --- Collect states for cross-session search ---
-    val isSearchDialogVisible by searchViewModel.isSearchDialogVisible.collectAsState()
-    val crossSessionSearchQuery by searchViewModel.searchQuery.collectAsState()
-    val lastCrossSessionSearchQuery by searchViewModel.lastSearchQuery.collectAsState()
-    val crossSessionSearchScope by searchViewModel.searchScope.collectAsState()
-    val lastCrossSessionSearchScope by searchViewModel.lastSearchScope.collectAsState()
-    val crossSessionSearchResultsState by searchViewModel.searchResults.collectAsState()
+    val crossSessionSearchState by crossSessionSearchViewModel.uiState.collectAsState()
 
-    // Keep session-local in-session search state outside the composable body so this screen only
-    // wires UI contracts and chat/search viewmodels together.
-    val chatSearchCoordinator = remember { ChatSearchCoordinator() }
-    val chatSearchState by chatSearchCoordinator.uiState.collectAsState()
-    val reconciliationVersion by chatSearchCoordinator.reconciliationVersion.collectAsState()
+    // In-session search state is now managed directly by ChatViewModel
+    val isSearchActive by chatViewModel.isSearchActive.collectAsState()
+    val searchQuery by chatViewModel.searchQuery.collectAsState()
+    val searchResults by chatViewModel.searchResults.collectAsState()
+    val currentSearchIndex by chatViewModel.currentSearchIndex.collectAsState()
+    val canReturnToPreviousThread = chatViewModel.canReturnToPreviousThread
 
     // Derive enabled tools count
     val enabledToolsCount = enabledToolsForCurrentSession.dataOrNull?.size ?: 0
@@ -143,19 +135,17 @@ fun ChatScreen(
                 isSessionListCollapsed = isSessionListCollapsed,
                 onToggleSessionList = { isSessionListCollapsed = !isSessionListCollapsed },
                 onCopyThread = { chatViewModel.copyThreadToClipboard() },
-                isSearchActive = chatSearchState.isSearchActive,
-                searchQuery = chatSearchState.searchQuery,
-                currentSearchIndex = chatSearchState.currentSearchIndex,
-                searchResultsCount = chatSearchState.searchResults.size,
-                canReturnToPreviousThread = chatSearchState.canReturnToPreviousThread,
-                onShowSearch = chatSearchCoordinator::showSearch,
-                onCloseSearch = chatSearchCoordinator::closeSearch,
-                onUpdateSearchQuery = chatSearchCoordinator::updateSearchQuery,
-                onNavigateSearchResult = chatSearchCoordinator::navigateSearchResult,
-                onJumpToSearchResult = chatSearchCoordinator::jumpToSearchResult,
-                onReturnToPreviousThread = {
-                    chatSearchCoordinator.returnToPreviousThread(sessionListViewModel::selectSession)
-                },
+                isSearchActive = isSearchActive,
+                searchQuery = searchQuery,
+                currentSearchIndex = currentSearchIndex,
+                searchResultsCount = searchResults.size,
+                canReturnToPreviousThread = canReturnToPreviousThread,
+                onShowSearch = chatViewModel::showSearch,
+                onCloseSearch = chatViewModel::closeSearch,
+                onUpdateSearchQuery = chatViewModel::updateSearchQuery,
+                onNavigateSearchResult = chatViewModel::navigateSearchResult,
+                onJumpToSearchResult = chatViewModel::jumpToSearchResult,
+                onReturnToPreviousThread = chatViewModel::returnToPreviousThread,
             )
         }
     )
@@ -169,26 +159,6 @@ fun ChatScreen(
         ) {
             chatViewModel.loadSession(selectedSessionId, authState.userId)
         }
-    }
-
-    LaunchedEffect(
-        chatSearchCoordinator,
-        reconciliationVersion,
-        authState,
-        selectedSessionId,
-        activeChatSessionId,
-        chatSessionUiState,
-        chatDisplayedMessages,
-    ) {
-        chatSearchCoordinator.onChatContextChanged(
-            isUserAuthenticated = authState is AuthState.Authenticated,
-            selectedSessionId = selectedSessionId,
-            activeChatSessionId = activeChatSessionId,
-            isSessionLoaded = chatSessionUiState is DataState.Success,
-            currentLeafMessageId = currentLeafMessageId,
-            displayedMessages = chatDisplayedMessages,
-            onSwitchBranchToMessage = chatViewModel::switchBranchToMessage,
-        )
     }
 
     // --- SessionListPanel Contract Construction ---
@@ -206,7 +176,7 @@ fun ChatScreen(
             dialogState = dialogState
         )
     }
-    val sessionListPanelActions = remember(sessionListViewModel, searchViewModel) {
+    val sessionListPanelActions = remember(sessionListViewModel, crossSessionSearchViewModel) {
         object : SessionListActions {
             override fun onSessionSelected(sessionId: Long?) = sessionListViewModel.selectSession(sessionId)
             override fun onStartCreatingNewGroup() = sessionListViewModel.startCreatingNewGroup()
@@ -222,7 +192,7 @@ fun ChatScreen(
             override fun onSaveRenamedGroup() = sessionListViewModel.saveRenamedGroup()
             override fun onCancelRenamingGroup() = sessionListViewModel.cancelRenamingGroup()
             override fun onRetryLoadingSessions() = sessionListViewModel.loadSessionsAndGroups()
-            override fun onSearchClick() = searchViewModel.showSearchDialog()
+            override fun onSearchClick() = crossSessionSearchViewModel.showSearchDialog()
 
             // Dialog management actions
             override fun onShowNewSessionDialog() = sessionListViewModel.showNewSessionDialog()
@@ -243,28 +213,13 @@ fun ChatScreen(
         }
     }
 
-    val onCrossSessionSearchResultClick = remember(
-        searchViewModel,
-        chatSearchCoordinator,
-        sessionListViewModel,
-        crossSessionSearchQuery,
-        lastCrossSessionSearchQuery,
-    ) {
-        { result: MessageSearchResult ->
-            val navigationQuery = lastCrossSessionSearchQuery.ifBlank { crossSessionSearchQuery }.trim()
-            searchViewModel.hideSearchDialog()
-            chatSearchCoordinator.beginCrossSessionNavigation(result, navigationQuery)
-            sessionListViewModel.selectSession(result.sessionId)
-        }
-    }
-
     // --- ChatArea Contract Construction ---
     val chatAreaState = remember(
         chatSessionUiState, availableModels, availableSettings, currentModel, currentSettings, modelsById,
         chatInputContent, chatReplyTargetMessage, chatEditingMessage, chatEditingContent,
         chatEditingFileReferences, chatEditingBasePathOverride, chatDisplayedMessages, chatCollapsedMessageIds,
         chatIsSendingMessage, chatDialogState, enabledToolsCount, toolCallsMap, pendingFileReferences,
-        chatSearchState,
+        isSearchActive, searchQuery, searchResults, currentSearchIndex,
     ) {
         ChatAreaState(
             sessionUiState = chatSessionUiState,
@@ -286,13 +241,13 @@ fun ChatScreen(
             enabledToolsCount = enabledToolsCount,
             toolCallsMap = toolCallsMap,
             pendingFileReferences = pendingFileReferences,
-            searchQuery = chatSearchState.searchQuery,
-            searchResults = chatSearchState.searchResults,
-            currentSearchIndex = chatSearchState.currentSearchIndex,
-            isSearchActive = chatSearchState.isSearchActive,
+            searchQuery = searchQuery,
+            searchResults = searchResults,
+            currentSearchIndex = currentSearchIndex,
+            isSearchActive = isSearchActive,
         )
     }
-    val chatAreaActions = remember(chatViewModel, chatSearchCoordinator, selectedSession, authState) {
+    val chatAreaActions = remember(chatViewModel, sessionListViewModel) {
         object : ChatAreaActions {
             override fun onUpdateInput(newText: String) = chatViewModel.updateInput(newText)
             override fun onSendMessage() = chatViewModel.sendMessage()
@@ -308,7 +263,9 @@ fun ChatScreen(
             override fun onRequestDeleteThread(message: ChatMessage) = chatViewModel.requestDeleteMessageRecursively(message)
             override fun onRequestInsertMessage(message: ChatMessage) = chatViewModel.onRequestInsertMessage(message)
             override fun onCancelDialog() = chatViewModel.cancelDialog()
-            override fun onSwitchBranchToMessage(messageId: Long) = chatViewModel.switchBranchToMessage(messageId)
+            override fun onSwitchBranchToMessage(messageId: Long) {
+                chatViewModel.switchBranchToMessage(messageId)
+            }
             override fun onToggleMessageCollapsed(messageId: Long) = chatViewModel.toggleMessageCollapsed(messageId)
             override fun onSelectModel(modelId: Long?) = chatViewModel.selectModel(modelId)
             override fun onSelectSettings(settingsId: Long?) = chatViewModel.selectSettings(settingsId)
@@ -319,13 +276,13 @@ fun ChatScreen(
                 chatViewModel.copyMessageToClipboard(message)
             override fun onCopyThread() =
                 chatViewModel.copyThreadToClipboard()
-            override fun onShowSearch() = chatSearchCoordinator.showSearch()
-            override fun onCloseSearch() = chatSearchCoordinator.closeSearch()
-            override fun onUpdateSearchQuery(query: String) = chatSearchCoordinator.updateSearchQuery(query)
+            override fun onShowSearch() = chatViewModel.showSearch()
+            override fun onCloseSearch() = chatViewModel.closeSearch()
+            override fun onUpdateSearchQuery(query: String) = chatViewModel.updateSearchQuery(query)
             override fun onNavigateSearchResult(direction: SearchDirection) =
-                chatSearchCoordinator.navigateSearchResult(direction)
+                chatViewModel.navigateSearchResult(direction)
             override fun onJumpToSearchResult(index: Int) =
-                chatSearchCoordinator.jumpToSearchResult(index)
+                chatViewModel.jumpToSearchResult(index)
             override fun onBranchAndContinue(message: ChatMessage) =
                 chatViewModel.sendMessage(continueFromMessage = message)
             override fun onRegenerateMessage(message: ChatMessage) =
@@ -367,17 +324,12 @@ fun ChatScreen(
         chatAreaState = chatAreaState,
         chatAreaActions = chatAreaActions,
         isSessionListCollapsed = isSessionListCollapsed,
-        isSearchDialogVisible = isSearchDialogVisible,
-        searchQuery = crossSessionSearchQuery,
-        lastSearchQuery = lastCrossSessionSearchQuery,
-        searchScope = crossSessionSearchScope,
-        lastSearchScope = lastCrossSessionSearchScope,
-        searchResultsState = crossSessionSearchResultsState,
-        onDismissSearchDialog = searchViewModel::hideSearchDialog,
-        onUpdateSearchQuery = searchViewModel::updateSearchQuery,
-        onUpdateSearchScope = searchViewModel::updateSearchScope,
-        onPerformSearch = searchViewModel::performSearch,
-        onSearchResultClick = onCrossSessionSearchResultClick,
+        crossSessionSearchState = crossSessionSearchState,
+        onDismissSearchDialog = crossSessionSearchViewModel::hideSearchDialog,
+        onUpdateSearchQuery = crossSessionSearchViewModel::updateSearchQuery,
+        onUpdateSearchScope = crossSessionSearchViewModel::updateSearchScope,
+        onPerformSearch = crossSessionSearchViewModel::performSearch,
+        onSearchResultClick = crossSessionSearchViewModel::onSearchResultClick
     )
 }
 

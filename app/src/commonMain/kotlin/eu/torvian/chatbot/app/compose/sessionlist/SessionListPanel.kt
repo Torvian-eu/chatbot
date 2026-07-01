@@ -15,7 +15,7 @@ import eu.torvian.chatbot.app.compose.common.LoadingOverlay
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.contracts.SessionListData
 import eu.torvian.chatbot.app.domain.contracts.SessionListDialogState
-import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.app.viewmodel.CrossSessionSearchUiState
 import eu.torvian.chatbot.common.models.api.core.MessageSearchResult
 import eu.torvian.chatbot.common.models.api.core.MessageSearchScope
 import eu.torvian.chatbot.common.models.core.ChatGroup
@@ -29,12 +29,7 @@ import eu.torvian.chatbot.common.models.core.ChatGroup
  *
  * @param state The current state contract for the session list panel.
  * @param actions The actions contract for the session list panel.
- * @param isSearchDialogVisible Whether the cross-session search dialog should be displayed.
- * @param searchQuery Current editable query for the cross-session search dialog.
- * @param lastSearchQuery Query that produced the currently rendered search results.
- * @param searchScope Scope currently selected in the dialog.
- * @param lastSearchScope Scope that produced the currently rendered search results.
- * @param searchResultsState Current search result state for the cross-session search dialog.
+ * @param crossSessionSearchState Cohesive state for the cross-session search dialog.
  * @param onDismissSearchDialog Callback that closes the dialog without clearing cached results.
  * @param onUpdateSearchQuery Callback for search query text changes.
  * @param onUpdateSearchScope Callback for search scope changes.
@@ -45,12 +40,7 @@ import eu.torvian.chatbot.common.models.core.ChatGroup
 fun SessionListPanel(
     state: SessionListState,
     actions: SessionListActions,
-    isSearchDialogVisible: Boolean,
-    searchQuery: String,
-    lastSearchQuery: String,
-    searchScope: MessageSearchScope,
-    lastSearchScope: MessageSearchScope,
-    searchResultsState: DataState<RepositoryError, List<MessageSearchResult>>,
+    crossSessionSearchState: CrossSessionSearchUiState,
     onDismissSearchDialog: () -> Unit,
     onUpdateSearchQuery: (String) -> Unit,
     onUpdateSearchScope: (MessageSearchScope) -> Unit,
@@ -98,12 +88,7 @@ fun SessionListPanel(
     }
 
     SearchDialog(
-        isVisible = isSearchDialogVisible,
-        query = searchQuery,
-        lastSearchQuery = lastSearchQuery,
-        searchScope = searchScope,
-        lastSearchScope = lastSearchScope,
-        searchResultsState = searchResultsState,
+        state = crossSessionSearchState,
         onDismiss = onDismissSearchDialog,
         onQueryChange = onUpdateSearchQuery,
         onScopeChange = onUpdateSearchScope,

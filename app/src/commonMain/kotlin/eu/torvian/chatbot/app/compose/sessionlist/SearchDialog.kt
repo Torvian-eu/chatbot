@@ -36,11 +36,10 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import eu.torvian.chatbot.app.domain.contracts.DataState
-import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.app.viewmodel.CrossSessionSearchUiState
 import eu.torvian.chatbot.common.models.api.core.MessageSearchResult
 import eu.torvian.chatbot.common.models.api.core.MessageSearchScope
 import eu.torvian.chatbot.common.models.core.ChatMessage
@@ -48,12 +47,7 @@ import eu.torvian.chatbot.common.models.core.ChatMessage
 /**
  * Dialog displaying cross-session search controls and the latest server-backed results.
  *
- * @param isVisible Whether the dialog should be rendered.
- * @param query Current editable query text.
- * @param lastSearchQuery Query that produced the current result state.
- * @param searchScope Scope currently selected in the dialog.
- * @param lastSearchScope Scope that produced the current result state.
- * @param searchResultsState Current loading, success, or error state for the search request.
+ * @param state Cohesive dialog state, including draft inputs and the latest submitted results.
  * @param onDismiss Request to close the dialog while preserving state.
  * @param onQueryChange Callback for query text changes.
  * @param onScopeChange Callback for scope changes.
@@ -62,28 +56,24 @@ import eu.torvian.chatbot.common.models.core.ChatMessage
  */
 @Composable
 fun SearchDialog(
-    isVisible: Boolean,
-    query: String,
-    lastSearchQuery: String,
-    searchScope: MessageSearchScope,
-    lastSearchScope: MessageSearchScope,
-    searchResultsState: DataState<RepositoryError, List<MessageSearchResult>>,
+    state: CrossSessionSearchUiState,
     onDismiss: () -> Unit,
     onQueryChange: (String) -> Unit,
     onScopeChange: (MessageSearchScope) -> Unit,
     onSearch: () -> Unit,
     onResultClick: (MessageSearchResult) -> Unit,
 ) {
-    if (!isVisible) {
+    if (!state.isDialogVisible) {
         return
     }
 
-    val currentScopeIsVisibleOnly = searchScope == MessageSearchScope.VISIBLE_THREADS_ONLY
-    val lastSearchScopeLabel = if (lastSearchScope == MessageSearchScope.VISIBLE_THREADS_ONLY) {
+    val currentScopeIsVisibleOnly = state.draftScope == MessageSearchScope.VISIBLE_THREADS_ONLY
+    val submittedSearchScopeLabel = if (state.submittedScope == MessageSearchScope.VISIBLE_THREADS_ONLY) {
         "currently displayed threads only"
     } else {
         "all threads"
     }
+    val searchResultsState = state.resultsState
 
     Dialog(onDismissRequest = onDismiss) {
         Box(
@@ -132,7 +122,7 @@ fun SearchDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         OutlinedTextField(
-                            value = query,
+                            value = state.draftQuery,
                             onValueChange = onQueryChange,
                             modifier = Modifier.weight(1f),
                             singleLine = true,
@@ -141,7 +131,7 @@ fun SearchDialog(
                         Spacer(Modifier.width(12.dp))
                         FilledIconButton(
                             onClick = onSearch,
-                            enabled = query.trim().isNotEmpty() && !searchResultsState.isLoading,
+                            enabled = state.draftQuery.trim().isNotEmpty(),
                         ) {
                             Icon(Icons.Default.Search, contentDescription = "Run search")
                         }
@@ -183,9 +173,9 @@ fun SearchDialog(
                         )
                     }
 
-                    if (lastSearchQuery.isNotBlank()) {
+                    if (state.submittedQuery.isNotBlank()) {
                         Text(
-                            text = "Showing results for “$lastSearchQuery” in $lastSearchScopeLabel",
+                            text = "Showing results for “${state.submittedQuery}” in $submittedSearchScopeLabel",
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -228,10 +218,10 @@ fun SearchDialog(
                             is DataState.Success -> {
                                 if (searchResultsState.data.isEmpty()) {
                                     SearchDialogPlaceholder(
-                                        text = if (lastSearchQuery.isBlank()) {
+                                        text = if (state.submittedQuery.isBlank()) {
                                             "No search results available."
                                         } else {
-                                            "No matches found for “$lastSearchQuery” in $lastSearchScopeLabel."
+                                            "No matches found for “${state.submittedQuery}” in $submittedSearchScopeLabel."
                                         }
                                     )
                                 } else {
@@ -293,11 +283,24 @@ private fun SearchResultCard(
     result: MessageSearchResult,
     onClick: () -> Unit,
 ) {
-    val highlightedSnippet = remember(result) {
+    val secondaryContainer = MaterialTheme.colorScheme.secondaryContainer
+    val onSecondaryContainer = MaterialTheme.colorScheme.onSecondaryContainer
+    val highlightStyle = remember(
+        secondaryContainer,
+        onSecondaryContainer,
+    ) {
+        SpanStyle(
+            background = secondaryContainer,
+            color = onSecondaryContainer,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+    val highlightedSnippet = remember(result, highlightStyle) {
         buildHighlightedSnippet(
             snippet = result.snippet,
             matchStartIndex = result.matchStartIndex,
             matchEndExclusive = result.matchEndExclusive,
+            highlightStyle = highlightStyle,
         )
     }
 
@@ -331,7 +334,6 @@ private fun SearchResultCard(
                 text = highlightedSnippet,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,
-                overflow = TextOverflow.Ellipsis
             )
         }
     }
@@ -344,12 +346,14 @@ private fun SearchResultCard(
  * @param snippet Snippet text returned by the backend.
  * @param matchStartIndex Inclusive match start offset inside [snippet].
  * @param matchEndExclusive Exclusive match end offset inside [snippet].
+ * @param highlightStyle Visual style applied to the matched range.
  * @return Annotated snippet with a single highlighted range when the offsets are valid.
  */
 private fun buildHighlightedSnippet(
     snippet: String,
     matchStartIndex: Int,
     matchEndExclusive: Int,
+    highlightStyle: SpanStyle,
 ): AnnotatedString {
     val clampedStartIndex = matchStartIndex.coerceIn(0, snippet.length)
     val clampedEndIndex = matchEndExclusive.coerceIn(clampedStartIndex, snippet.length)
@@ -357,7 +361,7 @@ private fun buildHighlightedSnippet(
         append(snippet)
         if (clampedStartIndex < clampedEndIndex) {
             addStyle(
-                style = SpanStyle(fontWeight = FontWeight.Bold),
+                style = highlightStyle,
                 start = clampedStartIndex,
                 end = clampedEndIndex,
             )

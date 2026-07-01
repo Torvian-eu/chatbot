@@ -24,21 +24,23 @@ import kotlin.test.assertTrue
 import kotlin.time.Clock
 
 /**
- * Unit tests for [SearchViewModel].
+ * Unit tests for [CrossSessionSearchViewModel].
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-class SearchViewModelTest {
+class CrossSessionSearchViewModelTest {
     @Test
     fun `performSearch trims the query and forwards it to the repository`() = runTest {
         val repository = mockk<SearchRepository>()
+        val searchNavigationCoordinator = mockk<SearchNavigationCoordinator>(relaxed = true)
         val notificationService = mockk<NotificationService>(relaxed = true)
         val searchResults = MutableStateFlow<DataState<RepositoryError, List<MessageSearchResult>>>(
             DataState.Success(listOf(messageSearchResult()))
         )
         every { repository.searchResults } returns searchResults
         coEvery { repository.searchMessages("hello", MessageSearchScope.ALL_THREADS) } returns Unit.right()
-        val viewModel = SearchViewModel(
+        val viewModel = CrossSessionSearchViewModel(
             searchRepository = repository,
+            searchNavigationCoordinator = searchNavigationCoordinator,
             notificationService = notificationService,
             uiDispatcher = StandardTestDispatcher(testScheduler),
         )
@@ -49,26 +51,29 @@ class SearchViewModelTest {
         viewModel.performSearch()
         advanceUntilIdle()
 
-        assertTrue(viewModel.isSearchDialogVisible.value)
-        assertEquals("hello", viewModel.searchQuery.value)
-        assertEquals("hello", viewModel.lastSearchQuery.value)
-        assertEquals(MessageSearchScope.ALL_THREADS, viewModel.searchScope.value)
-        assertEquals(MessageSearchScope.ALL_THREADS, viewModel.lastSearchScope.value)
-        assertIs<DataState.Success<List<MessageSearchResult>>>(viewModel.searchResults.value)
+        val state = viewModel.uiState.value
+        assertTrue(state.isDialogVisible)
+        assertEquals("hello", state.draftQuery)
+        assertEquals("hello", state.submittedQuery)
+        assertEquals(MessageSearchScope.ALL_THREADS, state.draftScope)
+        assertEquals(MessageSearchScope.ALL_THREADS, state.submittedScope)
+        assertIs<DataState.Success<List<MessageSearchResult>>>(state.resultsState)
         coVerify(exactly = 1) { repository.searchMessages("hello", MessageSearchScope.ALL_THREADS) }
     }
 
     @Test
     fun `hideSearchDialog preserves previously loaded results and selected scope`() = runTest {
         val repository = mockk<SearchRepository>()
+        val searchNavigationCoordinator = mockk<SearchNavigationCoordinator>(relaxed = true)
         val notificationService = mockk<NotificationService>(relaxed = true)
         every {
             repository.searchResults
         } returns MutableStateFlow<DataState<RepositoryError, List<MessageSearchResult>>>(
             DataState.Success(listOf(messageSearchResult(messageId = 22L)))
         )
-        val viewModel = SearchViewModel(
+        val viewModel = CrossSessionSearchViewModel(
             searchRepository = repository,
+            searchNavigationCoordinator = searchNavigationCoordinator,
             notificationService = notificationService,
             uiDispatcher = StandardTestDispatcher(testScheduler),
         )
@@ -78,20 +83,23 @@ class SearchViewModelTest {
         viewModel.hideSearchDialog()
         viewModel.showSearchDialog()
 
-        assertTrue(viewModel.isSearchDialogVisible.value)
-        assertEquals(MessageSearchScope.ALL_THREADS, viewModel.searchScope.value)
-        assertIs<DataState.Success<List<MessageSearchResult>>>(viewModel.searchResults.value)
+        val state = viewModel.uiState.value
+        assertTrue(state.isDialogVisible)
+        assertEquals(MessageSearchScope.ALL_THREADS, state.draftScope)
+        assertIs<DataState.Success<List<MessageSearchResult>>>(state.resultsState)
     }
 
     @Test
     fun `performSearch with blank input shows warning and skips repository`() = runTest {
         val repository = mockk<SearchRepository>()
+        val searchNavigationCoordinator = mockk<SearchNavigationCoordinator>(relaxed = true)
         val notificationService = mockk<NotificationService>(relaxed = true)
         every {
             repository.searchResults
         } returns MutableStateFlow<DataState<RepositoryError, List<MessageSearchResult>>>(DataState.Idle)
-        val viewModel = SearchViewModel(
+        val viewModel = CrossSessionSearchViewModel(
             searchRepository = repository,
+            searchNavigationCoordinator = searchNavigationCoordinator,
             notificationService = notificationService,
             uiDispatcher = StandardTestDispatcher(testScheduler),
         )

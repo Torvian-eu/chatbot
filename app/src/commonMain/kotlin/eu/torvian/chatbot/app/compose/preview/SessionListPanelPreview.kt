@@ -6,7 +6,7 @@ import eu.torvian.chatbot.app.compose.sessionlist.SessionListPanel
 import eu.torvian.chatbot.app.compose.sessionlist.SessionListState
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.contracts.SessionListData
-import eu.torvian.chatbot.common.models.api.core.MessageSearchScope
+import eu.torvian.chatbot.app.viewmodel.CrossSessionSearchUiState
 import eu.torvian.chatbot.common.models.core.ChatGroup
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 import androidx.compose.ui.tooling.preview.Preview
@@ -58,12 +58,7 @@ fun SessionListPanelPreview() {
     SessionListPanel(
         state = mockState,
         actions = mockActions,
-        isSearchDialogVisible = false,
-        searchQuery = "",
-        lastSearchQuery = "",
-        searchScope = MessageSearchScope.VISIBLE_THREADS_ONLY,
-        lastSearchScope = MessageSearchScope.VISIBLE_THREADS_ONLY,
-        searchResultsState = DataState.Idle,
+        crossSessionSearchState = CrossSessionSearchUiState(),
         onDismissSearchDialog = {},
         onUpdateSearchQuery = {},
         onUpdateSearchScope = {},

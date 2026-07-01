@@ -1,5 +1,10 @@
 package eu.torvian.chatbot.app.viewmodel.chat.state
 
+import eu.torvian.chatbot.app.chat.search.MessageSearchMatch
+import eu.torvian.chatbot.app.chat.search.SearchDirection
+import eu.torvian.chatbot.app.chat.search.findSearchMatches
+import eu.torvian.chatbot.app.chat.search.navigateSearchIndex
+import eu.torvian.chatbot.app.chat.search.normalizeSearchIndex
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.app.repository.*
@@ -55,6 +60,15 @@ class ChatStateImpl(
     private val _basePathOverride = MutableStateFlow<String?>(null)
     private val _collapsedMessageIds = MutableStateFlow<Set<Long>>(emptySet())
 
+    // --- In-Session Search State ---
+
+    private val _isSearchActive = MutableStateFlow(false)
+    private val _searchQuery = MutableStateFlow("")
+    private val _searchResults = MutableStateFlow<List<MessageSearchMatch>>(emptyList())
+    private val _currentSearchIndex = MutableStateFlow(-1)
+    private val _rollbackTarget = MutableStateFlow<Long?>(null)
+    private val _pendingSearchMessageTarget = MutableStateFlow<Long?>(null)
+
     // --- Auto-collapse tracking ---
     private var lastAutoCollapsedSessionId: Long? = null
 
@@ -72,6 +86,14 @@ class ChatStateImpl(
     override val pendingFileReferences: StateFlow<List<FileReference>> = _pendingFileReferences.asStateFlow()
     override val basePathOverride: StateFlow<String?> = _basePathOverride.asStateFlow()
     override val collapsedMessageIds: StateFlow<Set<Long>> = _collapsedMessageIds.asStateFlow()
+
+    // --- In-Session Search State Flows ---
+
+    override val isSearchActive: StateFlow<Boolean> = _isSearchActive.asStateFlow()
+    override val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+    override val searchResults: StateFlow<List<MessageSearchMatch>> = _searchResults.asStateFlow()
+    override val currentSearchIndex: StateFlow<Int> = _currentSearchIndex.asStateFlow()
+    override val rollbackTarget: StateFlow<Long?> = _rollbackTarget.asStateFlow()
 
     // --- Reactive State Derivation ---
 
@@ -254,6 +276,30 @@ class ChatStateImpl(
                 collapseAllDisplayedMessages()
             }
             .launchIn(backgroundScope)
+
+        // Derive search results from displayed messages and search query
+        searchQuery
+            .map { query ->
+                findSearchMatches(displayedMessages.value, query)
+            }
+            .combine(_pendingSearchMessageTarget) { results, pendingTarget ->
+                results to pendingTarget
+            }
+            .onEach { (results, pendingTarget) ->
+                _searchResults.value = results
+                // Normalize current index when results change
+                _currentSearchIndex.value = normalizeSearchIndex(results, _currentSearchIndex.value)
+                // Consume pending target: if set, find and select the target message
+                pendingTarget?.let { targetMessageId ->
+                    val targetIndex = results.indexOfFirst { it.messageId == targetMessageId }
+                    if (targetIndex >= 0) {
+                        _currentSearchIndex.value = targetIndex
+                    }
+                    // Clear the pending target after consumption
+                    _pendingSearchMessageTarget.value = null
+                }
+            }
+            .launchIn(backgroundScope)
     }
 
     // --- Public State Mutation Methods ---
@@ -343,5 +389,53 @@ class ChatStateImpl(
         _basePathOverride.value = null
         _collapsedMessageIds.value = emptySet()
         lastAutoCollapsedSessionId = null
+        // Reset search state
+        _isSearchActive.value = false
+        _searchQuery.value = ""
+        _searchResults.value = emptyList()
+        _currentSearchIndex.value = -1
+        _rollbackTarget.value = null
+        _pendingSearchMessageTarget.value = null
+    }
+
+    // --- In-Session Search State Mutation Methods ---
+
+    override fun showSearch() {
+        _isSearchActive.value = true
+    }
+
+    override fun closeSearch() {
+        // Preserve rollback state, only clear search UI state
+        _isSearchActive.value = false
+        _searchQuery.value = ""
+        _currentSearchIndex.value = -1
+        _pendingSearchMessageTarget.value = null
+    }
+
+    override fun updateSearchQuery(query: String) {
+        _searchQuery.value = query
+        // Reset index - will be normalized in the combine flow
+        _currentSearchIndex.value = -1
+    }
+
+    override fun navigateSearchResult(direction: SearchDirection) {
+        val newIndex = navigateSearchIndex(
+            searchResults = _searchResults.value,
+            currentIndex = _currentSearchIndex.value,
+            direction = direction,
+        )
+        _currentSearchIndex.value = newIndex
+    }
+
+    override fun jumpToSearchResult(index: Int) {
+        _currentSearchIndex.value = normalizeSearchIndex(_searchResults.value, index)
+    }
+
+    override fun setRollbackTarget(targetMessageId: Long?) {
+        _rollbackTarget.value = targetMessageId
+    }
+
+    override fun setPendingSearchMessageTarget(messageId: Long?) {
+        _pendingSearchMessageTarget.value = messageId
     }
 }
