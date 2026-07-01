@@ -16,6 +16,7 @@ import eu.torvian.chatbot.app.service.security.RequestSigningService
 import eu.torvian.chatbot.app.startup.AppStartupInitializer
 import eu.torvian.chatbot.app.startup.DefaultAppStartupInitializer
 import eu.torvian.chatbot.app.viewmodel.*
+import eu.torvian.chatbot.app.viewmodel.CrossSessionSearchViewModel
 import eu.torvian.chatbot.app.viewmodel.admin.UserGroupManagementViewModel
 import eu.torvian.chatbot.app.viewmodel.admin.UserManagementViewModel
 import eu.torvian.chatbot.app.viewmodel.auth.*
@@ -33,6 +34,8 @@ import eu.torvian.chatbot.app.viewmodel.settings.E2EASecurityViewModel
 import io.ktor.client.*
 import io.ktor.client.plugins.logging.*
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.serialization.json.Json
 import org.koin.core.module.Module
 import org.koin.core.module.dsl.viewModel
@@ -162,6 +165,16 @@ fun appModule(config: AppConfiguration): Module = module {
         DefaultThreadBuilder()
     }
 
+    // Provide SessionSelectionController for shared session selection state
+    single<SessionSelectionController> {
+        DefaultSessionSelectionController()
+    }
+
+    // Provide SearchNavigationState for durable navigation intent
+    single<SearchNavigationState> {
+        DefaultSearchNavigationState()
+    }
+
     // Provide concrete API client implementations, injecting the HttpClient
     single<ChatApi> {
         KtorChatApiClient(
@@ -175,6 +188,9 @@ fun appModule(config: AppConfiguration): Module = module {
     }
     single<GroupApi> {
         KtorGroupApiClient(get())
+    }
+    single<SearchApi> {
+        KtorSearchApiClient(get())
     }
     single<ModelApi> {
         KtorModelApiClient(get())
@@ -235,6 +251,9 @@ fun appModule(config: AppConfiguration): Module = module {
     }
     single<GroupRepository> {
         DefaultGroupRepository(get())
+    }
+    single<SearchRepository> {
+        DefaultSearchRepository(get())
     }
     single<UserRepository> {
         DefaultUserRepository(get())
@@ -383,8 +402,9 @@ fun appModule(config: AppConfiguration): Module = module {
             copyToClipboardUC = get { parametersOf(chatState) },
             toggleToolsUC = get { parametersOf(chatState) },
             fileReferenceUC = get { parametersOf(chatState, normalScope) },
+            navigationState = get(),
             normalScope = normalScope,
-            backgroundScope = backgroundScope
+            backgroundScope = backgroundScope,
         )
     }
     viewModel {
@@ -435,7 +455,7 @@ fun appModule(config: AppConfiguration): Module = module {
             normalScope
         )
     }
-    viewModel { SessionListViewModel(get<SessionRepository>(), get<GroupRepository>(), get<EventBus>(), get()) }
+    viewModel { SessionListViewModel(get<SessionRepository>(), get<GroupRepository>(), get<EventBus>(), get<SessionSelectionController>(), get()) }
     viewModel {
         ProviderConfigViewModel(
             get<ProviderRepository>(),
@@ -501,4 +521,21 @@ fun appModule(config: AppConfiguration): Module = module {
     }
     viewModel { AppViewModel(get(), get(), get(), get()) }
     viewModel { AboutViewModel() }
+    viewModel {
+        CrossSessionSearchViewModel(
+            searchRepository = get(),
+            searchNavigationCoordinator = get(),
+            notificationService = get()
+        )
+    }
+    single(createdAtStart = true) {
+        SearchNavigationCoordinator(
+            sessionSelectionController = get(),
+            navigationState = get(),
+        )
+    }
+    // Provide application-level CoroutineScope for global tasks
+    single( qualifier = named("ApplicationCoroutineScope")) {
+        CoroutineScope(Dispatchers.Default + SupervisorJob())
+    }
 }

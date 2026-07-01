@@ -30,7 +30,7 @@ import kotlinx.coroutines.launch
  * This class is responsible for:
  * - Loading and holding the state (Idle/Loading/Success/Error) of the list of all chat sessions and groups.
  * - Structuring the session list visually by group ("Ungrouped" and defined groups).
- * - Managing the currently selected session ID.
+ * - Managing the currently selected session ID through [SessionSelectionController].
  * - Handling user actions like creating, deleting, renaming sessions, and assigning sessions to groups.
  * - Handling user actions for managing groups (creating, renaming, deleting).
  * - Communicating with the backend via the SessionRepository and GroupRepository.
@@ -39,6 +39,7 @@ import kotlinx.coroutines.launch
  * @param sessionRepository The repository for session-related operations.
  * @param groupRepository The repository for group-related operations.
  * @param eventBus The event bus for emitting global events.
+ * @param sessionSelectionController The shared controller for session selection.
  * @param notificationService The error notifier for handling repository errors.
  * @param uiDispatcher The dispatcher to use for UI-related coroutines. Defaults to Main.
  *
@@ -54,6 +55,7 @@ class SessionListViewModel(
     private val sessionRepository: SessionRepository,
     private val groupRepository: GroupRepository,
     private val eventBus: EventBus,
+    private val sessionSelectionController: SessionSelectionController,
     private val notificationService: NotificationService,
     private val uiDispatcher: CoroutineDispatcher = Dispatchers.Main,
 ) : ViewModel() {
@@ -63,11 +65,6 @@ class SessionListViewModel(
     }
 
     // --- Private State Properties ---
-
-    /**
-     * The ID of the session the user has explicitly selected.
-     */
-    private val userSelectedSessionId = MutableStateFlow<Long?>(null)
 
     /**
      * The event ID of the last failed load operation.
@@ -108,11 +105,12 @@ class SessionListViewModel(
 
     /**
      * The currently selected session.
-     * This should be observed by the main chat UI to load the session details.
+     * This is derived from the shared [SessionSelectionController] to ensure
+     * consistent session selection across the app.
      */
     val selectedSession: StateFlow<ChatSessionSummary?> = combine(
         listState.map { it.dataOrNull?.allSessions },
-        userSelectedSessionId
+        sessionSelectionController.selectedSessionId
     ) { sessionsList, currentSelectedId ->
         sessionsList?.find { it.id == currentSelectedId }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), null)
@@ -206,13 +204,13 @@ class SessionListViewModel(
     }
 
     /**
-     * Selects a chat session from the list, updating the [selectedSession].
+     * Selects a chat session from the list, updating the shared [SessionSelectionController].
      * (E2.S4)
      *
      * @param sessionId The ID of the session to select, or null to clear selection.
      */
     fun selectSession(sessionId: Long?) {
-        userSelectedSessionId.value = sessionId
+        sessionSelectionController.selectSession(sessionId)
     }
 
     /**

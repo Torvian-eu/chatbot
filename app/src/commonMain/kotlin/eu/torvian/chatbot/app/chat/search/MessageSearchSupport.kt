@@ -1,4 +1,4 @@
-package eu.torvian.chatbot.app.compose.chatarea
+package eu.torvian.chatbot.app.chat.search
 
 import eu.torvian.chatbot.common.models.core.ChatMessage
 

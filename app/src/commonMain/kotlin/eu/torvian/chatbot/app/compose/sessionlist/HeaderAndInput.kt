@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreateNewFolder
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -20,10 +21,15 @@ import eu.torvian.chatbot.app.compose.common.PlainTooltipBox
 
 /**
  * Header section of the session list panel with title and action buttons.
+ *
+ * @param onNewSessionClick Callback invoked when the user requests a new session.
+ * @param onSearchClick Callback invoked when the user opens cross-session search.
+ * @param onNewGroupClick Callback invoked when the user requests a new group.
  */
 @Composable
 fun SessionListHeader(
     onNewSessionClick: () -> Unit,
+    onSearchClick: () -> Unit,
     onNewGroupClick: () -> Unit
 ) {
     Row(
@@ -52,6 +58,21 @@ fun SessionListHeader(
                     Icon(
                         imageVector = Icons.Default.Add,
                         contentDescription = "New session",
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.width(8.dp))
+            PlainTooltipBox(
+                text = "Search across sessions"
+            ) {
+                FilledIconButton(
+                    onClick = onSearchClick,
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Search sessions",
                         modifier = Modifier.size(18.dp)
                     )
                 }

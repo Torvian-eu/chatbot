@@ -1,0 +1,370 @@
+package eu.torvian.chatbot.app.compose.sessionlist
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import eu.torvian.chatbot.app.domain.contracts.DataState
+import eu.torvian.chatbot.app.viewmodel.CrossSessionSearchUiState
+import eu.torvian.chatbot.common.models.api.core.MessageSearchResult
+import eu.torvian.chatbot.common.models.api.core.MessageSearchScope
+import eu.torvian.chatbot.common.models.core.ChatMessage
+
+/**
+ * Dialog displaying cross-session search controls and the latest server-backed results.
+ *
+ * @param state Cohesive dialog state, including draft inputs and the latest submitted results.
+ * @param onDismiss Request to close the dialog while preserving state.
+ * @param onQueryChange Callback for query text changes.
+ * @param onScopeChange Callback for scope changes.
+ * @param onSearch Callback that executes a new search.
+ * @param onResultClick Callback invoked when the user selects a search result.
+ */
+@Composable
+fun SearchDialog(
+    state: CrossSessionSearchUiState,
+    onDismiss: () -> Unit,
+    onQueryChange: (String) -> Unit,
+    onScopeChange: (MessageSearchScope) -> Unit,
+    onSearch: () -> Unit,
+    onResultClick: (MessageSearchResult) -> Unit,
+) {
+    if (!state.isDialogVisible) {
+        return
+    }
+
+    val currentScopeIsVisibleOnly = state.draftScope == MessageSearchScope.VISIBLE_THREADS_ONLY
+    val submittedSearchScopeLabel = if (state.submittedScope == MessageSearchScope.VISIBLE_THREADS_ONLY) {
+        "currently displayed threads only"
+    } else {
+        "all threads"
+    }
+    val searchResultsState = state.resultsState
+
+    Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .widthIn(max = 900.dp)
+                    .heightIn(min = 320.dp, max = 700.dp),
+                shape = MaterialTheme.shapes.extraLarge,
+                tonalElevation = 6.dp,
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Search messages",
+                                style = MaterialTheme.typography.headlineSmall,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Search across your sessions. By default only the currently displayed thread in each session is searched.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        FilledIconButton(onClick = onDismiss) {
+                            Icon(Icons.Default.Close, contentDescription = "Close search dialog")
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = state.draftQuery,
+                            onValueChange = onQueryChange,
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            label = { Text("Search text") }
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        FilledIconButton(
+                            onClick = onSearch,
+                            enabled = state.draftQuery.trim().isNotEmpty(),
+                        ) {
+                            Icon(Icons.Default.Search, contentDescription = "Run search")
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                // The product requirement calls for a single default-on checkbox, so toggling maps
+                                // directly to the two supported server scopes.
+                                onScopeChange(
+                                    if (currentScopeIsVisibleOnly) {
+                                        MessageSearchScope.ALL_THREADS
+                                    } else {
+                                        MessageSearchScope.VISIBLE_THREADS_ONLY
+                                    }
+                                )
+                            },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = currentScopeIsVisibleOnly,
+                            onCheckedChange = { isChecked ->
+                                onScopeChange(
+                                    if (isChecked) {
+                                        MessageSearchScope.VISIBLE_THREADS_ONLY
+                                    } else {
+                                        MessageSearchScope.ALL_THREADS
+                                    }
+                                )
+                            }
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "Search only currently displayed threads",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    if (state.submittedQuery.isNotBlank()) {
+                        Text(
+                            text = "Showing results for “${state.submittedQuery}” in $submittedSearchScopeLabel",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    HorizontalDivider()
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f, fill = true)
+                    ) {
+                        when (searchResultsState) {
+                            DataState.Idle -> {
+                                SearchDialogPlaceholder(
+                                    text = if (currentScopeIsVisibleOnly) {
+                                        "Enter a query and run a search across the currently displayed thread in each session."
+                                    } else {
+                                        "Enter a query and run a search across all threads in your sessions."
+                                    }
+                                )
+                            }
+
+                            DataState.Loading -> {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator()
+                                }
+                            }
+
+                            is DataState.Error -> {
+                                SearchDialogPlaceholder(
+                                    text = searchResultsState.error.message,
+                                    isError = true
+                                )
+                            }
+
+                            is DataState.Success -> {
+                                if (searchResultsState.data.isEmpty()) {
+                                    SearchDialogPlaceholder(
+                                        text = if (state.submittedQuery.isBlank()) {
+                                            "No search results available."
+                                        } else {
+                                            "No matches found for “${state.submittedQuery}” in $submittedSearchScopeLabel."
+                                        }
+                                    )
+                                } else {
+                                    LazyColumn(
+                                        modifier = Modifier.fillMaxSize(),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        items(
+                                            items = searchResultsState.data,
+                                            key = MessageSearchResult::messageId
+                                        ) { result ->
+                                            SearchResultCard(
+                                                result = result,
+                                                onClick = { onResultClick(result) }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Lightweight placeholder used for idle, empty, and error states inside [SearchDialog].
+ *
+ * @param text Message to present to the user.
+ * @param isError Whether the text should use the error color.
+ */
+@Composable
+private fun SearchDialogPlaceholder(
+    text: String,
+    isError: Boolean = false,
+) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/**
+ * Renders a single cross-session search result with snippet highlighting and session context.
+ *
+ * @param result Search result to display.
+ * @param onClick Callback invoked when the result is selected.
+ */
+@Composable
+private fun SearchResultCard(
+    result: MessageSearchResult,
+    onClick: () -> Unit,
+) {
+    val secondaryContainer = MaterialTheme.colorScheme.secondaryContainer
+    val onSecondaryContainer = MaterialTheme.colorScheme.onSecondaryContainer
+    val highlightStyle = remember(
+        secondaryContainer,
+        onSecondaryContainer,
+    ) {
+        SpanStyle(
+            background = secondaryContainer,
+            color = onSecondaryContainer,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+    val highlightedSnippet = remember(result, highlightStyle) {
+        buildHighlightedSnippet(
+            snippet = result.snippet,
+            matchStartIndex = result.matchStartIndex,
+            matchEndExclusive = result.matchEndExclusive,
+            highlightStyle = highlightStyle,
+        )
+    }
+
+    OutlinedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = result.sessionName,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = when (result.messageRole) {
+                    ChatMessage.Role.USER -> "User message"
+                    ChatMessage.Role.ASSISTANT -> "Assistant message"
+                },
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = highlightedSnippet,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    }
+}
+
+/**
+ * Builds an [AnnotatedString] that highlights the matched substring inside a backend-provided
+ * snippet so the UI does not need to recompute search positions.
+ *
+ * @param snippet Snippet text returned by the backend.
+ * @param matchStartIndex Inclusive match start offset inside [snippet].
+ * @param matchEndExclusive Exclusive match end offset inside [snippet].
+ * @param highlightStyle Visual style applied to the matched range.
+ * @return Annotated snippet with a single highlighted range when the offsets are valid.
+ */
+private fun buildHighlightedSnippet(
+    snippet: String,
+    matchStartIndex: Int,
+    matchEndExclusive: Int,
+    highlightStyle: SpanStyle,
+): AnnotatedString {
+    val clampedStartIndex = matchStartIndex.coerceIn(0, snippet.length)
+    val clampedEndIndex = matchEndExclusive.coerceIn(clampedStartIndex, snippet.length)
+    return buildAnnotatedString {
+        append(snippet)
+        if (clampedStartIndex < clampedEndIndex) {
+            addStyle(
+                style = highlightStyle,
+                start = clampedStartIndex,
+                end = clampedEndIndex,
+            )
+        }
+    }
+}

@@ -6,6 +6,7 @@ import eu.torvian.chatbot.app.compose.sessionlist.SessionListPanel
 import eu.torvian.chatbot.app.compose.sessionlist.SessionListState
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.contracts.SessionListData
+import eu.torvian.chatbot.app.viewmodel.CrossSessionSearchUiState
 import eu.torvian.chatbot.common.models.core.ChatGroup
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 import androidx.compose.ui.tooling.preview.Preview
@@ -45,6 +46,7 @@ fun SessionListPanelPreview() {
         override fun onSaveRenamedGroup() {}
         override fun onCancelRenamingGroup() {}
         override fun onRetryLoadingSessions() {}
+        override fun onSearchClick() {}
         override fun onShowNewSessionDialog() {}
         override fun onShowRenameSessionDialog(session: ChatSessionSummary) {}
         override fun onShowDeleteSessionDialog(sessionId: Long) {}
@@ -55,6 +57,12 @@ fun SessionListPanelPreview() {
 
     SessionListPanel(
         state = mockState,
-        actions = mockActions
+        actions = mockActions,
+        crossSessionSearchState = CrossSessionSearchUiState(),
+        onDismissSearchDialog = {},
+        onUpdateSearchQuery = {},
+        onUpdateSearchScope = {},
+        onPerformSearch = {},
+        onSearchResultClick = {},
     )
 }

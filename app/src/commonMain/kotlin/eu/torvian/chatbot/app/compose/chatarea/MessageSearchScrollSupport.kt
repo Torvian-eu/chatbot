@@ -1,7 +1,9 @@
 package eu.torvian.chatbot.app.compose.chatarea
 
 import androidx.compose.ui.text.TextLayoutResult
+import eu.torvian.chatbot.app.chat.search.MessageSearchMatch
 import kotlin.math.roundToInt
+
 
 /**
  * Computes the vertical center of the selected search occurrence within laid-out full message text.

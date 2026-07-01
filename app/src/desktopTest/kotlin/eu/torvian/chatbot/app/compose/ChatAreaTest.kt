@@ -5,10 +5,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.v2.runComposeUiTest
+import eu.torvian.chatbot.app.chat.search.MessageSearchMatch
 import eu.torvian.chatbot.app.compose.chatarea.ChatArea
 import eu.torvian.chatbot.app.compose.chatarea.ChatAreaActions
 import eu.torvian.chatbot.app.compose.chatarea.ChatAreaState
-import eu.torvian.chatbot.app.compose.chatarea.MessageSearchMatch
 import eu.torvian.chatbot.app.compose.common.LOADING_OVERLAY_TAG
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.toRepositoryError

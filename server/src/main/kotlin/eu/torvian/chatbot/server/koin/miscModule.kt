@@ -35,9 +35,33 @@ fun miscModule() = module {
     single { WorkerServerIncomingMessageRouter(get(), get()) }
     single {
         ApiRoutesKtor(
-            get(), get(), get(), get(), get(), get(), get(), get(), get(), get(),
-            get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(),
-            get(), get(), get(), get(), get()
+            sessionService = get(),
+            groupService = get(),
+            llmProviderService = get(),
+            llmModelService = get(),
+            modelSettingsService = get(),
+            messageService = get(),
+            searchService = get(),
+            chatService = get(),
+            toolService = get(),
+            toolCallService = get(),
+            localMCPServerService = get(),
+            localMCPRuntimeControlService = get(),
+            localMCPServerConfigSyncService = get(),
+            localMCPToolDefinitionService = get(),
+            authenticationService = get(),
+            tokenService = get(),
+            accountManagementService = get(),
+            deviceTrustService = get(),
+            securityAuditService = get(),
+            userService = get(),
+            userGroupService = get(),
+            roleService = get(),
+            authorizationService = get(),
+            workerService = get(),
+            json = get(),
+            appConfig = get(),
+            userPreferenceService = get()
         )
     }
 }

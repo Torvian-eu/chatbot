@@ -3,22 +3,21 @@ package eu.torvian.chatbot.app.compose.chatarea
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuOpen
-import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.unit.dp
+import eu.torvian.chatbot.app.chat.search.SearchDirection
 import eu.torvian.chatbot.app.compose.common.LoadingOverlay
 import eu.torvian.chatbot.app.compose.common.PlainTooltipBox
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.ModelSettings
+
 
 /**
  * Top bar content for the Chat screen.
@@ -45,11 +44,13 @@ import eu.torvian.chatbot.common.models.llm.ModelSettings
  * @param searchQuery current in-session search query.
  * @param currentSearchIndex currently selected result index, or `-1` when none is selected.
  * @param searchResultsCount total number of matching occurrences in the current thread.
+ * @param canReturnToPreviousThread whether the in-session search UI should offer a rollback action.
  * @param onShowSearch enables search mode.
  * @param onCloseSearch disables search mode and clears the current query.
  * @param onUpdateSearchQuery updates the current search query.
  * @param onNavigateSearchResult cycles through search results.
  * @param onJumpToSearchResult jumps directly to a search result by zero-based index.
+ * @param onReturnToPreviousThread restores the previously displayed session/thread when available.
  */
 @Composable
 fun RowScope.ChatTopBarContent(
@@ -72,11 +73,13 @@ fun RowScope.ChatTopBarContent(
     searchQuery: String,
     currentSearchIndex: Int,
     searchResultsCount: Int,
+    canReturnToPreviousThread: Boolean,
     onShowSearch: () -> Unit,
     onCloseSearch: () -> Unit,
     onUpdateSearchQuery: (String) -> Unit,
     onNavigateSearchResult: (SearchDirection) -> Unit,
     onJumpToSearchResult: (Int) -> Unit,
+    onReturnToPreviousThread: () -> Unit,
 ) {
     // Left-aligned actions
     Row(
@@ -109,17 +112,21 @@ fun RowScope.ChatTopBarContent(
     // Center-aligned actions
     Row(
         modifier = Modifier.weight(1f),
-        horizontalArrangement = Arrangement.Center
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         if (isSearchActive) {
             SearchBar(
                 query = searchQuery,
                 currentIndex = currentSearchIndex,
                 resultCount = searchResultsCount,
+                canReturnToPreviousThread = canReturnToPreviousThread,
                 onQueryChange = onUpdateSearchQuery,
                 onNavigate = onNavigateSearchResult,
                 onJumpToResult = onJumpToSearchResult,
+                onReturnToPreviousThread = onReturnToPreviousThread,
                 onClose = onCloseSearch,
+                modifier = Modifier.weight(1f),
             )
         } else {
             // Compact model selector (icon + dropdown)

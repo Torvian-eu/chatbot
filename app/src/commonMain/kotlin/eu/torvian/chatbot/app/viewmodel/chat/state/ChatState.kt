@@ -1,9 +1,11 @@
 package eu.torvian.chatbot.app.viewmodel.chat.state
 
+import eu.torvian.chatbot.app.chat.search.MessageSearchMatch
+import eu.torvian.chatbot.app.chat.search.SearchDirection
 import eu.torvian.chatbot.app.domain.contracts.DataState
-import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.ToolCallsMap
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPServerDto
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
 import eu.torvian.chatbot.common.models.core.FileReference
@@ -171,6 +173,32 @@ interface ChatState {
      */
     val basePathOverride: StateFlow<String?>
 
+    // --- In-Session Search State Properties ---
+
+    /**
+     * Whether the in-session search UI should currently be visible.
+     */
+    val isSearchActive: StateFlow<Boolean>
+
+    /**
+     * Current query applied to the displayed messages.
+     */
+    val searchQuery: StateFlow<String>
+
+    /**
+     * Occurrence-level matches derived from the displayed messages and [searchQuery].
+     */
+    val searchResults: StateFlow<List<MessageSearchMatch>>
+
+    /**
+     * Currently selected result index, or `-1` when no match is selectable.
+     */
+    val currentSearchIndex: StateFlow<Int>
+
+    /**
+     * Previously displayed thread that can be restored after search-driven branch switching.
+     */
+    val rollbackTarget: StateFlow<Long?>
 
     // --- State Mutation Methods ---
 
@@ -262,4 +290,60 @@ interface ChatState {
      * Resets the entire chat state to its initial state.
      */
     fun resetState()
+
+    // --- In-Session Search State Mutation Methods ---
+
+    /**
+     * Shows the in-session search UI without changing the current query.
+     */
+    fun showSearch()
+
+    /**
+     * Closes the in-session search UI and clears the active query and selection.
+     *
+     * The rollback state is intentionally preserved so users can still return after dismissing search
+     * and reopening it in the same session context.
+     */
+    fun closeSearch()
+
+    /**
+     * Replaces the active query and resets the selected occurrence.
+     *
+     * The resulting occurrence list is re-derived from the currently displayed messages.
+     *
+     * @param query New query entered by the user.
+     */
+    fun updateSearchQuery(query: String)
+
+    /**
+     * Moves the selected occurrence forward or backward through the current result set.
+     *
+     * @param direction Requested navigation direction.
+     */
+    fun navigateSearchResult(direction: SearchDirection)
+
+    /**
+     * Selects a concrete occurrence index directly.
+     *
+     * @param index Zero-based result index requested by the UI.
+     */
+    fun jumpToSearchResult(index: Int)
+
+    /**
+     * Sets the rollback target for returning to a previous thread.
+     *
+     * @param targetMessageId The rollback target message ID, or null to clear.
+     */
+    fun setRollbackTarget(targetMessageId: Long?)
+
+    /**
+     * Sets a pending target message ID to select once search results are computed.
+     *
+     * This enables declarative targeting: when a navigation intent arrives, the target
+     * message ID is registered here, and the search result derivation flow will
+     * automatically select it when results are available.
+     *
+     * @param messageId The message ID to select, or null to clear.
+     */
+    fun setPendingSearchMessageTarget(messageId: Long?)
 }

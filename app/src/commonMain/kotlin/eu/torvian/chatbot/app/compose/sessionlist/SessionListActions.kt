@@ -63,6 +63,11 @@ interface SessionListActions {
      */
     fun onRetryLoadingSessions()
 
+    /**
+     * Callback for when the user requests to open the cross-session search dialog.
+     */
+    fun onSearchClick()
+
     // --- Dialog Request Actions (trigger dialog display) ---
 
     /**

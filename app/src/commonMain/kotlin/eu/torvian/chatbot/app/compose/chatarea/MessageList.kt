@@ -24,6 +24,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.unit.dp
+import eu.torvian.chatbot.app.chat.search.MessageSearchMatch
 import eu.torvian.chatbot.app.compose.common.ScrollbarWrapper
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSession
@@ -33,6 +34,7 @@ import eu.torvian.chatbot.common.models.tool.ToolCall
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.yield
+
 
 /**
  * Displays the list of messages in a scrollable column.

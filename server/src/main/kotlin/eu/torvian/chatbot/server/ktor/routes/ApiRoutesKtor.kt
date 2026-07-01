@@ -25,6 +25,7 @@ class ApiRoutesKtor(
     private val llmModelService: LLMModelService,
     private val modelSettingsService: ModelSettingsService,
     private val messageService: MessageService,
+    private val searchService: SearchService,
     private val chatService: ChatService,
     private val toolService: ToolService,
     private val toolCallService: ToolCallService,
@@ -63,6 +64,7 @@ class ApiRoutesKtor(
         configureModelRoutes(route)
         configureSettingsRoutes(route)
         configureMessageRoutes(route)
+        configureSearchRoutes(route)
         configureToolRoutes(route)
         configureLocalMCPServerRoutes(route)
         configureLocalMCPToolRoutes(route)
@@ -158,6 +160,13 @@ class ApiRoutesKtor(
      */
     fun configureMessageRoutes(route: Route) {
         route.configureMessageRoutes(messageService, authorizationService)
+    }
+
+    /**
+     * Configures routes related to cross-session search (`/api/v1/search`).
+     */
+    fun configureSearchRoutes(route: Route) {
+        route.configureSearchRoutes(searchService)
     }
 
     /**

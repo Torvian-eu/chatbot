@@ -28,9 +28,11 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import eu.torvian.chatbot.app.chat.search.MessageSearchMatch
 import eu.torvian.chatbot.app.compose.markdown.MarkdownHighlightedText
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.FileReference
+
 
 /**
  * Composable for displaying the content of a message, including editing capabilities.
@@ -261,7 +263,13 @@ private fun rememberSearchHighlightSpans(
     val regularHighlightColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.85f)
     val selectedHighlightColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.95f)
 
-    return remember(searchMatches, selectedSearchMatch, maxEndExclusive, regularHighlightColor, selectedHighlightColor) {
+    return remember(
+        searchMatches,
+        selectedSearchMatch,
+        maxEndExclusive,
+        regularHighlightColor,
+        selectedHighlightColor
+    ) {
         buildSearchHighlightSpans(
             searchMatches = searchMatches,
             selectedSearchMatch = selectedSearchMatch,

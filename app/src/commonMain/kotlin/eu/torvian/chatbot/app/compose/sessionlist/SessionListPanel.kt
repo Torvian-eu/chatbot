@@ -15,6 +15,9 @@ import eu.torvian.chatbot.app.compose.common.LoadingOverlay
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.domain.contracts.SessionListData
 import eu.torvian.chatbot.app.domain.contracts.SessionListDialogState
+import eu.torvian.chatbot.app.viewmodel.CrossSessionSearchUiState
+import eu.torvian.chatbot.common.models.api.core.MessageSearchResult
+import eu.torvian.chatbot.common.models.api.core.MessageSearchScope
 import eu.torvian.chatbot.common.models.core.ChatGroup
 
 /**
@@ -26,11 +29,23 @@ import eu.torvian.chatbot.common.models.core.ChatGroup
  *
  * @param state The current state contract for the session list panel.
  * @param actions The actions contract for the session list panel.
+ * @param crossSessionSearchState Cohesive state for the cross-session search dialog.
+ * @param onDismissSearchDialog Callback that closes the dialog without clearing cached results.
+ * @param onUpdateSearchQuery Callback for search query text changes.
+ * @param onUpdateSearchScope Callback for search scope changes.
+ * @param onPerformSearch Callback that executes a new cross-session search.
+ * @param onSearchResultClick Callback invoked when a search result is selected.
  */
 @Composable
 fun SessionListPanel(
     state: SessionListState,
-    actions: SessionListActions
+    actions: SessionListActions,
+    crossSessionSearchState: CrossSessionSearchUiState,
+    onDismissSearchDialog: () -> Unit,
+    onUpdateSearchQuery: (String) -> Unit,
+    onUpdateSearchScope: (MessageSearchScope) -> Unit,
+    onPerformSearch: () -> Unit,
+    onSearchResultClick: (MessageSearchResult) -> Unit,
 ) {
     when (val listUiState = state.listUiState) {
         DataState.Loading -> {
@@ -66,10 +81,20 @@ fun SessionListPanel(
                 editingGroupNameInput = state.editingGroupNameInput,
                 selectedSessionId = state.selectedSessionId,
                 dialogState = state.dialogState,
-                sessionListActions = actions
+                sessionListActions = actions,
+                onSearchClick = actions::onSearchClick,
             )
         }
     }
+
+    SearchDialog(
+        state = crossSessionSearchState,
+        onDismiss = onDismissSearchDialog,
+        onQueryChange = onUpdateSearchQuery,
+        onScopeChange = onUpdateSearchScope,
+        onSearch = onPerformSearch,
+        onResultClick = onSearchResultClick,
+    )
 }
 
 /**
@@ -85,6 +110,7 @@ fun SessionListPanel(
  * @param selectedSessionId The ID of the currently selected session.
  * @param dialogState The current dialog state from the ViewModel.
  * @param sessionListActions The actions contract for the session list panel.
+ * @param onSearchClick Callback invoked when the user opens the cross-session search dialog.
  */
 @Composable
 private fun SessionListSuccessPanelContent(
@@ -95,7 +121,8 @@ private fun SessionListSuccessPanelContent(
     editingGroupNameInput: String,
     selectedSessionId: Long?,
     dialogState: SessionListDialogState,
-    sessionListActions: SessionListActions
+    sessionListActions: SessionListActions,
+    onSearchClick: () -> Unit,
 ) {
 
     // Group editing actions
@@ -122,6 +149,7 @@ private fun SessionListSuccessPanelContent(
     Column(modifier = Modifier.fillMaxSize()) {
         SessionListHeader(
             onNewSessionClick = sessionListActions::onShowNewSessionDialog,
+            onSearchClick = onSearchClick,
             onNewGroupClick = sessionListActions::onStartCreatingNewGroup
         )
         // --- New Group Input (E6.S3) ---

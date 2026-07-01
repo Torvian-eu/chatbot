@@ -18,6 +18,9 @@ import eu.torvian.chatbot.app.compose.chatarea.ChatAreaState
 import eu.torvian.chatbot.app.compose.sessionlist.SessionListActions
 import eu.torvian.chatbot.app.compose.sessionlist.SessionListPanel
 import eu.torvian.chatbot.app.compose.sessionlist.SessionListState
+import eu.torvian.chatbot.app.viewmodel.CrossSessionSearchUiState
+import eu.torvian.chatbot.common.models.api.core.MessageSearchResult
+import eu.torvian.chatbot.common.models.api.core.MessageSearchScope
 
 /**
  * Composable for the main chat interface's content, including the session list and the chat area.
@@ -29,6 +32,12 @@ import eu.torvian.chatbot.app.compose.sessionlist.SessionListState
  * @param chatAreaState The current UI state contract for the chat area.
  * @param chatAreaActions The actions contract for the chat area.
  * @param isSessionListCollapsed Whether the session list panel is collapsed.
+ * @param crossSessionSearchState Cohesive state for the cross-session search dialog.
+ * @param onDismissSearchDialog Callback that closes the dialog.
+ * @param onUpdateSearchQuery Callback for search query changes.
+ * @param onUpdateSearchScope Callback for search scope changes.
+ * @param onPerformSearch Callback that triggers a new cross-session search.
+ * @param onSearchResultClick Callback invoked when a cross-session search result is selected.
  */
 @Composable
 fun ChatScreenContent(
@@ -36,7 +45,13 @@ fun ChatScreenContent(
     sessionListActions: SessionListActions,
     chatAreaState: ChatAreaState,
     chatAreaActions: ChatAreaActions,
-    isSessionListCollapsed: Boolean
+    isSessionListCollapsed: Boolean,
+    crossSessionSearchState: CrossSessionSearchUiState,
+    onDismissSearchDialog: () -> Unit,
+    onUpdateSearchQuery: (String) -> Unit,
+    onUpdateSearchScope: (MessageSearchScope) -> Unit,
+    onPerformSearch: () -> Unit,
+    onSearchResultClick: (MessageSearchResult) -> Unit,
 ) {
     Row(modifier = Modifier.fillMaxSize()) {
         AnimatedVisibility(
@@ -54,7 +69,13 @@ fun ChatScreenContent(
                 // PR 19: Session List Panel
                 SessionListPanel(
                     state = sessionListState,
-                    actions = sessionListActions
+                    actions = sessionListActions,
+                    crossSessionSearchState = crossSessionSearchState,
+                    onDismissSearchDialog = onDismissSearchDialog,
+                    onUpdateSearchQuery = onUpdateSearchQuery,
+                    onUpdateSearchScope = onUpdateSearchScope,
+                    onPerformSearch = onPerformSearch,
+                    onSearchResultClick = onSearchResultClick,
                 )
             }
         }
