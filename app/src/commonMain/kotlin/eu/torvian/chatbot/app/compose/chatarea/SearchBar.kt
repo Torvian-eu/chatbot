@@ -17,6 +17,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import eu.torvian.chatbot.app.chat.search.SearchDirection
 import eu.torvian.chatbot.app.compose.common.PlainTooltipBox
+import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
 
 
 /**
@@ -47,6 +49,8 @@ fun SearchBar(
     modifier: Modifier = Modifier,
 ) {
     val focusRequester = remember { FocusRequester() }
+    // Keep local draft state, reset instantly if the external query changes (e.g., due to search navigation)
+    var localQuery by remember(query) { mutableStateOf(query) }
     var isJumpDialogVisible by remember { mutableStateOf(false) }
     var requestedResultText by remember(resultCount, currentIndex) {
         mutableStateOf(if (currentIndex >= 0) (currentIndex + 1).toString() else "")
@@ -54,6 +58,17 @@ fun SearchBar(
     val selectedResultNumber = if (currentIndex >= 0) currentIndex + 1 else 0
     val requestedResultNumber = requestedResultText.toIntOrNull()
     val canJumpToRequestedResult = requestedResultNumber != null && requestedResultNumber in 1..resultCount
+
+    // Debounce local inputs before notifying the ViewModel
+    LaunchedEffect(localQuery) {
+        if (localQuery.isEmpty()) {
+            // Snappier experience when clearing query
+            onQueryChange("")
+        } else if (localQuery != query) {
+            delay(250.milliseconds) // 250ms debounce
+            onQueryChange(localQuery)
+        }
+    }
 
     LaunchedEffect(Unit) {
         try {
@@ -69,8 +84,8 @@ fun SearchBar(
         horizontalArrangement = Arrangement.Center,
     ) {
         OutlinedTextField(
-            value = query,
-            onValueChange = onQueryChange,
+            value = localQuery,
+            onValueChange = { localQuery = it },
             modifier = Modifier.weight(1f).focusRequester(focusRequester),
             label = { Text("Search messages", maxLines = 1) },
             placeholder = { Text("Find in current thread", maxLines = 1) },
