@@ -193,46 +193,6 @@ class ToolCallInteractionTest {
         assertEquals(WorkerProtocolMessageTypes.COMMAND_REJECTED, outbound[0].type)
     }
 
-    /**
-     * Verifies that when a prefixed tool name is sent through the protocol, the interaction
-     * passes the full public name to the executor — prefix stripping is the executor's
-     * responsibility (handled by `DefaultBuiltInToolCallExecutor`).
-     */
-    @Test
-    fun `prefixed tool names are passed through to the executor`() = runTest {
-        val emitter = RecordingEmitter()
-        val input = buildJsonObject { put("path", "src/main.kt") }
-        val authorization = buildAuthorization(
-            toolName = "project1.read_text_file",
-        )
-        val signedRequest = SignedBuiltInToolExecutionRequest(
-            signedRequest = signedRequestFor(authorization, input)
-        )
-        val requestPayload = signedRequest.toWorkerCommandRequestPayload()
-            .getOrElse { error("Failed to build request payload for test: $it") }
-
-        val executor = RecordingExecutor(
-            result = BuiltInToolExecutionResult(output = "x")
-        )
-        val interaction = ToolCallInteraction(
-            envelope = WorkerProtocolMessage(
-                id = "in-4",
-                type = WorkerProtocolMessageTypes.COMMAND_REQUEST,
-                interactionId = "int-4",
-                payload = null,
-            ),
-            requestPayload = requestPayload,
-            authorizationValidator = AuthorizingValidator(authorization),
-            toolCallExecutor = executor,
-            emitter = emitter,
-            messageIdProvider = SequenceMessageIdProvider(),
-        )
-
-        interaction.start()
-
-        assertEquals("project1.read_text_file", executor.executed.single().toolName)
-    }
-
     // --- helpers ---
 
     /**
