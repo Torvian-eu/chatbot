@@ -8,9 +8,6 @@ import eu.torvian.chatbot.server.service.llm.discovery.OpenAIModelDiscoveryStrat
 import eu.torvian.chatbot.server.service.llm.discovery.OpenRouterModelDiscoveryStrategy
 import eu.torvian.chatbot.server.service.llm.strategy.OllamaChatStrategy
 import eu.torvian.chatbot.server.service.llm.strategy.OpenAIChatStrategy
-import eu.torvian.chatbot.server.service.tool.ToolExecutor
-import eu.torvian.chatbot.server.service.tool.impl.WebSearchToolExecutor
-import eu.torvian.chatbot.server.service.tool.impl.WeatherToolExecutor
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.*
@@ -18,18 +15,21 @@ import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import kotlinx.serialization.json.Json
-import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
 /**
  * Defines the Koin module for components specific to the main application setup.
+ *
+ * The legacy server-side tool executors (web search / weather / calculator) have been removed in
+ * favor of dispatching tool calls through a worker. See [serviceModule] for built-in tool
+ * service bindings.
+ *
  * @param application The Ktor Application instance to provide.
  */
 fun mainModule(application: Application) = module {
     single { application }
     single { DatabaseMigrator(get()) }
 
-    // --- JSON Serializer ---
     single<Json> {
         Json {
             ignoreUnknownKeys = true
@@ -38,7 +38,6 @@ fun mainModule(application: Application) = module {
         }
     }
 
-    // --- HTTP Client ---
     single<HttpClient> {
         HttpClient(CIO) {
             install(ContentNegotiation) {
@@ -48,21 +47,17 @@ fun mainModule(application: Application) = module {
         }
     }
 
-    // --- LLM Strategies ---
     single<OpenAIChatStrategy> { OpenAIChatStrategy(get()) }
     single<OllamaChatStrategy> { OllamaChatStrategy(get()) }
     single<OpenAIModelDiscoveryStrategy> { OpenAIModelDiscoveryStrategy(get()) }
     single<OllamaModelDiscoveryStrategy> { OllamaModelDiscoveryStrategy(get()) }
     single<OpenRouterModelDiscoveryStrategy> { OpenRouterModelDiscoveryStrategy(get()) }
 
-    // --- External Services ---
     single<LLMApiClient> {
         val strategies = mapOf(
             LLMProviderType.OPENAI to get<OpenAIChatStrategy>(),
             LLMProviderType.OPENROUTER to get<OpenAIChatStrategy>(),
             LLMProviderType.OLLAMA to get<OllamaChatStrategy>(),
-            // Add other strategies here as they are implemented
-            // LLMProviderType.ANTHROPIC to get<AnthropicChatStrategy>(),
         )
         val modelDiscoveryStrategies = mapOf(
             LLMProviderType.OPENAI to get<OpenAIModelDiscoveryStrategy>(),
@@ -70,16 +65,5 @@ fun mainModule(application: Application) = module {
             LLMProviderType.OLLAMA to get<OllamaModelDiscoveryStrategy>(),
         )
         LLMApiClientKtor(get(), strategies, modelDiscoveryStrategies)
-    }
-
-    // --- Tool Executors ---
-    single<ToolExecutor>(named("web_search")) {
-        WebSearchToolExecutor(
-            httpClient = get()
-        )
-    }
-
-    single<ToolExecutor>(named("weather")) {
-        WeatherToolExecutor()
     }
 }

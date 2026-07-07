@@ -7,7 +7,17 @@ import kotlin.time.Instant
 
 /**
  * Represents a tool definition for miscellaneous (Non-MCP) tools.
+ *
+ * @deprecated This type is retained for backwards compatibility but is no longer used by the
+ *   tool execution pipeline. The server-side execution path that consumed [MiscToolDefinition] has
+ *   been removed. New tool definitions should use [LocalMCPToolDefinition] or
+ *   [BuiltInWorkerToolDefinition] instead.
  */
+@Deprecated(
+    message = "MiscToolDefinition is no longer dispatched by the orchestrator; use LocalMCPToolDefinition or BuiltInWorkerToolDefinition.",
+    replaceWith = ReplaceWith("BuiltInWorkerToolDefinition"),
+    level = DeprecationLevel.WARNING
+)
 @Serializable
 data class MiscToolDefinition(
     override val id: Long,

@@ -23,7 +23,25 @@
     "auth": {
       "refreshSkewSeconds": 60
     },
+    /*
+      Filesystem workspace for built-in tools. All file paths in built-in tool calls are
+      resolved against this directory and rejected if they escape it. The directory is
+      created at startup if it does not exist.
+    */
+    "workspace": {
+      "path": "./workspace"
+    },
+    /*
+      Built-in tool enablement. `toolNamePrefix` (optional) is prepended to all built-in
+      tool names exposed to the LLM (e.g. "project1" => "project1.read_text_file").
+      `enabled` lists the unprefixed names of tools that are available; a single "*"
+      enables all registered tools.
+    */
+    "builtInTools": {
+      "toolNamePrefix": null,
+      "enabled": ["*"],
+      "defaultCommandTimeoutSeconds": 600
+    },
     "trustedSigners": []
   }
 }
-

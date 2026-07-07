@@ -78,7 +78,7 @@ class SessionToolConfigDaoExposedTest {
 
         // Create test tool definitions
         testTool1 = createTestTool(name = "web_search", isEnabled = true)
-        testTool2 = createTestTool(name = "calculator", type = ToolType.CALCULATOR, isEnabled = true)
+        testTool2 = createTestTool(name = "calculator", type = ToolType.MCP_LOCAL, isEnabled = true)
         testTool3Disabled = createTestTool(name = "disabled_tool", isEnabled = false)
     }
 
@@ -90,7 +90,7 @@ class SessionToolConfigDaoExposedTest {
 
     private suspend fun createTestTool(
         name: String,
-        type: ToolType = ToolType.WEB_SEARCH,
+        type: ToolType = ToolType.MCP_LOCAL,
         isEnabled: Boolean = true
     ): ToolDefinition {
         val config = buildJsonObject { put("test", "value") }
@@ -283,4 +283,5 @@ class SessionToolConfigDaoExposedTest {
         }
     }
 }
+
 

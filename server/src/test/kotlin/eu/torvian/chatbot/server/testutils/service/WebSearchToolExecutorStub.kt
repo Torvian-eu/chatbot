@@ -45,7 +45,7 @@ class WebSearchToolExecutorStub : ToolExecutor {
     override fun validateConfiguration(
         toolDefinition: ToolDefinition
     ): Either<ToolExecutionError.InvalidConfiguration, Unit> {
-        if (toolDefinition.type != ToolType.WEB_SEARCH) {
+        if (toolDefinition.type != ToolType.MCP_LOCAL) {
             return ToolExecutionError.InvalidConfiguration(
                 "Tool type must be WEB_SEARCH"
             ).left()
@@ -53,4 +53,5 @@ class WebSearchToolExecutorStub : ToolExecutor {
         return Unit.right()
     }
 }
+
 

@@ -3,15 +3,17 @@ package eu.torvian.chatbot.server.service.core.toolcall
 import arrow.core.getOrElse
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.api.tool.ToolCallApprovalResponse
+import eu.torvian.chatbot.common.models.tool.BuiltInWorkerToolDefinition
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.server.data.dao.ToolCallDao
 import eu.torvian.chatbot.server.data.dao.UserToolApprovalPreferenceDao
+import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutor
+import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutorEvent
 import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutor
 import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutorEvent
-import eu.torvian.chatbot.server.service.tool.ToolExecutorFactory
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.channels.ProducerScope
 import kotlinx.coroutines.flow.Flow
@@ -30,18 +32,21 @@ private const val APPROVAL_TIMEOUT_MESSAGE = "Approval timeout (no response with
  * Default implementation of [ToolCallOrchestrator].
  *
  * Handles approval resolution, timeout handling, status persistence, and execution for both
- * Local MCP and non-Local-MCP tool calls.
+ * Local MCP and Built-in Worker tool calls. Built-in tools always require an app-signed
+ * authorization, mirroring Local MCP. The server-side execution path that previously dispatched
+ * MiscToolDefinition to pluggable ToolExecutors has been removed; any tool definition that is
+ * neither a [LocalMCPToolDefinition] nor a [BuiltInWorkerToolDefinition] is a configuration error.
  *
  * @property toolCallDao DAO for persisting tool-call status transitions and results.
- * @property toolExecutorFactory Factory that resolves the executor for non-Local-MCP tools.
  * @property localMcpExecutor Executor for Local MCP tools that dispatches to the worker.
+ * @property builtInWorkerToolExecutor Executor for built-in worker tools that dispatches to the worker.
  * @property userToolApprovalPreferenceDao DAO for user auto-approval/denial preferences.
  * @property transactionScope Transaction scope used for preference lookup.
  */
 class DefaultToolCallOrchestrator(
     private val toolCallDao: ToolCallDao,
-    private val toolExecutorFactory: ToolExecutorFactory,
     private val localMcpExecutor: LocalMCPExecutor,
+    private val builtInWorkerToolExecutor: BuiltInWorkerToolExecutor,
     private val userToolApprovalPreferenceDao: UserToolApprovalPreferenceDao,
     private val transactionScope: TransactionScope,
 ) : ToolCallOrchestrator {
@@ -68,7 +73,8 @@ class DefaultToolCallOrchestrator(
             // Step 1: Resolve approval
             val approvalOutcome = when (toolDef) {
                 is LocalMCPToolDefinition -> resolveLocalMcpApproval(pendingToolCall, toolApprovalFlow)
-                else -> resolveNonLocalMcpApproval(userId, pendingToolCall, toolDef, toolApprovalFlow)
+                is BuiltInWorkerToolDefinition -> resolveBuiltInWorkerApproval(pendingToolCall, toolApprovalFlow)
+                else -> resolveAutoApproval(userId, pendingToolCall, toolDef, toolApprovalFlow)
             }
 
             // Handle denial or timeout
@@ -101,7 +107,17 @@ class DefaultToolCallOrchestrator(
                     executeLocalMcpTool(pendingToolCall, toolDef, localApproval)
                 }
 
-                else -> executeNonLocalMcpTool(pendingToolCall, toolDef)
+                is BuiltInWorkerToolDefinition -> {
+                    val builtInApproval = approvalOutcome.submission as? ToolCallApprovalSubmission.BuiltInSigned
+                        ?: throw IllegalStateException(
+                            "Built-in worker tool call ${pendingToolCall.id} did not receive BuiltInSigned approval"
+                        )
+                    executeBuiltInWorkerTool(pendingToolCall, toolDef, builtInApproval)
+                }
+
+                else -> throw IllegalStateException(
+                    "Unsupported tool definition type for tool definition ${toolDef.id}: ${toolDef::class.simpleName}"
+                )
             }
 
             // Step 4: Persist and emit completion
@@ -114,16 +130,6 @@ class DefaultToolCallOrchestrator(
 
     /**
      * Resolves the user's approval decision for a Local MCP tool call.
-     *
-     * Local MCP tools always require user approval and wait for a signed authorization from the app.
-     * The signed submission may approve or deny the tool call; both outcomes are resolved here.
-     * If no response is received within the timeout window, returns [ApprovalOutcome.TimedOut].
-     *
-     * @receiver Producer scope used to emit [ToolCallExecutionEvent.ToolCallApprovalRequested] events.
-     * @param pendingToolCall The pending tool call awaiting approval.
-     * @param toolApprovalFlow Normalized client approval submissions emitted by the chat WebSocket.
-     * @return The resolved approval outcome.
-     * @throws IllegalStateException if persisting the AWAITING_APPROVAL status fails.
      */
     private suspend fun ProducerScope<ToolCallExecutionEvent>.resolveLocalMcpApproval(
         pendingToolCall: ToolCall,
@@ -141,7 +147,6 @@ class DefaultToolCallOrchestrator(
                     submission.toolCallId == pendingToolCall.id &&
                             submission is ToolCallApprovalSubmission.LocalMcpSigned
                 }
-                // Check the approval decision in the signed authorization
                 if (submission.approved) {
                     ApprovalOutcome.Approved(submission)
                 } else {
@@ -154,26 +159,46 @@ class DefaultToolCallOrchestrator(
     }
 
     /**
-     * Resolves approval for a non-Local-MCP tool call.
-     *
-     * May auto-approve or auto-deny based on the user's stored preferences, or request a manual
-     * Standard approval from the client when no preference exists.
-     *
-     * @receiver Producer scope used to emit [ToolCallExecutionEvent.ToolCallApprovalRequested] events.
-     * @param userId User whose approval preferences may be consulted.
-     * @param pendingToolCall The pending tool call awaiting approval.
-     * @param toolDef Definition of the tool being called.
-     * @param toolApprovalFlow Normalized client approval submissions emitted by the chat WebSocket.
-     * @return The resolved approval outcome.
-     * @throws IllegalStateException if persisting the AWAITING_APPROVAL status fails.
+     * Resolves the user's approval decision for a built-in worker tool call.
      */
-    private suspend fun ProducerScope<ToolCallExecutionEvent>.resolveNonLocalMcpApproval(
+    private suspend fun ProducerScope<ToolCallExecutionEvent>.resolveBuiltInWorkerApproval(
+        pendingToolCall: ToolCall,
+        toolApprovalFlow: Flow<ToolCallApprovalSubmission>
+    ): ApprovalOutcome {
+        val awaitingApprovalToolCall = pendingToolCall.copy(status = ToolCallStatus.AWAITING_APPROVAL)
+        toolCallDao.updateToolCall(awaitingApprovalToolCall).getOrElse { error ->
+            throw IllegalStateException("Failed to update tool call to AWAITING_APPROVAL: $error")
+        }
+        send(ToolCallExecutionEvent.ToolCallApprovalRequested(awaitingApprovalToolCall))
+
+        return try {
+            withTimeout(APPROVAL_TIMEOUT_DURATION.seconds) {
+                val submission = toolApprovalFlow.first { submission ->
+                    submission.toolCallId == pendingToolCall.id &&
+                            submission is ToolCallApprovalSubmission.BuiltInSigned
+                }
+                if (submission.approved) {
+                    ApprovalOutcome.Approved(submission)
+                } else {
+                    ApprovalOutcome.Denied(submission.denialReason)
+                }
+            }
+        } catch (_: TimeoutCancellationException) {
+            ApprovalOutcome.TimedOut
+        }
+    }
+
+    /**
+     * Resolves approval via auto-approval preference for tool types that allow opt-in
+     * auto-approval. The orchestrator currently treats every non-(Local MCP/Built-in Worker)
+     * tool as a configuration error and falls through to a regular approval flow.
+     */
+    private suspend fun ProducerScope<ToolCallExecutionEvent>.resolveAutoApproval(
         userId: Long,
         pendingToolCall: ToolCall,
         toolDef: ToolDefinition,
         toolApprovalFlow: Flow<ToolCallApprovalSubmission>
     ): ApprovalOutcome {
-        // Check for auto-approval preference
         val preference = toolDef.id.let { toolDefId ->
             transactionScope.transaction {
                 userToolApprovalPreferenceDao.getPreference(userId, toolDefId).getOrNull()
@@ -186,7 +211,6 @@ class DefaultToolCallOrchestrator(
             )
 
             return if (preference.autoApprove) {
-                // Auto-approved: return synthetic approval
                 ApprovalOutcome.Approved(
                     ToolCallApprovalSubmission.Standard(
                         ToolCallApprovalResponse(
@@ -197,12 +221,10 @@ class DefaultToolCallOrchestrator(
                     )
                 )
             } else {
-                // Auto-denied: return denial outcome
                 ApprovalOutcome.Denied(preference.denialReason ?: "Auto-denied by user preference")
             }
         }
 
-        // No preference: request user approval
         val awaitingApprovalToolCall = pendingToolCall.copy(status = ToolCallStatus.AWAITING_APPROVAL)
         toolCallDao.updateToolCall(awaitingApprovalToolCall).getOrElse { error ->
             throw IllegalStateException("Failed to update tool call to AWAITING_APPROVAL: $error")
@@ -228,14 +250,6 @@ class DefaultToolCallOrchestrator(
 
     /**
      * Persists a denied tool call and emits a completion event.
-     *
-     * Updates the tool call to [ToolCallStatus.USER_DENIED] and emits the resulting event so the
-     * chat flow can report the denial.
-     *
-     * @receiver Producer scope used to emit [ToolCallExecutionEvent.ToolCallCompleted].
-     * @param toolCall The tool call to mark as denied.
-     * @param denialReason Optional reason for the denial.
-     * @throws IllegalStateException if persisting the denied status fails.
      */
     private suspend fun ProducerScope<ToolCallExecutionEvent>.persistAndEmitDeniedToolCall(
         toolCall: ToolCall,
@@ -253,13 +267,6 @@ class DefaultToolCallOrchestrator(
 
     /**
      * Persists a timed-out tool call and emits a completion event.
-     *
-     * Updates the tool call to [ToolCallStatus.USER_DENIED] with a timeout message and emits
-     * the resulting event.
-     *
-     * @receiver Producer scope used to emit [ToolCallExecutionEvent.ToolCallCompleted].
-     * @param toolCall The tool call that timed out waiting for approval.
-     * @throws IllegalStateException if persisting the denied status fails.
      */
     private suspend fun ProducerScope<ToolCallExecutionEvent>.persistAndEmitTimedOutToolCall(toolCall: ToolCall) {
         val deniedToolCall = toolCall.copy(
@@ -274,13 +281,6 @@ class DefaultToolCallOrchestrator(
 
     /**
      * Marks a tool call as EXECUTING and emits the event.
-     *
-     * Updates the tool call to [ToolCallStatus.EXECUTING] and emits the resulting event so the
-     * chat flow can report the start of execution.
-     *
-     * @receiver Producer scope used to emit [ToolCallExecutionEvent.ToolCallExecuting].
-     * @param toolCall The tool call to mark as executing.
-     * @throws IllegalStateException if persisting the EXECUTING status fails.
      */
     private suspend fun ProducerScope<ToolCallExecutionEvent>.persistAndEmitExecutingToolCall(toolCall: ToolCall) {
         val executingToolCall = toolCall.copy(status = ToolCallStatus.EXECUTING)
@@ -292,11 +292,6 @@ class DefaultToolCallOrchestrator(
 
     /**
      * Executes a Local MCP tool and returns the updated tool call with results.
-     *
-     * @param toolCall The tool call to execute.
-     * @param toolDef The Local MCP tool definition to use.
-     * @param approval The signed approval authorization for this execution.
-     * @return The tool call with the execution output, status, and duration populated.
      */
     private suspend fun executeLocalMcpTool(
         toolCall: ToolCall,
@@ -331,67 +326,46 @@ class DefaultToolCallOrchestrator(
     }
 
     /**
-     * Executes a non-Local-MCP tool and returns the updated tool call with results.
-     *
-     * @param toolCall The tool call to execute.
-     * @param toolDef The non-Local-MCP tool definition to use.
-     * @return The tool call with the execution output, status, and duration populated.
-     * @throws IllegalStateException if no executor can be resolved for the tool type.
+     * Executes a built-in worker tool and returns the updated tool call with results.
      */
-    private suspend fun executeNonLocalMcpTool(
+    private suspend fun executeBuiltInWorkerTool(
         toolCall: ToolCall,
-        toolDef: ToolDefinition
+        toolDef: BuiltInWorkerToolDefinition,
+        approval: ToolCallApprovalSubmission.BuiltInSigned
     ): ToolCall {
         val startTime = Clock.System.now()
-        val executor = toolExecutorFactory.getExecutor(toolDef.type).getOrElse { error ->
-            throw IllegalStateException("Failed to get executor for tool type ${toolDef.type}: $error")
-        }
-
-        val result = executor.executeTool(toolDef, toolCall.input)
-        val endTime = Clock.System.now()
-        val durationMs = (endTime - startTime).inWholeMilliseconds
-
-        return result.fold(
-            ifLeft = { error ->
+        return when (val event = builtInWorkerToolExecutor.executeTool(
+            toolDefinition = toolDef,
+            toolCall = toolCall,
+            signedRequest = approval.signedRequest
+        )) {
+            is BuiltInWorkerToolExecutorEvent.ToolExecutionResult -> {
+                val durationMs = (Clock.System.now() - startTime).inWholeMilliseconds
                 toolCall.copy(
-                    status = ToolCallStatus.ERROR,
-                    errorMessage = error.toString(),
-                    durationMs = durationMs
-                )
-            },
-            ifRight = { output ->
-                toolCall.copy(
-                    output = output,
-                    status = ToolCallStatus.SUCCESS,
+                    output = event.result.output,
+                    status = if (event.result.isError) ToolCallStatus.ERROR else ToolCallStatus.SUCCESS,
+                    errorMessage = event.result.errorMessage,
                     durationMs = durationMs
                 )
             }
-        )
+
+            is BuiltInWorkerToolExecutorEvent.ToolExecutionError -> {
+                val durationMs = (Clock.System.now() - startTime).inWholeMilliseconds
+                toolCall.copy(
+                    status = ToolCallStatus.ERROR,
+                    errorMessage = event.error.message,
+                    durationMs = durationMs
+                )
+            }
+        }
     }
 
     /**
      * Internal sealed type representing the outcome of approval resolution.
-     *
-     * Used to simplify control flow in [executeAndUpdateToolCalls].
      */
     private sealed interface ApprovalOutcome {
-        /**
-         * Tool call was approved (either explicitly by the user or by auto-approval preference).
-         *
-         * @property submission The approval submission containing authorization details.
-         */
         data class Approved(val submission: ToolCallApprovalSubmission) : ApprovalOutcome
-
-        /**
-         * Tool call was explicitly denied by the user or auto-denied by preference.
-         *
-         * @property reason Optional reason for the denial.
-         */
         data class Denied(val reason: String?) : ApprovalOutcome
-
-        /**
-         * Approval request timed out (user did not respond within the timeout window).
-         */
         data object TimedOut : ApprovalOutcome
     }
 }

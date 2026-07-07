@@ -109,7 +109,7 @@ class ToolCallDaoExposedTest {
         testToolDefinition = toolDefinitionDao.insertToolDefinition(
             name = "web_search",
             description = "Search the web",
-            type = ToolType.WEB_SEARCH,
+            type = ToolType.MCP_LOCAL,
             config = config,
             inputSchema = inputSchema,
             outputSchema = null,
@@ -486,4 +486,5 @@ class ToolCallDaoExposedTest {
         assertEquals(0, remaining.size, "Expected no tool calls remaining")
     }
 }
+
 

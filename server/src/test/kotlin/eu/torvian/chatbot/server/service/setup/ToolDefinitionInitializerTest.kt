@@ -73,7 +73,7 @@ class ToolDefinitionInitializerTest {
         toolService.createTool(
             name = "test_tool",
             description = "Test tool",
-            type = ToolType.CUSTOM,
+            type = ToolType.MCP_LOCAL,
             config = kotlinx.serialization.json.buildJsonObject {},
             inputSchema = kotlinx.serialization.json.buildJsonObject {
                 put("type", kotlinx.serialization.json.JsonPrimitive("object"))
@@ -103,13 +103,13 @@ class ToolDefinitionInitializerTest {
             webSearchTool.description,
             "Expected correct description"
         )
-        assertEquals(ToolType.WEB_SEARCH, webSearchTool.type, "Expected WEB_SEARCH type")
+        assertEquals(ToolType.MCP_LOCAL, webSearchTool.type, "Expected WEB_SEARCH type")
         assertTrue(webSearchTool.isEnabled, "Web search tool should be enabled by default")
 
         // Verify weather tool was also created
         val weatherTool = tools.firstOrNull { it.name == "get_weather" }
         assertNotNull(weatherTool, "Expected get_weather tool to be created")
-        assertEquals(ToolType.WEATHER, weatherTool.type, "Expected WEATHER type")
+        assertEquals(ToolType.MCP_LOCAL, weatherTool.type, "Expected WEATHER type")
         assertTrue(weatherTool.isEnabled, "Weather tool should be enabled by default")
     }
 
@@ -224,7 +224,7 @@ class ToolDefinitionInitializerTest {
         toolService.createTool(
             name = "existing_tool",
             description = "Existing tool",
-            type = ToolType.CUSTOM,
+            type = ToolType.MCP_LOCAL,
             config = kotlinx.serialization.json.buildJsonObject {},
             inputSchema = kotlinx.serialization.json.buildJsonObject {
                 put("type", kotlinx.serialization.json.JsonPrimitive("object"))
@@ -270,4 +270,5 @@ class ToolDefinitionInitializerTest {
         assertTrue(itemProps.containsKey("snippet"), "Items should have snippet")
     }
 }
+
 

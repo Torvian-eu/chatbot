@@ -4,6 +4,7 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProt
 import eu.torvian.chatbot.common.security.AsymmetricCryptoProvider
 import eu.torvian.chatbot.common.security.JvmAsymmetricCryptoProvider
 import eu.torvian.chatbot.worker.auth.*
+import eu.torvian.chatbot.worker.builtin.*
 import eu.torvian.chatbot.worker.config.RuntimeConfig
 import eu.torvian.chatbot.worker.config.TrustedSigner
 import eu.torvian.chatbot.worker.mcp.*
@@ -201,11 +202,8 @@ fun workerModule(
             messageIdProvider = get()
         )
     }
-    single<ToolCallInteractionFactory> {
-        ToolCallInteractionFactory(
-            messageIdProvider = get()
-        )
-    }
+    // Note: ToolCallInteractionFactory is registered after the built-in tool bindings
+    // below so it can also be wired with the authorization validator and executor.
     single<CommandRequestProcessor> {
         CommandRequestProcessor(
             interactionScope = get(),
@@ -243,6 +241,31 @@ fun workerModule(
             workerUid = config.identity.uid,
             connectionLoop = get(),
             mcpClientService = get()
+        )
+    }
+    single<BuiltInToolAuthorizationValidator> {
+        DefaultBuiltInToolAuthorizationValidator(
+            verificationService = get(),
+        )
+    }
+    single<BuiltInToolExecutionContext> {
+        val cfg = get<RuntimeConfig>()
+        BuiltInToolExecutionContext(
+            workspace = java.nio.file.Paths.get(cfg.workspace.path).toAbsolutePath(),
+            toolNamePrefix = cfg.builtInTools.toolNamePrefix,
+            defaultCommandTimeoutSeconds = cfg.builtInTools.defaultCommandTimeoutSeconds,
+        )
+    }
+    single<BuiltInToolCallExecutor> {
+        DefaultBuiltInToolCallExecutor(
+            contextProvider = { get<BuiltInToolExecutionContext>() },
+        )
+    }
+    single<ToolCallInteractionFactory> {
+        ToolCallInteractionFactory(
+            authorizationValidator = get(),
+            toolCallExecutor = get(),
+            messageIdProvider = get(),
         )
     }
 }

@@ -20,7 +20,7 @@ class WeatherToolExecutorStub : ToolExecutor {
         toolDefinition: ToolDefinition,
         inputJson: String?
     ): Either<ToolExecutionError, String> {
-        if (toolDefinition.type != ToolType.WEATHER) {
+        if (toolDefinition.type != ToolType.MCP_LOCAL) {
             return ToolExecutionError.InvalidConfiguration(
                 "WeatherToolExecutorStub can only handle WEATHER tools"
             ).left()
@@ -64,7 +64,7 @@ class WeatherToolExecutorStub : ToolExecutor {
     override fun validateConfiguration(
         toolDefinition: ToolDefinition
     ): Either<ToolExecutionError.InvalidConfiguration, Unit> {
-        if (toolDefinition.type != ToolType.WEATHER) {
+        if (toolDefinition.type != ToolType.MCP_LOCAL) {
             return ToolExecutionError.InvalidConfiguration(
                 "Tool type must be WEATHER"
             ).left()
@@ -72,4 +72,5 @@ class WeatherToolExecutorStub : ToolExecutor {
         return Unit.right()
     }
 }
+
 

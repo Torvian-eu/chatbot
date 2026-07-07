@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.service.core.toolcall
 
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolExecutionAuthorization
 import eu.torvian.chatbot.common.models.api.tool.ToolCallApprovalResponse
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionAuthorization
 import eu.torvian.chatbot.common.security.SignedRequest
 import eu.torvian.chatbot.common.security.SignedRequestPayloadDecodingResult
 import eu.torvian.chatbot.common.security.decodePayload
@@ -111,6 +112,65 @@ sealed interface ToolCallApprovalSubmission {
                             toolCallId = -1L,
                             approved = false,
                             denialReason = "Invalid signed authorization metadata"
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Built-in worker tool approval carrying a detached signed request.
+     *
+     * Mirrors [LocalMcpSigned] for direct `tool.call` (non-MCP) tool executions. The signed
+     * payload contains the exact serialized [BuiltInToolExecutionAuthorization] which the worker
+     * re-verifies and uses as the single source of truth for execution.
+     */
+    data class BuiltInSigned(
+        val signedRequest: SignedRequest
+    ) : ToolCallApprovalSubmission {
+        private val decodedMetadata by lazy { decodeAuthorizationMetadata(signedRequest) }
+
+        override val toolCallId: Long
+            get() = decodedMetadata.toolCallId
+
+        override val approved: Boolean
+            get() = decodedMetadata.approved
+
+        override val denialReason: String?
+            get() = decodedMetadata.denialReason
+
+        private data class AuthorizationMetadata(
+            val toolCallId: Long,
+            val approved: Boolean,
+            val denialReason: String?
+        )
+
+        companion object {
+            private fun decodeAuthorizationMetadata(signedRequest: SignedRequest): AuthorizationMetadata {
+                return when (val decodingResult = signedRequest.decodePayload<BuiltInToolExecutionAuthorization>()) {
+                    is SignedRequestPayloadDecodingResult.Decoded -> {
+                        val auth = decodingResult.value
+                        AuthorizationMetadata(
+                            toolCallId = auth.toolCallId,
+                            approved = auth.approved,
+                            denialReason = auth.denialReason
+                        )
+                    }
+
+                    SignedRequestPayloadDecodingResult.MalformedPayload -> {
+                        AuthorizationMetadata(
+                            toolCallId = -1L,
+                            approved = false,
+                            denialReason = "Failed to decode signed built-in tool authorization metadata"
+                        )
+                    }
+
+                    SignedRequestPayloadDecodingResult.InvalidPayload -> {
+                        AuthorizationMetadata(
+                            toolCallId = -1L,
+                            approved = false,
+                            denialReason = "Invalid signed built-in tool authorization metadata"
                         )
                     }
                 }
