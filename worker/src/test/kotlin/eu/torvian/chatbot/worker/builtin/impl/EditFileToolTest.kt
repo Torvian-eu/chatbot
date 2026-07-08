@@ -256,6 +256,27 @@ class EditFileToolTest {
     }
 
     @Test
+    fun `repeated intra-token matches are replaced correctly`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            // Six characters with no whitespace: three non-overlapping "aa" runs.
+            file.writeText("aaaaaa", Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildInput("sample.txt", listOf("aa" to "X")),
+                context(dir),
+            )
+
+            assertSuccess(result)
+            // Each "aa" run must map to its own original-space range and be replaced.
+            assertEquals("XXX", readFile(file))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun `overlapping occurrences prefer the larger or more specific match`() = runTest {
         val dir = createTempDirectory("edit-file-test")
         try {
