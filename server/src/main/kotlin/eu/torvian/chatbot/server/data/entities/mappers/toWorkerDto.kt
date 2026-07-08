@@ -14,7 +14,8 @@ fun WorkerEntity.toWorkerDto(): WorkerDto = WorkerDto(
     certificateFingerprint = this.certificateFingerprint,
     allowedScopes = this.allowedScopes,
     createdAt = this.createdAt,
-    lastSeenAt = this.lastSeenAt
+    lastSeenAt = this.lastSeenAt,
+    toolNamePrefix = this.toolNamePrefix
 )
 
 

@@ -90,7 +90,8 @@ class WorkerServiceImpl(
                     displayName = displayName.trim(),
                     certificatePem = certificatePem,
                     certificateFingerprint = fingerprint,
-                    allowedScopes = allowedScopes.distinct()
+                    allowedScopes = allowedScopes.distinct(),
+                    toolNamePrefix = toolNamePrefix?.takeIf { it.isNotBlank() }
                 ).bind()
             }
 
@@ -188,12 +189,13 @@ class WorkerServiceImpl(
         ownerUserId: Long,
         workerId: Long,
         displayName: String,
-        allowedScopes: List<String>
+        allowedScopes: List<String>,
+        toolNamePrefix: String?
     ): Either<UpdateWorkerError, WorkerDto> = transactionScope.transaction {
         either {
             logger.debug("Updating worker (workerId={}, ownerUserId={})", workerId, ownerUserId)
 
-            // Fetch the worker first to verify ownership
+            // Fetch the worker first to verify ownership and read the current prefix.
             val worker = withError({ _: WorkerError.NotFound -> UpdateWorkerError.NotFound(workerId) }) {
                 workerDao.getWorkerById(workerId).bind()
             }
@@ -207,13 +209,35 @@ class WorkerServiceImpl(
                 UpdateWorkerError.Forbidden(workerId, worker.ownerUserId)
             }
 
-            // Update the worker
+            // Normalize the requested prefix: blank is treated as "no prefix".
+            val newPrefix = toolNamePrefix?.takeIf { it.isNotBlank() }
+            val oldPrefix = worker.toolNamePrefix?.takeIf { it.isNotBlank() }
+
+            // Persist the worker metadata (display name, scopes, prefix) in the same transaction.
             val updatedWorker = withError({ _: WorkerError.NotFound -> UpdateWorkerError.NotFound(workerId) }) {
                 workerDao.updateWorker(
                     id = workerId,
                     displayName = displayName.trim(),
-                    allowedScopes = allowedScopes.distinct()
+                    allowedScopes = allowedScopes.distinct(),
+                    toolNamePrefix = newPrefix
                 ).bind()
+            }
+
+            // Only rename built-in tool public names when the prefix actually changed. Renaming runs
+            // in the same transaction, so a failure rolls back the whole update atomically.
+            if (newPrefix != oldPrefix) {
+                builtInToolDefinitionSeeder.renamePublicNamesForPrefix(workerId, newPrefix)
+                    .mapLeft { seedError ->
+                        val reason = when (seedError) {
+                            is SeedBuiltInToolsError.ToolCreationFailed ->
+                                "tool creation failed: ${seedError.error}"
+
+                            is SeedBuiltInToolsError.LinkageFailed ->
+                                "linkage failed: ${seedError.error}"
+                        }
+                        logger.error("Failed to rename built-in tools for worker {}: {}", workerId, reason)
+                        UpdateWorkerError.InvalidInput("Failed to rename built-in tools: $reason")
+                    }.bind()
             }
 
             logger.info("Worker updated successfully (workerId={})", workerId)

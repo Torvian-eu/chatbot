@@ -64,7 +64,8 @@ fun Route.configureWorkerRoutes(
                     ownerUserId = ownerUserId,
                     workerId = resource.id,
                     displayName = request.displayName,
-                    allowedScopes = request.allowedScopes
+                    allowedScopes = request.allowedScopes,
+                    toolNamePrefix = request.toolNamePrefix
                 ).mapLeft { it.toApiError() }
             )
         }
@@ -100,6 +101,9 @@ private fun UpdateWorkerError.toApiError(): ApiError = when (this) {
 
     is UpdateWorkerError.Forbidden ->
         apiError(CommonApiErrorCodes.PERMISSION_DENIED, "You do not own this worker", "workerId" to workerId.toString())
+
+    is UpdateWorkerError.InvalidInput ->
+        apiError(CommonApiErrorCodes.INVALID_ARGUMENT, "Invalid worker update", "reason" to reason)
 }
 
 private fun DeleteWorkerError.toApiError(): ApiError = when (this) {

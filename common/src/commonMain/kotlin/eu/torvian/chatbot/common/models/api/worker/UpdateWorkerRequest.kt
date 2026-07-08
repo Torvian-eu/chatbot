@@ -9,9 +9,11 @@ import kotlinx.serialization.Serializable
  *
  * @property displayName New display name for the worker.
  * @property allowedScopes Updated list of allowed scopes for the worker.
+ * @property toolNamePrefix Optional prefix applied to the public names of the worker's built-in tools.
  */
 @Serializable
 data class UpdateWorkerRequest(
     val displayName: String,
-    val allowedScopes: List<String> = emptyList()
+    val allowedScopes: List<String> = emptyList(),
+    val toolNamePrefix: String? = null
 )

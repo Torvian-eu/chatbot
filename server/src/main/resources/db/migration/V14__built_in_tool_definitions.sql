@@ -14,3 +14,6 @@ CREATE TABLE built_in_tool_definitions (
     FOREIGN KEY (worker_id) REFERENCES workers (id) ON DELETE CASCADE
 );
 
+-- Optional prefix applied to the public names of a worker's built-in tools. Nullable so workers
+-- that do not use a prefix keep the unprefixed canonical tool names.
+ALTER TABLE workers ADD COLUMN tool_name_prefix VARCHAR(255);
