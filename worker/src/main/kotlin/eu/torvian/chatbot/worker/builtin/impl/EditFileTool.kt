@@ -403,12 +403,15 @@ class EditFileTool : BuiltInTool {
                     lastWasSpace = true
                 }
             } else {
-                if (lastWasSpace) {
-                    if (normCursor == normOffset) {
-                        origStart = origCursor
-                    }
-                    lastWasSpace = false
+                // Capture the original start whenever we are exactly at the normalized match
+                // start, independent of token boundaries. The previous guard (`if (lastWasSpace)`)
+                // only set it at the start of a run, so a match beginning mid-run (e.g. the second
+                // "aa" inside "aaaa") never recorded its start and was coerced to 0, collapsing
+                // every occurrence of that run onto the same range.
+                if (normCursor == normOffset) {
+                    origStart = origCursor
                 }
+                lastWasSpace = false
                 normCursor++
             }
             if (normCursor >= normOffset + needleNorm.length) {

@@ -1,0 +1,399 @@
+package eu.torvian.chatbot.worker.builtin.impl
+
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionResult
+import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
+import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.*
+import java.nio.file.Path
+import kotlin.io.path.createTempDirectory
+import kotlin.io.path.readText
+import kotlin.io.path.writeText
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+
+/**
+ * Scenario-driven unit tests for [EditFileTool].
+ *
+ * These tests lock down the current intended semantics of the tool: all-occurrence replacement,
+ * whitespace-normalized matching, deterministic overlap resolution, dry-run vs. write behavior,
+ * input validation, and workspace containment. They do not redesign the tool.
+ */
+class EditFileToolTest {
+
+    private val tool = EditFileTool()
+
+    // -----------------------------------------------------------------------------------------
+    // Helpers
+    // -----------------------------------------------------------------------------------------
+
+    /**
+     * Builds the JSON input object accepted by [EditFileTool.execute].
+     *
+     * @param path Workspace-relative file path.
+     * @param edits Ordered list of `(oldText, newText)` edit specs.
+     * @param dryRun When non-null, controls the `dryRun` flag; when null the flag is omitted.
+     * @return The input [kotlinx.serialization.json.JsonObject] for the tool.
+     */
+    private fun buildInput(
+        path: String,
+        edits: List<Pair<String, String>>,
+        dryRun: Boolean? = null,
+    ): JsonObject = buildJsonObject {
+        put("path", path)
+        putJsonArray("edits") {
+            for ((oldText, newText) in edits) {
+                addJsonObject {
+                    put("oldText", oldText)
+                    put("newText", newText)
+                }
+            }
+        }
+        if (dryRun != null) put("dryRun", dryRun)
+    }
+
+    /**
+     * Creates an execution context rooted at [workspace] using the IO dispatcher.
+     */
+    private fun context(workspace: Path): BuiltInToolExecutionContext =
+        BuiltInToolExecutionContext(
+            workspace = workspace,
+            defaultCommandTimeoutSeconds = 60,
+            ioDispatcher = Dispatchers.IO,
+        )
+
+    /**
+     * Reads the full text content of [file].
+     */
+    private fun readFile(file: Path): String = file.readText(Charsets.UTF_8)
+
+    /**
+     * Asserts that [result] is a successful (non-error) result and returns its textual output.
+     */
+    private fun assertSuccess(result: BuiltInToolExecutionResult): String {
+        assertTrue(!result.isError, "Expected success but got error: ${result.errorMessage}")
+        return result.output ?: ""
+    }
+
+    /**
+     * Asserts that [result] is an error result carrying the expected [code].
+     */
+    private fun assertError(result: BuiltInToolExecutionResult, code: String) {
+        assertTrue(result.isError, "Expected error but got success: ${result.output}")
+        assertEquals(code, result.errorCode, "Unexpected error code; message=${result.errorMessage}")
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Scenarios
+    // -----------------------------------------------------------------------------------------
+
+    @Test
+    fun `replaces all occurrences of a single edit spec`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            file.writeText("foo bar foo bar foo")
+
+            val result = tool.execute(
+                buildInput("sample.txt", listOf("foo" to "baz")),
+                context(dir),
+            )
+
+            assertSuccess(result)
+            assertEquals("baz bar baz bar baz", readFile(file))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `whitespace-normalized replacement works`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            // Multiple spaces between words in the source.
+            file.writeText("cat   walks", Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildInput("sample.txt", listOf("cat walks" to "dog runs")),
+                context(dir),
+            )
+
+            assertSuccess(result)
+            assertEquals("dog runs", readFile(file))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `multiline replacement works across line breaks`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            file.writeText("line1\nline2\nline3", Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildInput("sample.txt", listOf("line2\nline3" to "replaced")),
+                context(dir),
+            )
+
+            assertSuccess(result)
+            assertEquals("line1\nreplaced", readFile(file))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `dryRun returns a report and does not modify the file`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            val original = "foo bar foo"
+            file.writeText(original, Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildInput("sample.txt", listOf("foo" to "baz"), dryRun = true),
+                context(dir),
+            )
+
+            val output = assertSuccess(result)
+            // File must remain untouched.
+            assertEquals(original, readFile(file))
+            // Report must summarize the planned changes.
+            assertTrue(output.contains("requested edit specs: 1"), "report missing requested count")
+            assertTrue(output.contains("matched occurrences: 2"), "report missing matched count")
+            assertTrue(output.contains("applied occurrences: 2"), "report missing applied count")
+            assertTrue(output.contains("rejected occurrences: 0"), "report missing rejected count")
+            assertTrue(output.contains("--- diff ---"), "report missing diff section")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `non-dryRun writes the modified file`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            file.writeText("foo bar foo", Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildInput("sample.txt", listOf("foo" to "baz"), dryRun = false),
+                context(dir),
+            )
+
+            assertSuccess(result)
+            assertEquals("baz bar baz", readFile(file))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `edit spec with zero matches fails with an error result`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            file.writeText("hello world", Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildInput("sample.txt", listOf("missing" to "x")),
+                context(dir),
+            )
+
+            assertError(result, BuiltInToolExecutionError.EXECUTION_FAILED)
+            assertTrue(
+                result.errorMessage?.contains("not found") == true,
+                "error message should mention not found: ${result.errorMessage}",
+            )
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `blank oldText is rejected with INVALID_INPUT`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            file.writeText("hello world", Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildInput("sample.txt", listOf("   " to "x")),
+                context(dir),
+            )
+
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `non-overlapping multiple edit specs all apply`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            file.writeText("alpha beta gamma", Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildInput(
+                    "sample.txt",
+                    listOf("alpha" to "A", "beta" to "B", "gamma" to "C"),
+                ),
+                context(dir),
+            )
+
+            assertSuccess(result)
+            assertEquals("A B C", readFile(file))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `overlapping occurrences prefer the larger or more specific match`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            // "aaaa" contains two non-overlapping "aa" occurrences and one "aaaa" occurrence.
+            file.writeText("aaaa", Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildInput(
+                    "sample.txt",
+                    listOf(
+                        "aa" to "X",   // index 0, span 2
+                        "aaaa" to "Y", // index 1, span 4 (more specific -> wins)
+                    ),
+                ),
+                context(dir),
+            )
+
+            val output = assertSuccess(result)
+            // The whole string is replaced by the longer match.
+            assertEquals("Y", readFile(file))
+            // Report: 2 edit specs, 3 matched (two "aa" + one "aaaa"), 1 applied, 2 rejected.
+            assertTrue(output.contains("requested edit specs: 2"), "report missing requested count")
+            assertTrue(output.contains("matched occurrences: 3"), "report missing matched count")
+            assertTrue(output.contains("applied occurrences: 1"), "report missing applied count")
+            assertTrue(output.contains("rejected occurrences: 2"), "report missing rejected count")
+            // Rejected occurrences must identify the edit spec index and original-space range.
+            assertTrue(output.contains("edit spec index 0"), "report missing rejected edit spec index")
+            assertTrue(output.contains("original range ["), "report missing rejected original range")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `equal-priority overlap uses lower edit spec index as tie-breaker`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            file.writeText("abc", Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildInput(
+                    "sample.txt",
+                    listOf(
+                        "abc" to "X", // index 0 (kept on tie)
+                        "abc" to "Y", // index 1 (rejected on tie)
+                    ),
+                ),
+                context(dir),
+            )
+
+            val output = assertSuccess(result)
+            // Lower edit spec index wins the tie.
+            assertEquals("X", readFile(file))
+            assertTrue(output.contains("requested edit specs: 2"), "report missing requested count")
+            assertTrue(output.contains("matched occurrences: 2"), "report missing matched count")
+            assertTrue(output.contains("applied occurrences: 1"), "report missing applied count")
+            assertTrue(output.contains("rejected occurrences: 1"), "report missing rejected count")
+            assertTrue(output.contains("edit spec index 1"), "report missing rejected edit spec index")
+            assertTrue(output.contains("original range ["), "report missing rejected original range")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `match at end of file works`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            file.writeText("hello world", Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildInput("sample.txt", listOf("world" to "there")),
+                context(dir),
+            )
+
+            assertSuccess(result)
+            assertEquals("hello there", readFile(file))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `tabs spaces and newlines are normalized consistently for matching`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            // Tab between words and a trailing newline in the source.
+            file.writeText("cat\twalks\n", Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildInput("sample.txt", listOf("cat walks" to "dog runs")),
+                context(dir),
+            )
+
+            assertSuccess(result)
+            assertEquals("dog runs\n", readFile(file))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `workspace escape path is rejected`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val result = tool.execute(
+                buildInput("../escape.txt", listOf("a" to "b")),
+                context(dir),
+            )
+
+            assertError(result, BuiltInToolExecutionError.WORKSPACE_VIOLATION)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `normal in-workspace path is accepted`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val sub = dir.resolve("sub")
+            sub.toFile().mkdirs()
+            val file = sub.resolve("nested.txt")
+            file.writeText("value", Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildInput("sub/nested.txt", listOf("value" to "changed")),
+                context(dir),
+            )
+
+            assertSuccess(result)
+            assertEquals("changed", readFile(file))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+}
