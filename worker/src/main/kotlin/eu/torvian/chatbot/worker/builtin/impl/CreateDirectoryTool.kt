@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.worker.builtin.impl
 
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionResult
+import eu.torvian.chatbot.common.models.tool.BuiltInToolCatalog
 import eu.torvian.chatbot.worker.builtin.BuiltInTool
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
@@ -15,17 +16,8 @@ import java.nio.file.Files
  */
 class CreateDirectoryTool : BuiltInTool {
     override val name: String = "create_directory"
-    override val description: String = "Create a directory (and parents) inside the workspace. Idempotent."
-    override val inputSchema: JsonObject = buildJsonObject {
-        put("type", "object")
-        put("properties", buildJsonObject {
-            put("path", buildJsonObject {
-                put("type", "string")
-                put("description", "Path of the directory to create, relative to the workspace.")
-            })
-        })
-        put("required", buildJsonArray { add("path") })
-    }
+    override val description: String = BuiltInToolCatalog.specFor(name)!!.description
+    override val inputSchema: JsonObject = BuiltInToolCatalog.specFor(name)!!.inputSchema
 
     override suspend fun execute(input: JsonObject, context: BuiltInToolExecutionContext): BuiltInToolExecutionResult {
         val path = input["path"]?.jsonPrimitive?.content

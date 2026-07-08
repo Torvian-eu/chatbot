@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.worker.builtin.impl
 
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionResult
+import eu.torvian.chatbot.common.models.tool.BuiltInToolCatalog
 import eu.torvian.chatbot.worker.builtin.BuiltInTool
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
@@ -16,21 +17,8 @@ import java.nio.file.Files
  */
 class MoveFileTool : BuiltInTool {
     override val name: String = "move_file"
-    override val description: String = "Move or rename a file or directory. Fails if the destination exists."
-    override val inputSchema: JsonObject = buildJsonObject {
-        put("type", "object")
-        put("properties", buildJsonObject {
-            put("source", buildJsonObject {
-                put("type", "string")
-                put("description", "Source path relative to the workspace.")
-            })
-            put("destination", buildJsonObject {
-                put("type", "string")
-                put("description", "Destination path relative to the workspace.")
-            })
-        })
-        put("required", buildJsonArray { add("source"); add("destination") })
-    }
+    override val description: String = BuiltInToolCatalog.specFor(name)!!.description
+    override val inputSchema: JsonObject = BuiltInToolCatalog.specFor(name)!!.inputSchema
 
     override suspend fun execute(input: JsonObject, context: BuiltInToolExecutionContext): BuiltInToolExecutionResult {
         val source = input["source"]?.jsonPrimitive?.content

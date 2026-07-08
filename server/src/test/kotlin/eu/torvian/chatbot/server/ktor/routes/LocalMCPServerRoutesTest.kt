@@ -100,7 +100,8 @@ class LocalMCPServerRoutesTest {
                 Table.LOCAL_MCP_SERVERS,
                 Table.LOCAL_MCP_SERVER_SIGNATURES,
                 Table.LOCAL_MCP_TOOL_DEFINITIONS,
-                Table.TOOL_DEFINITIONS
+                Table.TOOL_DEFINITIONS,
+                Table.BUILT_IN_TOOL_DEFINITIONS
             )
         )
     }

@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.worker.builtin.impl
 
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionResult
+import eu.torvian.chatbot.common.models.tool.BuiltInToolCatalog
 import eu.torvian.chatbot.worker.builtin.BuiltInTool
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
@@ -36,32 +37,8 @@ import java.nio.file.NoSuchFileException
  */
 class EditFileTool : BuiltInTool {
     override val name: String = "edit_file"
-    override val description: String = "Apply structured edits to a text file with optional dry-run."
-    override val inputSchema: JsonObject = buildJsonObject {
-        put("type", "object")
-        put("properties", buildJsonObject {
-            put("path", buildJsonObject {
-                put("type", "string")
-                put("description", "Path to the file, relative to the workspace.")
-            })
-            put("edits", buildJsonObject {
-                put("type", "array")
-                put("items", buildJsonObject {
-                    put("type", "object")
-                    put("properties", buildJsonObject {
-                        put("oldText", buildJsonObject { put("type", "string") })
-                        put("newText", buildJsonObject { put("type", "string") })
-                    })
-                    put("required", buildJsonArray { add("oldText"); add("newText") })
-                })
-            })
-            put("dryRun", buildJsonObject {
-                put("type", "boolean")
-                put("description", "Preview the changes without applying them.")
-            })
-        })
-        put("required", buildJsonArray { add("path"); add("edits") })
-    }
+    override val description: String = BuiltInToolCatalog.specFor(name)!!.description
+    override val inputSchema: JsonObject = BuiltInToolCatalog.specFor(name)!!.inputSchema
 
     override suspend fun execute(input: JsonObject, context: BuiltInToolExecutionContext): BuiltInToolExecutionResult {
         val path = input["path"]?.jsonPrimitive?.content

@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.worker.builtin.impl
 
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionResult
+import eu.torvian.chatbot.common.models.tool.BuiltInToolCatalog
 import eu.torvian.chatbot.worker.builtin.BuiltInTool
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
@@ -20,30 +21,8 @@ import kotlin.io.path.isRegularFile
  */
 class ListDirectoryTool : BuiltInTool {
     override val name: String = "list_directory"
-    override val description: String = "List the contents of a directory with [FILE]/[DIR] prefixes."
-    override val inputSchema: JsonObject = buildJsonObject {
-        put("type", "object")
-        put("properties", buildJsonObject {
-            put("path", buildJsonObject {
-                put("type", "string")
-                put("description", "Directory path relative to the workspace (defaults to the workspace root).")
-            })
-            put("sortBy", buildJsonObject {
-                put("type", "string")
-                put("enum", buildJsonArray { add("name"); add("size") })
-                put("description", "Sort entries by name (default) or size.")
-            })
-            put("includeSizes", buildJsonObject {
-                put("type", "boolean")
-                put("description", "Include file sizes in the listing.")
-            })
-            put("recursive", buildJsonObject {
-                put("type", "boolean")
-                put("description", "Recursively list subdirectories with indentation.")
-            })
-        })
-        put("required", buildJsonArray { add("path") })
-    }
+    override val description: String = BuiltInToolCatalog.specFor(name)!!.description
+    override val inputSchema: JsonObject = BuiltInToolCatalog.specFor(name)!!.inputSchema
 
     override suspend fun execute(input: JsonObject, context: BuiltInToolExecutionContext): BuiltInToolExecutionResult {
         val path = input["path"]?.jsonPrimitive?.content ?: "."

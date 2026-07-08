@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.worker.builtin.impl
 
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionResult
+import eu.torvian.chatbot.common.models.tool.BuiltInToolCatalog
 import eu.torvian.chatbot.worker.builtin.BuiltInTool
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
@@ -18,25 +19,8 @@ import java.nio.file.NoSuchFileException
  */
 class ReadTextFileTool : BuiltInTool {
     override val name: String = "read_text_file"
-    override val description: String = "Read the contents of a text file as UTF-8."
-    override val inputSchema: JsonObject = buildJsonObject {
-        put("type", "object")
-        put("properties", buildJsonObject {
-            put("path", buildJsonObject {
-                put("type", "string")
-                put("description", "Path to the file, relative to the workspace.")
-            })
-            put("head", buildJsonObject {
-                put("type", "integer")
-                put("description", "Return only the first N lines. Mutually exclusive with 'tail'.")
-            })
-            put("tail", buildJsonObject {
-                put("type", "integer")
-                put("description", "Return only the last N lines. Mutually exclusive with 'head'.")
-            })
-        })
-        put("required", buildJsonArray { add("path") })
-    }
+    override val description: String = BuiltInToolCatalog.specFor(name)!!.description
+    override val inputSchema: JsonObject = BuiltInToolCatalog.specFor(name)!!.inputSchema
 
     override suspend fun execute(input: JsonObject, context: BuiltInToolExecutionContext): BuiltInToolExecutionResult {
         val path = input["path"]?.jsonPrimitive?.contentOrNull()

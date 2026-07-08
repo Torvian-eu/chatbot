@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.worker.builtin.impl
 
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionResult
+import eu.torvian.chatbot.common.models.tool.BuiltInToolCatalog
 import eu.torvian.chatbot.worker.builtin.BuiltInTool
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
@@ -17,29 +18,8 @@ import java.util.concurrent.TimeUnit
  */
 class RunCommandTool : BuiltInTool {
     override val name: String = "run_command"
-    override val description: String = "Run a process inside the worker workspace with a timeout."
-    override val inputSchema: JsonObject = buildJsonObject {
-        put("type", "object")
-        put("properties", buildJsonObject {
-            put("command", buildJsonObject {
-                put("type", "string")
-                put("description", "Executable name (must be on PATH or absolute).")
-            })
-            put("args", buildJsonObject {
-                put("type", "array")
-                put("items", buildJsonObject { put("type", "string") })
-                put("description", "Command-line arguments.")
-            })
-            put("timeout", buildJsonObject {
-                put("type", "integer")
-                put(
-                    "description",
-                    "Timeout in seconds. Defaults to the worker's builtInTools.defaultCommandTimeoutSeconds."
-                )
-            })
-        })
-        put("required", buildJsonArray { add("command") })
-    }
+    override val description: String = BuiltInToolCatalog.specFor(name)!!.description
+    override val inputSchema: JsonObject = BuiltInToolCatalog.specFor(name)!!.inputSchema
 
     override suspend fun execute(input: JsonObject, context: BuiltInToolExecutionContext): BuiltInToolExecutionResult {
         val command = input["command"]?.jsonPrimitive?.content

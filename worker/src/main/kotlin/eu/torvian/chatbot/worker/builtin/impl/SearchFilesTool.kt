@@ -1,6 +1,7 @@
 package eu.torvian.chatbot.worker.builtin.impl
 
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionResult
+import eu.torvian.chatbot.common.models.tool.BuiltInToolCatalog
 import eu.torvian.chatbot.worker.builtin.BuiltInTool
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
@@ -20,26 +21,8 @@ import java.nio.file.PathMatcher
  */
 class SearchFilesTool : BuiltInTool {
     override val name: String = "search_files"
-    override val description: String = "Recursively search for files/directories by glob pattern."
-    override val inputSchema: JsonObject = buildJsonObject {
-        put("type", "object")
-        put("properties", buildJsonObject {
-            put("path", buildJsonObject {
-                put("type", "string")
-                put("description", "Starting directory relative to the workspace.")
-            })
-            put("pattern", buildJsonObject {
-                put("type", "string")
-                put("description", "Glob pattern (e.g. '*.kt').")
-            })
-            put("excludePatterns", buildJsonObject {
-                put("type", "array")
-                put("items", buildJsonObject { put("type", "string") })
-                put("description", "Optional list of glob patterns to exclude.")
-            })
-        })
-        put("required", buildJsonArray { add("pattern") })
-    }
+    override val description: String = BuiltInToolCatalog.specFor(name)!!.description
+    override val inputSchema: JsonObject = BuiltInToolCatalog.specFor(name)!!.inputSchema
 
     override suspend fun execute(input: JsonObject, context: BuiltInToolExecutionContext): BuiltInToolExecutionResult {
         val pattern = input["pattern"]?.jsonPrimitive?.content
