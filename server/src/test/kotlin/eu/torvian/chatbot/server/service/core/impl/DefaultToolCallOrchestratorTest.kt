@@ -1,10 +1,8 @@
 package eu.torvian.chatbot.server.service.core.impl
 
 import arrow.core.right
-import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallResult
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolExecutionAuthorization
-import eu.torvian.chatbot.common.models.api.tool.ToolCallApprovalResponse
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionAuthorization
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionResult
 import eu.torvian.chatbot.common.models.tool.BuiltInWorkerToolDefinition
@@ -13,7 +11,6 @@ import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
 import eu.torvian.chatbot.common.security.SignedRequest
 import eu.torvian.chatbot.server.data.dao.ToolCallDao
-import eu.torvian.chatbot.server.data.dao.UserToolApprovalPreferenceDao
 import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutor
 import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutorError
 import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutorEvent
@@ -61,8 +58,6 @@ class DefaultToolCallOrchestratorTest {
     private lateinit var toolCallDao: ToolCallDao
     private lateinit var localMcpExecutor: LocalMCPExecutor
     private lateinit var builtInWorkerToolExecutor: BuiltInWorkerToolExecutor
-    private lateinit var userToolApprovalPreferenceDao: UserToolApprovalPreferenceDao
-    private lateinit var transactionScope: TransactionScope
     private lateinit var orchestrator: DefaultToolCallOrchestrator
 
     @BeforeEach
@@ -70,29 +65,17 @@ class DefaultToolCallOrchestratorTest {
         toolCallDao = mockk()
         localMcpExecutor = mockk()
         builtInWorkerToolExecutor = mockk()
-        userToolApprovalPreferenceDao = mockk()
-        transactionScope = mockk()
 
         orchestrator = DefaultToolCallOrchestrator(
             toolCallDao = toolCallDao,
             localMcpExecutor = localMcpExecutor,
             builtInWorkerToolExecutor = builtInWorkerToolExecutor,
-            userToolApprovalPreferenceDao = userToolApprovalPreferenceDao,
-            transactionScope = transactionScope,
         )
-
-        coEvery { transactionScope.transaction(any<suspend () -> Any?>()) } coAnswers {
-            val block = firstArg<suspend () -> Any?>()
-            block()
-        }
     }
 
     @AfterEach
     fun tearDown() {
-        clearMocks(
-            toolCallDao, localMcpExecutor, builtInWorkerToolExecutor,
-            userToolApprovalPreferenceDao, transactionScope,
-        )
+        clearMocks(toolCallDao, localMcpExecutor, builtInWorkerToolExecutor)
     }
 
     // --- executeAndUpdateToolCalls tests (approval/execution orchestration) ---
@@ -615,4 +598,3 @@ class DefaultToolCallOrchestratorTest {
         coVerify(exactly = 0) { toolCallDao.updateToolCall(any()) }
     }
 }
-

@@ -5,17 +5,12 @@ import eu.torvian.chatbot.worker.builtin.BuiltInTool
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
 import eu.torvian.chatbot.worker.builtin.WorkspacePathValidator
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.put
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.*
 import java.nio.file.FileSystems
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.PathMatcher
-import kotlin.streams.toList
 
 /**
  * Recursively searches for files and directories whose names match a glob pattern.
@@ -43,7 +38,7 @@ class SearchFilesTool : BuiltInTool {
                 put("description", "Optional list of glob patterns to exclude.")
             })
         })
-        put("required", buildJsonObject { put("0", "pattern") })
+        put("required", buildJsonArray { add("pattern") })
     }
 
     override suspend fun execute(input: JsonObject, context: BuiltInToolExecutionContext): BuiltInToolExecutionResult {
@@ -57,29 +52,34 @@ class SearchFilesTool : BuiltInTool {
         val root = try {
             WorkspacePathValidator.requireInside(context.workspace, path)
         } catch (e: Exception) {
-            return errorResult(BuiltInToolExecutionError.WORKSPACE_VIOLATION, e.message ?: "Path rejected by workspace validator")
+            return errorResult(
+                BuiltInToolExecutionError.WORKSPACE_VIOLATION,
+                e.message ?: "Path rejected by workspace validator"
+            )
         }
 
-        if (!Files.exists(root)) {
-            return errorResult(BuiltInToolExecutionError.NOT_FOUND, "Starting path not found: $path")
-        }
-
-        val matcher: PathMatcher = FileSystems.getDefault().getPathMatcher("glob:$pattern")
-        val excludeMatchers: List<PathMatcher> = exclude.map { FileSystems.getDefault().getPathMatcher("glob:$it") }
-        val matches = mutableListOf<Path>()
-
-        val candidates: List<Path> = Files.walk(root).use { stream -> stream.toList() }
-        candidates.forEach { candidate ->
-            if (excludeMatchers.any { it.matches(candidate.fileName) }) return@forEach
-            if (matcher.matches(candidate.fileName)) {
-                matches.add(candidate)
+        return withContext(context.ioDispatcher) {
+            if (!Files.exists(root)) {
+                return@withContext errorResult(BuiltInToolExecutionError.NOT_FOUND, "Starting path not found: $path")
             }
-        }
 
-        val relative = matches.map { context.workspace.relativize(it).toString() }
-        return BuiltInToolExecutionResult(
-            output = if (relative.isEmpty()) "" else relative.joinToString(separator = "\n"),
-        )
+            val matcher: PathMatcher = FileSystems.getDefault().getPathMatcher("glob:$pattern")
+            val excludeMatchers: List<PathMatcher> = exclude.map { FileSystems.getDefault().getPathMatcher("glob:$it") }
+            val matches = mutableListOf<Path>()
+
+            val candidates: List<Path> = Files.walk(root).use { stream -> stream.toList() }
+            candidates.forEach { candidate ->
+                if (excludeMatchers.any { it.matches(candidate.fileName) }) return@forEach
+                if (matcher.matches(candidate.fileName)) {
+                    matches.add(candidate)
+                }
+            }
+
+            val relative = matches.map { context.workspace.relativize(it).toString() }
+            BuiltInToolExecutionResult(
+                output = if (relative.isEmpty()) "" else relative.joinToString(separator = "\n"),
+            )
+        }
     }
 
     private fun errorResult(code: String, message: String): BuiltInToolExecutionResult =

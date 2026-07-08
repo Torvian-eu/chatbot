@@ -122,8 +122,8 @@ data class AuthConfigDto(
 /**
  * DTO for the worker's filesystem workspace used by built-in tools.
  *
- * @property path Path to the workspace directory. May be absolute or relative to the worker's
- *   current working directory. The directory is created at startup if it does not exist.
+ * @property path Path to the workspace directory. May be relative to the worker's config directory
+ *   or absolute. Relative paths are resolved during configuration assembly.
  */
 @Serializable
 data class WorkspaceConfigDto(
@@ -133,13 +133,11 @@ data class WorkspaceConfigDto(
 /**
  * DTO for built-in tool configuration.
  *
- * @property toolNamePrefix Optional namespace prefix for all built-in tool names.
  * @property enabled List of unprefixed built-in tool names to enable. Use a single `*` to enable all.
  * @property defaultCommandTimeoutSeconds Default timeout in seconds for the `run_command` tool.
  */
 @Serializable
 data class BuiltInToolsConfigDto(
-    val toolNamePrefix: String? = null,
     val enabled: List<String>? = null,
     val defaultCommandTimeoutSeconds: Long? = null
 )

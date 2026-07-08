@@ -9,7 +9,6 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.builders.commandResu
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.BuiltInToolProtocolMappingError
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toSignedBuiltInToolExecutionRequest
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerCommandResultPayload
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionRequest
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionResult
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandAcceptedPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRejectedPayload
@@ -87,13 +86,12 @@ class ToolCallInteraction(
 
         val authorization = (validationResult as BuiltInToolAuthorizationValidationResult.Authorized).authorization
         val innerInput = parseInputObject(authorization.input)
-        val innerRequest = BuiltInToolExecutionRequest(
+
+        emitAccepted()
+        val executionResult = toolCallExecutor.execute(
             toolName = authorization.builtInToolName,
             input = innerInput,
         )
-
-        emitAccepted()
-        val executionResult = toolCallExecutor.execute(innerRequest)
         emitResult(executionResult)
     }
 

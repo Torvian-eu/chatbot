@@ -5,9 +5,8 @@ import eu.torvian.chatbot.worker.builtin.BuiltInTool
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
 import eu.torvian.chatbot.worker.builtin.WorkspacePathValidator
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.put
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.*
 import java.nio.file.Files
 
 /**
@@ -16,19 +15,19 @@ import java.nio.file.Files
 class WriteFileTool : BuiltInTool {
     override val name: String = "write_file"
     override val description: String = "Create or overwrite a text file inside the workspace."
-    override val inputSchema: JsonObject = kotlinx.serialization.json.buildJsonObject {
+    override val inputSchema: JsonObject = buildJsonObject {
         put("type", "object")
-        put("properties", kotlinx.serialization.json.buildJsonObject {
-            put("path", kotlinx.serialization.json.buildJsonObject {
+        put("properties", buildJsonObject {
+            put("path", buildJsonObject {
                 put("type", "string")
                 put("description", "Path to the file, relative to the workspace.")
             })
-            put("content", kotlinx.serialization.json.buildJsonObject {
+            put("content", buildJsonObject {
                 put("type", "string")
                 put("description", "UTF-8 text content to write to the file.")
             })
         })
-        put("required", kotlinx.serialization.json.buildJsonObject { put("0", "path"); put("1", "content") })
+        put("required", buildJsonArray { add("path"); add("content") })
     }
 
     override suspend fun execute(input: JsonObject, context: BuiltInToolExecutionContext): BuiltInToolExecutionResult {
@@ -40,19 +39,23 @@ class WriteFileTool : BuiltInTool {
         val target = try {
             WorkspacePathValidator.requireInside(context.workspace, path)
         } catch (e: Exception) {
-            return errorResult(BuiltInToolExecutionError.WORKSPACE_VIOLATION, e.message ?: "Path rejected by workspace validator")
+            return errorResult(
+                BuiltInToolExecutionError.WORKSPACE_VIOLATION,
+                e.message ?: "Path rejected by workspace validator"
+            )
         }
 
-        return try {
-            Files.createDirectories(target.parent ?: context.workspace)
-            Files.writeString(target, content, Charsets.UTF_8)
-            BuiltInToolExecutionResult(output = "Wrote ${content.length} bytes to $path")
-        } catch (e: Exception) {
-            errorResult(BuiltInToolExecutionError.EXECUTION_FAILED, "Failed to write file: ${e.message}")
+        return withContext(context.ioDispatcher) {
+            try {
+                Files.createDirectories(target.parent ?: context.workspace)
+                Files.writeString(target, content, Charsets.UTF_8)
+                BuiltInToolExecutionResult(output = "Wrote ${content.length} bytes to $path")
+            } catch (e: Exception) {
+                errorResult(BuiltInToolExecutionError.EXECUTION_FAILED, "Failed to write file: ${e.message}")
+            }
         }
     }
 
     private fun errorResult(code: String, message: String): BuiltInToolExecutionResult =
         BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code)
 }
-

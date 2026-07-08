@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.worker.config
 
+import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -15,7 +16,8 @@ class ConfigAssemblerTest {
      */
     @Test
     fun `assembles complete dto into domain configuration`() {
-        val result = validDto().toDomain()
+        val configDir = createTempDirectory("config-assembler-test")
+        val result = validDto().toDomain(configDir)
 
         assertTrue(result.isRight())
         val config = result.getOrNull()
@@ -28,6 +30,8 @@ class ConfigAssemblerTest {
         assertEquals("./secrets.json", config?.worker?.storage?.secretsJsonPath)
         assertEquals("./token.json", config?.worker?.storage?.tokenFilePath)
         assertEquals(30, config?.worker?.auth?.refreshSkewSeconds)
+        // Workspace path should be resolved relative to configDir
+        assertEquals(configDir.resolve("./workspace").normalize().toString(), config?.worker?.workspace?.path)
 
         val signer = config?.worker?.trustedSigners?.single()
         assertEquals("signer-1", signer?.signerId)
@@ -40,6 +44,7 @@ class ConfigAssemblerTest {
      */
     @Test
     fun `uses defaults for omitted optional configuration`() {
+        val configDir = createTempDirectory("config-assembler-test")
         val result = validDto(
             setup = null,
             identity = IdentityConfigDto(
@@ -50,7 +55,7 @@ class ConfigAssemblerTest {
             ),
             auth = null,
             trustedSigners = null
-        ).toDomain()
+        ).toDomain(configDir)
 
         assertTrue(result.isRight())
         val config = result.getOrNull()
@@ -106,7 +111,8 @@ class ConfigAssemblerTest {
      * @param expectedDescriptionFragment Text expected in the validation error description.
      */
     private fun assertInvalid(dto: AppConfigDto, expectedDescriptionFragment: String) {
-        val result = dto.toDomain()
+        val configDir = createTempDirectory("config-assembler-test")
+        val result = dto.toDomain(configDir)
 
         assertTrue(result.isLeft())
         val invalid = checkNotNull(result.swap().getOrNull() as? WorkerConfigError.ConfigInvalid) {
@@ -157,6 +163,8 @@ class ConfigAssemblerTest {
             identity = identity,
             storage = storage,
             auth = auth,
+            workspace = WorkspaceConfigDto(path = "./workspace"),
+            builtInTools = BuiltInToolsConfigDto(enabled = listOf("*"), defaultCommandTimeoutSeconds = 600),
             trustedSigners = trustedSigners
         )
     )

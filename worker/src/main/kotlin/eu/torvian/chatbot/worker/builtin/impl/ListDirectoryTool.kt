@@ -5,15 +5,12 @@ import eu.torvian.chatbot.worker.builtin.BuiltInTool
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
 import eu.torvian.chatbot.worker.builtin.WorkspacePathValidator
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.put
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.*
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.isDirectory
 import kotlin.io.path.isRegularFile
-import kotlin.streams.toList
 
 /**
  * Lists the contents of a directory inside the worker workspace.
@@ -33,7 +30,7 @@ class ListDirectoryTool : BuiltInTool {
             })
             put("sortBy", buildJsonObject {
                 put("type", "string")
-                put("enum", buildJsonObject { put("0", "name"); put("1", "size") })
+                put("enum", buildJsonArray { add("name"); add("size") })
                 put("description", "Sort entries by name (default) or size.")
             })
             put("includeSizes", buildJsonObject {
@@ -45,6 +42,7 @@ class ListDirectoryTool : BuiltInTool {
                 put("description", "Recursively list subdirectories with indentation.")
             })
         })
+        put("required", buildJsonArray { add("path") })
     }
 
     override suspend fun execute(input: JsonObject, context: BuiltInToolExecutionContext): BuiltInToolExecutionResult {
@@ -60,20 +58,25 @@ class ListDirectoryTool : BuiltInTool {
         val root = try {
             WorkspacePathValidator.requireInside(context.workspace, path)
         } catch (e: Exception) {
-            return errorResult(BuiltInToolExecutionError.WORKSPACE_VIOLATION, e.message ?: "Path rejected by workspace validator")
+            return errorResult(
+                BuiltInToolExecutionError.WORKSPACE_VIOLATION,
+                e.message ?: "Path rejected by workspace validator"
+            )
         }
 
-        if (!Files.exists(root) || !root.isDirectory()) {
-            return errorResult(BuiltInToolExecutionError.NOT_FOUND, "Directory not found: $path")
-        }
+        return withContext(context.ioDispatcher) {
+            if (!Files.exists(root) || !root.isDirectory()) {
+                return@withContext errorResult(BuiltInToolExecutionError.NOT_FOUND, "Directory not found: $path")
+            }
 
-        val listing = if (recursive) {
-            renderRecursive(root, includeSizes, sortBy)
-        } else {
-            renderFlat(root, includeSizes, sortBy)
-        }
+            val listing = if (recursive) {
+                renderRecursive(root, includeSizes, sortBy)
+            } else {
+                renderFlat(root, includeSizes, sortBy)
+            }
 
-        return BuiltInToolExecutionResult(output = listing)
+            BuiltInToolExecutionResult(output = listing)
+        }
     }
 
     private fun renderFlat(root: Path, includeSizes: Boolean, sortBy: String): String {
@@ -127,4 +130,3 @@ class ListDirectoryTool : BuiltInTool {
     private fun errorResult(code: String, message: String): BuiltInToolExecutionResult =
         BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code)
 }
-

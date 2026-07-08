@@ -1,7 +1,6 @@
 package eu.torvian.chatbot.server.service.core.toolcall
 
 import arrow.core.getOrElse
-import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.api.tool.ToolCallApprovalResponse
 import eu.torvian.chatbot.common.models.tool.BuiltInWorkerToolDefinition
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
@@ -9,7 +8,6 @@ import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.server.data.dao.ToolCallDao
-import eu.torvian.chatbot.server.data.dao.UserToolApprovalPreferenceDao
 import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutor
 import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutorEvent
 import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutor
@@ -33,22 +31,19 @@ private const val APPROVAL_TIMEOUT_MESSAGE = "Approval timeout (no response with
  *
  * Handles approval resolution, timeout handling, status persistence, and execution for both
  * Local MCP and Built-in Worker tool calls. Built-in tools always require an app-signed
- * authorization, mirroring Local MCP. The server-side execution path that previously dispatched
- * MiscToolDefinition to pluggable ToolExecutors has been removed; any tool definition that is
- * neither a [LocalMCPToolDefinition] nor a [BuiltInWorkerToolDefinition] is a configuration error.
+ * authorization, mirroring Local MCP.
+ *
+ * Any tool definition that is neither a [LocalMCPToolDefinition] nor a
+ * [BuiltInWorkerToolDefinition] is a configuration error and causes an [IllegalStateException].
  *
  * @property toolCallDao DAO for persisting tool-call status transitions and results.
  * @property localMcpExecutor Executor for Local MCP tools that dispatches to the worker.
  * @property builtInWorkerToolExecutor Executor for built-in worker tools that dispatches to the worker.
- * @property userToolApprovalPreferenceDao DAO for user auto-approval/denial preferences.
- * @property transactionScope Transaction scope used for preference lookup.
  */
 class DefaultToolCallOrchestrator(
     private val toolCallDao: ToolCallDao,
     private val localMcpExecutor: LocalMCPExecutor,
     private val builtInWorkerToolExecutor: BuiltInWorkerToolExecutor,
-    private val userToolApprovalPreferenceDao: UserToolApprovalPreferenceDao,
-    private val transactionScope: TransactionScope,
 ) : ToolCallOrchestrator {
 
     private val logger: Logger = LogManager.getLogger(DefaultToolCallOrchestrator::class.java)
@@ -74,7 +69,7 @@ class DefaultToolCallOrchestrator(
             val approvalOutcome = when (toolDef) {
                 is LocalMCPToolDefinition -> resolveLocalMcpApproval(pendingToolCall, toolApprovalFlow)
                 is BuiltInWorkerToolDefinition -> resolveBuiltInWorkerApproval(pendingToolCall, toolApprovalFlow)
-                else -> resolveAutoApproval(userId, pendingToolCall, toolDef, toolApprovalFlow)
+                else -> throw IllegalStateException("Unsupported tool definition type for tool definition ${toolDef.id}: ${toolDef::class.simpleName}")
             }
 
             // Handle denial or timeout
@@ -181,66 +176,6 @@ class DefaultToolCallOrchestrator(
                     ApprovalOutcome.Approved(submission)
                 } else {
                     ApprovalOutcome.Denied(submission.denialReason)
-                }
-            }
-        } catch (_: TimeoutCancellationException) {
-            ApprovalOutcome.TimedOut
-        }
-    }
-
-    /**
-     * Resolves approval via auto-approval preference for tool types that allow opt-in
-     * auto-approval. The orchestrator currently treats every non-(Local MCP/Built-in Worker)
-     * tool as a configuration error and falls through to a regular approval flow.
-     */
-    private suspend fun ProducerScope<ToolCallExecutionEvent>.resolveAutoApproval(
-        userId: Long,
-        pendingToolCall: ToolCall,
-        toolDef: ToolDefinition,
-        toolApprovalFlow: Flow<ToolCallApprovalSubmission>
-    ): ApprovalOutcome {
-        val preference = toolDef.id.let { toolDefId ->
-            transactionScope.transaction {
-                userToolApprovalPreferenceDao.getPreference(userId, toolDefId).getOrNull()
-            }
-        }
-
-        if (preference != null) {
-            logger.info(
-                "Auto-${if (preference.autoApprove) "approving" else "denying"} tool call ${pendingToolCall.id} for user $userId based on preference"
-            )
-
-            return if (preference.autoApprove) {
-                ApprovalOutcome.Approved(
-                    ToolCallApprovalSubmission.Standard(
-                        ToolCallApprovalResponse(
-                            toolCallId = pendingToolCall.id,
-                            approved = true,
-                            denialReason = null
-                        )
-                    )
-                )
-            } else {
-                ApprovalOutcome.Denied(preference.denialReason ?: "Auto-denied by user preference")
-            }
-        }
-
-        val awaitingApprovalToolCall = pendingToolCall.copy(status = ToolCallStatus.AWAITING_APPROVAL)
-        toolCallDao.updateToolCall(awaitingApprovalToolCall).getOrElse { error ->
-            throw IllegalStateException("Failed to update tool call to AWAITING_APPROVAL: $error")
-        }
-        send(ToolCallExecutionEvent.ToolCallApprovalRequested(awaitingApprovalToolCall))
-
-        return try {
-            withTimeout(APPROVAL_TIMEOUT_DURATION.seconds) {
-                val submission = toolApprovalFlow.first { submission ->
-                    submission.toolCallId == pendingToolCall.id &&
-                            submission is ToolCallApprovalSubmission.Standard
-                }
-                if (submission.approved) {
-                    ApprovalOutcome.Approved(submission)
-                } else {
-                    ApprovalOutcome.Denied(submission.denialReason ?: "User denied tool call")
                 }
             }
         } catch (_: TimeoutCancellationException) {

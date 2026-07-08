@@ -1,24 +1,20 @@
 package eu.torvian.chatbot.worker.builtin
 
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionRequest
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionResult
-import eu.torvian.chatbot.worker.builtin.impl.CreateDirectoryTool
-import eu.torvian.chatbot.worker.builtin.impl.EditFileTool
-import eu.torvian.chatbot.worker.builtin.impl.ListDirectoryTool
-import eu.torvian.chatbot.worker.builtin.impl.MoveFileTool
-import eu.torvian.chatbot.worker.builtin.impl.ReadTextFileTool
-import eu.torvian.chatbot.worker.builtin.impl.RunCommandTool
-import eu.torvian.chatbot.worker.builtin.impl.SearchFilesTool
-import eu.torvian.chatbot.worker.builtin.impl.WriteFileTool
+import eu.torvian.chatbot.worker.builtin.impl.*
+import kotlinx.serialization.json.JsonObject
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 
 /**
  * Default in-memory implementation of [BuiltInToolCallExecutor].
  *
- * Resolves the public tool name (which may carry a configured prefix) to a [BuiltInTool]
- * implementation, looks up the appropriate execution context, and dispatches the call. Unknown
+ * Resolves the unprefixed built-in tool name to a [BuiltInTool] implementation,
+ * looks up the appropriate execution context, and dispatches the call. Unknown
  * tool names return a structured [BuiltInToolExecutionResult] error instead of throwing.
+ *
+ * Tool-name prefixing is a server-side catalog concern only — the worker runtime
+ * always resolves tools by their unprefixed name.
  */
 class DefaultBuiltInToolCallExecutor(
     private val contextProvider: () -> BuiltInToolExecutionContext,
@@ -28,8 +24,8 @@ class DefaultBuiltInToolCallExecutor(
         private val logger: Logger = LogManager.getLogger(DefaultBuiltInToolCallExecutor::class.java)
 
         /**
-         * Builds the default registry of built-in tools. The public key in the registry is the
-         * tool's unprefixed [BuiltInTool.name] — the prefix is applied at lookup time.
+         * Builds the default registry of built-in tools. The key is the unprefixed
+         * [BuiltInTool.name] (e.g. `read_text_file`).
          */
         fun defaultTools(): Map<String, BuiltInTool> = mapOf(
             "read_text_file" to ReadTextFileTool(),
@@ -45,20 +41,19 @@ class DefaultBuiltInToolCallExecutor(
 
     private val tools: Map<String, BuiltInTool> = defaultTools()
 
-    override suspend fun execute(request: BuiltInToolExecutionRequest): BuiltInToolExecutionResult {
+    override suspend fun execute(toolName: String, input: JsonObject): BuiltInToolExecutionResult {
         val context = contextProvider()
-        val unprefixed = unprefix(request.toolName, context.toolNamePrefix)
-        val tool = tools[unprefixed]
+        val tool = tools[toolName]
         if (tool == null) {
-            logger.warn("Unknown built-in tool requested: ${request.toolName}")
+            logger.warn("Unknown built-in tool requested: $toolName")
             return BuiltInToolExecutionResult(
                 isError = true,
-                errorMessage = "Unknown built-in tool: ${request.toolName}",
+                errorMessage = "Unknown built-in tool: $toolName",
                 errorCode = BuiltInToolExecutionError.UNKNOWN_TOOL,
             )
         }
         return try {
-            tool.execute(request.input, context)
+            tool.execute(input, context)
         } catch (e: WorkspaceSecurityViolation) {
             BuiltInToolExecutionResult(
                 isError = true,
@@ -74,14 +69,4 @@ class DefaultBuiltInToolCallExecutor(
             )
         }
     }
-
-    /**
-     * Strips the configured prefix from [publicName] to obtain the unprefixed registry key.
-     */
-    private fun unprefix(publicName: String, prefix: String?): String {
-        if (prefix.isNullOrBlank()) return publicName
-        val expected = "$prefix."
-        return if (publicName.startsWith(expected)) publicName.substring(expected.length) else publicName
-    }
 }
-

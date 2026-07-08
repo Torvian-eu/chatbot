@@ -149,7 +149,7 @@ class WorkerMain(
         }
 
         // Phase 3: Strict assembly and validation.
-        val appConfig = currentDto.toDomain()
+        val appConfig = currentDto.toDomain(configDir)
             .mapLeft { WorkerMainError.Config(it) }
             .bind()
         val config = appConfig.worker

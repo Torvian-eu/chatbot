@@ -19,7 +19,7 @@ data class Configuration(
  * @property storage Secrets and token file paths.
  * @property auth Authentication timing configuration.
  * @property workspace Filesystem workspace for built-in tools.
- * @property builtInTools Built-in tool configuration (prefix, enabled names, default command timeout).
+ * @property builtInTools Built-in tool configuration (enabled names, default command timeout).
  * @property trustedSigners Authorized E2EA signers trusted by this worker.
  */
 data class RuntimeConfig(
@@ -39,7 +39,10 @@ data class RuntimeConfig(
  * `run_command`. All file paths provided to built-in tools are resolved against this directory and
  * rejected if they escape it.
  *
- * @property path Absolute or worker-relative filesystem path to the workspace directory.
+ * This is the resolved domain model; the path is always an absolute normalized path.
+ * For the DTO that accepts relative or absolute paths, see [WorkspaceConfigDto].
+ *
+ * @property path Absolute normalized path to the workspace directory.
  */
 data class WorkspaceConfig(
     val path: String
@@ -48,15 +51,11 @@ data class WorkspaceConfig(
 /**
  * Built-in tool configuration.
  *
- * @property toolNamePrefix Optional namespace prefix prepended to all built-in tool names
- *   (e.g. `project1` results in `project1.read_text_file`). When `null`, tools are exposed
- *   unprefixed.
  * @property enabled List of unprefixed built-in tool names to enable. Empty list enables none.
  *   The sentinel value containing a single `*` enables all registered tools.
  * @property defaultCommandTimeoutSeconds Default timeout in seconds for the `run_command` tool.
  */
 data class BuiltInToolsConfig(
-    val toolNamePrefix: String? = null,
     val enabled: List<String> = emptyList(),
     val defaultCommandTimeoutSeconds: Long = 600
 )

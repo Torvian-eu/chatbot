@@ -19,8 +19,9 @@ enum class ToolType {
     /**
      * Built-in tools that are dispatched directly to a worker over the `tool.call` protocol.
      *
-     * The worker resolves the public tool name (optionally prefixed) against its in-memory built-in
-     * registry and executes the matching implementation inside its `workspace` directory.
+     * The worker resolves the unprefixed built-in tool name against its in-memory registry
+     * and executes the matching implementation inside its `workspace` directory. Tool-name
+     * prefixing is a server-side catalog concern and is not applied at the worker runtime.
      */
     BUILTIN_WORKER
 }

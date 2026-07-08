@@ -7,7 +7,6 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProt
 import eu.torvian.chatbot.common.models.api.worker.protocol.core.WorkerProtocolMessage
 import eu.torvian.chatbot.common.models.api.worker.protocol.mapping.toWorkerCommandRequestPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionAuthorization
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionRequest
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionResult
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.SignedBuiltInToolExecutionRequest
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRequestPayload
@@ -64,7 +63,7 @@ class ToolCallInteractionTest {
                 payload = null,
             ),
             requestPayload = requestPayload,
-            authorizationValidator = AuthorizingValidator(authorization),
+            authorizationValidator = AuthorizingValidator(),
             toolCallExecutor = executor,
             emitter = emitter,
             messageIdProvider = SequenceMessageIdProvider(),
@@ -278,13 +277,12 @@ class ToolCallInteractionTest {
 
     /**
      * Validator that always returns [BuiltInToolAuthorizationValidationResult.Authorized] with
-     * the supplied authorization.
+     * the authorization decoded from the signed request payload.
      */
-    private class AuthorizingValidator(
-        private val authorization: BuiltInToolExecutionAuthorization,
-    ) : BuiltInToolAuthorizationValidator {
+    private class AuthorizingValidator : BuiltInToolAuthorizationValidator {
         override suspend fun validate(signedRequest: SignedRequest): BuiltInToolAuthorizationValidationResult {
-            return BuiltInToolAuthorizationValidationResult.Authorized(authorization)
+            val auth = Json.decodeFromString(BuiltInToolExecutionAuthorization.serializer(), signedRequest.payload)
+            return BuiltInToolAuthorizationValidationResult.Authorized(auth)
         }
     }
 
@@ -309,10 +307,11 @@ class ToolCallInteractionTest {
     private class RecordingExecutor(
         private val result: BuiltInToolExecutionResult,
     ) : BuiltInToolCallExecutor {
-        val executed: MutableList<BuiltInToolExecutionRequest> = mutableListOf()
+        data class Invocation(val toolName: String, val input: JsonObject)
+        val executed: MutableList<Invocation> = mutableListOf()
 
-        override suspend fun execute(request: BuiltInToolExecutionRequest): BuiltInToolExecutionResult {
-            executed += request
+        override suspend fun execute(toolName: String, input: JsonObject): BuiltInToolExecutionResult {
+            executed += Invocation(toolName, input)
             return result
         }
     }

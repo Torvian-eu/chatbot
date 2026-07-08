@@ -5,13 +5,8 @@ import eu.torvian.chatbot.worker.builtin.BuiltInTool
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
 import eu.torvian.chatbot.worker.builtin.WorkspacePathValidator
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.put
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.*
 import java.nio.file.Files
 import java.nio.file.NoSuchFileException
 
@@ -42,7 +37,7 @@ class EditFileTool : BuiltInTool {
                         put("oldText", buildJsonObject { put("type", "string") })
                         put("newText", buildJsonObject { put("type", "string") })
                     })
-                    put("required", buildJsonObject { put("0", "oldText"); put("1", "newText") })
+                    put("required", buildJsonArray { add("oldText"); add("newText") })
                 })
             })
             put("dryRun", buildJsonObject {
@@ -50,12 +45,13 @@ class EditFileTool : BuiltInTool {
                 put("description", "Preview the changes without applying them.")
             })
         })
-        put("required", buildJsonObject { put("0", "path"); put("1", "edits") })
+        put("required", buildJsonArray { add("path"); add("edits") })
     }
 
     override suspend fun execute(input: JsonObject, context: BuiltInToolExecutionContext): BuiltInToolExecutionResult {
         val path = input["path"]?.jsonPrimitive?.content
             ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Missing required argument: path")
+
         @Suppress("UNCHECKED_CAST")
         val editsJson = input["edits"] as? JsonArray
             ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Missing or invalid 'edits' array")
@@ -78,33 +74,44 @@ class EditFileTool : BuiltInTool {
         val target = try {
             WorkspacePathValidator.requireInside(context.workspace, path)
         } catch (e: Exception) {
-            return errorResult(BuiltInToolExecutionError.WORKSPACE_VIOLATION, e.message ?: "Path rejected by workspace validator")
+            return errorResult(
+                BuiltInToolExecutionError.WORKSPACE_VIOLATION,
+                e.message ?: "Path rejected by workspace validator"
+            )
         }
 
-        val original = try {
-            Files.readString(target, Charsets.UTF_8)
-        } catch (e: NoSuchFileException) {
-            return errorResult(BuiltInToolExecutionError.NOT_FOUND, "File not found: $path")
-        } catch (e: Exception) {
-            return errorResult(BuiltInToolExecutionError.EXECUTION_FAILED, "Failed to read file: ${e.message}")
-        }
-
-        val outcome = applyEdits(original, edits)
-        if (outcome is ApplyOutcome.Failure) {
-            return errorResult(BuiltInToolExecutionError.EXECUTION_FAILED, outcome.message)
-        }
-        val success = outcome as ApplyOutcome.Success
-        val resultText = if (dryRun) {
-            renderDiff(original, success.modified, edits)
-        } else {
-            try {
-                Files.writeString(target, success.modified, Charsets.UTF_8)
-                renderDiff(original, success.modified, edits)
+        return withContext(context.ioDispatcher) {
+            val original = try {
+                Files.readString(target, Charsets.UTF_8)
+            } catch (_: NoSuchFileException) {
+                return@withContext errorResult(BuiltInToolExecutionError.NOT_FOUND, "File not found: $path")
             } catch (e: Exception) {
-                return errorResult(BuiltInToolExecutionError.EXECUTION_FAILED, "Failed to write file: ${e.message}")
+                return@withContext errorResult(
+                    BuiltInToolExecutionError.EXECUTION_FAILED,
+                    "Failed to read file: ${e.message}"
+                )
             }
+
+            val outcome = applyEdits(original, edits)
+            if (outcome is ApplyOutcome.Failure) {
+                return@withContext errorResult(BuiltInToolExecutionError.EXECUTION_FAILED, outcome.message)
+            }
+            val success = outcome as ApplyOutcome.Success
+            val resultText = if (dryRun) {
+                renderDiff(original, success.modified, edits)
+            } else {
+                try {
+                    Files.writeString(target, success.modified, Charsets.UTF_8)
+                    renderDiff(original, success.modified, edits)
+                } catch (e: Exception) {
+                    return@withContext errorResult(
+                        BuiltInToolExecutionError.EXECUTION_FAILED,
+                        "Failed to write file: ${e.message}"
+                    )
+                }
+            }
+            BuiltInToolExecutionResult(output = resultText)
         }
-        return BuiltInToolExecutionResult(output = resultText)
     }
 
     private fun renderDiff(original: String, modified: String, edits: List<EditSpec>): String {
@@ -152,8 +159,8 @@ class EditFileTool : BuiltInTool {
                 return ApplyOutcome.Failure("Edit at index $index: 'oldText' not found (after whitespace normalization)")
             }
             current = current.substring(0, occurrenceIndex) +
-                edit.newText +
-                current.substring(occurrenceIndex + edit.oldText.length)
+                    edit.newText +
+                    current.substring(occurrenceIndex + edit.oldText.length)
         }
         return ApplyOutcome.Success(current)
     }
@@ -221,4 +228,3 @@ class EditFileTool : BuiltInTool {
     private fun normalize(input: String): String =
         input.split(Regex("\\s+")).filter { it.isNotEmpty() }.joinToString(" ")
 }
-

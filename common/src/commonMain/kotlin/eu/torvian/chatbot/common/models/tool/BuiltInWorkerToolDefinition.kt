@@ -8,9 +8,9 @@ import kotlin.time.Instant
 /**
  * Represents a tool definition that is provided by a specific worker as a built-in tool.
  *
- * The worker resolves the public [name] (which includes any configured prefix) against its in-memory
- * built-in tool registry and executes the matching implementation inside its `workspace` directory.
- * The unprefixed implementation is identified by [builtInToolName].
+ * The server-side tool catalog stores the public [name] (which may include a configured prefix
+ * for disambiguation across workers). The worker runtime resolves execution strictly by the
+ * unprefixed [builtInToolName] (e.g. `read_text_file`), not by the public prefixed name.
  *
  * @property workerId Unique identifier for the worker that exposes this tool.
  * @property builtInToolName Unprefixed tool name used to look up the implementation on the worker.
@@ -36,4 +36,3 @@ data class BuiltInWorkerToolDefinition(
         return this.copy(updatedAt = newUpdatedAt)
     }
 }
-

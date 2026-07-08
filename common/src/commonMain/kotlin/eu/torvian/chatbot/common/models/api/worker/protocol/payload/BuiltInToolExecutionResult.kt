@@ -24,6 +24,5 @@ data class BuiltInToolExecutionResult(
     val isError: Boolean = false,
     val errorMessage: String? = null,
     val errorCode: String? = null,
-    val errorDetails: String? = null
+    val errorDetails: JsonObject? = null
 )
-

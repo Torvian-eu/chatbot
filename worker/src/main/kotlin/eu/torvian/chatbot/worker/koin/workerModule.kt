@@ -48,6 +48,7 @@ import kotlinx.serialization.json.Json
 import org.apache.logging.log4j.LogManager
 import org.koin.dsl.module
 import java.nio.file.Path
+import java.nio.file.Paths
 import kotlin.time.Duration.Companion.seconds
 import org.apache.logging.log4j.Logger as Log4jLogger
 
@@ -251,14 +252,13 @@ fun workerModule(
     single<BuiltInToolExecutionContext> {
         val cfg = get<RuntimeConfig>()
         BuiltInToolExecutionContext(
-            workspace = java.nio.file.Paths.get(cfg.workspace.path).toAbsolutePath(),
-            toolNamePrefix = cfg.builtInTools.toolNamePrefix,
+            workspace = Paths.get(cfg.workspace.path),
             defaultCommandTimeoutSeconds = cfg.builtInTools.defaultCommandTimeoutSeconds,
         )
     }
     single<BuiltInToolCallExecutor> {
         DefaultBuiltInToolCallExecutor(
-            contextProvider = { get<BuiltInToolExecutionContext>() },
+            contextProvider = get(),
         )
     }
     single<ToolCallInteractionFactory> {

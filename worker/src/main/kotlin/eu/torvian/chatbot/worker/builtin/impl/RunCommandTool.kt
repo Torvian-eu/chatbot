@@ -4,11 +4,8 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolE
 import eu.torvian.chatbot.worker.builtin.BuiltInTool
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.put
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.*
 import java.util.concurrent.TimeUnit
 
 /**
@@ -35,16 +32,19 @@ class RunCommandTool : BuiltInTool {
             })
             put("timeout", buildJsonObject {
                 put("type", "integer")
-                put("description", "Timeout in seconds. Defaults to the worker's builtInTools.defaultCommandTimeoutSeconds.")
+                put(
+                    "description",
+                    "Timeout in seconds. Defaults to the worker's builtInTools.defaultCommandTimeoutSeconds."
+                )
             })
         })
-        put("required", buildJsonObject { put("0", "command") })
+        put("required", buildJsonArray { add("command") })
     }
 
     override suspend fun execute(input: JsonObject, context: BuiltInToolExecutionContext): BuiltInToolExecutionResult {
         val command = input["command"]?.jsonPrimitive?.content
             ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Missing required argument: command")
-        val args = (input["args"] as? JsonArray)?.mapNotNull { it.jsonPrimitive?.content } ?: emptyList()
+        val args = (input["args"] as? JsonArray)?.mapNotNull { it.jsonPrimitive.content } ?: emptyList()
         val timeoutSeconds = input["timeout"]?.jsonPrimitive?.content?.toLongOrNull()
             ?: context.defaultCommandTimeoutSeconds
 
@@ -52,37 +52,48 @@ class RunCommandTool : BuiltInTool {
             return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "timeout must be > 0 seconds")
         }
 
-        return try {
-            val processBuilder = ProcessBuilder(listOf(command) + args)
-                .directory(context.workspace.toFile())
-                .redirectErrorStream(false)
-            val process = processBuilder.start()
-            val finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS)
-            if (!finished) {
-                process.destroyForcibly()
-                return errorResult(BuiltInToolExecutionError.TIMEOUT, "Command exceeded timeout of $timeoutSeconds seconds")
+        return withContext(context.ioDispatcher) {
+            try {
+                val processBuilder = ProcessBuilder(listOf(command) + args)
+                    .directory(context.workspace.toFile())
+                    .redirectErrorStream(false)
+                val process = processBuilder.start()
+                val finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS)
+                if (!finished) {
+                    process.destroyForcibly()
+                    return@withContext errorResult(
+                        BuiltInToolExecutionError.TIMEOUT,
+                        "Command exceeded timeout of $timeoutSeconds seconds"
+                    )
+                }
+                val stdout = process.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                val stderr = process.errorStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                val exitCode = process.exitValue()
+                val details = buildJsonObject {
+                    put("stdout", stdout)
+                    put("stderr", stderr)
+                    put("exitCode", exitCode)
+                    put("timeoutSeconds", timeoutSeconds)
+                }
+                BuiltInToolExecutionResult(
+                    output = buildString {
+                        append("exitCode: ").append(exitCode).append('\n')
+                        append("--- stdout ---\n").append(stdout)
+                        if (stderr.isNotEmpty()) {
+                            append("\n--- stderr ---\n").append(stderr)
+                        }
+                    },
+                    isError = exitCode != 0,
+                    errorMessage = if (exitCode != 0) "Command exited with code $exitCode" else null,
+                    errorCode = if (exitCode != 0) BuiltInToolExecutionError.EXECUTION_FAILED else null,
+                    details = details,
+                )
+            } catch (e: Exception) {
+                errorResult(BuiltInToolExecutionError.EXECUTION_FAILED, "Failed to run command: ${e.message}")
             }
-            val stdout = process.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-            val stderr = process.errorStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-            val exitCode = process.exitValue()
-            BuiltInToolExecutionResult(
-                output = buildString {
-                    append("exitCode: ").append(exitCode).append('\n')
-                    append("--- stdout ---\n").append(stdout)
-                    if (stderr.isNotEmpty()) {
-                        append("\n--- stderr ---\n").append(stderr)
-                    }
-                },
-                isError = exitCode != 0,
-                errorMessage = if (exitCode != 0) "Command exited with code $exitCode" else null,
-                errorCode = if (exitCode != 0) BuiltInToolExecutionError.EXECUTION_FAILED else null,
-            )
-        } catch (e: Exception) {
-            errorResult(BuiltInToolExecutionError.EXECUTION_FAILED, "Failed to run command: ${e.message}")
         }
     }
 
     private fun errorResult(code: String, message: String): BuiltInToolExecutionResult =
         BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code)
 }
-

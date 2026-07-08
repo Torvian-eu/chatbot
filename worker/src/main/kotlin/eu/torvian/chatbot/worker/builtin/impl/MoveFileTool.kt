@@ -5,10 +5,8 @@ import eu.torvian.chatbot.worker.builtin.BuiltInTool
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
 import eu.torvian.chatbot.worker.builtin.WorkspacePathValidator
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.put
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.*
 import java.nio.file.Files
 
 /**
@@ -31,7 +29,7 @@ class MoveFileTool : BuiltInTool {
                 put("description", "Destination path relative to the workspace.")
             })
         })
-        put("required", buildJsonObject { put("0", "source"); put("1", "destination") })
+        put("required", buildJsonArray { add("source"); add("destination") })
     }
 
     override suspend fun execute(input: JsonObject, context: BuiltInToolExecutionContext): BuiltInToolExecutionResult {
@@ -51,22 +49,26 @@ class MoveFileTool : BuiltInTool {
             return errorResult(BuiltInToolExecutionError.WORKSPACE_VIOLATION, "destination: ${e.message}")
         }
 
-        if (!Files.exists(sourcePath)) {
-            return errorResult(BuiltInToolExecutionError.NOT_FOUND, "Source does not exist: $source")
-        }
-        if (Files.exists(destinationPath)) {
-            return errorResult(BuiltInToolExecutionError.ALREADY_EXISTS, "Destination already exists: $destination")
-        }
+        return withContext(context.ioDispatcher) {
+            if (!Files.exists(sourcePath)) {
+                return@withContext errorResult(BuiltInToolExecutionError.NOT_FOUND, "Source does not exist: $source")
+            }
+            if (Files.exists(destinationPath)) {
+                return@withContext errorResult(
+                    BuiltInToolExecutionError.ALREADY_EXISTS,
+                    "Destination already exists: $destination"
+                )
+            }
 
-        return try {
-            Files.move(sourcePath, destinationPath)
-            BuiltInToolExecutionResult(output = "Moved $source to $destination")
-        } catch (e: Exception) {
-            errorResult(BuiltInToolExecutionError.EXECUTION_FAILED, "Failed to move: ${e.message}")
+            try {
+                Files.move(sourcePath, destinationPath)
+                BuiltInToolExecutionResult(output = "Moved $source to $destination")
+            } catch (e: Exception) {
+                errorResult(BuiltInToolExecutionError.EXECUTION_FAILED, "Failed to move: ${e.message}")
+            }
         }
     }
 
     private fun errorResult(code: String, message: String): BuiltInToolExecutionResult =
         BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code)
 }
-

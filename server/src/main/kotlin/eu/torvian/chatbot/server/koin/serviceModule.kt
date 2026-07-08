@@ -62,7 +62,7 @@ fun serviceModule() = module {
     single<LLMProviderService> { LLMProviderServiceImpl(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     single<MessageService> { MessageServiceImpl(get(), get(), get()) }
     single<SearchService> { SearchServiceImpl(get()) }
-    single<ToolCallOrchestrator> { DefaultToolCallOrchestrator(get(), get(), get(), get(), get()) }
+    single<ToolCallOrchestrator> { DefaultToolCallOrchestrator(get(), get(), get()) }
     single<FileReferenceContentBuilder> { DefaultFileReferenceContentBuilder() }
     single<ToolResultContentBuilder> { DefaultToolResultContentBuilder() }
     single<ChatContextBuilder> { DefaultChatContextBuilder(get(), get()) }

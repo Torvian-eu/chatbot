@@ -5,6 +5,7 @@ import arrow.core.raise.Raise
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import java.net.URI
+import java.nio.file.Path
 
 /**
  * Strict assembly and validation helpers for worker configuration.
@@ -27,7 +28,7 @@ import java.net.URI
  * @receiver The [AppConfigDto] to convert and validate.
  * @return Either a logical configuration error or the fully validated [Configuration].
  */
-fun AppConfigDto.toDomain(): Either<WorkerConfigError, Configuration> = either {
+fun AppConfigDto.toDomain(configDir: Path): Either<WorkerConfigError, Configuration> = either {
     val worker = worker ?: raise(WorkerConfigError.ConfigInvalid("Missing required config group: worker"))
 
     val serverDto = worker.server ?: raise(WorkerConfigError.ConfigInvalid("Missing required config group: worker.server"))
@@ -46,7 +47,6 @@ fun AppConfigDto.toDomain(): Either<WorkerConfigError, Configuration> = either {
     val tokenFilePath = required("worker.storage.tokenFilePath", storageDto.tokenFilePath)
     val refreshSkewSeconds = authDto.refreshSkewSeconds ?: 60L
     val workspacePath = required("worker.workspace.path", workspaceDto.path)
-    val builtInToolsPrefix = builtInToolsDto.toolNamePrefix?.takeIf { it.isNotBlank() }
     val builtInToolsEnabled = builtInToolsDto.enabled ?: emptyList()
     val defaultCommandTimeoutSeconds = builtInToolsDto.defaultCommandTimeoutSeconds ?: 600L
     val trustedSigners = worker.trustedSigners.orEmpty().mapIndexed { index, signerDto ->
@@ -82,6 +82,13 @@ fun AppConfigDto.toDomain(): Either<WorkerConfigError, Configuration> = either {
         WorkerConfigError.ConfigInvalid("worker.builtInTools.defaultCommandTimeoutSeconds must be > 0")
     }
 
+    // Resolve workspace path relative to config directory using PathResolver
+    val pathResolver = PathResolver()
+    val resolvedWorkspacePath = pathResolver.resolvePath(
+        configDir = configDir,
+        configuredPath = workspacePath
+    )
+
     Configuration(
         setupRequired = setup?.required ?: true,
         worker = RuntimeConfig(
@@ -102,10 +109,9 @@ fun AppConfigDto.toDomain(): Either<WorkerConfigError, Configuration> = either {
                 refreshSkewSeconds = refreshSkewSeconds
             ),
             workspace = WorkspaceConfig(
-                path = workspacePath
+                path = resolvedWorkspacePath.toString()
             ),
             builtInTools = BuiltInToolsConfig(
-                toolNamePrefix = builtInToolsPrefix,
                 enabled = builtInToolsEnabled,
                 defaultCommandTimeoutSeconds = defaultCommandTimeoutSeconds
             ),
@@ -167,4 +173,3 @@ private fun Raise<WorkerConfigError>.validateServerBaseUrl(rawValue: String) {
         WorkerConfigError.ConfigInvalid("worker.server.baseUrl scheme must be http or https")
     }
 }
-
