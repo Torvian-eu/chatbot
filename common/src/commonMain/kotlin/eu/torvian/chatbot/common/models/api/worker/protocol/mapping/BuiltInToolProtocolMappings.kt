@@ -7,7 +7,6 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.codec.decodeProtocol
 import eu.torvian.chatbot.common.models.api.worker.protocol.codec.encodeProtocolPayload
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerCommandResultStatuses
 import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProtocolCommandTypes
-import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionRequest
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionResult
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.SignedBuiltInToolExecutionRequest
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerCommandRequestPayload
@@ -57,31 +56,6 @@ fun WorkerCommandRequestPayload.toSignedBuiltInToolExecutionRequest(): Either<Bu
         ).mapLeft { it.toToolCallMappingError() }
             .bind()
     }
-
-/**
- * Maps a built-in tool execution request to a typed worker command-request payload (no signature).
- *
- * Useful for worker-side flows that need to convert a decoded inner request into a payload (e.g.
- * echoing a request for diagnostic purposes). Server-side dispatch always uses the signed
- * mapping above.
- *
- * @receiver Decoded built-in tool execution request.
- * @return Either a worker payload or a logical mapping error.
- */
-fun BuiltInToolExecutionRequest.toWorkerCommandRequestPayload():
-        Either<BuiltInToolProtocolMappingError, WorkerCommandRequestPayload> = either {
-
-    val data = encodeProtocolPayload(
-        value = this@toWorkerCommandRequestPayload,
-        targetType = "BuiltInToolExecutionRequest"
-    ).mapLeft { it.toToolCallMappingError() }
-        .bind()
-
-    WorkerCommandRequestPayload(
-        commandType = WorkerProtocolCommandTypes.TOOL_CALL,
-        data = data
-    )
-}
 
 /**
  * Maps a built-in tool-call result to a typed worker command-result payload.
@@ -135,4 +109,3 @@ private fun WorkerProtocolCodecError.toToolCallMappingError(): BuiltInToolProtoc
         )
     }
 }
-

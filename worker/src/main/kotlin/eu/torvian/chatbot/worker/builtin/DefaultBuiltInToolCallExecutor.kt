@@ -9,15 +9,13 @@ import org.apache.logging.log4j.Logger
 /**
  * Default in-memory implementation of [BuiltInToolCallExecutor].
  *
- * Resolves the unprefixed built-in tool name to a [BuiltInTool] implementation,
- * looks up the appropriate execution context, and dispatches the call. Unknown
- * tool names return a structured [BuiltInToolExecutionResult] error instead of throwing.
+ * Resolves the unprefixed built-in tool name to a [BuiltInTool] implementation and dispatches the
+ * call with the injected [context]. Unknown tool names return a structured
+ * [BuiltInToolExecutionResult] error instead of throwing.
  *
- * Tool-name prefixing is a server-side catalog concern only — the worker runtime
- * always resolves tools by their unprefixed name.
  */
 class DefaultBuiltInToolCallExecutor(
-    private val contextProvider: () -> BuiltInToolExecutionContext,
+    private val context: BuiltInToolExecutionContext,
 ) : BuiltInToolCallExecutor {
 
     companion object {
@@ -42,7 +40,6 @@ class DefaultBuiltInToolCallExecutor(
     private val tools: Map<String, BuiltInTool> = defaultTools()
 
     override suspend fun execute(toolName: String, input: JsonObject): BuiltInToolExecutionResult {
-        val context = contextProvider()
         val tool = tools[toolName]
         if (tool == null) {
             logger.warn("Unknown built-in tool requested: $toolName")

@@ -13,14 +13,20 @@ import java.nio.file.NoSuchFileException
 /**
  * Performs selective edits inside a text file using `oldText` -> `newText` replacements.
  *
- * Features:
- * - Whitespace-normalized search/replace so minor indentation differences do not cause misses.
- * - Multi-line `oldText` is supported.
- * - Multiple edits are applied sequentially in one pass. Each edit operates on the result of all
- *   prior edits (later edits see the output of earlier ones). Edits are NOT applied in parallel —
- *   overlapping oldText ranges across sequential edits is handled naturally because the second
- *   edit searches the already-modified string.
- * - `dryRun` produces a unified diff and match summary without modifying the file.
+ * Behavior:
+ * - Matching is performed in **whitespace-normalized** space so minor indentation differences do
+ *   not cause misses, but every replacement is applied using the **original-space** character
+ *   range that the normalized match maps back to. This keeps the fix where replacements never rely
+ *   on `oldText.length` for normalized matches.
+ * - Edits are planned as a batch against the *same* original text. The planning phase never mutates
+ *   the source, so caller-supplied order does not influence which ranges are found.
+ * - Conflicts are resolved deterministically: when two planned edits overlap, the **more specific**
+ *   edit wins (longer matched original span first; ties broken by lower original edit index). The
+ *   lower-priority overlapping edit is rejected with a clear summary rather than silently dropped.
+ * - Accepted edits are applied in **reverse start-index order** against the original text, which
+ *   avoids offset shifting and preserves the planned ranges.
+ * - `dryRun` produces a unified diff plus a summary (requested/matched/applied/rejected) without
+ *   modifying the file.
  */
 class EditFileTool : BuiltInTool {
     override val name: String = "edit_file"
@@ -95,17 +101,23 @@ class EditFileTool : BuiltInTool {
                 )
             }
 
-            val outcome = applyEdits(original, edits)
-            if (outcome is ApplyOutcome.Failure) {
-                return@withContext errorResult(BuiltInToolExecutionError.EXECUTION_FAILED, outcome.message)
+            // Plan + resolve conflicts against the original text (no mutation yet).
+            val plan = planAndResolve(original, edits)
+            if (plan is PlanResult.Failure) {
+                return@withContext errorResult(BuiltInToolExecutionError.EXECUTION_FAILED, plan.message)
             }
-            val success = outcome as ApplyOutcome.Success
-            val resultText = if (dryRun) {
-                renderDiff(original, success.modified, edits)
+            val success = plan as PlanResult.Success
+
+            // Apply accepted edits in reverse start-index order against the original text.
+            val modified = applyAccepted(original, success.accepted)
+
+            val report = renderReport(original, modified, edits, success)
+            if (dryRun) {
+                BuiltInToolExecutionResult(output = report)
             } else {
                 try {
-                    Files.writeString(target, success.modified, Charsets.UTF_8)
-                    renderDiff(original, success.modified, edits)
+                    Files.writeString(target, modified, Charsets.UTF_8)
+                    BuiltInToolExecutionResult(output = report)
                 } catch (e: Exception) {
                     return@withContext errorResult(
                         BuiltInToolExecutionError.EXECUTION_FAILED,
@@ -113,13 +125,162 @@ class EditFileTool : BuiltInTool {
                     )
                 }
             }
-            BuiltInToolExecutionResult(output = resultText)
         }
     }
 
-    private fun renderDiff(original: String, modified: String, edits: List<EditSpec>): String {
+    /**
+     * One requested edit as supplied by the caller (before any matching/planning).
+     *
+     * @property oldText Text to locate (matched in normalized space).
+     * @property newText Replacement text.
+     */
+    private data class EditSpec(val oldText: String, val newText: String)
+
+    /**
+     * Range of a match in the original text, covering start (inclusive) to end (exclusive).
+     *
+     * @property startIndex Start offset (inclusive) in the original string.
+     * @property endIndexExclusive End offset (exclusive) in the original string.
+     */
+    private data class MatchRange(val startIndex: Int, val endIndexExclusive: Int)
+
+    /**
+     * A planned edit after its match has been located in the original text.
+     *
+     * The [range] is expressed in original-space coordinates and [matchedSpanLength] is the length
+     * of that original span. Both are used for conflict resolution and for applying the edit.
+     *
+     * @property index Original caller-supplied edit index (for deterministic tie-breaking and reporting).
+     * @property oldText Text that was matched.
+     * @property newText Replacement text.
+     * @property range Original-space range of the matched region.
+     * @property matchedSpanLength Length of [range] (`endIndexExclusive - startIndex`).
+     */
+    private data class PlannedEdit(
+        val index: Int,
+        val oldText: String,
+        val newText: String,
+        val range: MatchRange,
+        val matchedSpanLength: Int
+    )
+
+    /**
+     * An edit that matched the original text but was rejected during conflict resolution.
+     *
+     * @property index Original caller-supplied edit index.
+     * @property reason Human-readable explanation (typically which higher-priority edit it overlapped).
+     */
+    private data class RejectedEdit(val index: Int, val reason: String)
+
+    private sealed interface PlanResult {
+        data class Failure(val message: String) : PlanResult
+        data class Success(val accepted: List<PlannedEdit>, val rejected: List<RejectedEdit>) : PlanResult
+    }
+
+    /**
+     * Plans every edit against the same [text] and resolves overlapping matches deterministically.
+     *
+     * Planning never mutates [text]: each edit is matched independently against the original string,
+     * so caller order cannot change which ranges are found. If any edit cannot be matched, the
+     * whole operation fails (as before) naming the failing edit index.
+     *
+     * Overlap policy: when two planned edits overlap, the **more specific** edit wins — the one
+     * with the longer matched original span. Ties (equal span length) are broken by the lower
+     * original edit index for determinism. The lower-priority overlapping edit is rejected (kept in
+     * the result summary) rather than silently dropped, and the higher-priority edit is applied.
+     *
+     * @param text Original file content (unmodified).
+     * @param edits Caller-supplied edits in their original order.
+     * @return A [PlanResult.Failure] if any edit cannot be matched, otherwise a [PlanResult.Success]
+     *   carrying the accepted and rejected edits.
+     */
+    private fun planAndResolve(text: String, edits: List<EditSpec>): PlanResult {
+        val planned = edits.mapIndexed { index, edit ->
+            val range = findNormalizedRange(text, edit.oldText)
+                ?: return PlanResult.Failure(
+                    "Edit at index $index: 'oldText' not found (after whitespace normalization)"
+                )
+            PlannedEdit(
+                index = index,
+                oldText = edit.oldText,
+                newText = edit.newText,
+                range = range,
+                matchedSpanLength = range.endIndexExclusive - range.startIndex
+            )
+        }
+
+        // Resolve conflicts by priority: longer matched span first, then lower original index.
+        val byPriority = planned.sortedWith(
+            compareByDescending<PlannedEdit> { it.matchedSpanLength }.thenBy { it.index }
+        )
+        val accepted = mutableListOf<PlannedEdit>()
+        val rejected = mutableListOf<RejectedEdit>()
+        for (candidate in byPriority) {
+            val conflict = accepted.firstOrNull { overlaps(it.range, candidate.range) }
+            if (conflict != null) {
+                // Lower-priority overlapping edit is rejected; the higher-priority one is kept.
+                rejected.add(
+                    RejectedEdit(
+                        index = candidate.index,
+                        reason = "Overlaps edit at index ${conflict.index} (kept higher-priority edit)"
+                    )
+                )
+            } else {
+                accepted.add(candidate)
+            }
+        }
+        return PlanResult.Success(accepted, rejected)
+    }
+
+    /**
+     * Applies the accepted edits to [text] in reverse start-index order.
+     *
+     * Because all [PlannedEdit] ranges are disjoint (overlaps were rejected) and computed against
+     * the original [text], applying from the highest start index downward keeps every earlier range
+     * valid — no offset shifting occurs between edits.
+     *
+     * @param text Original file content.
+     * @param accepted Edits accepted by [planAndResolve], in any order.
+     * @return The modified text with all accepted edits applied.
+     */
+    private fun applyAccepted(text: String, accepted: List<PlannedEdit>): String {
+        val ordered = accepted.sortedByDescending { it.range.startIndex }
+        var result = text
+        for (edit in ordered) {
+            val r = edit.range
+            result = result.substring(0, r.startIndex) + edit.newText + result.substring(r.endIndexExclusive)
+        }
+        return result
+    }
+
+    /**
+     * Renders a human-readable report: a summary of requested/matched/applied/rejected edits
+     * followed by a unified diff of the applied changes.
+     *
+     * @param original Original file content.
+     * @param modified File content after accepted edits were applied.
+     * @param edits All caller-supplied edits (for the requested count).
+     * @param plan The resolved plan (accepted + rejected edits).
+     */
+    private fun renderReport(
+        original: String,
+        modified: String,
+        edits: List<EditSpec>,
+        plan: PlanResult.Success
+    ): String {
+        val matched = plan.accepted.size + plan.rejected.size
         val sb = StringBuilder()
-        sb.append("Applied ").append(edits.size).append(" edit(s)\n")
+        sb.append("Edit summary:\n")
+        sb.append("- requested: ").append(edits.size).append('\n')
+        sb.append("- matched: ").append(matched).append('\n')
+        sb.append("- applied: ").append(plan.accepted.size).append('\n')
+        sb.append("- rejected: ").append(plan.rejected.size).append('\n')
+        if (plan.rejected.isNotEmpty()) {
+            sb.append("Rejected edits (overlapping, lower priority):\n")
+            for (r in plan.rejected) {
+                sb.append("  - index ").append(r.index).append(": ").append(r.reason).append('\n')
+            }
+        }
         sb.append("--- diff ---\n")
         val originalLines = original.split('\n')
         val modifiedLines = modified.split('\n')
@@ -142,42 +303,14 @@ class EditFileTool : BuiltInTool {
     private fun errorResult(code: String, message: String): BuiltInToolExecutionResult =
         BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code)
 
-    private data class EditSpec(val oldText: String, val newText: String)
-
     /**
-     * Range of a match in the original text, covering start (inclusive) to end (exclusive).
+     * Returns `true` when two original-space ranges overlap (share at least one character).
      *
-     * @property startIndex Start offset (inclusive) in the original string.
-     * @property endIndexExclusive End offset (exclusive) in the original string.
+     * Two half-open ranges `[aStart, aEnd)` and `[bStart, bEnd)` overlap iff
+     * `aStart < bEnd && bStart < aEnd`.
      */
-    private data class MatchRange(val startIndex: Int, val endIndexExclusive: Int)
-
-    private sealed interface ApplyOutcome {
-        data class Success(val modified: String) : ApplyOutcome
-        data class Failure(val message: String) : ApplyOutcome
-    }
-
-    /**
-     * Applies all edits sequentially to the input text, returning the modified text or a failure
-     * description. The search is whitespace-normalized so leading/trailing whitespace differences
-     * do not cause spurious misses.
-     *
-     * Edits are applied in order, each on the result of the previous edit. Overlapping or adjacent
-     * oldText ranges across different edits are handled naturally because the second edit searches
-     * the string already modified by the first. If an edit's `oldText` is not found, the entire
-     * operation fails with an index identifying which edit failed.
-     */
-    private fun applyEdits(text: String, edits: List<EditSpec>): ApplyOutcome {
-        var current = text
-        edits.forEachIndexed { index, edit ->
-            val range = findNormalizedRange(current, edit.oldText)
-                ?: return ApplyOutcome.Failure("Edit at index $index: 'oldText' not found (after whitespace normalization)")
-            current = current.substring(0, range.startIndex) +
-                    edit.newText +
-                    current.substring(range.endIndexExclusive)
-        }
-        return ApplyOutcome.Success(current)
-    }
+    private fun overlaps(a: MatchRange, b: MatchRange): Boolean =
+        a.startIndex < b.endIndexExclusive && b.startIndex < a.endIndexExclusive
 
     /**
      * Finds the first occurrence of [needle] in [haystack] after both strings are

@@ -258,7 +258,7 @@ fun workerModule(
     }
     single<BuiltInToolCallExecutor> {
         DefaultBuiltInToolCallExecutor(
-            contextProvider = { get<BuiltInToolExecutionContext>() },
+            context = get(),
         )
     }
     single<ToolCallInteractionFactory> {
