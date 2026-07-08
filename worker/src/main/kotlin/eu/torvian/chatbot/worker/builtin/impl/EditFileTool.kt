@@ -77,6 +77,12 @@ class EditFileTool : BuiltInTool {
                 ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Edit at index $index is not an object")
             val oldText = obj["oldText"]?.jsonPrimitive?.content
                 ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Edit at index $index missing 'oldText'")
+            if (oldText.isBlank()) {
+                return errorResult(
+                    BuiltInToolExecutionError.INVALID_INPUT,
+                    "Edit at index $index has empty or whitespace-only 'oldText'"
+                )
+            }
             val newText = obj["newText"]?.jsonPrimitive?.content
                 ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Edit at index $index missing 'newText'")
             EditSpec(oldText, newText)
@@ -174,10 +180,11 @@ class EditFileTool : BuiltInTool {
     )
 
     /**
-     * An edit that matched the original text but was rejected during conflict resolution.
+     * An occurrence that matched the original text but was rejected during conflict resolution.
      *
-     * @property index Original caller-supplied edit index.
-     * @property reason Human-readable explanation (typically which higher-priority edit it overlapped).
+     * @property index Original caller-supplied edit spec index of the rejected occurrence.
+     * @property reason Human-readable explanation identifying the kept conflicting occurrence
+     *   (its edit spec index and original-space range).
      */
     private data class RejectedEdit(val index: Int, val reason: String)
 
@@ -242,10 +249,14 @@ class EditFileTool : BuiltInTool {
             val conflict = accepted.firstOrNull { overlaps(it.range, candidate.range) }
             if (conflict != null) {
                 // Lower-priority overlapping occurrence is rejected; the higher-priority one is kept.
+                // The reason names the kept conflicting occurrence by its edit spec index and
+                // original-space range so the report is unambiguous.
                 rejected.add(
                     RejectedEdit(
                         index = candidate.index,
-                        reason = "Overlaps occurrence at index ${conflict.index} (kept higher-priority occurrence)"
+                        reason = "Overlaps occurrence from edit spec ${conflict.index} " +
+                            "at original range [${conflict.range.startIndex}, ${conflict.range.endIndexExclusive}) " +
+                            "(kept higher-priority occurrence)"
                     )
                 )
             } else {
