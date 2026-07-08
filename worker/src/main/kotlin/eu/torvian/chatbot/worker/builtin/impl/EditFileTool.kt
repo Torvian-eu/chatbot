@@ -16,7 +16,10 @@ import java.nio.file.NoSuchFileException
  * Features:
  * - Whitespace-normalized search/replace so minor indentation differences do not cause misses.
  * - Multi-line `oldText` is supported.
- * - Multiple edits are applied in one pass, with correct positioning.
+ * - Multiple edits are applied sequentially in one pass. Each edit operates on the result of all
+ *   prior edits (later edits see the output of earlier ones). Edits are NOT applied in parallel —
+ *   overlapping oldText ranges across sequential edits is handled naturally because the second
+ *   edit searches the already-modified string.
  * - `dryRun` produces a unified diff and match summary without modifying the file.
  */
 class EditFileTool : BuiltInTool {
@@ -141,6 +144,14 @@ class EditFileTool : BuiltInTool {
 
     private data class EditSpec(val oldText: String, val newText: String)
 
+    /**
+     * Range of a match in the original text, covering start (inclusive) to end (exclusive).
+     *
+     * @property startIndex Start offset (inclusive) in the original string.
+     * @property endIndexExclusive End offset (exclusive) in the original string.
+     */
+    private data class MatchRange(val startIndex: Int, val endIndexExclusive: Int)
+
     private sealed interface ApplyOutcome {
         data class Success(val modified: String) : ApplyOutcome
         data class Failure(val message: String) : ApplyOutcome
@@ -150,17 +161,20 @@ class EditFileTool : BuiltInTool {
      * Applies all edits sequentially to the input text, returning the modified text or a failure
      * description. The search is whitespace-normalized so leading/trailing whitespace differences
      * do not cause spurious misses.
+     *
+     * Edits are applied in order, each on the result of the previous edit. Overlapping or adjacent
+     * oldText ranges across different edits are handled naturally because the second edit searches
+     * the string already modified by the first. If an edit's `oldText` is not found, the entire
+     * operation fails with an index identifying which edit failed.
      */
     private fun applyEdits(text: String, edits: List<EditSpec>): ApplyOutcome {
         var current = text
         edits.forEachIndexed { index, edit ->
-            val occurrenceIndex = findNormalizedIndex(current, edit.oldText)
-            if (occurrenceIndex < 0) {
-                return ApplyOutcome.Failure("Edit at index $index: 'oldText' not found (after whitespace normalization)")
-            }
-            current = current.substring(0, occurrenceIndex) +
+            val range = findNormalizedRange(current, edit.oldText)
+                ?: return ApplyOutcome.Failure("Edit at index $index: 'oldText' not found (after whitespace normalization)")
+            current = current.substring(0, range.startIndex) +
                     edit.newText +
-                    current.substring(occurrenceIndex + edit.oldText.length)
+                    current.substring(range.endIndexExclusive)
         }
         return ApplyOutcome.Success(current)
     }
@@ -169,26 +183,28 @@ class EditFileTool : BuiltInTool {
      * Finds the first occurrence of [needle] in [haystack] after both strings are
      * whitespace-normalized (leading/trailing whitespace on each line collapsed).
      *
-     * Returns the byte offset within the **original** [haystack] of the matched region.
+     * @return The [MatchRange] within the **original** [haystack] of the matched region,
+     *   or `null` if the needle is not found after normalization.
      */
-    private fun findNormalizedIndex(haystack: String, needle: String): Int {
-        if (needle.isEmpty()) return 0
+    private fun findNormalizedRange(haystack: String, needle: String): MatchRange? {
+        if (needle.isEmpty()) return MatchRange(0, 0)
         val haystackNorm = normalize(haystack)
         val needleNorm = normalize(needle)
         val idx = haystackNorm.indexOf(needleNorm)
-        if (idx < 0) return -1
-        // Map back to original offset: count characters of `haystack` that correspond to the
-        // prefix. The normalized strings are produced by joining words with single spaces and
-        // collapsing runs of whitespace, so a positional map is straightforward: scan the
-        // original and produce the same normalization tokens to find the matching boundary.
-        return originalOffsetOf(haystack, idx, needleNorm)
+        if (idx < 0) return null
+        return originalRangeOf(haystack, idx, needleNorm)
     }
 
     /**
-     * Maps a character offset in the normalized [haystack] back to a character offset in the
-     * original [haystack].
+     * Maps a character offset range in the normalized [haystack] back to the corresponding
+     * [MatchRange] in the original [haystack].
+     *
+     * The normalized strings are produced by collapsing runs of whitespace to single spaces and
+     * trimming. This function scans the original string, reconstructs the normalized token
+     * boundaries, and records both the first and last original character that correspond to the
+     * normalized token span [normOffset, normOffset + needleNorm.length).
      */
-    private fun originalOffsetOf(haystack: String, normOffset: Int, needleNorm: String): Int {
+    private fun originalRangeOf(haystack: String, normOffset: Int, needleNorm: String): MatchRange {
         var normCursor = 0
         var origCursor = 0
         var origStart = -1
@@ -211,14 +227,19 @@ class EditFileTool : BuiltInTool {
                 }
                 normCursor++
             }
-            if (normCursor >= normOffset + needleNorm.length && origEnd < 0) {
+            if (normCursor >= normOffset + needleNorm.length) {
+                // The normalized match ends here — capture the position *after* the last
+                // consumed character in the original. For whitespace runs this includes all
+                // consecutive whitespace characters that collapsed into the trailing space
+                // token in the normalized form.
                 origEnd = origCursor + 1
                 break
             }
             origCursor++
         }
+        // If the match extends exactly to the string end, the loop exits before setting origEnd.
         if (origEnd < 0) origEnd = haystack.length
-        return origStart.coerceAtLeast(0)
+        return MatchRange(origStart.coerceAtLeast(0), origEnd)
     }
 
     /**
