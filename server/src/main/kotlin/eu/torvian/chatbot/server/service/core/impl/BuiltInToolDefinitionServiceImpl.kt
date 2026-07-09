@@ -9,7 +9,6 @@ import eu.torvian.chatbot.server.data.dao.BuiltInToolDefinitionDao
 import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
 import eu.torvian.chatbot.server.data.dao.WorkerDao
 import eu.torvian.chatbot.server.data.dao.error.BuiltInToolDefinitionError
-import eu.torvian.chatbot.server.data.dao.error.ToolDefinitionError
 import eu.torvian.chatbot.server.data.dao.error.WorkerError
 import eu.torvian.chatbot.server.service.core.BuiltInToolDefinitionService
 import eu.torvian.chatbot.server.service.core.ToolService
@@ -18,7 +17,6 @@ import eu.torvian.chatbot.server.service.core.error.builtin.UpdateBuiltInToolErr
 import eu.torvian.chatbot.server.service.core.error.tool.UpdateToolError
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
-import kotlin.time.Clock
 
 /**
  * Implementation of [BuiltInToolDefinitionService].

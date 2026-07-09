@@ -26,9 +26,8 @@ import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.http.*
 import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.put
+import kotlinx.serialization.json.buildJsonObject
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
