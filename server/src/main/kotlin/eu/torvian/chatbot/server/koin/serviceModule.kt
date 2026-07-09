@@ -90,6 +90,7 @@ fun serviceModule() = module {
     single<BuiltInToolDispatchService> { DefaultBuiltInToolDispatchService(get()) }
     single<BuiltInWorkerToolExecutor> { DefaultBuiltInWorkerToolExecutor(get()) }
     single<BuiltInToolDefinitionSeeder> { BuiltInToolDefinitionSeeder(get(), get(), get()) }
+    single<BuiltInToolDefinitionService> { BuiltInToolDefinitionServiceImpl(get(), get(), get(), get()) }
 
     single<RoleService> { RoleServiceImpl(get(), get(), get()) }
     single<UserGroupService> { UserGroupServiceImpl(get(), get(), get()) }
