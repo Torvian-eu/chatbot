@@ -3,6 +3,7 @@ package eu.torvian.chatbot.app.compose.settings
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.common.models.tool.BuiltInWorkerToolDefinition
+import eu.torvian.chatbot.common.models.tool.UserToolApprovalPreference
 import eu.torvian.chatbot.common.models.worker.WorkerDto
 
 /**
@@ -13,11 +14,14 @@ import eu.torvian.chatbot.common.models.worker.WorkerDto
  * @property selectedWorkerId Identifier of the worker whose built-in tools are displayed, or
  *   null when no worker is selected yet.
  * @property toolsState Reactive state of the built-in tools for the selected worker.
+ * @property approvalPreferencesState Reactive state of the user's tool approval preferences,
+ *   used to render the auto-approval mode of each tool row.
  */
 data class BuiltInToolsTabState(
     val workersState: DataState<RepositoryError, List<WorkerDto>>,
     val selectedWorkerId: Long?,
-    val toolsState: DataState<RepositoryError, List<BuiltInWorkerToolDefinition>>
+    val toolsState: DataState<RepositoryError, List<BuiltInWorkerToolDefinition>>,
+    val approvalPreferencesState: DataState<RepositoryError, List<UserToolApprovalPreference>>
 )
 
 /**
@@ -38,5 +42,17 @@ interface BuiltInToolsTabActions {
      * Toggles the enabled state of the given built-in tool.
      */
     fun onToggleToolEnabled(tool: BuiltInWorkerToolDefinition)
-}
 
+    /**
+     * Persists an edited built-in tool definition.
+     */
+    fun onUpdateTool(tool: BuiltInWorkerToolDefinition)
+
+    /**
+     * Sets the auto-approval mode for the given tool definition.
+     *
+     * @param toolDefinitionId The tool definition identifier to configure.
+     * @param autoApprove When true the tool is auto-approved; when false the user is prompted.
+     */
+    fun onSetApprovalPreference(toolDefinitionId: Long, autoApprove: Boolean)
+}

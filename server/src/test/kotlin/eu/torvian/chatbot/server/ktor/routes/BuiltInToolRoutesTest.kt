@@ -6,7 +6,6 @@ import eu.torvian.chatbot.common.api.resources.BuiltInToolResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
-import eu.torvian.chatbot.common.models.api.tool.UpdateBuiltInToolRequest
 import eu.torvian.chatbot.common.models.tool.BuiltInWorkerToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.common.models.worker.WorkerDto
@@ -28,6 +27,8 @@ import io.ktor.client.request.*
 import io.ktor.http.*
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.put
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -136,11 +137,17 @@ class BuiltInToolRoutesTest {
         val toolIds = seedBuiltInTools(worker.id)
         val toolId = toolIds.first()
 
+        // Fetch the current tool so we can send a full definition body.
+        val listed = client.get(href(BuiltInToolResource.ByWorkerId(workerId = worker.id))) {
+            authenticate(token)
+        }.body<List<BuiltInWorkerToolDefinition>>()
+        val tool = listed.first { it.id == toolId }
+
         // Toggle to disabled
         val disableResponse = client.put(href(BuiltInToolResource.ById(toolId = toolId))) {
             authenticate(token)
             contentType(ContentType.Application.Json)
-            setBody(UpdateBuiltInToolRequest(isEnabled = false))
+            setBody(tool.copy(isEnabled = false))
         }
 
         assertEquals(HttpStatusCode.OK, disableResponse.status)
@@ -152,7 +159,7 @@ class BuiltInToolRoutesTest {
         val enableResponse = client.put(href(BuiltInToolResource.ById(toolId = toolId))) {
             authenticate(token)
             contentType(ContentType.Application.Json)
-            setBody(UpdateBuiltInToolRequest(isEnabled = true))
+            setBody(disabledTool.copy(isEnabled = true))
         }
 
         assertEquals(HttpStatusCode.OK, enableResponse.status)
@@ -175,7 +182,21 @@ class BuiltInToolRoutesTest {
         val response = client.put(href(BuiltInToolResource.ById(toolId = toolIds.first()))) {
             authenticate(user2Token)
             contentType(ContentType.Application.Json)
-            setBody(UpdateBuiltInToolRequest(isEnabled = false))
+            setBody(
+                BuiltInWorkerToolDefinition(
+                    id = toolIds.first(),
+                    name = "read_text_file",
+                    description = "Read contents of a file as text",
+                    config = buildJsonObject { },
+                    inputSchema = buildJsonObject { put("type", JsonPrimitive("object")) },
+                    outputSchema = null,
+                    isEnabled = false,
+                    createdAt = kotlin.time.Clock.System.now(),
+                    updatedAt = kotlin.time.Clock.System.now(),
+                    workerId = worker.id,
+                    builtInToolName = "read_text_file"
+                )
+            )
         }
 
         assertEquals(HttpStatusCode.Forbidden, response.status)
@@ -205,7 +226,21 @@ class BuiltInToolRoutesTest {
         val response = client.put(href(BuiltInToolResource.ById(toolId = 99999L))) {
             authenticate(token)
             contentType(ContentType.Application.Json)
-            setBody(UpdateBuiltInToolRequest(isEnabled = false))
+            setBody(
+                BuiltInWorkerToolDefinition(
+                    id = 99999L,
+                    name = "read_text_file",
+                    description = "Read contents of a file as text",
+                    config = buildJsonObject { },
+                    inputSchema = buildJsonObject { put("type", JsonPrimitive("object")) },
+                    outputSchema = null,
+                    isEnabled = false,
+                    createdAt = kotlin.time.Clock.System.now(),
+                    updatedAt = kotlin.time.Clock.System.now(),
+                    workerId = 1L,
+                    builtInToolName = "read_text_file"
+                )
+            )
         }
 
         assertEquals(HttpStatusCode.NotFound, response.status)
@@ -262,7 +297,7 @@ class BuiltInToolRoutesTest {
             description = "Read contents of a file as text",
             type = ToolType.BUILTIN_WORKER,
             config = buildJsonObject { },
-            inputSchema = buildJsonObject { },
+            inputSchema = buildJsonObject { put("type", JsonPrimitive("object")) },
             outputSchema = null,
             isEnabled = true
         )
@@ -277,7 +312,7 @@ class BuiltInToolRoutesTest {
             description = "Execute a command-line command",
             type = ToolType.BUILTIN_WORKER,
             config = buildJsonObject { },
-            inputSchema = buildJsonObject { },
+            inputSchema = buildJsonObject { put("type", JsonPrimitive("object")) },
             outputSchema = null,
             isEnabled = true
         )

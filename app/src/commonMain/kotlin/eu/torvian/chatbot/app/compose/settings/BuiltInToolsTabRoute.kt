@@ -49,6 +49,7 @@ fun BuiltInToolsTabRoute(
     val workersState by viewModel.workersState.collectAsState()
     val selectedWorkerId by viewModel.selectedWorkerId.collectAsState()
     val toolsState by viewModel.toolsState.collectAsState()
+    val approvalPreferencesState by viewModel.approvalPreferencesState.collectAsState()
 
     // Update breadcrumbs.
     LaunchedEffect(Unit) {
@@ -59,7 +60,8 @@ fun BuiltInToolsTabRoute(
     val state = BuiltInToolsTabState(
         workersState = workersState,
         selectedWorkerId = selectedWorkerId,
-        toolsState = toolsState
+        toolsState = toolsState,
+        approvalPreferencesState = approvalPreferencesState
     )
 
     // Build actions forwarding to the ViewModel.
@@ -68,6 +70,9 @@ fun BuiltInToolsTabRoute(
         override fun onLoadTools(workerId: Long) = viewModel.loadTools(workerId)
         override fun onToggleToolEnabled(tool: BuiltInWorkerToolDefinition) =
             viewModel.toggleToolEnabled(tool)
+        override fun onUpdateTool(tool: BuiltInWorkerToolDefinition) = viewModel.updateTool(tool)
+        override fun onSetApprovalPreference(toolDefinitionId: Long, autoApprove: Boolean) =
+            viewModel.setApprovalPreference(toolDefinitionId, autoApprove)
     }
 
     // Call the presentational BuiltInToolsTab.
@@ -77,4 +82,3 @@ fun BuiltInToolsTabRoute(
         modifier = modifier
     )
 }
-

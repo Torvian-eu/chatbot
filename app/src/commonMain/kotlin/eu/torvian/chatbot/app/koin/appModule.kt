@@ -519,6 +519,7 @@ fun appModule(config: AppConfiguration): Module = module {
         BuiltInToolsViewModel(
             workerRepository = get(),
             builtInToolRepository = get(),
+            toolRepository = get(),
             notificationService = get()
         )
     }

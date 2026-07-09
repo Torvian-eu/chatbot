@@ -12,8 +12,10 @@ import eu.torvian.chatbot.server.data.dao.error.BuiltInToolDefinitionError
 import eu.torvian.chatbot.server.data.dao.error.ToolDefinitionError
 import eu.torvian.chatbot.server.data.dao.error.WorkerError
 import eu.torvian.chatbot.server.service.core.BuiltInToolDefinitionService
+import eu.torvian.chatbot.server.service.core.ToolService
 import eu.torvian.chatbot.server.service.core.error.builtin.GetBuiltInToolsError
 import eu.torvian.chatbot.server.service.core.error.builtin.UpdateBuiltInToolError
+import eu.torvian.chatbot.server.service.core.error.tool.UpdateToolError
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 import kotlin.time.Clock
@@ -29,6 +31,7 @@ class BuiltInToolDefinitionServiceImpl(
     private val workerDao: WorkerDao,
     private val builtInToolDefinitionDao: BuiltInToolDefinitionDao,
     private val toolDefinitionDao: ToolDefinitionDao,
+    private val toolService: ToolService,
     private val transactionScope: TransactionScope,
 ) : BuiltInToolDefinitionService {
 
@@ -58,41 +61,57 @@ class BuiltInToolDefinitionServiceImpl(
 
     override suspend fun updateBuiltInTool(
         userId: Long,
-        toolId: Long,
-        isEnabled: Boolean
+        tool: BuiltInWorkerToolDefinition
     ): Either<UpdateBuiltInToolError, BuiltInWorkerToolDefinition> = transactionScope.transaction {
         either {
-            // Step 1: Resolve the built-in tool definition.
-            val tool = withError({ _: BuiltInToolDefinitionError.NotFound ->
-                UpdateBuiltInToolError.ToolNotFound(toolId)
+            // Step 1: Resolve the persisted built-in tool definition to validate ownership
+            // and to recover the immutable fields (workerId, builtInToolName) that the client
+            // must not be allowed to change.
+            val existing = withError({ _: BuiltInToolDefinitionError.NotFound ->
+                UpdateBuiltInToolError.ToolNotFound(tool.id)
             }) {
-                builtInToolDefinitionDao.getToolById(toolId).bind()
+                builtInToolDefinitionDao.getToolById(tool.id).bind()
             }
 
             // Step 2: Verify the worker exists and the user owns it.
             val worker = withError({ _: WorkerError.NotFound ->
-                UpdateBuiltInToolError.ToolNotFound(toolId)
+                UpdateBuiltInToolError.ToolNotFound(tool.id)
             }) {
-                workerDao.getWorkerById(tool.workerId).bind()
+                workerDao.getWorkerById(existing.workerId).bind()
             }
 
             if (worker.ownerUserId != userId) {
-                raise(UpdateBuiltInToolError.Forbidden(tool.workerId, worker.ownerUserId))
+                raise(UpdateBuiltInToolError.Forbidden(existing.workerId, worker.ownerUserId))
             }
 
-            // Step 3: Update only the enabled state via the base tool-definition DAO.
-            val updatedTool = tool.copy(
-                isEnabled = isEnabled,
-                updatedAt = Clock.System.now()
+            // Step 3: Reconstruct the definition, preserving the immutable identity fields
+            // (id, workerId, builtInToolName, type, timestamps) and applying only the
+            // administrator-editable fields from the request.
+            val updatedDefinition = existing.copy(
+                name = tool.name,
+                description = tool.description,
+                config = tool.config,
+                inputSchema = tool.inputSchema,
+                outputSchema = tool.outputSchema,
+                isEnabled = tool.isEnabled
             )
 
-            withError({ _: ToolDefinitionError.NotFound ->
-                UpdateBuiltInToolError.ToolNotFound(toolId)
+            // Step 4: Validate and persist via the shared ToolService, mapping its typed
+            // errors into the built-in tool error hierarchy.
+            val updatedTool = withError({ error: UpdateToolError ->
+                when (error) {
+                    is UpdateToolError.ToolNotFound -> UpdateBuiltInToolError.ToolNotFound(error.id)
+                    is UpdateToolError.ValidationError ->
+                        UpdateBuiltInToolError.ValidationError(error.error)
+                }
             }) {
-                toolDefinitionDao.updateToolDefinition(updatedTool).bind()
+                toolService.updateTool(updatedDefinition).bind() as BuiltInWorkerToolDefinition
             }
 
-            logger.info("Updated built-in tool {} (worker {}) isEnabled={}", toolId, tool.workerId, isEnabled)
+            logger.info(
+                "Updated built-in tool {} (worker {}) isEnabled={}",
+                tool.id, existing.workerId, updatedTool.isEnabled
+            )
 
             updatedTool
         }

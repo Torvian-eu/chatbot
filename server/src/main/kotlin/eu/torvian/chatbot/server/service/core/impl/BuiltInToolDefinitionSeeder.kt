@@ -78,7 +78,8 @@ class BuiltInToolDefinitionSeeder(
                         // Persist the real per-tool schema so the LLM can call the tool.
                         inputSchema = spec.inputSchema,
                         outputSchema = null,
-                        isEnabled = false
+                        // Newly registered workers expose their built-in tools enabled by default.
+                        isEnabled = true
                     ).bind()
                 }
 

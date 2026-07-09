@@ -88,8 +88,8 @@ class BuiltInToolDefinitionSeederTest {
         val tools = result.getOrNull()!!
         assertEquals(8, tools.size)
         assertEquals(ToolType.BUILTIN_WORKER, tools.first().type)
-        // All tools are disabled by default.
-        assertTrue(tools.all { !it.isEnabled })
+        // All tools are enabled by default for newly registered workers.
+        assertTrue(tools.all { it.isEnabled })
         // Public name equals the unprefixed built-in name when no prefix is provided.
         assertTrue(tools.all { it.name == it.builtInToolName })
         assertEquals(
@@ -160,4 +160,3 @@ class BuiltInToolDefinitionSeederTest {
         assertTrue(after.all { it.name == it.builtInToolName })
     }
 }
-

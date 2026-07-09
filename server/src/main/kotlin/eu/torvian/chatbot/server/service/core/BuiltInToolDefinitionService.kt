@@ -31,22 +31,22 @@ interface BuiltInToolDefinitionService {
     ): Either<GetBuiltInToolsError, List<BuiltInWorkerToolDefinition>>
 
     /**
-     * Updates the global enabled state of a built-in worker tool definition.
+     * Updates a built-in worker tool definition with the supplied values.
      *
-     * Ownership is verified against the worker that owns this tool definition.
-     * Only the `isEnabled` property on the base [BuiltInWorkerToolDefinition] is
-     * toggled; other fields are preserved.
+     * Ownership is verified against the worker that owns this tool definition. The full
+     * [BuiltInWorkerToolDefinition] is passed through so administrators can edit the public
+     * [BuiltInWorkerToolDefinition.name], [BuiltInWorkerToolDefinition.description], and
+     * [BuiltInWorkerToolDefinition.inputSchema] in addition to the enabled state. The
+     * unprefixed [BuiltInWorkerToolDefinition.builtInToolName] and [BuiltInWorkerToolDefinition.workerId]
+     * are treated as immutable and ignored if the caller attempts to change them.
      *
      * @param userId The authenticated user identifier.
-     * @param toolId The tool-definition identifier to update.
-     * @param isEnabled The new enabled state.
+     * @param tool The full tool definition with the updated fields (id must be set).
      * @return Either an [UpdateBuiltInToolError] if validation or ownership fails,
      *         or the updated [BuiltInWorkerToolDefinition].
      */
     suspend fun updateBuiltInTool(
         userId: Long,
-        toolId: Long,
-        isEnabled: Boolean
+        tool: BuiltInWorkerToolDefinition
     ): Either<UpdateBuiltInToolError, BuiltInWorkerToolDefinition>
 }
-

@@ -7,11 +7,19 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenuItem
@@ -20,10 +28,14 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,14 +49,25 @@ import eu.torvian.chatbot.app.compose.common.ErrorStateDisplay
 import eu.torvian.chatbot.app.compose.common.LoadingStateDisplay
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.common.models.tool.BuiltInWorkerToolDefinition
+import eu.torvian.chatbot.common.models.tool.UserToolApprovalPreference
 import eu.torvian.chatbot.common.models.worker.WorkerDto
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+
+/**
+ * Pretty-printing JSON formatter used to render the editable input schema in the tool edit
+ * dialog. Reused across invocations to avoid the cost of constructing a new [Json] instance
+ * for every dialog.
+ */
+private val PrettyJson = Json { prettyPrint = true }
 
 /**
  * Built-in Tools management tab.
  *
  * Lets an administrator pick a registered worker and toggle the built-in tools that worker
  * exposes. The worker selection is rendered as an [ExposedDropdownMenuBox]; the tool list is a
- * scrollable [LazyColumn] of [BuiltInToolRow] cards. Tools flagged as dangerous
+ * scrollable [LazyColumn] of [BuiltInToolRow] cards. Each row exposes an edit action (to change
+ * the description and input schema) and an auto-approval dropdown. Tools flagged as dangerous
  * (`run_command`, `edit_file`) are visually emphasised.
  *
  * @param state Reactive UI state for the tab.
@@ -57,6 +80,9 @@ fun BuiltInToolsTab(
     actions: BuiltInToolsTabActions,
     modifier: Modifier = Modifier
 ) {
+    // Tracks the tool currently being edited in the dialog (null when closed).
+    var editingTool by remember { mutableStateOf<BuiltInWorkerToolDefinition?>(null) }
+
     Column(modifier = modifier.fillMaxSize()) {
         WorkerSelectionHeader(
             workersState = state.workersState,
@@ -96,9 +122,16 @@ fun BuiltInToolsTab(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(tools, key = { it.id }) { tool ->
+                            val preference = (state.approvalPreferencesState as? DataState.Success)
+                                ?.data?.find { it.toolDefinitionId == tool.id }
                             BuiltInToolRow(
                                 tool = tool,
-                                onToggleEnabled = { actions.onToggleToolEnabled(tool) }
+                                approvalPreference = preference,
+                                onToggleEnabled = { actions.onToggleToolEnabled(tool) },
+                                onEdit = { editingTool = tool },
+                                onSetApprovalPreference = { autoApprove ->
+                                    actions.onSetApprovalPreference(tool.id, autoApprove)
+                                }
                             )
                         }
                     }
@@ -111,6 +144,18 @@ fun BuiltInToolsTab(
                 }
             }
         }
+    }
+
+    // Edit dialog for description + input schema.
+    editingTool?.let { tool ->
+        BuiltInToolEditDialog(
+            tool = tool,
+            onDismiss = { editingTool = null },
+            onSave = { updated ->
+                actions.onUpdateTool(updated)
+                editingTool = null
+            }
+        )
     }
 }
 
@@ -190,21 +235,32 @@ private fun WorkerSelectionHeader(
 }
 
 /**
- * Single built-in tool row with a trailing enable/disable switch.
+ * Single built-in tool row with a trailing enable/disable switch, an edit action, and an
+ * auto-approval dropdown.
  *
  * Tools considered dangerous (`run_command`, `edit_file`) are emphasised with an error-tinted
  * accent so administrators can spot them at a glance.
  *
  * @param tool The tool definition to render.
+ * @param approvalPreference The user's current approval preference for this tool, or null.
  * @param onToggleEnabled Callback invoked when the switch is flipped.
+ * @param onEdit Callback invoked when the edit action is pressed.
+ * @param onSetApprovalPreference Callback invoked when the auto-approval mode is changed.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun BuiltInToolRow(
     tool: BuiltInWorkerToolDefinition,
+    approvalPreference: UserToolApprovalPreference?,
     onToggleEnabled: () -> Unit,
+    onEdit: () -> Unit,
+    onSetApprovalPreference: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val isDangerous = tool.builtInToolName in DANGEROUS_BUILT_IN_TOOLS
+    var approvalExpanded by remember { mutableStateOf(false) }
+    // Default behaviour (no preference) is "Requires User Approval".
+    val autoApprove = approvalPreference?.autoApprove ?: false
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -216,52 +272,216 @@ private fun BuiltInToolRow(
             }
         )
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(16.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(end = 8.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = tool.builtInToolName,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = if (isDangerous) {
-                        MaterialTheme.colorScheme.onErrorContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    },
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.padding(vertical = 2.dp))
-                Text(
-                    text = tool.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (isDangerous) {
-                    Spacer(modifier = Modifier.padding(vertical = 2.dp))
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 8.dp)
+                ) {
                     Text(
-                        text = "Dangerous operation",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error
+                        text = tool.builtInToolName,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = if (isDangerous) {
+                            MaterialTheme.colorScheme.onErrorContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = tool.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (isDangerous) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Dangerous operation",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+
+                IconButton(onClick = onEdit) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Edit tool",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Switch(
+                    checked = tool.isEnabled,
+                    onCheckedChange = { onToggleEnabled() }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Auto-approval mode selector.
+            ExposedDropdownMenuBox(
+                expanded = approvalExpanded,
+                onExpandedChange = { approvalExpanded = it },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedTextField(
+                    value = if (autoApprove) "Auto-Approve" else "Requires User Approval",
+                    onValueChange = { },
+                    readOnly = true,
+                    label = { Text("Approval mode") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = approvalExpanded) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(type = ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                )
+
+                ExposedDropdownMenu(
+                    expanded = approvalExpanded,
+                    onDismissRequest = { approvalExpanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Requires User Approval") },
+                        onClick = {
+                            onSetApprovalPreference(false)
+                            approvalExpanded = false
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Auto-Approve") },
+                        onClick = {
+                            onSetApprovalPreference(true)
+                            approvalExpanded = false
+                        }
                     )
                 }
             }
-
-            Switch(
-                checked = tool.isEnabled,
-                onCheckedChange = { onToggleEnabled() }
-            )
         }
     }
+}
+
+/**
+ * Dialog for editing a built-in tool's description and input schema.
+ *
+ * The input schema is edited as raw, formatted JSON. Saving is blocked while the schema text
+ * is not valid JSON, preventing the client from sending a malformed payload to the server.
+ *
+ * @param tool The tool definition being edited.
+ * @param onDismiss Callback invoked when the dialog is dismissed without saving.
+ * @param onSave Callback invoked with the updated definition when the user confirms.
+ */
+@Composable
+private fun BuiltInToolEditDialog(
+    tool: BuiltInWorkerToolDefinition,
+    onDismiss: () -> Unit,
+    onSave: (BuiltInWorkerToolDefinition) -> Unit
+) {
+    var description by remember { mutableStateOf(tool.description) }
+    // Pretty-print the schema for a friendlier editing experience.
+    var schemaText by remember {
+        mutableStateOf(PrettyJson.encodeToString(JsonObject.serializer(), tool.inputSchema))
+    }
+    var schemaError by remember { mutableStateOf<String?>(null) }
+
+    val isSchemaValid = remember(schemaText) {
+        try {
+            Json.parseToJsonElement(schemaText)
+            schemaError = null
+            true
+        } catch (e: Exception) {
+            schemaError = e.message ?: "Invalid JSON"
+            false
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit Tool: ${tool.builtInToolName}") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Public name (read-only, immutable identity).
+                OutlinedTextField(
+                    value = tool.name,
+                    onValueChange = { },
+                    label = { Text("Public Name") },
+                    readOnly = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                        disabledBorderColor = MaterialTheme.colorScheme.outline,
+                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                )
+
+                // Editable description.
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text("Description") },
+                    singleLine = false,
+                    minLines = 2,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Editable input schema (raw JSON, monospace).
+                OutlinedTextField(
+                    value = schemaText,
+                    onValueChange = { schemaText = it },
+                    label = { Text("Input Schema (JSON)") },
+                    singleLine = false,
+                    minLines = 6,
+                    isError = !isSchemaValid,
+                    supportingText = {
+                        if (isSchemaValid) {
+                            Text("Valid JSON schema")
+                        } else {
+                            Text(schemaError ?: "Invalid JSON")
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = isSchemaValid && description.isNotBlank(),
+                onClick = {
+                    val schemaElement = Json.parseToJsonElement(schemaText)
+                    val updatedSchema = schemaElement as JsonObject
+                    onSave(
+                        tool.copy(
+                            description = description,
+                            inputSchema = updatedSchema
+                        )
+                    )
+                }
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 /**
