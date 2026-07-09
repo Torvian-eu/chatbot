@@ -29,7 +29,7 @@
       created at startup if it does not exist.
     */
     "workspace": {
-      "path": "./workspace"
+      "path": "../workspace"
     },
     /*
       Built-in tool enablement. `enabled` lists the unprefixed names of tools that are
