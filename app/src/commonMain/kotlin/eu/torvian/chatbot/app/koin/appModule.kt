@@ -223,6 +223,9 @@ fun appModule(config: AppConfiguration): Module = module {
     single<LocalMCPToolApi> {
         KtorLocalMCPToolApiClient(get())
     }
+    single<BuiltInToolApi> {
+        KtorBuiltInToolApiClient(get())
+    }
     single<WorkerApi> {
         KtorWorkerApiClient(get())
     }
@@ -284,6 +287,11 @@ fun appModule(config: AppConfiguration): Module = module {
         DefaultLocalMCPToolRepository(
             localMCPToolApi = get(),
             toolRepository = get()
+        )
+    }
+    single<BuiltInToolRepository> {
+        DefaultBuiltInToolRepository(
+            builtInToolApi = get()
         )
     }
     single<ServerMetadataRepository> {
