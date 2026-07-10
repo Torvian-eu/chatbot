@@ -52,7 +52,15 @@ interface BuiltInToolsTabActions {
      * Sets the auto-approval mode for the given tool definition.
      *
      * @param toolDefinitionId The tool definition identifier to configure.
-     * @param autoApprove When true the tool is auto-approved; when false the user is prompted.
+     * @param autoApprove When true the tool is auto-approved; when false the tool is auto-denied.
      */
     fun onSetApprovalPreference(toolDefinitionId: Long, autoApprove: Boolean)
+
+    /**
+     * Removes the auto-approval preference for the given tool, reverting it to manual
+     * ("Requires User Approval") approval where the user is prompted on every call.
+     *
+     * @param toolDefinitionId The tool definition identifier whose preference should be cleared.
+     */
+    fun onClearApprovalPreference(toolDefinitionId: Long)
 }

@@ -154,7 +154,7 @@ class BuiltInToolsViewModel(
      * Sets or updates the auto-approval preference for a built-in tool.
      *
      * @param toolDefinitionId The tool definition identifier to configure.
-     * @param autoApprove When true the tool is auto-approved; when false the user is prompted.
+     * @param autoApprove When true the tool is auto-approved; when false the tool is auto-denied.
      */
     fun setApprovalPreference(toolDefinitionId: Long, autoApprove: Boolean) {
         viewModelScope.launch(uiDispatcher) {
@@ -163,6 +163,24 @@ class BuiltInToolsViewModel(
                     notificationService.repositoryError(
                         error = error,
                         shortMessage = "Failed to save approval preference"
+                    )
+                }
+        }
+    }
+
+    /**
+     * Removes the auto-approval preference for a built-in tool, reverting it to manual
+     * ("Requires User Approval") approval where the user is prompted on every call.
+     *
+     * @param toolDefinitionId The tool definition identifier whose preference should be cleared.
+     */
+    fun clearApprovalPreference(toolDefinitionId: Long) {
+        viewModelScope.launch(uiDispatcher) {
+            toolRepository.deleteToolApprovalPreference(toolDefinitionId = toolDefinitionId)
+                .onLeft { error ->
+                    notificationService.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to clear approval preference"
                     )
                 }
         }

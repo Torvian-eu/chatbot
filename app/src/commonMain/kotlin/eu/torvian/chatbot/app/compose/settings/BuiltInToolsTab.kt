@@ -100,6 +100,9 @@ fun BuiltInToolsTab(
                                 onEdit = { editingTool = tool },
                                 onSetApprovalPreference = { autoApprove ->
                                     actions.onSetApprovalPreference(tool.id, autoApprove)
+                                },
+                                onClearApprovalPreference = {
+                                    actions.onClearApprovalPreference(tool.id)
                                 }
                             )
                         }
@@ -214,7 +217,9 @@ private fun WorkerSelectionHeader(
  * @param approvalPreference The user's current approval preference for this tool, or null.
  * @param onToggleEnabled Callback invoked when the switch is flipped.
  * @param onEdit Callback invoked when the edit action is pressed.
- * @param onSetApprovalPreference Callback invoked when the auto-approval mode is changed.
+ * @param onSetApprovalPreference Callback invoked when auto-approval is enabled (auto-approve).
+ * @param onClearApprovalPreference Callback invoked when the preference is reset to manual
+ *   ("Requires User Approval") approval, removing the stored preference row.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -224,6 +229,7 @@ private fun BuiltInToolRow(
     onToggleEnabled: () -> Unit,
     onEdit: () -> Unit,
     onSetApprovalPreference: (Boolean) -> Unit,
+    onClearApprovalPreference: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val isDangerous = tool.builtInToolName in DANGEROUS_BUILT_IN_TOOLS
@@ -324,7 +330,9 @@ private fun BuiltInToolRow(
                     DropdownMenuItem(
                         text = { Text("Requires User Approval") },
                         onClick = {
-                            onSetApprovalPreference(false)
+                            // "Requires User Approval" means no stored preference, so the
+                            // preference row is deleted rather than set to auto-deny (false).
+                            onClearApprovalPreference()
                             approvalExpanded = false
                         }
                     )

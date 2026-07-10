@@ -73,6 +73,8 @@ fun BuiltInToolsTabRoute(
         override fun onUpdateTool(tool: BuiltInWorkerToolDefinition) = viewModel.updateTool(tool)
         override fun onSetApprovalPreference(toolDefinitionId: Long, autoApprove: Boolean) =
             viewModel.setApprovalPreference(toolDefinitionId, autoApprove)
+        override fun onClearApprovalPreference(toolDefinitionId: Long) =
+            viewModel.clearApprovalPreference(toolDefinitionId)
     }
 
     // Call the presentational BuiltInToolsTab.
