@@ -4,10 +4,7 @@ import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.app.domain.contracts.DataState
-import eu.torvian.chatbot.app.repository.RepositoryError
-import eu.torvian.chatbot.app.repository.ToolRepository
-import eu.torvian.chatbot.app.repository.WorkerRepository
-import eu.torvian.chatbot.app.repository.toRepositoryError
+import eu.torvian.chatbot.app.repository.*
 import eu.torvian.chatbot.app.service.api.WorkerApi
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.models.worker.WorkerDto
@@ -26,10 +23,14 @@ import kotlinx.coroutines.flow.update
  * @property workerApi The API client for worker-related operations.
  * @property toolRepository The shared tool repository whose cache backs the Configure Tools dialog.
  *   It is refreshed after a prefix change so renamed built-in tool public names appear immediately.
+ * @property builtInToolRepository The built-in tool repository whose per-worker cache backs the
+ *   Built-in Tools tab. It is refreshed after a prefix change so the Edit Tool dialog shows the
+ *   renamed public names immediately.
  */
 class DefaultWorkerRepository(
     private val workerApi: WorkerApi,
-    private val toolRepository: ToolRepository
+    private val toolRepository: ToolRepository,
+    private val builtInToolRepository: BuiltInToolRepository
 ) : WorkerRepository {
 
     companion object {
@@ -77,6 +78,9 @@ class DefaultWorkerRepository(
                 // Refresh the shared tool cache so the Configure Tools dialog shows the new names
                 // immediately instead of the stale cached values.
                 toolRepository.loadTools()
+                // Refresh the per-worker built-in tool cache so the Built-in Tools tab's Edit Tool
+                // dialog shows the renamed public names immediately instead of the stale values.
+                builtInToolRepository.loadTools(id)
             }
     }
 
