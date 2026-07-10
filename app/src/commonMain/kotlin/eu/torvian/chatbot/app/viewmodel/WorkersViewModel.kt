@@ -176,7 +176,8 @@ class WorkersViewModel(
             workerRepository.updateWorker(
                 id = originalWorker.id,
                 displayName = form.displayName.trim(),
-                allowedScopes = scopes
+                allowedScopes = scopes,
+                toolNamePrefix = form.toolNamePrefix.takeIf { it.isNotBlank() }
             ).fold(
                 ifLeft = { error ->
                     updateWorkerForm { it.withError("Error updating worker: ${error.message}") }

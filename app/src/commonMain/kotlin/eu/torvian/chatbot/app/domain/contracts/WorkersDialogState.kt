@@ -22,11 +22,13 @@ sealed class WorkersDialogState {
  *
  * @property displayName The display name of the worker.
  * @property allowedScopes Comma-separated list of allowed scopes.
+ * @property toolNamePrefix Optional prefix applied to the public names of the worker's built-in tools.
  * @property error Error message if validation fails.
  */
 data class WorkersFormState(
     val displayName: String = "",
     val allowedScopes: String = "",
+    val toolNamePrefix: String = "",
     val error: String? = null
 ) {
     companion object {
@@ -35,7 +37,8 @@ data class WorkersFormState(
          */
         fun fromWorker(worker: WorkerDto): WorkersFormState = WorkersFormState(
             displayName = worker.displayName,
-            allowedScopes = worker.allowedScopes.joinToString(", ")
+            allowedScopes = worker.allowedScopes.joinToString(", "),
+            toolNamePrefix = worker.toolNamePrefix ?: ""
         )
     }
 

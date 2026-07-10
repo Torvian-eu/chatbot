@@ -59,9 +59,10 @@ class DefaultWorkerRepository(
     override suspend fun updateWorker(
         id: Long,
         displayName: String,
-        allowedScopes: List<String>
+        allowedScopes: List<String>,
+        toolNamePrefix: String?
     ): Either<RepositoryError, Unit> {
-        return workerApi.updateWorker(id, displayName, allowedScopes)
+        return workerApi.updateWorker(id, displayName, allowedScopes, toolNamePrefix)
             .mapLeft { apiResourceError ->
                 apiResourceError.toRepositoryError("Failed to update worker")
             }
