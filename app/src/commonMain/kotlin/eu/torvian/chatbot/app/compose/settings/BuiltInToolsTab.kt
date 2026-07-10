@@ -502,4 +502,4 @@ private fun EmptyBuiltInToolsList(modifier: Modifier = Modifier) {
  * Built-in tool names that perform privileged filesystem or process operations and therefore
  * warrant a visual danger indication in the UI.
  */
-private val DANGEROUS_BUILT_IN_TOOLS = setOf("run_command", "edit_file")
+private val DANGEROUS_BUILT_IN_TOOLS = setOf("run_command")
