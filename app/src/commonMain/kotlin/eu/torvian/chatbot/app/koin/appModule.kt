@@ -282,7 +282,10 @@ fun appModule(config: AppConfiguration): Module = module {
         )
     }
     single<WorkerRepository> {
-        DefaultWorkerRepository(get())
+        DefaultWorkerRepository(
+            workerApi = get(),
+            toolRepository = get()
+        )
     }
     single<LocalMCPToolRepository> {
         DefaultLocalMCPToolRepository(

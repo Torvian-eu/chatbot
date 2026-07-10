@@ -5,6 +5,7 @@ import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.app.repository.RepositoryError
+import eu.torvian.chatbot.app.repository.ToolRepository
 import eu.torvian.chatbot.app.repository.WorkerRepository
 import eu.torvian.chatbot.app.repository.toRepositoryError
 import eu.torvian.chatbot.app.service.api.WorkerApi
@@ -23,9 +24,12 @@ import kotlinx.coroutines.flow.update
  * as other repositories in the application for consistency.
  *
  * @property workerApi The API client for worker-related operations.
+ * @property toolRepository The shared tool repository whose cache backs the Configure Tools dialog.
+ *   It is refreshed after a prefix change so renamed built-in tool public names appear immediately.
  */
 class DefaultWorkerRepository(
-    private val workerApi: WorkerApi
+    private val workerApi: WorkerApi,
+    private val toolRepository: ToolRepository
 ) : WorkerRepository {
 
     companion object {
@@ -69,6 +73,10 @@ class DefaultWorkerRepository(
             .map { _ ->
                 // Refresh the worker list to reflect the changes
                 loadWorkers()
+                // A prefix change renames the worker's built-in tool public names server-side.
+                // Refresh the shared tool cache so the Configure Tools dialog shows the new names
+                // immediately instead of the stale cached values.
+                toolRepository.loadTools()
             }
     }
 
