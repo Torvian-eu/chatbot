@@ -292,7 +292,8 @@ fun appModule(config: AppConfiguration): Module = module {
     }
     single<BuiltInToolRepository> {
         DefaultBuiltInToolRepository(
-            builtInToolApi = get()
+            builtInToolApi = get(),
+            toolRepository = get()
         )
     }
     single<ServerMetadataRepository> {
