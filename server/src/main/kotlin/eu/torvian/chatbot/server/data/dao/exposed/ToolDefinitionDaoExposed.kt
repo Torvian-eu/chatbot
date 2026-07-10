@@ -11,6 +11,7 @@ import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
 import eu.torvian.chatbot.server.data.dao.error.ToolDefinitionError
+import eu.torvian.chatbot.server.data.tables.BuiltInToolDefinitionTable
 import eu.torvian.chatbot.server.data.tables.LocalMCPServerTable
 import eu.torvian.chatbot.server.data.tables.LocalMCPToolDefinitionTable
 import eu.torvian.chatbot.server.data.tables.ToolDefinitionTable
@@ -133,6 +134,11 @@ class ToolDefinitionDaoExposed(
                     { ToolDefinitionTable.id },
                     { LocalMCPToolDefinitionTable.toolDefinitionId })
                 .leftJoin(LocalMCPServerTable, { LocalMCPToolDefinitionTable.mcpServerId }, { LocalMCPServerTable.id })
+                .leftJoin(
+                    BuiltInToolDefinitionTable,
+                    { ToolDefinitionTable.id },
+                    { BuiltInToolDefinitionTable.toolDefinitionId }
+                )
 
             joinedQuery
                 .selectAll()
@@ -144,4 +150,3 @@ class ToolDefinitionDaoExposed(
                 .map { it.toToolDefinition() }
         }
 }
-

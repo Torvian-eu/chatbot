@@ -1,9 +1,11 @@
 package eu.torvian.chatbot.server.data.tables.mappers
 
+import eu.torvian.chatbot.common.models.tool.BuiltInWorkerToolDefinition
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import eu.torvian.chatbot.common.models.tool.MiscToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolType
+import eu.torvian.chatbot.server.data.tables.BuiltInToolDefinitionTable
 import eu.torvian.chatbot.server.data.tables.LocalMCPToolDefinitionTable
 import eu.torvian.chatbot.server.data.tables.ToolDefinitionTable
 import kotlinx.serialization.json.Json
@@ -34,8 +36,8 @@ fun ResultRow.toToolDefinition(): ToolDefinition {
     val createdAt = Instant.fromEpochMilliseconds(this[ToolDefinitionTable.createdAt])
     val updatedAt = Instant.fromEpochMilliseconds(this[ToolDefinitionTable.updatedAt])
 
-    return if (toolType == ToolType.MCP_LOCAL) {
-        LocalMCPToolDefinition(
+    return when (toolType) {
+        ToolType.MCP_LOCAL -> LocalMCPToolDefinition(
             id = id,
             name = name,
             description = description,
@@ -48,8 +50,22 @@ fun ResultRow.toToolDefinition(): ToolDefinition {
             serverId = this[LocalMCPToolDefinitionTable.mcpServerId].value,
             mcpToolName = this[LocalMCPToolDefinitionTable.mcpToolName]
         )
-    } else {
-        MiscToolDefinition(
+
+        ToolType.BUILTIN_WORKER -> BuiltInWorkerToolDefinition(
+            id = id,
+            name = name,
+            description = description,
+            config = config,
+            inputSchema = inputSchema,
+            outputSchema = outputSchema,
+            isEnabled = isEnabled,
+            createdAt = createdAt,
+            updatedAt = updatedAt,
+            workerId = this[BuiltInToolDefinitionTable.workerId].value,
+            builtInToolName = this[BuiltInToolDefinitionTable.builtInToolName]
+        )
+
+        else -> MiscToolDefinition(
             id = id,
             name = name,
             description = description,
@@ -63,4 +79,3 @@ fun ResultRow.toToolDefinition(): ToolDefinition {
         )
     }
 }
-

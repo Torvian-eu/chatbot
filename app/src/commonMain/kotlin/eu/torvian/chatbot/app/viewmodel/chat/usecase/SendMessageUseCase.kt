@@ -15,7 +15,9 @@ import eu.torvian.chatbot.common.models.api.core.ChatStreamEvent
 import eu.torvian.chatbot.common.models.api.core.ProcessNewMessageRequest
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolExecutionAuthorization
 import eu.torvian.chatbot.common.models.api.tool.ToolCallApprovalResponse
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionAuthorization
 import eu.torvian.chatbot.common.models.core.ChatMessage
+import eu.torvian.chatbot.common.models.tool.BuiltInWorkerToolDefinition
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.UserToolApprovalPreference
@@ -88,6 +90,18 @@ class SendMessageUseCase(
         approved: Boolean,
         denialReason: String?
     ) {
+        // Built-in worker tools require an on-device cryptographic signature before the worker executes them.
+        val builtInTool = findBuiltInToolDefinition(toolCall)
+        if (builtInTool != null) {
+            emitBuiltInApprovalEvent(
+                toolCall = toolCall,
+                toolDefinition = builtInTool,
+                approved = approved,
+                denialReason = denialReason
+            )
+            return
+        }
+
         val localMcpTool = findLocalMcpToolDefinition(toolCall)
         if (localMcpTool == null) {
             toolApprovalFlow.emit(
@@ -176,6 +190,92 @@ class SendMessageUseCase(
     }
 
     /**
+     * Builds, signs, and emits a built-in worker tool authorization event for one tool call.
+     *
+     * The typed [BuiltInToolExecutionAuthorization] is created locally and signed on-device to produce a
+     * detached [SignedRequest]. Only the signed request is emitted to the server, which relays it to the
+     * worker. The worker verifies the signature and decodes the authorization from the signed payload as the
+     * sole source of truth for execution parameters, ensuring the client device authorized the exact call.
+     *
+     * @param toolCall Tool call the app is authorizing.
+     * @param toolDefinition Resolved built-in worker tool definition.
+     * @param approved Whether execution should proceed.
+     * @param denialReason Optional denial reason supplied by the user or an auto-deny preference.
+     */
+    private suspend fun emitBuiltInApprovalEvent(
+        toolCall: ToolCall,
+        toolDefinition: BuiltInWorkerToolDefinition,
+        approved: Boolean,
+        denialReason: String?
+    ) {
+        val currentSession = state.currentSession.value
+        if (currentSession == null) {
+            notificationService.genericError(
+                shortMessage = "Failed to authorize built-in tool call",
+                detailedMessage = "No active session is available for tool call ${toolCall.id}."
+            )
+            return
+        }
+
+        // Build typed authorization locally for signing
+        val authorization = BuiltInToolExecutionAuthorization(
+            toolCallId = toolCall.id,
+            sessionId = currentSession.id,
+            messageId = toolCall.messageId,
+            toolDefinitionId = toolDefinition.id,
+            toolName = toolCall.toolName,
+            workerId = toolDefinition.workerId,
+            builtInToolName = toolDefinition.builtInToolName,
+            input = toolCall.input,
+            approved = approved,
+            denialReason = denialReason
+        )
+
+        val signedRequest = requestSigningService.signRequest(
+            request = authorization,
+            serializer = BuiltInToolExecutionAuthorization.serializer()
+        ).fold(
+            ifLeft = { error ->
+                notificationService.genericError(
+                    shortMessage = "Failed to authorize built-in tool call",
+                    detailedMessage = error.message,
+                    originalThrowable = error.cause
+                )
+                return
+            },
+            ifRight = { it }
+        )
+
+        // Emit only the signed request; the typed authorization is serialized in signedRequest.payload
+        toolApprovalFlow.emit(
+            ChatClientEvent.BuiltInToolCallApproval(
+                signedRequest = signedRequest
+            )
+        )
+    }
+
+    /**
+     * Resolves the built-in worker tool definition for [toolCall] when the current tool cache contains one.
+     *
+     * @param toolCall Tool call whose definition should be resolved.
+     * @return Matching [BuiltInWorkerToolDefinition] or `null` when the tool is not a built-in worker tool
+     *   or the cache lacks it.
+     */
+    private suspend fun findBuiltInToolDefinition(toolCall: ToolCall): BuiltInWorkerToolDefinition? {
+        val toolDefinitionId = toolCall.toolDefinitionId ?: return null
+        val cachedDefinition = toolRepository.tools.value.dataOrNull
+            ?.firstOrNull { toolDefinition -> toolDefinition.id == toolDefinitionId } as? BuiltInWorkerToolDefinition
+        if (cachedDefinition != null) {
+            return cachedDefinition
+        }
+
+        return toolRepository.getToolById(toolDefinitionId).fold(
+            ifLeft = { null },
+            ifRight = { it as? BuiltInWorkerToolDefinition }
+        )
+    }
+
+    /**
      * Resolves the Local MCP tool definition for [toolCall] when the current tool cache contains one.
      *
      * @param toolCall Tool call whose definition should be resolved.
@@ -217,6 +317,26 @@ class SendMessageUseCase(
      */
     private suspend fun handleToolCallApprovalRequested(toolCall: ToolCall) {
         logger.debug("Tool call approval requested: ${toolCall.toolName}")
+
+        // Built-in worker tools participate in the on-device signing trust chain, so auto-decisions
+        // must be signed locally before being relayed to the worker.
+        val builtInTool = findBuiltInToolDefinition(toolCall)
+        if (builtInTool != null) {
+            val preference = findApprovalPreference(builtInTool.id) ?: return
+            val denialReason = if (preference.autoApprove) {
+                null
+            } else {
+                preference.denialReason ?: "Auto-denied by user preference"
+            }
+
+            emitBuiltInApprovalEvent(
+                toolCall = toolCall,
+                toolDefinition = builtInTool,
+                approved = preference.autoApprove,
+                denialReason = denialReason
+            )
+            return
+        }
 
         val localMcpTool = findLocalMcpToolDefinition(toolCall) ?: return
         val preference = findApprovalPreference(localMcpTool.id) ?: return

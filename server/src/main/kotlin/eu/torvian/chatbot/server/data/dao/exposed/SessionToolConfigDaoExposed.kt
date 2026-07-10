@@ -12,6 +12,7 @@ import eu.torvian.chatbot.server.data.dao.SessionToolConfigDao
 import eu.torvian.chatbot.server.data.dao.error.ClearToolConfigError
 import eu.torvian.chatbot.server.data.dao.error.SetToolEnabledError
 import eu.torvian.chatbot.server.data.dao.error.SetToolsEnabledError
+import eu.torvian.chatbot.server.data.tables.BuiltInToolDefinitionTable
 import eu.torvian.chatbot.server.data.tables.LocalMCPServerTable
 import eu.torvian.chatbot.server.data.tables.LocalMCPToolDefinitionTable
 import eu.torvian.chatbot.server.data.tables.SessionToolConfigTable
@@ -49,6 +50,10 @@ class SessionToolConfigDaoExposed(
                     LocalMCPServerTable,
                     { LocalMCPToolDefinitionTable.mcpServerId },
                     { LocalMCPServerTable.id }
+                ).leftJoin(
+                    BuiltInToolDefinitionTable,
+                    { ToolDefinitionTable.id },
+                    { BuiltInToolDefinitionTable.toolDefinitionId }
                 )
                 .selectAll().where {
                     (SessionToolConfigTable.sessionId eq sessionId) and
@@ -163,4 +168,3 @@ class SessionToolConfigDaoExposed(
             Unit.right()
         }
 }
-
