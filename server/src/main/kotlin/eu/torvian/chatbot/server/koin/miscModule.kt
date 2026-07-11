@@ -49,6 +49,7 @@ fun miscModule() = module {
             localMCPRuntimeControlService = get(),
             localMCPServerConfigSyncService = get(),
             localMCPToolDefinitionService = get(),
+            builtInToolDefinitionService = get(),
             authenticationService = get(),
             tokenService = get(),
             accountManagementService = get(),

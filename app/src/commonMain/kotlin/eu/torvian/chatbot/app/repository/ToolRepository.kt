@@ -3,10 +3,8 @@ package eu.torvian.chatbot.app.repository
 import arrow.core.Either
 import eu.torvian.chatbot.app.domain.contracts.DataState
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
-import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.common.models.tool.UserToolApprovalPreference
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.serialization.json.JsonObject
 
 /**
  * Repository interface for managing tool definitions and session-specific tool configurations.
@@ -67,53 +65,6 @@ interface ToolRepository {
      * @return Either.Right with the ToolDefinition on success, or Either.Left with RepositoryError on failure
      */
     suspend fun getToolById(toolId: Long): Either<RepositoryError, ToolDefinition>
-
-    /**
-     * Creates a new tool definition.
-     *
-     * Upon successful creation, the new tool is automatically added to the internal
-     * StateFlow, triggering updates to all observers.
-     *
-     * @param name The unique name of the tool (machine-readable, used in LLM API calls)
-     * @param description A description of what the tool does
-     * @param type The type of tool (e.g., WEB_SEARCH, CALCULATOR)
-     * @param config Tool-specific configuration (JSON object)
-     * @param inputSchema JSON Schema defining expected input parameters
-     * @param outputSchema Optional JSON Schema defining expected output structure
-     * @param isEnabled Whether the tool is enabled by default
-     * @return Either.Right with the created ToolDefinition on success, or Either.Left with RepositoryError on failure
-     */
-    suspend fun createTool(
-        name: String,
-        description: String,
-        type: ToolType,
-        config: JsonObject,
-        inputSchema: JsonObject,
-        outputSchema: JsonObject? = null,
-        isEnabled: Boolean = true
-    ): Either<RepositoryError, ToolDefinition>
-
-    /**
-     * Updates an existing tool definition.
-     *
-     * Upon successful update, the modified tool replaces the existing one in the
-     * internal StateFlow, triggering updates to all observers.
-     *
-     * @param tool The updated tool object with the same ID as the existing tool
-     * @return Either.Right with Unit on successful update, or Either.Left with RepositoryError on failure
-     */
-    suspend fun updateTool(tool: ToolDefinition): Either<RepositoryError, Unit>
-
-    /**
-     * Deletes a tool definition.
-     *
-     * Upon successful deletion, the tool is automatically removed from the internal
-     * StateFlow, triggering updates to all observers.
-     *
-     * @param toolId The unique identifier of the tool to delete
-     * @return Either.Right with Unit on successful deletion, or Either.Left with RepositoryError on failure
-     */
-    suspend fun deleteTool(toolId: Long): Either<RepositoryError, Unit>
 
     /**
      * Loads the list of tools enabled for a specific session.
@@ -235,4 +186,3 @@ interface ToolRepository {
         update: (List<UserToolApprovalPreference>) -> List<UserToolApprovalPreference>
     )
 }
-

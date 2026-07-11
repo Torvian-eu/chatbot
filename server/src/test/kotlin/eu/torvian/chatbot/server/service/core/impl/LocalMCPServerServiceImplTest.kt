@@ -78,7 +78,8 @@ class LocalMCPServerServiceImplTest {
         certificateFingerprint = "fp",
         allowedScopes = listOf("messages:read"),
         createdAt = Instant.fromEpochMilliseconds(1_700_000_000_000),
-        lastSeenAt = null
+        lastSeenAt = null,
+        toolNamePrefix = null
     )
 
     @BeforeEach

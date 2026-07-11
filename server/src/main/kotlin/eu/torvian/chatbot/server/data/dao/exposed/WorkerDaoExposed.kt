@@ -15,6 +15,7 @@ import eu.torvian.chatbot.server.data.tables.WorkerAuthChallengesTable
 import eu.torvian.chatbot.server.data.tables.WorkersTable
 import eu.torvian.chatbot.server.data.tables.mappers.toWorkerAuthChallengeEntity
 import eu.torvian.chatbot.server.data.tables.mappers.toWorkerEntity
+import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.greaterEq
@@ -24,7 +25,6 @@ import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
-import kotlinx.serialization.json.Json
 
 /**
  * Exposed implementation of [WorkerDao].
@@ -40,7 +40,8 @@ class WorkerDaoExposed(
         displayName: String,
         certificatePem: String,
         certificateFingerprint: String,
-        allowedScopes: List<String>
+        allowedScopes: List<String>,
+        toolNamePrefix: String?
     ): Either<WorkerError, WorkerEntity> =
         transactionScope.transaction {
             either {
@@ -56,13 +57,18 @@ class WorkerDaoExposed(
                         it[WorkersTable.certificateFingerprint] = certificateFingerprint
                         it[WorkersTable.allowedScopesJson] = allowedScopesJson
                         it[WorkersTable.createdAt] = now
+                        it[WorkersTable.toolNamePrefix] = toolNamePrefix
                     }
                     inserted.resultedValues?.first()?.toWorkerEntity()
                         ?: throw IllegalStateException("Failed to create worker")
                 }) { e: ExposedSQLException ->
                     if (e.isUniqueConstraintViolation()) {
                         when {
-                            e.message?.contains("worker_uid", ignoreCase = true) == true -> raise(WorkerError.DuplicateWorkerUid(workerUid))
+                            e.message?.contains(
+                                "worker_uid",
+                                ignoreCase = true
+                            ) == true -> raise(WorkerError.DuplicateWorkerUid(workerUid))
+
                             else -> raise(WorkerError.DuplicateCertificateFingerprint(certificateFingerprint))
                         }
                     } else {
@@ -110,7 +116,8 @@ class WorkerDaoExposed(
     override suspend fun updateWorker(
         id: Long,
         displayName: String,
-        allowedScopes: List<String>
+        allowedScopes: List<String>,
+        toolNamePrefix: String?
     ): Either<WorkerError.NotFound, WorkerEntity> =
         transactionScope.transaction {
             either {
@@ -118,6 +125,7 @@ class WorkerDaoExposed(
                 val updated = WorkersTable.update({ WorkersTable.id eq id }) {
                     it[WorkersTable.displayName] = displayName
                     it[WorkersTable.allowedScopesJson] = allowedScopesJson
+                    it[WorkersTable.toolNamePrefix] = toolNamePrefix
                 }
                 ensure(updated > 0) { WorkerError.NotFound(id) }
 
@@ -163,9 +171,9 @@ class WorkerDaoExposed(
     ): Either<WorkerError.InvalidChallenge, WorkerAuthChallengeEntity> = transactionScope.transaction {
         WorkerAuthChallengesTable.selectAll().where {
             (WorkerAuthChallengesTable.workerId eq workerId) and
-                (WorkerAuthChallengesTable.challengeId eq challengeId) and
-                (WorkerAuthChallengesTable.expiresAt greaterEq nowEpochMs) and
-                WorkerAuthChallengesTable.consumedAt.isNull()
+                    (WorkerAuthChallengesTable.challengeId eq challengeId) and
+                    (WorkerAuthChallengesTable.expiresAt greaterEq nowEpochMs) and
+                    WorkerAuthChallengesTable.consumedAt.isNull()
         }.singleOrNull()
             ?.toWorkerAuthChallengeEntity()
             ?.right()
@@ -192,4 +200,3 @@ class WorkerDaoExposed(
                 .map { it.toWorkerEntity() }
         }
 }
-

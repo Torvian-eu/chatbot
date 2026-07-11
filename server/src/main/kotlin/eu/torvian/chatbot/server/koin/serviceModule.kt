@@ -5,6 +5,8 @@ import eu.torvian.chatbot.common.security.CryptoProvider
 import eu.torvian.chatbot.common.security.EncryptionService
 import eu.torvian.chatbot.common.security.PasswordValidator
 import eu.torvian.chatbot.server.config.AppConfiguration
+import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutor
+import eu.torvian.chatbot.server.service.builtin.DefaultBuiltInWorkerToolExecutor
 import eu.torvian.chatbot.server.service.core.*
 import eu.torvian.chatbot.server.service.core.chat.content.DefaultFileReferenceContentBuilder
 import eu.torvian.chatbot.server.service.core.chat.content.DefaultToolResultContentBuilder
@@ -28,9 +30,9 @@ import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutor
 import eu.torvian.chatbot.server.service.security.*
 import eu.torvian.chatbot.server.service.security.authorizer.*
 import eu.torvian.chatbot.server.service.setup.InitializationCoordinator
-import eu.torvian.chatbot.server.service.setup.ToolDefinitionInitializer
 import eu.torvian.chatbot.server.service.setup.UserAccountInitializer
-import eu.torvian.chatbot.server.service.tool.ToolExecutorFactory
+import eu.torvian.chatbot.server.worker.builtin.BuiltInToolDispatchService
+import eu.torvian.chatbot.server.worker.builtin.DefaultBuiltInToolDispatchService
 import eu.torvian.chatbot.server.worker.mcp.configsync.DefaultLocalMCPServerConfigSyncService
 import eu.torvian.chatbot.server.worker.mcp.configsync.DefaultLocalMCPServerWorkerSyncService
 import eu.torvian.chatbot.server.worker.mcp.configsync.LocalMCPServerConfigSyncService
@@ -46,14 +48,8 @@ import org.koin.dsl.module
 
 /**
  * Dependency injection module for configuring the application's service layer.
- *
- * This module provides:
- * - Core Services (session, group, model, settings, message, LLM provider, tool)
- * - Security services (credential management, encryption)
- * - Tool execution services
  */
 fun serviceModule() = module {
-    // --- Core Services ---
     single<SessionService> { SessionServiceImpl(get(), get(), get(), get(), get(), get(), get(), get()) }
     single<GroupService> { GroupServiceImpl(get(), get(), get(), get()) }
     single<LLMModelService> { LLMModelServiceImpl(get(), get(), get(), get(), get(), get(), get()) }
@@ -61,7 +57,7 @@ fun serviceModule() = module {
     single<LLMProviderService> { LLMProviderServiceImpl(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     single<MessageService> { MessageServiceImpl(get(), get(), get()) }
     single<SearchService> { SearchServiceImpl(get()) }
-    single<ToolCallOrchestrator> { DefaultToolCallOrchestrator(get(), get(), get(), get(), get()) }
+    single<ToolCallOrchestrator> { DefaultToolCallOrchestrator(get(), get(), get()) }
     single<FileReferenceContentBuilder> { DefaultFileReferenceContentBuilder() }
     single<ToolResultContentBuilder> { DefaultToolResultContentBuilder() }
     single<ChatContextBuilder> { DefaultChatContextBuilder(get(), get()) }
@@ -72,9 +68,7 @@ fun serviceModule() = module {
     single<ConversationTurnOrchestrator> {
         DefaultConversationTurnOrchestrator(get(), get(), get(), get(), get())
     }
-    single<ChatService> {
-        ChatServiceImpl(get(), get())
-    }
+    single<ChatService> { ChatServiceImpl(get(), get()) }
     single<ToolService> { ToolServiceImpl(get(), get(), get(), get(), get()) }
     single<ToolCallService> { ToolCallServiceImpl(get(), get()) }
     single<LocalMCPServerService> { LocalMCPServerServiceImpl(get(), get(), get(), get(), get(), get(), get()) }
@@ -86,17 +80,28 @@ fun serviceModule() = module {
     single<LocalMCPToolCallDispatchService> { DefaultLocalMCPToolCallDispatchService(get()) }
     single<LocalMCPExecutor> { LocalMCPExecutor(get(), get()) }
 
+    // --- Built-in worker tool services (direct `tool.call` dispatch) ---
+    single<BuiltInToolDispatchService> { DefaultBuiltInToolDispatchService(get()) }
+    single<BuiltInWorkerToolExecutor> { DefaultBuiltInWorkerToolExecutor(get()) }
+    single<BuiltInToolDefinitionSeeder> { BuiltInToolDefinitionSeeder(get(), get(), get()) }
+    single<BuiltInToolDefinitionService> {
+        BuiltInToolDefinitionServiceImpl(
+            workerDao = get(),
+            builtInToolDefinitionDao = get(),
+            toolService = get(),
+            transactionScope = get()
+        )
+    }
+
     single<RoleService> { RoleServiceImpl(get(), get(), get()) }
     single<UserGroupService> { UserGroupServiceImpl(get(), get(), get()) }
     single<UserPreferenceService> { UserPreferenceServiceImpl(get(), get(), get()) }
 
-    // --- Security Services ---
     single<CryptoProvider> { AESCryptoProvider(get()) }
     single<EncryptionService> { EncryptionService(get()) }
     single<CredentialManager> { DbEncryptedCredentialManager(get(), get()) }
     single<CertificateService> { DefaultCertificateService() }
 
-    // --- Mail Service (pluggable transport) ---
     single<MailService> {
         val config = get<AppConfiguration>()
         when (config.email.provider.lowercase()) {
@@ -104,13 +109,13 @@ fun serviceModule() = module {
                 fromAddress = config.email.fromAddress,
                 properties = config.email.properties
             )
+
             else -> LoggingMailService(
                 fromAddress = config.email.fromAddress
             )
         }
     }
 
-    // --- Security Notification Service ---
     single<SecurityNotificationService> {
         SecurityNotificationServiceImpl(
             mailService = get(),
@@ -118,7 +123,6 @@ fun serviceModule() = module {
         )
     }
 
-    // --- Authentication Services ---
     single<PasswordService> {
         BCryptPasswordService(PasswordValidator(get<AppConfiguration>().authPolicy.passwordConfig))
     }
@@ -176,9 +180,8 @@ fun serviceModule() = module {
             authPolicy = get()
         )
     }
-    single<WorkerService> { WorkerServiceImpl(get(), get(), get()) }
+    single<WorkerService> { WorkerServiceImpl(get(), get(), get(), get()) }
 
-    // --- Authorizers (resource-level access) ---
     single<ResourceAuthorizer>(named(ResourceType.GROUP.key)) { GroupResourceAuthorizer(get()) }
     single<ResourceAuthorizer>(named(ResourceType.SESSION.key)) { SessionResourceAuthorizer(get()) }
     single<ResourceAuthorizer>(named(ResourceType.PROVIDER.key)) {
@@ -191,7 +194,6 @@ fun serviceModule() = module {
         SettingsResourceAuthorizer(get(), get(), get())
     }
 
-    // --- Authorization Services ---
     single<AuthorizationService> {
         AuthorizationServiceImpl(
             getAll<ResourceAuthorizer>().associateBy { it.resourceType },
@@ -201,32 +203,10 @@ fun serviceModule() = module {
         )
     }
 
-    // --- Setup Services ---
-    // Individual initializers
     single<UserAccountInitializer> { UserAccountInitializer(get(), get(), get()) }
-    single<ToolDefinitionInitializer> { ToolDefinitionInitializer(get(), get(), get()) }
-
-    // Initialization coordinator that runs all initializers
     single<InitializationCoordinator> {
         InitializationCoordinator(
-            listOf(
-                get<UserAccountInitializer>(),
-                get<ToolDefinitionInitializer>()
-            )
-        )
-    }
-
-
-    // --- Tool Executors ---
-    // Add more executors as they are implemented:
-    // single<CalculatorToolExecutor> { CalculatorToolExecutor() }
-
-    // --- Tool Executor Factory ---
-    single<ToolExecutorFactory> {
-        ToolExecutorFactory(
-            webSearchExecutor = get(named("web_search")),
-            weatherExecutor = get(named("weather"))
-            // Add more executors here as they are implemented
+            listOf(get<UserAccountInitializer>())
         )
     }
 }

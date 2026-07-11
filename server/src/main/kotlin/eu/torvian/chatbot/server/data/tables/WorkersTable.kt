@@ -16,6 +16,7 @@ import org.jetbrains.exposed.v1.core.dao.id.LongIdTable
  * @property allowedScopesJson JSON-encoded list of worker scopes.
  * @property createdAt Creation timestamp in epoch milliseconds.
  * @property lastSeenAt Last successful authentication timestamp.
+ * @property toolNamePrefix Optional prefix applied to the public names of the worker's built-in tools.
  */
 object WorkersTable : LongIdTable("workers") {
     val ownerUserId = reference("owner_user_id", UsersTable, onDelete = ReferenceOption.CASCADE)
@@ -26,5 +27,5 @@ object WorkersTable : LongIdTable("workers") {
     val allowedScopesJson = text("allowed_scopes_json")
     val createdAt = long("created_at")
     val lastSeenAt = long("last_seen_at").nullable()
+    val toolNamePrefix = varchar("tool_name_prefix", 255).nullable()
 }
-

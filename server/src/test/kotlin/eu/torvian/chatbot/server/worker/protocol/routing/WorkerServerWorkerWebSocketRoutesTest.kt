@@ -90,7 +90,9 @@ class WorkerServerWorkerWebSocketRoutesTest {
         testDataManager.createTables(
             setOf(
                 Table.USERS,
-                Table.WORKERS
+                Table.WORKERS,
+                Table.TOOL_DEFINITIONS,
+                Table.BUILT_IN_TOOL_DEFINITIONS
             )
         )
     }

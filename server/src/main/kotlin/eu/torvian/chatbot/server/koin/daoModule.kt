@@ -64,4 +64,7 @@ fun daoModule() = module {
 
     // Worker DAOs
     single<WorkerDao> { WorkerDaoExposed(get()) }
+
+    // Built-in worker tool DAOs
+    single<BuiltInToolDefinitionDao> { BuiltInToolDefinitionDaoExposed(get()) }
 }

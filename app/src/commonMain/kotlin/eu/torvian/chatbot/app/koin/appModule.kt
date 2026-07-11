@@ -21,6 +21,7 @@ import eu.torvian.chatbot.app.viewmodel.admin.UserGroupManagementViewModel
 import eu.torvian.chatbot.app.viewmodel.admin.UserManagementViewModel
 import eu.torvian.chatbot.app.viewmodel.auth.*
 import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
+import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModelSlotManager
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatStateImpl
 import eu.torvian.chatbot.app.viewmodel.chat.usecase.*
@@ -30,6 +31,7 @@ import eu.torvian.chatbot.app.viewmodel.common.CoroutineScopeProvider
 import eu.torvian.chatbot.app.viewmodel.common.DefaultCoroutineScopeProvider
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
 import eu.torvian.chatbot.app.viewmodel.settings.AboutViewModel
+import eu.torvian.chatbot.app.viewmodel.settings.BuiltInToolsViewModel
 import eu.torvian.chatbot.app.viewmodel.settings.E2EASecurityViewModel
 import io.ktor.client.*
 import io.ktor.client.plugins.logging.*
@@ -223,6 +225,9 @@ fun appModule(config: AppConfiguration): Module = module {
     single<LocalMCPToolApi> {
         KtorLocalMCPToolApiClient(get())
     }
+    single<BuiltInToolApi> {
+        KtorBuiltInToolApiClient(get())
+    }
     single<WorkerApi> {
         KtorWorkerApiClient(get())
     }
@@ -278,11 +283,21 @@ fun appModule(config: AppConfiguration): Module = module {
         )
     }
     single<WorkerRepository> {
-        DefaultWorkerRepository(get())
+        DefaultWorkerRepository(
+            workerApi = get(),
+            toolRepository = get(),
+            builtInToolRepository = get()
+        )
     }
     single<LocalMCPToolRepository> {
         DefaultLocalMCPToolRepository(
             localMCPToolApi = get(),
+            toolRepository = get()
+        )
+    }
+    single<BuiltInToolRepository> {
+        DefaultBuiltInToolRepository(
+            builtInToolApi = get(),
             toolRepository = get()
         )
     }
@@ -378,6 +393,11 @@ fun appModule(config: AppConfiguration): Module = module {
     // Provide authentication form validation service
     single<AuthValidationService> {
         DefaultAuthValidationService()
+    }
+
+    // Provide the long-lived slot manager that maps sessions to ChatViewModel slots.
+    single<ChatViewModelSlotManager> {
+        ChatViewModelSlotManager(maxSlots = ChatViewModelSlotManager.DEFAULT_MAX_SLOTS)
     }
 
     // Provide ViewModels, injecting the required dependencies
@@ -503,6 +523,14 @@ fun appModule(config: AppConfiguration): Module = module {
     viewModel {
         WorkersViewModel(
             workerRepository = get(),
+            notificationService = get()
+        )
+    }
+    viewModel {
+        BuiltInToolsViewModel(
+            workerRepository = get(),
+            builtInToolRepository = get(),
+            toolRepository = get(),
             notificationService = get()
         )
     }

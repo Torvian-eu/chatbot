@@ -41,6 +41,8 @@ data class SetupConfigDto(
  * @property identity Worker identity and certificate configuration (nullable).
  * @property storage File path configuration for secrets and token storage (nullable).
  * @property auth Authentication timing and skew configuration (nullable).
+ * @property workspace Filesystem workspace configuration for built-in tools (nullable).
+ * @property builtInTools Built-in tool enablement/prefix configuration (nullable).
  * @property trustedSigners Authorized E2EA signers trusted by this worker (nullable).
  */
 @Serializable
@@ -49,6 +51,8 @@ data class RuntimeConfigDto(
     val identity: IdentityConfigDto? = null,
     val storage: StorageConfigDto? = null,
     val auth: AuthConfigDto? = null,
+    val workspace: WorkspaceConfigDto? = null,
+    val builtInTools: BuiltInToolsConfigDto? = null,
     val trustedSigners: List<TrustedSignerDto>? = null
 )
 
@@ -113,4 +117,27 @@ data class StorageConfigDto(
 @Serializable
 data class AuthConfigDto(
     val refreshSkewSeconds: Long? = 60
+)
+
+/**
+ * DTO for the worker's filesystem workspace used by built-in tools.
+ *
+ * @property path Path to the workspace directory. May be relative to the worker's config directory
+ *   or absolute. Relative paths are resolved during configuration assembly.
+ */
+@Serializable
+data class WorkspaceConfigDto(
+    val path: String? = null
+)
+
+/**
+ * DTO for built-in tool configuration.
+ *
+ * @property enabled List of unprefixed built-in tool names to enable. Use a single `*` to enable all.
+ * @property defaultCommandTimeoutSeconds Default timeout in seconds for the `run_command` tool.
+ */
+@Serializable
+data class BuiltInToolsConfigDto(
+    val enabled: List<String>? = null,
+    val defaultCommandTimeoutSeconds: Long? = null
 )

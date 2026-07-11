@@ -12,7 +12,6 @@ import eu.torvian.chatbot.app.service.api.ToolApi
 import eu.torvian.chatbot.app.utils.misc.LruCache
 import eu.torvian.chatbot.app.utils.misc.kmpLogger
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
-import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.common.models.tool.UserToolApprovalPreference
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,7 +19,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.serialization.json.JsonObject
 
 /**
  * Default implementation of [ToolRepository] that manages tool definitions and session-specific configurations.
@@ -80,72 +78,6 @@ class DefaultToolRepository(
             apiResourceError.toRepositoryError("Failed to get tool by ID")
         }) {
             toolApi.getToolById(toolId).bind()
-        }
-    }
-
-    override suspend fun createTool(
-        name: String,
-        description: String,
-        type: ToolType,
-        config: JsonObject,
-        inputSchema: JsonObject,
-        outputSchema: JsonObject?,
-        isEnabled: Boolean
-    ): Either<RepositoryError, ToolDefinition> = either {
-        val newTool = withError({ apiResourceError ->
-            apiResourceError.toRepositoryError("Failed to create tool")
-        }) {
-            toolApi.createTool(name, description, type, config, inputSchema, outputSchema, isEnabled).bind()
-        }
-
-        // Add the new tool to the cache
-        updateToolCache { currentList ->
-            currentList + newTool
-        }
-
-        newTool
-    }
-
-    override suspend fun updateTool(tool: ToolDefinition): Either<RepositoryError, Unit> = either {
-        withError({ apiResourceError ->
-            apiResourceError.toRepositoryError("Failed to update tool")
-        }) {
-            toolApi.updateTool(tool).bind()
-        }
-
-        // Update the tool in the cache
-        val oldTool = _tools.value.dataOrNull?.find { it.id == tool.id }
-        updateToolCache { currentList ->
-            currentList.map { if (it.id == tool.id) tool else it }
-        }
-
-        // If the tool's enabled state changed, invalidate all enabled tools caches
-        if (oldTool?.isEnabled != tool.isEnabled) {
-            invalidateEnabledToolsCache()
-        }
-    }
-
-    override suspend fun deleteTool(toolId: Long): Either<RepositoryError, Unit> = either {
-        withError({ apiResourceError ->
-            apiResourceError.toRepositoryError("Failed to delete tool")
-        }) {
-            toolApi.deleteTool(toolId).bind()
-        }
-
-        // Remove the tool from the cache
-        val deletedTool = _tools.value.dataOrNull?.find { it.id == toolId }
-        updateToolCache { currentList ->
-            currentList.filter { it.id != toolId }
-        }
-
-        // Remove the tool from all enabled tools caches
-        deletedTool?.let { tool ->
-            updateEnabledToolsCache(tool, false)
-        }
-
-        // Update the tool approval preferences cache
-        updateToolApprovalPreferencesCache { currentList ->
-            currentList.filter { it.toolDefinitionId != toolId }
         }
     }
 
@@ -382,4 +314,3 @@ class DefaultToolRepository(
 
     }
 }
-

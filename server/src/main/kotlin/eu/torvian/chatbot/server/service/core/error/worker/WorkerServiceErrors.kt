@@ -37,6 +37,13 @@ sealed interface UpdateWorkerError {
      * @property ownerUserId Actual owner of the worker.
      */
     data class Forbidden(val workerId: Long, val ownerUserId: Long) : UpdateWorkerError
+
+    /**
+     * The built-in tool rename triggered by a prefix change failed.
+     *
+     * @property reason Human-readable failure detail.
+     */
+    data class InvalidInput(val reason: String) : UpdateWorkerError
 }
 
 /**

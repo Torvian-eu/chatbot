@@ -34,4 +34,4 @@ echo "Launching worker process as torvian ($(id -u torvian))..."
 # --- 2. Execute via gosu ---
 # We use 'exec gosu' to replace the shell process with the Java process.
 # This ensures that signals (SIGTERM) are passed directly to Java.
-exec gosu torvian java $JAVA_OPTS -cp "lib/*" eu.torvian.chatbot.worker.main.WorkerMain
+exec gosu torvian java $JAVA_OPTS -cp "lib/*" eu.torvian.chatbot.worker.main.WorkerMain "$@"

@@ -325,12 +325,14 @@ class ChatViewModel(
      *                            from that point. When null, sends the current input content normally.
      */
     fun sendMessage(continueFromMessage: ChatMessage? = null) {
-        sendMessageJob = normalScope.launch {
-            try {
-                sendMessageUC.execute(continueFromMessage = continueFromMessage)
-            } finally {
-                sendMessageJob = null
-            }
+        val job = normalScope.launch {
+            sendMessageUC.execute(continueFromMessage = continueFromMessage)
+        }
+        sendMessageJob = job
+        state.setIsSending(true)
+        job.invokeOnCompletion {
+            sendMessageJob = null
+            state.setIsSending(false)
         }
     }
 
@@ -340,7 +342,6 @@ class ChatViewModel(
     fun cancelSendMessage() {
         sendMessageJob?.cancel()
         sendMessageJob = null
-        state.setIsSending(false)
     }
 
     /**

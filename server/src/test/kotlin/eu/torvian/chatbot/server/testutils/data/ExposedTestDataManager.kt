@@ -91,6 +91,7 @@ class ExposedTestDataManager(private val transactionScope: TransactionScope) : T
             // MCP server tables (must come after users and tool definitions)
             Table.LOCAL_MCP_SERVERS to LocalMCPServerTable,
             Table.LOCAL_MCP_TOOL_DEFINITIONS to LocalMCPToolDefinitionTable,
+            Table.BUILT_IN_TOOL_DEFINITIONS to BuiltInToolDefinitionTable,
             Table.LOCAL_MCP_SERVER_SIGNATURES to LocalMCPServerSignaturesTable,
 
             // Failed login attempts table (for lockout feature)

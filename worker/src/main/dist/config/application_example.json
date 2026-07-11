@@ -24,6 +24,23 @@
     "auth": {
       "refreshSkewSeconds": 300
     },
+    /*
+      Filesystem workspace for built-in tools. All file paths in built-in tool calls are
+      resolved against this directory and rejected if they escape it. The directory is
+      created at startup if it does not exist.
+    */
+    "workspace": {
+      "path": "../workspace"
+    },
+    /*
+      Built-in tool enablement. `enabled` lists the unprefixed names of tools that are
+      available; a single "*" enables all registered tools. Tool-name prefixing is a
+      server-side catalog concern and is not applied at the worker runtime.
+    */
+    "builtInTools": {
+      "enabled": ["*"],
+      "defaultCommandTimeoutSeconds": 600
+    },
     "trustedSigners": [
       {
         "signerId": "uuid-of-signer-1", // app device id

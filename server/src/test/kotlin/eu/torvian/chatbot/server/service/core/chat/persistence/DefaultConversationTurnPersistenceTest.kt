@@ -6,7 +6,7 @@ import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.llm.ChatModelSettings
 import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType
-import eu.torvian.chatbot.common.models.tool.MiscToolDefinition
+import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
 import eu.torvian.chatbot.common.models.tool.ToolType
@@ -199,17 +199,18 @@ class DefaultConversationTurnPersistenceTest {
      */
     @Test
     fun `persistPendingToolCalls preserves tool resolution outcomes`() = runTest {
-        val toolDefinition = MiscToolDefinition(
+        val toolDefinition = LocalMCPToolDefinition(
             id = 8L,
             name = "search",
             description = "Searches docs",
-            type = ToolType.WEB_SEARCH,
             config = buildJsonObject { },
             inputSchema = buildJsonObject { },
             outputSchema = null,
             isEnabled = true,
             createdAt = baseInstant,
-            updatedAt = baseInstant
+            updatedAt = baseInstant,
+            serverId = 1L,
+            mcpToolName = "search"
         )
         val knownRequest = LLMCompletionResult.CompletionChoice.ToolCallRequest(
             name = "search",

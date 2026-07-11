@@ -1,10 +1,10 @@
 package eu.torvian.chatbot.server.service.core
 
 import arrow.core.Either
-import eu.torvian.chatbot.common.models.tool.MiscToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.common.models.tool.UserToolApprovalPreference
+import eu.torvian.chatbot.server.data.entities.ToolDefinitionEntity
 import eu.torvian.chatbot.server.service.core.error.tool.*
 import kotlinx.serialization.json.JsonObject
 
@@ -15,16 +15,16 @@ import kotlinx.serialization.json.JsonObject
 interface ToolService {
     /**
      * Retrieves all tool definitions from the system.
-     * @return A list of all [MiscToolDefinition] objects. Returns an empty list if no tools exist.
+     * @return A list of all [ToolDefinition] objects. Returns an empty list if no tools exist.
      */
-    suspend fun getAllTools(): List<MiscToolDefinition>
+    suspend fun getAllTools(): List<ToolDefinition>
 
     /**
      * Retrieves a specific tool definition by ID.
      * @param id The ID of the tool to retrieve.
-     * @return Either a [GetToolError] if the tool doesn't exist, or the [MiscToolDefinition].
+     * @return Either a [GetToolError] if the tool doesn't exist, or the [ToolDefinition].
      */
-    suspend fun getToolById(id: Long): Either<GetToolError, MiscToolDefinition>
+    suspend fun getToolById(id: Long): Either<GetToolError, ToolDefinition>
 
     /**
      * Creates a new tool definition.
@@ -37,7 +37,7 @@ interface ToolService {
      * @param outputSchema Optional JSON Schema describing the output format.
      * @param isEnabled Whether the tool is enabled by default.
      * @return Either a [ValidateToolError] if validation fails,
-     *         or the newly created [ToolDefinition].
+     *         or the newly created [ToolDefinitionEntity].
      */
     suspend fun createTool(
         name: String,
@@ -47,7 +47,7 @@ interface ToolService {
         inputSchema: JsonObject,
         outputSchema: JsonObject?,
         isEnabled: Boolean
-    ): Either<ValidateToolError, MiscToolDefinition>
+    ): Either<ValidateToolError, ToolDefinitionEntity>
 
     /**
      * Updates an existing tool definition.
@@ -134,7 +134,7 @@ interface ToolService {
      * - User-specific MCP_LOCAL tools (where the MCP server is owned by the user)
      *
      * @param userId The ID of the user
-     * @return List of ToolDefinition (mix of MiscToolDefinition and LocalMCPToolDefinition)
+     * @return List of ToolDefinition (mix of LocalMCPToolDefinition and BuiltInWorkerToolDefinition)
      */
     suspend fun getToolsForUser(userId: Long): List<ToolDefinition>
 
@@ -188,4 +188,3 @@ interface ToolService {
         toolDefinitionId: Long
     ): Either<DeleteToolApprovalPreferenceError, Unit>
 }
-

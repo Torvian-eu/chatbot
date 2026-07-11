@@ -22,7 +22,8 @@ fun ResultRow.toWorkerEntity(): WorkerEntity = WorkerEntity(
     allowedScopes = runCatching { Json.decodeFromString<List<String>>(this[WorkersTable.allowedScopesJson]) }
         .getOrDefault(emptyList()),
     createdAt = Instant.fromEpochMilliseconds(this[WorkersTable.createdAt]),
-    lastSeenAt = this[WorkersTable.lastSeenAt]?.let(Instant::fromEpochMilliseconds)
+    lastSeenAt = this[WorkersTable.lastSeenAt]?.let(Instant::fromEpochMilliseconds),
+    toolNamePrefix = this[WorkersTable.toolNamePrefix]
 )
 
 

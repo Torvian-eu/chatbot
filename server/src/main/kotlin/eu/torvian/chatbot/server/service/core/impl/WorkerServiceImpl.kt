@@ -11,6 +11,7 @@ import eu.torvian.chatbot.server.data.dao.WorkerDao
 import eu.torvian.chatbot.server.data.dao.error.WorkerError
 import eu.torvian.chatbot.server.data.entities.mappers.toWorkerDto
 import eu.torvian.chatbot.server.service.core.WorkerService
+import eu.torvian.chatbot.server.service.core.error.tool.SeedBuiltInToolsError
 import eu.torvian.chatbot.server.service.core.error.worker.AuthenticateWorkerError
 import eu.torvian.chatbot.server.service.core.error.worker.DeleteWorkerError
 import eu.torvian.chatbot.server.service.core.error.worker.RegisterWorkerError
@@ -29,11 +30,13 @@ import kotlin.time.Duration.Companion.minutes
  *
  * @property workerDao DAO for worker and challenge persistence.
  * @property certificateService Certificate parsing and signature verification service.
+ * @property builtInToolDefinitionSeeder Seeds default built-in tools when a worker is created.
  * @property transactionScope Transaction scope used for service operations.
  */
 class WorkerServiceImpl(
     private val workerDao: WorkerDao,
     private val certificateService: CertificateService,
+    private val builtInToolDefinitionSeeder: BuiltInToolDefinitionSeeder,
     private val transactionScope: TransactionScope
 ) : WorkerService {
 
@@ -42,10 +45,16 @@ class WorkerServiceImpl(
         workerUid: String,
         displayName: String,
         certificatePem: String,
-        allowedScopes: List<String>
+        allowedScopes: List<String>,
+        toolNamePrefix: String?
     ): Either<RegisterWorkerError, WorkerDto> = transactionScope.transaction {
         either {
-            logger.debug("Registering worker request received (ownerUserId={}, workerUid={}, displayName={})", ownerUserId, workerUid, displayName)
+            logger.debug(
+                "Registering worker request received (ownerUserId={}, workerUid={}, displayName={})",
+                ownerUserId,
+                workerUid,
+                displayName
+            )
             ensure(displayName.isNotBlank()) { RegisterWorkerError.InvalidInput("displayName cannot be blank") }
             ensure(workerUid.isNotBlank()) { RegisterWorkerError.InvalidInput("workerUid cannot be blank") }
 
@@ -60,7 +69,10 @@ class WorkerServiceImpl(
             val worker = withError({ error: WorkerError ->
                 when (error) {
                     is WorkerError.DuplicateCertificateFingerprint -> {
-                        logger.warn("Worker registration failed: duplicate certificate fingerprint={}", error.fingerprint)
+                        logger.warn(
+                            "Worker registration failed: duplicate certificate fingerprint={}",
+                            error.fingerprint
+                        )
                         RegisterWorkerError.CertificateAlreadyRegistered(error.fingerprint)
                     }
 
@@ -78,11 +90,31 @@ class WorkerServiceImpl(
                     displayName = displayName.trim(),
                     certificatePem = certificatePem,
                     certificateFingerprint = fingerprint,
-                    allowedScopes = allowedScopes.distinct()
+                    allowedScopes = allowedScopes.distinct(),
+                    toolNamePrefix = toolNamePrefix?.takeIf { it.isNotBlank() }
                 ).bind()
             }
 
-            logger.info("Worker registered successfully (workerUid={}, ownerUserId={})", worker.workerUid, worker.ownerUserId)
+            // Seed the default built-in tools for the new worker. Seeding is idempotent and runs in
+            // the same transaction so a failure rolls back the whole registration.
+            builtInToolDefinitionSeeder.seedDefaultToolsForWorker(worker.id, toolNamePrefix)
+                .mapLeft { seedError ->
+                    val reason = when (seedError) {
+                        is SeedBuiltInToolsError.ToolCreationFailed ->
+                            "tool creation failed: ${seedError.error}"
+
+                        is SeedBuiltInToolsError.LinkageFailed ->
+                            "linkage failed: ${seedError.error}"
+                    }
+                    logger.error("Failed to seed built-in tools for worker {}: {}", worker.id, reason)
+                    RegisterWorkerError.InvalidInput("Failed to seed built-in tools: $reason")
+                }.bind()
+
+            logger.info(
+                "Worker registered successfully (workerUid={}, ownerUserId={})",
+                worker.workerUid,
+                worker.ownerUserId
+            )
             worker.toWorkerDto()
         }
     }
@@ -94,17 +126,23 @@ class WorkerServiceImpl(
     ): Either<AuthenticateWorkerError, WorkerDto> = transactionScope.transaction {
         either {
             logger.debug("Authenticating worker (workerUid={}, challengeId={})", workerUid, challengeId)
-            val worker = withError({ _: WorkerError.UidNotFound -> AuthenticateWorkerError.WorkerNotFound(workerUid) }) {
-                workerDao.getWorkerByUid(workerUid).bind()
-            }
+            val worker =
+                withError({ _: WorkerError.UidNotFound -> AuthenticateWorkerError.WorkerNotFound(workerUid) }) {
+                    workerDao.getWorkerByUid(workerUid).bind()
+                }
 
-            val challenge = withError({ _: WorkerError.InvalidChallenge -> AuthenticateWorkerError.InvalidChallenge(challengeId) }) {
-                workerDao.getChallenge(worker.id, challengeId, System.currentTimeMillis()).bind()
-            }
+            val challenge =
+                withError({ _: WorkerError.InvalidChallenge -> AuthenticateWorkerError.InvalidChallenge(challengeId) }) {
+                    workerDao.getChallenge(worker.id, challengeId, System.currentTimeMillis()).bind()
+                }
 
             val cert = certificateService.parseCertificate(worker.certificatePem)
             if (!certificateService.verifySignature(challenge.challenge, signatureBase64, cert)) {
-                logger.warn("Worker authentication failed: invalid signature (workerUid={}, challengeId={})", workerUid, challengeId)
+                logger.warn(
+                    "Worker authentication failed: invalid signature (workerUid={}, challengeId={})",
+                    workerUid,
+                    challengeId
+                )
                 raise(AuthenticateWorkerError.InvalidSignature("Signature verification failed"))
             }
 
@@ -151,30 +189,55 @@ class WorkerServiceImpl(
         ownerUserId: Long,
         workerId: Long,
         displayName: String,
-        allowedScopes: List<String>
+        allowedScopes: List<String>,
+        toolNamePrefix: String?
     ): Either<UpdateWorkerError, WorkerDto> = transactionScope.transaction {
         either {
             logger.debug("Updating worker (workerId={}, ownerUserId={})", workerId, ownerUserId)
 
-            // Fetch the worker first to verify ownership
+            // Fetch the worker first to verify ownership and read the current prefix.
             val worker = withError({ _: WorkerError.NotFound -> UpdateWorkerError.NotFound(workerId) }) {
                 workerDao.getWorkerById(workerId).bind()
             }
 
             // Verify ownership
             ensure(worker.ownerUserId == ownerUserId) {
-                logger.warn("Worker update failed: ownership mismatch (workerId={}, requestedOwner={}, actualOwner={})",
-                    workerId, ownerUserId, worker.ownerUserId)
+                logger.warn(
+                    "Worker update failed: ownership mismatch (workerId={}, requestedOwner={}, actualOwner={})",
+                    workerId, ownerUserId, worker.ownerUserId
+                )
                 UpdateWorkerError.Forbidden(workerId, worker.ownerUserId)
             }
 
-            // Update the worker
+            // Normalize the requested prefix: blank is treated as "no prefix".
+            val newPrefix = toolNamePrefix?.takeIf { it.isNotBlank() }
+            val oldPrefix = worker.toolNamePrefix?.takeIf { it.isNotBlank() }
+
+            // Persist the worker metadata (display name, scopes, prefix) in the same transaction.
             val updatedWorker = withError({ _: WorkerError.NotFound -> UpdateWorkerError.NotFound(workerId) }) {
                 workerDao.updateWorker(
                     id = workerId,
                     displayName = displayName.trim(),
-                    allowedScopes = allowedScopes.distinct()
+                    allowedScopes = allowedScopes.distinct(),
+                    toolNamePrefix = newPrefix
                 ).bind()
+            }
+
+            // Only rename built-in tool public names when the prefix actually changed. Renaming runs
+            // in the same transaction, so a failure rolls back the whole update atomically.
+            if (newPrefix != oldPrefix) {
+                builtInToolDefinitionSeeder.renamePublicNamesForPrefix(workerId, newPrefix)
+                    .mapLeft { seedError ->
+                        val reason = when (seedError) {
+                            is SeedBuiltInToolsError.ToolCreationFailed ->
+                                "tool creation failed: ${seedError.error}"
+
+                            is SeedBuiltInToolsError.LinkageFailed ->
+                                "linkage failed: ${seedError.error}"
+                        }
+                        logger.error("Failed to rename built-in tools for worker {}: {}", workerId, reason)
+                        UpdateWorkerError.InvalidInput("Failed to rename built-in tools: $reason")
+                    }.bind()
             }
 
             logger.info("Worker updated successfully (workerId={})", workerId)
@@ -196,8 +259,10 @@ class WorkerServiceImpl(
 
             // Verify ownership
             ensure(worker.ownerUserId == ownerUserId) {
-                logger.warn("Worker deletion failed: ownership mismatch (workerId={}, requestedOwner={}, actualOwner={})",
-                    workerId, ownerUserId, worker.ownerUserId)
+                logger.warn(
+                    "Worker deletion failed: ownership mismatch (workerId={}, requestedOwner={}, actualOwner={})",
+                    workerId, ownerUserId, worker.ownerUserId
+                )
                 DeleteWorkerError.Forbidden(workerId, worker.ownerUserId)
             }
 
@@ -229,7 +294,12 @@ class WorkerServiceImpl(
             expiresAtEpochMs = expiresAt.toEpochMilliseconds()
         )
 
-        logger.debug("Issued worker challenge (workerId={}, workerUid={}, challengeId={})", workerId, workerUid, challengeId)
+        logger.debug(
+            "Issued worker challenge (workerId={}, workerUid={}, challengeId={})",
+            workerId,
+            workerUid,
+            challengeId
+        )
 
         return WorkerChallengeDto(
             challengeId = challengeId,
@@ -259,4 +329,3 @@ class WorkerServiceImpl(
         private val CHALLENGE_TTL = 10.minutes
     }
 }
-

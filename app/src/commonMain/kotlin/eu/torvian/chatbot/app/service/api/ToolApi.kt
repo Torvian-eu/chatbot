@@ -2,9 +2,7 @@ package eu.torvian.chatbot.app.service.api
 
 import arrow.core.Either
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
-import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.common.models.tool.UserToolApprovalPreference
-import kotlinx.serialization.json.JsonObject
 
 /**
  * Frontend API interface for interacting with tool-related endpoints.
@@ -40,57 +38,7 @@ interface ToolApi {
     suspend fun getToolById(toolId: Long): Either<ApiResourceError, ToolDefinition>
 
     /**
-     * Creates a new tool definition.
-     *
-     * Corresponds to `POST /api/v1/tools`.
-     * Requires MANAGE_TOOLS permission.
-     *
-     * @param name The unique name of the tool (machine-readable, used in LLM API calls)
-     * @param description A description of what the tool does
-     * @param type The type of tool (e.g., WEB_SEARCH, CALCULATOR)
-     * @param config Tool-specific configuration (JSON object)
-     * @param inputSchema JSON Schema defining expected input parameters
-     * @param outputSchema Optional JSON Schema defining expected output structure
-     * @param isEnabled Whether the tool is enabled by default
-     * @return [Either.Right] containing the newly created [ToolDefinition] on success,
-     *         or [Either.Left] containing a [ApiResourceError] on failure.
-     */
-    suspend fun createTool(
-        name: String,
-        description: String,
-        type: ToolType,
-        config: JsonObject,
-        inputSchema: JsonObject,
-        outputSchema: JsonObject? = null,
-        isEnabled: Boolean = true
-    ): Either<ApiResourceError, ToolDefinition>
-
-    /**
-     * Updates an existing tool definition.
-     *
-     * Corresponds to `PUT /api/v1/tools/{toolId}`.
-     * Requires MANAGE_TOOLS permission.
-     *
-     * @param tool The [ToolDefinition] object with updated details. The ID must match the path.
-     * @return [Either.Right] with [Unit] on successful update,
-     *         or [Either.Left] containing a [ApiResourceError] on failure (e.g., not found, invalid input).
-     */
-    suspend fun updateTool(tool: ToolDefinition): Either<ApiResourceError, Unit>
-
-    /**
-     * Deletes a tool definition.
-     *
-     * Corresponds to `DELETE /api/v1/tools/{toolId}`.
-     * Requires MANAGE_TOOLS permission.
-     *
-     * @param toolId The ID of the tool to delete.
-     * @return [Either.Right] with [Unit] on successful deletion (typically HTTP 204 No Content),
-     *         or [Either.Left] containing a [ApiResourceError] on failure (e.g., not found).
-     */
-    suspend fun deleteTool(toolId: Long): Either<ApiResourceError, Unit>
-
-    /**
-     * Retrieves the list of tools enabled for a specific session.
+     * Loads the list of tools enabled for a specific session.
      *
      * Corresponds to `GET /api/v1/sessions/{sessionId}/tools`.
      *
@@ -185,4 +133,3 @@ interface ToolApi {
      */
     suspend fun deleteToolApprovalPreference(toolId: Long): Either<ApiResourceError, Unit>
 }
-

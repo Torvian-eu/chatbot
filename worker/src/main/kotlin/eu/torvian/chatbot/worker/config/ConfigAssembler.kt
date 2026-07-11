@@ -5,6 +5,7 @@ import arrow.core.raise.Raise
 import arrow.core.raise.either
 import arrow.core.raise.ensure
 import java.net.URI
+import java.nio.file.Path
 
 /**
  * Strict assembly and validation helpers for worker configuration.
@@ -21,17 +22,21 @@ import java.net.URI
  * - Validates all required string fields are non-blank
  * - Validates the server base URL is an absolute HTTP(S) URL
  * - Ensures the refresh skew is non-negative
+ * - Ensures the workspace path is non-blank
+ * - Ensures the default command timeout is positive
  *
  * @receiver The [AppConfigDto] to convert and validate.
  * @return Either a logical configuration error or the fully validated [Configuration].
  */
-fun AppConfigDto.toDomain(): Either<WorkerConfigError, Configuration> = either {
+fun AppConfigDto.toDomain(configDir: Path): Either<WorkerConfigError, Configuration> = either {
     val worker = worker ?: raise(WorkerConfigError.ConfigInvalid("Missing required config group: worker"))
 
     val serverDto = worker.server ?: raise(WorkerConfigError.ConfigInvalid("Missing required config group: worker.server"))
     val identityDto = worker.identity ?: raise(WorkerConfigError.ConfigInvalid("Missing required config group: worker.identity"))
     val storageDto = worker.storage ?: raise(WorkerConfigError.ConfigInvalid("Missing required config group: worker.storage"))
     val authDto = worker.auth ?: AuthConfigDto()
+    val workspaceDto = worker.workspace ?: raise(WorkerConfigError.ConfigInvalid("Missing required config group: worker.workspace"))
+    val builtInToolsDto = worker.builtInTools ?: BuiltInToolsConfigDto()
 
     val baseUrl = required("worker.server.baseUrl", serverDto.baseUrl)
     val uid = required("worker.identity.uid", identityDto.uid)
@@ -41,6 +46,9 @@ fun AppConfigDto.toDomain(): Either<WorkerConfigError, Configuration> = either {
     val secretsJsonPath = required("worker.storage.secretsJsonPath", storageDto.secretsJsonPath)
     val tokenFilePath = required("worker.storage.tokenFilePath", storageDto.tokenFilePath)
     val refreshSkewSeconds = authDto.refreshSkewSeconds ?: 60L
+    val workspacePath = required("worker.workspace.path", workspaceDto.path)
+    val builtInToolsEnabled = builtInToolsDto.enabled ?: emptyList()
+    val defaultCommandTimeoutSeconds = builtInToolsDto.defaultCommandTimeoutSeconds ?: 600L
     val trustedSigners = worker.trustedSigners.orEmpty().mapIndexed { index, signerDto ->
         trustedSignerToDomain(signerDto, index)
     }
@@ -67,6 +75,19 @@ fun AppConfigDto.toDomain(): Either<WorkerConfigError, Configuration> = either {
     ensure(refreshSkewSeconds >= 0) {
         WorkerConfigError.ConfigInvalid("worker.auth.refreshSkewSeconds must be >= 0")
     }
+    ensure(workspacePath.isNotBlank()) {
+        WorkerConfigError.ConfigInvalid("worker.workspace.path must not be blank")
+    }
+    ensure(defaultCommandTimeoutSeconds > 0) {
+        WorkerConfigError.ConfigInvalid("worker.builtInTools.defaultCommandTimeoutSeconds must be > 0")
+    }
+
+    // Resolve workspace path relative to config directory using PathResolver
+    val pathResolver = PathResolver()
+    val resolvedWorkspacePath = pathResolver.resolvePath(
+        configDir = configDir,
+        configuredPath = workspacePath
+    )
 
     Configuration(
         setupRequired = setup?.required ?: true,
@@ -86,6 +107,13 @@ fun AppConfigDto.toDomain(): Either<WorkerConfigError, Configuration> = either {
             ),
             auth = AuthConfig(
                 refreshSkewSeconds = refreshSkewSeconds
+            ),
+            workspace = WorkspaceConfig(
+                path = resolvedWorkspacePath.toString()
+            ),
+            builtInTools = BuiltInToolsConfig(
+                enabled = builtInToolsEnabled,
+                defaultCommandTimeoutSeconds = defaultCommandTimeoutSeconds
             ),
             trustedSigners = trustedSigners
         )

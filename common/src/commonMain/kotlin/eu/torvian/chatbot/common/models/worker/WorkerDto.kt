@@ -14,6 +14,7 @@ import kotlin.time.Instant
  * @property allowedScopes Logical scopes the worker is allowed to request in service tokens.
  * @property createdAt Registration timestamp.
  * @property lastSeenAt Last successful authentication timestamp, when available.
+ * @property toolNamePrefix Optional prefix applied to the public names of the worker's built-in tools.
  */
 @Serializable
 data class WorkerDto(
@@ -24,7 +25,8 @@ data class WorkerDto(
     val certificateFingerprint: String,
     val allowedScopes: List<String>,
     val createdAt: Instant,
-    val lastSeenAt: Instant? = null
+    val lastSeenAt: Instant? = null,
+    val toolNamePrefix: String? = null
 )
 
 

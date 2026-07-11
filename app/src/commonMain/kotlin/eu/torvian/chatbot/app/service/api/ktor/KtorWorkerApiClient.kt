@@ -32,11 +32,18 @@ class KtorWorkerApiClient(
     override suspend fun updateWorker(
         id: Long,
         displayName: String,
-        allowedScopes: List<String>
+        allowedScopes: List<String>,
+        toolNamePrefix: String?
     ): Either<ApiResourceError, WorkerDto> =
         safeApiCall {
             client.patch(WorkerResource.Id(id = id)) {
-                setBody(UpdateWorkerRequest(displayName = displayName, allowedScopes = allowedScopes))
+                setBody(
+                    UpdateWorkerRequest(
+                        displayName = displayName,
+                        allowedScopes = allowedScopes,
+                        toolNamePrefix = toolNamePrefix
+                    )
+                )
             }.body<WorkerDto>()
         }
 

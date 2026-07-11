@@ -214,6 +214,73 @@ Allow users to create multiple skill spaces, which are separate collections of S
 ### Workspaces
 Combine memory spaces and skill spaces into workspaces. A workspace is a collection of memory spaces and skill spaces that are relevant for a specific topic or project. When starting a new chat session, the user can choose which workspace to load into the LLM context, which will load all the memory spaces and skill spaces associated with that workspace.
 
+### Built-in worker tools
+Add built-in tools for the worker to use.
+- All tools can be prefixed with a unique identifier to indicate that they are built-in tools for a specific worker instance. This prefix is configurable, so that the user can change it to something more meaningful for their specific use case. For instance: "project1.read_text_file", "project1.write_file", "project1.edit_file", etc.
+- Each worker as a special `workspace` directory, which is used to store files that the worker can access. All file paths are relative to this workspace directory. The worker can read/write files in this directory, but cannot access files outside of it. This is a security measure to prevent the worker from accessing sensitive files on the host machine.
+
+#### File Operation Tools
+- **read_text_file**: Read contents of a file as text.
+  - Inputs: `path`, `head`/`tail` (optional, first/last N lines)
+  - Outputs: file content as text
+  - Always treats the file as UTF-8 text regardless of extension.
+  - Cannot specify both head and tail simultaneously.
+- **write_file**: Create new file or overwrite existing (exercise caution with this)
+  - Inputs: `path`, `content`.
+- **edit_file**: Make selective edits using advanced pattern matching and formatting
+  - Features:
+    - Line-based and multi-line content matching
+    - Whitespace normalization with indentation preservation
+    - Multiple simultaneous edits with correct positioning
+    - Indentation style detection and preservation
+    - Git-style diff output with context
+    - Preview changes with dry run mode
+  - Inputs:
+    - `path` (string): File to edit
+    - `edits` (array): List of edit operations
+      - `oldText` (string): Text to search for (plain text or regex)
+      - `newText` (string): Text to replace with
+    - `dryRun` (boolean): Preview changes without applying (default: false)
+  - Returns detailed diff and match information for dry runs, otherwise applies changes
+  - Best Practice: Always use dryRun first to preview changes before applying them
+- **create_directory**: Create new directory or ensure it exists
+  - Input: `path` (string)
+  - Creates parent directories if needed
+  - Succeeds silently if directory exists
+- **list_directory**: List directory contents with [FILE] or [DIR] prefixes
+  - Inputs: 
+    - `path` (string)
+    - `sortBy` (string, optional): Sort entries by "name" or "size" (default: "name")
+    - `includeSizes` (boolean, optional): Include file sizes in output (default: false)
+    - `recursive` (boolean, optional): List contents recursively (default: false)
+  - Returns a simple listing of files and directories, optionally including sizes
+  - If `recursive` is true, the listing will include all subdirectories and their contents, formatted with indentation to indicate directory depth.
+  - Shows total files, directories, and combined size if `includeSizes` is true
+- **move_file**: Move or rename files and directories
+  - Inputs:
+    - `source` (string)
+    - `destination` (string)
+  - Fails if destination exists
+- **search_files**: Recursively search for files/directories that match or do not match patterns
+  - Inputs:
+    - `path` (string): Starting directory
+    - `pattern` (string): Search pattern (glob-style)
+    - `excludePatterns` (string[]): Exclude any patterns.
+  - Returns paths to matches
+
+#### CLI Tools
+- **run_command**: Execute a command-line command
+  - Inputs:
+    - `command` (string): Command to execute
+    - `args` (string[]): Optional arguments for the command
+    - `timeout` (number): Optional timeout in seconds (default: 600)
+  - Returns:
+    - `stdout` (string): Standard output of the command
+    - `stderr` (string): Standard error output of the command
+    - `exitCode` (number): Exit code of the command
+  - The current working directory is the worker's `workspace` directory. The command must be available in the system PATH or specified with an absolute path.
+  - The worker should run within a docker container or sandboxed environment to prevent malicious commands from affecting the host system.
+
 ---
 
 ## Advanced features
