@@ -21,6 +21,7 @@ import eu.torvian.chatbot.app.viewmodel.admin.UserGroupManagementViewModel
 import eu.torvian.chatbot.app.viewmodel.admin.UserManagementViewModel
 import eu.torvian.chatbot.app.viewmodel.auth.*
 import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
+import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModelSlotManager
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatState
 import eu.torvian.chatbot.app.viewmodel.chat.state.ChatStateImpl
 import eu.torvian.chatbot.app.viewmodel.chat.usecase.*
@@ -392,6 +393,11 @@ fun appModule(config: AppConfiguration): Module = module {
     // Provide authentication form validation service
     single<AuthValidationService> {
         DefaultAuthValidationService()
+    }
+
+    // Provide the long-lived slot manager that maps sessions to ChatViewModel slots.
+    single<ChatViewModelSlotManager> {
+        ChatViewModelSlotManager(maxSlots = ChatViewModelSlotManager.DEFAULT_MAX_SLOTS)
     }
 
     // Provide ViewModels, injecting the required dependencies
