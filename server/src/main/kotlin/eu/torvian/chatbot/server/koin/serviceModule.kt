@@ -5,6 +5,8 @@ import eu.torvian.chatbot.common.security.CryptoProvider
 import eu.torvian.chatbot.common.security.EncryptionService
 import eu.torvian.chatbot.common.security.PasswordValidator
 import eu.torvian.chatbot.server.config.AppConfiguration
+import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutor
+import eu.torvian.chatbot.server.service.builtin.DefaultBuiltInWorkerToolExecutor
 import eu.torvian.chatbot.server.service.core.*
 import eu.torvian.chatbot.server.service.core.chat.content.DefaultFileReferenceContentBuilder
 import eu.torvian.chatbot.server.service.core.chat.content.DefaultToolResultContentBuilder
@@ -89,6 +91,7 @@ fun serviceModule() = module {
 
     // --- Built-in worker tool services (direct `tool.call` dispatch) ---
     single<BuiltInToolDispatchService> { DefaultBuiltInToolDispatchService(get()) }
+    single<BuiltInWorkerToolExecutor> { DefaultBuiltInWorkerToolExecutor(get()) }
     single<RoleService> { RoleServiceImpl(get(), get(), get()) }
     single<UserGroupService> { UserGroupServiceImpl(get(), get(), get()) }
     single<UserPreferenceService> { UserPreferenceServiceImpl(get(), get(), get()) }
