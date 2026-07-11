@@ -393,26 +393,20 @@ class SendMessageUseCase(
             Triple(inputContent, parent, pendingRefs)
         }
 
-        state.setIsSending(true) // Set sending state to true
+        // Check if streaming is enabled in settings
+        val isStreamingEnabled = currentSettings.stream
 
-        try {
-            // Check if streaming is enabled in settings
-            val isStreamingEnabled = currentSettings.stream
+        val request = ProcessNewMessageRequest(
+            content = content,
+            parentMessageId = parentId,
+            isStreaming = isStreamingEnabled,
+            fileReferences = fileReferences
+        )
 
-            val request = ProcessNewMessageRequest(
-                content = content,
-                parentMessageId = parentId,
-                isStreaming = isStreamingEnabled,
-                fileReferences = fileReferences
-            )
-
-            if (isStreamingEnabled) {
-                handleStreamingMessage(currentSession.id, request)
-            } else {
-                handleNonStreamingMessage(currentSession.id, request)
-            }
-        } finally {
-            state.setIsSending(false) // Always reset sending state
+        if (isStreamingEnabled) {
+            handleStreamingMessage(currentSession.id, request)
+        } else {
+            handleNonStreamingMessage(currentSession.id, request)
         }
     }
 
