@@ -4,6 +4,8 @@ import eu.torvian.chatbot.common.models.api.worker.protocol.constants.WorkerProt
 import eu.torvian.chatbot.common.security.AsymmetricCryptoProvider
 import eu.torvian.chatbot.common.security.JvmAsymmetricCryptoProvider
 import eu.torvian.chatbot.worker.auth.*
+import eu.torvian.chatbot.worker.builtin.*
+import eu.torvian.chatbot.worker.builtin.impl.*
 import eu.torvian.chatbot.worker.config.RuntimeConfig
 import eu.torvian.chatbot.worker.config.TrustedSigner
 import eu.torvian.chatbot.worker.mcp.*
@@ -47,6 +49,7 @@ import kotlinx.serialization.json.Json
 import org.apache.logging.log4j.LogManager
 import org.koin.dsl.module
 import java.nio.file.Path
+import java.nio.file.Paths
 import kotlin.time.Duration.Companion.seconds
 import org.apache.logging.log4j.Logger as Log4jLogger
 
@@ -244,6 +247,29 @@ fun workerModule(
             connectionLoop = get(),
             mcpClientService = get()
         )
+    }
+
+    single<BuiltInToolExecutionContext> {
+        val cfg = get<RuntimeConfig>()
+        BuiltInToolExecutionContext(
+            workspace = Paths.get(cfg.workspace.path),
+            defaultCommandTimeoutSeconds = cfg.builtInTools.defaultCommandTimeoutSeconds,
+        )
+    }
+
+    single<Map<String, BuiltInTool>> {
+        // Registry of worker-side built-in tools, keyed by unprefixed tool name.
+        // Keep this in sync with BuiltInToolCatalog.
+        listOf(
+            ReadTextFileTool(),
+            WriteFileTool(),
+            EditFileTool(),
+            CreateDirectoryTool(),
+            ListDirectoryTool(),
+            MoveFileTool(),
+            SearchFilesTool(),
+            RunCommandTool(),
+        ).associateBy { it.name }
     }
 }
 
