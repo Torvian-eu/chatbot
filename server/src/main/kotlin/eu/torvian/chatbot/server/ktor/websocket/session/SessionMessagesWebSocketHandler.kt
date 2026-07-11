@@ -176,7 +176,7 @@ class SessionMessagesWebSocketHandler(
      * Normalizes WebSocket approval variants into the server-facing approval submission model.
      *
      * @receiver Decoded client-event stream for one live chat socket.
-     * @return Flow containing both regular and Local MCP approval submissions.
+     * @return Flow containing regular, Local MCP, and built-in worker tool approval submissions.
      */
     private fun Flow<ChatClientEvent>.toApprovalSubmissionFlow(): Flow<ToolCallApprovalSubmission> {
         return merge(
@@ -185,6 +185,12 @@ class SessionMessagesWebSocketHandler(
             filterIsInstance<ChatClientEvent.LocalMcpToolCallApproval>()
                 .map { event ->
                     ToolCallApprovalSubmission.LocalMcpSigned(
+                        signedRequest = event.signedRequest
+                    )
+                },
+            filterIsInstance<ChatClientEvent.BuiltInToolCallApproval>()
+                .map { event ->
+                    ToolCallApprovalSubmission.BuiltInSigned(
                         signedRequest = event.signedRequest
                     )
                 }
