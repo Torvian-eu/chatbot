@@ -21,6 +21,7 @@ import eu.torvian.chatbot.server.service.core.chat.preparation.DefaultConversati
 import eu.torvian.chatbot.server.service.core.chat.turn.ConversationTurnOrchestrator
 import eu.torvian.chatbot.server.service.core.chat.turn.DefaultConversationTurnOrchestrator
 import eu.torvian.chatbot.server.service.core.impl.*
+import eu.torvian.chatbot.server.service.core.impl.BuiltInToolDefinitionSeeder
 import eu.torvian.chatbot.server.service.core.toolcall.DefaultToolCallOrchestrator
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallOrchestrator
 import eu.torvian.chatbot.server.service.email.LoggingMailService
@@ -92,6 +93,7 @@ fun serviceModule() = module {
     // --- Built-in worker tool services (direct `tool.call` dispatch) ---
     single<BuiltInToolDispatchService> { DefaultBuiltInToolDispatchService(get()) }
     single<BuiltInWorkerToolExecutor> { DefaultBuiltInWorkerToolExecutor(get()) }
+    single<BuiltInToolDefinitionSeeder> { BuiltInToolDefinitionSeeder(get(), get(), get()) }
     single<BuiltInToolDefinitionService> {
         BuiltInToolDefinitionServiceImpl(
             workerDao = get(),
