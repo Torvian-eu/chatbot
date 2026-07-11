@@ -194,7 +194,8 @@ class TokenServiceImplTest {
             certificateFingerprint = "fingerprint",
             allowedScopes = listOf("messages:read"),
             createdAt = Instant.fromEpochMilliseconds(System.currentTimeMillis()),
-            lastSeenAt = null
+            lastSeenAt = null,
+            toolNamePrefix = null
         )
         val token = jwtConfig.generateServiceAccessToken(
             worker.id,

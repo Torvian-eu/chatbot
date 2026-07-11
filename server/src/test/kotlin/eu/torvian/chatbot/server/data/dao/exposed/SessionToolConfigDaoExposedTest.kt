@@ -3,13 +3,20 @@ package eu.torvian.chatbot.server.data.dao.exposed
 import arrow.core.getOrElse
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
+import eu.torvian.chatbot.common.models.api.mcp.LocalMCPEnvironmentVariableDto
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolType
+import eu.torvian.chatbot.server.data.dao.LocalMCPServerDao
+import eu.torvian.chatbot.server.data.dao.LocalMCPToolDefinitionDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
 import eu.torvian.chatbot.server.data.dao.SessionToolConfigDao
 import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
 import eu.torvian.chatbot.server.data.dao.error.SetToolEnabledError
+import eu.torvian.chatbot.server.data.entities.CreateLocalMCPServerEntity
+import eu.torvian.chatbot.server.data.entities.LocalMCPSecretEnvironmentVariableReference
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
+import eu.torvian.chatbot.server.testutils.data.TestDataSet
+import eu.torvian.chatbot.server.testutils.data.TestDefaults
 import eu.torvian.chatbot.server.testutils.koin.defaultTestContainer
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.buildJsonObject
@@ -35,12 +42,20 @@ import kotlin.test.assertTrue
  * - Respecting both global and session-level enabled flags
  *
  * The tests rely on an in-memory SQLite database managed by [TestDataManager].
+ *
+ * Note on the [getEnabledToolsForSession] filter: the production query joins with the
+ * [eu.torvian.chatbot.server.data.tables.LocalMCPServerTable] to gate the result on
+ * `MCP_LOCAL` tools whose owning server is enabled. Tests that exercise that filter therefore
+ * create a real Local MCP server + tool linkage for the relevant tool; tools that are not
+ * returned through that join are simply ignored by the query, which is the desired behavior.
  */
 class SessionToolConfigDaoExposedTest {
     private lateinit var container: DIContainer
     private lateinit var sessionToolConfigDao: SessionToolConfigDao
     private lateinit var sessionDao: SessionDao
     private lateinit var toolDefinitionDao: ToolDefinitionDao
+    private lateinit var localMCPServerDao: LocalMCPServerDao
+    private lateinit var localMCPToolDefinitionDao: LocalMCPToolDefinitionDao
     private lateinit var testDataManager: TestDataManager
 
     // Test fixtures
@@ -49,6 +64,7 @@ class SessionToolConfigDaoExposedTest {
     private lateinit var testTool1: ToolDefinition
     private lateinit var testTool2: ToolDefinition
     private lateinit var testTool3Disabled: ToolDefinition
+    private var testLocalMCPServerId: Long = 0
 
     @BeforeEach
     fun setUp() = runTest {
@@ -56,10 +72,19 @@ class SessionToolConfigDaoExposedTest {
         sessionToolConfigDao = container.get()
         sessionDao = container.get()
         toolDefinitionDao = container.get()
+        localMCPServerDao = container.get()
+        localMCPToolDefinitionDao = container.get()
         testDataManager = container.get()
 
         // Create all necessary tables
         testDataManager.createAllTables()
+
+        // Insert the owning user (FK target of `local_mcp_servers.user_id`) so the test can create
+        // a Local MCP server in the realistic production model. The setUp does not exercise
+        // any user management code; the user exists solely to satisfy the FK constraint.
+        testDataManager.setup(
+            TestDataSet(users = listOf(TestDefaults.user1))
+        )
 
         // Create test sessions
         testSessionId1 = sessionDao.insertSession(
@@ -78,8 +103,14 @@ class SessionToolConfigDaoExposedTest {
 
         // Create test tool definitions
         testTool1 = createTestTool(name = "web_search", isEnabled = true)
-        testTool2 = createTestTool(name = "calculator", type = ToolType.CALCULATOR, isEnabled = true)
+        testTool2 = createTestTool(name = "calculator", type = ToolType.MCP_LOCAL, isEnabled = true)
         testTool3Disabled = createTestTool(name = "disabled_tool", isEnabled = false)
+
+        // Bind `testTool1` to a real, enabled Local MCP server so the `getEnabledToolsForSession`
+        // join succeeds for that tool. Without this, the production query's
+        // `LocalMCPServerTable.isEnabled eq true` clause filters the row out, which is the wrong
+        // outcome for the test that asserts the tool is returned when enabled for the session.
+        testLocalMCPServerId = createEnabledLocalMCPServerForTestTool(testTool1.id)
     }
 
     @AfterEach
@@ -90,7 +121,7 @@ class SessionToolConfigDaoExposedTest {
 
     private suspend fun createTestTool(
         name: String,
-        type: ToolType = ToolType.WEB_SEARCH,
+        type: ToolType = ToolType.MCP_LOCAL,
         isEnabled: Boolean = true
     ): ToolDefinition {
         val config = buildJsonObject { put("test", "value") }
@@ -105,6 +136,43 @@ class SessionToolConfigDaoExposedTest {
             outputSchema = null,
             isEnabled = isEnabled
         )
+    }
+
+    /**
+     * Creates an enabled Local MCP server and links [toolDefinitionId] to it.
+     *
+     * The `getEnabledToolsForSession` query in [SessionToolConfigDaoExposed] requires a
+     * `LocalMCPServerTable` row for every `MCP_LOCAL` tool, gated on `isEnabled = true`. Tests
+     * that want the tool to be returned therefore need this realistic linkage. The owning
+     * `userId` is set to 1L (a placeholder; the join is on server enablement, not ownership).
+     */
+    private suspend fun createEnabledLocalMCPServerForTestTool(toolDefinitionId: Long): Long {
+        val server = localMCPServerDao.createServer(
+            CreateLocalMCPServerEntity(
+                userId = 1L,
+                workerId = 1L,
+                name = "Test MCP Server",
+                description = null,
+                command = "npx",
+                arguments = listOf("test-server"),
+                workingDirectory = null,
+                isEnabled = true,
+                autoStartOnEnable = false,
+                autoStartOnLaunch = false,
+                autoStopAfterInactivitySeconds = null,
+                toolNamePrefix = null,
+                environmentVariables = emptyList<LocalMCPEnvironmentVariableDto>(),
+                secretEnvironmentVariables = emptyList<LocalMCPSecretEnvironmentVariableReference>(),
+            )
+        )
+        localMCPToolDefinitionDao.insertTool(
+            toolDefinitionId = toolDefinitionId,
+            mcpServerId = server.id,
+            mcpToolName = "test_tool"
+        ).getOrElse { error ->
+            throw IllegalStateException("Failed to link test tool to Local MCP server: $error")
+        }
+        return server.id
     }
 
     @Test
@@ -283,4 +351,3 @@ class SessionToolConfigDaoExposedTest {
         }
     }
 }
-

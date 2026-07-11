@@ -60,9 +60,9 @@ class ToolDefinitionDaoExposedTest {
 
     // Helper function to create a test tool definition
     private suspend fun createTestTool(
-        name: String = "web_search",
+        name: String = "test_tool",
         description: String = "Search the web for information",
-        type: ToolType = ToolType.WEB_SEARCH,
+        type: ToolType = ToolType.MCP_LOCAL,
         isEnabled: Boolean = true
     ): MiscToolDefinition {
         val config = buildJsonObject {
@@ -95,7 +95,7 @@ class ToolDefinitionDaoExposedTest {
     fun `getAllToolDefinitions returns all tools`() = runTest {
         // Setup: Create multiple tools
         createTestTool(name = "web_search")
-        createTestTool(name = "calculator", description = "Perform calculations", type = ToolType.CALCULATOR)
+        createTestTool(name = "calculator", description = "Perform calculations", type = ToolType.MCP_LOCAL)
 
         // Execute
         val result = toolDefinitionDao.getAllToolDefinitions()
@@ -119,7 +119,7 @@ class ToolDefinitionDaoExposedTest {
         assertEquals(created.id, tool.id)
         assertEquals("web_search", tool.name)
         assertEquals("Search the web for information", tool.description)
-        assertEquals(ToolType.WEB_SEARCH, tool.type)
+        assertEquals(ToolType.MCP_LOCAL, tool.type)
         assertTrue(tool.isEnabled)
     }
 
@@ -173,7 +173,7 @@ class ToolDefinitionDaoExposedTest {
         val tool = toolDefinitionDao.insertToolDefinition(
             name = "test_tool",
             description = "A test tool",
-            type = ToolType.CUSTOM,
+            type = ToolType.MCP_LOCAL,
             config = config,
             inputSchema = inputSchema,
             outputSchema = null,
@@ -184,7 +184,7 @@ class ToolDefinitionDaoExposedTest {
         assertTrue(tool.id > 0, "Expected valid ID")
         assertEquals("test_tool", tool.name)
         assertEquals("A test tool", tool.description)
-        assertEquals(ToolType.CUSTOM, tool.type)
+        assertEquals(ToolType.MCP_LOCAL, tool.type)
         assertTrue(tool.isEnabled)
         assertNotNull(tool.createdAt)
         assertNotNull(tool.updatedAt)
@@ -201,7 +201,7 @@ class ToolDefinitionDaoExposedTest {
         val second = toolDefinitionDao.insertToolDefinition(
             name = "web_search",
             description = "Another web search",
-            type = ToolType.WEB_SEARCH,
+            type = ToolType.MCP_LOCAL,
             config = config,
             inputSchema = inputSchema,
             outputSchema = null,
@@ -259,7 +259,7 @@ class ToolDefinitionDaoExposedTest {
         val created = toolDefinitionDao.insertToolDefinition(
             name = "test_tool",
             description = "Test",
-            type = ToolType.CUSTOM,
+            type = ToolType.MCP_LOCAL,
             config = config,
             inputSchema = inputSchema,
             outputSchema = outputSchema,
@@ -287,7 +287,7 @@ class ToolDefinitionDaoExposedTest {
             id = 999L,
             name = "test",
             description = "Test",
-            type = ToolType.CUSTOM,
+            type = ToolType.MCP_LOCAL,
             config = config,
             inputSchema = inputSchema,
             outputSchema = null,
@@ -307,7 +307,7 @@ class ToolDefinitionDaoExposedTest {
     fun `updateToolDefinition allows duplicate names`() = runTest {
         // Setup: Create two tools
         createTestTool(name = "web_search")
-        val tool2 = createTestTool(name = "calculator", type = ToolType.CALCULATOR)
+        val tool2 = createTestTool(name = "calculator", type = ToolType.MCP_LOCAL)
 
         // Execute: Rename tool2 to tool1's name (now allowed)
         val updated = tool2.copy(name = "web_search")
@@ -357,7 +357,7 @@ class ToolDefinitionDaoExposedTest {
         // Setup: Create enabled and disabled tools
         createTestTool(name = "enabled1", isEnabled = true)
         createTestTool(name = "disabled1", isEnabled = false)
-        createTestTool(name = "enabled2", isEnabled = true, type = ToolType.CALCULATOR)
+        createTestTool(name = "enabled2", isEnabled = true, type = ToolType.MCP_LOCAL)
 
         // Execute
         val result = toolDefinitionDao.getEnabledToolDefinitions()
@@ -370,4 +370,5 @@ class ToolDefinitionDaoExposedTest {
         assertFalse(result.any { it.name == "disabled1" }, "Should not include disabled1 tool")
     }
 }
+
 

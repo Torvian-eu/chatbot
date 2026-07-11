@@ -203,7 +203,7 @@ class DefaultConversationTurnPersistenceTest {
             id = 8L,
             name = "search",
             description = "Searches docs",
-            type = ToolType.WEB_SEARCH,
+            type = ToolType.MCP_LOCAL,
             config = buildJsonObject { },
             inputSchema = buildJsonObject { },
             outputSchema = null,

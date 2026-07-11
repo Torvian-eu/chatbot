@@ -18,6 +18,7 @@ interface WorkerDao {
      * @param certificatePem PEM-encoded public certificate.
      * @param certificateFingerprint SHA-256 certificate fingerprint.
      * @param allowedScopes Logical worker scopes to persist.
+     * @param toolNamePrefix Optional prefix applied to the public names of the worker's built-in tools.
      * @return Either duplicate fingerprint error or the created [WorkerEntity].
      */
     suspend fun createWorker(
@@ -26,7 +27,8 @@ interface WorkerDao {
         displayName: String,
         certificatePem: String,
         certificateFingerprint: String,
-        allowedScopes: List<String>
+        allowedScopes: List<String>,
+        toolNamePrefix: String? = null
     ): Either<WorkerError, WorkerEntity>
 
     /**
@@ -63,19 +65,21 @@ interface WorkerDao {
     suspend fun updateLastSeen(workerId: Long, lastSeenAtEpochMs: Long): Either<WorkerError.NotFound, Unit>
 
     /**
-     * Updates a worker's display name and allowed scopes.
+     * Updates a worker's display name, allowed scopes, and optional tool name prefix.
      *
      * Note: workerUid and certificateFingerprint are immutable after creation.
      *
      * @param id Worker identifier.
      * @param displayName New display name.
      * @param allowedScopes New list of allowed scopes.
+     * @param toolNamePrefix New optional prefix applied to the public names of the worker's built-in tools.
      * @return Either not-found error or the updated [WorkerEntity].
      */
     suspend fun updateWorker(
         id: Long,
         displayName: String,
-        allowedScopes: List<String>
+        allowedScopes: List<String>,
+        toolNamePrefix: String? = null
     ): Either<WorkerError.NotFound, WorkerEntity>
 
     /**

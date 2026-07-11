@@ -192,6 +192,11 @@ enum class Table {
     /**
      * Table for storing signed Local MCP server configuration snapshots.
      */
+    BUILT_IN_TOOL_DEFINITIONS,
+
+    /**
+     * Table for storing signed Local MCP server configuration snapshots.
+     */
     LOCAL_MCP_SERVER_SIGNATURES,
 
     /**

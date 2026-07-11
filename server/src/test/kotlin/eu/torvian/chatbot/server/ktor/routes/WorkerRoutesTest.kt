@@ -70,7 +70,9 @@ class WorkerRoutesTest {
             setOf(
                 Table.USERS,
                 Table.USER_SESSIONS,
-                Table.WORKERS
+                Table.WORKERS,
+                Table.TOOL_DEFINITIONS,
+                Table.BUILT_IN_TOOL_DEFINITIONS
             )
         )
     }
