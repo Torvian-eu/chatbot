@@ -112,7 +112,7 @@ class WorkerConfigLoaderTest {
         try {
             val result = either {
                 val dto = loader.loadAppConfigDto(configDir).bind()
-                dto.toDomain().bind()
+                dto.toDomain(configDir).bind()
             }
             assertTrue(result.isLeft())
             val error = result.swap().getOrNull() as? WorkerConfigError.ConfigInvalid
@@ -148,7 +148,7 @@ class WorkerConfigLoaderTest {
         try {
             val result = either {
                 val dto = loader.loadAppConfigDto(tempDir).bind()
-                dto.toDomain().bind()
+                dto.toDomain(tempDir).bind()
             }
             assertTrue(result.isLeft())
             val error = result.swap().getOrNull()
@@ -254,7 +254,7 @@ class WorkerConfigLoaderTest {
         try {
             val result = either {
                 val dto = loader.loadAppConfigDto(configDir).bind()
-                dto.toDomain().bind()
+                dto.toDomain(configDir).bind()
             }
             assertTrue(result.isRight())
             assertEquals("worker-setup", result.getOrNull()?.worker?.identity?.uid)
@@ -297,7 +297,7 @@ class WorkerConfigLoaderTest {
                     configDir,
                     envProvider = { key -> if (key == "WORKER_SERVER_BASE_URL") "https://env.test" else null }
                 ).bind()
-                dto.toDomain().bind()
+                dto.toDomain(configDir).bind()
             }
             assertTrue(result.isRight())
             assertEquals("https://env.test", result.getOrNull()?.worker?.server?.baseUrl)
@@ -326,7 +326,7 @@ class WorkerConfigLoaderTest {
         try {
             val result = either {
                 val dto = loader.loadAppConfigDto(configDir, envProvider = { null }).bind()
-                dto.toDomain().bind()
+                dto.toDomain(configDir).bind()
             }
             assertTrue(result.isRight())
             assertEquals("worker-base", result.getOrNull()?.worker?.identity?.uid)
@@ -389,7 +389,7 @@ class WorkerConfigLoaderTest {
         try {
             val result = either {
                 val dto = loader.loadAppConfigDto(configDir).bind()
-                dto.toDomain().bind()
+                dto.toDomain(configDir).bind()
             }
             assertTrue(result.isRight())
             val config = result.getOrNull()
@@ -442,7 +442,7 @@ class WorkerConfigLoaderTest {
         return try {
             either {
                 val dto = loader.loadAppConfigDto(tempDir).bind()
-                dto.toDomain().bind()
+                dto.toDomain(tempDir).bind()
             }
         } finally {
             tempDir.toFile().deleteRecursively()
@@ -495,6 +495,13 @@ class WorkerConfigLoaderTest {
                 "auth": {
                   "refreshSkewSeconds": $refreshSkewSeconds
                 },
+                "workspace": {
+                  "path": "./workspace"
+                },
+                "builtInTools": {
+                  "enabled": ["*"],
+                  "defaultCommandTimeoutSeconds": 600
+                },
                 "trustedSigners": $trustedSignersJson
               }
             }
@@ -502,5 +509,4 @@ class WorkerConfigLoaderTest {
         )
     }
 }
-
 
