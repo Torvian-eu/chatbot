@@ -271,6 +271,13 @@ fun workerModule(
             RunCommandTool(),
         ).associateBy { it.name }
     }
+
+    single<BuiltInToolCallExecutor> {
+        DefaultBuiltInToolCallExecutor(
+            context = get(),
+            tools = get(),
+        )
+    }
 }
 
 /**
