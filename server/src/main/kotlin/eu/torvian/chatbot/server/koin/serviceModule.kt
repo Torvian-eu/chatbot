@@ -30,7 +30,8 @@ import eu.torvian.chatbot.server.service.security.authorizer.*
 import eu.torvian.chatbot.server.service.setup.InitializationCoordinator
 import eu.torvian.chatbot.server.service.setup.ToolDefinitionInitializer
 import eu.torvian.chatbot.server.service.setup.UserAccountInitializer
-import eu.torvian.chatbot.server.service.tool.ToolExecutorFactory
+import eu.torvian.chatbot.server.worker.builtin.BuiltInToolDispatchService
+import eu.torvian.chatbot.server.worker.builtin.DefaultBuiltInToolDispatchService
 import eu.torvian.chatbot.server.worker.mcp.configsync.DefaultLocalMCPServerConfigSyncService
 import eu.torvian.chatbot.server.worker.mcp.configsync.DefaultLocalMCPServerWorkerSyncService
 import eu.torvian.chatbot.server.worker.mcp.configsync.LocalMCPServerConfigSyncService
@@ -86,6 +87,8 @@ fun serviceModule() = module {
     single<LocalMCPToolCallDispatchService> { DefaultLocalMCPToolCallDispatchService(get()) }
     single<LocalMCPExecutor> { LocalMCPExecutor(get(), get()) }
 
+    // --- Built-in worker tool services (direct `tool.call` dispatch) ---
+    single<BuiltInToolDispatchService> { DefaultBuiltInToolDispatchService(get()) }
     single<RoleService> { RoleServiceImpl(get(), get(), get()) }
     single<UserGroupService> { UserGroupServiceImpl(get(), get(), get()) }
     single<UserPreferenceService> { UserPreferenceServiceImpl(get(), get(), get()) }
