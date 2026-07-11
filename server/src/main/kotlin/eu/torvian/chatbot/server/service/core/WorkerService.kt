@@ -20,6 +20,7 @@ interface WorkerService {
      * @param displayName Worker display name.
      * @param certificatePem PEM-encoded public certificate.
      * @param allowedScopes Logical worker scopes to persist.
+     * @param toolNamePrefix Optional prefix applied to the public names of the worker's built-in tools.
      * @return Either registration error or the created worker.
      */
     suspend fun registerWorker(
@@ -27,7 +28,8 @@ interface WorkerService {
         workerUid: String,
         displayName: String,
         certificatePem: String,
-        allowedScopes: List<String>
+        allowedScopes: List<String>,
+        toolNamePrefix: String? = null
     ): Either<RegisterWorkerError, WorkerDto>
 
     /**
@@ -74,13 +76,15 @@ interface WorkerService {
      * @param workerId Worker identifier to update.
      * @param displayName New display name.
      * @param allowedScopes New list of allowed scopes.
+     * @param toolNamePrefix New optional prefix applied to the public names of the worker's built-in tools.
      * @return Either update error or the updated worker.
      */
     suspend fun updateWorker(
         ownerUserId: Long,
         workerId: Long,
         displayName: String,
-        allowedScopes: List<String>
+        allowedScopes: List<String>,
+        toolNamePrefix: String? = null
     ): Either<UpdateWorkerError, WorkerDto>
 
     /**

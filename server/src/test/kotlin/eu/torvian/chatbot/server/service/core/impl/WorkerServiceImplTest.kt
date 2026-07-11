@@ -3,9 +3,11 @@ package eu.torvian.chatbot.server.service.core.impl
 import arrow.core.left
 import arrow.core.right
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
+import eu.torvian.chatbot.common.models.tool.BuiltInWorkerToolDefinition
 import eu.torvian.chatbot.server.data.dao.WorkerDao
 import eu.torvian.chatbot.server.data.dao.error.WorkerError
 import eu.torvian.chatbot.server.data.entities.WorkerEntity
+import eu.torvian.chatbot.server.service.core.impl.BuiltInToolDefinitionSeeder
 import eu.torvian.chatbot.server.service.core.error.worker.AuthenticateWorkerError
 import eu.torvian.chatbot.server.service.core.error.worker.RegisterWorkerError
 import eu.torvian.chatbot.server.service.security.CertificateService
@@ -24,11 +26,13 @@ import kotlin.time.Instant
 class WorkerServiceImplTest {
     private val workerDao = mockk<WorkerDao>()
     private val certificateService = mockk<CertificateService>()
+    private val builtInToolDefinitionSeeder = mockk<BuiltInToolDefinitionSeeder>()
     private val transactionScope = mockk<TransactionScope>()
 
     private val service = WorkerServiceImpl(
         workerDao = workerDao,
         certificateService = certificateService,
+        builtInToolDefinitionSeeder = builtInToolDefinitionSeeder,
         transactionScope = transactionScope
     )
 
@@ -41,16 +45,20 @@ class WorkerServiceImplTest {
         certificateFingerprint = "abc",
         allowedScopes = emptyList(),
         createdAt = Instant.fromEpochMilliseconds(1_700_000_000_000),
-        lastSeenAt = null
+        lastSeenAt = null,
+        toolNamePrefix = null
     )
 
     @BeforeEach
     fun setUp() {
-        clearMocks(workerDao, certificateService, transactionScope)
+        clearMocks(workerDao, certificateService, transactionScope, builtInToolDefinitionSeeder)
         coEvery { transactionScope.transaction<Any>(any()) } coAnswers {
             val block = firstArg<suspend () -> Any>()
             block()
         }
+        // Default: seeding succeeds so registration tests focus on worker creation.
+        coEvery { builtInToolDefinitionSeeder.seedDefaultToolsForWorker(any(), any()) } returns
+            emptyList<BuiltInWorkerToolDefinition>().right()
     }
 
     @Test
@@ -92,4 +100,3 @@ class WorkerServiceImplTest {
         coVerify(exactly = 0) { workerDao.consumeChallenge(any()) }
     }
 }
-

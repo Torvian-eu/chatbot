@@ -193,7 +193,7 @@ fun serviceModule() = module {
             authPolicy = get()
         )
     }
-    single<WorkerService> { WorkerServiceImpl(get(), get(), get()) }
+    single<WorkerService> { WorkerServiceImpl(get(), get(), get(), get()) }
 
     // --- Authorizers (resource-level access) ---
     single<ResourceAuthorizer>(named(ResourceType.GROUP.key)) { GroupResourceAuthorizer(get()) }
