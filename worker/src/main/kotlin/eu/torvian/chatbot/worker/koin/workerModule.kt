@@ -213,7 +213,9 @@ fun workerModule(
 
     single<ToolCallInteractionFactory> {
         ToolCallInteractionFactory(
-            messageIdProvider = get()
+            authorizationValidator = get(),
+            toolCallExecutor = get(),
+            messageIdProvider = get(),
         )
     }
     single<CommandRequestProcessor> {
