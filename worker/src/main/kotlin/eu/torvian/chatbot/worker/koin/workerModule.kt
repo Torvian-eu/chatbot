@@ -204,6 +204,13 @@ fun workerModule(
             messageIdProvider = get()
         )
     }
+
+    single<BuiltInToolAuthorizationValidator> {
+        DefaultBuiltInToolAuthorizationValidator(
+            verificationService = get(),
+        )
+    }
+
     single<ToolCallInteractionFactory> {
         ToolCallInteractionFactory(
             messageIdProvider = get()
