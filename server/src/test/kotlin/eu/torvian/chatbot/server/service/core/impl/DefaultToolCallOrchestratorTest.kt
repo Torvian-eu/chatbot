@@ -48,7 +48,7 @@ import kotlin.time.Instant
  *  - [BuiltInWorkerToolDefinition] requires a `BuiltInSigned` approval that mirrors the Local MCP
  *    signing flow (a detached signature over the [BuiltInToolExecutionAuthorization] payload).
  *
- * The legacy server-side execution path (MiscToolDefinition + ToolExecutorFactory) has been removed,
+ * The legacy server-side execution path (a generic tool definition type + ToolExecutorFactory) has been removed,
  * so any tool definition that is neither a [LocalMCPToolDefinition] nor a
  * [BuiltInWorkerToolDefinition] is a configuration error and propagates as an
  * [IllegalStateException] from the orchestrator.

@@ -14,6 +14,7 @@ import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
 import eu.torvian.chatbot.server.data.dao.error.SetToolEnabledError
 import eu.torvian.chatbot.server.data.entities.CreateLocalMCPServerEntity
 import eu.torvian.chatbot.server.data.entities.LocalMCPSecretEnvironmentVariableReference
+import eu.torvian.chatbot.server.data.entities.ToolDefinitionEntity
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
 import eu.torvian.chatbot.server.testutils.data.TestDataSet
 import eu.torvian.chatbot.server.testutils.data.TestDefaults
@@ -61,9 +62,9 @@ class SessionToolConfigDaoExposedTest {
     // Test fixtures
     private var testSessionId1: Long = 0
     private var testSessionId2: Long = 0
-    private lateinit var testTool1: ToolDefinition
-    private lateinit var testTool2: ToolDefinition
-    private lateinit var testTool3Disabled: ToolDefinition
+    private lateinit var testTool1: ToolDefinitionEntity
+    private lateinit var testTool2: ToolDefinitionEntity
+    private lateinit var testTool3Disabled: ToolDefinitionEntity
     private var testLocalMCPServerId: Long = 0
 
     @BeforeEach
@@ -123,7 +124,7 @@ class SessionToolConfigDaoExposedTest {
         name: String,
         type: ToolType = ToolType.MCP_LOCAL,
         isEnabled: Boolean = true
-    ): ToolDefinition {
+    ): ToolDefinitionEntity {
         val config = buildJsonObject { put("test", "value") }
         val inputSchema = buildJsonObject { put("type", "object") }
 

@@ -2,7 +2,6 @@ package eu.torvian.chatbot.server.data.tables.mappers
 
 import eu.torvian.chatbot.common.models.tool.BuiltInWorkerToolDefinition
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
-import eu.torvian.chatbot.common.models.tool.MiscToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.server.data.tables.BuiltInToolDefinitionTable
@@ -16,9 +15,11 @@ import kotlin.time.Instant
 /**
  * Maps a ResultRow to a ToolDefinition, handling all tool types polymorphically.
  *
- * This mapper handles both simple JOINs and LEFT JOINs with LocalMCPToolDefinitionTable:
+ * This mapper handles both simple JOINs and LEFT JOINs with LocalMCPToolDefinitionTable and
+ * BuiltInToolDefinitionTable:
  * - If type is MCP_LOCAL and MCP columns are present: returns LocalMCPToolDefinition
- * - Otherwise: returns MiscToolDefinition
+ * - If type is BUILTIN_WORKER and built-in columns are present: returns BuiltInWorkerToolDefinition
+ * - Otherwise: throws, since no generic tool type is supported anymore.
  *
  * Safely handles NULL values from LEFT JOINs on non-MCP tools.
  */
@@ -65,17 +66,7 @@ fun ResultRow.toToolDefinition(): ToolDefinition {
             builtInToolName = this[BuiltInToolDefinitionTable.builtInToolName]
         )
 
-        else -> MiscToolDefinition(
-            id = id,
-            name = name,
-            description = description,
-            type = toolType,
-            config = config,
-            inputSchema = inputSchema,
-            outputSchema = outputSchema,
-            isEnabled = isEnabled,
-            createdAt = createdAt,
-            updatedAt = updatedAt
-        )
+        // MCP_REMOTE is declared but never persisted; no generic fallback type exists anymore.
+        ToolType.MCP_REMOTE -> throw IllegalStateException("Unsupported tool type: $toolType")
     }
 }

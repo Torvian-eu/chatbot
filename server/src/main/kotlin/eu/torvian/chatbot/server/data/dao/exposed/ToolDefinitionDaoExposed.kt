@@ -6,17 +6,17 @@ import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.right
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
-import eu.torvian.chatbot.common.models.tool.MiscToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
 import eu.torvian.chatbot.server.data.dao.error.ToolDefinitionError
+import eu.torvian.chatbot.server.data.entities.ToolDefinitionEntity
 import eu.torvian.chatbot.server.data.tables.BuiltInToolDefinitionTable
 import eu.torvian.chatbot.server.data.tables.LocalMCPServerTable
 import eu.torvian.chatbot.server.data.tables.LocalMCPToolDefinitionTable
 import eu.torvian.chatbot.server.data.tables.ToolDefinitionTable
-import eu.torvian.chatbot.server.data.tables.mappers.toMiscToolDefinition
 import eu.torvian.chatbot.server.data.tables.mappers.toToolDefinition
+import eu.torvian.chatbot.server.data.tables.mappers.toToolDefinitionEntity
 import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.leftJoin
@@ -38,36 +38,57 @@ class ToolDefinitionDaoExposed(
     private val transactionScope: TransactionScope
 ) : ToolDefinitionDao {
 
-    override suspend fun getAllToolDefinitions(): List<MiscToolDefinition> =
+    /**
+     * Builds the joined query over [ToolDefinitionTable] that carries the columns required to
+     * reconstruct a fully typed [ToolDefinition] via [toToolDefinition].
+     *
+     * LEFT JOINs the MCP and built-in linkage tables so that every tool type (MCP_LOCAL,
+     * BUILTIN_WORKER, and any future generic type) can be mapped polymorphically without a
+     * separate generic fallback type.
+     */
+    private fun joinedToolDefinitions() =
+        ToolDefinitionTable
+            .leftJoin(
+                LocalMCPToolDefinitionTable,
+                { ToolDefinitionTable.id },
+                { LocalMCPToolDefinitionTable.toolDefinitionId })
+            .leftJoin(LocalMCPServerTable, { LocalMCPToolDefinitionTable.mcpServerId }, { LocalMCPServerTable.id })
+            .leftJoin(
+                BuiltInToolDefinitionTable,
+                { ToolDefinitionTable.id },
+                { BuiltInToolDefinitionTable.toolDefinitionId }
+            )
+
+    override suspend fun getAllToolDefinitions(): List<ToolDefinition> =
         transactionScope.transaction {
-            ToolDefinitionTable.selectAll().map { it.toMiscToolDefinition() }
+            joinedToolDefinitions().selectAll().map { it.toToolDefinition() }
         }
 
-    override suspend fun getToolDefinitionById(id: Long): Either<ToolDefinitionError.NotFound, MiscToolDefinition> =
+    override suspend fun getToolDefinitionById(id: Long): Either<ToolDefinitionError.NotFound, ToolDefinition> =
         transactionScope.transaction {
-            ToolDefinitionTable
+            joinedToolDefinitions()
                 .selectAll().where { ToolDefinitionTable.id eq id }
                 .singleOrNull()
-                ?.toMiscToolDefinition()
+                ?.toToolDefinition()
                 ?.right()
                 ?: ToolDefinitionError.NotFound(id).left()
         }
 
-    override suspend fun getToolDefinitionByName(name: String): Either<ToolDefinitionError.NameNotFound, MiscToolDefinition> =
+    override suspend fun getToolDefinitionByName(name: String): Either<ToolDefinitionError.NameNotFound, ToolDefinition> =
         transactionScope.transaction {
-            ToolDefinitionTable
+            joinedToolDefinitions()
                 .selectAll().where { ToolDefinitionTable.name eq name }
                 .singleOrNull()
-                ?.toMiscToolDefinition()
+                ?.toToolDefinition()
                 ?.right()
                 ?: ToolDefinitionError.NameNotFound(name).left()
         }
 
-    override suspend fun getEnabledToolDefinitions(): List<MiscToolDefinition> =
+    override suspend fun getEnabledToolDefinitions(): List<ToolDefinition> =
         transactionScope.transaction {
-            ToolDefinitionTable
+            joinedToolDefinitions()
                 .selectAll().where { ToolDefinitionTable.isEnabled eq true }
-                .map { it.toMiscToolDefinition() }
+                .map { it.toToolDefinition() }
         }
 
     override suspend fun insertToolDefinition(
@@ -78,10 +99,10 @@ class ToolDefinitionDaoExposed(
         inputSchema: JsonObject,
         outputSchema: JsonObject?,
         isEnabled: Boolean
-    ): MiscToolDefinition =
+    ): ToolDefinitionEntity =
         transactionScope.transaction {
             val now = Clock.System.now().toEpochMilliseconds()
-            val insertStatement = ToolDefinitionTable.insert {
+            ToolDefinitionTable.insert {
                 it[ToolDefinitionTable.name] = name
                 it[ToolDefinitionTable.description] = description
                 it[ToolDefinitionTable.type] = type
@@ -91,9 +112,8 @@ class ToolDefinitionDaoExposed(
                 it[ToolDefinitionTable.isEnabled] = isEnabled
                 it[createdAt] = now
                 it[updatedAt] = now
-            }
-            insertStatement.resultedValues?.first()?.toMiscToolDefinition()
-                ?: throw IllegalStateException("Failed to retrieve newly inserted tool definition")
+            }.resultedValues?.firstOrNull()?.toToolDefinitionEntity()
+                ?: throw IllegalStateException("Failed to read inserted tool definition row for name $name")
         }
 
     override suspend fun updateToolDefinition(

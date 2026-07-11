@@ -16,6 +16,7 @@ import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
 import eu.torvian.chatbot.server.data.dao.error.InsertToolCallError
 import eu.torvian.chatbot.server.data.dao.error.ToolCallError
 import eu.torvian.chatbot.server.data.dao.error.UpdateToolCallError
+import eu.torvian.chatbot.server.data.entities.ToolDefinitionEntity
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
 import eu.torvian.chatbot.server.testutils.koin.defaultTestContainer
 import kotlinx.coroutines.test.runTest
@@ -55,7 +56,7 @@ class ToolCallDaoExposedTest {
     // Test fixtures
     private var testSessionId: Long = 0
     private lateinit var testMessage: ChatMessage.AssistantMessage
-    private lateinit var testToolDefinition: ToolDefinition
+    private lateinit var testToolDefinition: ToolDefinitionEntity
 
     @BeforeEach
     fun setUp() = runTest {
@@ -486,5 +487,3 @@ class ToolCallDaoExposedTest {
         assertEquals(0, remaining.size, "Expected no tool calls remaining")
     }
 }
-
-

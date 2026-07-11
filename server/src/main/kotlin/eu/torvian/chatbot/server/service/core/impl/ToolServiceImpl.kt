@@ -5,7 +5,6 @@ import arrow.core.raise.either
 import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
-import eu.torvian.chatbot.common.models.tool.MiscToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.common.models.tool.UserToolApprovalPreference
@@ -16,6 +15,7 @@ import eu.torvian.chatbot.server.data.dao.UserToolApprovalPreferenceDao
 import eu.torvian.chatbot.server.data.dao.error.ToolDefinitionError
 import eu.torvian.chatbot.server.data.dao.error.UserToolApprovalPreferenceError
 import eu.torvian.chatbot.server.data.dao.error.SetPreferenceError
+import eu.torvian.chatbot.server.data.entities.ToolDefinitionEntity
 import eu.torvian.chatbot.server.service.core.ToolService
 import eu.torvian.chatbot.server.service.core.error.tool.*
 import kotlinx.serialization.json.JsonObject
@@ -39,13 +39,13 @@ class ToolServiceImpl(
 
     private val logger: Logger = LogManager.getLogger(ToolServiceImpl::class.java)
 
-    override suspend fun getAllTools(): List<MiscToolDefinition> {
+    override suspend fun getAllTools(): List<ToolDefinition> {
         return transactionScope.transaction {
             toolDefinitionDao.getAllToolDefinitions()
         }
     }
 
-    override suspend fun getToolById(id: Long): Either<GetToolError, MiscToolDefinition> =
+    override suspend fun getToolById(id: Long): Either<GetToolError, ToolDefinition> =
         transactionScope.transaction {
             either {
                 withError({ daoError: ToolDefinitionError.NotFound ->
@@ -64,7 +64,7 @@ class ToolServiceImpl(
         inputSchema: JsonObject,
         outputSchema: JsonObject?,
         isEnabled: Boolean
-    ): Either<ValidateToolError, MiscToolDefinition> = transactionScope.transaction {
+    ): Either<ValidateToolError, ToolDefinitionEntity> = transactionScope.transaction {
         either {
             // Validate tool definition
             validateToolDefinition(name, description, inputSchema, outputSchema).bind()

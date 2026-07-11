@@ -8,7 +8,7 @@ import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.llm.LLMProvider
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
-import eu.torvian.chatbot.common.models.tool.MiscToolDefinition
+import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
 import eu.torvian.chatbot.common.models.tool.ToolType
@@ -196,17 +196,18 @@ class DefaultConversationTurnOrchestratorTest {
      */
     @Test
     fun `processNonStreamingTurn appends tool calls and results for follow-up iteration`() = runTest {
-        val toolDefinition = MiscToolDefinition(
+        val toolDefinition = LocalMCPToolDefinition(
             id = 8L,
             name = "search",
             description = "Searches docs",
-            type = ToolType.MCP_LOCAL,
             config = buildJsonObject { },
             inputSchema = buildJsonObject { },
             outputSchema = null,
             isEnabled = true,
             createdAt = baseInstant,
-            updatedAt = baseInstant
+            updatedAt = baseInstant,
+            serverId = 1L,
+            mcpToolName = "search"
         )
         val userMessage = ChatMessage.UserMessage(
             id = 21L,

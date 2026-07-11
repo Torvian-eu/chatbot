@@ -10,6 +10,7 @@ import eu.torvian.chatbot.server.data.dao.LocalMCPToolDefinitionDao
 import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
 import eu.torvian.chatbot.server.data.entities.CreateLocalMCPServerEntity
 import eu.torvian.chatbot.server.data.entities.LocalMCPSecretEnvironmentVariableReference
+import eu.torvian.chatbot.server.data.entities.ToolDefinitionEntity
 import eu.torvian.chatbot.server.testutils.data.Table
 import eu.torvian.chatbot.server.testutils.data.TestDataManager
 import eu.torvian.chatbot.server.testutils.data.TestDataSet
@@ -119,7 +120,7 @@ class LocalMCPToolDefinitionDaoExposedTest {
     }
 
     // Helper function to create a test tool definition
-    private suspend fun createTestTool(name: String): ToolDefinition {
+    private suspend fun createTestTool(name: String): ToolDefinitionEntity {
         return toolDefinitionDao.insertToolDefinition(
             name = name,
             description = "Test tool: $name",
