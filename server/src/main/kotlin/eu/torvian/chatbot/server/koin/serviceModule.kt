@@ -92,6 +92,15 @@ fun serviceModule() = module {
     // --- Built-in worker tool services (direct `tool.call` dispatch) ---
     single<BuiltInToolDispatchService> { DefaultBuiltInToolDispatchService(get()) }
     single<BuiltInWorkerToolExecutor> { DefaultBuiltInWorkerToolExecutor(get()) }
+    single<BuiltInToolDefinitionService> {
+        BuiltInToolDefinitionServiceImpl(
+            workerDao = get(),
+            builtInToolDefinitionDao = get(),
+            toolService = get(),
+            transactionScope = get()
+        )
+    }
+
     single<RoleService> { RoleServiceImpl(get(), get(), get()) }
     single<UserGroupService> { UserGroupServiceImpl(get(), get(), get()) }
     single<UserPreferenceService> { UserPreferenceServiceImpl(get(), get(), get()) }
