@@ -13,21 +13,14 @@ import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.app.viewmodel.CrossSessionSearchViewModel
 import eu.torvian.chatbot.app.viewmodel.SessionListViewModel
 import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModel
+import eu.torvian.chatbot.app.viewmodel.chat.ChatViewModelSlotManager
 import eu.torvian.chatbot.common.models.core.ChatGroup
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.core.ChatSessionSummary
 import eu.torvian.chatbot.common.models.core.FileReference
 import eu.torvian.chatbot.common.models.tool.ToolCall
-import eu.torvian.chatbot.app.utils.misc.LruCache
-
+import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
-
-/**
- * Maximum number of chat ViewModel slots kept alive at the same time.
- *
- * Slots are reused using LRU order when this limit is reached.
- */
-private const val MAX_CHAT_VIEW_MODELS_IN_MEMORY = 20
 
 /**
  * A stateful wrapper Composable for the main chat interface.
@@ -41,6 +34,8 @@ private const val MAX_CHAT_VIEW_MODELS_IN_MEMORY = 20
  * Chat sessions are assigned to a bounded set of ViewModel slots using LRU. Recently used
  * sessions keep their own [ChatViewModel]; older sessions can be evicted and their slot reused,
  * keeping memory usage predictable while still supporting seamless switching for active sessions.
+ * The session->slot mapping lives in the long-lived [ChatViewModelSlotManager] (injected via Koin)
+ * so it survives navigation between Chat and other destinations.
  *
  * @param sessionListViewModel The ViewModel managing the session list state.
  */
@@ -55,11 +50,11 @@ fun ChatScreen(
     val selectedSession by sessionListViewModel.selectedSession.collectAsState()
     val selectedSessionId = selectedSession?.id
 
-    // Keeps track of which sessions currently occupy a limited pool of VM slots.
-    val viewModelSlotAllocator = remember { ChatViewModelSlotAllocator(MAX_CHAT_VIEW_MODELS_IN_MEMORY) }
+    // Long-lived manager that maps sessions to ViewModel slots.
+    val slotManager: ChatViewModelSlotManager = koinInject()
     // Stable key for Koin VM lookup; may be reused for a different session after LRU eviction.
     val chatViewModelKey = remember(selectedSessionId) {
-        viewModelSlotAllocator.resolveViewModelKey(selectedSessionId)
+        slotManager.resolveViewModelKey(selectedSessionId)
     }
 
     // Obtain a session-scoped ChatViewModel keyed by LRU slot.
@@ -260,50 +255,67 @@ fun ChatScreen(
             override fun onSaveEditingAsCopy() = chatViewModel.saveEditingAsCopy()
             override fun onCancelEditing() = chatViewModel.cancelEditing()
             override fun onRequestDeleteMessage(message: ChatMessage) = chatViewModel.requestDeleteMessage(message)
-            override fun onRequestDeleteThread(message: ChatMessage) = chatViewModel.requestDeleteMessageRecursively(message)
+            override fun onRequestDeleteThread(message: ChatMessage) =
+                chatViewModel.requestDeleteMessageRecursively(message)
+
             override fun onRequestInsertMessage(message: ChatMessage) = chatViewModel.onRequestInsertMessage(message)
             override fun onCancelDialog() = chatViewModel.cancelDialog()
             override fun onSwitchBranchToMessage(messageId: Long) {
                 chatViewModel.switchBranchToMessage(messageId)
             }
+
             override fun onToggleMessageCollapsed(messageId: Long) = chatViewModel.toggleMessageCollapsed(messageId)
             override fun onSelectModel(modelId: Long?) = chatViewModel.selectModel(modelId)
             override fun onSelectSettings(settingsId: Long?) = chatViewModel.selectSettings(settingsId)
             override fun onShowToolConfig() = chatViewModel.showToolConfigDialog()
             override fun onShowToolCallDetails(toolCall: ToolCall) =
                 chatViewModel.showToolCallDetails(toolCall)
+
             override fun onCopyMessage(message: ChatMessage) =
                 chatViewModel.copyMessageToClipboard(message)
+
             override fun onCopyThread() =
                 chatViewModel.copyThreadToClipboard()
+
             override fun onShowSearch() = chatViewModel.showSearch()
             override fun onCloseSearch() = chatViewModel.closeSearch()
             override fun onUpdateSearchQuery(query: String) = chatViewModel.updateSearchQuery(query)
             override fun onNavigateSearchResult(direction: SearchDirection) =
                 chatViewModel.navigateSearchResult(direction)
+
             override fun onJumpToSearchResult(index: Int) =
                 chatViewModel.jumpToSearchResult(index)
+
             override fun onBranchAndContinue(message: ChatMessage) =
                 chatViewModel.sendMessage(continueFromMessage = message)
+
             override fun onRegenerateMessage(message: ChatMessage) =
                 chatViewModel.regenerateMessage(message)
+
             override fun onAddFileReferences() =
                 chatViewModel.pickAndAddFileReferences()
+
             override fun onRemoveFileReference(fileReference: FileReference) =
                 chatViewModel.removeFileReference(fileReference)
+
             override fun onShowFileReferenceDetails(fileReference: FileReference) =
                 chatViewModel.showFileReferenceDetails(fileReference)
+
             override fun onShowFileReferencesManagement() =
                 chatViewModel.showFileReferencesManagement()
 
             override fun onAddEditingFileReferences() =
                 chatViewModel.pickAndAddEditingFileReferences()
+
             override fun onRemoveEditingFileReference(fileReference: FileReference) =
                 chatViewModel.removeEditingFileReference(fileReference)
+
             override fun onToggleEditingFileContent(fileReference: FileReference, includeContent: Boolean) =
                 chatViewModel.toggleEditingFileContent(fileReference, includeContent)
+
             override fun onSetEditingBasePathOverride(path: String?) =
                 chatViewModel.setEditingBasePathOverride(path)
+
             override fun onResetEditingBasePath() =
                 chatViewModel.resetEditingBasePath()
 
@@ -331,43 +343,4 @@ fun ChatScreen(
         onPerformSearch = crossSessionSearchViewModel::performSearch,
         onSearchResultClick = crossSessionSearchViewModel::onSearchResultClick
     )
-}
-
-/**
- * Maps session IDs to a bounded set of ViewModel slot indices.
- *
- * When all slots are occupied, the least-recently-used session mapping is replaced so its
- * slot can be reused by a newly selected session.
- *
- * @param maxViewModels Maximum number of slots that can exist concurrently.
- */
-private class ChatViewModelSlotAllocator(
-    maxViewModels: Int
-) {
-    /** Session -> slot mapping with access-order tracking. */
-    private val sessionToSlot = LruCache<Long, Int>(maxViewModels)
-
-    /** Pool of slots that have never been assigned yet. */
-    private val freeSlots = (0 until maxViewModels).toMutableSet()
-
-    /**
-     * Resolves the Koin key for the selected session.
-     *
-     * @return A stable slot key (`chat_slot_<n>`) or `chat_none` when no session is selected.
-     */
-    fun resolveViewModelKey(sessionId: Long?): String {
-        if (sessionId == null) return "chat_none"
-
-        val assignedSlot = sessionToSlot.getOrPut(sessionId) {
-            // Prefer an unused slot first.
-            freeSlots.firstOrNull()
-                .also { freeSlots.remove(it) }
-                // If none are free, reuse the slot that belongs to the least recently used session.
-                ?: sessionToSlot.leastRecentlyUsedValue
-                ?: error("Expected an LRU session when no free slots are available")
-        }
-        return slotKey(assignedSlot)
-    }
-
-    private fun slotKey(slot: Int): String = "chat_slot_$slot"
 }
