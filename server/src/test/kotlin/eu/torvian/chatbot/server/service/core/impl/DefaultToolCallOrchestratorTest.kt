@@ -1,30 +1,29 @@
 package eu.torvian.chatbot.server.service.core.impl
 
-import arrow.core.left
 import arrow.core.right
-import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolCallResult
 import eu.torvian.chatbot.common.models.api.mcp.LocalMCPToolExecutionAuthorization
-import eu.torvian.chatbot.common.models.api.tool.ToolCallApprovalResponse
-import eu.torvian.chatbot.common.models.tool.*
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionAuthorization
+import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionResult
+import eu.torvian.chatbot.common.models.tool.BuiltInWorkerToolDefinition
+import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
+import eu.torvian.chatbot.common.models.tool.ToolCall
+import eu.torvian.chatbot.common.models.tool.ToolCallStatus
 import eu.torvian.chatbot.common.security.SignedRequest
 import eu.torvian.chatbot.server.data.dao.ToolCallDao
-import eu.torvian.chatbot.server.data.dao.UserToolApprovalPreferenceDao
-import eu.torvian.chatbot.server.data.dao.error.UserToolApprovalPreferenceError
+import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutor
+import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutorError
+import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutorEvent
 import eu.torvian.chatbot.server.service.core.toolcall.DefaultToolCallOrchestrator
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallApprovalSubmission
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallExecutionEvent
 import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutor
 import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutorEvent
-import eu.torvian.chatbot.server.service.tool.ToolExecutor
-import eu.torvian.chatbot.server.service.tool.ToolExecutorFactory
 import io.mockk.clearMocks
 import io.mockk.coEvery
 import io.mockk.coVerify
-import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.toList
@@ -42,43 +41,41 @@ import kotlin.time.Instant
 /**
  * Unit tests for [DefaultToolCallOrchestrator].
  *
- * Covers the tool-call approval/execution lifecycle, including Local MCP and non-Local-MCP flows.
+ * Covers the tool-call approval/execution lifecycle for both supported tool families:
+ *
+ *  - [LocalMCPToolDefinition] requires a `LocalMcpSigned` approval that carries the app-signed
+ *    authorization. A denial or timeout short-circuits execution.
+ *  - [BuiltInWorkerToolDefinition] requires a `BuiltInSigned` approval that mirrors the Local MCP
+ *    signing flow (a detached signature over the [BuiltInToolExecutionAuthorization] payload).
+ *
+ * The legacy server-side execution path (MiscToolDefinition + ToolExecutorFactory) has been removed,
+ * so any tool definition that is neither a [LocalMCPToolDefinition] nor a
+ * [BuiltInWorkerToolDefinition] is a configuration error and propagates as an
+ * [IllegalStateException] from the orchestrator.
  */
 class DefaultToolCallOrchestratorTest {
 
     private lateinit var toolCallDao: ToolCallDao
-    private lateinit var toolExecutorFactory: ToolExecutorFactory
     private lateinit var localMcpExecutor: LocalMCPExecutor
-    private lateinit var userToolApprovalPreferenceDao: UserToolApprovalPreferenceDao
-    private lateinit var transactionScope: TransactionScope
-    private lateinit var toolExecutor: ToolExecutor
+    private lateinit var builtInWorkerToolExecutor: BuiltInWorkerToolExecutor
     private lateinit var orchestrator: DefaultToolCallOrchestrator
 
     @BeforeEach
     fun setUp() {
         toolCallDao = mockk()
-        toolExecutorFactory = mockk()
         localMcpExecutor = mockk()
-        userToolApprovalPreferenceDao = mockk()
-        transactionScope = mockk()
-        toolExecutor = mockk()
+        builtInWorkerToolExecutor = mockk()
 
         orchestrator = DefaultToolCallOrchestrator(
-            toolCallDao, toolExecutorFactory, localMcpExecutor, userToolApprovalPreferenceDao, transactionScope
+            toolCallDao = toolCallDao,
+            localMcpExecutor = localMcpExecutor,
+            builtInWorkerToolExecutor = builtInWorkerToolExecutor,
         )
-
-        coEvery { transactionScope.transaction(any<suspend () -> Any?>()) } coAnswers {
-            val block = firstArg<suspend () -> Any?>()
-            block()
-        }
     }
 
     @AfterEach
     fun tearDown() {
-        clearMocks(
-            toolCallDao, toolExecutorFactory, localMcpExecutor,
-            userToolApprovalPreferenceDao, transactionScope, toolExecutor
-        )
+        clearMocks(toolCallDao, localMcpExecutor, builtInWorkerToolExecutor)
     }
 
     // --- executeAndUpdateToolCalls tests (approval/execution orchestration) ---
@@ -108,23 +105,25 @@ class DefaultToolCallOrchestratorTest {
     )
 
     /**
-     * Fixture builder for a non-Local-MCP tool definition.
+     * Fixture builder for a Built-in Worker tool definition.
      */
-    private fun miscToolDefinition(
+    private fun builtInWorkerToolDefinition(
         id: Long = 2L,
-        name: String = "WebSearch",
-        type: ToolType = ToolType.WEB_SEARCH
-    ): MiscToolDefinition = MiscToolDefinition(
+        name: String = "project1.read_text_file",
+        workerId: Long = 7L,
+        builtInToolName: String = "read_text_file"
+    ): BuiltInWorkerToolDefinition = BuiltInWorkerToolDefinition(
         id = id,
         name = name,
-        description = "Search the web",
-        type = type,
+        description = "Read a text file inside the worker's workspace",
         config = buildJsonObject { },
         inputSchema = buildJsonObject { },
         outputSchema = null,
         isEnabled = true,
         createdAt = testToolCallInstant,
-        updatedAt = testToolCallInstant
+        updatedAt = testToolCallInstant,
+        workerId = workerId,
+        builtInToolName = builtInToolName
     )
 
     /**
@@ -172,7 +171,7 @@ class DefaultToolCallOrchestratorTest {
         )
         return ToolCallApprovalSubmission.LocalMcpSigned(
             signedRequest = SignedRequest(
-                payload = Json.encodeToString(authorization),
+                payload = Json.encodeToString(LocalMCPToolExecutionAuthorization.serializer(), authorization),
                 signature = "signature-$toolCallId",
                 signerId = "device-1",
                 timestamp = 1_700_000_000_000,
@@ -182,23 +181,44 @@ class DefaultToolCallOrchestratorTest {
     }
 
     /**
-     * Builds a standard (non-Local-MCP) approval submission with the given decision.
+     * Builds a Built-in Worker signed approval submission with the given decision.
+     *
+     * The signed payload encodes the [BuiltInToolExecutionAuthorization] that the worker re-verifies
+     * before executing the tool.
      */
-    private fun standardApproval(
+    private fun builtInSignedApproval(
         toolCallId: Long,
+        toolDefinitionId: Long,
+        workerId: Long,
+        builtInToolName: String,
         approved: Boolean,
         denialReason: String? = null
-    ): ToolCallApprovalSubmission.Standard =
-        ToolCallApprovalSubmission.Standard(
-            ToolCallApprovalResponse(
-                toolCallId = toolCallId,
-                approved = approved,
-                denialReason = denialReason
+    ): ToolCallApprovalSubmission.BuiltInSigned {
+        val authorization = BuiltInToolExecutionAuthorization(
+            toolCallId = toolCallId,
+            sessionId = 1L,
+            messageId = 100L,
+            toolDefinitionId = toolDefinitionId,
+            toolName = "$workerId-prefix.$builtInToolName",
+            workerId = workerId,
+            builtInToolName = builtInToolName,
+            input = "{}",
+            approved = approved,
+            denialReason = denialReason
+        )
+        return ToolCallApprovalSubmission.BuiltInSigned(
+            signedRequest = SignedRequest(
+                payload = Json.encodeToString(BuiltInToolExecutionAuthorization.serializer(), authorization),
+                signature = "builtin-signature-$toolCallId",
+                signerId = "device-1",
+                timestamp = 1_700_000_000_000,
+                nonce = "builtin-nonce-$toolCallId"
             )
         )
+    }
 
     /**
-     * Stubs toolCallDao.updateToolCall and records every persisted update so tests can assert status transitions.
+     * Stubs [ToolCallDao.updateToolCall] and records every persisted update so tests can assert status transitions.
      */
     private fun trackToolCallUpdates(): MutableList<ToolCall> {
         val updates = mutableListOf<ToolCall>()
@@ -208,6 +228,8 @@ class DefaultToolCallOrchestratorTest {
         }
         return updates
     }
+
+    // --- Local MCP tool-call tests ---
 
     @Test
     fun `executeAndUpdateToolCalls should request approval and execute an approved Local MCP tool call`() = runTest {
@@ -246,6 +268,7 @@ class DefaultToolCallOrchestratorTest {
         )
 
         coVerify(exactly = 1) { localMcpExecutor.executeTool(toolDef, pending, approval.signedRequest) }
+        coVerify(exactly = 0) { builtInWorkerToolExecutor.executeTool(any(), any(), any()) }
         coVerify(exactly = 3) { toolCallDao.updateToolCall(any()) }
     }
 
@@ -308,141 +331,38 @@ class DefaultToolCallOrchestratorTest {
         coVerify(exactly = 2) { toolCallDao.updateToolCall(any()) }
     }
 
+    // --- Built-in Worker tool-call tests ---
+
     @Test
-    fun `executeAndUpdateToolCalls should auto-approve non-Local-MCP tool based on preference and execute`() = runTest {
-        val toolDef = miscToolDefinition()
+    fun `executeAndUpdateToolCalls should request approval and execute an approved Built-in Worker tool call`() = runTest {
+        val toolDef = builtInWorkerToolDefinition(id = 2L, workerId = 17L, builtInToolName = "read_text_file")
         val pending = pendingToolCall(
-            id = 2L,
+            id = 10L,
             toolDefinitionId = toolDef.id,
-            toolName = toolDef.name
+            toolName = toolDef.name,
         )
-        val preference = UserToolApprovalPreference(
-            userId = 1L,
+        val approval = builtInSignedApproval(
+            toolCallId = pending.id,
             toolDefinitionId = toolDef.id,
-            autoApprove = true
+            workerId = toolDef.workerId,
+            builtInToolName = toolDef.builtInToolName,
+            approved = true,
         )
-        coEvery { userToolApprovalPreferenceDao.getPreference(1L, toolDef.id) } returns preference.right()
-        every { toolExecutorFactory.getExecutor(ToolType.WEB_SEARCH) } returns toolExecutor.right()
-        coEvery { toolExecutor.executeTool(toolDef, pending.input) } returns "search result".right()
         val updates = trackToolCallUpdates()
 
-        val events = orchestrator.executeAndUpdateToolCalls(
-            userId = 1L,
-            pendingToolCalls = listOf(pending),
-            toolDefinitions = listOf(toolDef),
-            toolApprovalFlow = emptyFlow()
-        ).toList()
-
-        assertEquals(2, events.size)
-        val executing = assertIs<ToolCallExecutionEvent.ToolCallExecuting>(events[0])
-        assertEquals(ToolCallStatus.EXECUTING, executing.toolCall.status)
-        val completed = assertIs<ToolCallExecutionEvent.ToolCallCompleted>(events[1])
-        assertEquals(ToolCallStatus.SUCCESS, completed.toolCall.status)
-        assertEquals("search result", completed.toolCall.output)
-
-        assertEquals(
-            listOf(ToolCallStatus.EXECUTING, ToolCallStatus.SUCCESS),
-            updates.map { it.status }
-        )
-
-        coVerify(exactly = 1) { toolExecutor.executeTool(toolDef, pending.input) }
-        coVerify(exactly = 1) { userToolApprovalPreferenceDao.getPreference(1L, toolDef.id) }
-        coVerify(exactly = 2) { toolCallDao.updateToolCall(any()) }
-    }
-
-    @Test
-    fun `executeAndUpdateToolCalls should auto-deny non-Local-MCP tool based on preference and skip execution`() = runTest {
-        val toolDef = miscToolDefinition()
-        val pending = pendingToolCall(
-            id = 3L,
-            toolDefinitionId = toolDef.id,
-            toolName = toolDef.name
-        )
-        val preference = UserToolApprovalPreference(
-            userId = 1L,
-            toolDefinitionId = toolDef.id,
-            autoApprove = false,
-            denialReason = "Unsafe tool"
-        )
-        coEvery { userToolApprovalPreferenceDao.getPreference(1L, toolDef.id) } returns preference.right()
-        val updates = trackToolCallUpdates()
-
-        val events = orchestrator.executeAndUpdateToolCalls(
-            userId = 1L,
-            pendingToolCalls = listOf(pending),
-            toolDefinitions = listOf(toolDef),
-            toolApprovalFlow = emptyFlow()
-        ).toList()
-
-        assertEquals(1, events.size)
-        val completed = assertIs<ToolCallExecutionEvent.ToolCallCompleted>(events[0])
-        assertEquals(ToolCallStatus.USER_DENIED, completed.toolCall.status)
-        assertEquals("Unsafe tool", completed.toolCall.denialReason)
-
-        assertEquals(listOf(ToolCallStatus.USER_DENIED), updates.map { it.status })
-
-        coVerify(exactly = 0) { toolExecutorFactory.getExecutor(any()) }
-        coVerify(exactly = 0) { toolExecutor.executeTool(any(), any()) }
-        coVerify(exactly = 1) { toolCallDao.updateToolCall(any()) }
-    }
-
-    @Test
-    fun `executeAndUpdateToolCalls should handle manual denial for non-Local-MCP tool and skip execution`() = runTest {
-        val toolDef = miscToolDefinition()
-        val pending = pendingToolCall(
-            id = 4L,
-            toolDefinitionId = toolDef.id,
-            toolName = toolDef.name
+        val result = BuiltInToolExecutionResult(
+            output = "Hello, world!",
+            isError = false,
         )
         coEvery {
-            userToolApprovalPreferenceDao.getPreference(1L, toolDef.id)
-        } returns UserToolApprovalPreferenceError.NotFound(1L, toolDef.id).left()
-        val updates = trackToolCallUpdates()
+            builtInWorkerToolExecutor.executeTool(toolDef, pending, approval.signedRequest)
+        } returns BuiltInWorkerToolExecutorEvent.ToolExecutionResult(result)
 
         val events = orchestrator.executeAndUpdateToolCalls(
             userId = 1L,
             pendingToolCalls = listOf(pending),
             toolDefinitions = listOf(toolDef),
-            toolApprovalFlow = flowOf(standardApproval(pending.id, approved = false, denialReason = "Nope"))
-        ).toList()
-
-        assertEquals(2, events.size)
-        val requested = assertIs<ToolCallExecutionEvent.ToolCallApprovalRequested>(events[0])
-        assertEquals(ToolCallStatus.AWAITING_APPROVAL, requested.toolCall.status)
-        val completed = assertIs<ToolCallExecutionEvent.ToolCallCompleted>(events[1])
-        assertEquals(ToolCallStatus.USER_DENIED, completed.toolCall.status)
-        assertEquals("Nope", completed.toolCall.denialReason)
-
-        assertEquals(
-            listOf(ToolCallStatus.AWAITING_APPROVAL, ToolCallStatus.USER_DENIED),
-            updates.map { it.status }
-        )
-
-        coVerify(exactly = 0) { toolExecutorFactory.getExecutor(any()) }
-        coVerify(exactly = 0) { toolExecutor.executeTool(any(), any()) }
-        coVerify(exactly = 2) { toolCallDao.updateToolCall(any()) }
-    }
-
-    @Test
-    fun `executeAndUpdateToolCalls should execute non-Local-MCP tool after manual Standard approval`() = runTest {
-        val toolDef = miscToolDefinition()
-        val pending = pendingToolCall(
-            id = 5L,
-            toolDefinitionId = toolDef.id,
-            toolName = toolDef.name
-        )
-        coEvery {
-            userToolApprovalPreferenceDao.getPreference(1L, toolDef.id)
-        } returns UserToolApprovalPreferenceError.NotFound(1L, toolDef.id).left()
-        every { toolExecutorFactory.getExecutor(ToolType.WEB_SEARCH) } returns toolExecutor.right()
-        coEvery { toolExecutor.executeTool(toolDef, pending.input) } returns "manual result".right()
-        val updates = trackToolCallUpdates()
-
-        val events = orchestrator.executeAndUpdateToolCalls(
-            userId = 1L,
-            pendingToolCalls = listOf(pending),
-            toolDefinitions = listOf(toolDef),
-            toolApprovalFlow = flowOf(standardApproval(pending.id, approved = true))
+            toolApprovalFlow = flowOf(approval),
         ).toList()
 
         assertEquals(3, events.size)
@@ -452,15 +372,229 @@ class DefaultToolCallOrchestratorTest {
         assertEquals(ToolCallStatus.EXECUTING, executing.toolCall.status)
         val completed = assertIs<ToolCallExecutionEvent.ToolCallCompleted>(events[2])
         assertEquals(ToolCallStatus.SUCCESS, completed.toolCall.status)
-        assertEquals("manual result", completed.toolCall.output)
+        assertEquals("Hello, world!", completed.toolCall.output)
+        assertEquals(null, completed.toolCall.errorMessage)
 
         assertEquals(
             listOf(ToolCallStatus.AWAITING_APPROVAL, ToolCallStatus.EXECUTING, ToolCallStatus.SUCCESS),
             updates.map { it.status }
         )
 
-        coVerify(exactly = 1) { toolExecutor.executeTool(toolDef, pending.input) }
+        coVerify(exactly = 1) { builtInWorkerToolExecutor.executeTool(toolDef, pending, approval.signedRequest) }
+        coVerify(exactly = 0) { localMcpExecutor.executeTool(any(), any(), any()) }
         coVerify(exactly = 3) { toolCallDao.updateToolCall(any()) }
     }
 
+    @Test
+    fun `executeAndUpdateToolCalls should record a Built-in Worker tool error result and keep ERROR status`() = runTest {
+        val toolDef = builtInWorkerToolDefinition(id = 2L, workerId = 17L, builtInToolName = "write_file")
+        val pending = pendingToolCall(
+            id = 11L,
+            toolDefinitionId = toolDef.id,
+            toolName = toolDef.name,
+        )
+        val approval = builtInSignedApproval(
+            toolCallId = pending.id,
+            toolDefinitionId = toolDef.id,
+            workerId = toolDef.workerId,
+            builtInToolName = toolDef.builtInToolName,
+            approved = true,
+        )
+        val updates = trackToolCallUpdates()
+
+        // The worker reports a structured error result; the orchestrator must translate `isError=true`
+        // into `ToolCallStatus.ERROR` and surface the error message to the chat loop.
+        val result = BuiltInToolExecutionResult(
+            output = null,
+            isError = true,
+            errorMessage = "Permission denied: /etc/passwd is outside the workspace",
+            errorCode = "WORKSPACE_VIOLATION",
+        )
+        coEvery {
+            builtInWorkerToolExecutor.executeTool(toolDef, pending, approval.signedRequest)
+        } returns BuiltInWorkerToolExecutorEvent.ToolExecutionResult(result)
+
+        val events = orchestrator.executeAndUpdateToolCalls(
+            userId = 1L,
+            pendingToolCalls = listOf(pending),
+            toolDefinitions = listOf(toolDef),
+            toolApprovalFlow = flowOf(approval),
+        ).toList()
+
+        assertEquals(3, events.size)
+        val completed = assertIs<ToolCallExecutionEvent.ToolCallCompleted>(events[2])
+        assertEquals(ToolCallStatus.ERROR, completed.toolCall.status)
+        assertEquals(null, completed.toolCall.output)
+        assertEquals("Permission denied: /etc/passwd is outside the workspace", completed.toolCall.errorMessage)
+
+        assertEquals(
+            listOf(ToolCallStatus.AWAITING_APPROVAL, ToolCallStatus.EXECUTING, ToolCallStatus.ERROR),
+            updates.map { it.status }
+        )
+    }
+
+    @Test
+    fun `executeAndUpdateToolCalls should translate a Built-in Worker dispatch error into ERROR status`() = runTest {
+        val toolDef = builtInWorkerToolDefinition(id = 2L, workerId = 17L, builtInToolName = "run_command")
+        val pending = pendingToolCall(
+            id = 12L,
+            toolDefinitionId = toolDef.id,
+            toolName = toolDef.name,
+        )
+        val approval = builtInSignedApproval(
+            toolCallId = pending.id,
+            toolDefinitionId = toolDef.id,
+            workerId = toolDef.workerId,
+            builtInToolName = toolDef.builtInToolName,
+            approved = true,
+        )
+        val updates = trackToolCallUpdates()
+
+        // A worker-side dispatch failure (e.g. worker not connected) becomes a structured executor
+        // error and must be recorded as `ToolCallStatus.ERROR`.
+        coEvery {
+            builtInWorkerToolExecutor.executeTool(toolDef, pending, approval.signedRequest)
+        } returns BuiltInWorkerToolExecutorEvent.ToolExecutionError(
+            toolCallId = pending.id,
+            error = BuiltInWorkerToolExecutorError.OtherError(
+                "Assigned worker ${toolDef.workerId} is not connected",
+            ),
+        )
+
+        val events = orchestrator.executeAndUpdateToolCalls(
+            userId = 1L,
+            pendingToolCalls = listOf(pending),
+            toolDefinitions = listOf(toolDef),
+            toolApprovalFlow = flowOf(approval),
+        ).toList()
+
+        assertEquals(3, events.size)
+        val completed = assertIs<ToolCallExecutionEvent.ToolCallCompleted>(events[2])
+        assertEquals(ToolCallStatus.ERROR, completed.toolCall.status)
+        assertEquals("Assigned worker ${toolDef.workerId} is not connected", completed.toolCall.errorMessage)
+
+        assertEquals(
+            listOf(ToolCallStatus.AWAITING_APPROVAL, ToolCallStatus.EXECUTING, ToolCallStatus.ERROR),
+            updates.map { it.status }
+        )
+    }
+
+    @Test
+    fun `executeAndUpdateToolCalls should deny a rejected Built-in Worker tool call and skip execution`() = runTest {
+        val toolDef = builtInWorkerToolDefinition(id = 2L, workerId = 17L, builtInToolName = "run_command")
+        val pending = pendingToolCall(
+            id = 13L,
+            toolDefinitionId = toolDef.id,
+            toolName = toolDef.name,
+        )
+        val approval = builtInSignedApproval(
+            toolCallId = pending.id,
+            toolDefinitionId = toolDef.id,
+            workerId = toolDef.workerId,
+            builtInToolName = toolDef.builtInToolName,
+            approved = false,
+            denialReason = "Refused: run_command requires explicit consent",
+        )
+        val updates = trackToolCallUpdates()
+
+        val events = orchestrator.executeAndUpdateToolCalls(
+            userId = 1L,
+            pendingToolCalls = listOf(pending),
+            toolDefinitions = listOf(toolDef),
+            toolApprovalFlow = flowOf(approval),
+        ).toList()
+
+        assertEquals(2, events.size)
+        val requested = assertIs<ToolCallExecutionEvent.ToolCallApprovalRequested>(events[0])
+        assertEquals(ToolCallStatus.AWAITING_APPROVAL, requested.toolCall.status)
+        val completed = assertIs<ToolCallExecutionEvent.ToolCallCompleted>(events[1])
+        assertEquals(ToolCallStatus.USER_DENIED, completed.toolCall.status)
+        assertEquals("Refused: run_command requires explicit consent", completed.toolCall.denialReason)
+
+        assertEquals(
+            listOf(ToolCallStatus.AWAITING_APPROVAL, ToolCallStatus.USER_DENIED),
+            updates.map { it.status }
+        )
+
+        coVerify(exactly = 0) { builtInWorkerToolExecutor.executeTool(any(), any(), any()) }
+        coVerify(exactly = 2) { toolCallDao.updateToolCall(any()) }
+    }
+
+    @Test
+    fun `executeAndUpdateToolCalls should time out waiting for Built-in Worker approval and skip execution`() = runTest {
+        val toolDef = builtInWorkerToolDefinition(id = 2L, workerId = 17L, builtInToolName = "list_directory")
+        val pending = pendingToolCall(
+            id = 14L,
+            toolDefinitionId = toolDef.id,
+            toolName = toolDef.name,
+        )
+        val updates = trackToolCallUpdates()
+
+        val events = orchestrator.executeAndUpdateToolCalls(
+            userId = 1L,
+            pendingToolCalls = listOf(pending),
+            toolDefinitions = listOf(toolDef),
+            toolApprovalFlow = flow { delay(1_000.days) },
+        ).toList()
+
+        assertEquals(2, events.size)
+        val requested = assertIs<ToolCallExecutionEvent.ToolCallApprovalRequested>(events[0])
+        assertEquals(ToolCallStatus.AWAITING_APPROVAL, requested.toolCall.status)
+        val completed = assertIs<ToolCallExecutionEvent.ToolCallCompleted>(events[1])
+        assertEquals(ToolCallStatus.USER_DENIED, completed.toolCall.status)
+        assertEquals("Approval timeout (no response within 5 minutes)", completed.toolCall.denialReason)
+
+        assertEquals(
+            listOf(ToolCallStatus.AWAITING_APPROVAL, ToolCallStatus.USER_DENIED),
+            updates.map { it.status }
+        )
+
+        coVerify(exactly = 0) { builtInWorkerToolExecutor.executeTool(any(), any(), any()) }
+        coVerify(exactly = 2) { toolCallDao.updateToolCall(any()) }
+    }
+
+    @Test
+    fun `executeAndUpdateToolCalls should skip pending tool calls that are not in PENDING status`() = runTest {
+        // Tool calls that arrive in any non-PENDING state (e.g. resuming from a checkpoint, or a
+        // re-delivery from a previous attempt) must be completed without re-running the
+        // approval flow or the executor. This is the orchestrator's idempotency contract.
+        val toolDef = builtInWorkerToolDefinition(id = 2L, workerId = 17L, builtInToolName = "list_directory")
+        val alreadyExecuted = pendingToolCall(
+            id = 16L,
+            toolDefinitionId = toolDef.id,
+            toolName = toolDef.name,
+        ).copy(
+            status = ToolCallStatus.SUCCESS,
+            output = "previously-computed-output",
+        )
+        trackToolCallUpdates()
+
+        val events = orchestrator.executeAndUpdateToolCalls(
+            userId = 1L,
+            pendingToolCalls = listOf(alreadyExecuted),
+            toolDefinitions = listOf(toolDef),
+            toolApprovalFlow = flowOf(
+                builtInSignedApproval(
+                    toolCallId = alreadyExecuted.id,
+                    toolDefinitionId = toolDef.id,
+                    workerId = toolDef.workerId,
+                    builtInToolName = toolDef.builtInToolName,
+                    approved = true,
+                )
+            ),
+        ).toList()
+
+        assertEquals(1, events.size)
+        val completed = assertIs<ToolCallExecutionEvent.ToolCallCompleted>(events[0])
+        // The orchestrator must not override the existing status; the caller supplied `SUCCESS`
+        // because this tool call was resumed, not freshly executed.
+        assertEquals(ToolCallStatus.SUCCESS, completed.toolCall.status)
+        assertEquals("previously-computed-output", completed.toolCall.output)
+
+        // No executor call, no status update, no approval transition: the orchestrator is a no-op
+        // for already-processed tool calls.
+        coVerify(exactly = 0) { builtInWorkerToolExecutor.executeTool(any(), any(), any()) }
+        coVerify(exactly = 0) { localMcpExecutor.executeTool(any(), any(), any()) }
+        coVerify(exactly = 0) { toolCallDao.updateToolCall(any()) }
+    }
 }
