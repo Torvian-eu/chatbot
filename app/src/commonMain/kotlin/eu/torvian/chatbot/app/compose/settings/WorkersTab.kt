@@ -106,6 +106,9 @@ fun WorkersTab(
                     onAllowedScopesChange = { scopes ->
                         actions.onUpdateWorkerForm { it.copy(allowedScopes = scopes) }
                     },
+                    onToolNamePrefixChange = { prefix ->
+                        actions.onUpdateWorkerForm { it.copy(toolNamePrefix = prefix) }
+                    },
                     onConfirm = { actions.onSaveWorker() },
                     onDismiss = { actions.onCancelDialog() }
                 )
@@ -313,6 +316,7 @@ private fun EditWorkerDialog(
     formState: eu.torvian.chatbot.app.domain.contracts.WorkersFormState,
     onDisplayNameChange: (String) -> Unit,
     onAllowedScopesChange: (String) -> Unit,
+    onToolNamePrefixChange: (String) -> Unit,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -341,6 +345,15 @@ private fun EditWorkerDialog(
                     placeholder = { Text("comma-separated, e.g., chat:read, chat:write") },
                     singleLine = false,
                     maxLines = 3,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = formState.toolNamePrefix,
+                    onValueChange = onToolNamePrefixChange,
+                    label = { Text("Tool Name Prefix") },
+                    placeholder = { Text("optional, e.g. project1 (prefixes built-in tool names)") },
+                    singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
 

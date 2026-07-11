@@ -5,6 +5,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import eu.torvian.chatbot.app.domain.contracts.WorkersFormState
 import eu.torvian.chatbot.app.repository.AuthState
 import eu.torvian.chatbot.app.viewmodel.WorkersViewModel
 import eu.torvian.chatbot.common.models.worker.WorkerDto
@@ -57,7 +58,7 @@ fun WorkersTabRoute(
         override fun onLoadWorkers() = viewModel.loadWorkers()
         override fun onStartEditingWorker(worker: WorkerDto) = viewModel.startEditingWorker(worker)
         override fun onStartDeletingWorker(worker: WorkerDto) = viewModel.startDeletingWorker(worker)
-        override fun onUpdateWorkerForm(update: (eu.torvian.chatbot.app.domain.contracts.WorkersFormState) -> eu.torvian.chatbot.app.domain.contracts.WorkersFormState) = viewModel.updateWorkerForm(update)
+        override fun onUpdateWorkerForm(update: (WorkersFormState) -> WorkersFormState) = viewModel.updateWorkerForm(update)
         override fun onSaveWorker() = viewModel.saveWorker()
         override fun onDeleteWorker(workerId: Long) = viewModel.deleteWorker(workerId)
         override fun onCancelDialog() = viewModel.cancelDialog()
