@@ -43,12 +43,16 @@ interface WorkerRepository {
      * @param id The unique identifier of the worker to update.
      * @param displayName New display name for the worker.
      * @param allowedScopes Updated list of allowed scopes for the worker.
+     * @param toolNamePrefix Optional prefix applied to the public names of the worker's built-in tools.
+     *   A blank value is treated as no prefix. When the prefix changes, the server also renames the
+     *   worker's built-in tool public names.
      * @return Either [RepositoryError] if update fails, or Unit on success.
      */
     suspend fun updateWorker(
         id: Long,
         displayName: String,
-        allowedScopes: List<String>
+        allowedScopes: List<String>,
+        toolNamePrefix: String? = null
     ): Either<RepositoryError, Unit>
 
     /**
