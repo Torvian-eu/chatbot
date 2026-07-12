@@ -90,9 +90,13 @@ fun BuiltInToolsTab(
 
             is DataState.Success -> {
                 val tools = toolsState.data
-                if (tools.isEmpty()) {
+                if (state.selectedWorkerId == null) {
+                    SelectWorkerPrompt(modifier = Modifier.fillMaxSize())
+                }
+                else if (tools.isEmpty()) {
                     EmptyBuiltInToolsList(modifier = Modifier.fillMaxSize())
-                } else {
+                }
+                else {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
