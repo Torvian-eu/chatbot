@@ -38,13 +38,6 @@ fun BuiltInToolsTabRoute(
         viewModel.loadWorkersIfNeeded()
     }
 
-    // Reset the worker selection when the category is re-selected in the sidebar.
-    LaunchedEffect(categoryResetSignal) {
-        if (categoryResetSignal > 0) {
-            viewModel.selectWorker(null)
-        }
-    }
-
     // Collect tab state.
     val workersState by viewModel.workersState.collectAsState()
     val selectedWorkerId by viewModel.selectedWorkerId.collectAsState()
