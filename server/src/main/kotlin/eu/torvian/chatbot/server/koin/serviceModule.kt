@@ -88,6 +88,7 @@ fun serviceModule() = module {
         BuiltInToolDefinitionServiceImpl(
             workerDao = get(),
             builtInToolDefinitionDao = get(),
+            builtInToolDefinitionSeeder = get(),
             toolService = get(),
             transactionScope = get()
         )

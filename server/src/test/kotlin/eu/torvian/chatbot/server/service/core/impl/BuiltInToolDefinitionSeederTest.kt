@@ -4,6 +4,7 @@ import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
 import eu.torvian.chatbot.common.models.tool.BuiltInToolCatalog
 import eu.torvian.chatbot.common.models.tool.ToolType
+import kotlinx.serialization.json.buildJsonObject
 import eu.torvian.chatbot.server.data.dao.BuiltInToolDefinitionDao
 import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
 import eu.torvian.chatbot.server.data.dao.WorkerDao
@@ -156,5 +157,98 @@ class BuiltInToolDefinitionSeederTest {
 
         val after = builtInToolDefinitionDao.getToolsByWorkerId(workerId)
         assertTrue(after.all { it.name == it.builtInToolName })
+    }
+
+    @Test
+    fun `resetToDefaults adds missing catalog tools to an old worker`() = runTest {
+        val workerId = createWorker("worker-reset-missing")
+
+        // Seed only a subset of the catalog (simulating an old worker registered before new tools).
+        val oldSpecs = BuiltInToolCatalog.allTools.take(2)
+        // Manually insert just two tools to mimic an old worker state (disabled).
+        for (spec in oldSpecs) {
+            val created = toolDefinitionDao.insertToolDefinition(
+                name = spec.builtInToolName,
+                description = spec.description,
+                type = ToolType.BUILTIN_WORKER,
+                config = buildJsonObject { },
+                inputSchema = spec.inputSchema,
+                outputSchema = null,
+                isEnabled = false
+            )
+            builtInToolDefinitionDao.insertTool(created.id, workerId, spec.builtInToolName)
+        }
+
+        val result = seeder.resetToDefaults(workerId, null)
+
+        assertTrue(result.isRight(), "reset failed: ${result.leftOrNull()}")
+        val tools = result.getOrNull()!!
+        // All catalog tools are now present.
+        assertEquals(BuiltInToolCatalog.size, tools.size)
+        // The two pre-existing tools keep their disabled state (preserved by reset).
+        val existing = tools.filter { it.builtInToolName in oldSpecs.map { s -> s.builtInToolName } }
+        assertEquals(2, existing.size)
+        assertTrue(existing.all { !it.isEnabled })
+        // The newly added tools are enabled (reset creates missing tools as enabled).
+        val added = tools.filter { it.builtInToolName !in oldSpecs.map { s -> s.builtInToolName } }
+        assertEquals(BuiltInToolCatalog.size - 2, added.size)
+        assertTrue(added.all { it.isEnabled })
+    }
+
+    @Test
+    fun `resetToDefaults repairs drifted metadata but preserves enabled state`() = runTest {
+        val workerId = createWorker("worker-reset-repair")
+
+        seeder.seedDefaultToolsForWorker(workerId, null).getOrNull()!!
+        val before = builtInToolDefinitionDao.getToolsByWorkerId(workerId)
+        val target = before.first()
+
+        // Drift the description and disable the tool.
+        toolDefinitionDao.updateToolDefinition(
+            target.copy(description = "DRIFTED", isEnabled = false)
+        )
+
+        val result = seeder.resetToDefaults(workerId, null)
+
+        assertTrue(result.isRight(), "reset failed: ${result.leftOrNull()}")
+        val after = result.getOrNull()!!.associateBy { it.builtInToolName }
+        // Description is repaired from the catalog.
+        assertEquals(
+            BuiltInToolCatalog.specFor(target.builtInToolName)!!.description,
+            after[target.builtInToolName]!!.description
+        )
+        // Enabled state is preserved (still disabled).
+        assertEquals(false, after[target.builtInToolName]!!.isEnabled)
+        // Count is unchanged.
+        assertEquals(BuiltInToolCatalog.size, after.size)
+    }
+
+    @Test
+    fun `resetToDefaults is idempotent and does not change in-sync tools`() = runTest {
+        val workerId = createWorker("worker-reset-idempotent")
+
+        seeder.seedDefaultToolsForWorker(workerId, null).getOrNull()!!
+        val first = seeder.resetToDefaults(workerId, null).getOrNull()!!
+        val second = seeder.resetToDefaults(workerId, null).getOrNull()!!
+
+        assertEquals(BuiltInToolCatalog.size, first.size)
+        assertEquals(BuiltInToolCatalog.size, second.size)
+        assertEquals(first.map { it.id }.toSet(), second.map { it.id }.toSet())
+    }
+
+    @Test
+    fun `resetToDefaults re-applies prefix to public names`() = runTest {
+        val workerId = createWorker("worker-reset-prefix")
+
+        // Seed without prefix first.
+        seeder.seedDefaultToolsForWorker(workerId, null).getOrNull()!!
+
+        // Reset with a prefix; public names should reflect it.
+        val result = seeder.resetToDefaults(workerId, "project1")
+
+        assertTrue(result.isRight(), "reset failed: ${result.leftOrNull()}")
+        val tools = result.getOrNull()!!
+        assertEquals(BuiltInToolCatalog.size, tools.size)
+        assertTrue(tools.all { it.name == "project1.${it.builtInToolName}" })
     }
 }

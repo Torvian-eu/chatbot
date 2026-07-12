@@ -51,12 +51,19 @@ fun BuiltInToolsTab(
 ) {
     // Tracks the tool currently being edited in the dialog (null when closed).
     var editingTool by remember { mutableStateOf<BuiltInWorkerToolDefinition?>(null) }
+    // Tracks whether the reset-to-defaults confirmation dialog is open.
+    var showResetConfirm by remember { mutableStateOf(false) }
+    // Whether a reset is currently in flight, used to disable the button and show progress.
+    val resetInProgress = state.resetInProgress
 
     Column(modifier = modifier.fillMaxSize()) {
         WorkerSelectionHeader(
             workersState = state.workersState,
             selectedWorkerId = state.selectedWorkerId,
             onWorkerSelected = actions::onSelectWorker,
+            resetEnabled = state.selectedWorkerId != null && !resetInProgress,
+            onReset = { showResetConfirm = true },
+            resetInProgress = resetInProgress,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 16.dp)
@@ -129,10 +136,25 @@ fun BuiltInToolsTab(
             }
         )
     }
+
+    // Reset confirmation dialog. The reset runs in the ViewModel (fire-and-forget), so the
+    // dialog is dismissed immediately on confirm rather than waiting for completion.
+    if (showResetConfirm) {
+        ResetConfirmationDialog(
+            onConfirm = {
+                actions.onResetToDefaults()
+                showResetConfirm = false
+            },
+            onDismiss = { showResetConfirm = false }
+        )
+    }
 }
 
 /**
- * Header containing the worker selection dropdown.
+ * Header containing the worker selection dropdown and the reset-to-defaults action.
+ *
+ * The reset control is only enabled when a worker is selected and no reset is in flight, so it
+ * is effectively hidden (disabled) until the user picks a worker.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -140,6 +162,9 @@ private fun WorkerSelectionHeader(
     workersState: DataState<*, List<WorkerDto>>,
     selectedWorkerId: Long?,
     onWorkerSelected: (Long?) -> Unit,
+    resetEnabled: Boolean,
+    onReset: () -> Unit,
+    resetInProgress: Boolean,
     modifier: Modifier = Modifier
 ) {
     val workers = (workersState as? DataState.Success)?.data ?: emptyList()
@@ -148,50 +173,74 @@ private fun WorkerSelectionHeader(
     val selectedWorker = workers.find { it.id == selectedWorkerId }
 
     Column(modifier = modifier) {
-        ExposedDropdownMenuBox(
-            expanded = expanded,
-            onExpandedChange = { expanded = it },
-            modifier = Modifier.fillMaxWidth()
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            OutlinedTextField(
-                value = selectedWorker?.displayName ?: "",
-                onValueChange = { },
-                readOnly = true,
-                label = { Text("Worker") },
-                placeholder = { Text("Select a worker") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .menuAnchor(type = ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-            )
-
-            ExposedDropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false }
-            ) {
-                if (workers.isEmpty()) {
-                    DropdownMenuItem(
-                        text = { Text("No workers available") },
-                        onClick = { expanded = false },
-                        enabled = false
+            // The dropdown takes the remaining width; the reset button sits to its right.
+            Box(modifier = Modifier.weight(1f)) {
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = { expanded = it },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        value = selectedWorker?.displayName ?: "",
+                        onValueChange = { },
+                        readOnly = true,
+                        label = { Text("Worker") },
+                        placeholder = { Text("Select a worker") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(type = ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                     )
-                } else {
-                    workers.forEach { worker ->
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    worker.displayName,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+
+                    ExposedDropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
+                    ) {
+                        if (workers.isEmpty()) {
+                            DropdownMenuItem(
+                                text = { Text("No workers available") },
+                                onClick = { expanded = false },
+                                enabled = false
+                            )
+                        } else {
+                            workers.forEach { worker ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            worker.displayName,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    },
+                                    onClick = {
+                                        onWorkerSelected(worker.id)
+                                        expanded = false
+                                    }
                                 )
-                            },
-                            onClick = {
-                                onWorkerSelected(worker.id)
-                                expanded = false
                             }
-                        )
+                        }
                     }
                 }
+            }
+
+            // Reset-to-defaults action. Disabled until a worker is selected and no reset is running.
+            OutlinedButton(
+                onClick = onReset,
+                enabled = resetEnabled
+            ) {
+                if (resetInProgress) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Text("Reset")
             }
         }
 
@@ -504,6 +553,44 @@ private fun EmptyBuiltInToolsList(modifier: Modifier = Modifier) {
             )
         }
     }
+}
+
+/**
+ * Confirmation dialog shown before resetting a worker's built-in tools to the catalog defaults.
+ *
+ * Resetting overwrites each tool's description and input schema with the catalog values and adds
+ * any tools that are missing from the worker, so the user must explicitly confirm. Enabled/disabled
+ * choices and approval preferences are preserved, which is surfaced in the dialog copy.
+ *
+ * @param onConfirm Callback invoked when the user confirms the reset.
+ * @param onDismiss Callback invoked when the dialog is dismissed without confirming.
+ */
+@Composable
+private fun ResetConfirmationDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Reset built-in tools?") },
+        text = {
+            Text(
+                "This restores the worker's built-in tools to their default definitions. " +
+                    "Custom descriptions and input schemas will be overwritten, and any missing " +
+                    "tools will be added. Enabled/disabled choices and approval preferences are kept."
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("Reset")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 /**

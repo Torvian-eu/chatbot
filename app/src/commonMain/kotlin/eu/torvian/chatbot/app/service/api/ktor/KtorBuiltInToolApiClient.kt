@@ -42,5 +42,12 @@ class KtorBuiltInToolApiClient(client: HttpClient) : BaseApiResourceClient(clien
             }.body()
         }
     }
-}
 
+    override suspend fun resetBuiltInToolsToDefaults(
+        workerId: Long
+    ): Either<ApiResourceError, List<BuiltInWorkerToolDefinition>> {
+        return safeApiCall {
+            client.post(BuiltInToolResource.ResetByWorkerId(workerId = workerId)).body()
+        }
+    }
+}

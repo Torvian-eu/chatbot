@@ -1,5 +1,6 @@
 package eu.torvian.chatbot.server.service.core.error.builtin
 
+import eu.torvian.chatbot.server.service.core.error.tool.SeedBuiltInToolsError
 import eu.torvian.chatbot.server.service.core.error.tool.ValidateToolError
 
 /**
@@ -54,3 +55,29 @@ sealed interface UpdateBuiltInToolError : BuiltInToolDefinitionServiceError {
     data class ValidationError(val error: ValidateToolError) : UpdateBuiltInToolError
 }
 
+/**
+ * Errors that can occur when resetting a worker's built-in tools to catalog defaults.
+ */
+sealed interface ResetBuiltInToolsError : BuiltInToolDefinitionServiceError {
+    /**
+     * The referenced worker was not found.
+     *
+     * @property workerId The worker identifier that was not found.
+     */
+    data class WorkerNotFound(val workerId: Long) : ResetBuiltInToolsError
+
+    /**
+     * The authenticated user is not the owner of the referenced worker.
+     *
+     * @property workerId The worker identifier the user tried to access.
+     * @property workerOwnerUserId The actual owner user identifier of the worker.
+     */
+    data class Forbidden(val workerId: Long, val workerOwnerUserId: Long) : ResetBuiltInToolsError
+
+    /**
+     * The reconciliation with the catalog failed while creating or repairing tool definitions.
+     *
+     * @property error The underlying [SeedBuiltInToolsError] describing the failure.
+     */
+    data class SeedFailed(val error: SeedBuiltInToolsError) : ResetBuiltInToolsError
+}

@@ -16,12 +16,15 @@ import eu.torvian.chatbot.common.models.worker.WorkerDto
  * @property toolsState Reactive state of the built-in tools for the selected worker.
  * @property approvalPreferencesState Reactive state of the user's tool approval preferences,
  *   used to render the auto-approval mode of each tool row.
+ * @property resetInProgress Whether a reset-to-defaults operation is currently in flight, used
+ *   to disable the reset control and show progress.
  */
 data class BuiltInToolsTabState(
     val workersState: DataState<RepositoryError, List<WorkerDto>>,
     val selectedWorkerId: Long?,
     val toolsState: DataState<RepositoryError, List<BuiltInWorkerToolDefinition>>,
-    val approvalPreferencesState: DataState<RepositoryError, List<UserToolApprovalPreference>>
+    val approvalPreferencesState: DataState<RepositoryError, List<UserToolApprovalPreference>>,
+    val resetInProgress: Boolean
 )
 
 /**
@@ -63,4 +66,9 @@ interface BuiltInToolsTabActions {
      * @param toolDefinitionId The tool definition identifier whose preference should be cleared.
      */
     fun onClearApprovalPreference(toolDefinitionId: Long)
+
+    /**
+     * Resets the built-in tools of the currently selected worker to the catalog defaults.
+     */
+    fun onResetToDefaults()
 }

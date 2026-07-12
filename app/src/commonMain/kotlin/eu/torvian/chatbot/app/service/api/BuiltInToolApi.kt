@@ -46,5 +46,15 @@ interface BuiltInToolApi {
      *         or [Either.Left] containing a [ApiResourceError] on failure (e.g., not found, invalid input).
      */
     suspend fun updateBuiltInTool(tool: BuiltInWorkerToolDefinition): Either<ApiResourceError, BuiltInWorkerToolDefinition>
-}
 
+    /**
+     * Resets a worker's built-in tools to the catalog defaults.
+     *
+     * Corresponds to `POST /api/v1/built-in-tools/worker/{workerId}/reset`.
+     *
+     * @param workerId The unique identifier of the worker whose built-in tools should be reset.
+     * @return [Either.Right] containing the reset list of [BuiltInWorkerToolDefinition] on success,
+     *         or [Either.Left] containing a [ApiResourceError] on failure (e.g. not found, forbidden).
+     */
+    suspend fun resetBuiltInToolsToDefaults(workerId: Long): Either<ApiResourceError, List<BuiltInWorkerToolDefinition>>
+}

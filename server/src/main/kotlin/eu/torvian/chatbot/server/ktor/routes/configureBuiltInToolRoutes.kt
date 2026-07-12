@@ -10,6 +10,7 @@ import eu.torvian.chatbot.server.domain.security.AuthSchemes
 import eu.torvian.chatbot.server.ktor.auth.getUserId
 import eu.torvian.chatbot.server.service.core.BuiltInToolDefinitionService
 import eu.torvian.chatbot.server.service.core.error.builtin.GetBuiltInToolsError
+import eu.torvian.chatbot.server.service.core.error.builtin.ResetBuiltInToolsError
 import eu.torvian.chatbot.server.service.core.error.builtin.UpdateBuiltInToolError
 import eu.torvian.chatbot.server.service.core.error.builtin.toApiError
 import io.ktor.http.HttpStatusCode
@@ -26,6 +27,7 @@ import io.ktor.server.routing.Route
  * This function sets up the following endpoints:
  * - GET /api/v1/built-in-tools/worker/{workerId} - List all built-in tools for a worker
  * - PUT /api/v1/built-in-tools/{toolId} - Update a built-in tool definition (full body)
+ * - POST /api/v1/built-in-tools/worker/{workerId}/reset - Reset built-in tools to catalog defaults
  *
  * All endpoints require user JWT authentication. Ownership is enforced at the
  * service layer: a user can only view or modify tools belonging to their own workers.
@@ -70,6 +72,19 @@ fun Route.configureBuiltInToolRoutes(
             val result = either {
                 withError({ e: UpdateBuiltInToolError -> e.toApiError() }) {
                     builtInToolDefinitionService.updateBuiltInTool(userId, tool).bind()
+                }
+            }
+            call.respondEither(result)
+        }
+
+        // POST /api/v1/built-in-tools/worker/{workerId}/reset - Reset built-in tools to catalog defaults
+        post<BuiltInToolResource.ResetByWorkerId> { resource ->
+            val userId = call.getUserId()
+            val workerId = resource.workerId
+
+            val result = either {
+                withError({ e: ResetBuiltInToolsError -> e.toApiError() }) {
+                    builtInToolDefinitionService.resetBuiltInToolsToDefaults(userId, workerId).bind()
                 }
             }
             call.respondEither(result)

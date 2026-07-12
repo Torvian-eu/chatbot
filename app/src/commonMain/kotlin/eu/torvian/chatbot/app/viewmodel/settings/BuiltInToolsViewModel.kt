@@ -55,6 +55,14 @@ class BuiltInToolsViewModel(
      */
     val selectedWorkerId: StateFlow<Long?> = _selectedWorkerId.asStateFlow()
 
+    private val _resetInProgress = MutableStateFlow(false)
+
+    /**
+     * Whether a reset-to-defaults operation is currently in flight. Used by the UI to disable the
+     * reset control and show progress.
+     */
+    val resetInProgress: StateFlow<Boolean> = _resetInProgress.asStateFlow()
+
     /**
      * Reactive stream of built-in tools for the currently selected worker.
      */
@@ -204,6 +212,28 @@ class BuiltInToolsViewModel(
                         )
                     }
             }
+        }
+    }
+
+    /**
+     * Resets the built-in tools of the currently selected worker to the catalog defaults.
+     *
+     * Reconciles the worker's tools with the server catalog (missing tools are created, existing
+     * tools repaired) while preserving enabled/disabled choices and approval preferences. The user
+     * is notified on failure. No-op when no worker is selected.
+     */
+    fun resetToDefaults() {
+        val workerId = _selectedWorkerId.value ?: return
+        viewModelScope.launch(uiDispatcher) {
+            _resetInProgress.value = true
+            builtInToolRepository.resetToDefaults(workerId)
+                .onLeft { error ->
+                    notificationService.repositoryError(
+                        error = error,
+                        shortMessage = "Failed to reset built-in tools"
+                    )
+                }
+            _resetInProgress.value = false
         }
     }
 }

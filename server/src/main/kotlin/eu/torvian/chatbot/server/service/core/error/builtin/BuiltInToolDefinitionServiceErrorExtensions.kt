@@ -3,6 +3,8 @@ package eu.torvian.chatbot.server.service.core.error.builtin
 import eu.torvian.chatbot.common.api.ApiError
 import eu.torvian.chatbot.common.api.CommonApiErrorCodes
 import eu.torvian.chatbot.common.api.apiError
+import eu.torvian.chatbot.server.service.core.BuiltInToolDefinitionService
+import eu.torvian.chatbot.server.service.core.error.tool.SeedBuiltInToolsError
 import eu.torvian.chatbot.server.service.core.error.tool.toApiError
 
 /**
@@ -51,3 +53,31 @@ fun UpdateBuiltInToolError.toApiError(): ApiError = when (this) {
     is UpdateBuiltInToolError.ValidationError -> error.toApiError()
 }
 
+/**
+ * Converts a [ResetBuiltInToolsError] to an [ApiError].
+ */
+fun ResetBuiltInToolsError.toApiError(): ApiError = when (this) {
+    is ResetBuiltInToolsError.WorkerNotFound -> apiError(
+        apiCode = CommonApiErrorCodes.NOT_FOUND,
+        message = "Worker not found",
+        "workerId" to workerId.toString()
+    )
+
+    is ResetBuiltInToolsError.Forbidden -> apiError(
+        apiCode = CommonApiErrorCodes.PERMISSION_DENIED,
+        message = "User does not own the referenced worker",
+        "workerId" to workerId.toString(),
+        "ownerUserId" to workerOwnerUserId.toString()
+    )
+
+    is ResetBuiltInToolsError.SeedFailed -> when (error) {
+        is SeedBuiltInToolsError.ToolCreationFailed ->
+            error.error.toApiError()
+
+        is SeedBuiltInToolsError.LinkageFailed ->
+            apiError(
+                apiCode = CommonApiErrorCodes.INTERNAL,
+                message = "Failed to reset built-in tools: linkage error"
+            )
+    }
+}

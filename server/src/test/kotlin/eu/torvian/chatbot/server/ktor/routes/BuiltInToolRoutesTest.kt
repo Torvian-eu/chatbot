@@ -6,6 +6,7 @@ import eu.torvian.chatbot.common.api.resources.BuiltInToolResource
 import eu.torvian.chatbot.common.api.resources.href
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
+import eu.torvian.chatbot.common.models.tool.BuiltInToolCatalog
 import eu.torvian.chatbot.common.models.tool.BuiltInWorkerToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.common.models.worker.WorkerDto
@@ -13,6 +14,8 @@ import eu.torvian.chatbot.server.data.dao.BuiltInToolDefinitionDao
 import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
 import eu.torvian.chatbot.server.data.dao.WorkerDao
 import eu.torvian.chatbot.server.data.entities.UserEntity
+import eu.torvian.chatbot.server.data.tables.BuiltInToolDefinitionTable
+import eu.torvian.chatbot.server.data.tables.ToolDefinitionTable
 import eu.torvian.chatbot.server.service.security.CertificateService
 import eu.torvian.chatbot.server.testutils.auth.TestAuthHelper
 import eu.torvian.chatbot.server.testutils.auth.authenticate
@@ -245,6 +248,48 @@ class BuiltInToolRoutesTest {
         assertEquals(HttpStatusCode.NotFound, response.status)
         val error = response.body<ApiError>()
         assertEquals(CommonApiErrorCodes.NOT_FOUND.code, error.code)
+    }
+
+    @Test
+    fun `user can reset built-in tools of their own worker`() = app {
+        val token = authHelper.createUserAndGetToken(user1)
+        val worker = registerWorker(user1, "builtin-reset-own")
+        // Seed only a subset to simulate an old worker missing newer catalog tools.
+        seedBuiltInTools(worker.id).take(1)
+
+        val response = client.post(
+            href(BuiltInToolResource.ResetByWorkerId(workerId = worker.id))
+        ) {
+            authenticate(token)
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val tools = response.body<List<BuiltInWorkerToolDefinition>>()
+        // Reset reconciles with the full catalog, so all catalog tools are now present.
+        assertEquals(BuiltInToolCatalog.size, tools.size)
+        assertTrue(tools.all { it.workerId == worker.id })
+    }
+
+    @Test
+    fun `user cannot reset built-in tools of another users worker`() = app {
+        authHelper.createUserAndGetToken(user1)
+        val worker = registerWorker(user1, "builtin-reset-forbidden")
+        seedBuiltInTools(worker.id)
+
+        val user2Token = authHelper.createUserAndGetToken(
+            user = user2,
+            session = authHelper.createTestSession(id = 997L, userId = user2.id)
+        )
+
+        val response = client.post(
+            href(BuiltInToolResource.ResetByWorkerId(workerId = worker.id))
+        ) {
+            authenticate(user2Token)
+        }
+
+        assertEquals(HttpStatusCode.Forbidden, response.status)
+        val error = response.body<ApiError>()
+        assertEquals(CommonApiErrorCodes.PERMISSION_DENIED.code, error.code)
     }
 
     /**
