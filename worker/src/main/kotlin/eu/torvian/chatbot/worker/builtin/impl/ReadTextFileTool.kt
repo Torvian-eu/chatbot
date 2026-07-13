@@ -67,8 +67,13 @@ class ReadTextFileTool : BuiltInTool {
                 val (startIdx, endIdx) = resolveSlice(range, allLines.size)
                 val selected = allLines.subList(startIdx, endIdx)
 
+                // Prefix a single concise header line (relative path + 1-based line range) so the
+                // consumer knows which file and lines were read without re-counting the content;
+                // keeps token usage low.
+                val header = buildRangeHeader(path, startIdx, endIdx, allLines.size)
+                val body = selected.joinToString(separator = "\n")
                 BuiltInToolExecutionResult(
-                    output = selected.joinToString(separator = "\n"),
+                    output = if (body.isEmpty()) header else "$header\n$body",
                 )
             } catch (_: NoSuchFileException) {
                 errorResult(BuiltInToolExecutionError.NOT_FOUND, "File not found: $path")
@@ -106,6 +111,30 @@ class ReadTextFileTool : BuiltInTool {
     private fun JsonPrimitive.contentOrNull(): String? = if (isString) content else null
 
     private fun JsonElement.intOrNull(): Int? = jsonPrimitive.content.toIntOrNull()
+
+    /**
+     * Builds a single concise header line describing which 1-based lines were read from [path].
+     *
+     * The format is `=== <path> (lines:<first>-<last> of <total>) ===` (or a single `<n>` for one
+     * line, or `none` when nothing was read). [path] is the workspace-relative path supplied by the
+     * caller. This keeps the output token-friendly while telling the consumer exactly which file
+     * and lines were returned.
+     *
+     * @param path Workspace-relative path of the file that was read.
+     * @param startIdx 0-based inclusive start index of the slice.
+     * @param endIdx 0-based exclusive end index of the slice.
+     * @param total Total number of lines in the file.
+     * @return The header line.
+     */
+    private fun buildRangeHeader(path: String, startIdx: Int, endIdx: Int, total: Int): String {
+        val count = endIdx - startIdx
+        val range = when {
+            count <= 0 -> "none"
+            count == 1 -> "${startIdx + 1}"
+            else -> "${startIdx + 1}-$endIdx"
+        }
+        return "=== $path (lines:$range of $total) ==="
+    }
 
     private fun errorResult(code: String, message: String): BuiltInToolExecutionResult =
         BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code)

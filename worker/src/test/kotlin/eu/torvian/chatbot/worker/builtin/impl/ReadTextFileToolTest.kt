@@ -84,7 +84,7 @@ class ReadTextFileToolTest {
 
             val result = tool.execute(buildInput("sample.txt"), context(dir))
 
-            assertEquals("line1\nline2\nline3", assertSuccess(result))
+            assertEquals("=== sample.txt (lines:1-3 of 3) ===\nline1\nline2\nline3", assertSuccess(result))
         } finally {
             dir.toFile().deleteRecursively()
         }
@@ -99,7 +99,7 @@ class ReadTextFileToolTest {
 
             val result = tool.execute(buildInput("sample.txt", 1 to 3), context(dir))
 
-            assertEquals("line2\nline3", assertSuccess(result))
+            assertEquals("=== sample.txt (lines:2-3 of 4) ===\nline2\nline3", assertSuccess(result))
         } finally {
             dir.toFile().deleteRecursively()
         }
@@ -114,7 +114,7 @@ class ReadTextFileToolTest {
 
             val result = tool.execute(buildInput("sample.txt", null to 2), context(dir))
 
-            assertEquals("line1\nline2", assertSuccess(result))
+            assertEquals("=== sample.txt (lines:1-2 of 4) ===\nline1\nline2", assertSuccess(result))
         } finally {
             dir.toFile().deleteRecursively()
         }
@@ -129,7 +129,7 @@ class ReadTextFileToolTest {
 
             val result = tool.execute(buildInput("sample.txt", -2 to null), context(dir))
 
-            assertEquals("line3\nline4", assertSuccess(result))
+            assertEquals("=== sample.txt (lines:3-4 of 4) ===\nline3\nline4", assertSuccess(result))
         } finally {
             dir.toFile().deleteRecursively()
         }
@@ -144,7 +144,7 @@ class ReadTextFileToolTest {
 
             val result = tool.execute(buildInput("sample.txt", 1 to -1), context(dir))
 
-            assertEquals("line2\nline3", assertSuccess(result))
+            assertEquals("=== sample.txt (lines:2-3 of 4) ===\nline2\nline3", assertSuccess(result))
         } finally {
             dir.toFile().deleteRecursively()
         }
@@ -159,7 +159,7 @@ class ReadTextFileToolTest {
 
             val result = tool.execute(buildInput("sample.txt", 1 to 100), context(dir))
 
-            assertEquals("line2\nline3", assertSuccess(result))
+            assertEquals("=== sample.txt (lines:2-3 of 3) ===\nline2\nline3", assertSuccess(result))
         } finally {
             dir.toFile().deleteRecursively()
         }
