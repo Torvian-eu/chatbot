@@ -10,7 +10,7 @@ import kotlinx.serialization.json.*
  * so the LLM can discover and call them, and the worker tool implementations reuse the same
  * [BuiltInToolSpec] values to keep their advertised schema in sync with what is persisted.
  *
- * The [builtInToolName] is always the unprefixed canonical name (e.g. `read_text_file`); the server
+ * The [BuiltInToolSpec.builtInToolName] is always the unprefixed canonical name (e.g. `read_text_file`); the server
  * derives the public (possibly prefixed) name at seeding time.
  */
 object BuiltInToolCatalog {
@@ -210,6 +210,11 @@ object BuiltInToolCatalog {
             }
         ),
     )
+
+    /**
+     * Number of built-in tool specifications in the catalog.
+     */
+    val size: Int get() = allTools.size
 
     /**
      * Looks up a built-in tool specification by its unprefixed canonical name.

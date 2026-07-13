@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.service.core.impl
 
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
+import eu.torvian.chatbot.common.models.tool.BuiltInToolCatalog
 import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.server.data.dao.BuiltInToolDefinitionDao
 import eu.torvian.chatbot.server.data.dao.ToolDefinitionDao
@@ -20,9 +21,9 @@ import kotlin.test.assertTrue
 /**
  * Tests for [BuiltInToolDefinitionSeeder].
  *
- * Verifies that the eight default built-in tools are seeded for a worker, that seeding is
+ * Verifies that the default built-in tools are seeded for a worker, that seeding is
  * idempotent, that the worker prefix is reflected in public names, and that prefix updates rename
- * only the public name while preserving the unprefixed [builtInToolName].
+ * only the public name while preserving the unprefixed `builtInToolName`.
  */
 class BuiltInToolDefinitionSeederTest {
 
@@ -78,24 +79,21 @@ class BuiltInToolDefinitionSeederTest {
     }
 
     @Test
-    fun `seedDefaultToolsForWorker creates the 8 default built-in tools`() = runTest {
-        val workerId = createWorker("worker-seed-8")
+    fun `seedDefaultToolsForWorker creates the default built-in tools`() = runTest {
+        val workerId = createWorker("worker-seed")
 
         val result = seeder.seedDefaultToolsForWorker(workerId, null)
 
         assertTrue(result.isRight(), "seeding failed: ${result.leftOrNull()}")
         val tools = result.getOrNull()!!
-        assertEquals(8, tools.size)
+        assertEquals(BuiltInToolCatalog.size, tools.size)
         assertEquals(ToolType.BUILTIN_WORKER, tools.first().type)
         // All tools are enabled by default for newly registered workers.
         assertTrue(tools.all { it.isEnabled })
         // Public name equals the unprefixed built-in name when no prefix is provided.
         assertTrue(tools.all { it.name == it.builtInToolName })
         assertEquals(
-            setOf(
-                "read_text_file", "write_file", "edit_file", "create_directory",
-                "list_directory", "move_file", "search_files", "run_command"
-            ),
+            BuiltInToolCatalog.allTools.map { it.builtInToolName }.toSet(),
             tools.map { it.builtInToolName }.toSet()
         )
     }
@@ -107,8 +105,8 @@ class BuiltInToolDefinitionSeederTest {
         val first = seeder.seedDefaultToolsForWorker(workerId, null).getOrNull()!!
         val second = seeder.seedDefaultToolsForWorker(workerId, null).getOrNull()!!
 
-        assertEquals(8, first.size)
-        assertEquals(8, second.size)
+        assertEquals(BuiltInToolCatalog.size, first.size)
+        assertEquals(BuiltInToolCatalog.size, second.size)
         // Re-running must not create duplicate definitions.
         assertEquals(first.map { it.id }.toSet(), second.map { it.id }.toSet())
     }
@@ -119,10 +117,11 @@ class BuiltInToolDefinitionSeederTest {
 
         val tools = seeder.seedDefaultToolsForWorker(workerId, "project1").getOrNull()!!
 
-        assertEquals(8, tools.size)
+        assertEquals(BuiltInToolCatalog.size, tools.size)
         assertTrue(tools.all { it.name == "project1.${it.builtInToolName}" })
-        // The unprefixed internal name is preserved.
-        assertTrue(tools.all { it.builtInToolName == it.builtInToolName })
+        // The unprefixed internal name matches the catalog's canonical name.
+        val catalogNames = BuiltInToolCatalog.allTools.map { it.builtInToolName }.toSet()
+        assertTrue(tools.all { it.builtInToolName in catalogNames })
         assertEquals("project1.read_text_file", tools.first { it.builtInToolName == "read_text_file" }.name)
     }
 
@@ -139,7 +138,7 @@ class BuiltInToolDefinitionSeederTest {
         assertTrue(renameResult.isRight(), "rename failed: ${renameResult.leftOrNull()}")
 
         val after = builtInToolDefinitionDao.getToolsByWorkerId(workerId)
-        assertEquals(8, after.size)
+        assertEquals(BuiltInToolCatalog.size, after.size)
         for (tool in after) {
             // builtInToolName must be unchanged.
             assertEquals(beforeNames[tool.builtInToolName], beforeNames[tool.builtInToolName])

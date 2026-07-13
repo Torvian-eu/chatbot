@@ -2,6 +2,7 @@ package eu.torvian.chatbot.server.service.core.impl
 
 import eu.torvian.chatbot.common.misc.di.DIContainer
 import eu.torvian.chatbot.common.misc.di.get
+import eu.torvian.chatbot.common.models.tool.BuiltInToolCatalog
 import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.server.data.dao.BuiltInToolDefinitionDao
 import eu.torvian.chatbot.server.data.dao.WorkerDao
@@ -21,7 +22,7 @@ import kotlin.test.assertTrue
 /**
  * Transaction-wrapped integration tests for [WorkerService] prefix persistence and propagation.
  *
- * Verifies that registering a worker with a prefix seeds the eight built-in tools with prefixed
+ * Verifies that registering a worker with a prefix seeds the default built-in tools with prefixed
  * public names, that updating the prefix renames the public names while preserving the unprefixed
  * `builtInToolName`, and that clearing the prefix reverts the public names to the canonical names.
  * All assertions run inside the service transaction so the worker row and tool linkages stay
@@ -70,7 +71,7 @@ class WorkerServiceImplPrefixTest {
     }
 
     @Test
-    fun `registerWorker with prefix seeds 8 tools with prefixed public names and persists prefix`() = runTest {
+    fun `registerWorker with prefix seeds tools with prefixed public names and persists prefix`() = runTest {
         val result = service.registerWorker(
             ownerUserId = testUser.id,
             workerUid = "prefix-register-worker",
@@ -85,7 +86,7 @@ class WorkerServiceImplPrefixTest {
         assertEquals("project1", worker.toolNamePrefix)
 
         val tools = builtInToolDefinitionDao.getToolsByWorkerId(worker.id)
-        assertEquals(8, tools.size)
+        assertEquals(BuiltInToolCatalog.size, tools.size)
         assertEquals(ToolType.BUILTIN_WORKER, tools.first().type)
         assertTrue(tools.all { it.name == "project1.${it.builtInToolName}" })
         // The persisted worker row carries the prefix.
@@ -119,7 +120,7 @@ class WorkerServiceImplPrefixTest {
         assertEquals("project2", updated.getOrNull()!!.toolNamePrefix)
 
         val after = builtInToolDefinitionDao.getToolsByWorkerId(registered.id)
-        assertEquals(8, after.size)
+        assertEquals(BuiltInToolCatalog.size, after.size)
         for (tool in after) {
             // builtInToolName must be unchanged across the rename.
             assertEquals(beforeNames[tool.builtInToolName], beforeNames[tool.builtInToolName])
@@ -153,7 +154,7 @@ class WorkerServiceImplPrefixTest {
         assertEquals(null, updated.getOrNull()!!.toolNamePrefix)
 
         val after = builtInToolDefinitionDao.getToolsByWorkerId(registered.id)
-        assertEquals(8, after.size)
+        assertEquals(BuiltInToolCatalog.size, after.size)
         // Public names revert to the unprefixed canonical built-in names.
         assertTrue(after.all { it.name == it.builtInToolName })
         val persisted = workerDao.getWorkerById(registered.id).getOrNull()!!
