@@ -4,6 +4,7 @@ import arrow.core.Either
 import eu.torvian.chatbot.common.models.tool.BuiltInWorkerToolDefinition
 import eu.torvian.chatbot.server.service.core.error.builtin.GetBuiltInToolsError
 import eu.torvian.chatbot.server.service.core.error.builtin.UpdateBuiltInToolError
+import eu.torvian.chatbot.server.service.core.error.builtin.ResetBuiltInToolsError
 
 /**
  * Service interface for managing built-in worker tool definitions.
@@ -49,4 +50,22 @@ interface BuiltInToolDefinitionService {
         userId: Long,
         tool: BuiltInWorkerToolDefinition
     ): Either<UpdateBuiltInToolError, BuiltInWorkerToolDefinition>
+
+    /**
+     * Resets a worker's built-in tool definitions to the catalog defaults.
+     *
+     * Reconciles the persisted tools with [eu.torvian.chatbot.common.models.tool.BuiltInToolCatalog]:
+     * missing tools are created, existing tools have their catalog-derived fields repaired, and the
+     * worker's enabled/disabled choices and approval preferences are preserved. Ownership is verified
+     * before performing any change.
+     *
+     * @param userId The authenticated user identifier.
+     * @param workerId The worker whose built-in tools should be reset.
+     * @return Either a [ResetBuiltInToolsError] if ownership validation or reconciliation fails,
+     *         or the list of [BuiltInWorkerToolDefinition] after the reset.
+     */
+    suspend fun resetBuiltInToolsToDefaults(
+        userId: Long,
+        workerId: Long
+    ): Either<ResetBuiltInToolsError, List<BuiltInWorkerToolDefinition>>
 }

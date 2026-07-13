@@ -38,18 +38,12 @@ fun BuiltInToolsTabRoute(
         viewModel.loadWorkersIfNeeded()
     }
 
-    // Reset the worker selection when the category is re-selected in the sidebar.
-    LaunchedEffect(categoryResetSignal) {
-        if (categoryResetSignal > 0) {
-            viewModel.selectWorker(null)
-        }
-    }
-
     // Collect tab state.
     val workersState by viewModel.workersState.collectAsState()
     val selectedWorkerId by viewModel.selectedWorkerId.collectAsState()
     val toolsState by viewModel.toolsState.collectAsState()
     val approvalPreferencesState by viewModel.approvalPreferencesState.collectAsState()
+    val resetInProgress by viewModel.resetInProgress.collectAsState()
 
     // Update breadcrumbs.
     LaunchedEffect(Unit) {
@@ -61,7 +55,8 @@ fun BuiltInToolsTabRoute(
         workersState = workersState,
         selectedWorkerId = selectedWorkerId,
         toolsState = toolsState,
-        approvalPreferencesState = approvalPreferencesState
+        approvalPreferencesState = approvalPreferencesState,
+        resetInProgress = resetInProgress
     )
 
     // Build actions forwarding to the ViewModel.
@@ -75,6 +70,7 @@ fun BuiltInToolsTabRoute(
             viewModel.setApprovalPreference(toolDefinitionId, autoApprove)
         override fun onClearApprovalPreference(toolDefinitionId: Long) =
             viewModel.clearApprovalPreference(toolDefinitionId)
+        override fun onResetToDefaults() = viewModel.resetToDefaults()
     }
 
     // Call the presentational BuiltInToolsTab.

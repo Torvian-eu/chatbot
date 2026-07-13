@@ -16,9 +16,9 @@ import kotlin.test.assertTrue
 /**
  * Scenario-driven unit tests for [ReadTextFileTool].
  *
- * These tests lock down the current intended semantics: full UTF-8 reads, `head`/`tail` line
- * selection, mutual exclusion of `head` and `tail`, missing-file handling, and workspace
- * containment. They do not redesign the tool.
+ * These tests lock down the current intended semantics: full UTF-8 reads, `[start, end)` line
+ * range selection with Python slice semantics (0-based, negative-from-end, null open-ended),
+ * range validation, missing-file handling, and workspace containment. They do not redesign the tool.
  */
 class ReadTextFileToolTest {
 
@@ -32,14 +32,17 @@ class ReadTextFileToolTest {
      * Builds the JSON input object accepted by [ReadTextFileTool.execute].
      *
      * @param path Workspace-relative file path.
-     * @param head When non-null, number of leading lines to return.
-     * @param tail When non-null, number of trailing lines to return.
+     * @param range Optional `[start, end)` line range; elements may be null for an open end.
      * @return The input [kotlinx.serialization.json.JsonObject] for the tool.
      */
-    private fun buildInput(path: String, head: Int? = null, tail: Int? = null): JsonObject = buildJsonObject {
+    private fun buildInput(path: String, range: Pair<Int?, Int?>? = null): JsonObject = buildJsonObject {
         put("path", path)
-        if (head != null) put("head", head)
-        if (tail != null) put("tail", tail)
+        if (range != null) {
+            put("range", buildJsonArray {
+                add(range.first?.let { JsonPrimitive(it) } ?: JsonNull)
+                add(range.second?.let { JsonPrimitive(it) } ?: JsonNull)
+            })
+        }
     }
 
     /**
@@ -81,50 +84,113 @@ class ReadTextFileToolTest {
 
             val result = tool.execute(buildInput("sample.txt"), context(dir))
 
-            assertEquals("line1\nline2\nline3", assertSuccess(result))
+            assertEquals("=== sample.txt (lines:1-3 of 3) ===\nline1\nline2\nline3", assertSuccess(result))
         } finally {
             dir.toFile().deleteRecursively()
         }
     }
 
     @Test
-    fun `head returns only the first N lines`() = runTest {
+    fun `range selects a half-open start-end slice`() = runTest {
         val dir = createTempDirectory("read-text-file-test")
         try {
             val file = dir.resolve("sample.txt")
             file.writeText("line1\nline2\nline3\nline4", Charsets.UTF_8)
 
-            val result = tool.execute(buildInput("sample.txt", head = 2), context(dir))
+            val result = tool.execute(buildInput("sample.txt", 1 to 3), context(dir))
 
-            assertEquals("line1\nline2", assertSuccess(result))
+            assertEquals("=== sample.txt (lines:2-3 of 4) ===\nline2\nline3", assertSuccess(result))
         } finally {
             dir.toFile().deleteRecursively()
         }
     }
 
     @Test
-    fun `tail returns only the last N lines`() = runTest {
+    fun `null start with end returns the first N lines`() = runTest {
         val dir = createTempDirectory("read-text-file-test")
         try {
             val file = dir.resolve("sample.txt")
             file.writeText("line1\nline2\nline3\nline4", Charsets.UTF_8)
 
-            val result = tool.execute(buildInput("sample.txt", tail = 2), context(dir))
+            val result = tool.execute(buildInput("sample.txt", null to 2), context(dir))
 
-            assertEquals("line3\nline4", assertSuccess(result))
+            assertEquals("=== sample.txt (lines:1-2 of 4) ===\nline1\nline2", assertSuccess(result))
         } finally {
             dir.toFile().deleteRecursively()
         }
     }
 
     @Test
-    fun `supplying both head and tail is rejected as invalid input`() = runTest {
+    fun `negative start counts from the end`() = runTest {
+        val dir = createTempDirectory("read-text-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            file.writeText("line1\nline2\nline3\nline4", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("sample.txt", -2 to null), context(dir))
+
+            assertEquals("=== sample.txt (lines:3-4 of 4) ===\nline3\nline4", assertSuccess(result))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `negative end counts from the end`() = runTest {
+        val dir = createTempDirectory("read-text-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            file.writeText("line1\nline2\nline3\nline4", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("sample.txt", 1 to -1), context(dir))
+
+            assertEquals("=== sample.txt (lines:2-3 of 4) ===\nline2\nline3", assertSuccess(result))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `out-of-range bounds are clamped rather than rejected`() = runTest {
         val dir = createTempDirectory("read-text-file-test")
         try {
             val file = dir.resolve("sample.txt")
             file.writeText("line1\nline2\nline3", Charsets.UTF_8)
 
-            val result = tool.execute(buildInput("sample.txt", head = 1, tail = 1), context(dir))
+            val result = tool.execute(buildInput("sample.txt", 1 to 100), context(dir))
+
+            assertEquals("=== sample.txt (lines:2-3 of 3) ===\nline2\nline3", assertSuccess(result))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `range with both bounds null is rejected as invalid input`() = runTest {
+        val dir = createTempDirectory("read-text-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            file.writeText("line1\nline2\nline3", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("sample.txt", null to null), context(dir))
+
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `range with wrong arity is rejected as invalid input`() = runTest {
+        val dir = createTempDirectory("read-text-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            file.writeText("line1\nline2\nline3", Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildJsonObject { put("path", "sample.txt"); put("range", buildJsonArray { add(0) }) },
+                context(dir)
+            )
 
             assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
         } finally {
@@ -156,4 +222,3 @@ class ReadTextFileToolTest {
         }
     }
 }
-

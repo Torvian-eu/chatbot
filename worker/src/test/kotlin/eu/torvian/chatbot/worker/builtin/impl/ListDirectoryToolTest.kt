@@ -98,7 +98,7 @@ class ListDirectoryToolTest {
     }
 
     @Test
-    fun `sorting by name orders alphabetically case-insensitive`() = runTest {
+    fun `sorting by name orders alphabetically case-insensitive with directories first`() = runTest {
         val dir = createTempDirectory("list-dir-test")
         try {
             dir.resolve("banana.txt").writeText("x", Charsets.UTF_8)
@@ -109,7 +109,9 @@ class ListDirectoryToolTest {
             val result = tool.execute(buildInput(".", sortBy = "name"), context(dir))
 
             val names = assertSuccess(result).lines().map { it.removePrefix("[FILE] ").removePrefix("[DIR] ") }
-            assertEquals(listOf("apple.txt", "banana.txt", "Cherry.txt", "Zebra"), names)
+            // Directories are listed before files; within each group, names are ordered
+            // case-insensitively. "Zebra" is a directory, so it comes first.
+            assertEquals(listOf("Zebra", "apple.txt", "banana.txt", "Cherry.txt"), names)
         } finally {
             dir.toFile().deleteRecursively()
         }

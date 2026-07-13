@@ -106,4 +106,30 @@ class DefaultBuiltInToolRepository(
             }
         )
     }
+
+    override suspend fun resetToDefaults(
+        workerId: Long
+    ): Either<RepositoryError, List<BuiltInWorkerToolDefinition>> {
+        return builtInToolApi.resetBuiltInToolsToDefaults(workerId).fold(
+            ifLeft = { error ->
+                val repoError = error.toRepositoryError("Failed to reset built-in tools for worker $workerId")
+                logger.warn("Failed to reset built-in tools for worker $workerId: ${repoError.message}")
+                repoError.left()
+            },
+            ifRight = { tools ->
+                // Refresh the cached list so the UI reflects the reconciled definitions immediately.
+                _builtInTools.update { DataState.Success(tools) }
+
+                // Keep the shared ToolRepository (which backs the Configure Tools dialog) in sync,
+                // without forcing a network reload.
+                toolRepository.updateToolCache { currentList ->
+                    val byId = tools.associateBy { it.id }
+                    currentList.map { existing -> byId[existing.id] ?: existing }
+                }
+
+                logger.debug("Successfully reset ${tools.size} built-in tools for worker $workerId")
+                tools.right()
+            }
+        )
+    }
 }

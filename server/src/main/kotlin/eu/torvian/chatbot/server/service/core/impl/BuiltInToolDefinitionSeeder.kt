@@ -11,6 +11,7 @@ import eu.torvian.chatbot.server.data.dao.BuiltInToolDefinitionDao
 import eu.torvian.chatbot.server.data.dao.error.BuiltInToolDefinitionError
 import eu.torvian.chatbot.server.service.core.ToolService
 import eu.torvian.chatbot.server.service.core.error.tool.SeedBuiltInToolsError
+import eu.torvian.chatbot.server.service.core.error.tool.UpdateToolError
 import eu.torvian.chatbot.server.service.core.error.tool.ValidateToolError
 import kotlinx.serialization.json.JsonObject
 import org.apache.logging.log4j.LogManager
@@ -127,6 +128,99 @@ class BuiltInToolDefinitionSeeder(
                 }
             }
             logger.info("Renamed built-in tool public names for worker {} (prefix={})", workerId, newPrefix)
+        }
+    }
+
+    /**
+     * Reconciles a worker's built-in tool definitions with the current catalog.
+     *
+     * For every [BuiltInToolCatalog] spec: if the worker has no linkage for that unprefixed name,
+     * it is created (idempotent, like seeding). If a linkage already exists, its public name
+     * (prefix-aware), description, and input schema are overwritten with the catalog values, while
+     * the enabled flag and approval preferences are preserved. This is the server-side counterpart
+     * of the "Reset to defaults" action in the UI and is used to bring older workers up to date
+     * after new tools are added to the catalog.
+     *
+     * @param workerId Owning worker identifier.
+     * @param toolNamePrefix Optional prefix applied to public tool names (e.g. "project1").
+     * @return Either a [SeedBuiltInToolsError] or the list of [BuiltInWorkerToolDefinition] now owned by the worker.
+     */
+    suspend fun resetToDefaults(
+        workerId: Long,
+        toolNamePrefix: String?
+    ): Either<SeedBuiltInToolsError, List<BuiltInWorkerToolDefinition>> = transactionScope.transaction {
+        either {
+            val existing = toolDefinitionDao.getToolsByWorkerId(workerId)
+                .associateBy { it.builtInToolName }
+            val prefix = toolNamePrefix?.takeIf { it.isNotBlank() }
+
+            for (spec in defaultToolSpecs) {
+                val name = spec.builtInToolName
+                val publicName = prefix?.let { "$it.$name" } ?: name
+
+                val current = existing[name]
+                if (current == null) {
+                    // Missing tool: create it exactly like seeding does.
+                    val created = withError({ error: ValidateToolError ->
+                        SeedBuiltInToolsError.ToolCreationFailed(error)
+                    }) {
+                        toolService.createTool(
+                            name = publicName,
+                            description = spec.description,
+                            type = ToolType.BUILTIN_WORKER,
+                            config = JsonObject(emptyMap()),
+                            inputSchema = spec.inputSchema,
+                            outputSchema = null,
+                            // Reset restores defaults, so newly (re)created tools are enabled.
+                            isEnabled = true
+                        ).bind()
+                    }
+
+                    withError({ error: BuiltInToolDefinitionError ->
+                        SeedBuiltInToolsError.LinkageFailed(error)
+                    }) {
+                        toolDefinitionDao.insertTool(
+                            toolDefinitionId = created.id,
+                            workerId = workerId,
+                            builtInToolName = name
+                        ).bind()
+                    }
+                } else if (current.name != publicName ||
+                    current.description != spec.description ||
+                    current.inputSchema != spec.inputSchema
+                ) {
+                    // Existing tool: repair only the catalog-derived fields. The enabled flag and
+                    // approval preferences are intentionally preserved so an admin's choices survive
+                    // a reset. The public name is re-applied only when it actually differs (e.g. after
+                    // a prefix change), avoiding needless writes for pre-existing tools.
+                    val repaired = current.copy(
+                        name = publicName,
+                        description = spec.description,
+                        inputSchema = spec.inputSchema
+                    )
+                    withError({ error: UpdateToolError ->
+                        when (error) {
+                            is UpdateToolError.ToolNotFound ->
+                                SeedBuiltInToolsError.LinkageFailed(
+                                    BuiltInToolDefinitionError.ReferencedEntityNotFound(
+                                        toolDefinitionId = current.id,
+                                        workerId = workerId,
+                                        message = "Tool definition not found during reset"
+                                    )
+                                )
+
+                            is UpdateToolError.ValidationError ->
+                                SeedBuiltInToolsError.ToolCreationFailed(error.error)
+                        }
+                    }) {
+                        toolService.updateTool(repaired).bind()
+                    }
+                }
+                // else: already in sync, nothing to do.
+            }
+
+            logger.info("Reset built-in tools to defaults for worker {} (prefix={})", workerId, toolNamePrefix)
+            toolDefinitionDao.getToolsByWorkerId(workerId)
         }
     }
 }

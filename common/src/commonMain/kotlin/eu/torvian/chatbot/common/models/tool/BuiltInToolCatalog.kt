@@ -10,7 +10,7 @@ import kotlinx.serialization.json.*
  * so the LLM can discover and call them, and the worker tool implementations reuse the same
  * [BuiltInToolSpec] values to keep their advertised schema in sync with what is persisted.
  *
- * The [builtInToolName] is always the unprefixed canonical name (e.g. `read_text_file`); the server
+ * The [BuiltInToolSpec.builtInToolName] is always the unprefixed canonical name (e.g. `read_text_file`); the server
  * derives the public (possibly prefixed) name at seeding time.
  */
 object BuiltInToolCatalog {
@@ -42,13 +42,21 @@ object BuiltInToolCatalog {
                         put("type", "string")
                         put("description", "Path to the file, relative to the workspace.")
                     })
-                    put("head", buildJsonObject {
-                        put("type", "integer")
-                        put("description", "Return only the first N lines. Mutually exclusive with 'tail'.")
-                    })
-                    put("tail", buildJsonObject {
-                        put("type", "integer")
-                        put("description", "Return only the last N lines. Mutually exclusive with 'head'.")
+                    put("range", buildJsonObject {
+                        put("type", "array")
+                        put("minItems", 2)
+                        put("maxItems", 2)
+                        put("items", buildJsonObject {
+                            put("type", buildJsonArray {
+                                add("integer")
+                                add("null")
+                            })
+                        })
+                        put(
+                            "description",
+                            "Line range as [start, end), matching Python slice semantics. " +
+                            "Negative values count from the end. Use null for open-ended."
+                        )
                     })
                 })
                 put("required", buildJsonArray { add("path") })
@@ -162,22 +170,31 @@ object BuiltInToolCatalog {
         ),
         BuiltInToolSpec(
             builtInToolName = "search_files",
-            description = "Recursively search for files/directories by glob pattern.",
+            description = "Search for files/directories by glob pattern.",
             inputSchema = buildJsonObject {
                 put("type", "object")
                 put("properties", buildJsonObject {
                     put("path", buildJsonObject {
                         put("type", "string")
-                        put("description", "Starting directory relative to the workspace.")
+                        put("description", "Starting directory relative to the workspace (defaults to the workspace root).")
                     })
                     put("pattern", buildJsonObject {
                         put("type", "string")
-                        put("description", "Glob pattern (e.g. '*.kt').")
+                        put("description", "Glob pattern (e.g. '**.kt'). Use ** for recursive matching from the starting directory; a bare '*.kt' matches only the starting directory.")
                     })
                     put("excludePatterns", buildJsonObject {
-                        put("type", "array")
-                        put("items", buildJsonObject { put("type", "string") })
-                        put("description", "Optional list of glob patterns to exclude.")
+                        put("oneOf", buildJsonArray {
+                            add(buildJsonObject {
+                                put("type", "string")
+                                put("description", "Single glob pattern to exclude.")
+                            })
+                            add(buildJsonObject {
+                                put("type", "array")
+                                put("items", buildJsonObject { put("type", "string") })
+                                put("description", "List of glob patterns to exclude.")
+                            })
+                        })
+                        put("description", "Optional glob pattern(s) to exclude. Supports both string and array formats.")
                     })
                 })
                 put("required", buildJsonArray { add("pattern") })
@@ -209,7 +226,147 @@ object BuiltInToolCatalog {
                 put("required", buildJsonArray { add("command") })
             }
         ),
+        BuiltInToolSpec(
+            builtInToolName = "search_text",
+            description = "Search UTF-8 text files in the workspace for matching text or regex patterns, returning matching file paths and line numbers.",
+            inputSchema = buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject {
+                    put("path", buildJsonObject {
+                        put("type", "string")
+                        put("description", "Starting directory or file path relative to the workspace. Defaults to the workspace root.")
+                    })
+                    put("query", buildJsonObject {
+                        put("type", "string")
+                        put("description", "Text or regex pattern to search for.")
+                    })
+                    put("mode", buildJsonObject {
+                        put("type", "string")
+                        put("enum", buildJsonArray { add("plain"); add("regex") })
+                        put("description", "Interpret 'query' as plain text (default) or a regular expression.")
+                    })
+                    put("caseSensitive", buildJsonObject {
+                        put("type", "boolean")
+                        put("description", "Whether matching is case-sensitive. Defaults to false.")
+                    })
+                    put("wholeWord", buildJsonObject {
+                        put("type", "boolean")
+                        put("description", "When true, matches whole words only. Only applies in plain-text mode.")
+                    })
+                    put("filePattern", buildJsonObject {
+                        put("type", "string")
+                        put("description", "Optional glob pattern to include only matching files, for example '*.kt' or '*.md'. A bare '*.kt' matches only files in the starting directory; use '**.kt' to match recursively.")
+                    })
+                    put("excludePatterns", buildJsonObject {
+                        put("oneOf", buildJsonArray {
+                            add(buildJsonObject {
+                                put("type", "string")
+                                put("description", "Single glob pattern to exclude.")
+                            })
+                            add(buildJsonObject {
+                                put("type", "array")
+                                put("items", buildJsonObject { put("type", "string") })
+                                put("description", "List of glob patterns to exclude.")
+                            })
+                        })
+                        put("description", "Optional glob pattern(s) to exclude. Supports both string and array formats.")
+                    })
+                    put("contextBefore", buildJsonObject {
+                        put("type", "integer")
+                        put("minimum", 0)
+                        put("description", "Number of context lines to include before each match. Defaults to 0.")
+                    })
+                    put("contextAfter", buildJsonObject {
+                        put("type", "integer")
+                        put("minimum", 0)
+                        put("description", "Number of context lines to include after each match. Defaults to 0.")
+                    })
+                    put("maxResults", buildJsonObject {
+                        put("type", "integer")
+                        put("minimum", 1)
+                        put("description", "Maximum number of matched lines to return across all files.")
+                    })
+                })
+                put("required", buildJsonArray { add("query") })
+            }
+        ),
+        BuiltInToolSpec(
+            builtInToolName = "fetch_web_content",
+            description = "Fetch textual content from a public internet URL. Localhost, loopback, link-local, and private-network addresses are not allowed.",
+            inputSchema = buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject {
+                    put("url", buildJsonObject {
+                        put("type", "string")
+                        put("format", "uri")
+                        put("description", "Public internet URL to fetch.")
+                    })
+                    put("timeoutSeconds", buildJsonObject {
+                        put("type", "integer")
+                        put("minimum", 1)
+                        put("description", "Optional request timeout in seconds.")
+                    })
+                    put("maxBytes", buildJsonObject {
+                        put("type", "integer")
+                        put("minimum", 1)
+                        put("description", "Maximum number of response bytes to read before truncating or failing.")
+                    })
+                    put("followRedirects", buildJsonObject {
+                        put("type", "boolean")
+                        put("description", "Whether HTTP redirects should be followed. Defaults to true.")
+                    })
+                    put("returnMode", buildJsonObject {
+                        put("type", "string")
+                        put("enum", buildJsonArray { add("auto"); add("text"); add("html") })
+                        put("description", "How to interpret the response body. 'auto' uses the response content type.")
+                    })
+                })
+                put("required", buildJsonArray { add("url") })
+            }
+        ),
+        BuiltInToolSpec(
+            builtInToolName = "download_file",
+            description = "Download content from a public internet URL directly to a file inside the workspace. Supports binary data. Localhost, loopback, link-local, and private-network addresses are not allowed.",
+            inputSchema = buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject {
+                    put("url", buildJsonObject {
+                        put("type", "string")
+                        put("format", "uri")
+                        put("description", "Public internet URL to download.")
+                    })
+                    put("path", buildJsonObject {
+                        put("type", "string")
+                        put("description", "Destination file path relative to the workspace.")
+                    })
+                    put("overwrite", buildJsonObject {
+                        put("type", "boolean")
+                        put("description", "Whether to overwrite the destination file if it already exists. Defaults to false.")
+                    })
+                    put("timeoutSeconds", buildJsonObject {
+                        put("type", "integer")
+                        put("minimum", 1)
+                        put("description", "Optional request timeout in seconds.")
+                    })
+                    put("maxBytes", buildJsonObject {
+                        put("type", "integer")
+                        put("minimum", 1)
+                        put("description", "Maximum number of bytes allowed for the download.")
+                    })
+                    put("followRedirects", buildJsonObject {
+                        put("type", "boolean")
+                        put("description", "Whether HTTP redirects should be followed. Defaults to true.")
+                    })
+                })
+                put("required", buildJsonArray { add("url"); add("path") })
+            }
+        ),
     )
+
+    /**
+     * Number of built-in tool specifications in the catalog.
+     */
+    val size: Int get() = allTools.size
 
     /**
      * Looks up a built-in tool specification by its unprefixed canonical name.
@@ -220,4 +377,3 @@ object BuiltInToolCatalog {
     fun specFor(builtInToolName: String): BuiltInToolSpec? =
         allTools.firstOrNull { it.builtInToolName == builtInToolName }
 }
-

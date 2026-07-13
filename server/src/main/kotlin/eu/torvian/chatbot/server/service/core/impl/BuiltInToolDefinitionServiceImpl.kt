@@ -13,7 +13,9 @@ import eu.torvian.chatbot.server.data.dao.error.WorkerError
 import eu.torvian.chatbot.server.service.core.BuiltInToolDefinitionService
 import eu.torvian.chatbot.server.service.core.ToolService
 import eu.torvian.chatbot.server.service.core.error.builtin.GetBuiltInToolsError
+import eu.torvian.chatbot.server.service.core.error.builtin.ResetBuiltInToolsError
 import eu.torvian.chatbot.server.service.core.error.builtin.UpdateBuiltInToolError
+import eu.torvian.chatbot.server.service.core.error.tool.SeedBuiltInToolsError
 import eu.torvian.chatbot.server.service.core.error.tool.UpdateToolError
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
@@ -28,6 +30,7 @@ import org.apache.logging.log4j.Logger
 class BuiltInToolDefinitionServiceImpl(
     private val workerDao: WorkerDao,
     private val builtInToolDefinitionDao: BuiltInToolDefinitionDao,
+    private val builtInToolDefinitionSeeder: BuiltInToolDefinitionSeeder,
     private val toolService: ToolService,
     private val transactionScope: TransactionScope,
 ) : BuiltInToolDefinitionService {
@@ -111,6 +114,33 @@ class BuiltInToolDefinitionServiceImpl(
             )
 
             updatedTool
+        }
+    }
+
+    override suspend fun resetBuiltInToolsToDefaults(
+        userId: Long,
+        workerId: Long
+    ): Either<ResetBuiltInToolsError, List<BuiltInWorkerToolDefinition>> = transactionScope.transaction {
+        either {
+            // Step 1: Verify the worker exists and belongs to the calling user.
+            val worker = withError({ _: WorkerError.NotFound ->
+                ResetBuiltInToolsError.WorkerNotFound(workerId)
+            }) {
+                workerDao.getWorkerById(workerId).bind()
+            }
+
+            if (worker.ownerUserId != userId) {
+                raise(ResetBuiltInToolsError.Forbidden(workerId, worker.ownerUserId))
+            }
+
+            // Step 2: Reconcile the worker's tools with the catalog, preserving enabled state and
+            // approval preferences. The seeder reads the worker's current prefix so public names
+            // stay consistent with the worker configuration.
+            withError({ error: SeedBuiltInToolsError ->
+                ResetBuiltInToolsError.SeedFailed(error)
+            }) {
+                builtInToolDefinitionSeeder.resetToDefaults(workerId, worker.toolNamePrefix).bind()
+            }
         }
     }
 }

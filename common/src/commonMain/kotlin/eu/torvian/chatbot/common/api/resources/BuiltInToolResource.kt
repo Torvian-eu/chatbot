@@ -30,6 +30,21 @@ data class BuiltInToolResource(
     )
 
     /**
+     * Nested resource for `POST /api/v1/built-in-tools/worker/{workerId}/reset`.
+     *
+     * Triggers a reconciliation of the worker's built-in tool definitions with the catalog
+     * defaults. The authenticated user must be the owner of the worker.
+     *
+     * @property parent The parent [BuiltInToolResource].
+     * @property workerId The identifier of the worker whose tools should be reset.
+     */
+    @Resource("worker/{workerId}/reset")
+    data class ResetByWorkerId(
+        val parent: BuiltInToolResource = BuiltInToolResource(),
+        val workerId: Long
+    )
+
+    /**
      * Nested resource for `/api/v1/built-in-tools/{toolId}`.
      *
      * Allows interacting with a single built-in worker tool definition, such as

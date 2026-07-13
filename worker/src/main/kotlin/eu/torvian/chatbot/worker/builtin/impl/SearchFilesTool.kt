@@ -14,10 +14,17 @@ import java.nio.file.Path
 import java.nio.file.PathMatcher
 
 /**
- * Recursively searches for files and directories whose names match a glob pattern.
+ * Searches for files and directories whose path — relative to the starting directory — matches a glob pattern.
  *
- * Supports exclude patterns that skip whole subtrees. Returns a newline-separated list of matched
- * paths (relative to the workspace).
+ * The walk over the starting directory is recursive, but the glob pattern itself is matched against
+ * each candidate's path relative to the starting directory (the workspace root combined with the
+ * requested `path`), so patterns behave intuitively regardless of the absolute filesystem location
+ * (e.g. `**.kt` or a bare `*.kt`). A bare `*.kt` only matches entries directly in the starting
+ * directory; use `**` (e.g. `**.kt`) for recursive matching that also includes the starting directory
+ * itself. A pattern can also be anchored to a subdirectory — for instance a pattern that starts with
+ * `src/` and ends in `**` matches the entire src subtree. Supports exclude patterns (string or array)
+ * that skip matched paths. Returns a newline-separated list of matched paths (relative to the starting
+ * directory).
  */
 class SearchFilesTool : BuiltInTool {
     override val name: String = "search_files"
@@ -28,9 +35,11 @@ class SearchFilesTool : BuiltInTool {
         val pattern = input["pattern"]?.jsonPrimitive?.content
             ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Missing required argument: pattern")
         val path = input["path"]?.jsonPrimitive?.content ?: "."
-        val exclude = (input["excludePatterns"] as? JsonArray)
-            ?.mapNotNull { it.jsonPrimitive.contentOrNull }
-            ?: emptyList()
+        val exclude = when (val excludeInput = input["excludePatterns"]) {
+            is JsonArray -> excludeInput.mapNotNull { it.jsonPrimitive.contentOrNull }
+            is JsonPrimitive -> excludeInput.contentOrNull?.let { listOf(it) } ?: emptyList()
+            else -> emptyList()
+        }
 
         val root = try {
             WorkspacePathValidator.requireInside(context.workspace, path)
@@ -48,19 +57,26 @@ class SearchFilesTool : BuiltInTool {
 
             val matcher: PathMatcher = FileSystems.getDefault().getPathMatcher("glob:$pattern")
             val excludeMatchers: List<PathMatcher> = exclude.map { FileSystems.getDefault().getPathMatcher("glob:$it") }
-            val matches = mutableListOf<Path>()
+            val matches = mutableListOf<String>()
 
             val candidates: List<Path> = Files.walk(root).use { stream -> stream.toList() }
             candidates.forEach { candidate ->
-                if (excludeMatchers.any { it.matches(candidate.fileName) }) return@forEach
-                if (matcher.matches(candidate.fileName)) {
-                    matches.add(candidate)
+                // Relativize once against the starting directory (root) and reuse for both matching and
+                // the final output, so glob patterns behave intuitively (e.g. "**.kt" or "src/**.kt")
+                // regardless of the absolute filesystem location. The relative path is also exactly what
+                // we return to the caller, so a search rooted at "website/css" with pattern "*" matches
+                // "style.css" rather than requiring the full "website/css/style.css". Normalize to
+                // forward slashes so output and matching are platform-independent (glob matchers expect
+                // '/' separators), keeping results consistent across operating systems.
+                val relativeCandidate = root.relativize(candidate).toString().replace('\\', '/')
+                if (excludeMatchers.any { it.matches(Path.of(relativeCandidate)) }) return@forEach
+                if (matcher.matches(Path.of(relativeCandidate))) {
+                    matches.add(relativeCandidate)
                 }
             }
 
-            val relative = matches.map { context.workspace.relativize(it).toString() }
             BuiltInToolExecutionResult(
-                output = if (relative.isEmpty()) "" else relative.joinToString(separator = "\n"),
+                output = if (matches.isEmpty()) "" else matches.joinToString(separator = "\n"),
             )
         }
     }

@@ -47,5 +47,17 @@ interface BuiltInToolRepository {
      * @return [Either.Right] with the updated tool on success, or [Either.Left] with [RepositoryError] on failure.
      */
     suspend fun updateBuiltInTool(tool: BuiltInWorkerToolDefinition): Either<RepositoryError, BuiltInWorkerToolDefinition>
-}
 
+    /**
+     * Resets the built-in tools of the given worker to the catalog defaults on the server.
+     *
+     * Reconciles the worker's tools with the server catalog: missing tools are created and
+     * existing tools have their catalog-derived fields repaired, while enabled/disabled choices
+     * and approval preferences are preserved. On success the in-memory cache is refreshed with the
+     * returned tool list.
+     *
+     * @param workerId The unique identifier of the worker whose built-in tools should be reset.
+     * @return [Either.Right] with the reset tools on success, or [Either.Left] with [RepositoryError] on failure.
+     */
+    suspend fun resetToDefaults(workerId: Long): Either<RepositoryError, List<BuiltInWorkerToolDefinition>>
+}
