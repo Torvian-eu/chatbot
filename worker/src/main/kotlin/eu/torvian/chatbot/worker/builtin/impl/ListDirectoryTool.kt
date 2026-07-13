@@ -99,11 +99,16 @@ class ListDirectoryTool : BuiltInTool {
     }
 
     private fun sortEntries(entries: List<Path>, sortBy: String): List<Path> {
-        return if (sortBy == "size") {
-            entries.sortedBy { if (it.isRegularFile()) Files.size(it) else -1L }
-        } else {
-            entries.sortedBy { it.fileName.toString().lowercase() }
-        }
+        // Directories are always listed before files (the universal convention on Windows, Linux,
+        // and macOS), with the requested sort applied as a secondary key within each group.
+        val comparator = compareBy<Path> { if (it.isDirectory()) 0 else 1 }.thenBy {
+            if (sortBy == "size") {
+                if (it.isRegularFile()) Files.size(it) else -1L
+            } else {
+                0L
+            }
+        }.thenBy { it.fileName.toString().lowercase() }
+        return entries.sortedWith(comparator)
     }
 
     private fun errorResult(code: String, message: String): BuiltInToolExecutionResult =
