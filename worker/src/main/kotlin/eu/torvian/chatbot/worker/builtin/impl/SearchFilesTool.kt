@@ -65,8 +65,10 @@ class SearchFilesTool : BuiltInTool {
                 // the final output, so glob patterns behave intuitively (e.g. "**.kt" or "src/**.kt")
                 // regardless of the absolute filesystem location. The relative path is also exactly what
                 // we return to the caller, so a search rooted at "website/css" with pattern "*" matches
-                // "style.css" rather than requiring the full "website/css/style.css".
-                val relativeCandidate = root.relativize(candidate).toString()
+                // "style.css" rather than requiring the full "website/css/style.css". Normalize to
+                // forward slashes so output and matching are platform-independent (glob matchers expect
+                // '/' separators), keeping results consistent across operating systems.
+                val relativeCandidate = root.relativize(candidate).toString().replace('\\', '/')
                 if (excludeMatchers.any { it.matches(Path.of(relativeCandidate)) }) return@forEach
                 if (matcher.matches(Path.of(relativeCandidate))) {
                     matches.add(relativeCandidate)
