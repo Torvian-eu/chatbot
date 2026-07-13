@@ -14,8 +14,10 @@ import java.nio.file.NoSuchFileException
 /**
  * Reads the contents of a text file inside the worker workspace.
  *
- * Always interprets the file as UTF-8 regardless of extension. The optional `head`/`tail`
- * parameters return the first/last N lines; supplying both is rejected to avoid ambiguity.
+ * Always interprets the file as UTF-8 regardless of extension. The optional `range` parameter
+ * selects a half-open `[start, end)` slice of lines using Python slice semantics: indices are
+ * 0-based, negative values count from the end, and `null` denotes an open end. When `range` is
+ * omitted the entire file is returned.
  */
 class ReadTextFileTool : BuiltInTool {
     override val name: String = "read_text_file"
@@ -25,13 +27,26 @@ class ReadTextFileTool : BuiltInTool {
     override suspend fun execute(input: JsonObject, context: BuiltInToolExecutionContext): BuiltInToolExecutionResult {
         val path = input["path"]?.jsonPrimitive?.contentOrNull()
             ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Missing required argument: path")
-        val head = input["head"]?.jsonPrimitive?.intOrNull()
-        val tail = input["tail"]?.jsonPrimitive?.intOrNull()
-        if (head != null && tail != null) {
-            return errorResult(
-                BuiltInToolExecutionError.INVALID_INPUT,
-                "Arguments 'head' and 'tail' are mutually exclusive"
-            )
+
+        // Parse the optional [start, end) range. Each element is either an integer or null
+        // (open-ended), matching the JSON Schema's "type": ["integer", "null"] items.
+        val range = input["range"]?.let { element ->
+            val array = element.jsonArray
+            if (array.size != 2) {
+                return errorResult(
+                    BuiltInToolExecutionError.INVALID_INPUT,
+                    "Argument 'range' must contain exactly two elements [start, end)"
+                )
+            }
+            val start = array[0].intOrNull()
+            val end = array[1].intOrNull()
+            if (start == null && end == null) {
+                return errorResult(
+                    BuiltInToolExecutionError.INVALID_INPUT,
+                    "Argument 'range' must specify at least a start or an end"
+                )
+            }
+            start to end
         }
 
         val target = try {
@@ -47,11 +62,10 @@ class ReadTextFileTool : BuiltInTool {
             try {
                 val allLines = Files.readAllLines(target, Charsets.UTF_8)
 
-                val selected = when {
-                    head != null -> allLines.take(head)
-                    tail != null -> allLines.takeLast(tail)
-                    else -> allLines
-                }
+                // Resolve the slice bounds with Python semantics: negative indices count from the
+                // end, null is open-ended, and the end index is exclusive.
+                val (startIdx, endIdx) = resolveSlice(range, allLines.size)
+                val selected = allLines.subList(startIdx, endIdx)
 
                 BuiltInToolExecutionResult(
                     output = selected.joinToString(separator = "\n"),
@@ -64,9 +78,34 @@ class ReadTextFileTool : BuiltInTool {
         }
     }
 
+    /**
+     * Resolves a Python-style `[start, end)` slice against a list of [size] lines.
+     *
+     * Both bounds are clamped to `[0, size]` so out-of-range values behave like Python slicing
+     * (which silently truncates rather than throwing). A `null` bound is treated as the natural
+     * open end: `0` for start and [size] for end. Negative bounds count backwards from [size].
+     *
+     * @param range Pair of `(start, end)` where either element may be null; null when no range was supplied.
+     * @param size Number of lines in the file.
+     * @return A `(startIndex, endIndex)` pair with `0 <= startIndex <= endIndex <= size`.
+     */
+    private fun resolveSlice(range: Pair<Int?, Int?>?, size: Int): Pair<Int, Int> {
+        if (range == null) return 0 to size
+        val (rawStart, rawEnd) = range
+        val start = when (rawStart) {
+            null -> 0
+            else -> if (rawStart < 0) (size + rawStart).coerceAtLeast(0) else rawStart.coerceAtMost(size)
+        }
+        val end = when (rawEnd) {
+            null -> size
+            else -> if (rawEnd < 0) (size + rawEnd).coerceAtLeast(0) else rawEnd.coerceAtMost(size)
+        }
+        return start to maxOf(start, end)
+    }
+
     private fun JsonPrimitive.contentOrNull(): String? = if (isString) content else null
 
-    private fun JsonPrimitive.intOrNull(): Int? = content.toIntOrNull()
+    private fun JsonElement.intOrNull(): Int? = jsonPrimitive.content.toIntOrNull()
 
     private fun errorResult(code: String, message: String): BuiltInToolExecutionResult =
         BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code)

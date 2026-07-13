@@ -42,13 +42,21 @@ object BuiltInToolCatalog {
                         put("type", "string")
                         put("description", "Path to the file, relative to the workspace.")
                     })
-                    put("head", buildJsonObject {
-                        put("type", "integer")
-                        put("description", "Return only the first N lines. Mutually exclusive with 'tail'.")
-                    })
-                    put("tail", buildJsonObject {
-                        put("type", "integer")
-                        put("description", "Return only the last N lines. Mutually exclusive with 'head'.")
+                    put("range", buildJsonObject {
+                        put("type", "array")
+                        put("minItems", 2)
+                        put("maxItems", 2)
+                        put("items", buildJsonObject {
+                            put("type", buildJsonArray {
+                                add("integer")
+                                add("null")
+                            })
+                        })
+                        put(
+                            "description",
+                            "Line range as [start, end), matching Python slice semantics. " +
+                            "Negative values count from the end. Use null for open-ended."
+                        )
                     })
                 })
                 put("required", buildJsonArray { add("path") })
