@@ -277,6 +277,7 @@ fun workerModule(
             ListDirectoryTool(),
             MoveFileTool(),
             SearchFilesTool(),
+            SearchTextTool(),
             RunCommandTool(),
         ).associateBy { it.name }
     }

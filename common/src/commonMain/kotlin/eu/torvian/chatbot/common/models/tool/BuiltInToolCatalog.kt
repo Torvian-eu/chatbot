@@ -226,6 +226,70 @@ object BuiltInToolCatalog {
                 put("required", buildJsonArray { add("command") })
             }
         ),
+        BuiltInToolSpec(
+            builtInToolName = "search_text",
+            description = "Search UTF-8 text files in the workspace for matching text or regex patterns, returning matching file paths and line numbers.",
+            inputSchema = buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject {
+                    put("path", buildJsonObject {
+                        put("type", "string")
+                        put("description", "Starting directory or file path relative to the workspace. Defaults to the workspace root.")
+                    })
+                    put("query", buildJsonObject {
+                        put("type", "string")
+                        put("description", "Text or regex pattern to search for.")
+                    })
+                    put("mode", buildJsonObject {
+                        put("type", "string")
+                        put("enum", buildJsonArray { add("plain"); add("regex") })
+                        put("description", "Interpret 'query' as plain text (default) or a regular expression.")
+                    })
+                    put("caseSensitive", buildJsonObject {
+                        put("type", "boolean")
+                        put("description", "Whether matching is case-sensitive. Defaults to false.")
+                    })
+                    put("wholeWord", buildJsonObject {
+                        put("type", "boolean")
+                        put("description", "When true, matches whole words only. Only applies in plain-text mode.")
+                    })
+                    put("filePattern", buildJsonObject {
+                        put("type", "string")
+                        put("description", "Optional glob pattern to include only matching files, for example '*.kt' or '*.md'. A bare '*.kt' matches only files in the starting directory; use '**.kt' to match recursively.")
+                    })
+                    put("excludePatterns", buildJsonObject {
+                        put("oneOf", buildJsonArray {
+                            add(buildJsonObject {
+                                put("type", "string")
+                                put("description", "Single glob pattern to exclude.")
+                            })
+                            add(buildJsonObject {
+                                put("type", "array")
+                                put("items", buildJsonObject { put("type", "string") })
+                                put("description", "List of glob patterns to exclude.")
+                            })
+                        })
+                        put("description", "Optional glob pattern(s) to exclude. Supports both string and array formats.")
+                    })
+                    put("contextBefore", buildJsonObject {
+                        put("type", "integer")
+                        put("minimum", 0)
+                        put("description", "Number of context lines to include before each match. Defaults to 0.")
+                    })
+                    put("contextAfter", buildJsonObject {
+                        put("type", "integer")
+                        put("minimum", 0)
+                        put("description", "Number of context lines to include after each match. Defaults to 0.")
+                    })
+                    put("maxResults", buildJsonObject {
+                        put("type", "integer")
+                        put("minimum", 1)
+                        put("description", "Maximum number of matched lines to return across all files.")
+                    })
+                })
+                put("required", buildJsonArray { add("query") })
+            }
+        ),
     )
 
     /**
