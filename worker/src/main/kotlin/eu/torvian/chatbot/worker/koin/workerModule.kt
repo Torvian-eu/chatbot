@@ -6,6 +6,11 @@ import eu.torvian.chatbot.common.security.JvmAsymmetricCryptoProvider
 import eu.torvian.chatbot.worker.auth.*
 import eu.torvian.chatbot.worker.builtin.*
 import eu.torvian.chatbot.worker.builtin.impl.*
+import eu.torvian.chatbot.worker.builtin.net.DnsResolver
+import eu.torvian.chatbot.worker.builtin.net.JvmDnsResolver
+import eu.torvian.chatbot.worker.builtin.net.KtorWebFetchService
+import eu.torvian.chatbot.worker.builtin.net.PublicUrlValidator
+import eu.torvian.chatbot.worker.builtin.net.WebFetchService
 import eu.torvian.chatbot.worker.config.RuntimeConfig
 import eu.torvian.chatbot.worker.config.TrustedSigner
 import eu.torvian.chatbot.worker.mcp.*
@@ -279,6 +284,8 @@ fun workerModule(
             SearchFilesTool(),
             SearchTextTool(),
             RunCommandTool(),
+            FetchWebContentTool(fetchService = get()),
+            DownloadFileTool(fetchService = get()),
         ).associateBy { it.name }
     }
 
@@ -288,6 +295,12 @@ fun workerModule(
             tools = get(),
         )
     }
+
+    // Shared worker-side web-access foundation (consumed by future built-in tools such as
+    // fetch_web_content and download_file). No built-in tools are registered here yet.
+    single<DnsResolver> { JvmDnsResolver() }
+    single<PublicUrlValidator> { PublicUrlValidator(dns = get()) }
+    single<WebFetchService> { KtorWebFetchService(validator = get()) }
 }
 
 /**

@@ -290,6 +290,77 @@ object BuiltInToolCatalog {
                 put("required", buildJsonArray { add("query") })
             }
         ),
+        BuiltInToolSpec(
+            builtInToolName = "fetch_web_content",
+            description = "Fetch textual content from a public internet URL. Localhost, loopback, link-local, and private-network addresses are not allowed.",
+            inputSchema = buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject {
+                    put("url", buildJsonObject {
+                        put("type", "string")
+                        put("format", "uri")
+                        put("description", "Public internet URL to fetch.")
+                    })
+                    put("timeoutSeconds", buildJsonObject {
+                        put("type", "integer")
+                        put("minimum", 1)
+                        put("description", "Optional request timeout in seconds.")
+                    })
+                    put("maxBytes", buildJsonObject {
+                        put("type", "integer")
+                        put("minimum", 1)
+                        put("description", "Maximum number of response bytes to read before truncating or failing.")
+                    })
+                    put("followRedirects", buildJsonObject {
+                        put("type", "boolean")
+                        put("description", "Whether HTTP redirects should be followed. Defaults to true.")
+                    })
+                    put("returnMode", buildJsonObject {
+                        put("type", "string")
+                        put("enum", buildJsonArray { add("auto"); add("text"); add("html") })
+                        put("description", "How to interpret the response body. 'auto' uses the response content type.")
+                    })
+                })
+                put("required", buildJsonArray { add("url") })
+            }
+        ),
+        BuiltInToolSpec(
+            builtInToolName = "download_file",
+            description = "Download content from a public internet URL directly to a file inside the workspace. Supports binary data. Localhost, loopback, link-local, and private-network addresses are not allowed.",
+            inputSchema = buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject {
+                    put("url", buildJsonObject {
+                        put("type", "string")
+                        put("format", "uri")
+                        put("description", "Public internet URL to download.")
+                    })
+                    put("path", buildJsonObject {
+                        put("type", "string")
+                        put("description", "Destination file path relative to the workspace.")
+                    })
+                    put("overwrite", buildJsonObject {
+                        put("type", "boolean")
+                        put("description", "Whether to overwrite the destination file if it already exists. Defaults to false.")
+                    })
+                    put("timeoutSeconds", buildJsonObject {
+                        put("type", "integer")
+                        put("minimum", 1)
+                        put("description", "Optional request timeout in seconds.")
+                    })
+                    put("maxBytes", buildJsonObject {
+                        put("type", "integer")
+                        put("minimum", 1)
+                        put("description", "Maximum number of bytes allowed for the download.")
+                    })
+                    put("followRedirects", buildJsonObject {
+                        put("type", "boolean")
+                        put("description", "Whether HTTP redirects should be followed. Defaults to true.")
+                    })
+                })
+                put("required", buildJsonArray { add("url"); add("path") })
+            }
+        ),
     )
 
     /**
@@ -306,4 +377,3 @@ object BuiltInToolCatalog {
     fun specFor(builtInToolName: String): BuiltInToolSpec? =
         allTools.firstOrNull { it.builtInToolName == builtInToolName }
 }
-
