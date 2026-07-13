@@ -162,22 +162,31 @@ object BuiltInToolCatalog {
         ),
         BuiltInToolSpec(
             builtInToolName = "search_files",
-            description = "Recursively search for files/directories by glob pattern.",
+            description = "Search for files/directories by glob pattern.",
             inputSchema = buildJsonObject {
                 put("type", "object")
                 put("properties", buildJsonObject {
                     put("path", buildJsonObject {
                         put("type", "string")
-                        put("description", "Starting directory relative to the workspace.")
+                        put("description", "Starting directory relative to the workspace (defaults to the workspace root).")
                     })
                     put("pattern", buildJsonObject {
                         put("type", "string")
-                        put("description", "Glob pattern (e.g. '*.kt').")
+                        put("description", "Glob pattern (e.g. '**.kt'). Use ** for recursive matching from the starting directory; a bare '*.kt' matches only the starting directory.")
                     })
                     put("excludePatterns", buildJsonObject {
-                        put("type", "array")
-                        put("items", buildJsonObject { put("type", "string") })
-                        put("description", "Optional list of glob patterns to exclude.")
+                        put("oneOf", buildJsonArray {
+                            add(buildJsonObject {
+                                put("type", "string")
+                                put("description", "Single glob pattern to exclude.")
+                            })
+                            add(buildJsonObject {
+                                put("type", "array")
+                                put("items", buildJsonObject { put("type", "string") })
+                                put("description", "List of glob patterns to exclude.")
+                            })
+                        })
+                        put("description", "Optional glob pattern(s) to exclude. Supports both string and array formats.")
                     })
                 })
                 put("required", buildJsonArray { add("pattern") })
