@@ -83,8 +83,9 @@ class LoadSessionUseCase(
             { modelSettingsRepository.loadAllSettings() },
             { toolRepository.loadTools() },
             { toolRepository.loadEnabledToolsForSession(sessionId) },
-            { mcpServerRepository.loadServers(userId) }
-        ) { sessionResult, toolCallsResult, modelsResult, settingsResult, toolsResult, enabledToolsResult, _ ->
+            { mcpServerRepository.loadServers(userId) },
+            { toolRepository.loadUserToolApprovalPreferences() }
+        ) { sessionResult, toolCallsResult, modelsResult, settingsResult, toolsResult, enabledToolsResult, _, preferencesResult ->
             sessionResult
                 .onLeft { error ->
                     val eventId = notificationService.repositoryError(
@@ -131,6 +132,13 @@ class LoadSessionUseCase(
                 notificationService.repositoryError(
                     error = error,
                     shortMessage = "Failed to load enabled tools for session"
+                )
+                return@parZip
+            }
+            preferencesResult.onLeft { error ->
+                notificationService.repositoryError(
+                    error = error,
+                    shortMessage = "Failed to load tool approval preferences"
                 )
                 return@parZip
             }
