@@ -18,7 +18,32 @@
     },
     "auth": {
       "refreshSkewSeconds": "WORKER_REFRESH_SKEW_SECONDS"
-    }
+    },
+    "workspace": {
+      "path": "WORKER_WORKSPACE_PATH"
+    },
+    "builtInTools": {
+      "enabled": "WORKER_BUILTIN_TOOLS_ENABLED",
+      "defaultCommandTimeoutSeconds": "WORKER_BUILTIN_TOOLS_DEFAULT_COMMAND_TIMEOUT_SECONDS"
+    },
+    "trustedSigners": [
+      {
+        "signerId": "WORKER_TRUSTED_SIGNER_1_ID",
+        "publicKeyBase64": "WORKER_TRUSTED_SIGNER_1_PUBLIC_KEY_BASE64",
+        "permissions": [
+          "WORKER_TRUSTED_SIGNER_1_PERMISSION_1",
+          "WORKER_TRUSTED_SIGNER_1_PERMISSION_2"
+        ]
+      },
+      {
+        "signerId": "WORKER_TRUSTED_SIGNER_2_ID",
+        "publicKeyBase64": "WORKER_TRUSTED_SIGNER_2_PUBLIC_KEY_BASE64",
+        "permissions": [
+          "WORKER_TRUSTED_SIGNER_2_PERMISSION_1",
+          "WORKER_TRUSTED_SIGNER_2_PERMISSION_2"
+        ]
+      }
+    ]
   }
 }
 

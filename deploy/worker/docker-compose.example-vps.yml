@@ -3,6 +3,15 @@
 # docker compose -f docker-compose.example-vps.yml run -it --rm chatbot-worker
 # It will ask you to enter credentials for the chatbot server and will register the worker. After that, you can start the worker in detached mode:
 # docker compose -f docker-compose.example-vps.yml up -d
+#
+# To authorize clients to run tool-execution requests on this worker (E2EA), register their
+# signer credentials. You can either:
+#   - Pass them as environment variables (see the WORKER_TRUSTED_SIGNER_* block below), or
+#   - Run the trusted-signer admin mode once:
+#     docker compose -f docker-compose.example-vps.yml run --rm chatbot-worker \
+#       --add-trusted-signer --signer-id=<SIGNER_ID> --public-key-base64=<PUBLIC_KEY> --permissions=mcp:read,mcp:write
+# The client's Signer ID and public key are shown under Settings -> E2EA Security.
+# See https://github.com/Torvian-eu/chatbot/blob/master/docs/user%20guides/Trusted%20Signers%20guide.md
 
 name: chatbot-worker
 
@@ -14,6 +23,12 @@ services:
       - CHATBOT_WORKER_SETUP_SERVER_URL=https://chatbot-server.yourdomain.com # Change to the actual URL of your chatbot server
       - PUID=1000  # Change to your actual host UID (run 'id -u')
       - PGID=1000  # Change to your actual host GID (run 'id -g')
+      # Trusted signer(s) for E2EA tool-execution authorization (optional, repeat slots as needed).
+      # Each signer needs a unique ID, a Base64 public key, and optional comma-separated permissions.
+      # - WORKER_TRUSTED_SIGNER_1_ID=client-desktop-7f3a
+      # - WORKER_TRUSTED_SIGNER_1_PUBLIC_KEY_BASE64=MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcD...
+      # - WORKER_TRUSTED_SIGNER_1_PERMISSION_1=mcp:read
+      # - WORKER_TRUSTED_SIGNER_1_PERMISSION_2=mcp:write
     volumes:
       - ./config:/app/config
       - ./data:/app/data
