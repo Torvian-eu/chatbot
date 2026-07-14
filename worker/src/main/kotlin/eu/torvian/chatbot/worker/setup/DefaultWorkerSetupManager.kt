@@ -14,6 +14,8 @@ import eu.torvian.chatbot.worker.config.SetupConfigDto
 import eu.torvian.chatbot.worker.config.StorageConfigDto
 import eu.torvian.chatbot.worker.config.WorkerConfigError
 import eu.torvian.chatbot.worker.config.WorkerConfigLoader
+import eu.torvian.chatbot.worker.config.WorkspaceConfigDto
+import eu.torvian.chatbot.worker.config.ensureWorkspaceDirectory
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 import java.nio.file.Path
@@ -80,6 +82,14 @@ class DefaultWorkerSetupManager(
 
         val secretsPath = pathResolver.resolvePath(normalizedConfigDir, secretsPathValue)
 
+        // Ensure the workspace directory exists before the worker is started.
+        val workspacePathValue = mergedConfig.worker?.workspace?.path?.takeIf { it.isNotBlank() }
+            ?: DEFAULT_WORKSPACE_PATH
+        val workspacePath = pathResolver.resolvePath(normalizedConfigDir, workspacePathValue)
+        ensureWorkspaceDirectory(workspacePath)
+            .mapLeft { mapConfigError(it, normalizedConfigDir) }
+            .bind()
+
         val preparedIdentity = loadOrGenerateIdentity(
             mergedConfig = mergedConfig,
             secretsPath = secretsPath
@@ -121,7 +131,8 @@ class DefaultWorkerSetupManager(
             certificatePem = preparedIdentity.certificatePem,
             secretsPathValue = secretsPathValue,
             tokenPathValue = tokenPathValue,
-            refreshSkewSeconds = auth?.refreshSkewSeconds ?: 60L
+            refreshSkewSeconds = auth?.refreshSkewSeconds ?: 60L,
+            workspacePathValue = workspacePathValue
         )
 
         configLoader.saveLayerDto(
@@ -242,6 +253,7 @@ class DefaultWorkerSetupManager(
      * @param secretsPathValue Path value for the secrets JSON file.
      * @param tokenPathValue Path value for the token cache file.
      * @param refreshSkewSeconds Token refresh skew in seconds.
+     * @param workspacePathValue Path value for the workspace directory.
      * @return Patched [AppConfigDto] ready to be written as `application.json`.
      */
     private fun buildUpdatedApplicationConfig(
@@ -253,13 +265,15 @@ class DefaultWorkerSetupManager(
         certificatePem: String,
         secretsPathValue: String,
         tokenPathValue: String,
-        refreshSkewSeconds: Long
+        refreshSkewSeconds: Long,
+        workspacePathValue: String
     ): AppConfigDto {
         val existingWorker = existingConfig.worker ?: RuntimeConfigDto()
         val existingServer = existingWorker.server ?: ServerConfigDto()
         val existingIdentity = existingWorker.identity ?: IdentityConfigDto()
         val existingStorage = existingWorker.storage ?: StorageConfigDto()
         val existingAuth = existingWorker.auth ?: AuthConfigDto()
+        val workspace = existingWorker.workspace ?: WorkspaceConfigDto(path = workspacePathValue)
 
         return existingConfig.copy(
             worker = existingWorker.copy(
@@ -278,7 +292,8 @@ class DefaultWorkerSetupManager(
                 ),
                 auth = existingAuth.copy(
                     refreshSkewSeconds = refreshSkewSeconds
-                )
+                ),
+                workspace = workspace
             ),
             setup = null
         )
@@ -317,15 +332,7 @@ class DefaultWorkerSetupManager(
     companion object {
         private const val DEFAULT_SECRETS_JSON_PATH = "./secrets.json"
         private const val DEFAULT_TOKEN_FILE_PATH = "./token.json"
+        private const val DEFAULT_WORKSPACE_PATH = "../workspace"
         private val logger: Logger = LogManager.getLogger(DefaultWorkerSetupManager::class.java)
     }
 }
-
-
-
-
-
-
-
-
-
