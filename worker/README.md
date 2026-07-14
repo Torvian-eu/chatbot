@@ -35,6 +35,23 @@ All worker fields can be supplied via environment variables through `env-mapping
 ```
 For setup mode, pass `--setup`.
 
+### Trusted signer admin mode
+
+The worker can register a client as a trusted signer (used for End-to-End Authorization of tool-execution requests) without starting the runtime. This mode adds or replaces a single trusted signer in `application.json` and then exits:
+
+```bash
+./start-worker.sh --add-trusted-signer \
+  --signer-id=<SIGNER_ID> \
+  --public-key-base64=<PUBLIC_KEY> \
+  --permissions=mcp:read,mcp:write
+```
+
+- `--add-trusted-signer` enables admin mode and exits before runtime bootstrap.
+- `--signer-id` and `--public-key-base64` are required.
+- `--permissions` is optional (comma-separated list of permission tokens).
+
+The signer ID and public key are shown in the client under **Settings → E2EA Security**. See the [Trusted Signers guide](../docs/user%20guides/Trusted%20Signers%20guide.md) for full details, including environment-variable configuration and Docker usage.
+
 ### Initial setup
 
 The setup process is required to register the worker with the server and generate the necessary credentials for authentication. This only needs to be done once per worker instance.
@@ -50,4 +67,3 @@ The setup process can be run with manual user input from the command line, or it
 ```powershell
 ./gradlew worker:test
 ```
-

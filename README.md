@@ -150,6 +150,7 @@ Notes:
 - The server must be running before starting the worker.
 - An **active** user (or admin) account is required to start the worker, because the worker needs to authenticate with the server.
 - On first startup, the worker will prompt you to enter the server URL and user credentials to connect. An SSL certificate will be generated during setup. On subsequent startups, the stored SSL certificate (and private key) will be used for authentication.
+- To let clients authorize tool-execution requests on this worker, register their signer credentials via the `--add-trusted-signer` CLI flag (or environment variables). See the [Trusted Signers guide](docs/user%20guides/Trusted%20Signers%20guide.md) for details.
 
 **Docker quick start:**
 ```bash
@@ -217,6 +218,7 @@ The files will be installed to `worker/build/install/worker/`. You can run the w
 These guides provide information on how to configure and use specific features of the chatbot.
 - [LLM configuration guide](docs/user%20guides/LLM%20configuration%20guide.md) - How to configure LLM providers, models and model settings. And how to use them in the chatbot.
 - [MCP server configuration guide](docs/user%20guides/MCP%20server%20configuration%20guide.md) - How to configure and use MCP servers.
+- [Trusted Signers guide](docs/user%20guides/Trusted%20Signers%20guide.md) - How to authorize clients for worker tool execution via trusted signers (E2EA).
 
 ## Deployment
 For information on deploying the chatbot application to a VPS or server environment, please refer to the [Deployment Guide](deploy/README.md). This includes:
@@ -272,4 +274,3 @@ For support or general questions, please post a message in the [GitHub discussio
 ## Screenshots
 - Desktop app GUI: ![](https://i.imgur.com/aaFyKLk.png)
 - MCP server configuration: ![](https://i.imgur.com/c4Oskp0.png)
-

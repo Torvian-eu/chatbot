@@ -15,6 +15,7 @@ This README is focused on first-time deployment only.
 - `worker/start-worker-docker.sh`: modified startup script for the worker, used in the Docker image to allow running as non-root user while still being able to write to mounted volumes
 - `worker/docker-compose.example-local.yml`: Docker Compose example for local deployment of the worker
 - `worker/docker-compose.example-vps.yml`: Docker Compose example for VPS deployment of the worker
+- `worker/README.md`: worker Docker deployment guide, including how to authorize clients via trusted signers (E2EA)
 - `caddy/docker-compose.example.yml`: Docker Compose example for Caddy with reverse proxy & static frontend hosting
 - `install-server-dist.ps1`: server distribution build/install script
 - `install-worker-dist.ps1`: worker distribution build/install script
