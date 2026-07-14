@@ -15,7 +15,15 @@
     },
     "auth": {
       "refreshSkewSeconds": 60
-    }
+    },
+    "workspace": {
+      "path": "../workspace"
+    },
+    "builtInTools": {
+      "enabled": ["*"],
+      "defaultCommandTimeoutSeconds": 600
+    },
+    "trustedSigners": []
   }
 }
 
