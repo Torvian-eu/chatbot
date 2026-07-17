@@ -3,12 +3,12 @@ package eu.torvian.chatbot.worker.main
 import arrow.core.Either
 import arrow.core.raise.either
 import arrow.core.raise.ensure
+import eu.torvian.chatbot.worker.VersionInfo
 import eu.torvian.chatbot.worker.config.*
 import eu.torvian.chatbot.worker.koin.workerModule
 import eu.torvian.chatbot.worker.runtime.WorkerRuntime
 import eu.torvian.chatbot.worker.service.api.WorkerMetadataService
 import eu.torvian.chatbot.worker.setup.*
-import eu.torvian.chatbot.worker.VersionInfo
 import io.ktor.client.*
 import kotlinx.coroutines.runBlocking
 import org.apache.logging.log4j.LogManager
@@ -154,6 +154,11 @@ class WorkerMain(
             .bind()
         val config = appConfig.worker
 
+        // Ensure the workspace root exists
+        ensureWorkspaceDirectory(Path.of(config.workspace.path))
+            .mapLeft { WorkerMainError.Config(it) }
+            .bind()
+
         val resolvedPaths = pathResolver.resolve(configDir, config.storage)
         val privateKeyPem = privateKeyProvider.loadPrivateKeyPem(configDir, config.storage)
             .mapLeft { error ->
@@ -178,7 +183,10 @@ class WorkerMain(
         try {
             metadataService.checkCompatibility().fold(
                 ifLeft = { error ->
-                    logger.warn("Worker/server compatibility probe reported a logical issue; continuing startup: {}", error)
+                    logger.warn(
+                        "Worker/server compatibility probe reported a logical issue; continuing startup: {}",
+                        error
+                    )
                 },
                 ifRight = {
                     // Compatibility mismatches are handled inside the service by logging a warning.
@@ -241,8 +249,8 @@ class WorkerMain(
         }
 
         val hasSignerSpecificFlags = options.signerId != null ||
-            options.publicKeyBase64 != null ||
-            options.permissionsCsv != null
+                options.publicKeyBase64 != null ||
+                options.permissionsCsv != null
         ensure(!(hasSignerSpecificFlags && !options.addTrustedSigner)) {
             WorkerMainError.InvalidArguments(
                 "--signer-id, --public-key-base64, and --permissions can only be used together with --add-trusted-signer"

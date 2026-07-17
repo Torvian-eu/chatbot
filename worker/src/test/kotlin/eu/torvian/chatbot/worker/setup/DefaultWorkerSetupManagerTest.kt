@@ -7,6 +7,8 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import eu.torvian.chatbot.worker.config.DefaultWorkerConfigLoader
 import kotlin.io.path.createTempDirectory
+import kotlin.io.path.exists
+import kotlin.io.path.isDirectory
 import kotlin.io.path.readText
 import kotlin.io.path.writeText
 import kotlin.test.Test
@@ -45,6 +47,7 @@ class DefaultWorkerSetupManagerTest {
             val identityJson = workerJson?.get("identity")?.jsonObject
             val storageJson = workerJson?.get("storage")?.jsonObject
             val authJson = workerJson?.get("auth")?.jsonObject
+            val workspaceJson = workerJson?.get("workspace")?.jsonObject
 
             assertEquals("https://localhost:8443/", serverJson?.get("baseUrl")?.jsonPrimitive?.content)
             assertEquals(api.registerWorkerUid, identityJson?.get("uid")?.jsonPrimitive?.content)
@@ -54,9 +57,16 @@ class DefaultWorkerSetupManagerTest {
             assertEquals("./secrets.json", storageJson?.get("secretsJsonPath")?.jsonPrimitive?.content)
             assertEquals("./token.json", storageJson?.get("tokenFilePath")?.jsonPrimitive?.content)
             assertEquals("60", authJson?.get("refreshSkewSeconds")?.jsonPrimitive?.content)
+            // Setup must preserve the workspace group so toDomain does not fail at runtime.
+            assertNotNull(workspaceJson, "workspace group must be preserved by setup")
+            assertEquals("../workspace", workspaceJson["path"]?.jsonPrimitive?.content)
 
             val setupJson = json.parseToJsonElement(tempDir.resolve("setup.json").readText()).jsonObject
             assertEquals("false", setupJson["setup"]?.jsonObject?.get("required")?.jsonPrimitive?.content)
+
+            // Setup must create the workspace directory (resolved relative to the config dir).
+            val workspaceDir = tempDir.resolve("../workspace").normalize()
+            assertTrue(workspaceDir.exists() && workspaceDir.isDirectory(), "workspace should be created during setup")
 
             val secretsJson = json.parseToJsonElement(tempDir.resolve("secrets.json").readText()).jsonObject
             assertTrue(secretsJson["privateKeyPem"]?.jsonPrimitive?.content.orEmpty().contains("BEGIN"))

@@ -1,5 +1,5 @@
 # 1. Base image
-FROM eclipse-temurin:25-jre
+FROM eclipse-temurin:25-jdk
 
 # Set environment to non-interactive to avoid prompts
 ARG DEBIAN_FRONTEND=noninteractive
@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-venv \
     gosu \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # 3. Download and extract official Node.js binaries (OpenJS Foundation)
