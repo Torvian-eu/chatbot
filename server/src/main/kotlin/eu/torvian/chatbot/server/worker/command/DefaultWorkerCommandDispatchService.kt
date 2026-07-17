@@ -25,14 +25,23 @@ import org.apache.logging.log4j.Logger
  * If the worker disconnects before completion, the dispatcher returns an explicit disconnect
  * outcome rather than waiting for the timeout.
  *
+ * The [defaultTimeout] is intentionally a high safety backstop rather than a tight bound: the
+ * worker is the authority on how long a tool call may run (via its own per-tool timeout or
+ * `builtInTools.defaultCommandTimeoutSeconds`), so the server must never cut off a dispatch that
+ * the worker is still actively executing. A dropped worker connection cancels the waiting
+ * coroutine with a `CancellationException`, and because Kotlin coroutines are lightweight this
+ * long backstop does not leak threads or other resources.
+ *
  * @property workerSessionRegistry Registry used to look up the currently connected worker session.
  * @property pendingCommandRegistry Registry used to correlate inbound lifecycle frames.
- * @property defaultTimeout Default wait time used when the caller does not override the timeout.
+ * @property defaultTimeout Safety ceiling used when the caller does not override the timeout. The
+ *   worker remains in control of the actual execution timeout; this only guards against a
+ *   never-ending dispatch (e.g. a worker that dies silently without sending a lifecycle frame).
  */
 class DefaultWorkerCommandDispatchService(
     private val workerSessionRegistry: WorkerSessionRegistry,
     private val pendingCommandRegistry: PendingWorkerCommandRegistry,
-    override val defaultTimeout: Duration = 30.seconds
+    override val defaultTimeout: Duration = 3600.seconds
 ) : WorkerCommandDispatchService {
     override suspend fun dispatch(
         workerId: Long,
@@ -152,5 +161,3 @@ class DefaultWorkerCommandDispatchService(
         private val logger: Logger = LogManager.getLogger(DefaultWorkerCommandDispatchService::class.java)
     }
 }
-
-
