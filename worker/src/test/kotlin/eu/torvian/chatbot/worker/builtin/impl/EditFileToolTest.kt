@@ -90,6 +90,9 @@ class EditFileToolTest {
     // Scenarios
     // -----------------------------------------------------------------------------------------
 
+    /**
+     * Every non-overlapping occurrence of a single edit spec is replaced.
+     */
     @Test
     fun `replaces all occurrences of a single edit spec`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -109,6 +112,10 @@ class EditFileToolTest {
         }
     }
 
+    /**
+     * Interior whitespace divergence (extra spaces) is tolerated for matching; the
+     * matched region is replaced wholesale by newText.
+     */
     @Test
     fun `whitespace-normalized replacement works`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -129,6 +136,9 @@ class EditFileToolTest {
         }
     }
 
+    /**
+     * An edit spanning multiple lines is applied across newline boundaries.
+     */
     @Test
     fun `multiline replacement works across line breaks`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -148,6 +158,9 @@ class EditFileToolTest {
         }
     }
 
+    /**
+     * With dryRun=true the tool returns the summary + diff but does not write the file.
+     */
     @Test
     fun `dryRun returns a report and does not modify the file`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -175,6 +188,9 @@ class EditFileToolTest {
         }
     }
 
+    /**
+     * With dryRun=false the modified content is actually written back to the file.
+     */
     @Test
     fun `non-dryRun writes the modified file`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -194,6 +210,9 @@ class EditFileToolTest {
         }
     }
 
+    /**
+     * An oldText that matches zero occurrences fails with EXECUTION_FAILED ("not found").
+     */
     @Test
     fun `edit spec with zero matches fails with an error result`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -207,15 +226,19 @@ class EditFileToolTest {
             )
 
             assertError(result, BuiltInToolExecutionError.EXECUTION_FAILED)
-            assertTrue(
-                result.errorMessage?.contains("not found") == true,
-                "error message should mention not found: ${result.errorMessage}",
+            assertEquals(
+                result.errorMessage?.contains("not found"),
+                true,
+                "error message should mention not found: ${result.errorMessage}"
             )
         } finally {
             dir.toFile().deleteRecursively()
         }
     }
 
+    /**
+     * A whitespace-only oldText is rejected as INVALID_INPUT before any matching.
+     */
     @Test
     fun `blank oldText is rejected with INVALID_INPUT`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -234,6 +257,9 @@ class EditFileToolTest {
         }
     }
 
+    /**
+     * Several independent edit specs each apply to their own non-overlapping region.
+     */
     @Test
     fun `non-overlapping multiple edit specs all apply`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -256,6 +282,10 @@ class EditFileToolTest {
         }
     }
 
+    /**
+     * Multiple non-overlapping "aa" runs inside one token ("aaaaaa") each map to
+     * their own original-space range and are replaced.
+     */
     @Test
     fun `repeated intra-token matches are replaced correctly`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -277,6 +307,9 @@ class EditFileToolTest {
         }
     }
 
+    /**
+     * When spans overlap, the longer (more specific) match wins; shorter rejected.
+     */
     @Test
     fun `overlapping occurrences prefer the larger or more specific match`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -312,6 +345,9 @@ class EditFileToolTest {
         }
     }
 
+    /**
+     * Equal-length overlapping spans are broken by the lower edit-spec index.
+     */
     @Test
     fun `equal-priority overlap uses lower edit spec index as tie-breaker`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -344,6 +380,9 @@ class EditFileToolTest {
         }
     }
 
+    /**
+     * A match that ends at end-of-file is applied correctly.
+     */
     @Test
     fun `match at end of file works`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -363,6 +402,10 @@ class EditFileToolTest {
         }
     }
 
+    /**
+     * A tab in the source matches a single space in oldText, and the tab is
+     * replaced by newText (trailing newline preserved).
+     */
     @Test
     fun `tabs spaces and newlines are normalized consistently for matching`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -383,6 +426,10 @@ class EditFileToolTest {
         }
     }
 
+    /**
+     * A path escaping the workspace (../escape.txt) is rejected with
+     * WORKSPACE_VIOLATION.
+     */
     @Test
     fun `workspace escape path is rejected`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -398,6 +445,11 @@ class EditFileToolTest {
         }
     }
 
+    /**
+     * A whitespace-leading multiline edit keeps the first line's indentation at exactly
+     * one level: the original indentation is inside the matched range and replaced by
+     * newText, so no doubling occurs.
+     */
     @Test
     fun `indentation of the first matched line is not doubled`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -424,6 +476,9 @@ class EditFileToolTest {
         }
     }
 
+    /**
+     * A nested in-workspace path is accepted and the file is edited in place.
+     */
     @Test
     fun `normal in-workspace path is accepted`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -449,6 +504,10 @@ class EditFileToolTest {
     // Whitespace-insensitive matching that stays in original space (refactored scanner)
     // -----------------------------------------------------------------------------------------
 
+    /**
+     * Interior whitespace divergence is tolerated for matching, but the matched region
+     * (including its inter-word spacing) is replaced wholesale by newText.
+     */
     @Test
     fun `differing interior whitespace still matches without touching surrounding spaces`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -472,6 +531,10 @@ class EditFileToolTest {
         }
     }
 
+    /**
+     * A tab in the source matches a space in oldText; the tab is part of the matched
+     * range and is replaced by newText (the tab does not survive).
+     */
     @Test
     fun `tab and space whitespace are treated as equivalent for matching`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -494,6 +557,10 @@ class EditFileToolTest {
         }
     }
 
+    /**
+     * Explicit CRLF (windows) line endings are preserved and the first-line
+     * indentation is not doubled.
+     */
     @Test
     fun `first-line indentation is preserved once on CRLF (windows) files`() = runTest {
         val dir = createTempDirectory("edit-file-test")
