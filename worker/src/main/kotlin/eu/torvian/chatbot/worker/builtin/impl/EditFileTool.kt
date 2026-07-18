@@ -42,6 +42,19 @@ class EditFileTool : BuiltInTool {
     override val description: String = BuiltInToolCatalog.specFor(name)!!.description
     override val inputSchema: JsonObject = BuiltInToolCatalog.specFor(name)!!.inputSchema
 
+    /**
+     * Applies the caller-supplied `oldText` -> `newText` edits to the referenced file.
+     *
+     * Edits are matched whitespace-insensitively in original space, planned as a single
+     * conflict-resolved batch, then applied. Validation, workspace containment, and read/
+     * write failures are reported as [BuiltInToolExecutionResult.isError] rather than thrown.
+     *
+     * @param input Tool input: `path` (string), `edits` (array of `oldText`/`newText`
+     *   objects), and an optional `dryRun` flag.
+     * @param context Execution context supplying the workspace root and IO dispatcher.
+     * @return A [BuiltInToolExecutionResult]: the diff/report on success, or an error
+     *   result carrying [BuiltInToolExecutionError] details on failure.
+     */
     override suspend fun execute(input: JsonObject, context: BuiltInToolExecutionContext): BuiltInToolExecutionResult {
         val path = input["path"]?.jsonPrimitive?.content
             ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Missing required argument: path")
@@ -167,8 +180,23 @@ class EditFileTool : BuiltInTool {
      */
     private data class RejectedEdit(val index: Int, val reason: String)
 
+    /**
+     * Outcome of [planAndResolve]: either a planning failure or the resolved plan.
+     */
     private sealed interface PlanResult {
+        /**
+         * Planning could not proceed because an edit spec matched zero occurrences.
+         *
+         * @property message Explains which edit spec index failed and why.
+         */
         data class Failure(val message: String) : PlanResult
+
+        /**
+         * Planning succeeded with conflict resolution applied.
+         *
+         * @property accepted Occurrences chosen to be applied (disjoint ranges).
+         * @property rejected Lower-priority occurrences dropped due to overlap, kept for reporting.
+         */
         data class Success(val accepted: List<PlannedEditOccurrence>, val rejected: List<RejectedEdit>) : PlanResult
     }
 
@@ -278,6 +306,7 @@ class EditFileTool : BuiltInTool {
      * @param modified File content after accepted occurrences were applied.
      * @param edits All caller-supplied edit specs (for the requested count).
      * @param plan The resolved plan (accepted + rejected occurrences).
+     * @return The rendered report string (summary followed by a unified diff).
      */
     private fun renderReport(
         original: String,
@@ -317,6 +346,13 @@ class EditFileTool : BuiltInTool {
         return sb.toString()
     }
 
+    /**
+     * Builds an error [BuiltInToolExecutionResult] from a logical [code] and message.
+     *
+     * @param code Machine-readable error code (one of [BuiltInToolExecutionError]).
+     * @param message Human-readable explanation of the failure.
+     * @return An error result with [BuiltInToolExecutionResult.isError] set to `true`.
+     */
     private fun errorResult(code: String, message: String): BuiltInToolExecutionResult =
         BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code)
 
@@ -325,6 +361,10 @@ class EditFileTool : BuiltInTool {
      *
      * Two half-open ranges `[aStart, aEnd)` and `[bStart, bEnd)` overlap iff
      * `aStart < bEnd && bStart < aEnd`.
+     *
+     * @param a First range.
+     * @param b Second range.
+     * @return `true` if [a] and [b] share at least one character, `false` otherwise.
      */
     private fun overlaps(a: MatchRange, b: MatchRange): Boolean =
         a.startIndex < b.endIndexExclusive && b.startIndex < a.endIndexExclusive
@@ -349,6 +389,8 @@ class EditFileTool : BuiltInTool {
      * next search resumes after the end of that match's original span, so self-overlapping
      * matches are skipped.
      *
+     * @param haystack Original file content searched for matches.
+     * @param needle Caller-supplied text to locate (matched whitespace-insensitively).
      * @return The list of [MatchRange]s within the **original** [haystack] for every matched
      *   region, in source order. Empty if [needle] is not found.
      */
@@ -395,10 +437,13 @@ class EditFileTool : BuiltInTool {
      * Attempts a whitespace-insensitive match of [needle] against [haystack] starting at
      * [hStart].
      *
-     * Returns the original-space end index (exclusive) of the matched region if [needle]
-     * matches, or `null` if it does not. See [findAllRanges] for the whitespace-run equality
-     * rule. Trailing whitespace in [needle] is tolerated (a match may end inside a whitespace
-     * run), while a match that runs past the end of [haystack] fails.
+     * @param haystack Original file content being searched.
+     * @param hStart Offset in [haystack] where the attempted match is anchored.
+     * @param needle Caller-supplied text to match.
+     * @return The original-space end index (exclusive) of the matched region if [needle]
+     *   matches starting at [hStart], or `null` if it does not. See [findAllRanges] for the
+     *   whitespace-run equality rule. Trailing whitespace in [needle] is tolerated (a match may
+     *   end inside a whitespace run), while a match that runs past the end of [haystack] fails.
      */
     private fun matchEndAt(haystack: String, hStart: Int, needle: String): Int? {
         var hi = hStart
@@ -429,7 +474,9 @@ class EditFileTool : BuiltInTool {
     }
 
     /**
-     * Returns the index just past the whitespace run starting at [index] in [text].
+     * @param text String being scanned.
+     * @param index Position of the whitespace run to skip past.
+     * @return The index just past the whitespace run starting at [index].
      *
      * If [text] has no whitespace at [index] the returned value equals [index], so callers
      * that only invoke this when `text[index].isWhitespace()` still behave correctly.
