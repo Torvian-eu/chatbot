@@ -12,6 +12,7 @@ import kotlin.io.path.readText
 import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -398,6 +399,32 @@ class EditFileToolTest {
     }
 
     @Test
+    fun `indentation of the first matched line is not doubled`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("sample.kt")
+            // The matched block carries 4 spaces of indentation on its first line.
+            val original = "class A {\n    fun foo() {\n        bar()\n    }\n}\n"
+            file.writeText(original, Charsets.UTF_8)
+
+            // oldText / newText supply their own (single) 4-space indentation on the first line.
+            val oldText = "    fun foo() {\n        bar()\n    }"
+            val newText = "    fun foo() {\n        baz()\n    }"
+
+            val result = tool.execute(
+                buildInput("sample.kt", listOf(oldText to newText)),
+                context(dir),
+            )
+
+            assertSuccess(result)
+            val expected = "class A {\n    fun foo() {\n        baz()\n    }\n}\n"
+            assertEquals(expected, readFile(file))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun `normal in-workspace path is accepted`() = runTest {
         val dir = createTempDirectory("edit-file-test")
         try {
@@ -413,6 +440,84 @@ class EditFileToolTest {
 
             assertSuccess(result)
             assertEquals("changed", readFile(file))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Whitespace-insensitive matching that stays in original space (refactored scanner)
+    // -----------------------------------------------------------------------------------------
+
+    @Test
+    fun `differing interior whitespace still matches without touching surrounding spaces`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            // Three inter-word spaces in the source; oldText uses a single space.
+            file.writeText("alpha   beta   gamma", Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildInput("sample.txt", listOf("alpha beta gamma" to "A B C")),
+                context(dir),
+            )
+
+            assertSuccess(result)
+            // Interior whitespace divergence is tolerated for *matching*, but the matched
+            // region (including its inter-word spacing) is replaced wholesale by newText, so
+            // the resulting spacing follows newText, not the original.
+            assertEquals("A B C", readFile(file))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `tab and space whitespace are treated as equivalent for matching`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            // Tab between words in the source; oldText uses a single space.
+            file.writeText("cat\twalks", Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildInput("sample.txt", listOf("cat walks" to "dog runs")),
+                context(dir),
+            )
+
+            assertSuccess(result)
+            // The tab is part of the matched original range and is replaced by newText,
+            // so the tab does not survive.
+            assertEquals("dog runs", readFile(file))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `first-line indentation is preserved once on CRLF (windows) files`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("sample.kt")
+            // Explicit CRLF line endings (writeText keeps \r\n as-is; Files.readString preserves it).
+            val original = "class A {\r\n    fun foo() {\r\n        bar()\r\n    }\r\n}\r\n"
+            file.writeText(original, Charsets.UTF_8)
+
+            val oldText = "    fun foo() {\r\n        bar()\r\n    }"
+            val newText = "    fun foo() {\r\n        baz()\r\n    }"
+
+            val result = tool.execute(
+                buildInput("sample.kt", listOf(oldText to newText)),
+                context(dir),
+            )
+
+            assertSuccess(result)
+            // The match range starts at the indentation after the \n of each \r\n pair, so the
+            // leading \r\n is preserved and the indentation is replaced wholesale by newText:
+            // single indentation, and the file stays CRLF (no stray bare \r, no doubling).
+            val expected = "class A {\r\n    fun foo() {\r\n        baz()\r\n    }\r\n}\r\n"
+            assertEquals(expected, readFile(file))
+            assertFalse(readFile(file).contains("        fun"), "first line must not be double-indented")
         } finally {
             dir.toFile().deleteRecursively()
         }

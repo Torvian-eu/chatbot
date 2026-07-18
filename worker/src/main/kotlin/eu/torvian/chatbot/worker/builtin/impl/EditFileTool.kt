@@ -7,7 +7,9 @@ import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
 import eu.torvian.chatbot.worker.builtin.WorkspacePathValidator
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.*
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.nio.file.Files
 import java.nio.file.NoSuchFileException
 
@@ -194,10 +196,10 @@ class EditFileTool : BuiltInTool {
         // Flatten all occurrences from every edit spec into a single global list.
         val planned = mutableListOf<PlannedEditOccurrence>()
         for ((index, edit) in edits.withIndex()) {
-            val ranges = findAllNormalizedRanges(text, edit.oldText)
+            val ranges = findAllRanges(text, edit.oldText)
             if (ranges.isEmpty()) {
                 return PlanResult.Failure(
-                    "Edit at index $index: 'oldText' not found (after whitespace normalization)"
+                    "Edit at index $index: 'oldText' not found (whitespace-insensitive match)"
                 )
             }
             for (range in ranges) {
@@ -328,88 +330,113 @@ class EditFileTool : BuiltInTool {
         a.startIndex < b.endIndexExclusive && b.startIndex < a.endIndexExclusive
 
     /**
-     * Finds **all** non-overlapping occurrences of [needle] in [haystack] after both strings are
-     * whitespace-normalized (leading/trailing whitespace on each line collapsed).
+     * Finds **all** non-overlapping occurrences of [needle] in [haystack] using a
+     * whitespace-insensitive but **original-space** comparison.
      *
-     * Within a single edit spec, occurrences are returned in source order and never overlap: once a
-     * normalized match is consumed, the next search resumes after the end of that match's normalized
-     * span, so self-overlapping matches are not returned.
+     * Matching is tolerant to *incidental* whitespace divergence between the caller-supplied
+     * [needle] and the bytes on disk (e.g. `cat   walks` vs `cat walks`, tabs vs spaces):
+     * whenever both cursors sit on whitespace, the comparison advances past each side's whole
+     * whitespace run, so runs of differing length/kind compare equal. All other characters
+     * must match exactly.
      *
-     * @return The list of [MatchRange]s within the **original** [haystack] for every matched region,
-     *   in source order. Empty if [needle] is not found after normalization.
+     * Crucially the search never leaves original space: a match is reported as the *actual*
+     * original `[start, end)` range it covers. Because the range includes the leading
+     * indentation of the first matched line by construction, applying [newText] replaces that
+     * indentation wholesale (no doubling), and there is no normalize-then-remap step that
+     * could misplace the range.
+     *
+     * Occurrences are returned in source order and never overlap: once a match is consumed, the
+     * next search resumes after the end of that match's original span, so self-overlapping
+     * matches are skipped.
+     *
+     * @return The list of [MatchRange]s within the **original** [haystack] for every matched
+     *   region, in source order. Empty if [needle] is not found.
      */
-    private fun findAllNormalizedRanges(haystack: String, needle: String): List<MatchRange> {
+        private fun findAllRanges(haystack: String, needle: String): List<MatchRange> {
         if (needle.isEmpty()) return listOf(MatchRange(0, 0))
-        val haystackNorm = normalize(haystack)
-        val needleNorm = normalize(needle)
-        if (needleNorm.isEmpty()) return listOf(MatchRange(0, 0))
+        // A whitespace-leading needle must anchor at a line start (string start or right after a
+        // newline). This prevents it from absorbing a *preceding* line's trailing whitespace /
+        // newline: e.g. matching `    fun()` against `class A {\n    fun()` must start at the
+        // indentation run after the newline, not at the space following `{`.
+        // A non-whitespace-leading needle is tried at every position (index-of semantics), which
+        // also preserves intra-token repeats such as `aa` inside `aaaa`.
+        val needleStartsWithWs = needle[0].isWhitespace()
 
         val ranges = mutableListOf<MatchRange>()
-        var searchFrom = 0
-        while (true) {
-            val idx = haystackNorm.indexOf(needleNorm, searchFrom)
-            if (idx < 0) break
-            ranges.add(originalRangeOf(haystack, idx, needleNorm))
-            // Resume after the consumed normalized span so self-overlapping matches are skipped.
-            searchFrom = idx + needleNorm.length
+        var hi = 0
+        while (hi < haystack.length) {
+            val canStart = if (needleStartsWithWs) {
+                hi == 0 || haystack[hi - 1] == '\n'
+            } else {
+                true
+            }
+            if (canStart) {
+                val end = matchEndAt(haystack, hi, needle)
+                if (end != null) {
+                    ranges.add(MatchRange(hi, end))
+                    // Resume after the consumed original span so self-overlapping matches are skipped.
+                    hi = end
+                    continue
+                }
+            }
+            // No match starts here. Skip efficiently: a non-whitespace needle cannot start
+            // inside a whitespace run, so jump to the run's end; otherwise step by one character
+            // (this also keeps visiting line starts inside a whitespace run for ws-leading needles).
+            hi = if (haystack[hi].isWhitespace() && !needleStartsWithWs) {
+                endOfWhitespaceRun(haystack, hi)
+            } else {
+                hi + 1
+            }
         }
         return ranges
     }
 
     /**
-     * Maps a character offset range in the normalized [haystack] back to the corresponding
-     * [MatchRange] in the original [haystack].
+     * Attempts a whitespace-insensitive match of [needle] against [haystack] starting at
+     * [hStart].
      *
-     * The normalized strings are produced by collapsing runs of whitespace to single spaces and
-     * trimming. This function scans the original string, reconstructs the normalized token
-     * boundaries, and records both the first and last original character that correspond to the
-     * normalized token span [normOffset, normOffset + needleNorm.length).
+     * Returns the original-space end index (exclusive) of the matched region if [needle]
+     * matches, or `null` if it does not. See [findAllRanges] for the whitespace-run equality
+     * rule. Trailing whitespace in [needle] is tolerated (a match may end inside a whitespace
+     * run), while a match that runs past the end of [haystack] fails.
      */
-    private fun originalRangeOf(haystack: String, normOffset: Int, needleNorm: String): MatchRange {
-        var normCursor = 0
-        var origCursor = 0
-        var origStart = -1
-        var origEnd = -1
-        var lastWasSpace = true
-        while (origCursor < haystack.length) {
-            val c = haystack[origCursor]
-            val isWs = c.isWhitespace()
-            if (isWs) {
-                if (!lastWasSpace) {
-                    normCursor++
-                    lastWasSpace = true
-                }
+    private fun matchEndAt(haystack: String, hStart: Int, needle: String): Int? {
+        var hi = hStart
+        var ni = 0
+        while (ni < needle.length) {
+            if (hi >= haystack.length) return null
+            val hc = haystack[hi]
+            val nc = needle[ni]
+            if (hc.isWhitespace() && nc.isWhitespace()) {
+                // Both sides on whitespace: advance each past its whole run; the runs compare
+                // equal regardless of length or kind (spaces vs tabs vs newlines).
+                hi = endOfWhitespaceRun(haystack, hi)
+                ni = endOfWhitespaceRun(needle, ni)
+            } else if (hc.isWhitespace() || nc.isWhitespace()) {
+                // One side whitespace, the other not -> mismatch.
+                return null
+            } else if (hc != nc) {
+                return null
             } else {
-                // Capture the original start whenever we are exactly at the normalized match
-                // start, independent of token boundaries. The previous guard (`if (lastWasSpace)`)
-                // only set it at the start of a run, so a match beginning mid-run (e.g. the second
-                // "aa" inside "aaaa") never recorded its start and was coerced to 0, collapsing
-                // every occurrence of that run onto the same range.
-                if (normCursor == normOffset) {
-                    origStart = origCursor
-                }
-                lastWasSpace = false
-                normCursor++
+                hi++
+                ni++
             }
-            if (normCursor >= normOffset + needleNorm.length) {
-                // The normalized match ends here — capture the position *after* the last
-                // consumed character in the original. For whitespace runs this includes all
-                // consecutive whitespace characters that collapsed into the trailing space
-                // token in the normalized form.
-                origEnd = origCursor + 1
-                break
-            }
-            origCursor++
         }
-        // If the match extends exactly to the string end, the loop exits before setting origEnd.
-        if (origEnd < 0) origEnd = haystack.length
-        return MatchRange(origStart.coerceAtLeast(0), origEnd)
+        // Needle fully consumed. The match ends at the current haystack cursor, which sits at
+        // the first character after the matched region (possibly inside a trailing whitespace
+        // run, which is deliberately included so it is replaced by newText).
+        return hi
     }
 
     /**
-     * Normalizes a string for whitespace-insensitive comparison: collapses all whitespace to a
-     * single space and trims leading/trailing whitespace.
+     * Returns the index just past the whitespace run starting at [index] in [text].
+     *
+     * If [text] has no whitespace at [index] the returned value equals [index], so callers
+     * that only invoke this when `text[index].isWhitespace()` still behave correctly.
      */
-    private fun normalize(input: String): String =
-        input.split(Regex("\\s+")).filter { it.isNotEmpty() }.joinToString(" ")
+    private fun endOfWhitespaceRun(text: String, index: Int): Int {
+        var i = index
+        while (i < text.length && text[i].isWhitespace()) i++
+        return i
+    }
 }
