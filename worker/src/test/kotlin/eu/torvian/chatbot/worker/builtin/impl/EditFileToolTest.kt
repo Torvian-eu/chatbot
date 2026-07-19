@@ -227,8 +227,8 @@ class EditFileToolTest {
 
             assertError(result, BuiltInToolExecutionError.EXECUTION_FAILED)
             assertEquals(
-                result.errorMessage?.contains("not found"),
                 true,
+                result.errorMessage?.contains("not found"),
                 "error message should mention not found: ${result.errorMessage}"
             )
         } finally {
@@ -584,7 +584,105 @@ class EditFileToolTest {
             // single indentation, and the file stays CRLF (no stray bare \r, no doubling).
             val expected = "class A {\r\n    fun foo() {\r\n        baz()\r\n    }\r\n}\r\n"
             assertEquals(expected, readFile(file))
-            assertFalse(readFile(file).contains("        fun"), "first line must not be double-indented")
+                        assertFalse(readFile(file).contains("        fun"), "first line must not be double-indented")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Unified diff output (Git-compatible) — regression guards for inaccurate diff reporting
+    // -----------------------------------------------------------------------------------------
+
+    /**
+     * An early single-line edit must produce a compact diff: the unchanged trailing lines
+     * (which merely shift down by one index) must appear as context, never as changed lines.
+     * This guards the "small change at the beginning → very long diff" symptom.
+     */
+    @Test
+    fun `early edit produces compact unified diff with unchanged lines as context`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            val original = "alpha\nbeta\ngamma\ndelta\nepsilon"
+            file.writeText(original, Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildInput("sample.txt", listOf("alpha" to "ALPHA"), dryRun = true),
+                context(dir),
+            )
+
+            val output = assertSuccess(result)
+            assertTrue(output.contains("--- diff ---"), "report missing diff section")
+            // The diff must contain a single hunk header.
+            val hunkHeaders = output.lines().filter { it.startsWith("@@") }
+            assertEquals(1, hunkHeaders.size, "expected exactly one hunk, got:\n$output")
+            // Only "alpha" changed; it must be the sole - / + pair.
+            assertTrue(output.contains("- alpha"), "expected removed line alpha")
+            assertTrue(output.contains("+ ALPHA"), "expected added line ALPHA")
+            // All other lines must be context (space prefix) or absent, never - / +.
+            for (line in listOf("beta", "gamma", "delta", "epsilon")) {
+                assertTrue(
+                    !output.contains("- $line") && !output.contains("+ $line"),
+                    "unchanged line '$line' must not be reported as changed in:\n$output"
+                )
+            }
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * Inserting a line near the top is shown as a single added line; the shifted-down existing
+     * lines are context only, not deleted/re-added.
+     */
+    @Test
+    fun `insertion near top is shown as a single added line in diff`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            val original = "one\ntwo\nthree"
+            file.writeText(original, Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildInput("sample.txt", listOf("one" to "one\nONE"), dryRun = true),
+                context(dir),
+            )
+
+            val output = assertSuccess(result)
+            assertTrue(output.contains("+ ONE"), "expected inserted line ONE in diff")
+            // two/three are unchanged and merely shifted; they must not be flagged as changed.
+            for (line in listOf("two", "three")) {
+                assertTrue(
+                    !output.contains("- $line") && !output.contains("+ $line"),
+                    "shifted line '$line' must not be reported as changed in:\n$output"
+                )
+            }
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * When the applied changes produce no textual difference, the report says "(no changes)"
+     * rather than dumping the entire file as a positional diff.
+     */
+    @Test
+    fun `no-op edit reports no changes rather than a full dump`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            // oldText equals newText -> applied content equals original.
+            file.writeText("hello world", Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildInput("sample.txt", listOf("hello" to "hello"), dryRun = true),
+                context(dir),
+            )
+
+            val output = assertSuccess(result)
+            assertTrue(output.contains("(no changes)"), "expected (no changes) marker, got:\n$output")
+            assertFalse(output.contains("@@"), "no-op diff must not contain hunk headers")
         } finally {
             dir.toFile().deleteRecursively()
         }

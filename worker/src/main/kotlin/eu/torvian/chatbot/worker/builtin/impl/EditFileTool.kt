@@ -5,6 +5,7 @@ import eu.torvian.chatbot.common.models.tool.BuiltInToolCatalog
 import eu.torvian.chatbot.worker.builtin.BuiltInTool
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
+import eu.torvian.chatbot.worker.builtin.LineDiff
 import eu.torvian.chatbot.worker.builtin.WorkspacePathValidator
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
@@ -17,10 +18,11 @@ import java.nio.file.NoSuchFileException
  * Performs selective edits inside a text file using `oldText` -> `newText` replacements.
  *
  * Behavior:
- * - Matching is performed in **whitespace-normalized** space so minor indentation differences do
- *   not cause misses, but every replacement is applied using the **original-space** character
- *   range that the normalized match maps back to. This keeps the fix where replacements never rely
- *   on `oldText.length` for normalized matches.
+  * - Matching is performed in original space with **whitespace-tolerant** comparison: incidental
+ *   whitespace divergence (extra spaces, tabs vs spaces, differing indentation runs) between the
+ *   caller-supplied `oldText` and the bytes on disk does not cause misses, and every replacement is
+ *   applied using the **original-space** character range that the match covers. The match never
+ *   leaves original space, so no normalized-remap step can misplace the range.
  * - Each caller-supplied edit spec matches **all** of its non-overlapping occurrences in the
  *   original text (not just the first). One edit spec may therefore produce multiple planned
  *   occurrences.
@@ -32,8 +34,8 @@ import java.nio.file.NoSuchFileException
  *   overlapping occurrence is rejected with a clear summary rather than silently dropped.
  * - Accepted occurrences are applied in **reverse start-index order** against the original text,
  *   which avoids offset shifting and preserves the planned ranges.
- * - `dryRun` produces a unified diff plus a summary (requested edit specs / matched / applied /
- *   rejected occurrences) without modifying the file.
+ * - `dryRun` produces a Git-compatible unified diff plus a summary (requested edit specs / matched /
+ *   applied / rejected occurrences) without modifying the file.
  * - If an edit spec matches zero occurrences, the whole operation fails naming that edit spec's
  *   index.
  */
@@ -287,20 +289,24 @@ class EditFileTool : BuiltInTool {
     private fun applyAccepted(text: String, accepted: List<PlannedEditOccurrence>): String {
         val ordered = accepted.sortedByDescending { it.range.startIndex }
         var result = text
-        for (edit in ordered) {
-            val r = edit.range
-            result = result.substring(0, r.startIndex) + edit.newText + result.substring(r.endIndexExclusive)
+        for ((_, _, newText, r) in ordered) {
+            result = result.substring(0, r.startIndex) + newText + result.substring(r.endIndexExclusive)
         }
         return result
     }
 
     /**
-     * Renders a human-readable report: a summary of requested edit specs and matched/applied/rejected
-     * occurrences, followed by a unified diff of the applied changes.
+          * Renders a human-readable report: a summary of requested edit specs and matched/applied/rejected
+     * occurrences, followed by a Git-compatible unified diff of the applied changes.
      *
      * The summary distinguishes **requested edit specs** (caller-supplied edits) from
      * **occurrences** (individual matches in the original text). One edit spec may produce several
      * matched/applied/rejected occurrences.
+     *
+     * The diff is produced by [LineDiff.unifiedDiff], which aligns the two files via a
+     * longest-common-subsequence edit script and emits `@@ -a,b +c,d @@` hunks with surrounding
+     * context lines. Unlike a positional line-by-line comparison, this keeps the diff compact and
+     * correct even when an edit near the top of the file shifts the alignment of every later line.
      *
      * @param original Original file content.
      * @param modified File content after accepted occurrences were applied.
@@ -323,25 +329,20 @@ class EditFileTool : BuiltInTool {
         sb.append("- rejected occurrences: ").append(plan.rejected.size).append('\n')
         if (plan.rejected.isNotEmpty()) {
             sb.append("Rejected occurrences (overlapping, lower priority):\n")
-            for (r in plan.rejected) {
-                sb.append("  - edit spec index ").append(r.index).append(": ").append(r.reason).append('\n')
+            for ((index, reason) in plan.rejected) {
+                sb.append("  - edit spec index ").append(index).append(": ").append(reason).append('\n')
             }
         }
         sb.append("--- diff ---\n")
+        // Split on '\n' so each list entry is a line *without* its terminator; a trailing empty
+        // string preserves a missing final newline and is reported faithfully rather than invented.
         val originalLines = original.split('\n')
         val modifiedLines = modified.split('\n')
-        val max = maxOf(originalLines.size, modifiedLines.size)
-        for (i in 0 until max) {
-            val orig = originalLines.getOrNull(i)
-            val mod = modifiedLines.getOrNull(i)
-            when {
-                orig == null -> sb.append("+ ").append(mod).append('\n')
-                mod == null -> sb.append("- ").append(orig).append('\n')
-                orig != mod -> {
-                    sb.append("- ").append(orig).append('\n')
-                    sb.append("+ ").append(mod).append('\n')
-                }
-            }
+        val diff = LineDiff.unifiedDiff(originalLines, modifiedLines, contextLines = 3)
+        if (diff.isEmpty()) {
+            sb.append("(no changes)\n")
+        } else {
+            sb.append(diff)
         }
         return sb.toString()
     }
@@ -381,7 +382,7 @@ class EditFileTool : BuiltInTool {
      *
      * Crucially the search never leaves original space: a match is reported as the *actual*
      * original `[start, end)` range it covers. Because the range includes the leading
-     * indentation of the first matched line by construction, applying [newText] replaces that
+     * indentation of the first matched line by construction, applying `newText` replaces that
      * indentation wholesale (no doubling), and there is no normalize-then-remap step that
      * could misplace the range.
      *
@@ -407,11 +408,7 @@ class EditFileTool : BuiltInTool {
         val ranges = mutableListOf<MatchRange>()
         var hi = 0
         while (hi < haystack.length) {
-            val canStart = if (needleStartsWithWs) {
-                hi == 0 || haystack[hi - 1] == '\n'
-            } else {
-                true
-            }
+            val canStart = !needleStartsWithWs || hi == 0 || haystack[hi - 1] == '\n'
             if (canStart) {
                 val end = matchEndAt(haystack, hi, needle)
                 if (end != null) {
