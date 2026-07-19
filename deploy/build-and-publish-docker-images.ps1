@@ -4,7 +4,10 @@ param (
     [string]$ReleaseTag,
 
     [Parameter(Mandatory=$false)]
-    [string]$GitHubUser = "rwachters"
+    [string]$GitHubUser = "rwachters",
+
+    [Parameter(Mandatory=$false)]
+    [switch]$NoPublish
 )
 
 # 1. Path Setup
@@ -25,29 +28,37 @@ if ($IsProduction) {
 }
 
 # 3. Authentication Logic (Environment Variable > Prompt ONLY)
-Write-Host "`nAttempting to retrieve GitHub Access Token..." -ForegroundColor Gray
-$GitHubToken = $null
-if ($env:GH_PAT) {
-    $GitHubToken = $env:GH_PAT
-    Write-Host "Using GitHub Token from environment variable (GH_PAT)." -ForegroundColor Green
-} else {
-    Write-Host "Environment variable GH_PAT not found. Prompting for token." -ForegroundColor Yellow
-    $SecureToken = Read-Host "Enter GitHub Access Token (needs 'write:packages' scope)" -AsSecureString
-    $ptr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureToken)
-    $GitHubToken = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($ptr)
-}
+# Login is only required when actually pushing images.
+if (-not $NoPublish) {
+    Write-Host "`nAttempting to retrieve GitHub Access Token..." -ForegroundColor Gray
+    $GitHubToken = $null
+    if ($env:GH_PAT) {
+        $GitHubToken = $env:GH_PAT
+        Write-Host "Using GitHub Token from environment variable (GH_PAT)." -ForegroundColor Green
+    } else {
+        Write-Host "Environment variable GH_PAT not found. Prompting for token." -ForegroundColor Yellow
+        $SecureToken = Read-Host "Enter GitHub Access Token (needs 'write:packages' scope)" -AsSecureString
+        $ptr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureToken)
+        $GitHubToken = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($ptr)
+    }
 
-# Validate that a token was obtained
-if ([string]::IsNullOrEmpty($GitHubToken)) {
-    Write-Error "No GitHub Access Token provided or found. Aborting."
-    exit 1
+    # Validate that a token was obtained
+    if ([string]::IsNullOrEmpty($GitHubToken)) {
+        Write-Error "No GitHub Access Token provided or found. Aborting."
+        exit 1
+    }
+} else {
+    Write-Host "`n-NoPublish specified. Skipping authentication and push." -ForegroundColor Yellow
 }
 
 # 4. Docker Login
-Write-Host "Logging in to $Registry as $GitHubUser..." -ForegroundColor Gray
-$GitHubToken | docker login $Registry -u $GitHubUser --password-stdin
-if ($LASTEXITCODE -ne 0) { Write-Error "Docker login failed. Check your token and username."; exit $LASTEXITCODE }
-Write-Host "Docker login successful." -ForegroundColor Green
+# Only log in when publishing, since the registry credentials are not needed for local builds.
+if (-not $NoPublish) {
+    Write-Host "Logging in to $Registry as $GitHubUser..." -ForegroundColor Gray
+    $GitHubToken | docker login $Registry -u $GitHubUser --password-stdin
+    if ($LASTEXITCODE -ne 0) { Write-Error "Docker login failed. Check your token and username."; exit $LASTEXITCODE }
+    Write-Host "Docker login successful." -ForegroundColor Green
+}
 
 # 5. Execute your existing installation scripts
 Write-Host "Installing server and worker distributions using local scripts..." -ForegroundColor Gray
@@ -90,7 +101,12 @@ foreach ($Img in $Images) {
         Write-Host "Tagging successful." -ForegroundColor Green
     }
 
-    # Push
+    # Push (skipped when -NoPublish is specified; build and tag still run locally)
+    if ($NoPublish) {
+        Write-Host "Skipping push for $ImgName (NoPublish)." -ForegroundColor Yellow
+        continue
+    }
+
     Write-Host "Pushing images to $Registry..." -ForegroundColor Gray
     docker push $VersionTag
     if ($LASTEXITCODE -ne 0) { Write-Error "Failed to push $VersionTag"; continue }
