@@ -11,10 +11,10 @@ import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpackConfig
 description = "Shared logic and data classes for the chatbot application"
 
 plugins {
-//    id("common-module-convention")  // Apply custom convention plugin
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.kotlin.serialization)
-    alias(libs.plugins.android.library)
+    // AGP 9.0 KMP library plugin: replaces com.android.library for KMP modules.
+    alias(libs.plugins.android.kotlin.multiplatform.library)
 }
 
 repositories {
@@ -53,10 +53,12 @@ kotlin {
 
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs {
+        // Select the browser environment to silence the "choose a WebAssembly-JavaScript
+        // environment" warning. The executable/browser distribution config lives in :webApp.
         outputModuleName = "composeCommon"
+        val rootDirPath = project.rootDir.path
+        val projectDirPath = project.projectDir.path
         browser {
-            val rootDirPath = project.rootDir.path
-            val projectDirPath = project.projectDir.path
             commonWebpackConfig {
                 outputFileName = "composeCommon.js"
                 devServer = devServer ?: KotlinWebpackConfig.DevServer().apply {
@@ -69,9 +71,27 @@ kotlin {
         binaries.executable()
     }
 
-    androidTarget {
+    // Android target configuration lives in the `android {}` block (AGP 9.0 KMP library plugin).
+    // Namespace must be unique across modules; the :androidApp module uses "eu.torvian.chatbot".
+    android {
+        namespace = "eu.torvian.chatbot.common"
+        compileSdk = libs.versions.android.compileSdk.get().toInt()
+        minSdk = libs.versions.android.minSdk.get().toInt()
+
         compilerOptions {
             jvmTarget.set(JvmTarget.fromTarget(libs.versions.javaAndroid.get()))
+        }
+
+        // Enable host (JVM) unit tests for the Android source set so the shared
+        // commonTest code can run on the Android target.
+        withHostTest {
+            isIncludeAndroidResources = true
+        }
+
+        packaging {
+            resources {
+                excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            }
         }
     }
 
@@ -80,13 +100,13 @@ kotlin {
 
     sourceSets {
         // Create a new source set for shared Android/Desktop code
-        val desktopAndroidMain by creating {
+        val desktopAndroidMain = create("desktopAndroidMain") {
             dependsOn(commonMain.get())
         }
-        val desktopMain by getting {
+        val desktopMain = getByName("desktopMain") {
             dependsOn(desktopAndroidMain)
         }
-        val desktopTest by getting
+        val desktopTest = getByName("desktopTest")
 
         androidMain {
             dependsOn(desktopAndroidMain)
@@ -128,33 +148,9 @@ kotlin {
         }
     }
 
-    android {
-        namespace = "eu.torvian.chatbot"
-        compileSdk = libs.versions.android.compileSdk.get().toInt()
-
-        defaultConfig {
-            minSdk = libs.versions.android.minSdk.get().toInt()
-        }
-        packaging {
-            resources {
-                excludes += "/META-INF/{AL2.0,LGPL2.1}"
-            }
-        }
-        buildTypes {
-            getByName("release") {
-                isMinifyEnabled = false
-            }
-        }
-        compileOptions {
-            val javaAndroidVal = libs.versions.javaAndroid.get()
-            sourceCompatibility = JavaVersion.toVersion(javaAndroidVal)
-            targetCompatibility = JavaVersion.toVersion(javaAndroidVal)
-        }
+    tasks.withType<Test> {
+        jvmArgs(
+            "--sun-misc-unsafe-memory-access=allow" // Allow unsafe memory access for testing purposes (needed for MockK)
+        )
     }
-}
-
-tasks.withType<Test> {
-    jvmArgs(
-        "--sun-misc-unsafe-memory-access=allow" // Allow unsafe memory access for testing purposes (needed for MockK)
-    )
 }

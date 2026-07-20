@@ -11,13 +11,13 @@ $DeployDir = Join-Path $ProjectRoot "deploy"
 $ClientDistDir = Join-Path $DeployDir "wasm-client\dist"
 
 # Define the path to the Gradle client distribution directory (where Gradle will output the client distribution)
-$GradleClientDistDir = Join-Path $ProjectRoot "app\build\dist\wasmJs\productionExecutable"
+$GradleClientDistDir = Join-Path $ProjectRoot "webApp\build\dist\wasmJs\productionExecutable"
 
 # Build & Install the client project using the Gradle wrapper
 Write-Host "Building & Installing the client project..."
 Push-Location $ProjectRoot
 try {
-    ./gradlew app:wasmJsBrowserDistribution
+    ./gradlew webApp:wasmJsBrowserDistribution
 
     if ($LASTEXITCODE -ne 0) {
         throw "Gradle build failed with exit code $LASTEXITCODE"

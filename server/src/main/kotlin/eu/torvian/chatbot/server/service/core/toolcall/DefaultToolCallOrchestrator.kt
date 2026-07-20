@@ -1,7 +1,6 @@
 package eu.torvian.chatbot.server.service.core.toolcall
 
 import arrow.core.getOrElse
-import eu.torvian.chatbot.common.models.api.tool.ToolCallApprovalResponse
 import eu.torvian.chatbot.common.models.tool.BuiltInWorkerToolDefinition
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolCall
@@ -69,7 +68,6 @@ class DefaultToolCallOrchestrator(
             val approvalOutcome = when (toolDef) {
                 is LocalMCPToolDefinition -> resolveLocalMcpApproval(pendingToolCall, toolApprovalFlow)
                 is BuiltInWorkerToolDefinition -> resolveBuiltInWorkerApproval(pendingToolCall, toolApprovalFlow)
-                else -> throw IllegalStateException("Unsupported tool definition type for tool definition ${toolDef.id}: ${toolDef::class.simpleName}")
             }
 
             // Handle denial or timeout
