@@ -178,10 +178,8 @@ class UserServiceImpl(
                 }
 
                 // Delegate to DAO and translate DAO errors into service errors
-                withError({ daoError ->
-                    when (daoError) {
-                        is UserError.UserNotFound -> UpdateUserError.UserNotFound(userId)
-                    }
+                withError({ _: UserError.UserNotFound ->
+                    UpdateUserError.UserNotFound(userId)
                 }) {
                     userDao.updateUserStatus(userId, status).bind()
                 }
@@ -193,12 +191,13 @@ class UserServiceImpl(
         requiresPasswordChange: Boolean
     ): Either<UpdateUserError, User> =
         transactionScope.transaction {
-            userDao.updatePasswordChangeRequired(userId, requiresPasswordChange)
-                .mapLeft { error ->
-                    when (error) {
-                        is UserError.UserNotFound -> UpdateUserError.UserNotFound(userId)
-                    }
+            either {
+                withError({ _: UserError.UserNotFound ->
+                    UpdateUserError.UserNotFound(userId)
+                }) {
+                    userDao.updatePasswordChangeRequired(userId, requiresPasswordChange).bind()
                 }
+            }
         }
 
     override suspend fun updateUser(
@@ -332,11 +331,8 @@ class UserServiceImpl(
             }
 
             // Revoke role
-            withError({ daoError ->
-                when (daoError) {
-                    is UserRoleAssignmentError.AssignmentNotFound ->
-                        RevokeRoleError.RoleNotAssigned(userId, roleId)
-                }
+            withError({ _: UserRoleAssignmentError.AssignmentNotFound ->
+                RevokeRoleError.RoleNotAssigned(userId, roleId)
             }) {
                 userRoleAssignmentDao.revokeRoleFromUser(userId, roleId).bind()
             }
