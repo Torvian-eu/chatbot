@@ -21,8 +21,8 @@ if (!(Test-Path $PackageDir)) { New-Item -ItemType Directory -Path $PackageDir |
 $WindowsConfigs = @(
     @{ Name = "Server"; Task = "server:installDist"; Source = "server/build/install/server"; Prefix = "Chatbot_server" },
     @{ Name = "Worker"; Task = "worker:installDist"; Source = "worker/build/install/worker"; Prefix = "Chatbot_worker" },
-    @{ Name = "Windows Client"; Task = "app:createDistributable"; Source = "app/build/compose/binaries/main/app/Chatbot"; Prefix = "Chatbot_client_windows" },
-    @{ Name = "Web Client"; Task = "app:wasmJsBrowserDistribution"; Source = "app/build/dist/wasmJs/productionExecutable"; Prefix = "Chatbot_client_web" }
+    @{ Name = "Windows Client"; Task = "desktopApp:createDistributable"; Source = "desktopApp/build/compose/binaries/main/app/Chatbot"; Prefix = "Chatbot_client_windows" },
+    @{ Name = "Web Client"; Task = "webApp:wasmJsBrowserDistribution"; Source = "webApp/build/dist/wasmJs/productionExecutable"; Prefix = "Chatbot_client_web" }
 )
 
 Write-Host "--- Starting Full Multi-Platform Build for $ReleaseTag ---" -ForegroundColor Cyan
@@ -45,7 +45,7 @@ $WslPackagePath = "/mnt/" + $WinPathRaw.Replace(":", "").Replace("\", "/").ToLow
 
 # Use 'bash -l -c' to ensure the environment (SSH keys, etc.) is loaded
 $LinuxTarName = "Chatbot_client_linux_x64_$ReleaseTag.tar.gz"
-$LinuxCommands = "cd $WslProjectPath && git pull origin master && ./gradlew :app:createDistributable && cd app/build/compose/binaries/main/app/Chatbot && tar -czf ../$LinuxTarName . && mv ../$LinuxTarName '$WslPackagePath/'"
+$LinuxCommands = "cd $WslProjectPath && git pull origin master && ./gradlew :desktopApp:createDistributable && cd desktopApp/build/compose/binaries/main/app/Chatbot && tar -czf ../$LinuxTarName . && mv ../$LinuxTarName '$WslPackagePath/'"
 
 Write-Host "Executing Linux build commands..." -ForegroundColor Gray
 wsl -d $WslDistro bash -l -c $LinuxCommands

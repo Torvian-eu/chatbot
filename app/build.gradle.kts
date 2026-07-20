@@ -1,16 +1,22 @@
-import org.jetbrains.compose.desktop.application.dsl.TargetFormat
-import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpackConfig
 
 /**
- * Build configuration for the `app-shared` module.
+ * Build configuration for the `app` module.
  *
- * - Implements shared frontend logic for the application, including API clients and ViewModels.
+ * This module is a Kotlin Multiplatform **library** that contains the shared
+ * frontend logic for the application: API clients, ViewModels, shared Compose UI,
+ * and the platform-specific `actual` implementations for Android, Desktop (JVM),
+ * and Web (Wasm/JS).
+ *
+ * The platform entry points (MainActivity, desktop `main()`, Wasm `main()`) live
+ * in the dedicated `androidApp`, `desktopApp`, and `webApp` modules respectively.
+ * This split is required because AGP 9.0 no longer allows the Android
+ * application plugin to coexist with the Kotlin Multiplatform plugin in a single
+ * module.
  */
 
-description = "Shared frontend logic module for the chatbot application"
+description = "Shared frontend logic library module for the chatbot application"
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
@@ -18,7 +24,8 @@ plugins {
     alias(libs.plugins.compose)
     alias(libs.plugins.kotlin.compose)
 //    alias(libs.plugins.compose.hotreload)
-    alias(libs.plugins.android.application)
+    // AGP 9.0 KMP library plugin: replaces com.android.library for KMP modules.
+    alias(libs.plugins.android.kotlin.multiplatform.library)
 }
 
 repositories {
@@ -33,9 +40,9 @@ kotlin {
         vendor.set(JvmVendorSpec.ADOPTIUM)
     }
 
-    // Primary target for Desktop backend-frontend logic
+    // Primary target for Desktop backend-frontend logic.
+    // Desktop is consumed as a library by the :desktopApp module; no application block here.
     jvm("desktop") {
-
         testRuns["test"].executionTask.configure {
             // Use JUnit 5 Platform for testing
             useJUnitPlatform()
@@ -58,38 +65,33 @@ kotlin {
 
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs {
-        outputModuleName = "composeApp"
-        browser {
-            val rootDirPath = project.rootDir.path
-            val projectDirPath = project.projectDir.path
-            commonWebpackConfig {
-                outputFileName = "composeApp.js"
-                devServer = devServer ?: KotlinWebpackConfig.DevServer().apply {
-                    // Serve sources to debug inside browser
-                    static(rootDirPath)
-                    static(projectDirPath)
-                }
-            }
-        }
-        binaries.executable()
-//        // Commented out because it is not working with some packages:
-//        compilerOptions {
-//            // Use the new Wasm exception proposal for better error handling
-//            freeCompilerArgs.add("-Xwasm-use-new-exception-proposal")
-//        }
+        // Library target only: the executable/browser configuration lives in the :webApp module.
+        // Keep this target so the shared `actual` implementations (wasmJsMain) are compiled
+        // and consumed by :webApp. Select the browser environment to silence the AGP/Kotlin
+        // "choose a WebAssembly-JavaScript environment" warning.
+        browser()
     }
 
-    androidTarget {
-        @OptIn(ExperimentalKotlinGradlePluginApi::class)
+    // Android target configuration lives in the `android {}` block (AGP 9.0 KMP library plugin).
+    android {
+        namespace = "eu.torvian.chatbot.app"
+        compileSdk = libs.versions.android.compileSdk.get().toInt()
+        minSdk = libs.versions.android.minSdk.get().toInt()
+
         compilerOptions {
             jvmTarget.set(JvmTarget.fromTarget(libs.versions.javaAndroid.get()))
         }
-    }
 
-    // Add other targets here:
-    // iosX64()
-    // iosArm64()
-    // iosSimulatorArm64()
+        // Enable Android resources so the shared module can expose composeResources and
+        // the launcher resources consumed by the :androidApp module.
+        androidResources { enable = true }
+
+        // Enable host (JVM) unit tests for the Android source set so the shared
+        // commonTest code can run on the Android target.
+        withHostTest {
+            isIncludeAndroidResources = true
+        }
+    }
 
     // Apply the default hierarchy template again. Needed for custom source sets to work correctly.
     applyDefaultHierarchyTemplate()
@@ -98,16 +100,16 @@ kotlin {
     // Source sets are used to share code between targets
     sourceSets {
         // Create a new source set for shared Android/Desktop code
-        val desktopAndroidMain by creating {
+        val desktopAndroidMain = create("desktopAndroidMain") {
             dependsOn(commonMain.get())
         }
-        val desktopMain by getting {
+        val desktopMain = getByName("desktopMain") {
             dependsOn(desktopAndroidMain)
         }
         androidMain {
             dependsOn(desktopAndroidMain)
         }
-        val desktopTest by getting
+        val desktopTest = getByName("desktopTest")
 
         commonMain.dependencies {
             // Project dependencies
@@ -122,7 +124,7 @@ kotlin {
             implementation(libs.compose.components.resources)
             implementation(libs.compose.uiToolingPreview)
             //TODO: Instead of using the now deprecated material-icons-extended,
-            // download icons invidually from google and add them to /composeResources.
+            // download icons individually from google and add them to /composeResources.
             // As described here: https://kotlinlang.org/docs/multiplatform/compose-multiplatform-resources-usage.html#icons
             implementation(compose.materialIconsExtended)
 
@@ -172,9 +174,8 @@ kotlin {
         }
 
         desktopMain.dependencies {
-            // implementation(project(":server"))
             // Compose for Desktop
-            runtimeOnly(compose.desktop.currentOs)
+            implementation(compose.desktop.currentOs)
             // KotlinX Coroutines Swing for JVM Main Dispatcher
             implementation(libs.kotlinx.coroutines.swing)
             // Logging (JVM-specific)
@@ -194,6 +195,8 @@ kotlin {
 
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)
+            // Koin Android integration (provides androidContext() for DI).
+            implementation(libs.koin.android)
             // Logging
             implementation(libs.slf4j.simple)
         }
@@ -249,139 +252,11 @@ kotlin.sourceSets.commonMain.configure {
     kotlin.srcDir(tasks.named("generateVersionInfo"))
 }
 
-// Task to create native installers (E7.S1)
-compose.desktop {
-    application {
-        mainClass = "eu.torvian.chatbot.app.main.AppMainKt"
-
-        nativeDistributions {
-            // Strip -SNAPSHOT suffix for native distribution package version
-            val cleanPackageVersion = centralVersion.removeSuffix("-SNAPSHOT")
-
-            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb, TargetFormat.Exe)
-            packageName = "Chatbot"
-            packageVersion = cleanPackageVersion
-
-            modules("java.sql") // Prevents exception "NoClassDefFoundError: java/sql/DriverManager"
-
-            // Add launcher configuration if needed
-            // linux { ... }
-            // windows { ... }
-            // macos { ... }
-        }
-
-        jvmArgs += listOf(
-            "--enable-native-access=ALL-UNNAMED", // Required for Skiko native access to work properly
-            "-Duser.language=en",
-            "-Duser.country=US"
-        )
-        // Uncomment to test with Spanish locale
-//        jvmArgs += "-Duser.language=es"
-//        jvmArgs += "-Duser.country=ES" // Optional, for regional variants like es-ES
-
-    }
-}
-
-// Task to create distributable to a custom path
-tasks.register<Sync>("createDistributableTo") {
-    group = "compose desktop"
-    description = "Copies the desktop distributable to a custom path using -PinstallPath=<path>."
-
-    dependsOn("createDistributable")
-    from(layout.buildDirectory.dir("compose/binaries/main/app/Chatbot"))
-    into(provider {
-        val installPath = findProperty("installPath")?.toString()?.trim()
-        if (installPath.isNullOrEmpty()) {
-            throw GradleException(
-                "Missing required property 'installPath'. Usage: ./gradlew app:createDistributableTo -PinstallPath=/your/target/path"
-            )
-        }
-        file(installPath)
-    })
-}
-
-// Configure the createDistributable task to also copy config files and launch scripts
-afterEvaluate {
-    tasks.named("createDistributable") {
-        val windowsBatchFile = layout.projectDirectory.file("dist-resources/Chatbot-with-logs.bat")
-        val unixShellScript = layout.projectDirectory.file("dist-resources/chatbot-with-logs.sh")
-        val configDir = layout.projectDirectory.dir("src/commonMain/composeResources/files/config")
-        val distDirProvider = layout.buildDirectory.dir("compose/binaries/main/app/Chatbot")
-
-        doLast {
-            val distDir = distDirProvider.get().asFile
-
-            // Copy default config files into the distributable so createDistributable output is complete.
-            val targetConfigDir = File(distDir, "config")
-            targetConfigDir.mkdirs()
-
-            val defaultConfig = configDir.file("default_config.json").asFile
-            val defaultSetup = configDir.file("default_setup.json").asFile
-
-            if (defaultConfig.exists()) {
-                defaultConfig.copyTo(File(targetConfigDir, "config.json"), overwrite = true)
-                println("Copied config.json to distribution: ${distDir.absolutePath}")
-            } else {
-                println("WARNING: default_config.json not found at ${defaultConfig.absolutePath}")
-            }
-
-            if (defaultSetup.exists()) {
-                defaultSetup.copyTo(File(targetConfigDir, "setup.json"), overwrite = true)
-                println("Copied setup.json to distribution: ${distDir.absolutePath}")
-            } else {
-                println("WARNING: default_setup.json not found at ${defaultSetup.absolutePath}")
-            }
-
-            // Copy platform-specific launch scripts
-            // This adds convenience scripts that start the application with a console/terminal window visible,
-            // allowing users to see log output.
-            val os = System.getProperty("os.name").lowercase()
-
-            when {
-                os.contains("win") -> {
-                    // Windows: copy batch file
-                    val batchFile = windowsBatchFile.asFile
-                    if (batchFile.exists()) {
-                        batchFile.copyTo(File(distDir, batchFile.name), overwrite = true)
-                        println("Copied Windows batch file to distribution: ${distDir.absolutePath}")
-                    } else {
-                        println("WARNING: Windows batch file not found at ${batchFile.absolutePath}")
-                    }
-                }
-
-                os.contains("mac") || os.contains("darwin") -> {
-                    // macOS: copy shell script
-                    val shellScript = unixShellScript.asFile
-                    if (shellScript.exists()) {
-                        val targetFile = File(distDir, shellScript.name)
-                        shellScript.copyTo(targetFile, overwrite = true)
-                        // Make executable on Unix-like systems
-                        targetFile.setExecutable(true, false)
-                        println("Copied macOS shell script to distribution: ${distDir.absolutePath}")
-                    } else {
-                        println("WARNING: Shell script not found at ${shellScript.absolutePath}")
-                    }
-                }
-
-                os.contains("nux") || os.contains("nix") -> {
-                    // Linux: copy shell script
-                    val shellScript = unixShellScript.asFile
-                    if (shellScript.exists()) {
-                        val targetFile = File(distDir, shellScript.name)
-                        shellScript.copyTo(targetFile, overwrite = true)
-                        // Make executable on Unix-like systems
-                        targetFile.setExecutable(true, false)
-                        println("Copied Linux shell script to distribution: ${distDir.absolutePath}")
-                    } else {
-                        println("WARNING: Shell script not found at ${shellScript.absolutePath}")
-                    }
-                }
-
-                else -> {
-                    println("WARNING: Unknown OS '${os}', no launcher script copied")
-                }
-            }
-        }
+// Compose resources configuration for the shared module.
+compose {
+    resources {
+        // Set the package name for generated resources
+        packageOfResClass = "eu.torvian.chatbot.app.generated.resources"
     }
 }
 
@@ -390,44 +265,4 @@ tasks.withType<Test> {
         "--enable-native-access=ALL-UNNAMED",
         "--sun-misc-unsafe-memory-access=allow" // Allow unsafe memory access for testing purposes (needed for MockK)
     )
-}
-
-compose {
-    resources {
-        // Set the package name for generated resources
-        packageOfResClass = "eu.torvian.chatbot.app.generated.resources"
-    }
-}
-
-android {
-    namespace = "eu.torvian.chatbot"
-    compileSdk = libs.versions.android.compileSdk.get().toInt()
-
-    defaultConfig {
-        applicationId = "eu.torvian.chatbot"
-        minSdk = libs.versions.android.minSdk.get().toInt()
-        targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = centralVersion
-    }
-    packaging {
-        resources {
-            excludes += "/META-INF/{AL2.0,LGPL2.1}"
-        }
-    }
-    buildTypes {
-        getByName("release") {
-            isMinifyEnabled = false
-        }
-    }
-    compileOptions {
-        val javaAndroidVal = libs.versions.javaAndroid.get()
-        sourceCompatibility = JavaVersion.toVersion(javaAndroidVal)
-        targetCompatibility = JavaVersion.toVersion(javaAndroidVal)
-    }
-}
-
-dependencies {
-    // UI tooling for debugging and preview
-    debugImplementation(libs.compose.uiTooling)
 }

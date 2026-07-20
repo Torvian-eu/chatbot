@@ -25,7 +25,10 @@ gradle.beforeProject {
 // Include the sub-modules
 include("common") // Contains shared code (models)
 include("server") // Contains backend logic (services, data, external, server API)
-include("app") // Contains frontend logic for KMP (API clients, ViewModels, UI)
+include("app") // Contains shared frontend logic (KMP library: API clients, ViewModels, UI)
+include("androidApp") // Contains the Android application entry point
+include("desktopApp") // Contains the Desktop (JVM) application entry point
+include("webApp") // Contains the Web (Wasm/JS) application entry point
 include("worker") // Contains standalone worker service logic
 
 // Include the custom build logic

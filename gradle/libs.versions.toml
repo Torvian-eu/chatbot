@@ -22,7 +22,7 @@ androidx-navigation = "2.9.2" # For Compose Multiplatform Navigation
 kotlin-buildlogic = "2.2.0"  # Kotlin version for build-logic compatibility
 compose-hot-reload = "1.0.0" # Compose Hot Reload version
 androidx-activity = "1.13.0" # For Compose Multiplatform Activity
-android-gradle-plugin = "8.12.3" # Android Gradle Plugin version
+android-gradle-plugin = "9.1.0" # Android Gradle Plugin version
 android-compileSdk = "36"    # The API level to compile against: https://developer.android.com/studio/releases/platforms
 android-minSdk = "26"        # The minimum Android version supported
 android-targetSdk = "36"     # The target Android version for testing
@@ -111,6 +111,7 @@ koin-test-junit5 = { module = "io.insert-koin:koin-test-junit5", version.ref = "
 koin-compose = { module = "io.insert-koin:koin-compose", version.ref = "koin" }
 koin-compose-viewmodel = { module = "io.insert-koin:koin-compose-viewmodel", version.ref = "koin" }
 koin-compose-viewmodel-navigation = { module = "io.insert-koin:koin-compose-viewmodel-navigation", version.ref = "koin" }
+koin-android = { module = "io.insert-koin:koin-android", version.ref = "koin" }
 
 # Arrow (FP library)
 arrow-core = { module = "io.arrow-kt:arrow-core", version.ref = "arrow" }
@@ -251,5 +252,5 @@ compose-hotreload = { id = "org.jetbrains.compose.hot-reload", version.ref = "co
 # Android Application Gradle Plugin: Adds Android-specific tasks to the Gradle build.
 android-application = { id = "com.android.application", version.ref = "android-gradle-plugin" }
 
-# Android Library Gradle Plugin: Allows building Android libraries.
-android-library = { id = "com.android.library", version.ref = "android-gradle-plugin" }
+# Android Kotlin Multiplatform Library Gradle Plugin: Allows building Android libraries from KMP modules (AGP 9.0+).
+android-kotlin-multiplatform-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "android-gradle-plugin" }
