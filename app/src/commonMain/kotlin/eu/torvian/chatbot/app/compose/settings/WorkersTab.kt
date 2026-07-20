@@ -354,6 +354,11 @@ private fun EditWorkerDialog(
                     label = { Text("Tool Name Prefix") },
                     placeholder = { Text("optional, e.g. project1 (prefixes built-in tool names)") },
                     singleLine = true,
+                    isError = formState.toolNamePrefixError != null,
+                    supportingText = {
+                        // Inline field error shown only when the prefix is invalid.
+                        formState.toolNamePrefixError?.let { Text(it) }
+                    },
                     modifier = Modifier.fillMaxWidth()
                 )
 

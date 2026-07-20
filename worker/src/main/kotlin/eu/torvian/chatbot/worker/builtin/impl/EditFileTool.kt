@@ -5,9 +5,12 @@ import eu.torvian.chatbot.common.models.tool.BuiltInToolCatalog
 import eu.torvian.chatbot.worker.builtin.BuiltInTool
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
+import eu.torvian.chatbot.worker.builtin.LineDiff
 import eu.torvian.chatbot.worker.builtin.WorkspacePathValidator
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.*
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.nio.file.Files
 import java.nio.file.NoSuchFileException
 
@@ -15,10 +18,11 @@ import java.nio.file.NoSuchFileException
  * Performs selective edits inside a text file using `oldText` -> `newText` replacements.
  *
  * Behavior:
- * - Matching is performed in **whitespace-normalized** space so minor indentation differences do
- *   not cause misses, but every replacement is applied using the **original-space** character
- *   range that the normalized match maps back to. This keeps the fix where replacements never rely
- *   on `oldText.length` for normalized matches.
+  * - Matching is performed in original space with **whitespace-tolerant** comparison: incidental
+ *   whitespace divergence (extra spaces, tabs vs spaces, differing indentation runs) between the
+ *   caller-supplied `oldText` and the bytes on disk does not cause misses, and every replacement is
+ *   applied using the **original-space** character range that the match covers. The match never
+ *   leaves original space, so no normalized-remap step can misplace the range.
  * - Each caller-supplied edit spec matches **all** of its non-overlapping occurrences in the
  *   original text (not just the first). One edit spec may therefore produce multiple planned
  *   occurrences.
@@ -30,8 +34,8 @@ import java.nio.file.NoSuchFileException
  *   overlapping occurrence is rejected with a clear summary rather than silently dropped.
  * - Accepted occurrences are applied in **reverse start-index order** against the original text,
  *   which avoids offset shifting and preserves the planned ranges.
- * - `dryRun` produces a unified diff plus a summary (requested edit specs / matched / applied /
- *   rejected occurrences) without modifying the file.
+ * - `dryRun` produces a Git-compatible unified diff plus a summary (requested edit specs / matched /
+ *   applied / rejected occurrences) without modifying the file.
  * - If an edit spec matches zero occurrences, the whole operation fails naming that edit spec's
  *   index.
  */
@@ -40,6 +44,19 @@ class EditFileTool : BuiltInTool {
     override val description: String = BuiltInToolCatalog.specFor(name)!!.description
     override val inputSchema: JsonObject = BuiltInToolCatalog.specFor(name)!!.inputSchema
 
+    /**
+     * Applies the caller-supplied `oldText` -> `newText` edits to the referenced file.
+     *
+     * Edits are matched whitespace-insensitively in original space, planned as a single
+     * conflict-resolved batch, then applied. Validation, workspace containment, and read/
+     * write failures are reported as [BuiltInToolExecutionResult.isError] rather than thrown.
+     *
+     * @param input Tool input: `path` (string), `edits` (array of `oldText`/`newText`
+     *   objects), and an optional `dryRun` flag.
+     * @param context Execution context supplying the workspace root and IO dispatcher.
+     * @return A [BuiltInToolExecutionResult]: the diff/report on success, or an error
+     *   result carrying [BuiltInToolExecutionError] details on failure.
+     */
     override suspend fun execute(input: JsonObject, context: BuiltInToolExecutionContext): BuiltInToolExecutionResult {
         val path = input["path"]?.jsonPrimitive?.content
             ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Missing required argument: path")
@@ -165,8 +182,23 @@ class EditFileTool : BuiltInTool {
      */
     private data class RejectedEdit(val index: Int, val reason: String)
 
+    /**
+     * Outcome of [planAndResolve]: either a planning failure or the resolved plan.
+     */
     private sealed interface PlanResult {
+        /**
+         * Planning could not proceed because an edit spec matched zero occurrences.
+         *
+         * @property message Explains which edit spec index failed and why.
+         */
         data class Failure(val message: String) : PlanResult
+
+        /**
+         * Planning succeeded with conflict resolution applied.
+         *
+         * @property accepted Occurrences chosen to be applied (disjoint ranges).
+         * @property rejected Lower-priority occurrences dropped due to overlap, kept for reporting.
+         */
         data class Success(val accepted: List<PlannedEditOccurrence>, val rejected: List<RejectedEdit>) : PlanResult
     }
 
@@ -194,10 +226,10 @@ class EditFileTool : BuiltInTool {
         // Flatten all occurrences from every edit spec into a single global list.
         val planned = mutableListOf<PlannedEditOccurrence>()
         for ((index, edit) in edits.withIndex()) {
-            val ranges = findAllNormalizedRanges(text, edit.oldText)
+            val ranges = findAllRanges(text, edit.oldText)
             if (ranges.isEmpty()) {
                 return PlanResult.Failure(
-                    "Edit at index $index: 'oldText' not found (after whitespace normalization)"
+                    "Edit at index $index: 'oldText' not found (whitespace-insensitive match)"
                 )
             }
             for (range in ranges) {
@@ -257,25 +289,30 @@ class EditFileTool : BuiltInTool {
     private fun applyAccepted(text: String, accepted: List<PlannedEditOccurrence>): String {
         val ordered = accepted.sortedByDescending { it.range.startIndex }
         var result = text
-        for (edit in ordered) {
-            val r = edit.range
-            result = result.substring(0, r.startIndex) + edit.newText + result.substring(r.endIndexExclusive)
+        for ((_, _, newText, r) in ordered) {
+            result = result.substring(0, r.startIndex) + newText + result.substring(r.endIndexExclusive)
         }
         return result
     }
 
     /**
-     * Renders a human-readable report: a summary of requested edit specs and matched/applied/rejected
-     * occurrences, followed by a unified diff of the applied changes.
+          * Renders a human-readable report: a summary of requested edit specs and matched/applied/rejected
+     * occurrences, followed by a Git-compatible unified diff of the applied changes.
      *
      * The summary distinguishes **requested edit specs** (caller-supplied edits) from
      * **occurrences** (individual matches in the original text). One edit spec may produce several
      * matched/applied/rejected occurrences.
      *
+     * The diff is produced by [LineDiff.unifiedDiff], which aligns the two files via a
+     * longest-common-subsequence edit script and emits `@@ -a,b +c,d @@` hunks with surrounding
+     * context lines. Unlike a positional line-by-line comparison, this keeps the diff compact and
+     * correct even when an edit near the top of the file shifts the alignment of every later line.
+     *
      * @param original Original file content.
      * @param modified File content after accepted occurrences were applied.
      * @param edits All caller-supplied edit specs (for the requested count).
      * @param plan The resolved plan (accepted + rejected occurrences).
+     * @return The rendered report string (summary followed by a unified diff).
      */
     private fun renderReport(
         original: String,
@@ -292,29 +329,31 @@ class EditFileTool : BuiltInTool {
         sb.append("- rejected occurrences: ").append(plan.rejected.size).append('\n')
         if (plan.rejected.isNotEmpty()) {
             sb.append("Rejected occurrences (overlapping, lower priority):\n")
-            for (r in plan.rejected) {
-                sb.append("  - edit spec index ").append(r.index).append(": ").append(r.reason).append('\n')
+            for ((index, reason) in plan.rejected) {
+                sb.append("  - edit spec index ").append(index).append(": ").append(reason).append('\n')
             }
         }
         sb.append("--- diff ---\n")
+        // Split on '\n' so each list entry is a line *without* its terminator; a trailing empty
+        // string preserves a missing final newline and is reported faithfully rather than invented.
         val originalLines = original.split('\n')
         val modifiedLines = modified.split('\n')
-        val max = maxOf(originalLines.size, modifiedLines.size)
-        for (i in 0 until max) {
-            val orig = originalLines.getOrNull(i)
-            val mod = modifiedLines.getOrNull(i)
-            when {
-                orig == null -> sb.append("+ ").append(mod).append('\n')
-                mod == null -> sb.append("- ").append(orig).append('\n')
-                orig != mod -> {
-                    sb.append("- ").append(orig).append('\n')
-                    sb.append("+ ").append(mod).append('\n')
-                }
-            }
+        val diff = LineDiff.unifiedDiff(originalLines, modifiedLines, contextLines = 3)
+        if (diff.isEmpty()) {
+            sb.append("(no changes)\n")
+        } else {
+            sb.append(diff)
         }
         return sb.toString()
     }
 
+    /**
+     * Builds an error [BuiltInToolExecutionResult] from a logical [code] and message.
+     *
+     * @param code Machine-readable error code (one of [BuiltInToolExecutionError]).
+     * @param message Human-readable explanation of the failure.
+     * @return An error result with [BuiltInToolExecutionResult.isError] set to `true`.
+     */
     private fun errorResult(code: String, message: String): BuiltInToolExecutionResult =
         BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code)
 
@@ -323,93 +362,125 @@ class EditFileTool : BuiltInTool {
      *
      * Two half-open ranges `[aStart, aEnd)` and `[bStart, bEnd)` overlap iff
      * `aStart < bEnd && bStart < aEnd`.
+     *
+     * @param a First range.
+     * @param b Second range.
+     * @return `true` if [a] and [b] share at least one character, `false` otherwise.
      */
     private fun overlaps(a: MatchRange, b: MatchRange): Boolean =
         a.startIndex < b.endIndexExclusive && b.startIndex < a.endIndexExclusive
 
     /**
-     * Finds **all** non-overlapping occurrences of [needle] in [haystack] after both strings are
-     * whitespace-normalized (leading/trailing whitespace on each line collapsed).
+     * Finds **all** non-overlapping occurrences of [needle] in [haystack] using a
+     * whitespace-insensitive but **original-space** comparison.
      *
-     * Within a single edit spec, occurrences are returned in source order and never overlap: once a
-     * normalized match is consumed, the next search resumes after the end of that match's normalized
-     * span, so self-overlapping matches are not returned.
+     * Matching is tolerant to *incidental* whitespace divergence between the caller-supplied
+     * [needle] and the bytes on disk (e.g. `cat   walks` vs `cat walks`, tabs vs spaces):
+     * whenever both cursors sit on whitespace, the comparison advances past each side's whole
+     * whitespace run, so runs of differing length/kind compare equal. All other characters
+     * must match exactly.
      *
-     * @return The list of [MatchRange]s within the **original** [haystack] for every matched region,
-     *   in source order. Empty if [needle] is not found after normalization.
+     * Crucially the search never leaves original space: a match is reported as the *actual*
+     * original `[start, end)` range it covers. Because the range includes the leading
+     * indentation of the first matched line by construction, applying `newText` replaces that
+     * indentation wholesale (no doubling), and there is no normalize-then-remap step that
+     * could misplace the range.
+     *
+     * Occurrences are returned in source order and never overlap: once a match is consumed, the
+     * next search resumes after the end of that match's original span, so self-overlapping
+     * matches are skipped.
+     *
+     * @param haystack Original file content searched for matches.
+     * @param needle Caller-supplied text to locate (matched whitespace-insensitively).
+     * @return The list of [MatchRange]s within the **original** [haystack] for every matched
+     *   region, in source order. Empty if [needle] is not found.
      */
-    private fun findAllNormalizedRanges(haystack: String, needle: String): List<MatchRange> {
+        private fun findAllRanges(haystack: String, needle: String): List<MatchRange> {
         if (needle.isEmpty()) return listOf(MatchRange(0, 0))
-        val haystackNorm = normalize(haystack)
-        val needleNorm = normalize(needle)
-        if (needleNorm.isEmpty()) return listOf(MatchRange(0, 0))
+        // A whitespace-leading needle must anchor at a line start (string start or right after a
+        // newline). This prevents it from absorbing a *preceding* line's trailing whitespace /
+        // newline: e.g. matching `    fun()` against `class A {\n    fun()` must start at the
+        // indentation run after the newline, not at the space following `{`.
+        // A non-whitespace-leading needle is tried at every position (index-of semantics), which
+        // also preserves intra-token repeats such as `aa` inside `aaaa`.
+        val needleStartsWithWs = needle[0].isWhitespace()
 
         val ranges = mutableListOf<MatchRange>()
-        var searchFrom = 0
-        while (true) {
-            val idx = haystackNorm.indexOf(needleNorm, searchFrom)
-            if (idx < 0) break
-            ranges.add(originalRangeOf(haystack, idx, needleNorm))
-            // Resume after the consumed normalized span so self-overlapping matches are skipped.
-            searchFrom = idx + needleNorm.length
+        var hi = 0
+        while (hi < haystack.length) {
+            val canStart = !needleStartsWithWs || hi == 0 || haystack[hi - 1] == '\n'
+            if (canStart) {
+                val end = matchEndAt(haystack, hi, needle)
+                if (end != null) {
+                    ranges.add(MatchRange(hi, end))
+                    // Resume after the consumed original span so self-overlapping matches are skipped.
+                    hi = end
+                    continue
+                }
+            }
+            // No match starts here. Skip efficiently: a non-whitespace needle cannot start
+            // inside a whitespace run, so jump to the run's end; otherwise step by one character
+            // (this also keeps visiting line starts inside a whitespace run for ws-leading needles).
+            hi = if (haystack[hi].isWhitespace() && !needleStartsWithWs) {
+                endOfWhitespaceRun(haystack, hi)
+            } else {
+                hi + 1
+            }
         }
         return ranges
     }
 
     /**
-     * Maps a character offset range in the normalized [haystack] back to the corresponding
-     * [MatchRange] in the original [haystack].
+     * Attempts a whitespace-insensitive match of [needle] against [haystack] starting at
+     * [hStart].
      *
-     * The normalized strings are produced by collapsing runs of whitespace to single spaces and
-     * trimming. This function scans the original string, reconstructs the normalized token
-     * boundaries, and records both the first and last original character that correspond to the
-     * normalized token span [normOffset, normOffset + needleNorm.length).
+     * @param haystack Original file content being searched.
+     * @param hStart Offset in [haystack] where the attempted match is anchored.
+     * @param needle Caller-supplied text to match.
+     * @return The original-space end index (exclusive) of the matched region if [needle]
+     *   matches starting at [hStart], or `null` if it does not. See [findAllRanges] for the
+     *   whitespace-run equality rule. Trailing whitespace in [needle] is tolerated (a match may
+     *   end inside a whitespace run), while a match that runs past the end of [haystack] fails.
      */
-    private fun originalRangeOf(haystack: String, normOffset: Int, needleNorm: String): MatchRange {
-        var normCursor = 0
-        var origCursor = 0
-        var origStart = -1
-        var origEnd = -1
-        var lastWasSpace = true
-        while (origCursor < haystack.length) {
-            val c = haystack[origCursor]
-            val isWs = c.isWhitespace()
-            if (isWs) {
-                if (!lastWasSpace) {
-                    normCursor++
-                    lastWasSpace = true
-                }
+    private fun matchEndAt(haystack: String, hStart: Int, needle: String): Int? {
+        var hi = hStart
+        var ni = 0
+        while (ni < needle.length) {
+            if (hi >= haystack.length) return null
+            val hc = haystack[hi]
+            val nc = needle[ni]
+            if (hc.isWhitespace() && nc.isWhitespace()) {
+                // Both sides on whitespace: advance each past its whole run; the runs compare
+                // equal regardless of length or kind (spaces vs tabs vs newlines).
+                hi = endOfWhitespaceRun(haystack, hi)
+                ni = endOfWhitespaceRun(needle, ni)
+            } else if (hc.isWhitespace() || nc.isWhitespace()) {
+                // One side whitespace, the other not -> mismatch.
+                return null
+            } else if (hc != nc) {
+                return null
             } else {
-                // Capture the original start whenever we are exactly at the normalized match
-                // start, independent of token boundaries. The previous guard (`if (lastWasSpace)`)
-                // only set it at the start of a run, so a match beginning mid-run (e.g. the second
-                // "aa" inside "aaaa") never recorded its start and was coerced to 0, collapsing
-                // every occurrence of that run onto the same range.
-                if (normCursor == normOffset) {
-                    origStart = origCursor
-                }
-                lastWasSpace = false
-                normCursor++
+                hi++
+                ni++
             }
-            if (normCursor >= normOffset + needleNorm.length) {
-                // The normalized match ends here — capture the position *after* the last
-                // consumed character in the original. For whitespace runs this includes all
-                // consecutive whitespace characters that collapsed into the trailing space
-                // token in the normalized form.
-                origEnd = origCursor + 1
-                break
-            }
-            origCursor++
         }
-        // If the match extends exactly to the string end, the loop exits before setting origEnd.
-        if (origEnd < 0) origEnd = haystack.length
-        return MatchRange(origStart.coerceAtLeast(0), origEnd)
+        // Needle fully consumed. The match ends at the current haystack cursor, which sits at
+        // the first character after the matched region (possibly inside a trailing whitespace
+        // run, which is deliberately included so it is replaced by newText).
+        return hi
     }
 
     /**
-     * Normalizes a string for whitespace-insensitive comparison: collapses all whitespace to a
-     * single space and trims leading/trailing whitespace.
+     * @param text String being scanned.
+     * @param index Position of the whitespace run to skip past.
+     * @return The index just past the whitespace run starting at [index].
+     *
+     * If [text] has no whitespace at [index] the returned value equals [index], so callers
+     * that only invoke this when `text[index].isWhitespace()` still behave correctly.
      */
-    private fun normalize(input: String): String =
-        input.split(Regex("\\s+")).filter { it.isNotEmpty() }.joinToString(" ")
+    private fun endOfWhitespaceRun(text: String, index: Int): Int {
+        var i = index
+        while (i < text.length && text[i].isWhitespace()) i++
+        return i
+    }
 }

@@ -17,6 +17,8 @@ import org.jetbrains.exposed.v1.core.dao.id.LongIdTable
  * @property createdAt Creation timestamp in epoch milliseconds.
  * @property lastSeenAt Last successful authentication timestamp.
  * @property toolNamePrefix Optional prefix applied to the public names of the worker's built-in tools.
+ *   Must match `^[a-zA-Z0-9_-]+$` (letters, digits, underscores, dashes); enforced by the server before
+ *   persistence. A `null` value means "no prefix".
  */
 object WorkersTable : LongIdTable("workers") {
     val ownerUserId = reference("owner_user_id", UsersTable, onDelete = ReferenceOption.CASCADE)

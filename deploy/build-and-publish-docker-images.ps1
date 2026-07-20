@@ -1,13 +1,28 @@
+<#
+.SYNOPSIS
+    Builds (and optionally publishes) the Torvian chatbot Docker images for the server and worker.
+.DESCRIPTION
+    Installs the server and worker distributions, then builds their Docker images.
+    By default it also tags (for production releases) and pushes the images to the GitHub Container Registry.
+    Use the switches below to limit which images are built or to skip publishing entirely.
+#>
+
 param (
     [Parameter(Mandatory=$true, HelpMessage="The version tag for the release (e.g., v0.4.0 or v0.9.0-SNAPSHOT)")]
     [Alias("tag")]
     [string]$ReleaseTag,
 
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory=$false, HelpMessage="The GitHub username used to authenticate against the container registry (defaults to 'rwachters')")]
     [string]$GitHubUser = "rwachters",
 
-    [Parameter(Mandatory=$false)]
-    [switch]$NoPublish
+    [Parameter(Mandatory=$false, HelpMessage="Build and tag the images locally but skip Docker login and pushing to the registry")]
+    [switch]$NoPublish,
+
+    [Parameter(Mandatory=$false, HelpMessage="Build and publish only the chatbot-server image (mutually exclusive with WorkerOnly)")]
+    [switch]$ServerOnly,
+
+    [Parameter(Mandatory=$false, HelpMessage="Build and publish only the chatbot-worker image (mutually exclusive with ServerOnly)")]
+    [switch]$WorkerOnly
 )
 
 # 1. Path Setup
@@ -19,6 +34,12 @@ $Org = "torvian-eu"
 # Production tags strictly follow semantic versioning (e.g., v1.0.0 or 1.0.0).
 # If it has a suffix like "-SNAPSHOT", "-rc1", or "-beta", we treat it as non-production.
 $IsProduction = $ReleaseTag -match '^v?\d+\.\d+\.\d+$'
+
+# Validate that ServerOnly and WorkerOnly are not both specified (they are mutually exclusive).
+if ($ServerOnly -and $WorkerOnly) {
+    Write-Error "ServerOnly and WorkerOnly cannot be used together. Aborting."
+    exit 1
+}
 
 Write-Host "--- Starting Docker Build/Push Pipeline for $ReleaseTag ---" -ForegroundColor Cyan
 if ($IsProduction) {
@@ -76,6 +97,15 @@ $Images = @(
     @{ Name = "chatbot-server"; Context = "server" },
     @{ Name = "chatbot-worker"; Context = "worker" }
 )
+
+# Restrict to a single image when ServerOnly or WorkerOnly is specified.
+if ($ServerOnly) {
+    $Images = $Images | Where-Object { $_.Name -eq "chatbot-server" }
+    Write-Host "ServerOnly specified. Only the server image will be processed." -ForegroundColor Yellow
+} elseif ($WorkerOnly) {
+    $Images = $Images | Where-Object { $_.Name -eq "chatbot-worker" }
+    Write-Host "WorkerOnly specified. Only the worker image will be processed." -ForegroundColor Yellow
+}
 
 # 7. Docker Build, Tag, and Push Loop
 foreach ($Img in $Images) {

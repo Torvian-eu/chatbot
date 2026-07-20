@@ -266,5 +266,91 @@ class DefaultLocalMCPRuntimeControlServiceTest {
         ifLeft = { error("Expected Right but was Left: $it") },
         ifRight = { it }
     )
-}
 
+    /**
+     * Verifies `refreshTools` sanitizes the public tool name into LLM-safe characters while preserving the
+     * raw MCP name for dispatch.
+     */
+    @Test
+    fun `refresh tools sanitizes public name but keeps raw mcpToolName`() = runTest {
+        val server = localServer(toolNamePrefix = null)
+        val discoveredTool = WorkerMcpDiscoveredToolData(
+            name = "get /weather",
+            description = "Gets weather",
+            inputSchema = buildJsonObject {
+                put("type", "object")
+            },
+            outputSchema = null
+        )
+
+        coEvery { localMCPServerService.getServerById(userId = 9L, serverId = 7L) } returns server.right()
+        coEvery { commandDispatchService.discoverTools(workerId = 3L, serverId = 7L) } returns
+            WorkerMcpServerDiscoverToolsResultData(
+                serverId = 7L,
+                tools = listOf(discoveredTool)
+            ).right()
+
+        coEvery {
+            toolDefinitionService.refreshMCPTools(
+                serverId = 7L,
+                currentTools = any()
+            )
+        } answers {
+            val currentTools = secondArg<List<LocalMCPToolDefinition>>()
+            RefreshResult(
+                addedTools = currentTools,
+                updatedTools = emptyList(),
+                deletedTools = emptyList()
+            ).right()
+        }
+
+        val response = service.refreshTools(userId = 9L, serverId = 7L).requireRight()
+
+        assertEquals(1, response.addedTools.size)
+        // Public name is sanitized to LLM-safe characters; raw name is preserved for MCP dispatch.
+        assertEquals("get_weather", response.addedTools.single().name)
+        assertEquals("get /weather", response.addedTools.single().mcpToolName)
+    }
+
+    /**
+     * Verifies a server-configured prefix is concatenated before sanitization, and the raw name is preserved.
+     */
+    @Test
+    fun `refresh tools applies and sanitizes prefixed public name`() = runTest {
+        val server = localServer(toolNamePrefix = "proj-")
+        val discoveredTool = WorkerMcpDiscoveredToolData(
+            name = "list files",
+            description = "Lists files",
+            inputSchema = buildJsonObject {
+                put("type", "object")
+            },
+            outputSchema = null
+        )
+
+        coEvery { localMCPServerService.getServerById(userId = 9L, serverId = 7L) } returns server.right()
+        coEvery { commandDispatchService.discoverTools(workerId = 3L, serverId = 7L) } returns
+            WorkerMcpServerDiscoverToolsResultData(
+                serverId = 7L,
+                tools = listOf(discoveredTool)
+            ).right()
+
+        coEvery {
+            toolDefinitionService.refreshMCPTools(
+                serverId = 7L,
+                currentTools = any()
+            )
+        } answers {
+            val currentTools = secondArg<List<LocalMCPToolDefinition>>()
+            RefreshResult(
+                addedTools = currentTools,
+                updatedTools = emptyList(),
+                deletedTools = emptyList()
+            ).right()
+        }
+
+        val response = service.refreshTools(userId = 9L, serverId = 7L).requireRight()
+
+        assertEquals("proj-list_files", response.addedTools.single().name)
+        assertEquals("list files", response.addedTools.single().mcpToolName)
+    }
+}

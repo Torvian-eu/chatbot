@@ -12,6 +12,7 @@ import kotlin.io.path.readText
 import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -89,6 +90,9 @@ class EditFileToolTest {
     // Scenarios
     // -----------------------------------------------------------------------------------------
 
+    /**
+     * Every non-overlapping occurrence of a single edit spec is replaced.
+     */
     @Test
     fun `replaces all occurrences of a single edit spec`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -108,6 +112,10 @@ class EditFileToolTest {
         }
     }
 
+    /**
+     * Interior whitespace divergence (extra spaces) is tolerated for matching; the
+     * matched region is replaced wholesale by newText.
+     */
     @Test
     fun `whitespace-normalized replacement works`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -128,6 +136,9 @@ class EditFileToolTest {
         }
     }
 
+    /**
+     * An edit spanning multiple lines is applied across newline boundaries.
+     */
     @Test
     fun `multiline replacement works across line breaks`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -147,6 +158,9 @@ class EditFileToolTest {
         }
     }
 
+    /**
+     * With dryRun=true the tool returns the summary + diff but does not write the file.
+     */
     @Test
     fun `dryRun returns a report and does not modify the file`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -174,6 +188,9 @@ class EditFileToolTest {
         }
     }
 
+    /**
+     * With dryRun=false the modified content is actually written back to the file.
+     */
     @Test
     fun `non-dryRun writes the modified file`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -193,6 +210,9 @@ class EditFileToolTest {
         }
     }
 
+    /**
+     * An oldText that matches zero occurrences fails with EXECUTION_FAILED ("not found").
+     */
     @Test
     fun `edit spec with zero matches fails with an error result`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -206,15 +226,19 @@ class EditFileToolTest {
             )
 
             assertError(result, BuiltInToolExecutionError.EXECUTION_FAILED)
-            assertTrue(
-                result.errorMessage?.contains("not found") == true,
-                "error message should mention not found: ${result.errorMessage}",
+            assertEquals(
+                true,
+                result.errorMessage?.contains("not found"),
+                "error message should mention not found: ${result.errorMessage}"
             )
         } finally {
             dir.toFile().deleteRecursively()
         }
     }
 
+    /**
+     * A whitespace-only oldText is rejected as INVALID_INPUT before any matching.
+     */
     @Test
     fun `blank oldText is rejected with INVALID_INPUT`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -233,6 +257,9 @@ class EditFileToolTest {
         }
     }
 
+    /**
+     * Several independent edit specs each apply to their own non-overlapping region.
+     */
     @Test
     fun `non-overlapping multiple edit specs all apply`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -255,6 +282,10 @@ class EditFileToolTest {
         }
     }
 
+    /**
+     * Multiple non-overlapping "aa" runs inside one token ("aaaaaa") each map to
+     * their own original-space range and are replaced.
+     */
     @Test
     fun `repeated intra-token matches are replaced correctly`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -276,6 +307,9 @@ class EditFileToolTest {
         }
     }
 
+    /**
+     * When spans overlap, the longer (more specific) match wins; shorter rejected.
+     */
     @Test
     fun `overlapping occurrences prefer the larger or more specific match`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -311,6 +345,9 @@ class EditFileToolTest {
         }
     }
 
+    /**
+     * Equal-length overlapping spans are broken by the lower edit-spec index.
+     */
     @Test
     fun `equal-priority overlap uses lower edit spec index as tie-breaker`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -343,6 +380,9 @@ class EditFileToolTest {
         }
     }
 
+    /**
+     * A match that ends at end-of-file is applied correctly.
+     */
     @Test
     fun `match at end of file works`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -362,6 +402,10 @@ class EditFileToolTest {
         }
     }
 
+    /**
+     * A tab in the source matches a single space in oldText, and the tab is
+     * replaced by newText (trailing newline preserved).
+     */
     @Test
     fun `tabs spaces and newlines are normalized consistently for matching`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -382,6 +426,10 @@ class EditFileToolTest {
         }
     }
 
+    /**
+     * A path escaping the workspace (../escape.txt) is rejected with
+     * WORKSPACE_VIOLATION.
+     */
     @Test
     fun `workspace escape path is rejected`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -397,6 +445,40 @@ class EditFileToolTest {
         }
     }
 
+    /**
+     * A whitespace-leading multiline edit keeps the first line's indentation at exactly
+     * one level: the original indentation is inside the matched range and replaced by
+     * newText, so no doubling occurs.
+     */
+    @Test
+    fun `indentation of the first matched line is not doubled`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("sample.kt")
+            // The matched block carries 4 spaces of indentation on its first line.
+            val original = "class A {\n    fun foo() {\n        bar()\n    }\n}\n"
+            file.writeText(original, Charsets.UTF_8)
+
+            // oldText / newText supply their own (single) 4-space indentation on the first line.
+            val oldText = "    fun foo() {\n        bar()\n    }"
+            val newText = "    fun foo() {\n        baz()\n    }"
+
+            val result = tool.execute(
+                buildInput("sample.kt", listOf(oldText to newText)),
+                context(dir),
+            )
+
+            assertSuccess(result)
+            val expected = "class A {\n    fun foo() {\n        baz()\n    }\n}\n"
+            assertEquals(expected, readFile(file))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * A nested in-workspace path is accepted and the file is edited in place.
+     */
     @Test
     fun `normal in-workspace path is accepted`() = runTest {
         val dir = createTempDirectory("edit-file-test")
@@ -413,6 +495,194 @@ class EditFileToolTest {
 
             assertSuccess(result)
             assertEquals("changed", readFile(file))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Whitespace-insensitive matching that stays in original space (refactored scanner)
+    // -----------------------------------------------------------------------------------------
+
+    /**
+     * Interior whitespace divergence is tolerated for matching, but the matched region
+     * (including its inter-word spacing) is replaced wholesale by newText.
+     */
+    @Test
+    fun `differing interior whitespace still matches without touching surrounding spaces`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            // Three inter-word spaces in the source; oldText uses a single space.
+            file.writeText("alpha   beta   gamma", Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildInput("sample.txt", listOf("alpha beta gamma" to "A B C")),
+                context(dir),
+            )
+
+            assertSuccess(result)
+            // Interior whitespace divergence is tolerated for *matching*, but the matched
+            // region (including its inter-word spacing) is replaced wholesale by newText, so
+            // the resulting spacing follows newText, not the original.
+            assertEquals("A B C", readFile(file))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * A tab in the source matches a space in oldText; the tab is part of the matched
+     * range and is replaced by newText (the tab does not survive).
+     */
+    @Test
+    fun `tab and space whitespace are treated as equivalent for matching`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            // Tab between words in the source; oldText uses a single space.
+            file.writeText("cat\twalks", Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildInput("sample.txt", listOf("cat walks" to "dog runs")),
+                context(dir),
+            )
+
+            assertSuccess(result)
+            // The tab is part of the matched original range and is replaced by newText,
+            // so the tab does not survive.
+            assertEquals("dog runs", readFile(file))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * Explicit CRLF (windows) line endings are preserved and the first-line
+     * indentation is not doubled.
+     */
+    @Test
+    fun `first-line indentation is preserved once on CRLF (windows) files`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("sample.kt")
+            // Explicit CRLF line endings (writeText keeps \r\n as-is; Files.readString preserves it).
+            val original = "class A {\r\n    fun foo() {\r\n        bar()\r\n    }\r\n}\r\n"
+            file.writeText(original, Charsets.UTF_8)
+
+            val oldText = "    fun foo() {\r\n        bar()\r\n    }"
+            val newText = "    fun foo() {\r\n        baz()\r\n    }"
+
+            val result = tool.execute(
+                buildInput("sample.kt", listOf(oldText to newText)),
+                context(dir),
+            )
+
+            assertSuccess(result)
+            // The match range starts at the indentation after the \n of each \r\n pair, so the
+            // leading \r\n is preserved and the indentation is replaced wholesale by newText:
+            // single indentation, and the file stays CRLF (no stray bare \r, no doubling).
+            val expected = "class A {\r\n    fun foo() {\r\n        baz()\r\n    }\r\n}\r\n"
+            assertEquals(expected, readFile(file))
+                        assertFalse(readFile(file).contains("        fun"), "first line must not be double-indented")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Unified diff output (Git-compatible) — regression guards for inaccurate diff reporting
+    // -----------------------------------------------------------------------------------------
+
+    /**
+     * An early single-line edit must produce a compact diff: the unchanged trailing lines
+     * (which merely shift down by one index) must appear as context, never as changed lines.
+     * This guards the "small change at the beginning → very long diff" symptom.
+     */
+    @Test
+    fun `early edit produces compact unified diff with unchanged lines as context`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            val original = "alpha\nbeta\ngamma\ndelta\nepsilon"
+            file.writeText(original, Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildInput("sample.txt", listOf("alpha" to "ALPHA"), dryRun = true),
+                context(dir),
+            )
+
+            val output = assertSuccess(result)
+            assertTrue(output.contains("--- diff ---"), "report missing diff section")
+            // The diff must contain a single hunk header.
+            val hunkHeaders = output.lines().filter { it.startsWith("@@") }
+            assertEquals(1, hunkHeaders.size, "expected exactly one hunk, got:\n$output")
+            // Only "alpha" changed; it must be the sole - / + pair.
+            assertTrue(output.contains("- alpha"), "expected removed line alpha")
+            assertTrue(output.contains("+ ALPHA"), "expected added line ALPHA")
+            // All other lines must be context (space prefix) or absent, never - / +.
+            for (line in listOf("beta", "gamma", "delta", "epsilon")) {
+                assertTrue(
+                    !output.contains("- $line") && !output.contains("+ $line"),
+                    "unchanged line '$line' must not be reported as changed in:\n$output"
+                )
+            }
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * Inserting a line near the top is shown as a single added line; the shifted-down existing
+     * lines are context only, not deleted/re-added.
+     */
+    @Test
+    fun `insertion near top is shown as a single added line in diff`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            val original = "one\ntwo\nthree"
+            file.writeText(original, Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildInput("sample.txt", listOf("one" to "one\nONE"), dryRun = true),
+                context(dir),
+            )
+
+            val output = assertSuccess(result)
+            assertTrue(output.contains("+ ONE"), "expected inserted line ONE in diff")
+            // two/three are unchanged and merely shifted; they must not be flagged as changed.
+            for (line in listOf("two", "three")) {
+                assertTrue(
+                    !output.contains("- $line") && !output.contains("+ $line"),
+                    "shifted line '$line' must not be reported as changed in:\n$output"
+                )
+            }
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * When the applied changes produce no textual difference, the report says "(no changes)"
+     * rather than dumping the entire file as a positional diff.
+     */
+    @Test
+    fun `no-op edit reports no changes rather than a full dump`() = runTest {
+        val dir = createTempDirectory("edit-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            // oldText equals newText -> applied content equals original.
+            file.writeText("hello world", Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildInput("sample.txt", listOf("hello" to "hello"), dryRun = true),
+                context(dir),
+            )
+
+            val output = assertSuccess(result)
+            assertTrue(output.contains("(no changes)"), "expected (no changes) marker, got:\n$output")
+            assertFalse(output.contains("@@"), "no-op diff must not contain hunk headers")
         } finally {
             dir.toFile().deleteRecursively()
         }

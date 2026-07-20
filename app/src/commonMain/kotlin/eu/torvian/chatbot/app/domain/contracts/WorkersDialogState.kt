@@ -23,13 +23,15 @@ sealed class WorkersDialogState {
  * @property displayName The display name of the worker.
  * @property allowedScopes Comma-separated list of allowed scopes.
  * @property toolNamePrefix Optional prefix applied to the public names of the worker's built-in tools.
- * @property error Error message if validation fails.
+ * @property error Form-level error message (e.g. a failed save), when present.
+ * @property toolNamePrefixError Field-level error for [toolNamePrefix], when the value is invalid.
  */
 data class WorkersFormState(
     val displayName: String = "",
     val allowedScopes: String = "",
     val toolNamePrefix: String = "",
-    val error: String? = null
+    val error: String? = null,
+    val toolNamePrefixError: String? = null
 ) {
     companion object {
         /**
@@ -44,6 +46,9 @@ data class WorkersFormState(
 
     /**
      * Validates the form and returns an error message if invalid.
+     *
+     * Only the display name is a hard requirement; the tool-name prefix is validated separately via
+     * [toolNamePrefixError] so its error can be shown inline on its own field.
      */
     fun validate(): String? = when {
         displayName.isBlank() -> "Display name cannot be empty"

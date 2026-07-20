@@ -1,5 +1,8 @@
 package eu.torvian.chatbot.server.koin
 
+import eu.torvian.chatbot.common.models.tool.ToolNameSanitizer
+import eu.torvian.chatbot.common.models.tool.ToolNameValidator
+import eu.torvian.chatbot.common.models.tool.ToolNamePrefixValidator
 import eu.torvian.chatbot.common.security.AESCryptoProvider
 import eu.torvian.chatbot.common.security.CryptoProvider
 import eu.torvian.chatbot.common.security.EncryptionService
@@ -50,6 +53,11 @@ import org.koin.dsl.module
  * Dependency injection module for configuring the application's service layer.
  */
 fun serviceModule() = module {
+    // --- Tool-name sanitization/validation (LLM-safe character set) ---
+    single { ToolNameSanitizer() }
+    single { ToolNameValidator() }
+    single { ToolNamePrefixValidator() }
+
     single<SessionService> { SessionServiceImpl(get(), get(), get(), get(), get(), get(), get(), get()) }
     single<GroupService> { GroupServiceImpl(get(), get(), get(), get()) }
     single<LLMModelService> { LLMModelServiceImpl(get(), get(), get(), get(), get(), get(), get()) }
@@ -69,9 +77,9 @@ fun serviceModule() = module {
         DefaultConversationTurnOrchestrator(get(), get(), get(), get(), get())
     }
     single<ChatService> { ChatServiceImpl(get(), get()) }
-    single<ToolService> { ToolServiceImpl(get(), get(), get(), get(), get()) }
+    single<ToolService> { ToolServiceImpl(get(), get(), get(), get(), get(), get()) }
     single<ToolCallService> { ToolCallServiceImpl(get(), get()) }
-    single<LocalMCPServerService> { LocalMCPServerServiceImpl(get(), get(), get(), get(), get(), get(), get()) }
+    single<LocalMCPServerService> { LocalMCPServerServiceImpl(get(), get(), get(), get(), get(), get(), get(), get()) }
     single<LocalMCPRuntimeCommandDispatchService> { DefaultLocalMCPRuntimeCommandDispatchService(get()) }
     single<LocalMCPServerWorkerSyncService> { DefaultLocalMCPServerWorkerSyncService(get()) }
     single<LocalMCPRuntimeControlService> { DefaultLocalMCPRuntimeControlService(get(), get(), get()) }

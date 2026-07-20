@@ -7,6 +7,7 @@ import arrow.core.raise.withError
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.api.worker.WorkerChallengeDto
 import eu.torvian.chatbot.common.models.worker.WorkerDto
+import eu.torvian.chatbot.common.models.tool.ToolNamePrefixValidator
 import eu.torvian.chatbot.server.data.dao.WorkerDao
 import eu.torvian.chatbot.server.data.dao.error.WorkerError
 import eu.torvian.chatbot.server.data.entities.mappers.toWorkerDto
@@ -40,6 +41,11 @@ class WorkerServiceImpl(
     private val transactionScope: TransactionScope
 ) : WorkerService {
 
+    /**
+     * Validates worker tool-name prefixes against the allowed character set before persistence.
+     */
+    private val toolNamePrefixValidator = ToolNamePrefixValidator()
+
     override suspend fun registerWorker(
         ownerUserId: Long,
         workerUid: String,
@@ -57,6 +63,12 @@ class WorkerServiceImpl(
             )
             ensure(displayName.isNotBlank()) { RegisterWorkerError.InvalidInput("displayName cannot be blank") }
             ensure(workerUid.isNotBlank()) { RegisterWorkerError.InvalidInput("workerUid cannot be blank") }
+
+            // Reject prefixes with illegal characters before any persistence happens. A blank prefix is
+            // valid and means "no prefix" (persisted as null).
+            toolNamePrefixValidator.validate(toolNamePrefix ?: "")?.let { reason ->
+                raise(RegisterWorkerError.InvalidInput("Invalid tool name prefix: $reason"))
+            }
 
             val certificate = try {
                 certificateService.parseCertificate(certificatePem)
@@ -212,6 +224,12 @@ class WorkerServiceImpl(
             // Normalize the requested prefix: blank is treated as "no prefix".
             val newPrefix = toolNamePrefix?.takeIf { it.isNotBlank() }
             val oldPrefix = worker.toolNamePrefix?.takeIf { it.isNotBlank() }
+
+            // Reject prefixes with illegal characters before any persistence or tool rename happens.
+            // A blank prefix is valid and means "no prefix" (persisted as null).
+            toolNamePrefixValidator.validate(newPrefix ?: "")?.let { reason ->
+                raise(UpdateWorkerError.InvalidInput("Invalid tool name prefix: $reason"))
+            }
 
             // Persist the worker metadata (display name, scopes, prefix) in the same transaction.
             val updatedWorker = withError({ _: WorkerError.NotFound -> UpdateWorkerError.NotFound(workerId) }) {

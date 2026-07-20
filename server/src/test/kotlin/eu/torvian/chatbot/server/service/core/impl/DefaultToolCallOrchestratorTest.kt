@@ -109,7 +109,7 @@ class DefaultToolCallOrchestratorTest {
      */
     private fun builtInWorkerToolDefinition(
         id: Long = 2L,
-        name: String = "project1.read_text_file",
+        name: String = "project1_read_text_file",
         workerId: Long = 7L,
         builtInToolName: String = "read_text_file"
     ): BuiltInWorkerToolDefinition = BuiltInWorkerToolDefinition(
@@ -199,7 +199,7 @@ class DefaultToolCallOrchestratorTest {
             sessionId = 1L,
             messageId = 100L,
             toolDefinitionId = toolDefinitionId,
-            toolName = "$workerId-prefix.$builtInToolName",
+            toolName = "$workerId-prefix_$builtInToolName",
             workerId = workerId,
             builtInToolName = builtInToolName,
             input = "{}",

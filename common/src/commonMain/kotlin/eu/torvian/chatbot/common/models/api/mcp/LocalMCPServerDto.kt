@@ -21,7 +21,9 @@ import kotlin.time.Instant
  * @property autoStartOnEnable Whether this server auto-starts when enabled.
  * @property autoStartOnLaunch Whether this server auto-starts on worker launch.
  * @property autoStopAfterInactivitySeconds Optional inactivity timeout for auto-stop behavior.
- * @property toolNamePrefix Optional tool-name prefix applied during discovery.
+ * @property toolNamePrefix Optional tool-name prefix applied during discovery. It is concatenated into every
+ *   public tool name for this server, so it must only contain LLM-safe characters
+ *   (`^[a-zA-Z0-9_-]+$`); a blank value means "no prefix". Enforced at server config create/update.
  * @property environmentVariables Non-secret environment variables.
  * @property secretEnvironmentVariables Secret environment variables, returned in plaintext for authorized consumers.
  * @property createdAt Creation timestamp.

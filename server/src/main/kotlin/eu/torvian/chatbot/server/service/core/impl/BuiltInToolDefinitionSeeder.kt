@@ -25,6 +25,9 @@ import org.apache.logging.log4j.Logger
  * [BuiltInWorkerToolDefinition.name] is derived from the worker's configured prefix (when present),
  * while [BuiltInWorkerToolDefinition.builtInToolName] always stores the unprefixed canonical name.
  *
+ * The prefix is concatenated to the canonical name **without** a dot (see [buildPublicToolName]),
+ * because some LLM providers reject dots in tool names and would otherwise fail the tool call.
+ *
  * @property toolDefinitionDao DAO for the built-in linkage table.
  * @property toolService Service used to create the base tool definition rows.
  * @property transactionScope Transaction boundary used to make seeding atomic.
@@ -43,6 +46,23 @@ class BuiltInToolDefinitionSeeder(
     private val defaultToolSpecs: List<BuiltInToolCatalog.BuiltInToolSpec> = BuiltInToolCatalog.allTools
 
     /**
+     * Joins a worker tool-name prefix to a canonical built-in tool name **without** inserting a dot.
+     *
+     * Some LLM providers reject dots in tool names, so the prefix is concatenated directly to the
+     * canonical name without any separator added by the server. The caller supplies the separator
+     * as part of the prefix (e.g. `"project1_"` + `"read_text_file"` → `"project1_read_text_file"`,
+     * or `"proj-"` + `"read_text_file"` → `"proj-read_text_file"`). The unprefixed [builtInToolName]
+     * is always persisted separately and is the value the worker uses to resolve and execute the
+     * tool, so the public name format does not affect dispatch.
+     *
+     * @param prefix Optional worker-configured tool prefix (e.g. "project1_").
+     * @param builtInToolName Unprefixed canonical tool name (e.g. "read_text_file").
+     * @return Prefixed name when [prefix] is not blank; otherwise [builtInToolName].
+     */
+    private fun buildPublicToolName(prefix: String?, builtInToolName: String): String =
+        if (prefix.isNullOrBlank()) builtInToolName else "$prefix$builtInToolName"
+
+    /**
      * Seeds the default built-in tools for the given worker.
      *
      * Existing linkages (same worker + unprefixed name) are left untouched, so repeated calls are
@@ -51,7 +71,7 @@ class BuiltInToolDefinitionSeeder(
      * the LLM can discover and call the tool.
      *
      * @param workerId Owning worker identifier.
-     * @param toolNamePrefix Optional prefix applied to public tool names (e.g. "project1").
+     * @param toolNamePrefix Optional prefix applied to public tool names (e.g. "project1_").
      * @return Either a [SeedBuiltInToolsError] or the list of [BuiltInWorkerToolDefinition] now owned by the worker.
      */
     suspend fun seedDefaultToolsForWorker(
@@ -67,7 +87,7 @@ class BuiltInToolDefinitionSeeder(
                 val name = spec.builtInToolName
                 if (existing.containsKey(name)) continue
 
-                val publicName = prefix?.let { "$it.$name" } ?: name
+                val publicName = buildPublicToolName(prefix, name)
                 val created = withError({ error: ValidateToolError ->
                     SeedBuiltInToolsError.ToolCreationFailed(error)
                 }) {
@@ -108,7 +128,7 @@ class BuiltInToolDefinitionSeeder(
      * the public names revert to the unprefixed canonical names.
      *
      * @param workerId Owning worker identifier.
-     * @param newPrefix New optional prefix (e.g. "project1"), or null/blank to clear.
+     * @param newPrefix New optional prefix (e.g. "project1_"), or null/blank to clear.
      */
     suspend fun renamePublicNamesForPrefix(
         workerId: Long,
@@ -118,7 +138,7 @@ class BuiltInToolDefinitionSeeder(
             val prefix = newPrefix?.takeIf { it.isNotBlank() }
             val tools = toolDefinitionDao.getToolsByWorkerId(workerId)
             for (tool in tools) {
-                val publicName = prefix?.let { "$it.${tool.builtInToolName}" } ?: tool.builtInToolName
+                val publicName = buildPublicToolName(prefix, tool.builtInToolName)
                 if (publicName != tool.name) {
                     withError({ error: BuiltInToolDefinitionError ->
                         SeedBuiltInToolsError.LinkageFailed(error)
@@ -142,7 +162,7 @@ class BuiltInToolDefinitionSeeder(
      * after new tools are added to the catalog.
      *
      * @param workerId Owning worker identifier.
-     * @param toolNamePrefix Optional prefix applied to public tool names (e.g. "project1").
+     * @param toolNamePrefix Optional prefix applied to public tool names (e.g. "project1_").
      * @return Either a [SeedBuiltInToolsError] or the list of [BuiltInWorkerToolDefinition] now owned by the worker.
      */
     suspend fun resetToDefaults(
@@ -156,7 +176,7 @@ class BuiltInToolDefinitionSeeder(
 
             for (spec in defaultToolSpecs) {
                 val name = spec.builtInToolName
-                val publicName = prefix?.let { "$it.$name" } ?: name
+                val publicName = buildPublicToolName(prefix, name)
 
                 val current = existing[name]
                 if (current == null) {

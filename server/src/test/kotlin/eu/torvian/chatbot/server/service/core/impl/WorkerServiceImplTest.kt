@@ -7,9 +7,9 @@ import eu.torvian.chatbot.common.models.tool.BuiltInWorkerToolDefinition
 import eu.torvian.chatbot.server.data.dao.WorkerDao
 import eu.torvian.chatbot.server.data.dao.error.WorkerError
 import eu.torvian.chatbot.server.data.entities.WorkerEntity
-import eu.torvian.chatbot.server.service.core.impl.BuiltInToolDefinitionSeeder
 import eu.torvian.chatbot.server.service.core.error.worker.AuthenticateWorkerError
 import eu.torvian.chatbot.server.service.core.error.worker.RegisterWorkerError
+import eu.torvian.chatbot.server.service.core.error.worker.UpdateWorkerError
 import eu.torvian.chatbot.server.service.security.CertificateService
 import io.mockk.clearMocks
 import io.mockk.coEvery
@@ -98,5 +98,76 @@ class WorkerServiceImplTest {
         assertTrue(result.isLeft())
         assertEquals(AuthenticateWorkerError.InvalidChallenge("missing"), result.leftOrNull())
         coVerify(exactly = 0) { workerDao.consumeChallenge(any()) }
+    }
+
+    @Test
+    fun `registerWorker rejects prefix with illegal characters`() = runTest {
+        val result = service.registerWorker(
+            ownerUserId = 1L,
+            workerUid = "worker-7",
+            displayName = "worker",
+            certificatePem = "pem",
+            allowedScopes = emptyList(),
+            toolNamePrefix = "bad.prefix"
+        )
+
+        assertTrue(result.isLeft())
+        assertTrue(result.leftOrNull() is RegisterWorkerError.InvalidInput)
+        coVerify(exactly = 0) { workerDao.createWorker(any(), any(), any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `registerWorker accepts a legal prefix`() = runTest {
+        every { certificateService.parseCertificate("pem") } returns mockk()
+        every { certificateService.computeCertificateFingerprint(any()) } returns "fp"
+        coEvery {
+            workerDao.createWorker(any(), any(), any(), any(), any(), any(), any())
+        } returns testWorker.right()
+
+        val result = service.registerWorker(
+            ownerUserId = 1L,
+            workerUid = "worker-7",
+            displayName = "worker",
+            certificatePem = "pem",
+            allowedScopes = emptyList(),
+            toolNamePrefix = "project1_"
+        )
+
+        assertTrue(result.isRight())
+    }
+
+    @Test
+    fun `updateWorker rejects prefix with illegal characters`() = runTest {
+        coEvery { workerDao.getWorkerById(10L) } returns testWorker.right()
+
+        val result = service.updateWorker(
+            ownerUserId = 1L,
+            workerId = 10L,
+            displayName = "worker",
+            allowedScopes = emptyList(),
+            toolNamePrefix = "bad prefix"
+        )
+
+        assertTrue(result.isLeft())
+        assertTrue(result.leftOrNull() is UpdateWorkerError.InvalidInput)
+        coVerify(exactly = 0) { workerDao.updateWorker(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `updateWorker accepts a legal prefix`() = runTest {
+        coEvery { workerDao.getWorkerById(10L) } returns testWorker.right()
+        coEvery { workerDao.updateWorker(any(), any(), any(), any()) } returns testWorker.right()
+        coEvery { builtInToolDefinitionSeeder.renamePublicNamesForPrefix(any(), any()) } returns
+            Unit.right()
+
+        val result = service.updateWorker(
+            ownerUserId = 1L,
+            workerId = 10L,
+            displayName = "worker",
+            allowedScopes = emptyList(),
+            toolNamePrefix = "proj-"
+        )
+
+        assertTrue(result.isRight())
     }
 }
