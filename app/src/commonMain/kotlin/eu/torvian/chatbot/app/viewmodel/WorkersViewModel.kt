@@ -8,6 +8,7 @@ import eu.torvian.chatbot.app.domain.contracts.WorkersFormState
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.WorkerRepository
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
+import eu.torvian.chatbot.common.models.worker.ToolNamePrefixValidator
 import eu.torvian.chatbot.common.models.worker.WorkerDto
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -40,6 +41,12 @@ class WorkersViewModel(
     // --- Private State Properties ---
 
     private val _dialogState = MutableStateFlow<WorkersDialogState>(WorkersDialogState.None)
+
+    /**
+     * Validates worker tool-name prefixes against the allowed character set, reusing the same rule
+     * enforced by the server so the UI can give immediate feedback.
+     */
+    private val toolNamePrefixValidator = ToolNamePrefixValidator()
 
     // --- Public State Properties ---
 
@@ -99,13 +106,18 @@ class WorkersViewModel(
 
     /**
      * Updates any field in the worker form using a lambda function.
+     *
+     * The tool-name prefix is validated on every edit so its inline error appears immediately,
+     * matching the server-side rule. A blank prefix is always valid (means "no prefix").
      */
     fun updateWorkerForm(update: (WorkersFormState) -> WorkersFormState) {
         _dialogState.update { dialogState ->
             when (dialogState) {
-                is WorkersDialogState.EditWorker -> dialogState.copy(
-                    formState = update(dialogState.formState)
-                )
+                is WorkersDialogState.EditWorker -> {
+                    val nextForm = update(dialogState.formState)
+                    val prefixError = toolNamePrefixValidator.validate(nextForm.toolNamePrefix)
+                    dialogState.copy(formState = nextForm.copy(toolNamePrefixError = prefixError))
+                }
 
                 else -> dialogState // No change for other states
             }
@@ -164,6 +176,13 @@ class WorkersViewModel(
         val validationError = form.validate()
         if (validationError != null) {
             updateWorkerForm { it.withError(validationError) }
+            return
+        }
+
+        // Block the save when the tool-name prefix is invalid. The inline error is already shown live
+        // via updateWorkerForm, so we just surface it as the form-level error as a fallback.
+        if (form.toolNamePrefixError != null) {
+            updateWorkerForm { it.withError(form.toolNamePrefixError) }
             return
         }
 

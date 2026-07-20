@@ -10,6 +10,7 @@ import kotlinx.serialization.Serializable
  * @property displayName New display name for the worker.
  * @property allowedScopes Updated list of allowed scopes for the worker.
  * @property toolNamePrefix Optional prefix applied to the public names of the worker's built-in tools.
+ *   Must match `^[a-zA-Z0-9_-]+$` (letters, digits, underscores, dashes); a blank value clears the prefix.
  */
 @Serializable
 data class UpdateWorkerRequest(
