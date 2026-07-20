@@ -116,26 +116,26 @@ class BuiltInToolDefinitionSeederTest {
     fun `seedDefaultToolsForWorker reflects prefix in public names`() = runTest {
         val workerId = createWorker("worker-seed-prefix")
 
-        val tools = seeder.seedDefaultToolsForWorker(workerId, "project1").getOrNull()!!
+        val tools = seeder.seedDefaultToolsForWorker(workerId, "project1_").getOrNull()!!
 
         assertEquals(BuiltInToolCatalog.size, tools.size)
-        assertTrue(tools.all { it.name == "project1.${it.builtInToolName}" })
+        assertTrue(tools.all { it.name == "project1_${it.builtInToolName}" })
         // The unprefixed internal name matches the catalog's canonical name.
         val catalogNames = BuiltInToolCatalog.allTools.map { it.builtInToolName }.toSet()
         assertTrue(tools.all { it.builtInToolName in catalogNames })
-        assertEquals("project1.read_text_file", tools.first { it.builtInToolName == "read_text_file" }.name)
+        assertEquals("project1_read_text_file", tools.first { it.builtInToolName == "read_text_file" }.name)
     }
 
     @Test
     fun `renamePublicNamesForPrefix renames only public names, preserving builtInToolName`() = runTest {
         val workerId = createWorker("worker-rename")
 
-        seeder.seedDefaultToolsForWorker(workerId, "project1").getOrNull()!!
+        seeder.seedDefaultToolsForWorker(workerId, "project1_").getOrNull()!!
         val before = builtInToolDefinitionDao.getToolsByWorkerId(workerId)
         val beforeNames = before.associate { it.builtInToolName to it.name }
 
-        // Change the prefix to project2.
-        val renameResult = seeder.renamePublicNamesForPrefix(workerId, "project2")
+        // Change the prefix to project2_.
+        val renameResult = seeder.renamePublicNamesForPrefix(workerId, "project2_")
         assertTrue(renameResult.isRight(), "rename failed: ${renameResult.leftOrNull()}")
 
         val after = builtInToolDefinitionDao.getToolsByWorkerId(workerId)
@@ -144,7 +144,7 @@ class BuiltInToolDefinitionSeederTest {
             // builtInToolName must be unchanged.
             assertEquals(beforeNames[tool.builtInToolName], beforeNames[tool.builtInToolName])
             // Public name reflects the new prefix.
-            assertEquals("project2.${tool.builtInToolName}", tool.name)
+            assertEquals("project2_${tool.builtInToolName}", tool.name)
         }
     }
 
@@ -152,7 +152,7 @@ class BuiltInToolDefinitionSeederTest {
     fun `renamePublicNamesForPrefix with null prefix reverts to unprefixed names`() = runTest {
         val workerId = createWorker("worker-rename-null")
 
-        seeder.seedDefaultToolsForWorker(workerId, "project1").getOrNull()!!
+        seeder.seedDefaultToolsForWorker(workerId, "project1_").getOrNull()!!
         seeder.renamePublicNamesForPrefix(workerId, null).getOrNull()!!
 
         val after = builtInToolDefinitionDao.getToolsByWorkerId(workerId)
@@ -244,11 +244,11 @@ class BuiltInToolDefinitionSeederTest {
         seeder.seedDefaultToolsForWorker(workerId, null).getOrNull()!!
 
         // Reset with a prefix; public names should reflect it.
-        val result = seeder.resetToDefaults(workerId, "project1")
+        val result = seeder.resetToDefaults(workerId, "project1_")
 
         assertTrue(result.isRight(), "reset failed: ${result.leftOrNull()}")
         val tools = result.getOrNull()!!
         assertEquals(BuiltInToolCatalog.size, tools.size)
-        assertTrue(tools.all { it.name == "project1.${it.builtInToolName}" })
+        assertTrue(tools.all { it.name == "project1_${it.builtInToolName}" })
     }
 }

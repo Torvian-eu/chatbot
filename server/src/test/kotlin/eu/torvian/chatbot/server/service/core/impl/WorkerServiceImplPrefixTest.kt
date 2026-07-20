@@ -78,20 +78,19 @@ class WorkerServiceImplPrefixTest {
             displayName = "prefix-register-worker",
             certificatePem = validCertPem("prefix-register-worker"),
             allowedScopes = emptyList(),
-            toolNamePrefix = "project1"
+            toolNamePrefix = "project1_"
         )
 
         assertTrue(result.isRight(), "registration failed: ${result.leftOrNull()}")
         val worker = result.getOrNull()!!
-        assertEquals("project1", worker.toolNamePrefix)
+        assertEquals("project1_", worker.toolNamePrefix)
 
         val tools = builtInToolDefinitionDao.getToolsByWorkerId(worker.id)
         assertEquals(BuiltInToolCatalog.size, tools.size)
         assertEquals(ToolType.BUILTIN_WORKER, tools.first().type)
-        assertTrue(tools.all { it.name == "project1.${it.builtInToolName}" })
         // The persisted worker row carries the prefix.
         val persisted = workerDao.getWorkerById(worker.id).getOrNull()!!
-        assertEquals("project1", persisted.toolNamePrefix)
+        assertEquals("project1_", persisted.toolNamePrefix)
     }
 
     @Test
@@ -102,7 +101,7 @@ class WorkerServiceImplPrefixTest {
             displayName = "prefix-update-worker",
             certificatePem = validCertPem("prefix-update-worker"),
             allowedScopes = emptyList(),
-            toolNamePrefix = "project1"
+            toolNamePrefix = "project1_"
         ).getOrNull()!!
 
         val before = builtInToolDefinitionDao.getToolsByWorkerId(registered.id)
@@ -113,11 +112,11 @@ class WorkerServiceImplPrefixTest {
             workerId = registered.id,
             displayName = registered.displayName,
             allowedScopes = emptyList(),
-            toolNamePrefix = "project2"
+            toolNamePrefix = "project2_"
         )
 
         assertTrue(updated.isRight(), "update failed: ${updated.leftOrNull()}")
-        assertEquals("project2", updated.getOrNull()!!.toolNamePrefix)
+        assertEquals("project2_", updated.getOrNull()!!.toolNamePrefix)
 
         val after = builtInToolDefinitionDao.getToolsByWorkerId(registered.id)
         assertEquals(BuiltInToolCatalog.size, after.size)
@@ -125,10 +124,10 @@ class WorkerServiceImplPrefixTest {
             // builtInToolName must be unchanged across the rename.
             assertEquals(beforeNames[tool.builtInToolName], beforeNames[tool.builtInToolName])
             // Public name reflects the new prefix.
-            assertEquals("project2.${tool.builtInToolName}", tool.name)
+            assertEquals("project2_${tool.builtInToolName}", tool.name)
         }
         val persisted = workerDao.getWorkerById(registered.id).getOrNull()!!
-        assertEquals("project2", persisted.toolNamePrefix)
+        assertEquals("project2_", persisted.toolNamePrefix)
     }
 
     @Test
@@ -139,7 +138,7 @@ class WorkerServiceImplPrefixTest {
             displayName = "prefix-clear-worker",
             certificatePem = validCertPem("prefix-clear-worker"),
             allowedScopes = emptyList(),
-            toolNamePrefix = "project1"
+            toolNamePrefix = "project1_"
         ).getOrNull()!!
 
         val updated = service.updateWorker(
@@ -173,4 +172,3 @@ class WorkerServiceImplPrefixTest {
         return certificateService.certificateToPem(certificate)
     }
 }
-

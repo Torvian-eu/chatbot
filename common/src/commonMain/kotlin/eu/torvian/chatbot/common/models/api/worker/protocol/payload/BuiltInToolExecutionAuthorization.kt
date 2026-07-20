@@ -13,7 +13,7 @@ import kotlinx.serialization.Serializable
  * @property sessionId Session that owns the approved tool call.
  * @property messageId Assistant message that owns the tool call.
  * @property toolDefinitionId Persisted built-in tool definition approved by the user.
- * @property toolName Public tool name that appeared in the chat tool call (e.g. `project1.read_text_file`).
+ * @property toolName Public tool name that appeared in the chat tool call (e.g. `project1_read_text_file`).
  * @property workerId Worker that should execute the built-in tool.
  * @property builtInToolName Unprefixed built-in tool name (e.g. `read_text_file`).
  * @property input Exact JSON argument string approved by the app, preserved byte-for-byte.
@@ -33,4 +33,3 @@ data class BuiltInToolExecutionAuthorization(
     val approved: Boolean,
     val denialReason: String? = null
 )
-
