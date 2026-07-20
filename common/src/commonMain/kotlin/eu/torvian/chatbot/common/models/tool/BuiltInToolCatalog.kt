@@ -95,8 +95,14 @@ object BuiltInToolCatalog {
                         put("items", buildJsonObject {
                             put("type", "object")
                             put("properties", buildJsonObject {
-                                put("oldText", buildJsonObject { put("type", "string") })
-                                put("newText", buildJsonObject { put("type", "string") })
+                                put("oldText", buildJsonObject {
+                                    put("type", "string")
+                                    put("description", "Text to replace. ALL occurrences in the file will be replaced. Include surrounding context to target a specific instance.")
+                                })
+                                put("newText", buildJsonObject {
+                                    put("type", "string")
+                                    put("description", "Replacement text.")
+                                })
                             })
                             put("required", buildJsonArray { add("oldText"); add("newText") })
                         })
