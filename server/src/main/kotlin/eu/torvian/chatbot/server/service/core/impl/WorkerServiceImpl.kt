@@ -7,7 +7,7 @@ import arrow.core.raise.withError
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.api.worker.WorkerChallengeDto
 import eu.torvian.chatbot.common.models.worker.WorkerDto
-import eu.torvian.chatbot.common.models.worker.ToolNamePrefixValidator
+import eu.torvian.chatbot.common.models.tool.ToolNamePrefixValidator
 import eu.torvian.chatbot.server.data.dao.WorkerDao
 import eu.torvian.chatbot.server.data.dao.error.WorkerError
 import eu.torvian.chatbot.server.data.entities.mappers.toWorkerDto

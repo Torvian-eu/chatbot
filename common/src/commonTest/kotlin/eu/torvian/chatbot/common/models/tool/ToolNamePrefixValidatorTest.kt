@@ -1,4 +1,4 @@
-package eu.torvian.chatbot.common.models.worker
+package eu.torvian.chatbot.common.models.tool
 
 import kotlin.test.Test
 import kotlin.test.assertEquals

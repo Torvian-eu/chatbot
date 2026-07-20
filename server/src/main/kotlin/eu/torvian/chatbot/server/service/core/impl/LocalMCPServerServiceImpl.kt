@@ -6,6 +6,7 @@ import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.api.mcp.*
+import eu.torvian.chatbot.common.models.tool.ToolNamePrefixValidator
 import eu.torvian.chatbot.common.security.SignedRequest
 import eu.torvian.chatbot.server.data.dao.*
 import eu.torvian.chatbot.server.data.dao.error.DeleteLocalMCPServerError
@@ -33,6 +34,7 @@ import kotlin.time.Clock
  * @property workerDao Persistence gateway for validating worker ownership.
  * @property credentialManager Secret storage service used for plaintext secret environment variables.
  * @property transactionScope Transaction boundary used to keep config and signature writes atomic.
+ * @property toolNamePrefixValidator Tool name prefix validator.
  */
 class LocalMCPServerServiceImpl(
     private val localMCPServerDao: LocalMCPServerDao,
@@ -42,6 +44,7 @@ class LocalMCPServerServiceImpl(
     private val workerDao: WorkerDao,
     private val credentialManager: CredentialManager,
     private val transactionScope: TransactionScope,
+    private val toolNamePrefixValidator: ToolNamePrefixValidator = ToolNamePrefixValidator()
 ) : LocalMCPServerService {
 
     private val logger: Logger = LogManager.getLogger(LocalMCPServerServiceImpl::class.java)
@@ -218,6 +221,11 @@ class LocalMCPServerServiceImpl(
     ): Either<LocalMCPServerServiceError, LocalMCPServerDto> = either {
         validateRequest(request.name, request.command).bind()
         validateWorkerOwnership(userId, request.workerId).bind()
+        // The tool-name prefix is concatenated into every public tool name for this server, so it must only
+        // contain LLM-safe characters. A blank prefix is valid (means "no prefix").
+        toolNamePrefixValidator.validate(request.toolNamePrefix ?: "")?.let { reason ->
+            raise(LocalMCPServerValidationError("Invalid tool name prefix: $reason"))
+        }
         val secretReferences = storeSecretEnvironmentVariables(request.secretEnvironmentVariables).bind()
         val createdEntity = localMCPServerDao.createServer(
             CreateLocalMCPServerEntity(
@@ -254,6 +262,11 @@ class LocalMCPServerServiceImpl(
         serverId: Long,
         request: UpdateLocalMCPServerRequest
     ): Either<LocalMCPServerServiceError, LocalMCPServerDto> = either {
+        // The tool-name prefix is concatenated into every public tool name for this server, so it must only
+        // contain LLM-safe characters. A blank prefix is valid (means "no prefix").
+        toolNamePrefixValidator.validate(request.toolNamePrefix ?: "")?.let { reason ->
+            raise(LocalMCPServerValidationError("Invalid tool name prefix: $reason"))
+        }
         val newSecretReferences = storeSecretEnvironmentVariables(request.secretEnvironmentVariables).bind()
         persistUpdatedServerInTransaction(
             userId = userId,

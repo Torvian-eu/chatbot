@@ -21,6 +21,7 @@ import eu.torvian.chatbot.server.data.entities.UserDeviceEntity
 import eu.torvian.chatbot.server.data.entities.WorkerEntity
 import eu.torvian.chatbot.server.service.core.LocalMCPServerSignerSnapshot
 import eu.torvian.chatbot.server.service.core.error.mcp.LocalMCPServerUnknownSignerDeviceError
+import eu.torvian.chatbot.server.service.core.error.mcp.LocalMCPServerValidationError
 import eu.torvian.chatbot.server.service.core.error.mcp.LocalMCPServerWorkerOwnershipMismatchError
 import eu.torvian.chatbot.server.service.security.CredentialManager
 import io.mockk.CapturingSlot
@@ -153,7 +154,9 @@ class LocalMCPServerServiceImplTest {
         )
         val signedRequest = signedRequest(payload = json.encodeToString(request))
 
-        coEvery { userDeviceDao.getDeviceByClientId(workerEntity.ownerUserId, signedRequest.signerId) } returns null
+        coEvery { userDeviceDao.getDeviceByClientId(workerEntity.ownerUserId, signedRequest.signerId) } returns
+            null
+        coEvery { workerDao.getWorkerById(workerEntity.id) } returns workerEntity.right()
 
         val result = service.createSignedServer(
             userId = workerEntity.ownerUserId,
@@ -188,6 +191,60 @@ class LocalMCPServerServiceImplTest {
 
         assertTrue(result.isLeft())
         assertIs<LocalMCPServerWorkerOwnershipMismatchError>(result.leftOrNull())
+    }
+
+    @Test
+    fun `createSignedServer rejects illegal tool name prefix`() = runTest {
+        val request = CreateLocalMCPServerRequest(
+            workerId = workerEntity.id,
+            name = "filesystem",
+            command = "npx",
+            toolNamePrefix = "bad.prefix"
+        )
+        val signedRequest = signedRequest(payload = json.encodeToString(request))
+
+        coEvery { userDeviceDao.getDeviceByClientId(workerEntity.ownerUserId, signedRequest.signerId) } returns
+            userDeviceEntity(signedRequest.signerId)
+        coEvery { workerDao.getWorkerById(workerEntity.id) } returns workerEntity.right()
+
+        val result = service.createSignedServer(
+            userId = workerEntity.ownerUserId,
+            request = request,
+            signedRequest = signedRequest
+        )
+
+        assertTrue(result.isLeft())
+        assertIs<LocalMCPServerValidationError>(result.leftOrNull())
+        coVerify(exactly = 0) { localMCPServerDao.createServer(any()) }
+    }
+
+    @Test
+    fun `createSignedServer accepts a legal tool name prefix`() = runTest {
+        val createPayloadSlot: CapturingSlot<CreateLocalMCPServerEntity> = slot()
+        val request = CreateLocalMCPServerRequest(
+            workerId = workerEntity.id,
+            name = "filesystem",
+            command = "npx",
+            toolNamePrefix = "proj-"
+        )
+        val signedRequest = signedRequest(payload = json.encodeToString(request))
+        val device = userDeviceEntity(clientDeviceId = signedRequest.signerId)
+
+        coEvery { userDeviceDao.getDeviceByClientId(workerEntity.ownerUserId, signedRequest.signerId) } returns device
+        coEvery { workerDao.getWorkerById(workerEntity.id) } returns workerEntity.right()
+        coEvery { localMCPServerDao.createServer(capture(createPayloadSlot)) } answers {
+            createPayloadSlot.captured.toEntity(id = 123L)
+        }
+        coEvery { localMCPServerSignatureDao.upsertSignature(any()) } answers { mockk() }
+
+        val result = service.createSignedServer(
+            userId = workerEntity.ownerUserId,
+            request = request,
+            signedRequest = signedRequest
+        )
+
+        assertTrue(result.isRight())
+        assertEquals("proj-", createPayloadSlot.captured.toolNamePrefix)
     }
 
     @Test
@@ -609,4 +666,3 @@ class LocalMCPServerServiceImplTest {
         updatedAt = Instant.fromEpochMilliseconds(1_700_000_100_000)
     )
 }
-

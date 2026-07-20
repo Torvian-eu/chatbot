@@ -9,7 +9,12 @@ import kotlin.time.Instant
  * Represents a tool definition that is specific to a local MCP server.
  *
  * @property serverId Unique identifier for the MCP server that provides this tool
- * @property mcpToolName Original tool name from the MCP server (for name mapping)
+ * @property name Public, LLM-facing tool name. This is the LLM-safe (sanitized) identifier derived from the raw
+ *   MCP tool name plus the server's optional prefix; it is the value sent to the LLM provider and may only contain
+ *   the characters `a-z A-Z 0-9 _ -`. It is never used for MCP dispatch.
+ * @property mcpToolName Original tool name from the MCP server (for name mapping). This raw name is preserved
+ *   verbatim and used by the worker to dispatch the call to the MCP server; it may contain characters that are
+ *   illegal in LLM tool names. The public [name] is the LLM-safe (sanitized) identifier derived from it.
  */
 @Serializable
 data class LocalMCPToolDefinition(

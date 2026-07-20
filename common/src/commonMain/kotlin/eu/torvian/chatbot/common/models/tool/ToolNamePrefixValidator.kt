@@ -1,12 +1,13 @@
-package eu.torvian.chatbot.common.models.worker
+package eu.torvian.chatbot.common.models.tool
 
 /**
- * Validates worker tool-name prefixes against the character set that is safe to embed in the public
- * names of built-in tools sent to LLM providers.
+ * Validates tool-name prefixes against the character set that is safe to embed in the public names of tools
+ * sent to LLM providers.
  *
- * A prefix is concatenated (without a separator) to a canonical built-in tool name to form the public
- * tool name the LLM sees. Because some providers reject characters such as dots, spaces, or slashes in
- * tool names, the prefix is restricted to letters, digits, underscores, and dashes.
+ * A prefix is concatenated (without a separator) to a canonical tool name to form the public tool name the LLM
+ * sees. Because some providers reject characters such as dots, spaces, or slashes in tool names, the prefix is
+ * restricted to letters, digits, underscores, and dashes. The same rule is enforced for both worker tool-name
+ * prefixes and Local MCP server tool-name prefixes.
  *
  * @property config The validation rules to apply.
  */
@@ -14,7 +15,7 @@ class ToolNamePrefixValidator(
     private val config: ToolNamePrefixValidationConfig = ToolNamePrefixValidationConfig()
 ) {
     /**
-     * Validates a worker tool-name prefix.
+     * Validates a tool-name prefix.
      *
      * A blank or empty prefix is always valid: it represents "no prefix" and is persisted as `null`.
      * Only non-blank prefixes are checked against the length bounds and the allowed-character regex.
@@ -35,4 +36,3 @@ class ToolNamePrefixValidator(
         }
     }
 }
-

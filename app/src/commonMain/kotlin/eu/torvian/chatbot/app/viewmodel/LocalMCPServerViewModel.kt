@@ -19,6 +19,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import eu.torvian.chatbot.common.models.tool.ToolNamePrefixValidator
 
 /**
  * Manages the UI state and logic for configuring Local MCP Servers (US6.4, US6.5).
@@ -781,6 +782,10 @@ sealed class DialogTestResult {
  * @property environmentVariables Non-secret environment variables.
  * @property secretEnvironmentVariables Secret environment variables.
  * @property workerIdError Validation error shown when worker ID is missing or invalid.
+ * @property toolNamePrefix Optional prefix prepended to every tool name for this server; must match the
+ *   LLM-safe character set `^[a-zA-Z0-9_-]+$` (blank means no prefix).
+ * @property toolNamePrefixError Validation error shown when [toolNamePrefix] contains illegal characters or
+ *   exceeds the allowed length; `null` when valid or blank.
  */
 data class LocalMCPServerFormState(
     val workerId: Long = 0L,
@@ -799,18 +804,21 @@ data class LocalMCPServerFormState(
     val workerIdError: String? = null,
     val nameError: String? = null,
     val commandError: String? = null,
+    val toolNamePrefixError: String? = null,
     val fullCommand: String = ""
 ) {
     /**
      * Returns true if the form has no validation errors.
      */
     fun isValid(): Boolean {
-        return workerIdError == null && nameError == null && commandError == null && workerId > 0 && name.isNotBlank() && command.isNotBlank()
+        return workerIdError == null && nameError == null && commandError == null && toolNamePrefixError == null && workerId > 0 && name.isNotBlank() && command.isNotBlank()
     }
 
     /**
-     * Validates the form and returns a new state with error messages if validation fails.
-     * Returns the same state if already valid.
+     * Validates the form and returns a copy with all error fields populated.
+     * Covers the required fields (name, worker, command) and the optional tool-name prefix,
+     * whose characters must match the LLM-safe set enforced server-side. A blank prefix is valid.
+     * Returns this unchanged only when every field is already valid.
      */
     fun validate(): LocalMCPServerFormState {
         val newNameError = when {
@@ -825,9 +833,15 @@ data class LocalMCPServerFormState(
             command.isBlank() -> "Command is required"
             else -> null
         }
+        val newPrefixError = ToolNamePrefixValidator().validate(toolNamePrefix)
 
-        return if (newWorkerIdError != null || newNameError != null || newCommandError != null) {
-            copy(workerIdError = newWorkerIdError, nameError = newNameError, commandError = newCommandError)
+        return if (newWorkerIdError != null || newNameError != null || newCommandError != null || newPrefixError != null) {
+            copy(
+                workerIdError = newWorkerIdError,
+                nameError = newNameError,
+                commandError = newCommandError,
+                toolNamePrefixError = newPrefixError
+            )
         } else {
             this
         }

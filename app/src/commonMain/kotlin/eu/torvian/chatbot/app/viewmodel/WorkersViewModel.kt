@@ -8,7 +8,7 @@ import eu.torvian.chatbot.app.domain.contracts.WorkersFormState
 import eu.torvian.chatbot.app.repository.RepositoryError
 import eu.torvian.chatbot.app.repository.WorkerRepository
 import eu.torvian.chatbot.app.viewmodel.common.NotificationService
-import eu.torvian.chatbot.common.models.worker.ToolNamePrefixValidator
+import eu.torvian.chatbot.common.models.tool.ToolNamePrefixValidator
 import eu.torvian.chatbot.common.models.worker.WorkerDto
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers

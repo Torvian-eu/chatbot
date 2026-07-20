@@ -6,6 +6,7 @@ import arrow.core.raise.ensure
 import arrow.core.raise.withError
 import eu.torvian.chatbot.common.misc.transaction.TransactionScope
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
+import eu.torvian.chatbot.common.models.tool.ToolNameValidator
 import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.common.models.tool.UserToolApprovalPreference
 import eu.torvian.chatbot.server.data.dao.LocalMCPToolDefinitionDao
@@ -35,6 +36,7 @@ class ToolServiceImpl(
     private val localMCPToolDefinitionDao: LocalMCPToolDefinitionDao,
     private val userToolApprovalPreferenceDao: UserToolApprovalPreferenceDao,
     private val transactionScope: TransactionScope,
+    private val toolNameValidator: ToolNameValidator = ToolNameValidator()
 ) : ToolService {
 
     private val logger: Logger = LogManager.getLogger(ToolServiceImpl::class.java)
@@ -198,6 +200,12 @@ class ToolServiceImpl(
         }
         ensure(name.length <= 255) {
             ValidateToolError.InvalidName("Tool name cannot exceed 255 characters.", name)
+        }
+        // Defensive backstop: the public tool name must only contain LLM-safe characters. MCP tool names are
+        // sanitized before persistence (see DefaultLocalMCPRuntimeControlService), so this mainly guards
+        // built-in tools and any future name source against regressions.
+        toolNameValidator.validate(name)?.let { reason ->
+            raise(ValidateToolError.InvalidName(reason, name))
         }
 
         // Validate description

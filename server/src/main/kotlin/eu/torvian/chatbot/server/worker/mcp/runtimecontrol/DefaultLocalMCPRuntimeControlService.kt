@@ -6,6 +6,7 @@ import arrow.core.raise.withError
 import eu.torvian.chatbot.common.models.api.mcp.*
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.WorkerMcpDiscoveredToolData
 import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
+import eu.torvian.chatbot.common.models.tool.ToolNameSanitizer
 import eu.torvian.chatbot.common.security.SignedRequest
 import eu.torvian.chatbot.server.service.core.LocalMCPServerService
 import eu.torvian.chatbot.server.service.core.LocalMCPToolDefinitionService
@@ -31,7 +32,8 @@ import kotlin.time.Clock
 class DefaultLocalMCPRuntimeControlService(
     private val localMCPServerService: LocalMCPServerService,
     private val localMCPRuntimeCommandDispatchService: LocalMCPRuntimeCommandDispatchService,
-    private val localMCPToolDefinitionService: LocalMCPToolDefinitionService
+    private val localMCPToolDefinitionService: LocalMCPToolDefinitionService,
+    private val toolNameSanitizer: ToolNameSanitizer = ToolNameSanitizer()
 ) : LocalMCPRuntimeControlService {
     override suspend fun startServer(userId: Long, serverId: Long): Either<LocalMCPRuntimeControlError, Unit> = either {
         val server = resolveOwnedServer(userId = userId, serverId = serverId).bind()
@@ -174,9 +176,13 @@ class DefaultLocalMCPRuntimeControlService(
         server: LocalMCPServerDto
     ): LocalMCPToolDefinition {
         val now = Clock.System.now()
+        // The raw MCP name is preserved verbatim in `mcpToolName` for dispatch to the MCP server. Only the
+        // LLM-facing public `name` is sanitized, because some providers reject characters such as dots or
+        // spaces in tool names while the MCP protocol itself does not.
+        val publicName = toolNameSanitizer.sanitize(buildToolName(server.toolNamePrefix, name))
         return LocalMCPToolDefinition(
             id = 0L,
-            name = buildToolName(server.toolNamePrefix, name),
+            name = publicName,
             description = description.orEmpty(),
             config = buildJsonObject { },
             inputSchema = inputSchema,

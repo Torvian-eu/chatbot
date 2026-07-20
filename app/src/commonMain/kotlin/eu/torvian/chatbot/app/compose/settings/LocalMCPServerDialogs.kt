@@ -291,12 +291,18 @@ fun LocalMCPServerConfigDialog(
                     placeholder = { Text("github_") },
                     singleLine = true,
                     enabled = !isSaving,
+                    isError = formState.toolNamePrefixError != null,
                     supportingText = {
-                        val example = formState.toolNamePrefix
-                            .takeIf { it.isNotBlank() }
-                            ?.let { prefix -> "e.g. \"delete_file\" → \"${prefix}delete_file\"" }
-                            ?: "Optional – prepended to every tool name so the LLM can tell servers apart"
-                        Text(example)
+                        // Inline field error shown only when the prefix is invalid; otherwise show the
+                        // helpful example of how the prefix is concatenated into tool names.
+                        formState.toolNamePrefixError?.let { Text(it) }
+                            ?: run {
+                                val example = formState.toolNamePrefix
+                                    .takeIf { it.isNotBlank() }
+                                    ?.let { prefix -> "e.g. \"delete_file\" → \"${prefix}delete_file\"" }
+                                    ?: "Optional – prepended to every tool name so the LLM can tell servers apart"
+                                Text(example)
+                            }
                     },
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -524,7 +530,7 @@ fun LocalMCPServerConfigDialog(
                 // Save button
                 Button(
                     onClick = onConfirm,
-                    enabled = !isSaving && !isTesting && formState.isValid()
+                    enabled = !isSaving && !isTesting
                 ) {
                     if (isSaving) {
                         CircularProgressIndicator(
