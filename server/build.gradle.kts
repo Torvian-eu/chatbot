@@ -41,7 +41,6 @@ dependencies {
 
     // Testing dependencies
     testImplementation(libs.bundles.ktor.server.test)  // Ktor server testing
-    testImplementation(libs.bundles.ktor.client)       // Ktor client-related dependencies
     testImplementation(libs.ktor.client.mock)          // Ktor client mock engine for testing
     testImplementation(libs.kotlin.test)               // Kotlin test framework
     testImplementation(libs.bundles.koin.test)         // Koin testing support
@@ -67,6 +66,7 @@ tasks {
 
     // Custom task to clean the installDist directory before each installDist execution
     register<Delete>("cleanInstallDistDir") {
+        description = "Cleans the installDist directory for the server module before installation."
         delete(layout.buildDirectory.dir("install/server"))
     }
 
