@@ -52,6 +52,7 @@ application {
 tasks {
     // Custom task to clean the installDist directory before each installDist execution
     register<Delete>("cleanInstallDistDir") {
+        description = "Cleans the installDist directory for the worker module before installation."
         delete(layout.buildDirectory.dir("install/worker"))
     }
 
@@ -68,7 +69,8 @@ tasks {
 
 val centralVersion = extensions.extraProperties["centralVersion"]?.toString() ?: "unspecified"
 
-val generateVersionInfo by tasks.registering {
+val generateVersionInfo = tasks.register("generateVersionInfo") {
+    description = "Generates a Kotlin file containing version information for the worker module."
     val versionValue = centralVersion
     val outputDir = layout.buildDirectory.dir("generated/version/main/kotlin")
     val outputFile = outputDir.map { it.file("eu/torvian/chatbot/worker/VersionInfo.kt") }
