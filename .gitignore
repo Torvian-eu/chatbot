@@ -69,3 +69,6 @@ deploy/packages
 /.github/git-commit-instructions.md
 /.junie
 /.serena
+
+# Per-clone local Gradle configuration
+local.gradle.properties
