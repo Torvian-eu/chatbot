@@ -247,10 +247,10 @@ class DefaultConversationTurnPersistenceTest {
         )
 
         coEvery {
-            toolCallDao.insertToolCall(12L, toolDefinition.id, "search", "call-1", "{\"query\":\"docs\"}", null, ToolCallStatus.PENDING, null, null, any(), null)
+            toolCallDao.insertToolCall(12L, toolDefinition.id, "search", "call-1", "{\"query\":\"docs\"}", null, ToolCallStatus.PENDING, null, null, any(), null, null, null)
         } returns knownToolCall.right()
         coEvery {
-            toolCallDao.insertToolCall(12L, null, "missing", "call-2", "{}", null, ToolCallStatus.ERROR, "Tool 'missing' not found in enabled tools", null, any(), null)
+            toolCallDao.insertToolCall(12L, null, "missing", "call-2", "{}", null, ToolCallStatus.ERROR, "Tool 'missing' not found in enabled tools", null, any(), null, null, null)
         } returns missingToolCall.right()
 
         val result = persistence.persistPendingToolCalls(12L, listOf(knownRequest, missingRequest), listOf(toolDefinition))

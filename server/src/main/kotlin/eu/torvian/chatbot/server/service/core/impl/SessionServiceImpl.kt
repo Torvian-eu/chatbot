@@ -427,7 +427,9 @@ class SessionServiceImpl(
                             errorMessage = originalToolCall.errorMessage,
                             denialReason = originalToolCall.denialReason,
                             executedAt = originalToolCall.executedAt,
-                            durationMs = originalToolCall.durationMs
+                            durationMs = originalToolCall.durationMs,
+                            errorCode = originalToolCall.errorCode,
+                            errorDetails = originalToolCall.errorDetails
                         ).bind()
                     }
                 }

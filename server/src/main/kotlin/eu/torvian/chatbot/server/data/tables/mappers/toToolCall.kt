@@ -24,5 +24,7 @@ fun ResultRow.toToolCall() = ToolCall(
     errorMessage = this[ToolCallTable.errorMessage],
     denialReason = this[ToolCallTable.denialReason],
     executedAt = Instant.fromEpochMilliseconds(this[ToolCallTable.executedAt]),
-    durationMs = this[ToolCallTable.durationMs]
+    durationMs = this[ToolCallTable.durationMs],
+    errorCode = this[ToolCallTable.errorCode],
+    errorDetails = this[ToolCallTable.errorDetails]
 )

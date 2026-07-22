@@ -143,7 +143,9 @@ class DefaultConversationTurnPersistence(
                 },
                 denialReason = null,
                 executedAt = Clock.System.now(),
-                durationMs = null
+                durationMs = null,
+                errorCode = null,
+                errorDetails = null
             ).getOrElse { error ->
                 throw IllegalStateException("Failed to insert tool call: $error")
             }

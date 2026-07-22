@@ -30,6 +30,12 @@ import kotlin.time.Instant
  *                        Only populated when status is USER_DENIED.
  * @property executedAt Timestamp when the tool was executed
  * @property durationMs Execution time in milliseconds (null if pending)
+ * @property errorCode Optional machine-readable error code when [status] is [ToolCallStatus.ERROR].
+ *                      Mirrors the code reported by the executor (e.g. a worker-side authorization
+ *                      failure) and is surfaced back to the LLM alongside [errorMessage].
+ * @property errorDetails Optional structured diagnostics when [status] is [ToolCallStatus.ERROR].
+ *                        Stored as a serialized JSON string to preserve machine-readable context
+ *                        (logs, troubleshooting) without imposing a fixed schema.
  */
 @Serializable
 data class ToolCall(
@@ -44,6 +50,8 @@ data class ToolCall(
     val errorMessage: String? = null,
     val denialReason: String? = null,
     val executedAt: Instant,
-    val durationMs: Long? = null
+    val durationMs: Long? = null,
+    val errorCode: String? = null,
+    val errorDetails: String? = null
 )
 

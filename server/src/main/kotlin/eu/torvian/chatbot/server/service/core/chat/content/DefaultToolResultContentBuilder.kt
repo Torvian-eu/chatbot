@@ -20,6 +20,10 @@ class DefaultToolResultContentBuilder : ToolResultContentBuilder {
             ToolCallStatus.ERROR -> {
                 buildJsonObject {
                     put("error", toolCall.errorMessage ?: "Unknown error")
+                    // Surface the tool's full output (e.g. run_command stdout/stderr) so the LLM can
+                    // recover without a blind retry. The concise error message remains for humans.
+                    toolCall.output?.takeIf { it.isNotBlank() }?.let { put("output", it) }
+                    toolCall.errorCode?.let { put("errorCode", it) }
                 }.toString()
             }
 
