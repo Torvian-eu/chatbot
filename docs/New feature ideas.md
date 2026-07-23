@@ -8,11 +8,10 @@
   - Store partial message content in AssistantMessage table, in case the stream was interrupted. (either due to an error, or because the user stopped the streaming)
   - In the UI, the "send" button should transform into a "stop" button while the message is streaming. 
  
-### Allow user to pause an agentic response, in order to provide user feedback.
-  - Add a "Pause" button to the input area, which is shown while a message is streaming and when tools are involved.
+### Allow user to pause an agentic response
+  - When a message starts streaming, show a "Pause" icon instead of a "Stop" icon. When user clicks the "Pause" button, the icon starts blinking slowly, indicating that the streaming process is being paused. When streaming process is actually paused, the icon changes to default mode again (with "Play" icon). While the icon is slowly blinking on Pause state, the user can click on it again, which will force a hard stop. (Websocket connection will be closed immediately)
   - Pausing should stop the (web socket) streaming process, but only after the current assistant message is fully processed. This means that the message loop (used for tool calling) will be interrupted prematurely.
   - This feature is particularly useful for agentic LLM usage, where the user might want to interrupt an undesirable response and provide feedback.
-  - When paused, the user can provide feedback to the assistant. This feedback is sent to the assistant as a new message, which becomes the next message in the conversation. Note: this behavior is no different from sending a new message, so there is no special "paused" state that needs to be tracked.
 
 ### (done) Allow recursive deletion of messages. (in addition to single message deletion)
   - The server module is already capable of this, but the ktor route needs to be examined. In `configureMessageRoutes.kt` we have a route `delete<MessageResource.ById>`, where we use a query parameter "mode=single" to perform a non-recursive delete and "mode=recursive" to perform a recursive delete. However, we use the Ktor Resources plugin, and we should examine if a query parameter can be configured for the route declaritively instead, so that it can be validated at compile time.
@@ -127,6 +126,23 @@ Normally, only the assistant can call tools. However, it sometimes is useful for
 - A dialog should be presented with all the arguments for the tool, which can be filled in manually.
 - The dialog should allow the user to select a tool from the list of available tools for the current session.
 
+
+### Add system message composer
+The system message is what the LLM uses to understand the context of the conversation. It's always the first message in the conversation, and carries the heaviest weighting. We want to let the user compose the system message within the UI:
+- There should be several snippets of text (components) that the user can choose from to compose the system message:
+  - The system message property from the current chat model settings (ChatModelSettings.systemMessage)
+  - A predefined role-based message, stored in the database. For example: "You are a helpful assistant.".
+  - File contents from one or more `AGENTS.md` files. (Every worker instance should have an AGENTS.md file, located in the workspace root. This file can contain specific project instructions for the LLM.)
+  - A custom message that the user can edit.
+- The user should be able to add new role-based message objects to the database. Each object should have at least the following properties: id, name (unique), display name, and system message content.
+- The system message composition object is stored per-session. It should have at least the following properties: id, chat session id, role-based message id (nullable), custom message content (String, nullable), list of worker ids (to include AGENTS.md files from), whether the ChatModelSettings.systemMessage should be included or not (Boolean, default: true), ordering of components (List<String>)
+- The system message composer should be accessible from the top bar in the chatscreen, in the "More" menu.
+- In the composer dialog, the user should be able to select which components to include, and change the ordering. Each component should be presented as a card in the UI.
+
+Technical notes:
+- The database should hold a cached version of the system message for performance reasons, so that the composed system message doesn't have to be rebuilt on every request. It should be stored in the database as an object with at least the following properties: chat session id, system message (String). The client app is responsible for keeping the system message updated (by calling an endpoint on the server)
+- The client app can get the contents of an AGENTS.md file by calling the built-in worker tool `read_text_file`.
+- The client app should have Repository class for managing the cached (per-session) system message and other related data.
 
 ---
 
@@ -335,6 +351,12 @@ Open questions:
 - How to present sub-agents in the UI?
 - Using Chatbot MCP server we could allow the LLM (main agent) call the MCP server to create a new chat session, and send a message with a specially crafted prompt to that session. When the sub-agent in the new chat session completes it's task, it sends a message (with task result) to the main agent to let it know it's done. The main agent can then decide what to do with the result.
 
+#### Other idea
+- Add a new tool definition: "spawn_sub_agent" with new BUILTIN_SERVER tool type. It should have the following inputs:
+  - `agent_name`: The name of the sub-agent to spawn.
+  - `role`: The role of the sub-agent.
+  - `task_description`: A description of the task the sub-agent should perform.
+
 ### Auto-complete user prompts
 - The user starts typing a prompt, and the AI suggests possible completions based on the current conversation, and prompt history (also from other chat sessions), or prompt templates.
 
@@ -367,6 +389,9 @@ Open questions:
 - alternative: use [Graphify](https://github.com/safishamsi/graphify) SKILL.
 
 ### Role-playing mode
+
+### Retry LLM request on 503
+- Implement retry logic for LLM requests that receive a 503 Service Unavailable error, with exponential backoff.
 
 ---
 

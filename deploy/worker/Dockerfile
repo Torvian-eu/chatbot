@@ -32,7 +32,7 @@ RUN groupadd -g 10001 torvian && \
     useradd -u 10001 -g torvian -m -s /bin/bash torvian
 
 # 6. Prepare directory structure for app and MCP caches
-RUN mkdir -p /app/config /app/data /app/logs /app/cache/npm /app/cache/uv
+RUN mkdir -p /app/config /app/data /app/logs /app/workspace /app/cache/npm /app/cache/uv
 
 # 7. Copy application files (ensuring ownership)
 COPY --chown=torvian:torvian dist/ /app

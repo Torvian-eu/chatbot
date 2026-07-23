@@ -245,4 +245,49 @@ eval "set -- $(
         tr '\n' ' '
     )" '"$@"'
 
+# ==========================================================
+# Optional CHATBOT-specific Gradle cache redirection
+# ==========================================================
+#
+# Precedence:
+# 1. CHATBOT_GRADLE_ROOT environment variable
+# 2. local.gradle.properties in the project root
+# 3. Otherwise: default Gradle behavior
+#
+# If a Gradle root is configured, we add:
+#   --no-watch-fs
+#   --project-cache-dir <root>/main/project-cache
+#
+# This avoids project-root .gradle cache conflicts between
+# different environments (such as Windows and Docker).
+# ==========================================================
+
+CHATBOT_GRADLE_ROOT_RESOLVED=${CHATBOT_GRADLE_ROOT:-}
+
+if [ -z "$CHATBOT_GRADLE_ROOT_RESOLVED" ] && [ -f "$APP_HOME/local.gradle.properties" ]; then
+    CHATBOT_GRADLE_ROOT_RESOLVED=$(
+        sed -n 's/^[[:space:]]*chatbot\.gradle\.root[[:space:]]*=[[:space:]]*//p' "$APP_HOME/local.gradle.properties" | tail -n 1
+    )
+fi
+
+if [ -n "$CHATBOT_GRADLE_ROOT_RESOLVED" ]; then
+    case "$CHATBOT_GRADLE_ROOT_RESOLVED" in
+        /*) ;;
+        [A-Za-z]:[\\/]* ) ;;
+        *)
+            CHATBOT_GRADLE_ROOT_RESOLVED="$APP_HOME/$CHATBOT_GRADLE_ROOT_RESOLVED"
+            ;;
+    esac
+
+    PROJECT_CACHE_DIR="$CHATBOT_GRADLE_ROOT_RESOLVED/main/project-cache"
+
+    echo "Using CHATBOT Gradle root: $CHATBOT_GRADLE_ROOT_RESOLVED" >&2
+    echo "Using project cache dir:   $PROJECT_CACHE_DIR" >&2
+
+    set -- \
+        "$@" \
+        --no-watch-fs \
+        --project-cache-dir "$PROJECT_CACHE_DIR"
+fi
+
 exec "$JAVACMD" "$@"
