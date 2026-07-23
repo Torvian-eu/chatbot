@@ -13,12 +13,12 @@ val projectGroup = "eu.torvian"
 rootProject.name = projectName
 
 // ==========================================================
-// Optional External Gradle Artifact Configuration
+// Optional External Build Artifact Configuration
 // ==========================================================
 //
 // Goal:
 // Allow certain environments (such as Docker or a specific local clone)
-// to store Gradle-generated files outside the project directory.
+// to store Gradle build outputs outside the project directory.
 //
 // This helps avoid:
 // - lock conflicts between Windows Gradle and Linux Gradle
@@ -39,15 +39,20 @@ rootProject.name = projectName
 //     ../gradle-chatbot/windows
 //     ../gradle-chatbot/docker
 //
-// If no external root is configured, Gradle will use:
-// - .gradle/ in the project root
-// - build/ inside each module
+// If no external root is configured, Gradle will use the default build/
+// directory inside each module.
 //
 // If an external root is configured, this main build uses a dedicated namespace:
 //   <externalRoot>/main/...
 //
 // This keeps it clearly separated from other included builds such as:
 //   <externalRoot>/build-logic/...
+//
+// Note:
+// The Gradle project cache directory (normally .gradle/) is NOT configured here.
+// That is handled externally by the Gradle wrapper scripts / command line via:
+//   --project-cache-dir
+//   --no-watch-fs
 // ==========================================================
 
 // Optional local per-clone configuration file.
@@ -99,15 +104,6 @@ val configuredExternalGradleRoot: File? =
 val externalGradleRoot: File? =
     configuredExternalGradleRoot?.let { File(it, "main") }
 
-// If an external root is configured, redirect the project-local Gradle cache
-// (normally stored in .gradle/) to:
-//   <externalGradleRoot>/project-cache
-//
-// If no external root is configured, default Gradle behavior is preserved.
-if (externalGradleRoot != null) {
-    startParameter.projectCacheDir = File(externalGradleRoot, "project-cache")
-}
-
 // ==========================================================
 // Per-Project Configuration
 // ==========================================================
@@ -118,7 +114,7 @@ if (externalGradleRoot != null) {
 // - version
 // - shared version extra property
 //
-// Additionally, if an external Gradle root is configured,
+// Additionally, if an external root is configured,
 // it redirects each project's build directory from:
 //   <module>/build
 // to:

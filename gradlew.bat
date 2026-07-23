@@ -24,7 +24,7 @@
 @rem ##########################################################################
 
 @rem Set local scope for the variables, and ensure extensions are enabled
-setlocal EnableExtensions
+setlocal EnableExtensions EnableDelayedExpansion
 
 set DIRNAME=%~dp0
 if "%DIRNAME%"=="" set DIRNAME=.
@@ -68,14 +68,89 @@ echo location of your Java installation. 1>&2
 "%COMSPEC%" /c exit 1
 
 :execute
-@rem Setup the command line
+@rem ==========================================================
+@rem Optional CHATBOT-specific Gradle cache redirection
+@rem
+@rem Precedence:
+@rem 1. CHATBOT_GRADLE_ROOT environment variable
+@rem 2. local.gradle.properties in the project root
+@rem 3. Otherwise: default Gradle behavior
+@rem
+@rem If a Gradle root is configured, add:
+@rem   --no-watch-fs
+@rem   --project-cache-dir <root>\main\project-cache
+@rem ==========================================================
 
+set "CHATBOT_GRADLE_ROOT_RESOLVED=%CHATBOT_GRADLE_ROOT%"
 
+if not defined CHATBOT_GRADLE_ROOT_RESOLVED (
+    if exist "%APP_HOME%\local.gradle.properties" (
+        for /f "usebackq tokens=1,* delims==" %%A in ("%APP_HOME%\local.gradle.properties") do (
+            set "KEY=%%A"
+            set "VALUE=%%B"
+            if "!KEY!"=="chatbot.gradle.root" (
+                set "CHATBOT_GRADLE_ROOT_RESOLVED=!VALUE!"
+            )
+        )
+    )
+)
 
-@rem Execute Gradle
-@rem endlocal doesn't take effect until after the line is parsed and variables are expanded
-@rem which allows us to clear the local environment before executing the java command
-endlocal & "%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %GRADLE_OPTS% "-Dorg.gradle.appname=%APP_BASE_NAME%" -jar "%APP_HOME%\gradle\wrapper\gradle-wrapper.jar" %* & call :exitWithErrorLevel
+set "USE_CHATBOT_CACHE="
+
+if defined CHATBOT_GRADLE_ROOT_RESOLVED (
+    @rem Trim one leading space if present after '='
+    if "!CHATBOT_GRADLE_ROOT_RESOLVED:~0,1!"==" " (
+        set "CHATBOT_GRADLE_ROOT_RESOLVED=!CHATBOT_GRADLE_ROOT_RESOLVED:~1!"
+    )
+
+    @rem Resolve relative paths against the project root.
+    if not "!CHATBOT_GRADLE_ROOT_RESOLVED:~1,1!"==":" (
+        if not "!CHATBOT_GRADLE_ROOT_RESOLVED:~0,2!"=="\\" (
+            set "CHATBOT_GRADLE_ROOT_RESOLVED=%APP_HOME%\!CHATBOT_GRADLE_ROOT_RESOLVED!"
+        )
+    )
+
+    @rem Normalize to a clean absolute path
+    for %%I in ("!CHATBOT_GRADLE_ROOT_RESOLVED!") do set "CHATBOT_GRADLE_ROOT_RESOLVED=%%~fI"
+
+    set "PROJECT_CACHE_DIR=!CHATBOT_GRADLE_ROOT_RESOLVED!\main\project-cache"
+
+    echo Using CHATBOT Gradle root: !CHATBOT_GRADLE_ROOT_RESOLVED! 1>&2
+    echo Using project cache dir:   !PROJECT_CACHE_DIR! 1>&2
+
+    set "USE_CHATBOT_CACHE=1"
+)
+
+@rem ==========================================================
+@rem Export variables out of the local scope before endlocal
+@rem ==========================================================
+set "FINAL_USE_CHATBOT_CACHE=%USE_CHATBOT_CACHE%"
+set "FINAL_PROJECT_CACHE_DIR=%PROJECT_CACHE_DIR%"
+set "FINAL_JAVA_EXE=%JAVA_EXE%"
+set "FINAL_APP_HOME=%APP_HOME%"
+set "FINAL_APP_BASE_NAME=%APP_BASE_NAME%"
+set "FINAL_DEFAULT_JVM_OPTS=%DEFAULT_JVM_OPTS%"
+set "FINAL_JAVA_OPTS=%JAVA_OPTS%"
+set "FINAL_GRADLE_OPTS=%GRADLE_OPTS%"
+
+endlocal & (
+    set "FINAL_USE_CHATBOT_CACHE=%FINAL_USE_CHATBOT_CACHE%"
+    set "FINAL_PROJECT_CACHE_DIR=%FINAL_PROJECT_CACHE_DIR%"
+    set "FINAL_JAVA_EXE=%FINAL_JAVA_EXE%"
+    set "FINAL_APP_HOME=%FINAL_APP_HOME%"
+    set "FINAL_APP_BASE_NAME=%FINAL_APP_BASE_NAME%"
+    set "FINAL_DEFAULT_JVM_OPTS=%FINAL_DEFAULT_JVM_OPTS%"
+    set "FINAL_JAVA_OPTS=%FINAL_JAVA_OPTS%"
+    set "FINAL_GRADLE_OPTS=%FINAL_GRADLE_OPTS%"
+)
+
+if defined FINAL_USE_CHATBOT_CACHE (
+    "%FINAL_JAVA_EXE%" %FINAL_DEFAULT_JVM_OPTS% %FINAL_JAVA_OPTS% %FINAL_GRADLE_OPTS% "-Dorg.gradle.appname=%FINAL_APP_BASE_NAME%" -jar "%FINAL_APP_HOME%\gradle\wrapper\gradle-wrapper.jar" --no-watch-fs --project-cache-dir "%FINAL_PROJECT_CACHE_DIR%" %*
+) else (
+    "%FINAL_JAVA_EXE%" %FINAL_DEFAULT_JVM_OPTS% %FINAL_JAVA_OPTS% %FINAL_GRADLE_OPTS% "-Dorg.gradle.appname=%FINAL_APP_BASE_NAME%" -jar "%FINAL_APP_HOME%\gradle\wrapper\gradle-wrapper.jar" %*
+)
+
+call :exitWithErrorLevel
 
 :exitWithErrorLevel
 @rem Use "%COMSPEC%" /c exit to allow operators to work properly in scripts
