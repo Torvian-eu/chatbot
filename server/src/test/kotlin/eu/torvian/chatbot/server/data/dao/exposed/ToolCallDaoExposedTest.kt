@@ -7,7 +7,6 @@ import eu.torvian.chatbot.common.models.core.MessageInsertPosition
 import eu.torvian.chatbot.common.models.core.ChatMessage
 import eu.torvian.chatbot.common.models.tool.ToolCall
 import eu.torvian.chatbot.common.models.tool.ToolCallStatus
-import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import eu.torvian.chatbot.common.models.tool.ToolType
 import eu.torvian.chatbot.server.data.dao.MessageDao
 import eu.torvian.chatbot.server.data.dao.SessionDao
@@ -135,7 +134,6 @@ class ToolCallDaoExposedTest {
     ): ToolCall {
         val input = """{"query":"Kotlin programming"}"""
         val output = """{"results":"Found 10 results"}"""
-
         return toolCallDao.insertToolCall(
             messageId = messageId,
             toolDefinitionId = toolDefinitionId,
@@ -147,7 +145,9 @@ class ToolCallDaoExposedTest {
             errorMessage = if (status == ToolCallStatus.ERROR) "Test error" else null,
             denialReason = denialReason,
             executedAt = Clock.System.now(),
-            durationMs = if (status == ToolCallStatus.SUCCESS) 150L else null
+            durationMs = if (status == ToolCallStatus.SUCCESS) 150L else null,
+            errorCode = null,
+            errorDetails = null
         ).getOrElse { throw IllegalStateException("Failed to create test tool call: $it") }
     }
 
@@ -171,7 +171,9 @@ class ToolCallDaoExposedTest {
             errorMessage = null,
             denialReason = null,
             executedAt = now,
-            durationMs = 200L
+            durationMs = 200L,
+            errorCode = null,
+            errorDetails = null
         )
 
         // Verify
@@ -301,7 +303,9 @@ class ToolCallDaoExposedTest {
             errorMessage = null,
             denialReason = null,
             executedAt = Clock.System.now(),
-            durationMs = null
+            durationMs = null,
+            errorCode = null,
+            errorDetails = null
         )
 
         // Verify
@@ -328,7 +332,9 @@ class ToolCallDaoExposedTest {
             errorMessage = null,
             denialReason = null,
             executedAt = Clock.System.now(),
-            durationMs = null
+            durationMs = null,
+            errorCode = null,
+            errorDetails = null
         )
 
         // Verify
@@ -354,7 +360,9 @@ class ToolCallDaoExposedTest {
             errorMessage = null,
             denialReason = null,
             executedAt = Clock.System.now(),
-            durationMs = null
+            durationMs = null,
+            errorCode = null,
+            errorDetails = null
         ).getOrElse { throw IllegalStateException("Failed to create tool call") }
 
         // Execute: Update to SUCCESS with output and new tool name
@@ -421,7 +429,9 @@ class ToolCallDaoExposedTest {
             errorMessage = "Initial error",
             denialReason = null,
             executedAt = Clock.System.now(),
-            durationMs = null
+            durationMs = null,
+            errorCode = null,
+            errorDetails = null
         ).getOrElse { throw IllegalStateException("Failed to create tool call") }
 
         // Execute: Update to clear error message (retry scenario)

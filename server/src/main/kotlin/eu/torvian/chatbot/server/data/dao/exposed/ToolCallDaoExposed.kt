@@ -72,7 +72,9 @@ class ToolCallDaoExposed(
         errorMessage: String?,
         denialReason: String?,
         executedAt: Instant,
-        durationMs: Long?
+        durationMs: Long?,
+        errorCode: String?,
+        errorDetails: String?
     ): Either<InsertToolCallError, ToolCall> =
         transactionScope.transaction {
             either {
@@ -89,6 +91,8 @@ class ToolCallDaoExposed(
                         it[ToolCallTable.denialReason] = denialReason
                         it[ToolCallTable.executedAt] = executedAt.toEpochMilliseconds()
                         it[ToolCallTable.durationMs] = durationMs
+                        it[ToolCallTable.errorCode] = errorCode
+                        it[ToolCallTable.errorDetails] = errorDetails
                     }
                     insertStatement.resultedValues?.first()?.toToolCall()
                         ?: throw IllegalStateException("Failed to retrieve newly inserted tool call")
@@ -120,6 +124,8 @@ class ToolCallDaoExposed(
                     it[denialReason] = toolCall.denialReason
                     it[executedAt] = toolCall.executedAt.toEpochMilliseconds()
                     it[durationMs] = toolCall.durationMs
+                    it[errorCode] = toolCall.errorCode
+                    it[errorDetails] = toolCall.errorDetails
                 }
                 ensure(updatedRowCount != 0) { UpdateToolCallError.NotFound(toolCall.id) }
             }

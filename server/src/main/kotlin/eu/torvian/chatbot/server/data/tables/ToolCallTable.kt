@@ -39,8 +39,12 @@ import org.jetbrains.exposed.v1.core.dao.id.LongIdTable
  * @property outputJson JSON object containing the results returned by the tool
  * @property status Current status of the tool call execution
  * @property errorMessage Error details if the tool execution failed
+ * @property denialReason Reason provided by user when denying tool call execution.
+ *                        Only populated when status is USER_DENIED.
  * @property executedAt Unix timestamp (milliseconds) when the tool was executed
  * @property durationMs Execution time in milliseconds (null if still pending)
+ * @property errorCode Optional machine-readable error code (null unless status is ERROR).
+ * @property errorDetails Optional structured diagnostics, stored as JSON text (null unless status is ERROR).
  */
 object ToolCallTable : LongIdTable("tool_calls") {
     val messageId = reference("message_id", ChatMessageTable, onDelete = ReferenceOption.CASCADE)
@@ -54,6 +58,8 @@ object ToolCallTable : LongIdTable("tool_calls") {
     val denialReason = text("denial_reason").nullable()
     val executedAt = long("executed_at")
     val durationMs = long("duration_ms").nullable()
+    val errorCode = varchar("error_code", 255).nullable()
+    val errorDetails = text("error_details").nullable()
 
     init {
         index(false, messageId)

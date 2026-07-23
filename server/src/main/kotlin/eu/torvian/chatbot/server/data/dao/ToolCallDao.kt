@@ -58,6 +58,8 @@ interface ToolCallDao {
      * @param denialReason Reason provided by user when denying execution (only for USER_DENIED status)
      * @param executedAt Timestamp when the tool was executed
      * @param durationMs Execution time in milliseconds (null if pending)
+     * @param errorCode Optional machine-readable error code (null unless the tool reported one).
+     * @param errorDetails Optional structured diagnostics as JSON text (null unless the tool reported some).
      * @return Either [InsertToolCallError] or the newly created [ToolCall]
      */
     suspend fun insertToolCall(
@@ -71,7 +73,9 @@ interface ToolCallDao {
         errorMessage: String?,
         denialReason: String?,
         executedAt: Instant,
-        durationMs: Long?
+        durationMs: Long?,
+        errorCode: String?,
+        errorDetails: String?
     ): Either<InsertToolCallError, ToolCall>
 
     /**

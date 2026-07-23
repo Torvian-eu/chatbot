@@ -100,4 +100,62 @@ class DefaultToolResultContentBuilderTest {
             deniedResult
         )
     }
+
+    /**
+     * Verifies an error tool call surfaces the captured output (e.g. run_command stdout/stderr)
+     * alongside the concise error message, so the LLM can recover without a blind retry.
+     */
+    @Test
+    fun `build includes output and errorCode for errored tool calls`() {
+        val builder = DefaultToolResultContentBuilder()
+
+        val result = builder.build(
+            ToolCall(
+                id = 3L,
+                messageId = 10L,
+                toolDefinitionId = 2L,
+                toolName = "run_command",
+                toolCallId = "call-3",
+                input = "{\"command\":\"ls\"}",
+                output = "exitCode: 2\n--- stdout ---\n\n--- stderr ---\nNo such file or directory",
+                status = ToolCallStatus.ERROR,
+                errorMessage = "Command exited with code 2",
+                errorCode = "EXECUTION_FAILED",
+                executedAt = Instant.fromEpochMilliseconds(1234L)
+            )
+        )
+
+        assertEquals(
+            "{\"error\":\"Command exited with code 2\"," +
+                "\"output\":\"exitCode: 2\\n--- stdout ---\\n\\n--- stderr ---\\nNo such file or directory\"," +
+                "\"errorCode\":\"EXECUTION_FAILED\"}",
+            result
+        )
+    }
+
+    /**
+     * Verifies an error tool call with blank output does not emit a redundant output key,
+     * preserving the legacy error-only contract.
+     */
+    @Test
+    fun `build omits output key when errored output is blank`() {
+        val builder = DefaultToolResultContentBuilder()
+
+        val result = builder.build(
+            ToolCall(
+                id = 4L,
+                messageId = 10L,
+                toolDefinitionId = 2L,
+                toolName = "run_command",
+                toolCallId = "call-4",
+                input = null,
+                output = "   ",
+                status = ToolCallStatus.ERROR,
+                errorMessage = "Command exited with code 1",
+                executedAt = Instant.fromEpochMilliseconds(1234L)
+            )
+        )
+
+        assertEquals("{\"error\":\"Command exited with code 1\"}", result)
+    }
 }

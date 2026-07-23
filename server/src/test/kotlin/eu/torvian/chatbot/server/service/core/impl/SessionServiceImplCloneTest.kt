@@ -470,7 +470,7 @@ class SessionServiceImplCloneTest {
         coEvery {
             toolCallDao.insertToolCall(
                 messageId = capture(toolCallMessageIdSlot),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any()
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()
             )
         } returns originalToolCall.copy(id = 2001L, messageId = 202L).right()
 
@@ -484,6 +484,8 @@ class SessionServiceImplCloneTest {
         coVerify {
             toolCallDao.insertToolCall(
                 202L,
+                any(),
+                any(),
                 any(),
                 any(),
                 any(),

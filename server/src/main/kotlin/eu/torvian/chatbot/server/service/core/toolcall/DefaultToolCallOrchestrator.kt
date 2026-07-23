@@ -240,6 +240,8 @@ class DefaultToolCallOrchestrator(
                     output = event.result.output,
                     status = if (event.result.isError) ToolCallStatus.ERROR else ToolCallStatus.SUCCESS,
                     errorMessage = event.result.errorMessage,
+                    errorCode = event.result.errorCode,
+                    errorDetails = event.result.errorDetails,
                     durationMs = durationMs
                 )
             }
@@ -275,6 +277,8 @@ class DefaultToolCallOrchestrator(
                     output = event.result.output,
                     status = if (event.result.isError) ToolCallStatus.ERROR else ToolCallStatus.SUCCESS,
                     errorMessage = event.result.errorMessage,
+                    errorCode = event.result.errorCode,
+                    errorDetails = event.result.errorDetails?.toString(),
                     durationMs = durationMs
                 )
             }

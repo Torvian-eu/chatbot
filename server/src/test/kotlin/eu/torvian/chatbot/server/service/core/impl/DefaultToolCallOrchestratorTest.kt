@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -244,7 +245,7 @@ class DefaultToolCallOrchestratorTest {
             isError = false
         )
         coEvery { localMcpExecutor.executeTool(toolDef, pending, approval.signedRequest) } returns
-            LocalMCPExecutorEvent.ToolExecutionResult(result)
+                LocalMCPExecutorEvent.ToolExecutionResult(result)
 
         val events = orchestrator.executeAndUpdateToolCalls(
             userId = 1L,
@@ -334,60 +335,111 @@ class DefaultToolCallOrchestratorTest {
     // --- Built-in Worker tool-call tests ---
 
     @Test
-    fun `executeAndUpdateToolCalls should request approval and execute an approved Built-in Worker tool call`() = runTest {
-        val toolDef = builtInWorkerToolDefinition(id = 2L, workerId = 17L, builtInToolName = "read_text_file")
-        val pending = pendingToolCall(
-            id = 10L,
-            toolDefinitionId = toolDef.id,
-            toolName = toolDef.name,
-        )
-        val approval = builtInSignedApproval(
-            toolCallId = pending.id,
-            toolDefinitionId = toolDef.id,
-            workerId = toolDef.workerId,
-            builtInToolName = toolDef.builtInToolName,
-            approved = true,
-        )
-        val updates = trackToolCallUpdates()
+    fun `executeAndUpdateToolCalls should request approval and execute an approved Built-in Worker tool call`() =
+        runTest {
+            val toolDef = builtInWorkerToolDefinition(id = 2L, workerId = 17L, builtInToolName = "read_text_file")
+            val pending = pendingToolCall(
+                id = 10L,
+                toolDefinitionId = toolDef.id,
+                toolName = toolDef.name,
+            )
+            val approval = builtInSignedApproval(
+                toolCallId = pending.id,
+                toolDefinitionId = toolDef.id,
+                workerId = toolDef.workerId,
+                builtInToolName = toolDef.builtInToolName,
+                approved = true,
+            )
+            val updates = trackToolCallUpdates()
 
-        val result = BuiltInToolExecutionResult(
-            output = "Hello, world!",
-            isError = false,
-        )
-        coEvery {
-            builtInWorkerToolExecutor.executeTool(toolDef, pending, approval.signedRequest)
-        } returns BuiltInWorkerToolExecutorEvent.ToolExecutionResult(result)
+            val result = BuiltInToolExecutionResult(
+                output = "Hello, world!",
+                isError = false,
+            )
+            coEvery {
+                builtInWorkerToolExecutor.executeTool(toolDef, pending, approval.signedRequest)
+            } returns BuiltInWorkerToolExecutorEvent.ToolExecutionResult(result)
 
-        val events = orchestrator.executeAndUpdateToolCalls(
-            userId = 1L,
-            pendingToolCalls = listOf(pending),
-            toolDefinitions = listOf(toolDef),
-            toolApprovalFlow = flowOf(approval),
-        ).toList()
+            val events = orchestrator.executeAndUpdateToolCalls(
+                userId = 1L,
+                pendingToolCalls = listOf(pending),
+                toolDefinitions = listOf(toolDef),
+                toolApprovalFlow = flowOf(approval),
+            ).toList()
 
-        assertEquals(3, events.size)
-        val requested = assertIs<ToolCallExecutionEvent.ToolCallApprovalRequested>(events[0])
-        assertEquals(ToolCallStatus.AWAITING_APPROVAL, requested.toolCall.status)
-        val executing = assertIs<ToolCallExecutionEvent.ToolCallExecuting>(events[1])
-        assertEquals(ToolCallStatus.EXECUTING, executing.toolCall.status)
-        val completed = assertIs<ToolCallExecutionEvent.ToolCallCompleted>(events[2])
-        assertEquals(ToolCallStatus.SUCCESS, completed.toolCall.status)
-        assertEquals("Hello, world!", completed.toolCall.output)
-        assertEquals(null, completed.toolCall.errorMessage)
+            assertEquals(3, events.size)
+            val requested = assertIs<ToolCallExecutionEvent.ToolCallApprovalRequested>(events[0])
+            assertEquals(ToolCallStatus.AWAITING_APPROVAL, requested.toolCall.status)
+            val executing = assertIs<ToolCallExecutionEvent.ToolCallExecuting>(events[1])
+            assertEquals(ToolCallStatus.EXECUTING, executing.toolCall.status)
+            val completed = assertIs<ToolCallExecutionEvent.ToolCallCompleted>(events[2])
+            assertEquals(ToolCallStatus.SUCCESS, completed.toolCall.status)
+            assertEquals("Hello, world!", completed.toolCall.output)
+            assertEquals(null, completed.toolCall.errorMessage)
 
-        assertEquals(
-            listOf(ToolCallStatus.AWAITING_APPROVAL, ToolCallStatus.EXECUTING, ToolCallStatus.SUCCESS),
-            updates.map { it.status }
-        )
+            assertEquals(
+                listOf(ToolCallStatus.AWAITING_APPROVAL, ToolCallStatus.EXECUTING, ToolCallStatus.SUCCESS),
+                updates.map { it.status }
+            )
 
-        coVerify(exactly = 1) { builtInWorkerToolExecutor.executeTool(toolDef, pending, approval.signedRequest) }
-        coVerify(exactly = 0) { localMcpExecutor.executeTool(any(), any(), any()) }
-        coVerify(exactly = 3) { toolCallDao.updateToolCall(any()) }
-    }
+            coVerify(exactly = 1) { builtInWorkerToolExecutor.executeTool(toolDef, pending, approval.signedRequest) }
+            coVerify(exactly = 0) { localMcpExecutor.executeTool(any(), any(), any()) }
+            coVerify(exactly = 3) { toolCallDao.updateToolCall(any()) }
+        }
 
     @Test
-    fun `executeAndUpdateToolCalls should record a Built-in Worker tool error result and keep ERROR status`() = runTest {
-        val toolDef = builtInWorkerToolDefinition(id = 2L, workerId = 17L, builtInToolName = "write_file")
+    fun `executeAndUpdateToolCalls should record a Built-in Worker tool error result and keep ERROR status`() =
+        runTest {
+            val toolDef = builtInWorkerToolDefinition(id = 2L, workerId = 17L, builtInToolName = "write_file")
+            val pending = pendingToolCall(
+                id = 11L,
+                toolDefinitionId = toolDef.id,
+                toolName = toolDef.name,
+            )
+            val approval = builtInSignedApproval(
+                toolCallId = pending.id,
+                toolDefinitionId = toolDef.id,
+                workerId = toolDef.workerId,
+                builtInToolName = toolDef.builtInToolName,
+                approved = true,
+            )
+            val updates = trackToolCallUpdates()
+
+            // The worker reports a structured error result; the orchestrator must translate `isError=true`
+            // into `ToolCallStatus.ERROR` and surface the error message to the chat loop.
+            val result = BuiltInToolExecutionResult(
+                output = null,
+                isError = true,
+                errorMessage = "Permission denied: /etc/passwd is outside the workspace",
+                errorCode = "WORKSPACE_VIOLATION",
+            )
+            coEvery {
+                builtInWorkerToolExecutor.executeTool(toolDef, pending, approval.signedRequest)
+            } returns BuiltInWorkerToolExecutorEvent.ToolExecutionResult(result)
+
+            val events = orchestrator.executeAndUpdateToolCalls(
+                userId = 1L,
+                pendingToolCalls = listOf(pending),
+                toolDefinitions = listOf(toolDef),
+                toolApprovalFlow = flowOf(approval),
+            ).toList()
+
+            assertEquals(3, events.size)
+            val completed = assertIs<ToolCallExecutionEvent.ToolCallCompleted>(events[2])
+            assertEquals(ToolCallStatus.ERROR, completed.toolCall.status)
+            assertEquals(null, completed.toolCall.output)
+            assertEquals("Permission denied: /etc/passwd is outside the workspace", completed.toolCall.errorMessage)
+            assertEquals("WORKSPACE_VIOLATION", completed.toolCall.errorCode)
+
+            assertEquals(
+                listOf(ToolCallStatus.AWAITING_APPROVAL, ToolCallStatus.EXECUTING, ToolCallStatus.ERROR),
+                updates.map { it.status }
+            )
+        }
+
+    @Test
+    fun `executeAndUpdateToolCalls should retain errored tool output and details for the LLM context`() = runTest {
+        val toolDef = builtInWorkerToolDefinition(id = 2L, workerId = 17L, builtInToolName = "run_command")
         val pending = pendingToolCall(
             id = 11L,
             toolDefinitionId = toolDef.id,
@@ -400,15 +452,20 @@ class DefaultToolCallOrchestratorTest {
             builtInToolName = toolDef.builtInToolName,
             approved = true,
         )
-        val updates = trackToolCallUpdates()
+        trackToolCallUpdates()
 
-        // The worker reports a structured error result; the orchestrator must translate `isError=true`
-        // into `ToolCallStatus.ERROR` and surface the error message to the chat loop.
+        // Even when the command exits non-zero, the worker returns the captured stdout/stderr in
+        // `output` plus structured `errorDetails`. The orchestrator must persist these so the
+        // ToolResultContentBuilder can relay them back to the LLM.
         val result = BuiltInToolExecutionResult(
-            output = null,
+            output = "exitCode: 2\n--- stdout ---\n\n--- stderr ---\nNo such file or directory",
             isError = true,
-            errorMessage = "Permission denied: /etc/passwd is outside the workspace",
-            errorCode = "WORKSPACE_VIOLATION",
+            errorMessage = "Command exited with code 2",
+            errorCode = "EXECUTION_FAILED",
+            errorDetails = buildJsonObject {
+                put("exitCode", JsonPrimitive(2))
+                put("stderr", JsonPrimitive("No such file or directory"))
+            },
         )
         coEvery {
             builtInWorkerToolExecutor.executeTool(toolDef, pending, approval.signedRequest)
@@ -424,12 +481,15 @@ class DefaultToolCallOrchestratorTest {
         assertEquals(3, events.size)
         val completed = assertIs<ToolCallExecutionEvent.ToolCallCompleted>(events[2])
         assertEquals(ToolCallStatus.ERROR, completed.toolCall.status)
-        assertEquals(null, completed.toolCall.output)
-        assertEquals("Permission denied: /etc/passwd is outside the workspace", completed.toolCall.errorMessage)
-
         assertEquals(
-            listOf(ToolCallStatus.AWAITING_APPROVAL, ToolCallStatus.EXECUTING, ToolCallStatus.ERROR),
-            updates.map { it.status }
+            "exitCode: 2\n--- stdout ---\n\n--- stderr ---\nNo such file or directory",
+            completed.toolCall.output
+        )
+        assertEquals("Command exited with code 2", completed.toolCall.errorMessage)
+        assertEquals("EXECUTION_FAILED", completed.toolCall.errorCode)
+        assertEquals(
+            "{\"exitCode\":2,\"stderr\":\"No such file or directory\"}",
+            completed.toolCall.errorDetails
         )
     }
 
@@ -521,37 +581,38 @@ class DefaultToolCallOrchestratorTest {
     }
 
     @Test
-    fun `executeAndUpdateToolCalls should time out waiting for Built-in Worker approval and skip execution`() = runTest {
-        val toolDef = builtInWorkerToolDefinition(id = 2L, workerId = 17L, builtInToolName = "list_directory")
-        val pending = pendingToolCall(
-            id = 14L,
-            toolDefinitionId = toolDef.id,
-            toolName = toolDef.name,
-        )
-        val updates = trackToolCallUpdates()
+    fun `executeAndUpdateToolCalls should time out waiting for Built-in Worker approval and skip execution`() =
+        runTest {
+            val toolDef = builtInWorkerToolDefinition(id = 2L, workerId = 17L, builtInToolName = "list_directory")
+            val pending = pendingToolCall(
+                id = 14L,
+                toolDefinitionId = toolDef.id,
+                toolName = toolDef.name,
+            )
+            val updates = trackToolCallUpdates()
 
-        val events = orchestrator.executeAndUpdateToolCalls(
-            userId = 1L,
-            pendingToolCalls = listOf(pending),
-            toolDefinitions = listOf(toolDef),
-            toolApprovalFlow = flow { delay(1_000.days) },
-        ).toList()
+            val events = orchestrator.executeAndUpdateToolCalls(
+                userId = 1L,
+                pendingToolCalls = listOf(pending),
+                toolDefinitions = listOf(toolDef),
+                toolApprovalFlow = flow { delay(1_000.days) },
+            ).toList()
 
-        assertEquals(2, events.size)
-        val requested = assertIs<ToolCallExecutionEvent.ToolCallApprovalRequested>(events[0])
-        assertEquals(ToolCallStatus.AWAITING_APPROVAL, requested.toolCall.status)
-        val completed = assertIs<ToolCallExecutionEvent.ToolCallCompleted>(events[1])
-        assertEquals(ToolCallStatus.USER_DENIED, completed.toolCall.status)
-        assertEquals("Approval timeout (no response within 5 minutes)", completed.toolCall.denialReason)
+            assertEquals(2, events.size)
+            val requested = assertIs<ToolCallExecutionEvent.ToolCallApprovalRequested>(events[0])
+            assertEquals(ToolCallStatus.AWAITING_APPROVAL, requested.toolCall.status)
+            val completed = assertIs<ToolCallExecutionEvent.ToolCallCompleted>(events[1])
+            assertEquals(ToolCallStatus.USER_DENIED, completed.toolCall.status)
+            assertEquals("Approval timeout (no response within 5 minutes)", completed.toolCall.denialReason)
 
-        assertEquals(
-            listOf(ToolCallStatus.AWAITING_APPROVAL, ToolCallStatus.USER_DENIED),
-            updates.map { it.status }
-        )
+            assertEquals(
+                listOf(ToolCallStatus.AWAITING_APPROVAL, ToolCallStatus.USER_DENIED),
+                updates.map { it.status }
+            )
 
-        coVerify(exactly = 0) { builtInWorkerToolExecutor.executeTool(any(), any(), any()) }
-        coVerify(exactly = 2) { toolCallDao.updateToolCall(any()) }
-    }
+            coVerify(exactly = 0) { builtInWorkerToolExecutor.executeTool(any(), any(), any()) }
+            coVerify(exactly = 2) { toolCallDao.updateToolCall(any()) }
+        }
 
     @Test
     fun `executeAndUpdateToolCalls should skip pending tool calls that are not in PENDING status`() = runTest {
