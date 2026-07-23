@@ -16,7 +16,7 @@ if [ ! -z "${PUID}" ]; then
 
     # Fix permissions on writable directories to ensure the new UID owns them
     # This is vital for app functionality
-    chown -R torvian:torvian /app/config /app/data /app/logs /app/cache
+    chown -R torvian:torvian /app/config /app/data /app/logs /app/workspace /app/cache
 fi
 
 echo "Starting Chatbot Worker..."
