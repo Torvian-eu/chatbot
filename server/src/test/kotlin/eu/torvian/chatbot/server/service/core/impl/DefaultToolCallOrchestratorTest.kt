@@ -23,8 +23,6 @@ import io.mockk.clearMocks
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
@@ -36,7 +34,6 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
-import kotlin.time.Duration.Companion.days
 import kotlin.time.Instant
 
 /**
@@ -45,7 +42,7 @@ import kotlin.time.Instant
  * Covers the tool-call approval/execution lifecycle for both supported tool families:
  *
  *  - [LocalMCPToolDefinition] requires a `LocalMcpSigned` approval that carries the app-signed
- *    authorization. A denial or timeout short-circuits execution.
+ *    authorization. A denial short-circuits execution.
  *  - [BuiltInWorkerToolDefinition] requires a `BuiltInSigned` approval that mirrors the Local MCP
  *    signing flow (a detached signature over the [BuiltInToolExecutionAuthorization] payload).
  *
@@ -303,35 +300,6 @@ class DefaultToolCallOrchestratorTest {
         coVerify(exactly = 2) { toolCallDao.updateToolCall(any()) }
     }
 
-    @Test
-    fun `executeAndUpdateToolCalls should time out waiting for Local MCP approval and skip execution`() = runTest {
-        val toolDef = localMcpToolDefinition()
-        val pending = pendingToolCall()
-        val updates = trackToolCallUpdates()
-
-        val events = orchestrator.executeAndUpdateToolCalls(
-            userId = 1L,
-            pendingToolCalls = listOf(pending),
-            toolDefinitions = listOf(toolDef),
-            toolApprovalFlow = flow { delay(1_000.days) }
-        ).toList()
-
-        assertEquals(2, events.size)
-        val requested = assertIs<ToolCallExecutionEvent.ToolCallApprovalRequested>(events[0])
-        assertEquals(ToolCallStatus.AWAITING_APPROVAL, requested.toolCall.status)
-        val completed = assertIs<ToolCallExecutionEvent.ToolCallCompleted>(events[1])
-        assertEquals(ToolCallStatus.USER_DENIED, completed.toolCall.status)
-        assertEquals("Approval timeout (no response within 5 minutes)", completed.toolCall.denialReason)
-
-        assertEquals(
-            listOf(ToolCallStatus.AWAITING_APPROVAL, ToolCallStatus.USER_DENIED),
-            updates.map { it.status }
-        )
-
-        coVerify(exactly = 0) { localMcpExecutor.executeTool(any(), any(), any()) }
-        coVerify(exactly = 2) { toolCallDao.updateToolCall(any()) }
-    }
-
     // --- Built-in Worker tool-call tests ---
 
     @Test
@@ -579,40 +547,6 @@ class DefaultToolCallOrchestratorTest {
         coVerify(exactly = 0) { builtInWorkerToolExecutor.executeTool(any(), any(), any()) }
         coVerify(exactly = 2) { toolCallDao.updateToolCall(any()) }
     }
-
-    @Test
-    fun `executeAndUpdateToolCalls should time out waiting for Built-in Worker approval and skip execution`() =
-        runTest {
-            val toolDef = builtInWorkerToolDefinition(id = 2L, workerId = 17L, builtInToolName = "list_directory")
-            val pending = pendingToolCall(
-                id = 14L,
-                toolDefinitionId = toolDef.id,
-                toolName = toolDef.name,
-            )
-            val updates = trackToolCallUpdates()
-
-            val events = orchestrator.executeAndUpdateToolCalls(
-                userId = 1L,
-                pendingToolCalls = listOf(pending),
-                toolDefinitions = listOf(toolDef),
-                toolApprovalFlow = flow { delay(1_000.days) },
-            ).toList()
-
-            assertEquals(2, events.size)
-            val requested = assertIs<ToolCallExecutionEvent.ToolCallApprovalRequested>(events[0])
-            assertEquals(ToolCallStatus.AWAITING_APPROVAL, requested.toolCall.status)
-            val completed = assertIs<ToolCallExecutionEvent.ToolCallCompleted>(events[1])
-            assertEquals(ToolCallStatus.USER_DENIED, completed.toolCall.status)
-            assertEquals("Approval timeout (no response within 5 minutes)", completed.toolCall.denialReason)
-
-            assertEquals(
-                listOf(ToolCallStatus.AWAITING_APPROVAL, ToolCallStatus.USER_DENIED),
-                updates.map { it.status }
-            )
-
-            coVerify(exactly = 0) { builtInWorkerToolExecutor.executeTool(any(), any(), any()) }
-            coVerify(exactly = 2) { toolCallDao.updateToolCall(any()) }
-        }
 
     @Test
     fun `executeAndUpdateToolCalls should skip pending tool calls that are not in PENDING status`() = runTest {

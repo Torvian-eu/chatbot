@@ -1,36 +1,25 @@
 package eu.torvian.chatbot.server.service.core.toolcall
 
 import arrow.core.getOrElse
-import eu.torvian.chatbot.common.models.tool.BuiltInWorkerToolDefinition
-import eu.torvian.chatbot.common.models.tool.LocalMCPToolDefinition
-import eu.torvian.chatbot.common.models.tool.ToolCall
-import eu.torvian.chatbot.common.models.tool.ToolCallStatus
-import eu.torvian.chatbot.common.models.tool.ToolDefinition
+import eu.torvian.chatbot.common.models.tool.*
 import eu.torvian.chatbot.server.data.dao.ToolCallDao
 import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutor
 import eu.torvian.chatbot.server.service.builtin.BuiltInWorkerToolExecutorEvent
 import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutor
 import eu.torvian.chatbot.server.service.mcp.LocalMCPExecutorEvent
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.channels.ProducerScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.withTimeout
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 import kotlin.time.Clock
-import kotlin.time.Duration.Companion.seconds
-
-private const val APPROVAL_TIMEOUT_DURATION = 300L // 5 minutes
-private const val APPROVAL_TIMEOUT_MESSAGE = "Approval timeout (no response within 5 minutes)"
 
 /**
  * Default implementation of [ToolCallOrchestrator].
  *
- * Handles approval resolution, timeout handling, status persistence, and execution for both
- * Local MCP and Built-in Worker tool calls. Built-in tools always require an app-signed
- * authorization, mirroring Local MCP.
+ * Handles approval resolution and execution for both Local MCP and Built-in Worker tool calls.
+ * Built-in tools always require an app-signed authorization, mirroring Local MCP.
  *
  * Any tool definition that is neither a [LocalMCPToolDefinition] nor a
  * [BuiltInWorkerToolDefinition] is a configuration error and causes an [IllegalStateException].
@@ -69,16 +58,10 @@ class DefaultToolCallOrchestrator(
                 is LocalMCPToolDefinition -> resolveLocalMcpApproval(pendingToolCall, toolApprovalFlow)
                 is BuiltInWorkerToolDefinition -> resolveBuiltInWorkerApproval(pendingToolCall, toolApprovalFlow)
             }
-
-            // Handle denial or timeout
+            // Handle denial
             when (approvalOutcome) {
                 is ApprovalOutcome.Denied -> {
                     persistAndEmitDeniedToolCall(pendingToolCall, approvalOutcome.reason)
-                    return@forEach
-                }
-
-                is ApprovalOutcome.TimedOut -> {
-                    persistAndEmitTimedOutToolCall(pendingToolCall)
                     return@forEach
                 }
 
@@ -131,20 +114,14 @@ class DefaultToolCallOrchestrator(
         }
         send(ToolCallExecutionEvent.ToolCallApprovalRequested(awaitingApprovalToolCall))
 
-        return try {
-            withTimeout(APPROVAL_TIMEOUT_DURATION.seconds) {
-                val submission = toolApprovalFlow.first { submission ->
-                    submission.toolCallId == pendingToolCall.id &&
-                            submission is ToolCallApprovalSubmission.LocalMcpSigned
-                }
-                if (submission.approved) {
-                    ApprovalOutcome.Approved(submission)
-                } else {
-                    ApprovalOutcome.Denied(submission.denialReason)
-                }
-            }
-        } catch (_: TimeoutCancellationException) {
-            ApprovalOutcome.TimedOut
+        val submission = toolApprovalFlow.first { submission ->
+            submission.toolCallId == pendingToolCall.id &&
+                    submission is ToolCallApprovalSubmission.LocalMcpSigned
+        }
+        return if (submission.approved) {
+            ApprovalOutcome.Approved(submission)
+        } else {
+            ApprovalOutcome.Denied(submission.denialReason)
         }
     }
 
@@ -161,20 +138,14 @@ class DefaultToolCallOrchestrator(
         }
         send(ToolCallExecutionEvent.ToolCallApprovalRequested(awaitingApprovalToolCall))
 
-        return try {
-            withTimeout(APPROVAL_TIMEOUT_DURATION.seconds) {
-                val submission = toolApprovalFlow.first { submission ->
-                    submission.toolCallId == pendingToolCall.id &&
-                            submission is ToolCallApprovalSubmission.BuiltInSigned
-                }
-                if (submission.approved) {
-                    ApprovalOutcome.Approved(submission)
-                } else {
-                    ApprovalOutcome.Denied(submission.denialReason)
-                }
-            }
-        } catch (_: TimeoutCancellationException) {
-            ApprovalOutcome.TimedOut
+        val submission = toolApprovalFlow.first { submission ->
+            submission.toolCallId == pendingToolCall.id &&
+                    submission is ToolCallApprovalSubmission.BuiltInSigned
+        }
+        return if (submission.approved) {
+            ApprovalOutcome.Approved(submission)
+        } else {
+            ApprovalOutcome.Denied(submission.denialReason)
         }
     }
 
@@ -191,20 +162,6 @@ class DefaultToolCallOrchestrator(
         )
         toolCallDao.updateToolCall(deniedToolCall).getOrElse { error ->
             throw IllegalStateException("Failed to update denied tool call: $error")
-        }
-        send(ToolCallExecutionEvent.ToolCallCompleted(deniedToolCall))
-    }
-
-    /**
-     * Persists a timed-out tool call and emits a completion event.
-     */
-    private suspend fun ProducerScope<ToolCallExecutionEvent>.persistAndEmitTimedOutToolCall(toolCall: ToolCall) {
-        val deniedToolCall = toolCall.copy(
-            status = ToolCallStatus.USER_DENIED,
-            denialReason = APPROVAL_TIMEOUT_MESSAGE
-        )
-        toolCallDao.updateToolCall(deniedToolCall).getOrElse { error ->
-            throw IllegalStateException("Failed to update tool call after timeout: $error")
         }
         send(ToolCallExecutionEvent.ToolCallCompleted(deniedToolCall))
     }
@@ -300,6 +257,5 @@ class DefaultToolCallOrchestrator(
     private sealed interface ApprovalOutcome {
         data class Approved(val submission: ToolCallApprovalSubmission) : ApprovalOutcome
         data class Denied(val reason: String?) : ApprovalOutcome
-        data object TimedOut : ApprovalOutcome
     }
 }
