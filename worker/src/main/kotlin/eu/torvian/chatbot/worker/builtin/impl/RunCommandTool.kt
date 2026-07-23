@@ -24,7 +24,11 @@ class RunCommandTool : BuiltInTool {
     override suspend fun execute(input: JsonObject, context: BuiltInToolExecutionContext): BuiltInToolExecutionResult {
         val command = input["command"]?.jsonPrimitive?.content
             ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Missing required argument: command")
-        val args = (input["args"] as? JsonArray)?.mapNotNull { it.jsonPrimitive.content } ?: emptyList()
+        val args = when (val argsInput = input["args"]) {
+            is JsonArray -> argsInput.mapNotNull { it.jsonPrimitive.contentOrNull }
+            is JsonPrimitive -> argsInput.contentOrNull?.let { listOf(it) } ?: emptyList()
+            else -> emptyList()
+        }
         val timeoutSeconds = input["timeout"]?.jsonPrimitive?.content?.toLongOrNull()
             ?: context.defaultCommandTimeoutSeconds
 

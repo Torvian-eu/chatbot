@@ -163,6 +163,23 @@ class RunCommandToolTest {
             dir.toFile().deleteRecursively()
         }
     }
+    @Test
+    fun `single string args are treated as a single argument and execute successfully`() = runTest {
+        val dir = createTempDirectory("run-command-test")
+        try {
+            // Passing args as a single JsonPrimitive string instead of a JsonArray.
+            val input = buildJsonObject {
+                put("command", echoCommand("hello").first)
+                put("args", "hello")
+            }
+            val result = tool.execute(input, context(dir))
+
+            val output = assertSuccess(result)
+            assertTrue(output.contains("hello"), "output should contain echoed text; got:\n$output")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
 
     @Test
     fun `command exceeding the timeout is destroyed and returns timeout`() = runTest {

@@ -217,9 +217,18 @@ object BuiltInToolCatalog {
                         put("description", "Executable name (must be on PATH or absolute).")
                     })
                     put("args", buildJsonObject {
-                        put("type", "array")
-                        put("items", buildJsonObject { put("type", "string") })
-                        put("description", "Command-line arguments.")
+                        put("oneOf", buildJsonArray {
+                            add(buildJsonObject {
+                                put("type", "string")
+                                put("description", "A single command-line argument.")
+                            })
+                            add(buildJsonObject {
+                                put("type", "array")
+                                put("items", buildJsonObject { put("type", "string") })
+                                put("description", "Command-line arguments.")
+                            })
+                        })
+                        put("description", "Command-line arguments. Accepts a single string or an array of strings.")
                     })
                     put("timeout", buildJsonObject {
                         put("type", "integer")
