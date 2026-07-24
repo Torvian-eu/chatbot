@@ -3,6 +3,7 @@ package eu.torvian.chatbot.server.main
 import eu.torvian.chatbot.common.models.llm.LLMProviderType
 import eu.torvian.chatbot.server.service.llm.LLMApiClient
 import eu.torvian.chatbot.server.service.llm.LLMApiClientKtor
+import eu.torvian.chatbot.server.service.llm.RetryLLMApiClient
 import eu.torvian.chatbot.server.service.llm.discovery.OllamaModelDiscoveryStrategy
 import eu.torvian.chatbot.server.service.llm.discovery.OpenAIModelDiscoveryStrategy
 import eu.torvian.chatbot.server.service.llm.discovery.OpenRouterModelDiscoveryStrategy
@@ -59,6 +60,7 @@ fun mainModule(application: Application) = module {
             LLMProviderType.OPENROUTER to get<OpenRouterModelDiscoveryStrategy>(),
             LLMProviderType.OLLAMA to get<OllamaModelDiscoveryStrategy>(),
         )
-        LLMApiClientKtor(get(), strategies, modelDiscoveryStrategies)
+        val baseClient = LLMApiClientKtor(get(), strategies, modelDiscoveryStrategies)
+        RetryLLMApiClient( baseClient)
     }
 }
