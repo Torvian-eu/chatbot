@@ -103,6 +103,26 @@ class RunCommandToolTest {
         assertEquals(code, result.errorCode, "Unexpected error code; message=${result.errorMessage}")
     }
 
+    /**
+     * Builds an input payload where `args` is intentionally a single JSON string.
+     *
+     * The command must still be valid on each platform: on Windows `cmd` expects `/c <command>`
+     * as one command-line string, while Linux can execute `echo` with a plain single argument.
+     *
+     * @param text Text to echo.
+     * @return A [JsonObject] with `command` and string-form `args`.
+     */
+    private fun singleStringArgsInput(text: String): JsonObject =
+        buildJsonObject {
+            if (isWindows) {
+                put("command", "cmd")
+                put("args", "/c echo $text")
+            } else {
+                put("command", "echo")
+                put("args", text)
+            }
+        }
+
     // -----------------------------------------------------------------------------------------
     // Scenarios
     // -----------------------------------------------------------------------------------------
@@ -132,8 +152,8 @@ class RunCommandToolTest {
 
             assertError(result, BuiltInToolExecutionError.EXECUTION_FAILED)
             assertEquals(
-                result.errorMessage?.contains("3"),
                 true,
+                result.errorMessage?.contains("3"),
                 "error message should mention exit code; got: ${result.errorMessage}"
             )
             val output = result.output ?: ""
@@ -163,15 +183,13 @@ class RunCommandToolTest {
             dir.toFile().deleteRecursively()
         }
     }
+
     @Test
     fun `single string args are treated as a single argument and execute successfully`() = runTest {
         val dir = createTempDirectory("run-command-test")
         try {
-            // Passing args as a single JsonPrimitive string instead of a JsonArray.
-            val input = buildJsonObject {
-                put("command", echoCommand("hello").first)
-                put("args", "hello")
-            }
+            // Keep `args` as a JsonPrimitive string while still producing a valid command line on each OS.
+            val input = singleStringArgsInput("hello")
             val result = tool.execute(input, context(dir))
 
             val output = assertSuccess(result)
@@ -197,3 +215,4 @@ class RunCommandToolTest {
         }
     }
 }
+
