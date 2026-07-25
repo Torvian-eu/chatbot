@@ -8,6 +8,8 @@ import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 import kotlin.random.Random
@@ -61,6 +63,7 @@ class RetryLLMApiClient(
         tools: List<ToolDefinition>?
     ): Either<LLMCompletionError, LLMCompletionResult> {
         for (attempt in 0..maxRetries) {
+            currentCoroutineContext().ensureActive()
             when (val result = inner.completeChat(messages, modelConfig, provider, settings, apiKey, tools)) {
                 is Either.Right -> return result
                 is Either.Left -> {
@@ -102,6 +105,7 @@ class RetryLLMApiClient(
         tools: List<ToolDefinition>?
     ): Flow<Either<LLMCompletionError, LLMStreamChunk>> = flow {
         for (attempt in 0..maxRetries) {
+            currentCoroutineContext().ensureActive()
             // Request a fresh stream for each attempt.
             var contentEmitted = false
             var retryableErrorEncountered: LLMCompletionError.ApiError? = null

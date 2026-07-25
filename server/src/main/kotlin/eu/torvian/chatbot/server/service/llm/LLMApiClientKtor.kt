@@ -16,6 +16,7 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.utils.io.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
@@ -65,7 +66,7 @@ class LLMApiClientKtor(
                 logger.error(errorMsg)
                 return LLMCompletionError.ConfigurationError(errorMsg).left()
             }
-        logger.debug("Using strategy: ${strategy::class.simpleName} for provider type ${provider.type}")
+        logger.debug("Using strategy: {} for provider type {}", strategy::class.simpleName, provider.type)
 
         // 2. Use the selected strategy to prepare the generic API request configuration.
         // This involves mapping application models to API-specific request DTOs.
@@ -77,7 +78,7 @@ class LLMApiClientKtor(
             apiKey = apiKey,
             tools = tools
         ).getOrElse { error -> // Handle ConfigurationError returned by the strategy
-            logger.error("Strategy ${strategy::class.simpleName} failed to prepare request: ${error.message}")
+            logger.error("Strategy {} failed to prepare request: {}", strategy::class.simpleName, error.message)
             return error.left() // Propagate the specific error returned by the strategy
         }
 
@@ -85,7 +86,11 @@ class LLMApiClientKtor(
         // This is where generic types are mapped to Ktor types.
         return withContext(Dispatchers.IO) {
             try {
-                logger.debug("Executing HTTP request: ${apiRequestConfig.method} ${provider.baseUrl}${apiRequestConfig.path}")
+                logger.debug(
+                    "Executing HTTP request: {} {}",
+                    apiRequestConfig.method,
+                    "${provider.baseUrl}${apiRequestConfig.path}"
+                )
                 val httpResponse: HttpResponse = httpClient.request {
                     // Set the HTTP method
                     method = apiRequestConfig.method.toKtorHttpMethod()
@@ -106,7 +111,7 @@ class LLMApiClientKtor(
                         requestTimeoutMillis = 180_000 // 3 minutes
                     }
                 }
-                logger.debug("Received HTTP response: ${httpResponse.status}")
+                logger.debug("Received HTTP response: {}", httpResponse.status)
 
                 // 4. Read the response body as text. This is done regardless of status
                 // so the strategy can process the raw body for both success and error responses.
@@ -114,7 +119,7 @@ class LLMApiClientKtor(
                     httpResponse.bodyAsText()
                 } catch (e: Exception) {
                     // Handle errors specifically during reading the response body
-                    logger.error("Failed to read response body from ${provider.name} API", e)
+                    logger.error("Failed to read response body from {} API", provider.name, e)
                     return@withContext LLMCompletionError.NetworkError(
                         "Failed to read response body from ${provider.name}",
                         e
@@ -143,8 +148,8 @@ class LLMApiClientKtor(
                     logger.error("LLM API ${provider.name} returned error (Status: ${httpResponse.status.value}): $apiError")
                     apiError.left() // Return the specific API error provided by the strategy
                 }
-
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 // Catch any exceptions that occurred during the HTTP request itself
                 // (e.g., network issues, connection refused, unexpected errors before status/body is available).
                 logger.error("LLMApiClientKtor: HTTP request failed for provider ${provider.name}", e)
@@ -188,7 +193,12 @@ class LLMApiClientKtor(
         }
 
         try {
-            logger.debug("Executing HTTP streaming request: ${apiRequestConfig.method} ${provider.baseUrl}${apiRequestConfig.path}")
+            logger.debug(
+                "Executing HTTP streaming request: {} {}{}",
+                apiRequestConfig.method,
+                provider.baseUrl,
+                apiRequestConfig.path
+            )
 
             // Use preparePost and execute to get a streaming response
             httpClient.prepareRequest("${provider.baseUrl}${apiRequestConfig.path}") {
@@ -205,7 +215,7 @@ class LLMApiClientKtor(
                 }
             }.execute { httpResponse -> // Use execute block for streaming
                 if (httpResponse.status.isSuccess()) {
-                    logger.debug("Received HTTP streaming response: ${httpResponse.status}")
+                    logger.debug("Received HTTP streaming response: {}", httpResponse.status)
 
                     // Get the ByteReadChannel for raw content
                     val byteReadChannel: ByteReadChannel = httpResponse.body()
@@ -240,6 +250,7 @@ class LLMApiClientKtor(
                 }
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             logger.error("LLMApiClientKtor: HTTP streaming request failed for provider ${provider.name}", e)
             send(
                 LLMCompletionError.NetworkError(
@@ -270,7 +281,12 @@ class LLMApiClientKtor(
 
         return withContext(Dispatchers.IO) {
             try {
-                logger.debug("Executing model discovery request: ${apiRequestConfig.method} ${provider.baseUrl}${apiRequestConfig.path}")
+                logger.debug(
+                    "Executing model discovery request: {} {}{}",
+                    apiRequestConfig.method,
+                    provider.baseUrl,
+                    apiRequestConfig.path
+                )
                 val httpResponse: HttpResponse = httpClient.request {
                     method = apiRequestConfig.method.toKtorHttpMethod()
                     url("${provider.baseUrl}${apiRequestConfig.path}")
@@ -316,6 +332,7 @@ class LLMApiClientKtor(
                     apiError.left()
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 logger.error("LLMApiClientKtor: Model discovery request failed for provider ${provider.name}", e)
                 ModelDiscoveryError.NetworkError(
                     "Network or communication error with ${provider.name}: ${e.message}",

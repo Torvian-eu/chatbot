@@ -24,19 +24,13 @@ import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageEr
 import eu.torvian.chatbot.server.service.core.error.message.toApiError
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallApprovalSubmission
 import eu.torvian.chatbot.server.service.security.AuthorizationService
-import io.ktor.server.websocket.DefaultWebSocketServerSession
-import io.ktor.websocket.CloseReason
-import io.ktor.websocket.Frame
-import io.ktor.websocket.close
-import io.ktor.websocket.readText
+import io.ktor.server.websocket.*
+import io.ktor.websocket.*
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.filterIsInstance
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.merge
-import kotlinx.coroutines.flow.receiveAsFlow
-import kotlinx.coroutines.flow.shareIn
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.Json
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
@@ -120,29 +114,39 @@ class SessionMessagesWebSocketHandler(
                     return@run
                 }
 
-                val clientEventFlow = createClientEventFlow()
-                val approvalResponseFlow = clientEventFlow.toApprovalSubmissionFlow()
+                coroutineScope {
+                    val processingScope = this
+                    val clientEventFlow = createClientEventFlow(
+                        onChannelClosed = {
+                            logger.info("WebSocket channel closed by client for session $sessionId")
+                            processingScope.cancel(CancellationException("Client closed WebSocket"))
+                        }
+                    )
+                    val approvalResponseFlow = clientEventFlow.toApprovalSubmissionFlow()
 
-                if (processRequest.isStreaming) {
-                    processStreamingRequest(
-                        userId = userId,
-                        session = session,
-                        llmConfig = llmConfig,
-                        request = processRequest,
-                        approvalResponseFlow = approvalResponseFlow
-                    )
-                } else {
-                    processNonStreamingRequest(
-                        userId = userId,
-                        session = session,
-                        llmConfig = llmConfig,
-                        request = processRequest,
-                        approvalResponseFlow = approvalResponseFlow
-                    )
+                    if (processRequest.isStreaming) {
+                        processStreamingRequest(
+                            userId = userId,
+                            session = session,
+                            llmConfig = llmConfig,
+                            request = processRequest,
+                            approvalResponseFlow = approvalResponseFlow
+                        )
+                    } else {
+                        processNonStreamingRequest(
+                            userId = userId,
+                            session = session,
+                            llmConfig = llmConfig,
+                            request = processRequest,
+                            approvalResponseFlow = approvalResponseFlow
+                        )
+                    }
                 }
+
             } catch (e: ClosedReceiveChannelException) {
                 logger.debug("WebSocket client channel closed for session $sessionId: ${e.message}")
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 logger.error("Error in WebSocket session for session $sessionId: ${e.message}", e)
                 val internalApiError = apiError(CommonApiErrorCodes.INTERNAL, "An unexpected error occurred.")
                 runCatching {
@@ -160,13 +164,21 @@ class SessionMessagesWebSocketHandler(
      * Builds the shared inbound client-event stream for the live socket.
      *
      * A shared flow is required because both approval normalization branches must consume the
-     * same incoming transport frames without racing each other.
+     * same incoming transport frames without racing each other. The [onChannelClosed] callback
+     * is invoked when the underlying channel completes (client disconnect), allowing the caller
+     * to cancel the processing scope.
      *
      * @receiver Live Ktor WebSocket session that owns the inbound channel.
+     * @param onChannelClosed Callback invoked when the WebSocket channel closes.
      * @return Shared flow of decoded client events sourced from text frames.
      */
-    private fun DefaultWebSocketServerSession.createClientEventFlow(): Flow<ChatClientEvent> {
+    private fun DefaultWebSocketServerSession.createClientEventFlow(
+        onChannelClosed: () -> Unit
+    ): Flow<ChatClientEvent> {
         return incoming.receiveAsFlow()
+            .onCompletion {
+                onChannelClosed()
+            }
             .filterIsInstance<Frame.Text>()
             .map { frame -> json.decodeFromString<ChatClientEvent>(frame.readText()) }
             .shareIn(this, SharingStarted.Eagerly)

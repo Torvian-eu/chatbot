@@ -13,7 +13,6 @@ import eu.torvian.chatbot.server.service.core.chat.turn.ConversationTurnRequest
 import eu.torvian.chatbot.server.service.core.error.message.ProcessNewMessageError
 import eu.torvian.chatbot.server.service.core.error.message.ValidateNewMessageError
 import eu.torvian.chatbot.server.service.core.toolcall.ToolCallApprovalSubmission
-import eu.torvian.chatbot.server.service.llm.LLMCompletionError
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import org.apache.logging.log4j.LogManager
@@ -110,11 +109,10 @@ class ChatServiceImpl(
                 send(event.toMessageStreamEventEither())
             }
         } catch (e: Exception) {
-            logger.error("Unexpected error in processNewMessageStreaming for session ${session.id}: ${e.message}", e)
+            val errorMessage = "Unexpected error in processNewMessageStreaming for session ${session.id}: ${e.message}"
+            logger.error(errorMessage, e)
             send(
-                ProcessNewMessageError.ExternalServiceError(
-                    LLMCompletionError.InvalidResponseError("Unexpected error: ${e.message}")
-                ).left()
+                ProcessNewMessageError.UnexpectedError(errorMessage).left()
             )
             send(MessageStreamEvent.StreamCompleted.right())
         }
