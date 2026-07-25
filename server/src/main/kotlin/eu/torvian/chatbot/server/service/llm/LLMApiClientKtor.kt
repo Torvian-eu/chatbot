@@ -16,6 +16,7 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.utils.io.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
@@ -143,8 +144,8 @@ class LLMApiClientKtor(
                     logger.error("LLM API ${provider.name} returned error (Status: ${httpResponse.status.value}): $apiError")
                     apiError.left() // Return the specific API error provided by the strategy
                 }
-
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 // Catch any exceptions that occurred during the HTTP request itself
                 // (e.g., network issues, connection refused, unexpected errors before status/body is available).
                 logger.error("LLMApiClientKtor: HTTP request failed for provider ${provider.name}", e)
@@ -240,6 +241,7 @@ class LLMApiClientKtor(
                 }
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             logger.error("LLMApiClientKtor: HTTP streaming request failed for provider ${provider.name}", e)
             send(
                 LLMCompletionError.NetworkError(
@@ -316,6 +318,7 @@ class LLMApiClientKtor(
                     apiError.left()
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 logger.error("LLMApiClientKtor: Model discovery request failed for provider ${provider.name}", e)
                 ModelDiscoveryError.NetworkError(
                     "Network or communication error with ${provider.name}: ${e.message}",
