@@ -263,8 +263,8 @@ class ChatServiceImplTest {
             .collect { event -> events.add(event) }
 
         val error = events[0].leftOrNull()
-        assertIs<ProcessNewMessageError.ExternalServiceError>(error)
-        assertEquals("Unexpected error: boom", (error.llmError as LLMCompletionError.InvalidResponseError).message)
+        assertIs<ProcessNewMessageError.UnexpectedError>(error)
+        assertEquals(true, error.message.contains("boom"))
         assertIs<MessageStreamEvent.StreamCompleted>(events[1].getOrNull())
     }
 
