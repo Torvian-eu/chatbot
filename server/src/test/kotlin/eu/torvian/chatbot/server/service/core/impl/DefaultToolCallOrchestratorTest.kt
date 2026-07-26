@@ -433,7 +433,7 @@ class DefaultToolCallOrchestratorTest {
             errorDetails = buildJsonObject {
                 put("exitCode", JsonPrimitive(2))
                 put("stderr", JsonPrimitive("No such file or directory"))
-            },
+            }.toString(),
         )
         coEvery {
             builtInWorkerToolExecutor.executeTool(toolDef, pending, approval.signedRequest)

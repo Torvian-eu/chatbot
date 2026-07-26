@@ -49,7 +49,7 @@ fun mapWebFetchErrorToToolResult(error: WebFetchError): BuiltInToolExecutionResu
             isError = true,
             errorMessage = error.message,
             errorCode = BuiltInToolExecutionError.EXECUTION_FAILED,
-            errorDetails = buildJsonObject { put("statusCode", error.statusCode) },
+            errorDetails = buildJsonObject { put("statusCode", error.statusCode) }.toString(),
         )
 
     is WebFetchError.Transport ->

@@ -246,7 +246,8 @@ class FetchWebContentToolTest {
         )
         assertTrue(result.isError)
         assertEquals(BuiltInToolExecutionError.EXECUTION_FAILED, result.errorCode)
-        assertEquals(404, result.errorDetails!!["statusCode"]?.jsonPrimitive?.int)
+        val errorDetails = Json.parseToJsonElement(result.errorDetails!!).jsonObject
+        assertEquals(404, errorDetails["statusCode"]?.jsonPrimitive?.int)
     }
 
     @Test

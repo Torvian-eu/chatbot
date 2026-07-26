@@ -95,6 +95,12 @@ fun ToolCallDetailsDialog(
                     ToolCallErrorSection(error)
                 }
 
+                // Error details section (if applicable)
+                toolCall.errorDetails?.let { details ->
+                    HorizontalDivider()
+                    ToolCallErrorDetailsSection(details)
+                }
+
                 // Denial reason section (if applicable)
                 toolCall.denialReason?.let { reason ->
                     HorizontalDivider()
@@ -225,7 +231,7 @@ private fun ToolCallDataSection(
             // Try to pretty-print JSON, fall back to raw string
             val formattedData = try {
                 val json = Json { prettyPrint = true }
-                json.parseToJsonElement(data).toString()
+                json.encodeToString(json.parseToJsonElement(data))
             } catch (_: Exception) {
                 data
             }
@@ -275,6 +281,41 @@ private fun ToolCallErrorSection(errorMessage: String) {
 }
 
 @Composable
+private fun ToolCallErrorDetailsSection(errorDetails: String) {
+    Column {
+        Text(
+            text = "Error Details",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(4.dp))
+
+        // Try to pretty-print JSON, fall back to raw string
+        val formattedDetails = try {
+            val json = Json { prettyPrint = true }
+            json.encodeToString(json.parseToJsonElement(errorDetails))
+        } catch (_: Exception) {
+            errorDetails
+        }
+
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = MaterialTheme.shapes.small
+        ) {
+            SelectionContainer {
+                Text(
+                    text = formattedDetails,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontFamily = FontFamily.Monospace
+                    ),
+                    modifier = Modifier.padding(8.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun ToolCallDenialReasonSection(denialReason: String) {
     Column {
         Text(
@@ -297,4 +338,3 @@ private fun ToolCallDenialReasonSection(denialReason: String) {
         }
     }
 }
-

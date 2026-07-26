@@ -223,8 +223,10 @@ class RunCommandToolTest {
             val result = tool.execute(buildInput("echo hello world"), context(dir))
 
             assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
-            val errorDetails = result.errorDetails
+            val errorDetailsJson = result.errorDetails
                 ?: throw AssertionError("expected errorDetails with validation errors")
+            // Parse the errorDetails string as JSON
+            val errorDetails = Json.parseToJsonElement(errorDetailsJson).jsonObject
             val errorsArray = errorDetails["validationErrors"]?.jsonArray
                 ?: throw AssertionError("expected validationErrors array in errorDetails")
             assertEquals(1, errorsArray.size, "should have 1 validation error")
@@ -252,8 +254,10 @@ class RunCommandToolTest {
             val result = tool.execute(buildInput("echo hello world", timeout = 0), context(dir))
 
             assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
-            val errorDetails = result.errorDetails
+            val errorDetailsJson = result.errorDetails
                 ?: throw AssertionError("expected errorDetails with accumulated validation errors")
+            // Parse the errorDetails string as JSON
+            val errorDetails = Json.parseToJsonElement(errorDetailsJson).jsonObject
             val errorsArray = errorDetails["validationErrors"]?.jsonArray
                 ?: throw AssertionError("expected validationErrors array in errorDetails")
             assertEquals(2, errorsArray.size, "should have accumulated 2 validation errors")
@@ -271,4 +275,3 @@ class RunCommandToolTest {
         }
     }
 }
-

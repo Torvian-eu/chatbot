@@ -22,8 +22,11 @@ import kotlin.time.Instant
  *                 Stored as a string (not parsed JsonObject) to preserve invalid
  *                 JSON from the LLM, which is needed to generate proper error messages.
  *                 Null for parameterless function calls.
- * @property output JSON string containing the results returned by the tool.
- *                  Null if the tool call is pending or if execution hasn't completed.
+ * @property output Hybrid string containing the results returned by the tool.
+ *                 This field is **hybrid**: it may be a JSON string (e.g. from `read_text_file`
+ *                 returning file contents as JSON) or a plain text string (e.g. from `run_command`
+ *                 returning stdout/stderr). Consumers should parse it as JSON when appropriate.
+ *                 Null if the tool call is pending or if execution hasn't completed.
  * @property status Current execution status
  * @property errorMessage Error details if execution failed
  * @property denialReason Reason provided by user when denying tool call execution.
@@ -33,9 +36,13 @@ import kotlin.time.Instant
  * @property errorCode Optional machine-readable error code when [status] is [ToolCallStatus.ERROR].
  *                      Mirrors the code reported by the executor (e.g. a worker-side authorization
  *                      failure) and is surfaced back to the LLM alongside [errorMessage].
- * @property errorDetails Optional structured diagnostics when [status] is [ToolCallStatus.ERROR].
- *                        Stored as a serialized JSON string to preserve machine-readable context
- *                        (logs, troubleshooting) without imposing a fixed schema.
+ * @property errorDetails Hybrid string containing optional structured diagnostics when
+ *                       [status] is [ToolCallStatus.ERROR]. This field is **hybrid**: it may be
+ *                       a JSON string (when set by tools like `run_command` with accumulated
+ *                       validation errors in `errorDetails`) or a plain text string. Consumers
+ *                       should parse it as JSON when appropriate to extract structured information.
+ *                       Stored as a serialized string to preserve the original format without
+ *                       imposing a fixed schema.
  */
 @Serializable
 data class ToolCall(

@@ -61,7 +61,7 @@ class RunCommandTool : BuiltInTool {
                     putJsonArray("validationErrors") {
                         validationErrors.forEach { error -> add(error) }
                     }
-                }
+                }.toString()
             )
         }
 
@@ -113,6 +113,6 @@ class RunCommandTool : BuiltInTool {
         }
     }
 
-    private fun errorResult(code: String, message: String, errorDetails: JsonObject? = null): BuiltInToolExecutionResult =
+    private fun errorResult(code: String, message: String, errorDetails: String? = null): BuiltInToolExecutionResult =
         BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code, errorDetails = errorDetails)
 }
