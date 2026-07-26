@@ -214,5 +214,28 @@ class RunCommandToolTest {
             dir.toFile().deleteRecursively()
         }
     }
+
+    @Test
+    fun `command field containing spaces returns invalid input error with guidance`() = runTest {
+        val dir = createTempDirectory("run-command-test")
+        try {
+            // Simulate LLM misuse: full command line placed in the `command` field.
+            val result = tool.execute(buildInput("echo hello world"), context(dir))
+
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            assertEquals(
+                true,
+                result.errorMessage?.contains("args"),
+                "error message should mention the 'args' field; got: ${result.errorMessage}"
+            )
+            assertEquals(
+                true,
+                result.errorMessage?.contains("echo hello world"),
+                "error message should echo back the received command; got: ${result.errorMessage}"
+            )
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
 }
 
