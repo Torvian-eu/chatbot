@@ -223,15 +223,48 @@ class RunCommandToolTest {
             val result = tool.execute(buildInput("echo hello world"), context(dir))
 
             assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            val errorDetails = result.errorDetails
+                ?: throw AssertionError("expected errorDetails with validation errors")
+            val errorsArray = errorDetails["validationErrors"]?.jsonArray
+                ?: throw AssertionError("expected validationErrors array in errorDetails")
+            assertEquals(1, errorsArray.size, "should have 1 validation error")
+            val errorText = errorsArray.first().jsonPrimitive.content
             assertEquals(
                 true,
-                result.errorMessage?.contains("args"),
-                "error message should mention the 'args' field; got: ${result.errorMessage}"
+                errorText.contains("args"),
+                "error message should mention the 'args' field; got: $errorText"
             )
             assertEquals(
                 true,
-                result.errorMessage?.contains("echo hello world"),
-                "error message should echo back the received command; got: ${result.errorMessage}"
+                errorText.contains("echo hello world"),
+                "error message should echo back the received command; got: $errorText"
+            )
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `multiple validation errors are accumulated instead of failing on first`() = runTest {
+        val dir = createTempDirectory("run-command-test")
+        try {
+            // Both command has spaces AND timeout is invalid (<= 0).
+            val result = tool.execute(buildInput("echo hello world", timeout = 0), context(dir))
+
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            val errorDetails = result.errorDetails
+                ?: throw AssertionError("expected errorDetails with accumulated validation errors")
+            val errorsArray = errorDetails["validationErrors"]?.jsonArray
+                ?: throw AssertionError("expected validationErrors array in errorDetails")
+            assertEquals(2, errorsArray.size, "should have accumulated 2 validation errors")
+            val errorTexts = errorsArray.map { it.jsonPrimitive.content }
+            assertTrue(
+                errorTexts.any { it.contains("command") && it.contains("spaces") },
+                "should contain command whitespace error; got: $errorTexts"
+            )
+            assertTrue(
+                errorTexts.any { it.contains("timeout") },
+                "should contain timeout error; got: $errorTexts"
             )
         } finally {
             dir.toFile().deleteRecursively()

@@ -22,22 +22,46 @@ class RunCommandTool : BuiltInTool {
     override val inputSchema: JsonObject = BuiltInToolCatalog.specFor(name)!!.inputSchema
 
     override suspend fun execute(input: JsonObject, context: BuiltInToolExecutionContext): BuiltInToolExecutionResult {
-        val command = input["command"]?.jsonPrimitive?.content
-            ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Missing required argument: command")
+        // Accumulate all INVALID_INPUT validation errors before failing, so the LLM can see
+        // every issue at once instead of fixing them one at a time.
+        val validationErrors = mutableListOf<String>()
 
-        // Detect common LLM misuse: the full command line (with arguments) was placed
-        // in the `command` field instead of being split into `command` + `args`.
-        // Valid executable names passed to ProcessBuilder (which does not invoke a shell)
-        // never contain whitespace.
-        if (command.any { it.isWhitespace() }) {
+        val command = input["command"]?.jsonPrimitive?.content
+        if (command == null) {
+            validationErrors.add("Missing required argument: command")
+        } else {
+            // Detect common LLM misuse: the full command line (with arguments) was placed
+            // in the `command` field instead of being split into `command` + `args`.
+            // Valid executable names passed to ProcessBuilder (which does not invoke a shell)
+            // never contain whitespace.
+            if (command.any { it.isWhitespace() }) {
+                validationErrors.add(
+                    "The 'command' field must be a single executable name without spaces " +
+                        "(e.g. \"echo\", \"sh\", \"/usr/bin/git\"). Arguments should be provided " +
+                        "in the 'args' field. Received: \"$command\". " +
+                        "If you need to run a shell command with arguments, invoke the shell " +
+                        "explicitly (e.g. command=\"sh\", args=[\"-c\", \"ls -la\"]) or pass " +
+                        "arguments individually (e.g. command=\"echo\", args=[\"hello\", \"world\"])."
+                )
+            }
+        }
+
+        val timeoutSeconds = input["timeout"]?.jsonPrimitive?.content?.toLongOrNull()
+            ?: context.defaultCommandTimeoutSeconds
+
+        if (timeoutSeconds <= 0) {
+            validationErrors.add("timeout must be > 0 seconds")
+        }
+
+        if (validationErrors.isNotEmpty()) {
             return errorResult(
                 BuiltInToolExecutionError.INVALID_INPUT,
-                "The 'command' field must be a single executable name without spaces " +
-                    "(e.g. \"echo\", \"sh\", \"/usr/bin/git\"). Arguments should be provided " +
-                    "in the 'args' field. Received: \"$command\". " +
-                    "If you need to run a shell command with arguments, invoke the shell " +
-                    "explicitly (e.g. command=\"sh\", args=[\"-c\", \"ls -la\"]) or pass " +
-                    "arguments individually (e.g. command=\"echo\", args=[\"hello\", \"world\"])."
+                "Input validation failed with ${validationErrors.size} error(s):",
+                errorDetails = buildJsonObject {
+                    putJsonArray("validationErrors") {
+                        validationErrors.forEach { error -> add(error) }
+                    }
+                }
             )
         }
 
@@ -45,12 +69,6 @@ class RunCommandTool : BuiltInTool {
             is JsonArray -> argsInput.mapNotNull { it.jsonPrimitive.contentOrNull }
             is JsonPrimitive -> argsInput.contentOrNull?.let { listOf(it) } ?: emptyList()
             else -> emptyList()
-        }
-        val timeoutSeconds = input["timeout"]?.jsonPrimitive?.content?.toLongOrNull()
-            ?: context.defaultCommandTimeoutSeconds
-
-        if (timeoutSeconds <= 0) {
-            return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "timeout must be > 0 seconds")
         }
 
         return withContext(context.ioDispatcher) {
@@ -95,6 +113,6 @@ class RunCommandTool : BuiltInTool {
         }
     }
 
-    private fun errorResult(code: String, message: String): BuiltInToolExecutionResult =
-        BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code)
+    private fun errorResult(code: String, message: String, errorDetails: JsonObject? = null): BuiltInToolExecutionResult =
+        BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code, errorDetails = errorDetails)
 }
