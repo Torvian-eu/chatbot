@@ -117,5 +117,67 @@ class WriteFileToolTest {
             dir.toFile().deleteRecursively()
         }
     }
-}
 
+    @Test
+    fun `unknown parameter returns invalid input error`() = runTest {
+        val dir = createTempDirectory("write-file-test")
+        try {
+            val result = tool.execute(
+                buildJsonObject {
+                    put("path", "sample.txt")
+                    put("content", "hello")
+                    put("unknownParam", "someValue")
+                },
+                context(dir)
+            )
+
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            val errorDetailsJson = result.errorDetails
+                ?: throw AssertionError("expected errorDetails with validation errors")
+            val errorDetails = Json.parseToJsonElement(errorDetailsJson).jsonObject
+            val errorsArray = errorDetails["validationErrors"]?.jsonArray
+                ?: throw AssertionError("expected validationErrors array in errorDetails")
+            assertEquals(1, errorsArray.size, "should have 1 validation error")
+            val errorText = errorsArray.first().jsonPrimitive.content
+            assertTrue(
+                errorText.contains("unknownParam"),
+                "error message should mention the unknown parameter; got: $errorText"
+            )
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `missing path and unknown parameter are accumulated in validation errors`() = runTest {
+        val dir = createTempDirectory("write-file-test")
+        try {
+            val result = tool.execute(
+                buildJsonObject {
+                    put("content", "hello")
+                    put("unknownParam", "someValue")
+                },
+                context(dir)
+            )
+
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            val errorDetailsJson = result.errorDetails
+                ?: throw AssertionError("expected errorDetails with accumulated validation errors")
+            val errorDetails = Json.parseToJsonElement(errorDetailsJson).jsonObject
+            val errorsArray = errorDetails["validationErrors"]?.jsonArray
+                ?: throw AssertionError("expected validationErrors array in errorDetails")
+            assertEquals(2, errorsArray.size, "should have accumulated 2 validation errors")
+            val errorTexts = errorsArray.map { it.jsonPrimitive.content }
+            assertTrue(
+                errorTexts.any { it.contains("path") },
+                "should contain missing path error; got: $errorTexts"
+            )
+            assertTrue(
+                errorTexts.any { it.contains("unknownParam") },
+                "should contain unknownParam error; got: $errorTexts"
+            )
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+}

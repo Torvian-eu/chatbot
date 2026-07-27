@@ -221,4 +221,101 @@ class ReadTextFileToolTest {
             dir.toFile().deleteRecursively()
         }
     }
+
+    @Test
+    fun `unknown parameter returns invalid input error`() = runTest {
+        val dir = createTempDirectory("read-text-file-test")
+        try {
+            val result = tool.execute(
+                buildJsonObject {
+                    put("path", "sample.txt")
+                    put("unknownParam", "someValue")
+                },
+                context(dir)
+            )
+
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            val errorDetailsJson = result.errorDetails
+                ?: throw AssertionError("expected errorDetails with validation errors")
+            val errorDetails = Json.parseToJsonElement(errorDetailsJson).jsonObject
+            val errorsArray = errorDetails["validationErrors"]?.jsonArray
+                ?: throw AssertionError("expected validationErrors array in errorDetails")
+            assertEquals(1, errorsArray.size, "should have 1 validation error")
+            val errorText = errorsArray.first().jsonPrimitive.content
+            assertTrue(
+                errorText.contains("unknownParam"),
+                "error message should mention the unknown parameter; got: $errorText"
+            )
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `multiple unknown parameters are accumulated in validation errors`() = runTest {
+        val dir = createTempDirectory("read-text-file-test")
+        try {
+            val result = tool.execute(
+                buildJsonObject {
+                    put("path", "sample.txt")
+                    put("unknownParam1", "value1")
+                    put("unknownParam2", "value2")
+                },
+                context(dir)
+            )
+
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            val errorDetailsJson = result.errorDetails
+                ?: throw AssertionError("expected errorDetails with accumulated validation errors")
+            val errorDetails = Json.parseToJsonElement(errorDetailsJson).jsonObject
+            val errorsArray = errorDetails["validationErrors"]?.jsonArray
+                ?: throw AssertionError("expected validationErrors array in errorDetails")
+            assertEquals(2, errorsArray.size, "should have accumulated 2 unknown parameter errors")
+            val errorTexts = errorsArray.map { it.jsonPrimitive.content }
+            assertTrue(
+                errorTexts.any { it.contains("unknownParam1") },
+                "should contain unknownParam1 error; got: $errorTexts"
+            )
+            assertTrue(
+                errorTexts.any { it.contains("unknownParam2") },
+                "should contain unknownParam2 error; got: $errorTexts"
+            )
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `unknown parameter combined with other validation errors are all accumulated`() = runTest {
+        val dir = createTempDirectory("read-text-file-test")
+        try {
+            val result = tool.execute(
+                buildJsonObject {
+                    put("path", "sample.txt")
+                    put("unknownParam", "someValue")
+                    put("range", buildJsonArray { add(0) }) // wrong arity
+                },
+                context(dir)
+            )
+
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            val errorDetailsJson = result.errorDetails
+                ?: throw AssertionError("expected errorDetails with accumulated validation errors")
+            val errorDetails = Json.parseToJsonElement(errorDetailsJson).jsonObject
+            val errorsArray = errorDetails["validationErrors"]?.jsonArray
+                ?: throw AssertionError("expected validationErrors array in errorDetails")
+            assertEquals(2, errorsArray.size, "should have accumulated 2 validation errors")
+            val errorTexts = errorsArray.map { it.jsonPrimitive.content }
+            assertTrue(
+                errorTexts.any { it.contains("unknownParam") },
+                "should contain unknownParam error; got: $errorTexts"
+            )
+            assertTrue(
+                errorTexts.any { it.contains("range") },
+                "should contain range error; got: $errorTexts"
+            )
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
 }

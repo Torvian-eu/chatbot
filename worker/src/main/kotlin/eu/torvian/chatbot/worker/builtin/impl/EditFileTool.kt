@@ -10,6 +10,9 @@ import eu.torvian.chatbot.worker.builtin.WorkspacePathValidator
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.jsonPrimitive
 import java.nio.file.Files
 import java.nio.file.NoSuchFileException
@@ -58,15 +61,44 @@ class EditFileTool : BuiltInTool {
      *   result carrying [BuiltInToolExecutionError] details on failure.
      */
     override suspend fun execute(input: JsonObject, context: BuiltInToolExecutionContext): BuiltInToolExecutionResult {
-        val path = input["path"]?.jsonPrimitive?.content
-            ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Missing required argument: path")
+        // Accumulate all INVALID_INPUT validation errors before failing, so the LLM can see
+        // every issue at once instead of fixing them one at a time.
+        val validationErrors = mutableListOf<String>()
 
-        @Suppress("UNCHECKED_CAST")
+        // Define the set of known/valid parameter names for this tool
+        val validKeys = setOf("path", "edits", "dryRun")
+        // Check for unknown parameters
+        for (key in input.keys) {
+            if (key !in validKeys) {
+                validationErrors.add("Unknown parameter: '$key'")
+            }
+        }
+
+        val path = input["path"]?.jsonPrimitive?.content
+        if (path == null) {
+            validationErrors.add("Missing required argument: path")
+        }
+
         val editsJson = input["edits"] as? JsonArray
-            ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Missing or invalid 'edits' array")
+        if (input["edits"] != null && editsJson == null) {
+            validationErrors.add("Argument 'edits' must be an array")
+        }
+
+        if (validationErrors.isNotEmpty()) {
+            return errorResult(
+                BuiltInToolExecutionError.INVALID_INPUT,
+                "Input validation failed with ${validationErrors.size} error(s):",
+                errorDetails = buildJsonObject {
+                    putJsonArray("validationErrors") {
+                        validationErrors.forEach { error -> add(JsonPrimitive(error)) }
+                    }
+                }.toString()
+            )
+        }
+
         val dryRun = input["dryRun"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
 
-        val edits = editsJson.mapIndexed { index, element ->
+        val edits = (editsJson ?: emptyList()).mapIndexed { index, element ->
             val obj = element as? JsonObject
                 ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Edit at index $index is not an object")
             val oldText = obj["oldText"]?.jsonPrimitive?.content
@@ -87,7 +119,7 @@ class EditFileTool : BuiltInTool {
         }
 
         val target = try {
-            WorkspacePathValidator.requireInside(context.workspace, path)
+            WorkspacePathValidator.requireInside(context.workspace, path!!)
         } catch (e: Exception) {
             return errorResult(
                 BuiltInToolExecutionError.WORKSPACE_VIOLATION,
@@ -213,8 +245,8 @@ class EditFileTool : BuiltInTool {
      *
      * Overlap policy: when two planned occurrences overlap, the **more specific** occurrence wins —
      * the one with the longer matched original span. Ties (equal span length) are broken first by
-     * the lower original edit spec index, then by the earlier start index, for full determinism.
-     * The lower-priority overlapping occurrence is rejected (kept in the result summary) rather than
+     * the lower original edit index, then by the earlier start index, for full determinism. The
+     * lower-priority overlapping occurrence is rejected (kept in the result summary) rather than
      * silently dropped, and the higher-priority occurrence is applied.
      *
      * @param text Original file content (unmodified).
@@ -348,16 +380,6 @@ class EditFileTool : BuiltInTool {
     }
 
     /**
-     * Builds an error [BuiltInToolExecutionResult] from a logical [code] and message.
-     *
-     * @param code Machine-readable error code (one of [BuiltInToolExecutionError]).
-     * @param message Human-readable explanation of the failure.
-     * @return An error result with [BuiltInToolExecutionResult.isError] set to `true`.
-     */
-    private fun errorResult(code: String, message: String): BuiltInToolExecutionResult =
-        BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code)
-
-    /**
      * Returns `true` when two original-space ranges overlap (share at least one character).
      *
      * Two half-open ranges `[aStart, aEnd)` and `[bStart, bEnd)` overlap iff
@@ -483,4 +505,7 @@ class EditFileTool : BuiltInTool {
         while (i < text.length && text[i].isWhitespace()) i++
         return i
     }
+
+    private fun errorResult(code: String, message: String, errorDetails: String? = null): BuiltInToolExecutionResult =
+        BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code, errorDetails = errorDetails)
 }

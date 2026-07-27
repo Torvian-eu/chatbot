@@ -39,52 +39,74 @@ class DownloadFileTool(
     override val inputSchema: JsonObject = BuiltInToolCatalog.specFor(name)!!.inputSchema
 
     override suspend fun execute(input: JsonObject, context: BuiltInToolExecutionContext): BuiltInToolExecutionResult {
-        // --- Input parsing & validation (tool-local concerns only) -------------------------------
+        // Accumulate all INVALID_INPUT validation errors before failing, so the LLM can see
+        // every issue at once instead of fixing them one at a time.
+        val validationErrors = mutableListOf<String>()
+
+        // Define the set of known/valid parameter names for this tool
+        val validKeys = setOf("url", "path", "overwrite", "timeoutSeconds", "maxBytes", "followRedirects")
+        // Check for unknown parameters
+        for (key in input.keys) {
+            if (key !in validKeys) {
+                validationErrors.add("Unknown parameter: '$key'")
+            }
+        }
+
         val url = input["url"]?.jsonPrimitive?.content
-            ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Missing required argument: url")
-        if (url.isBlank()) {
-            return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Argument 'url' must not be blank")
+        if (url == null) {
+            validationErrors.add("Missing required argument: url")
+        } else if (url.isBlank()) {
+            validationErrors.add("Argument 'url' must not be blank")
         }
 
         val path = input["path"]?.jsonPrimitive?.content
-            ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Missing required argument: path")
-        if (path.isBlank()) {
-            return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Argument 'path' must not be blank")
+        if (path == null) {
+            validationErrors.add("Missing required argument: path")
+        } else if (path.isBlank()) {
+            validationErrors.add("Argument 'path' must not be blank")
         }
 
-        // overwrite defaults to false; a present but non-boolean value is rejected as invalid input.
         val overwrite = when (val raw = input["overwrite"]?.jsonPrimitive?.content) {
             null -> false
-            else -> raw.toBooleanStrictOrNull()
-                ?: return errorResult(
-                    BuiltInToolExecutionError.INVALID_INPUT,
-                    "Argument 'overwrite' must be a boolean (true/false)"
-                )
+            else -> raw.toBooleanStrictOrNull() ?: run {
+                validationErrors.add("Argument 'overwrite' must be a boolean (true/false)")
+                null
+            }
         }
 
         val timeoutSeconds = input["timeoutSeconds"]?.jsonPrimitive?.content?.toIntOrNull()
         if (timeoutSeconds != null && timeoutSeconds <= 0) {
-            return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Argument 'timeoutSeconds' must be > 0")
+            validationErrors.add("Argument 'timeoutSeconds' must be > 0")
         }
 
         val maxBytes = input["maxBytes"]?.jsonPrimitive?.content?.toIntOrNull()
         if (maxBytes != null && maxBytes <= 0) {
-            return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Argument 'maxBytes' must be > 0")
+            validationErrors.add("Argument 'maxBytes' must be > 0")
         }
 
-        // followRedirects defaults to true; a present but non-boolean value is rejected as invalid input.
         val followRedirects = when (val raw = input["followRedirects"]?.jsonPrimitive?.content) {
             null -> true
-            else -> raw.toBooleanStrictOrNull()
-                ?: return errorResult(
-                    BuiltInToolExecutionError.INVALID_INPUT,
-                    "Argument 'followRedirects' must be a boolean (true/false)"
-                )
+            else -> raw.toBooleanStrictOrNull() ?: run {
+                validationErrors.add("Argument 'followRedirects' must be a boolean (true/false)")
+                null
+            }
+        }
+
+        if (validationErrors.isNotEmpty()) {
+            return errorResult(
+                BuiltInToolExecutionError.INVALID_INPUT,
+                "Input validation failed with ${validationErrors.size} error(s):",
+                errorDetails = buildJsonObject {
+                    putJsonArray("validationErrors") {
+                        validationErrors.forEach { error -> add(error) }
+                    }
+                }.toString()
+            )
         }
 
         // --- Resolve & validate the destination through the shared workspace model -----------------
         val target = try {
-            WorkspacePathValidator.requireInside(context.workspace, path)
+            WorkspacePathValidator.requireInside(context.workspace, path!!)
         } catch (e: Exception) {
             return errorResult(
                 BuiltInToolExecutionError.WORKSPACE_VIOLATION,
@@ -94,10 +116,10 @@ class DownloadFileTool(
 
         // --- Delegate to the shared web foundation (no URL/HTTP logic here) -----------------------
         val request = WebFetchRequest(
-            url = url,
+            url = url!!,
             timeoutSeconds = timeoutSeconds,
             maxBytes = maxBytes,
-            followRedirects = followRedirects,
+            followRedirects = followRedirects!!,
         )
 
         val result = when (val fetched = fetchService.fetch(request)) {
@@ -116,7 +138,7 @@ class DownloadFileTool(
                     )
                 }
                 val alreadyExisted = target.exists()
-                if (alreadyExisted && !overwrite) {
+                if (alreadyExisted && !overwrite!!) {
                     return@withContext errorResult(
                         BuiltInToolExecutionError.ALREADY_EXISTS,
                         "Destination '$path' already exists and overwrite is false"
@@ -147,8 +169,6 @@ class DownloadFileTool(
         }
     }
 
-
-    private fun errorResult(code: String, message: String): BuiltInToolExecutionResult =
-        BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code)
+    private fun errorResult(code: String, message: String, errorDetails: String? = null): BuiltInToolExecutionResult =
+        BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code, errorDetails = errorDetails)
 }
-

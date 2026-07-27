@@ -25,14 +25,39 @@ class ListDirectoryTool : BuiltInTool {
     override val inputSchema: JsonObject = BuiltInToolCatalog.specFor(name)!!.inputSchema
 
     override suspend fun execute(input: JsonObject, context: BuiltInToolExecutionContext): BuiltInToolExecutionResult {
-        val path = input["path"]?.jsonPrimitive?.content ?: "."
+        // Accumulate all INVALID_INPUT validation errors before failing, so the LLM can see
+        // every issue at once instead of fixing them one at a time.
+        val validationErrors = mutableListOf<String>()
+
+        // Define the set of known/valid parameter names for this tool
+        val validKeys = setOf("path", "sortBy", "includeSizes", "recursive")
+        // Check for unknown parameters
+        for (key in input.keys) {
+            if (key !in validKeys) {
+                validationErrors.add("Unknown parameter: '$key'")
+            }
+        }
+
         val sortBy = input["sortBy"]?.jsonPrimitive?.content ?: "name"
+        if (sortBy !in setOf("name", "size")) {
+            validationErrors.add("Invalid 'sortBy' value: $sortBy (expected 'name' or 'size')")
+        }
+
+        if (validationErrors.isNotEmpty()) {
+            return errorResult(
+                BuiltInToolExecutionError.INVALID_INPUT,
+                "Input validation failed with ${validationErrors.size} error(s):",
+                errorDetails = buildJsonObject {
+                    putJsonArray("validationErrors") {
+                        validationErrors.forEach { error -> add(error) }
+                    }
+                }.toString()
+            )
+        }
+
+        val path = input["path"]?.jsonPrimitive?.content ?: "."
         val includeSizes = input["includeSizes"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
         val recursive = input["recursive"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
-
-        if (sortBy !in setOf("name", "size")) {
-            return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Invalid 'sortBy' value: $sortBy")
-        }
 
         val root = try {
             WorkspacePathValidator.requireInside(context.workspace, path)
@@ -111,6 +136,6 @@ class ListDirectoryTool : BuiltInTool {
         return entries.sortedWith(comparator)
     }
 
-    private fun errorResult(code: String, message: String): BuiltInToolExecutionResult =
-        BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code)
+    private fun errorResult(code: String, message: String, errorDetails: String? = null): BuiltInToolExecutionResult =
+        BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code, errorDetails = errorDetails)
 }

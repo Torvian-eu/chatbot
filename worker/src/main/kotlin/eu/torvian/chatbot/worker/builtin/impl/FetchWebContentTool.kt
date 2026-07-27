@@ -38,47 +38,67 @@ class FetchWebContentTool(
     override val inputSchema: JsonObject = BuiltInToolCatalog.specFor(name)!!.inputSchema
 
     override suspend fun execute(input: JsonObject, context: BuiltInToolExecutionContext): BuiltInToolExecutionResult {
-        // --- Input parsing & validation (tool-local concerns only) -------------------------------
+        // Accumulate all INVALID_INPUT validation errors before failing, so the LLM can see
+        // every issue at once instead of fixing them one at a time.
+        val validationErrors = mutableListOf<String>()
+
+        // Define the set of known/valid parameter names for this tool
+        val validKeys = setOf("url", "timeoutSeconds", "maxBytes", "followRedirects", "returnMode")
+        // Check for unknown parameters
+        for (key in input.keys) {
+            if (key !in validKeys) {
+                validationErrors.add("Unknown parameter: '$key'")
+            }
+        }
+
         val url = input["url"]?.jsonPrimitive?.content
-            ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Missing required argument: url")
-        if (url.isBlank()) {
-            return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Argument 'url' must not be blank")
+        if (url == null) {
+            validationErrors.add("Missing required argument: url")
+        } else if (url.isBlank()) {
+            validationErrors.add("Argument 'url' must not be blank")
         }
 
         val timeoutSeconds = input["timeoutSeconds"]?.jsonPrimitive?.content?.toIntOrNull()
         if (timeoutSeconds != null && timeoutSeconds <= 0) {
-            return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Argument 'timeoutSeconds' must be > 0")
+            validationErrors.add("Argument 'timeoutSeconds' must be > 0")
         }
 
         val maxBytes = input["maxBytes"]?.jsonPrimitive?.content?.toIntOrNull()
         if (maxBytes != null && maxBytes <= 0) {
-            return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Argument 'maxBytes' must be > 0")
+            validationErrors.add("Argument 'maxBytes' must be > 0")
         }
 
-        // followRedirects defaults to true; a present but non-boolean value is rejected as invalid input.
         val followRedirects = when (val raw = input["followRedirects"]?.jsonPrimitive?.content) {
             null -> true
             else -> raw.toBooleanStrictOrNull()
-                ?: return errorResult(
-                    BuiltInToolExecutionError.INVALID_INPUT,
-                    "Argument 'followRedirects' must be a boolean (true/false)"
-                )
+        }
+        if (input["followRedirects"]?.jsonPrimitive?.content != null && followRedirects == null) {
+            validationErrors.add("Argument 'followRedirects' must be a boolean (true/false)")
         }
 
         val returnMode = input["returnMode"]?.jsonPrimitive?.content ?: "auto"
         if (returnMode !in setOf("auto", "text", "html")) {
+            validationErrors.add("Invalid 'returnMode' value: $returnMode (expected 'auto', 'text', or 'html')")
+        }
+
+        if (validationErrors.isNotEmpty()) {
             return errorResult(
                 BuiltInToolExecutionError.INVALID_INPUT,
-                "Invalid 'returnMode' value: $returnMode (expected 'auto', 'text', or 'html')"
+                "Input validation failed with ${validationErrors.size} error(s):",
+                errorDetails = buildJsonObject {
+                    putJsonArray("validationErrors") {
+                        validationErrors.forEach { error -> add(error) }
+                    }
+                }.toString()
             )
         }
 
         // --- Delegate to the shared web foundation (no URL/HTTP logic here) -----------------------
         val request = WebFetchRequest(
-            url = url,
+            url = url!!,
             timeoutSeconds = timeoutSeconds,
             maxBytes = maxBytes,
-            followRedirects = followRedirects,
+            followRedirects = followRedirects!!,
         )
 
         val result = when (val fetched = fetchService.fetch(request)) {
@@ -190,8 +210,8 @@ class FetchWebContentTool(
         decoder.decode(ByteBuffer.wrap(bytes)).toString()
     }.getOrNull()
 
-    private fun errorResult(code: String, message: String): BuiltInToolExecutionResult =
-        BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code)
+    private fun errorResult(code: String, message: String, errorDetails: String? = null): BuiltInToolExecutionResult =
+        BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code, errorDetails = errorDetails)
 
     private companion object {
         /** Application media types that are reliably textual and safe to emit as text. */

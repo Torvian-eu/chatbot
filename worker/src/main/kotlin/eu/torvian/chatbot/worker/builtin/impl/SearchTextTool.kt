@@ -57,47 +57,72 @@ class SearchTextTool : BuiltInTool {
     override val inputSchema: JsonObject = BuiltInToolCatalog.specFor(name)!!.inputSchema
 
     override suspend fun execute(input: JsonObject, context: BuiltInToolExecutionContext): BuiltInToolExecutionResult {
-        val query = input["query"]?.jsonPrimitive?.content
-            ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Missing required argument: query")
-        if (query.isBlank()) {
-            return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Argument 'query' must not be blank")
+        // Accumulate all INVALID_INPUT validation errors before failing, so the LLM can see
+        // every issue at once instead of fixing them one at a time.
+        val validationErrors = mutableListOf<String>()
+
+        // Define the set of known/valid parameter names for this tool
+        val validKeys = setOf(
+            "path", "query", "mode", "caseSensitive", "wholeWord",
+            "filePattern", "excludePatterns", "contextBefore", "contextAfter", "maxResults"
+        )
+        // Check for unknown parameters
+        for (key in input.keys) {
+            if (key !in validKeys) {
+                validationErrors.add("Unknown parameter: '$key'")
+            }
         }
-        val path = input["path"]?.jsonPrimitive?.content ?: "."
+
+        val query = input["query"]?.jsonPrimitive?.content
+        if (query == null) {
+            validationErrors.add("Missing required argument: query")
+        } else if (query.isBlank()) {
+            validationErrors.add("Argument 'query' must not be blank")
+        }
+
         val mode = input["mode"]?.jsonPrimitive?.content ?: "plain"
+        if (mode !in setOf("plain", "regex")) {
+            validationErrors.add("Invalid 'mode' value: $mode (expected 'plain' or 'regex')")
+        }
+
         val caseSensitive = input["caseSensitive"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
         val wholeWord = input["wholeWord"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
+        if (mode == "regex" && wholeWord) {
+            validationErrors.add("Argument 'wholeWord' is not supported in 'regex' mode")
+        }
+
+        val contextBefore = input["contextBefore"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
+        if (contextBefore < 0) {
+            validationErrors.add("Argument 'contextBefore' must be >= 0")
+        }
+        val contextAfter = input["contextAfter"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
+        if (contextAfter < 0) {
+            validationErrors.add("Argument 'contextAfter' must be >= 0")
+        }
+
+        val maxResults = input["maxResults"]?.jsonPrimitive?.content?.toIntOrNull()
+        if (maxResults != null && maxResults < 1) {
+            validationErrors.add("Argument 'maxResults' must be >= 1")
+        }
+
+        if (validationErrors.isNotEmpty()) {
+            return errorResult(
+                BuiltInToolExecutionError.INVALID_INPUT,
+                "Input validation failed with ${validationErrors.size} error(s):",
+                errorDetails = buildJsonObject {
+                    putJsonArray("validationErrors") {
+                        validationErrors.forEach { error -> add(error) }
+                    }
+                }.toString()
+            )
+        }
+
+        val path = input["path"]?.jsonPrimitive?.content ?: "."
         val filePattern = input["filePattern"]?.jsonPrimitive?.content
         val excludePatterns = when (val excludeInput = input["excludePatterns"]) {
             is JsonArray -> excludeInput.mapNotNull { it.jsonPrimitive.contentOrNull }
             is JsonPrimitive -> excludeInput.contentOrNull?.let { listOf(it) } ?: emptyList()
             else -> emptyList()
-        }
-        val contextBefore = input["contextBefore"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
-        val contextAfter = input["contextAfter"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
-        val maxResults = input["maxResults"]?.jsonPrimitive?.content?.toIntOrNull()
-
-        if (mode !in setOf("plain", "regex")) {
-            return errorResult(
-                BuiltInToolExecutionError.INVALID_INPUT,
-                "Invalid 'mode' value: $mode (expected 'plain' or 'regex')"
-            )
-        }
-        if (contextBefore < 0) {
-            return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Argument 'contextBefore' must be >= 0")
-        }
-        if (contextAfter < 0) {
-            return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Argument 'contextAfter' must be >= 0")
-        }
-        if (maxResults != null && maxResults < 1) {
-            return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Argument 'maxResults' must be >= 1")
-        }
-        // wholeWord is only meaningful in plain mode; reject the ambiguous combination in regex mode
-        // rather than silently ignoring it, so callers get deterministic feedback.
-        if (mode == "regex" && wholeWord) {
-            return errorResult(
-                BuiltInToolExecutionError.INVALID_INPUT,
-                "Argument 'wholeWord' is not supported in 'regex' mode"
-            )
         }
 
         val root = try {
@@ -111,7 +136,7 @@ class SearchTextTool : BuiltInTool {
 
         // Compile the matcher once for the whole search to avoid recompiling per line/file.
         val regex = try {
-            compileRegex(query, mode, caseSensitive, wholeWord)
+            compileRegex(query!!, mode, caseSensitive, wholeWord)
         } catch (e: Exception) {
             return errorResult(
                 BuiltInToolExecutionError.INVALID_INPUT,
@@ -200,8 +225,7 @@ class SearchTextTool : BuiltInTool {
 
                     // Collect the match for the grouped readable output. The path is emitted once as
                     // a per-file header during rendering (below) rather than repeated on every line,
-                    // keeping the output compact and token-friendly. Context lines are paired with
-                    // their 1-based line numbers so they can be rendered as "<n>: <content>".
+                    // keeping the textual output compact and token-friendly for the consuming model.
                     val render = MatchRender(
                         lineNumber = lineNumber,
                         line = line,
@@ -282,7 +306,7 @@ class SearchTextTool : BuiltInTool {
      *
      * Uses a strict decoder that reports (rather than silently replaces) malformed input, so files
      * that are not valid UTF-8 text (for example binaries) throw and are skipped by the caller
-     * instead of producing garbage matches. Line terminators (LF, CRLF, and CR) are stripped, so
+     * instead of producing mojibake output. Line terminators (LF, CRLF, and CR) are stripped, so
      * matched lines never contain a trailing carriage return.
      *
      * @param file Regular file to read.
@@ -300,8 +324,8 @@ class SearchTextTool : BuiltInTool {
         return text.split(Regex("\r\n|\r|\n"))
     }
 
-    private fun errorResult(code: String, message: String): BuiltInToolExecutionResult =
-        BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code)
+    private fun errorResult(code: String, message: String, errorDetails: String? = null): BuiltInToolExecutionResult =
+        BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code, errorDetails = errorDetails)
 }
 
 /**

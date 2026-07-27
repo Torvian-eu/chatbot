@@ -21,20 +21,55 @@ class MoveFileTool : BuiltInTool {
     override val inputSchema: JsonObject = BuiltInToolCatalog.specFor(name)!!.inputSchema
 
     override suspend fun execute(input: JsonObject, context: BuiltInToolExecutionContext): BuiltInToolExecutionResult {
+        // Accumulate all INVALID_INPUT validation errors before failing, so the LLM can see
+        // every issue at once instead of fixing them one at a time.
+        val validationErrors = mutableListOf<String>()
+
+        // Define the set of known/valid parameter names for this tool
+        val validKeys = setOf("source", "destination")
+        // Check for unknown parameters
+        for (key in input.keys) {
+            if (key !in validKeys) {
+                validationErrors.add("Unknown parameter: '$key'")
+            }
+        }
+
         val source = input["source"]?.jsonPrimitive?.content
-            ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Missing required argument: source")
+        if (source == null) {
+            validationErrors.add("Missing required argument: source")
+        }
         val destination = input["destination"]?.jsonPrimitive?.content
-            ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Missing required argument: destination")
+        if (destination == null) {
+            validationErrors.add("Missing required argument: destination")
+        }
+
+        if (validationErrors.isNotEmpty()) {
+            return errorResult(
+                BuiltInToolExecutionError.INVALID_INPUT,
+                "Input validation failed with ${validationErrors.size} error(s):",
+                errorDetails = buildJsonObject {
+                    putJsonArray("validationErrors") {
+                        validationErrors.forEach { error -> add(error) }
+                    }
+                }.toString()
+            )
+        }
 
         val sourcePath = try {
-            WorkspacePathValidator.requireInside(context.workspace, source)
+            WorkspacePathValidator.requireInside(context.workspace, source!!)
         } catch (e: Exception) {
-            return errorResult(BuiltInToolExecutionError.WORKSPACE_VIOLATION, "source: ${e.message}")
+            return errorResult(
+                BuiltInToolExecutionError.WORKSPACE_VIOLATION,
+                "source: ${e.message}"
+            )
         }
         val destinationPath = try {
-            WorkspacePathValidator.requireInside(context.workspace, destination)
+            WorkspacePathValidator.requireInside(context.workspace, destination!!)
         } catch (e: Exception) {
-            return errorResult(BuiltInToolExecutionError.WORKSPACE_VIOLATION, "destination: ${e.message}")
+            return errorResult(
+                BuiltInToolExecutionError.WORKSPACE_VIOLATION,
+                "destination: ${e.message}"
+            )
         }
 
         return withContext(context.ioDispatcher) {
@@ -57,6 +92,6 @@ class MoveFileTool : BuiltInTool {
         }
     }
 
-    private fun errorResult(code: String, message: String): BuiltInToolExecutionResult =
-        BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code)
+    private fun errorResult(code: String, message: String, errorDetails: String? = null): BuiltInToolExecutionResult =
+        BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code, errorDetails = errorDetails)
 }

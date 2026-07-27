@@ -26,6 +26,15 @@ class RunCommandTool : BuiltInTool {
         // every issue at once instead of fixing them one at a time.
         val validationErrors = mutableListOf<String>()
 
+        // Define the set of known/valid parameter names for this tool
+        val validKeys = setOf("command", "args", "timeout")
+        // Check for unknown parameters
+        for (key in input.keys) {
+            if (key !in validKeys) {
+                validationErrors.add("Unknown parameter: '$key'")
+            }
+        }
+
         val command = input["command"]?.jsonPrimitive?.content
         if (command == null) {
             validationErrors.add("Missing required argument: command")

@@ -25,32 +25,57 @@ class ReadTextFileTool : BuiltInTool {
     override val inputSchema: JsonObject = BuiltInToolCatalog.specFor(name)!!.inputSchema
 
     override suspend fun execute(input: JsonObject, context: BuiltInToolExecutionContext): BuiltInToolExecutionResult {
+        // Accumulate all INVALID_INPUT validation errors before failing, so the LLM can see
+        // every issue at once instead of fixing them one at a time.
+        val validationErrors = mutableListOf<String>()
+
+        // Define the set of known/valid parameter names for this tool
+        val validKeys = setOf("path", "range")
+        // Check for unknown parameters
+        for (key in input.keys) {
+            if (key !in validKeys) {
+                validationErrors.add("Unknown parameter: '$key'")
+            }
+        }
+
         val path = input["path"]?.jsonPrimitive?.contentOrNull()
-            ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Missing required argument: path")
+        if (path == null) {
+            validationErrors.add("Missing required argument: path")
+        }
 
         // Parse the optional [start, end) range. Each element is either an integer or null
         // (open-ended), matching the JSON Schema's "type": ["integer", "null"] items.
         val range = input["range"]?.let { element ->
             val array = element.jsonArray
             if (array.size != 2) {
-                return errorResult(
-                    BuiltInToolExecutionError.INVALID_INPUT,
-                    "Argument 'range' must contain exactly two elements [start, end)"
-                )
+                validationErrors.add("Argument 'range' must contain exactly two elements [start, end)")
+                null
+            } else {
+                val start = array[0].intOrNull()
+                val end = array[1].intOrNull()
+                if (start == null && end == null) {
+                    validationErrors.add("Argument 'range' must specify at least a start or an end")
+                    null
+                } else {
+                    start to end
+                }
             }
-            val start = array[0].intOrNull()
-            val end = array[1].intOrNull()
-            if (start == null && end == null) {
-                return errorResult(
-                    BuiltInToolExecutionError.INVALID_INPUT,
-                    "Argument 'range' must specify at least a start or an end"
-                )
-            }
-            start to end
+        }
+
+        if (validationErrors.isNotEmpty()) {
+            return errorResult(
+                BuiltInToolExecutionError.INVALID_INPUT,
+                "Input validation failed with ${validationErrors.size} error(s):",
+                errorDetails = buildJsonObject {
+                    putJsonArray("validationErrors") {
+                        validationErrors.forEach { error -> add(error) }
+                    }
+                }.toString()
+            )
         }
 
         val target = try {
-            WorkspacePathValidator.requireInside(context.workspace, path)
+            WorkspacePathValidator.requireInside(context.workspace, path!!)
         } catch (e: Exception) {
             return errorResult(
                 BuiltInToolExecutionError.WORKSPACE_VIOLATION,
@@ -136,6 +161,6 @@ class ReadTextFileTool : BuiltInTool {
         return "=== $path (lines:$range of $total) ==="
     }
 
-    private fun errorResult(code: String, message: String): BuiltInToolExecutionResult =
-        BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code)
+    private fun errorResult(code: String, message: String, errorDetails: String? = null): BuiltInToolExecutionResult =
+        BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code, errorDetails = errorDetails)
 }
