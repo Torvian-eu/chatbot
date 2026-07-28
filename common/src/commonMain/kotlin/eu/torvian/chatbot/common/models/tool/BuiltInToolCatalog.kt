@@ -92,6 +92,7 @@ object BuiltInToolCatalog {
                     })
                     put("edits", buildJsonObject {
                         put("type", "array")
+                        put("minItems", 1)
                         put("items", buildJsonObject {
                             put("type", "object")
                             put("properties", buildJsonObject {
@@ -110,6 +111,7 @@ object BuiltInToolCatalog {
                     put("dryRun", buildJsonObject {
                         put("type", "boolean")
                         put("description", "Preview the changes without applying them.")
+                        put("default", false)
                     })
                 })
                 put("required", buildJsonArray { add("path"); add("edits") })
@@ -138,22 +140,25 @@ object BuiltInToolCatalog {
                     put("path", buildJsonObject {
                         put("type", "string")
                         put("description", "Directory path relative to the workspace (defaults to the workspace root).")
+                        put("default", ".")
                     })
                     put("sortBy", buildJsonObject {
                         put("type", "string")
                         put("enum", buildJsonArray { add("name"); add("size") })
                         put("description", "Sort entries by name (default) or size.")
+                        put("default", "name")
                     })
                     put("includeSizes", buildJsonObject {
                         put("type", "boolean")
                         put("description", "Include file sizes in the listing.")
+                        put("default", false)
                     })
                     put("recursive", buildJsonObject {
                         put("type", "boolean")
                         put("description", "Recursively list subdirectories with indentation.")
+                        put("default", false)
                     })
                 })
-                put("required", buildJsonArray { add("path") })
             }
         ),
         BuiltInToolSpec(
@@ -183,6 +188,7 @@ object BuiltInToolCatalog {
                     put("path", buildJsonObject {
                         put("type", "string")
                         put("description", "Starting directory relative to the workspace (defaults to the workspace root).")
+                        put("default", ".")
                     })
                     put("pattern", buildJsonObject {
                         put("type", "string")
@@ -214,7 +220,7 @@ object BuiltInToolCatalog {
                 put("properties", buildJsonObject {
                     put("command", buildJsonObject {
                         put("type", "string")
-                        put("description", "Executable name (must be on PATH or absolute).")
+                        put("description", "Executable name (must be on PATH or absolute). This should be only the executable or program name, not the full command line with arguments.")
                     })
                     put("args", buildJsonObject {
                         put("oneOf", buildJsonArray {
@@ -228,10 +234,11 @@ object BuiltInToolCatalog {
                                 put("description", "Command-line arguments.")
                             })
                         })
-                        put("description", "Command-line arguments. Accepts a single string or an array of strings.")
+                        put("description", "Command-line arguments. Accepts a single string or an array of strings. Arguments belong here and should be separate entries.")
                     })
                     put("timeout", buildJsonObject {
                         put("type", "integer")
+                        put("minimum", 1)
                         put(
                             "description",
                             "Timeout in seconds. Defaults to the worker's builtInTools.defaultCommandTimeoutSeconds."
@@ -250,6 +257,7 @@ object BuiltInToolCatalog {
                     put("path", buildJsonObject {
                         put("type", "string")
                         put("description", "Starting directory or file path relative to the workspace. Defaults to the workspace root.")
+                        put("default", ".")
                     })
                     put("query", buildJsonObject {
                         put("type", "string")
@@ -258,15 +266,18 @@ object BuiltInToolCatalog {
                     put("mode", buildJsonObject {
                         put("type", "string")
                         put("enum", buildJsonArray { add("plain"); add("regex") })
-                        put("description", "Interpret 'query' as plain text or a regular expression (regex is the default).")
+                        put("description", "Interpret 'query' as plain text or a regular expression. Use 'plain' for exact literal matching.")
+                        put("default", "regex")
                     })
                     put("caseSensitive", buildJsonObject {
                         put("type", "boolean")
-                        put("description", "Whether matching is case-sensitive. Defaults to false.")
+                        put("description", "Whether matching is case-sensitive.")
+                        put("default", false)
                     })
                     put("wholeWord", buildJsonObject {
                         put("type", "boolean")
-                        put("description", "When true, matches whole words only. Only applies in plain-text mode.")
+                        put("description", "When true, matches whole words only. Only valid and applicable when mode='plain'.")
+                        put("default", false)
                     })
                     put("filePattern", buildJsonObject {
                         put("type", "string")
@@ -289,12 +300,14 @@ object BuiltInToolCatalog {
                     put("contextBefore", buildJsonObject {
                         put("type", "integer")
                         put("minimum", 0)
-                        put("description", "Number of context lines to include before each match. Defaults to 0.")
+                        put("description", "Number of context lines to include before each match.")
+                        put("default", 0)
                     })
                     put("contextAfter", buildJsonObject {
                         put("type", "integer")
                         put("minimum", 0)
-                        put("description", "Number of context lines to include after each match. Defaults to 0.")
+                        put("description", "Number of context lines to include after each match.")
+                        put("default", 0)
                     })
                     put("maxResults", buildJsonObject {
                         put("type", "integer")
@@ -328,12 +341,14 @@ object BuiltInToolCatalog {
                     })
                     put("followRedirects", buildJsonObject {
                         put("type", "boolean")
-                        put("description", "Whether HTTP redirects should be followed. Defaults to true.")
+                        put("description", "Whether HTTP redirects should be followed.")
+                        put("default", true)
                     })
                     put("returnMode", buildJsonObject {
                         put("type", "string")
                         put("enum", buildJsonArray { add("auto"); add("text"); add("html") })
                         put("description", "How to interpret the response body. 'auto' uses the response content type.")
+                        put("default", "auto")
                     })
                 })
                 put("required", buildJsonArray { add("url") })
@@ -356,7 +371,8 @@ object BuiltInToolCatalog {
                     })
                     put("overwrite", buildJsonObject {
                         put("type", "boolean")
-                        put("description", "Whether to overwrite the destination file if it already exists. Defaults to false.")
+                        put("description", "Whether to overwrite the destination file if it already exists.")
+                        put("default", false)
                     })
                     put("timeoutSeconds", buildJsonObject {
                         put("type", "integer")
@@ -370,7 +386,8 @@ object BuiltInToolCatalog {
                     })
                     put("followRedirects", buildJsonObject {
                         put("type", "boolean")
-                        put("description", "Whether HTTP redirects should be followed. Defaults to true.")
+                        put("description", "Whether HTTP redirects should be followed.")
+                        put("default", true)
                     })
                 })
                 put("required", buildJsonArray { add("url"); add("path") })
