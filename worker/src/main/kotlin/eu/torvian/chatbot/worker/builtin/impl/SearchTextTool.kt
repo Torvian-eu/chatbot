@@ -169,13 +169,13 @@ class SearchTextTool : BuiltInTool {
             var truncated = false
 
             searchLoop@ for (file in candidates) {
-                // Relativize against the starting directory (root) — not the workspace root — so the
-                // reported path and the exclude-pattern matching behave intuitively regardless of the
-                // absolute filesystem location (e.g. a search rooted at "website/css" reports
-                // "style.css" rather than "website/css/style.css"). Normalize to forward slashes so
-                // output and exclude-pattern matching are platform-independent (glob matchers expect
-                // '/' separators), keeping results consistent across operating systems.
-                val relative = root.relativize(file).toString().replace('\\', '/')
+                // Use paths relative to the search root, normalize separators to /, and fall back to the file name
+                // when the root is a single file so results stay consistent and meaningful across platforms.
+                val relative = if (root.isRegularFile()) {
+                    root.fileName.toString().replace('\\', '/')
+                } else {
+                    root.relativize(file).toString().replace('\\', '/')
+                }
                 // filePattern filters by the relative path (consistent with SearchFilesTool, which
                 // matches the whole start-relative path); excludePatterns also filter by that path.
                 if (fileMatcher != null && !fileMatcher.matches(Path.of(relative))) continue@searchLoop
