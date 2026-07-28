@@ -366,6 +366,22 @@ object BuiltInToolCatalog {
                         put("format", "uri")
                         put("description", "Public internet URL to fetch.")
                     })
+                    put("range", buildJsonObject {
+                        put("type", "array")
+                        put("minItems", 2)
+                        put("maxItems", 2)
+                        put("items", buildJsonObject {
+                            put("type", buildJsonArray {
+                                add("integer")
+                                add("null")
+                            })
+                        })
+                        put(
+                            "description",
+                            "Line range as [start, end), matching Python slice semantics. " +
+                            "Negative values count from the end. Use null for open-ended."
+                        )
+                    })
                     put("timeoutSeconds", buildJsonObject {
                         put("type", "integer")
                         put("minimum", 1)

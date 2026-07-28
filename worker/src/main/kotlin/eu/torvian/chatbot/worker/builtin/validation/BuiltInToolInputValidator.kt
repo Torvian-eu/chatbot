@@ -3,6 +3,8 @@ package eu.torvian.chatbot.worker.builtin.validation
 import eu.torvian.chatbot.common.models.api.worker.protocol.payload.BuiltInToolExecutionResult
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
@@ -289,4 +291,74 @@ internal fun truncateBytes(text: String, maxBytes: Int): Pair<String, Int> {
         charIndex += charCount
     }
     return text to byteCount
+}
+
+/**
+ * Parses an optional line range parameter as a 2-element array `[start, end)` where elements are integers or null.
+ *
+ * @param input The raw tool input object.
+ * @param key The parameter name to read (e.g. "range").
+ * @param validationErrors The accumulated validation error list.
+ * @return A pair of `(start, end)` where each element is an integer or null, or null when the parameter is absent or invalid.
+ */
+internal fun parseOptionalLineRange(
+    input: JsonObject,
+    key: String,
+    validationErrors: MutableList<String>,
+): Pair<Int?, Int?>? {
+    val element = input[key] ?: return null
+    val array = element as? JsonArray
+    if (array == null) {
+        validationErrors.add("Argument '$key' must be an array [start, end)")
+        return null
+    }
+    if (array.size != 2) {
+        validationErrors.add("Argument '$key' must contain exactly two elements [start, end)")
+        return null
+    }
+    val parseBound = { item: JsonElement, label: String ->
+        when (item) {
+            JsonNull -> null
+            !is JsonPrimitive -> {
+                validationErrors.add("Argument '$label' must be an integer or null")
+                null
+            }
+            else -> item.content.toIntOrNull() ?: run {
+                validationErrors.add("Argument '$label' must be an integer or null")
+                null
+            }
+        }
+    }
+    val start = parseBound(array[0], "$key[0]")
+    val end = parseBound(array[1], "$key[1]")
+    if (start == null && end == null) {
+        validationErrors.add("Argument '$key' must specify at least a start or an end")
+        return null
+    }
+    return start to end
+}
+
+/**
+ * Resolves Python-style `[start, end)` slice bounds against a total line count.
+ *
+ * Both bounds are clamped to `[0, totalLines]` so out-of-range values behave like Python slicing
+ * (which silently truncates rather than throwing). A `null` bound is treated as the natural
+ * open end: `0` for start and [totalLines] for end. Negative bounds count backwards from [totalLines].
+ *
+ * @param range Pair of `(start, end)` where either element may be null; null when no range was supplied.
+ * @param totalLines Total number of lines.
+ * @return A `(startIndex, endIndex)` pair with `0 <= startIndex <= endIndex <= totalLines`.
+ */
+internal fun resolveSlice(range: Pair<Int?, Int?>?, totalLines: Int): Pair<Int, Int> {
+    if (range == null) return 0 to totalLines
+    val (rawStart, rawEnd) = range
+    val start = when (rawStart) {
+        null -> 0
+        else -> if (rawStart < 0) (totalLines + rawStart).coerceAtLeast(0) else rawStart.coerceAtMost(totalLines)
+    }
+    val end = when (rawEnd) {
+        null -> totalLines
+        else -> if (rawEnd < 0) (totalLines + rawEnd).coerceAtLeast(0) else rawEnd.coerceAtMost(totalLines)
+    }
+    return start to maxOf(start, end)
 }

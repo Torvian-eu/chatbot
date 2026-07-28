@@ -72,3 +72,29 @@ internal fun formatTruncationNotice(
     val hintSuffix = if (!extraHint.isNullOrBlank()) " ${extraHint.trim()}" else ""
     return "\n\n[Output truncated: showing first $linesShown lines / $bytesShown bytes.$hintSuffix Increase 'maxLines'/'maxBytes' to read further.]"
 }
+
+/**
+ * Builds a single concise header line describing the line range returned from [label].
+ *
+ * Format: `=== <label> (lines:<range> of <totalLines>) ===`
+ *
+ * @param label The target path or URL string.
+ * @param startIdx 0-based inclusive start index of the slice.
+ * @param endIdx 0-based exclusive end index of the slice.
+ * @param totalLines Total number of lines in the source document.
+ * @return The formatted range header line.
+ */
+internal fun buildRangeHeader(
+    label: String,
+    startIdx: Int,
+    endIdx: Int,
+    totalLines: Int,
+): String {
+    val count = endIdx - startIdx
+    val range = when {
+        count <= 0 -> "none"
+        count == 1 -> "${startIdx + 1}"
+        else -> "${startIdx + 1}-$endIdx"
+    }
+    return "=== $label (lines:$range of $totalLines) ==="
+}

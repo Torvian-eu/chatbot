@@ -12,11 +12,14 @@ import eu.torvian.chatbot.worker.builtin.validation.addUnknownParameterErrors
 import eu.torvian.chatbot.worker.builtin.validation.builtInToolErrorResult
 import eu.torvian.chatbot.worker.builtin.validation.invalidInputResult
 import eu.torvian.chatbot.worker.builtin.validation.formatTruncationNotice
+import eu.torvian.chatbot.worker.builtin.validation.buildRangeHeader
 import eu.torvian.chatbot.worker.builtin.validation.parseOptionalBoolean
 import eu.torvian.chatbot.worker.builtin.validation.parseOptionalInt
 import eu.torvian.chatbot.worker.builtin.validation.parseOptionalIntOrNull
+import eu.torvian.chatbot.worker.builtin.validation.parseOptionalLineRange
 import eu.torvian.chatbot.worker.builtin.validation.parseOptionalString
 import eu.torvian.chatbot.worker.builtin.validation.parseRequiredString
+import eu.torvian.chatbot.worker.builtin.validation.resolveSlice
 import eu.torvian.chatbot.worker.builtin.validation.truncateLinesAndBytes
 import arrow.core.Either
 import kotlinx.serialization.json.*
@@ -53,7 +56,7 @@ class FetchWebContentTool(
         val validationErrors = mutableListOf<String>()
 
         // Define the set of known/valid parameter names for this tool
-        val validKeys = setOf("url", "timeoutSeconds", "maxDownloadBytes", "maxBytes", "maxLines", "followRedirects", "returnMode")
+        val validKeys = setOf("url", "timeoutSeconds", "maxDownloadBytes", "maxBytes", "maxLines", "followRedirects", "returnMode", "range")
         addUnknownParameterErrors(input, validKeys, validationErrors)
 
         val url = parseRequiredString(input, "url", validationErrors)
@@ -87,6 +90,8 @@ class FetchWebContentTool(
         if (returnMode !in setOf("auto", "text", "html")) {
             validationErrors.add("Invalid 'returnMode' value: $returnMode (expected 'auto', 'text', or 'html')")
         }
+
+        val range = parseOptionalLineRange(input, "range", validationErrors)
 
         if (validationErrors.isNotEmpty()) {
             return invalidInputResult(validationErrors)
@@ -123,18 +128,25 @@ class FetchWebContentTool(
             )
 
         // --- Shape the result (output + structured details) --------------------------------------
-        val truncationResult = truncateLinesAndBytes(text, maxLines, maxBytes)
+        val allLines = text.lines()
+        val (startIdx, endIdx) = resolveSlice(range, allLines.size)
+        val selected = allLines.subList(startIdx, endIdx)
+        val rawBody = selected.joinToString("\n")
+        val truncationResult = truncateLinesAndBytes(rawBody, maxLines, maxBytes)
         val body = truncationResult.text
         val linesShown = truncationResult.linesShown
         val bytesShown = truncationResult.bytesShown
         val truncated = truncationResult.isTruncated
 
         val notice = if (truncated) {
-            formatTruncationNotice(linesShown, bytesShown)
+            formatTruncationNotice(linesShown, bytesShown, "Use 'range' or")
         } else {
             ""
         }
-        val output = body + notice
+        val actualEndIdx = startIdx + linesShown
+        val header = buildRangeHeader(fetchedResult.finalUrl, startIdx, actualEndIdx, allLines.size)
+        val content = if (body.isEmpty()) header else "$header\n$body"
+        val output = content + notice
 
         val details = buildJsonObject {
             put("finalUrl", fetchedResult.finalUrl)
@@ -143,6 +155,7 @@ class FetchWebContentTool(
             put("contentLength", fetchedResult.contentLength)
             put("bytesRead", fetchedResult.bodyBytes.size)
             put("returnMode", returnMode)
+            put("totalLines", allLines.size)
             put("truncated", truncated)
         }
 
