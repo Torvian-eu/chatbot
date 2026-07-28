@@ -345,4 +345,71 @@ class ReadTextFileToolTest {
             dir.toFile().deleteRecursively()
         }
     }
+
+    @Test
+    fun `read_text_file respects maxLines and maxBytes overrides and truncates with notice`() = runTest {
+        val dir = createTempDirectory("read-text-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            file.writeText("line1\nline2\nline3\nline4\nline5", Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildJsonObject {
+                    put("path", "sample.txt")
+                    put("maxLines", 2)
+                },
+                context(dir)
+            )
+
+            val success = assertSuccess(result)
+            assertTrue(success.contains("[Output truncated:"), "Expected truncation notice; got: $success")
+            assertEquals(true, result.details?.jsonObject?.get("truncated")?.jsonPrimitive?.boolean)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `read_text_file range header reflects actual returned lines when maxLines truncates content`() = runTest {
+        val dir = createTempDirectory("read-text-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            file.writeText("line1\nline2\nline3\nline4\nline5", Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildJsonObject {
+                    put("path", "sample.txt")
+                    put("maxLines", 2)
+                },
+                context(dir)
+            )
+
+            val success = assertSuccess(result)
+            assertTrue(success.startsWith("=== sample.txt (lines:1-2 of 5) ==="), "Header should reflect returned lines 1-2; got: $success")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `read_text_file with invalid maxLines or maxBytes returns invalid input error`() = runTest {
+        val dir = createTempDirectory("read-text-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            file.writeText("line1", Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildJsonObject {
+                    put("path", "sample.txt")
+                    put("maxLines", 0)
+                    put("maxBytes", -5)
+                },
+                context(dir)
+            )
+
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
 }

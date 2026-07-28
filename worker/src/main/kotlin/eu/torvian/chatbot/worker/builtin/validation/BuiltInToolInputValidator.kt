@@ -257,3 +257,36 @@ internal fun parseStringOrStringArray(
         }
     }
 }
+
+/**
+ * Truncates [text] to at most [maxBytes] UTF-8 bytes without splitting multi-byte characters.
+ *
+ * Runs in O(maxBytes) time with zero temporary byte array allocations. Stops scanning as soon
+ * as [maxBytes] is reached.
+ *
+ * @param text The input text string.
+ * @param maxBytes Maximum allowed UTF-8 bytes.
+ * @return A pair of `(truncatedText, actualByteSize)`.
+ */
+internal fun truncateBytes(text: String, maxBytes: Int): Pair<String, Int> {
+    if (maxBytes <= 0) return "" to 0
+
+    var byteCount = 0
+    var charIndex = 0
+    while (charIndex < text.length) {
+        val codePoint = text.codePointAt(charIndex)
+        val charCount = Character.charCount(codePoint)
+        val cpBytes = when {
+            codePoint <= 0x7F -> 1
+            codePoint <= 0x7FF -> 2
+            codePoint <= 0xFFFF -> 3
+            else -> 4
+        }
+        if (byteCount + cpBytes > maxBytes) {
+            return text.substring(0, charIndex) to byteCount
+        }
+        byteCount += cpBytes
+        charIndex += charCount
+    }
+    return text to byteCount
+}

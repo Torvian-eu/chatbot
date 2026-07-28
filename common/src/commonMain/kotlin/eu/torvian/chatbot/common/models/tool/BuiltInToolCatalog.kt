@@ -58,6 +58,18 @@ object BuiltInToolCatalog {
                             "Negative values count from the end. Use null for open-ended."
                         )
                     })
+                    put("maxLines", buildJsonObject {
+                        put("type", "integer")
+                        put("minimum", 1)
+                        put("default", 500)
+                        put("description", "Maximum number of lines to return.")
+                    })
+                    put("maxBytes", buildJsonObject {
+                        put("type", "integer")
+                        put("minimum", 1)
+                        put("default", 20000)
+                        put("description", "Maximum number of bytes to return.")
+                    })
                 })
                 put("required", buildJsonArray { add("path") })
             }
@@ -256,6 +268,18 @@ object BuiltInToolCatalog {
                             "Timeout in seconds. Defaults to the worker's builtInTools.defaultCommandTimeoutSeconds."
                         )
                     })
+                    put("maxLines", buildJsonObject {
+                        put("type", "integer")
+                        put("minimum", 1)
+                        put("default", 50)
+                        put("description", "Maximum number of output lines to return.")
+                    })
+                    put("maxBytes", buildJsonObject {
+                        put("type", "integer")
+                        put("minimum", 1)
+                        put("default", 2000)
+                        put("description", "Maximum number of output bytes to return.")
+                    })
                 })
                 put("required", buildJsonArray { add("command") })
             }
@@ -347,10 +371,23 @@ object BuiltInToolCatalog {
                         put("minimum", 1)
                         put("description", "Optional request timeout in seconds.")
                     })
+                    put("maxDownloadBytes", buildJsonObject {
+                        put("type", "integer")
+                        put("minimum", 1)
+                        put("default", 100000)
+                        put("description", "Maximum number of response bytes to download from the network.")
+                    })
                     put("maxBytes", buildJsonObject {
                         put("type", "integer")
                         put("minimum", 1)
-                        put("description", "Maximum number of response bytes to read before truncating or failing.")
+                        put("default", 20000)
+                        put("description", "Maximum number of text bytes returned in the tool output.")
+                    })
+                    put("maxLines", buildJsonObject {
+                        put("type", "integer")
+                        put("minimum", 1)
+                        put("default", 500)
+                        put("description", "Maximum number of text lines returned in the tool output.")
                     })
                     put("followRedirects", buildJsonObject {
                         put("type", "boolean")

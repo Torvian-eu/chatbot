@@ -105,7 +105,7 @@ class FetchWebContentToolTest {
             input(
                 "url" to JsonPrimitive("https://example.com/"),
                 "timeoutSeconds" to JsonPrimitive(15),
-                "maxBytes" to JsonPrimitive(2048),
+                "maxDownloadBytes" to JsonPrimitive(2048),
                 "followRedirects" to JsonPrimitive(false),
                 "returnMode" to JsonPrimitive("text"),
             ),
@@ -388,5 +388,39 @@ class FetchWebContentToolTest {
         )
         assertTrue(result.isError)
         assertEquals(BuiltInToolExecutionError.EXECUTION_FAILED, result.errorCode)
+    }
+
+    @Test
+    fun `fetch_web_content enforces maxDownloadBytes and presentation maxBytes maxLines truncation`() = runTest {
+        val longBody = "line1\nline2\nline3\nline4\nline5"
+        val fake = FakeWebFetchService(
+            mutableListOf(okResult("https://example.com/", longBody))
+        )
+        val result = toolWith(fake).execute(
+            input(
+                "url" to JsonPrimitive("https://example.com/"),
+                "maxDownloadBytes" to JsonPrimitive(50000),
+                "maxLines" to JsonPrimitive(2),
+            ),
+            context(),
+        )
+        val success = assertSuccess(result)
+        assertTrue(success.output!!.contains("[Output truncated:"), "Expected truncation notice; got: ${success.output}")
+        assertEquals(true, success.details?.jsonObject?.get("truncated")?.jsonPrimitive?.boolean)
+        assertEquals(50000, fake.requests.first().maxBytes)
+    }
+
+    @Test
+    fun `fetch_web_content with invalid maxDownloadBytes maxBytes or maxLines returns invalid input`() = runTest {
+        val fake = FakeWebFetchService(mutableListOf())
+        val result = toolWith(fake).execute(
+            input(
+                "url" to JsonPrimitive("https://example.com/"),
+                "maxDownloadBytes" to JsonPrimitive(0),
+            ),
+            context(),
+        )
+        assertTrue(result.isError)
+        assertEquals(BuiltInToolExecutionError.INVALID_INPUT, result.errorCode)
     }
 }
