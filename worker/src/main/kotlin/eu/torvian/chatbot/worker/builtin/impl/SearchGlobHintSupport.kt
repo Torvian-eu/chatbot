@@ -48,3 +48,41 @@ internal fun toRecursiveHintPattern(pattern: String): String =
         pattern.startsWith("*") -> "**${pattern.removePrefix("*")}"
         else -> "**$pattern"
     }
+
+/**
+ * Checks whether [pattern] is an unintentional leading slash-star-star pattern that excludes the starting directory.
+ *
+ * A pattern is considered an unintentional leading pattern if it starts with the prefix,
+ * does not start with recursive double asterisks after the prefix, and does not contain path separators (`/` or `\`).
+ *
+ * @param pattern The glob pattern to inspect.
+ * @return True if the pattern has an unintentional leading prefix that can be flattened.
+ */
+internal fun isUnintentionalLeadingSlashStarStar(pattern: String): Boolean {
+    val prefix = "**" + "/"
+    if (!pattern.startsWith(prefix)) return false
+    val rest = pattern.removePrefix(prefix)
+    if (rest.startsWith("**")) return false
+    if ('/' in rest || '\\' in rest) return false
+    return true
+}
+
+/**
+ * Transforms an unintentional leading slash-star-star glob pattern cleanly without producing triple asterisks.
+ *
+ * For example, a nested pattern with file extension becomes a top-level recursive pattern.
+ * If the pattern is not an unintentional leading pattern, it is returned unchanged.
+ *
+ * @param pattern The glob pattern to transform.
+ * @return The transformed glob pattern.
+ */
+internal fun fixLeadingSlashStarStar(pattern: String): String {
+    if (!isUnintentionalLeadingSlashStarStar(pattern)) return pattern
+    val prefix = "**" + "/"
+    val rest = pattern.removePrefix(prefix)
+    return if (rest.startsWith("*")) {
+        "**" + rest.removePrefix("*")
+    } else {
+        "**$rest"
+    }
+}

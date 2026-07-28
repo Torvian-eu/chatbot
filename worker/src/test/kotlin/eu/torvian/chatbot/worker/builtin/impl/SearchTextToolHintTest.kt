@@ -443,4 +443,54 @@ class SearchTextToolHintTest {
             dir.toFile().deleteRecursively()
         }
     }
+
+    @Test
+    fun `filePattern starting with slash star star shows warning hint even when matches found`() = runTest {
+        val dir = createTempDirectory("search-text-test")
+        try {
+            dir.resolve("file.kt").writeText("target", Charsets.UTF_8)
+            val sub = dir.resolve("sub").toFile()
+            sub.mkdirs()
+            dir.resolve("sub/other.kt").writeText("target", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("target", filePattern = "**/*.kt"), context(dir))
+            val success = assertSuccess(result)
+            assertTrue(success.output!!.contains("Hint: filePattern='**/*.kt' excludes files directly in the starting directory"), "output=${success.output}")
+            assertTrue(success.output!!.contains("use filePattern='**.kt'"), "output=${success.output}")
+            assertFalse(success.output!!.contains("***"), "output=${success.output}")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `filePattern starting with double star without slash does not show warning hint`() = runTest {
+        val dir = createTempDirectory("search-text-test")
+        try {
+            dir.resolve("file.kt").writeText("target", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("target", filePattern = "**.kt"), context(dir))
+            val success = assertSuccess(result)
+            assertFalse(success.output!!.contains("excludes files directly in the starting directory"), "output=${success.output}")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `intentional or nested filePattern slash star star patterns do not show warning hint`() = runTest {
+        val dir = createTempDirectory("search-text-test")
+        try {
+            dir.resolve("src").toFile().mkdirs()
+            dir.resolve("src/file.kt").writeText("target", Charsets.UTF_8)
+
+            for (p in listOf("**/**.kt", "**/src/*.kt", "**/*/*.kt")) {
+                val result = tool.execute(buildInput("target", filePattern = p), context(dir))
+                val success = assertSuccess(result)
+                assertFalse(success.output!!.contains("excludes files directly in the starting directory"), "pattern $p should not trigger hint; output=${success.output}")
+            }
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
 }

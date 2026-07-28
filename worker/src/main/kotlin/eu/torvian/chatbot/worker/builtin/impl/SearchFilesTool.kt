@@ -95,17 +95,26 @@ class SearchFilesTool : BuiltInTool {
                 }
             }
 
-            val hint =
-                if (matches.isEmpty() && Files.isDirectory(root) && pattern != null
-                    && looksLikeNonRecursiveTopLevelPattern(pattern) && hasSubdirectories(root)
-                ) {
-                    val suggested = toRecursiveHintPattern(pattern)
-                    "\n\nHint: '$pattern' only matches entries in the starting directory. If you intended a recursive search, use '$suggested'."
-                } else {
-                    ""
-                }
+            val hints = mutableListOf<String>()
 
-            val summary = if (truncated) "\n\n${matches.size} result(s) shown — truncated to $maxResults result(s)" else ""
+            if (pattern != null && isUnintentionalLeadingSlashStarStar(pattern)) {
+                hints += "Hint: '$pattern' excludes files directly in the starting directory because '**/ '" +
+                        " requires a directory separator. To include files in the starting directory as well" +
+                        ", use '${fixLeadingSlashStarStar(pattern)}'."
+            }
+
+            if (matches.isEmpty() && Files.isDirectory(root) && pattern != null
+                && looksLikeNonRecursiveTopLevelPattern(pattern) && hasSubdirectories(root)
+            ) {
+                val suggested = toRecursiveHintPattern(pattern)
+                hints += "Hint: '$pattern' only matches entries in the starting directory." +
+                        " If you intended a recursive search, use '$suggested'."
+            }
+
+            val hintSuffix = if (hints.isEmpty()) "" else "\n\n" + hints.joinToString("\n\n")
+
+            val summary =
+                if (truncated) "\n\n${matches.size} result(s) shown — truncated to $maxResults result(s)" else ""
 
             val details = buildJsonObject {
                 putJsonArray("matches") { matches.forEach { add(it) } }
@@ -115,9 +124,9 @@ class SearchFilesTool : BuiltInTool {
 
             BuiltInToolExecutionResult(
                 output = if (matches.isEmpty()) {
-                    if (hint.isNotEmpty()) "No matches found$hint" else ""
+                    if (hints.isNotEmpty()) "No matches found" + hintSuffix else ""
                 } else {
-                    matches.joinToString(separator = "\n") + summary
+                    matches.joinToString(separator = "\n") + summary + hintSuffix
                 },
                 details = details,
             )

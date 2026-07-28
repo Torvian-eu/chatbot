@@ -6,18 +6,10 @@ import eu.torvian.chatbot.worker.builtin.BuiltInTool
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
 import eu.torvian.chatbot.worker.builtin.WorkspacePathValidator
-import eu.torvian.chatbot.worker.builtin.validation.addUnknownParameterErrors
-import eu.torvian.chatbot.worker.builtin.validation.builtInToolErrorResult
-import eu.torvian.chatbot.worker.builtin.validation.invalidInputResult
-import eu.torvian.chatbot.worker.builtin.validation.parseOptionalBoolean
-import eu.torvian.chatbot.worker.builtin.validation.parseOptionalInt
-import eu.torvian.chatbot.worker.builtin.validation.parseOptionalString
-import eu.torvian.chatbot.worker.builtin.validation.parseRequiredString
-import eu.torvian.chatbot.worker.builtin.validation.parseStringOrStringArray
+import eu.torvian.chatbot.worker.builtin.validation.*
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
 import java.nio.ByteBuffer
-import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
 import java.nio.file.FileSystems
 import java.nio.file.Files
@@ -272,9 +264,19 @@ class SearchTextTool : BuiltInTool {
             }
 
             // Add hint when no matches found and filePattern looks like a non-recursive top-level pattern with subdirectories present
-            if (totalMatches == 0 && filePattern != null && Files.isDirectory(root) && looksLikeNonRecursiveTopLevelPattern(filePattern) && hasSubdirectories(root)) {
+            if (totalMatches == 0 && filePattern != null && Files.isDirectory(root)
+                && looksLikeNonRecursiveTopLevelPattern(filePattern) && hasSubdirectories(root)
+            ) {
                 val suggested = toRecursiveHintPattern(filePattern)
-                hints += "Hint: filePattern='$filePattern' only matches files in the starting directory. If you intended to search recursively, use filePattern='$suggested'."
+                hints += "Hint: filePattern='$filePattern' only matches files in the starting directory." +
+                        " If you intended to search recursively, use filePattern='$suggested'."
+            }
+
+            // Add hint when filePattern starts with **/ (regardless of whether matches were found or not)
+            if (filePattern != null && isUnintentionalLeadingSlashStarStar(filePattern)) {
+                hints += "Hint: filePattern='$filePattern' excludes files directly in the starting directory" +
+                        " because '**/ ' requires a directory separator. To include files in the starting" +
+                        " directory as well, use filePattern='${fixLeadingSlashStarStar(filePattern)}'."
             }
 
             val hintSuffix = if (hints.isEmpty()) "" else "\n\n" + hints.joinToString("\n\n")

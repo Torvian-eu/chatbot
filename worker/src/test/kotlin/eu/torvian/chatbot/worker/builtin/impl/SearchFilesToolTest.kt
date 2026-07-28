@@ -142,8 +142,10 @@ class SearchFilesToolTest {
             // `**/*.kt` matches files in subdirectories only (the root file "a.kt" has no slash).
             val result = tool.execute(buildInput("**/*.kt"), context(dir))
 
-            val matches = assertSuccess(result).lines().map { it.replace('\\', '/') }.toSet()
+            val output = assertSuccess(result)
+            val matches = result.details?.jsonObject?.get("matches")?.jsonArray?.map { it.jsonPrimitive.content }?.toSet()
             assertEquals(setOf("sub/b.kt"), matches)
+            assertTrue(output.contains("Hint: '**/*.kt' excludes files directly in the starting directory"))
         } finally {
             dir.toFile().deleteRecursively()
         }
@@ -539,6 +541,76 @@ class SearchFilesToolTest {
             assertTrue(output.contains("result(s) shown — truncated to 25 result(s)"), "expected truncation notice; got:\n$output")
             val details = result.details
             assertEquals(true, details?.jsonObject?.get("truncated")?.jsonPrimitive?.boolean)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `leading slash star star pattern shows warning hint even when matches found and suggests fix without triple stars`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            dir.resolve("a.kt").writeText("x", Charsets.UTF_8)
+            val sub = dir.resolve("sub").toFile()
+            sub.mkdirs()
+            dir.resolve("sub/b.kt").writeText("x", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("**/*.kt"), context(dir))
+            val output = assertSuccess(result)
+            assertTrue(output.contains("Hint: '**/*.kt' excludes files directly in the starting directory"), "output=$output")
+            assertTrue(output.contains("use '**.kt'"), "output=$output")
+            assertFalse(output.contains("***"), "output=$output")
+            // Also verify that top-level file a.kt was excluded by **/*.kt (glob semantics unchanged)
+            assertFalse(output.contains("a.kt"), "output=$output")
+            assertTrue(output.contains("sub/b.kt"), "output=$output")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `leading slash star star pattern like README md shows warning hint`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            val sub = dir.resolve("sub").toFile()
+            sub.mkdirs()
+            dir.resolve("sub/README.md").writeText("x", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("**/README.md"), context(dir))
+            val output = assertSuccess(result)
+            assertTrue(output.contains("Hint: '**/README.md' excludes files directly in the starting directory"), "output=$output")
+            assertTrue(output.contains("use '**README.md'"), "output=$output")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `pattern starting with double star without slash does not show leading slash warning hint`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            dir.resolve("a.kt").writeText("x", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("**.kt"), context(dir))
+            val output = assertSuccess(result)
+            assertFalse(output.contains("excludes files directly in the starting directory"), "output=$output")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `intentional or nested slash star star patterns do not show leading slash warning hint`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            dir.resolve("src").toFile().mkdirs()
+            dir.resolve("src/a.kt").writeText("x", Charsets.UTF_8)
+
+            for (p in listOf("**/**.kt", "**/src/*.kt", "**/*/*.kt")) {
+                val result = tool.execute(buildInput(p), context(dir))
+                val output = assertSuccess(result)
+                assertFalse(output.contains("excludes files directly in the starting directory"), "pattern $p should not trigger hint; output=$output")
+            }
         } finally {
             dir.toFile().deleteRecursively()
         }
