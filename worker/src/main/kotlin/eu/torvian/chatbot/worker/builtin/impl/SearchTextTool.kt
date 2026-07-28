@@ -257,7 +257,7 @@ class SearchTextTool : BuiltInTool {
                 put("skippedFiles", skippedFiles)
             }
 
-            // Build the summary and hint
+            // Build the summary and hints
             val summary = buildString {
                 append("\n\n")
                 append("$totalMatches match(es) across $searchedFiles file(s)")
@@ -265,15 +265,23 @@ class SearchTextTool : BuiltInTool {
                 if (truncated) append(" — truncated to $maxResults result(s)")
             }
 
+            val hints = mutableListOf<String>()
+
             // Add hint when no matches found in plain mode but query looks like regex
-            val hint = if (totalMatches == 0 && mode == "plain" && looksLikeRegex(query)) {
-                "\n\nHint: Your query appears to be a regular expression. If you want to use regex matching, set mode='regex'."
-            } else {
-                ""
+            if (totalMatches == 0 && mode == "plain" && looksLikeRegex(query)) {
+                hints += "Hint: Your query appears to be a regular expression. If you want to use regex matching, set mode='regex'."
             }
 
+            // Add hint when no matches found and filePattern looks like a non-recursive top-level pattern with subdirectories present
+            if (totalMatches == 0 && filePattern != null && Files.isDirectory(root) && looksLikeNonRecursiveTopLevelPattern(filePattern) && hasSubdirectories(root)) {
+                val suggested = toRecursiveHintPattern(filePattern)
+                hints += "Hint: filePattern='$filePattern' only matches files in the starting directory. If you intended to search recursively, use filePattern='$suggested'."
+            }
+
+            val hintSuffix = if (hints.isEmpty()) "" else "\n\n" + hints.joinToString("\n\n")
+
             BuiltInToolExecutionResult(
-                output = if (outputLines.isEmpty()) "No matches found" + hint else outputLines.joinToString("\n") + summary + hint,
+                output = if (outputLines.isEmpty()) "No matches found" + hintSuffix else outputLines.joinToString("\n") + summary + hintSuffix,
                 details = details,
             )
         }

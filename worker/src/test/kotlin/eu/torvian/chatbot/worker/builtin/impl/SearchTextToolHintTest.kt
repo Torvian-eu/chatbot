@@ -316,4 +316,131 @@ class SearchTextToolHintTest {
             dir.toFile().deleteRecursively()
         }
     }
+
+    @Test
+    fun `filePattern hint is shown when no matches and non-recursive pattern with subdirectories`() = runTest {
+        val dir = createTempDirectory("search-text-test")
+        try {
+            dir.resolve("root.txt").writeText("content", Charsets.UTF_8)
+            val sub = dir.resolve("sub").toFile()
+            sub.mkdirs()
+            dir.resolve("sub/file.kt").writeText("target", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("missing", filePattern = "*.kt"), context(dir))
+            val success = assertSuccess(result)
+            assertEquals(0, success.details!!["totalMatches"]?.jsonPrimitive?.int)
+            assertTrue(success.output!!.contains("Hint: filePattern='*.kt' only matches files in the starting directory"), "output=${success.output}")
+            assertTrue(success.output!!.contains("use filePattern='**.kt'"), "output=${success.output}")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `filePattern hint is shown for plain filename when no matches and subdirectories exist`() = runTest {
+        val dir = createTempDirectory("search-text-test")
+        try {
+            dir.resolve("root.txt").writeText("content", Charsets.UTF_8)
+            val sub = dir.resolve("sub").toFile()
+            sub.mkdirs()
+            dir.resolve("sub/README.md").writeText("target", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("missing", filePattern = "README.md"), context(dir))
+            val success = assertSuccess(result)
+            assertEquals(0, success.details!!["totalMatches"]?.jsonPrimitive?.int)
+            assertTrue(success.output!!.contains("Hint: filePattern='README.md' only matches files in the starting directory"), "output=${success.output}")
+            assertTrue(success.output!!.contains("use filePattern='**README.md'"), "output=${success.output}")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `no filePattern hint when pattern already contains double star`() = runTest {
+        val dir = createTempDirectory("search-text-test")
+        try {
+            dir.resolve("root.txt").writeText("content", Charsets.UTF_8)
+            val sub = dir.resolve("sub").toFile()
+            sub.mkdirs()
+            dir.resolve("sub/file.kt").writeText("target", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("missing", filePattern = "**.kt"), context(dir))
+            val success = assertSuccess(result)
+            assertEquals(0, success.details!!["totalMatches"]?.jsonPrimitive?.int)
+            assertFalse(success.output!!.contains("only matches files in the starting directory"), "output=${success.output}")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `no filePattern hint when pattern contains path separator`() = runTest {
+        val dir = createTempDirectory("search-text-test")
+        try {
+            dir.resolve("root.txt").writeText("content", Charsets.UTF_8)
+            val sub = dir.resolve("sub").toFile()
+            sub.mkdirs()
+            dir.resolve("sub/file.kt").writeText("target", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("missing", filePattern = "sub/*.kt"), context(dir))
+            val success = assertSuccess(result)
+            assertEquals(0, success.details!!["totalMatches"]?.jsonPrimitive?.int)
+            assertFalse(success.output!!.contains("only matches files in the starting directory"), "output=${success.output}")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `no filePattern hint when matches found`() = runTest {
+        val dir = createTempDirectory("search-text-test")
+        try {
+            dir.resolve("file.kt").writeText("target", Charsets.UTF_8)
+            val sub = dir.resolve("sub").toFile()
+            sub.mkdirs()
+            dir.resolve("sub/other.kt").writeText("target", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("target", filePattern = "*.kt"), context(dir))
+            val success = assertSuccess(result)
+            assertEquals(1, success.details!!["totalMatches"]?.jsonPrimitive?.int)
+            assertFalse(success.output!!.contains("only matches files in the starting directory"), "output=${success.output}")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `no filePattern hint when directory has no subdirectories`() = runTest {
+        val dir = createTempDirectory("search-text-test")
+        try {
+            dir.resolve("file.txt").writeText("content", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("missing", filePattern = "*.kt"), context(dir))
+            val success = assertSuccess(result)
+            assertEquals(0, success.details!!["totalMatches"]?.jsonPrimitive?.int)
+            assertFalse(success.output!!.contains("only matches files in the starting directory"), "output=${success.output}")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `both regex hint and filePattern hint can appear together`() = runTest {
+        val dir = createTempDirectory("search-text-test")
+        try {
+            dir.resolve("root.txt").writeText("content", Charsets.UTF_8)
+            val sub = dir.resolve("sub").toFile()
+            sub.mkdirs()
+            dir.resolve("sub/file.kt").writeText("target", Charsets.UTF_8)
+
+            // query looks like regex ("hello\\d+") and mode is plain, filePattern is "*.kt", no matches
+            val result = tool.execute(buildInput("hello\\d+", mode = "plain", filePattern = "*.kt"), context(dir))
+            val success = assertSuccess(result)
+            assertEquals(0, success.details!!["totalMatches"]?.jsonPrimitive?.int)
+            assertTrue(success.output!!.contains("Your query appears to be a regular expression"), "output=${success.output}")
+            assertTrue(success.output!!.contains("only matches files in the starting directory"), "output=${success.output}")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
 }

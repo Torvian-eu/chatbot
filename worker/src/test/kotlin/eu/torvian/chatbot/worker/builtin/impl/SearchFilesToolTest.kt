@@ -12,6 +12,7 @@ import kotlin.io.path.createTempDirectory
 import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -361,6 +362,105 @@ class SearchFilesToolTest {
 
             val matches = assertSuccess(result).lines().map { it.replace('\\', '/') }.toSet()
             assertEquals(setOf("src/Main.kt"), matches)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `no matches with non-recursive pattern and subdirectories shows hint for star pattern`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            dir.resolve("sub").toFile().mkdirs()
+            dir.resolve("sub/b.kt").writeText("x", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("*.kt"), context(dir))
+
+            val output = assertSuccess(result)
+            assertTrue(output.contains("No matches found"))
+            assertTrue(output.contains("Hint: '*.kt' only matches entries in the starting directory. If you intended a recursive search, use '**.kt'."))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `no matches with non-recursive pattern and subdirectories shows hint for plain filename`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            dir.resolve("sub").toFile().mkdirs()
+            dir.resolve("sub/README.md").writeText("x", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("README.md"), context(dir))
+
+            val output = assertSuccess(result)
+            assertTrue(output.contains("No matches found"))
+            assertTrue(output.contains("Hint: 'README.md' only matches entries in the starting directory. If you intended a recursive search, use '**README.md'."))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `no matches with double star pattern shows no hint`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            dir.resolve("sub").toFile().mkdirs()
+            dir.resolve("sub/b.kt").writeText("x", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("**.java"), context(dir))
+
+            val output = assertSuccess(result)
+            assertEquals("", output)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `no matches with path-aware pattern shows no hint`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            dir.resolve("src").toFile().mkdirs()
+            dir.resolve("src/Main.kt").writeText("x", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("src/*.java"), context(dir))
+
+            val output = assertSuccess(result)
+            assertEquals("", output)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `matches found in top directory shows no hint`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            dir.resolve("a.kt").writeText("x", Charsets.UTF_8)
+            dir.resolve("sub").toFile().mkdirs()
+            dir.resolve("sub/b.kt").writeText("x", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("*.kt"), context(dir))
+
+            val output = assertSuccess(result)
+            assertEquals("a.kt", output.replace('\\', '/'))
+            assertFalse(output.contains("Hint:"))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `no matches in flat directory with no subdirectories shows no hint`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            dir.resolve("a.txt").writeText("x", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("*.kt"), context(dir))
+
+            val output = assertSuccess(result)
+            assertEquals("", output)
         } finally {
             dir.toFile().deleteRecursively()
         }

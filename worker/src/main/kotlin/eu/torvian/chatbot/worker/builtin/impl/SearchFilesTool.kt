@@ -6,14 +6,9 @@ import eu.torvian.chatbot.worker.builtin.BuiltInTool
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
 import eu.torvian.chatbot.worker.builtin.WorkspacePathValidator
-import eu.torvian.chatbot.worker.builtin.validation.addUnknownParameterErrors
-import eu.torvian.chatbot.worker.builtin.validation.builtInToolErrorResult
-import eu.torvian.chatbot.worker.builtin.validation.invalidInputResult
-import eu.torvian.chatbot.worker.builtin.validation.parseOptionalString
-import eu.torvian.chatbot.worker.builtin.validation.parseRequiredString
-import eu.torvian.chatbot.worker.builtin.validation.parseStringOrStringArray
+import eu.torvian.chatbot.worker.builtin.validation.*
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.*
+import kotlinx.serialization.json.JsonObject
 import java.nio.file.FileSystems
 import java.nio.file.Files
 import java.nio.file.Path
@@ -65,7 +60,10 @@ class SearchFilesTool : BuiltInTool {
 
         return withContext(context.ioDispatcher) {
             if (!Files.exists(root)) {
-                return@withContext builtInToolErrorResult(BuiltInToolExecutionError.NOT_FOUND, "Starting path not found: $path")
+                return@withContext builtInToolErrorResult(
+                    BuiltInToolExecutionError.NOT_FOUND,
+                    "Starting path not found: $path"
+                )
             }
 
             val matcher: PathMatcher = FileSystems.getDefault().getPathMatcher("glob:$pattern")
@@ -88,9 +86,24 @@ class SearchFilesTool : BuiltInTool {
                 }
             }
 
+            val hint =
+                if (matches.isEmpty() && Files.isDirectory(root) && pattern != null
+                    && looksLikeNonRecursiveTopLevelPattern(pattern) && hasSubdirectories(root)
+                ) {
+                    val suggested = toRecursiveHintPattern(pattern)
+                    "\n\nHint: '$pattern' only matches entries in the starting directory. If you intended a recursive search, use '$suggested'."
+                } else {
+                    ""
+                }
+
             BuiltInToolExecutionResult(
-                output = if (matches.isEmpty()) "" else matches.joinToString(separator = "\n"),
+                output = if (matches.isEmpty()) {
+                    if (hint.isNotEmpty()) "No matches found$hint" else ""
+                } else {
+                    matches.joinToString(separator = "\n")
+                },
             )
         }
     }
+
 }
