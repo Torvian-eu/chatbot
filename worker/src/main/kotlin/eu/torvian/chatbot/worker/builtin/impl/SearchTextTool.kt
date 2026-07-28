@@ -41,14 +41,14 @@ import kotlin.io.path.isRegularFile
  */
 class SearchTextTool : BuiltInTool {
 
-    /**
-     * Maximum file size (in bytes) loaded into memory for searching.
-     *
-     * The v1 implementation reads each candidate file fully into memory (see [readUtf8Lines]); files
-     * larger than this budget are skipped to avoid memory pressure. Streaming/constant-memory search
-     * is intentionally out of scope for this step.
-     */
     private companion object {
+        /**
+         * Maximum file size (in bytes) loaded into memory for searching.
+         *
+         * The v1 implementation reads each candidate file fully into memory (see [readUtf8Lines]); files
+         * larger than this budget are skipped to avoid memory pressure. Streaming/constant-memory search
+         * is intentionally out of scope for this step.
+         */
         const val MAX_FILE_BYTES: Long = 1_048_576L // 1 MB
     }
 
@@ -80,7 +80,8 @@ class SearchTextTool : BuiltInTool {
             validationErrors.add("Argument 'query' must not be blank")
         }
 
-        val mode = input["mode"]?.jsonPrimitive?.content ?: "plain"
+        // Default mode is "regex"
+        val mode = input["mode"]?.jsonPrimitive?.content ?: "regex"
         if (mode !in setOf("plain", "regex")) {
             validationErrors.add("Invalid 'mode' value: $mode (expected 'plain' or 'regex')")
         }
@@ -263,6 +264,8 @@ class SearchTextTool : BuiltInTool {
                 put("searchedFiles", searchedFiles)
                 put("skippedFiles", skippedFiles)
             }
+
+            // Build the summary and hint
             val summary = buildString {
                 append("\n\n")
                 append("$totalMatches match(es) across $searchedFiles file(s)")
@@ -270,11 +273,47 @@ class SearchTextTool : BuiltInTool {
                 if (truncated) append(" — truncated to $maxResults result(s)")
             }
 
+            // Add hint when no matches found in plain mode but query looks like regex
+            val hint = if (totalMatches == 0 && mode == "plain" && looksLikeRegex(query)) {
+                "\n\nHint: Your query appears to be a regular expression. If you want to use regex matching, set mode='regex'."
+            } else {
+                ""
+            }
+
             BuiltInToolExecutionResult(
-                output = if (outputLines.isEmpty()) "No matches found" else outputLines.joinToString("\n") + summary,
+                output = if (outputLines.isEmpty()) "No matches found" + hint else outputLines.joinToString("\n") + summary + hint,
                 details = details,
             )
         }
+    }
+
+    /**
+     * Checks if the query appears to be a regular expression pattern.
+     *
+     * This is an intentionally coarse heuristic used only for deciding whether to show
+     * a helpful hint when a plain-text search finds no matches. It is not a regex parser
+     * and does not try to classify every edge case perfectly.
+     *
+     * @param query The search query to analyze.
+     * @return True if the query looks like it contains regex patterns.
+     */
+    private fun looksLikeRegex(query: String): Boolean {
+        if (query.isBlank()) return false
+
+        // Check for common regex escape sequences that are unlikely to be used in plain text.
+        val regexEscapes = listOf("\\d", "\\D", "\\w", "\\W", "\\s", "\\S", "\\b", "\\B")
+        if (regexEscapes.any(query::contains)) return true
+
+        // Check for anchors and alternation
+        if (query.startsWith("^") || query.endsWith("$") || "|" in query) return true
+
+        // Check for character classes like [a-z] or [^0-9]
+        if (Regex("""(?<!\\)\[[^]]+]""").containsMatchIn(query)) return true
+
+        // Check for quantifiers like *, +, ?, {n}, {n,}, {n,m}
+        if (Regex("""(?<!\\)[\w)\]](?:[+*?]|\{\d+(,\d*)?})""").containsMatchIn(query)) return true
+
+        return false
     }
 
     /**

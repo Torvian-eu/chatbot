@@ -258,7 +258,7 @@ object BuiltInToolCatalog {
                     put("mode", buildJsonObject {
                         put("type", "string")
                         put("enum", buildJsonArray { add("plain"); add("regex") })
-                        put("description", "Interpret 'query' as plain text (default) or a regular expression.")
+                        put("description", "Interpret 'query' as plain text or a regular expression (regex is the default).")
                     })
                     put("caseSensitive", buildJsonObject {
                         put("type", "boolean")
