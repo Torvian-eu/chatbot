@@ -199,6 +199,33 @@ class ReadTextFileToolTest {
     }
 
     @Test
+    fun `path and range objects are rejected as invalid input`() = runTest {
+        val dir = createTempDirectory("read-text-file-test")
+        try {
+            val result = tool.execute(
+                buildJsonObject {
+                    put("path", buildJsonObject { put("nested", "value") })
+                    put("range", buildJsonObject { put("nested", "value") })
+                },
+                context(dir)
+            )
+
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            val errorDetailsJson = result.errorDetails
+                ?: throw AssertionError("expected errorDetails with validation errors")
+            val errorDetails = Json.parseToJsonElement(errorDetailsJson).jsonObject
+            val errorsArray = errorDetails["validationErrors"]?.jsonArray
+                ?: throw AssertionError("expected validationErrors array in errorDetails")
+            assertEquals(2, errorsArray.size, "should have accumulated 2 validation errors")
+            val errorTexts = errorsArray.map { it.jsonPrimitive.content }
+            assertTrue(errorTexts.any { it.contains("path") && it.contains("string") })
+            assertTrue(errorTexts.any { it.contains("range") && it.contains("array") })
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun `requesting a non-existent file returns not found`() = runTest {
         val dir = createTempDirectory("read-text-file-test")
         try {

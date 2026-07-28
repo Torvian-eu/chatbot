@@ -6,6 +6,10 @@ import eu.torvian.chatbot.worker.builtin.BuiltInTool
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
 import eu.torvian.chatbot.worker.builtin.WorkspacePathValidator
+import eu.torvian.chatbot.worker.builtin.validation.addUnknownParameterErrors
+import eu.torvian.chatbot.worker.builtin.validation.builtInToolErrorResult
+import eu.torvian.chatbot.worker.builtin.validation.invalidInputResult
+import eu.torvian.chatbot.worker.builtin.validation.parseRequiredString
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
 import java.nio.file.Files
@@ -25,38 +29,19 @@ class WriteFileTool : BuiltInTool {
 
         // Define the set of known/valid parameter names for this tool
         val validKeys = setOf("path", "content")
-        // Check for unknown parameters
-        for (key in input.keys) {
-            if (key !in validKeys) {
-                validationErrors.add("Unknown parameter: '$key'")
-            }
-        }
+        addUnknownParameterErrors(input, validKeys, validationErrors)
 
-        val path = input["path"]?.jsonPrimitive?.content
-        if (path == null) {
-            validationErrors.add("Missing required argument: path")
-        }
-        val content = input["content"]?.jsonPrimitive?.content
-        if (content == null) {
-            validationErrors.add("Missing required argument: content")
-        }
+        val path = parseRequiredString(input, "path", validationErrors)
+        val content = parseRequiredString(input, "content", validationErrors)
 
         if (validationErrors.isNotEmpty()) {
-            return errorResult(
-                BuiltInToolExecutionError.INVALID_INPUT,
-                "Input validation failed with ${validationErrors.size} error(s):",
-                errorDetails = buildJsonObject {
-                    putJsonArray("validationErrors") {
-                        validationErrors.forEach { error -> add(error) }
-                    }
-                }.toString()
-            )
+            return invalidInputResult(validationErrors)
         }
 
         val target = try {
             WorkspacePathValidator.requireInside(context.workspace, path!!)
         } catch (e: Exception) {
-            return errorResult(
+            return builtInToolErrorResult(
                 BuiltInToolExecutionError.WORKSPACE_VIOLATION,
                 e.message ?: "Path rejected by workspace validator"
             )
@@ -68,11 +53,8 @@ class WriteFileTool : BuiltInTool {
                 Files.writeString(target, content!!, Charsets.UTF_8)
                 BuiltInToolExecutionResult(output = "Wrote ${content.length} bytes to $path")
             } catch (e: Exception) {
-                errorResult(BuiltInToolExecutionError.EXECUTION_FAILED, "Failed to write file: ${e.message}")
+                builtInToolErrorResult(BuiltInToolExecutionError.EXECUTION_FAILED, "Failed to write file: ${e.message}")
             }
         }
     }
-
-    private fun errorResult(code: String, message: String, errorDetails: String? = null): BuiltInToolExecutionResult =
-        BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code, errorDetails = errorDetails)
 }

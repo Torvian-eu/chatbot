@@ -6,6 +6,11 @@ import eu.torvian.chatbot.worker.builtin.BuiltInTool
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
 import eu.torvian.chatbot.worker.builtin.WorkspacePathValidator
+import eu.torvian.chatbot.worker.builtin.validation.addUnknownParameterErrors
+import eu.torvian.chatbot.worker.builtin.validation.builtInToolErrorResult
+import eu.torvian.chatbot.worker.builtin.validation.invalidInputResult
+import eu.torvian.chatbot.worker.builtin.validation.parseOptionalBoolean
+import eu.torvian.chatbot.worker.builtin.validation.parseOptionalString
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
 import java.nio.file.Files
@@ -31,38 +36,25 @@ class ListDirectoryTool : BuiltInTool {
 
         // Define the set of known/valid parameter names for this tool
         val validKeys = setOf("path", "sortBy", "includeSizes", "recursive")
-        // Check for unknown parameters
-        for (key in input.keys) {
-            if (key !in validKeys) {
-                validationErrors.add("Unknown parameter: '$key'")
-            }
-        }
+        addUnknownParameterErrors(input, validKeys, validationErrors)
 
-        val sortBy = input["sortBy"]?.jsonPrimitive?.content ?: "name"
+        val sortBy = parseOptionalString(input, "sortBy", validationErrors) ?: "name"
         if (sortBy !in setOf("name", "size")) {
             validationErrors.add("Invalid 'sortBy' value: $sortBy (expected 'name' or 'size')")
         }
 
-        if (validationErrors.isNotEmpty()) {
-            return errorResult(
-                BuiltInToolExecutionError.INVALID_INPUT,
-                "Input validation failed with ${validationErrors.size} error(s):",
-                errorDetails = buildJsonObject {
-                    putJsonArray("validationErrors") {
-                        validationErrors.forEach { error -> add(error) }
-                    }
-                }.toString()
-            )
-        }
+        val path = parseOptionalString(input, "path", validationErrors) ?: "."
+        val includeSizes = parseOptionalBoolean(input, "includeSizes", defaultValue = false, validationErrors)
+        val recursive = parseOptionalBoolean(input, "recursive", defaultValue = false, validationErrors)
 
-        val path = input["path"]?.jsonPrimitive?.content ?: "."
-        val includeSizes = input["includeSizes"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
-        val recursive = input["recursive"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
+        if (validationErrors.isNotEmpty()) {
+            return invalidInputResult(validationErrors)
+        }
 
         val root = try {
             WorkspacePathValidator.requireInside(context.workspace, path)
         } catch (e: Exception) {
-            return errorResult(
+            return builtInToolErrorResult(
                 BuiltInToolExecutionError.WORKSPACE_VIOLATION,
                 e.message ?: "Path rejected by workspace validator"
             )
@@ -70,7 +62,7 @@ class ListDirectoryTool : BuiltInTool {
 
         return withContext(context.ioDispatcher) {
             if (!Files.exists(root) || !root.isDirectory()) {
-                return@withContext errorResult(BuiltInToolExecutionError.NOT_FOUND, "Directory not found: $path")
+                return@withContext builtInToolErrorResult(BuiltInToolExecutionError.NOT_FOUND, "Directory not found: $path")
             }
 
             val listing = if (recursive) {
@@ -135,7 +127,4 @@ class ListDirectoryTool : BuiltInTool {
         }.thenBy { it.fileName.toString().lowercase() }
         return entries.sortedWith(comparator)
     }
-
-    private fun errorResult(code: String, message: String, errorDetails: String? = null): BuiltInToolExecutionResult =
-        BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code, errorDetails = errorDetails)
 }

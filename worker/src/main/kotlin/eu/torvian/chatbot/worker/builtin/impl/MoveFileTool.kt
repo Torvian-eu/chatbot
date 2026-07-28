@@ -6,6 +6,10 @@ import eu.torvian.chatbot.worker.builtin.BuiltInTool
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
 import eu.torvian.chatbot.worker.builtin.WorkspacePathValidator
+import eu.torvian.chatbot.worker.builtin.validation.addUnknownParameterErrors
+import eu.torvian.chatbot.worker.builtin.validation.builtInToolErrorResult
+import eu.torvian.chatbot.worker.builtin.validation.invalidInputResult
+import eu.torvian.chatbot.worker.builtin.validation.parseRequiredString
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
 import java.nio.file.Files
@@ -27,38 +31,19 @@ class MoveFileTool : BuiltInTool {
 
         // Define the set of known/valid parameter names for this tool
         val validKeys = setOf("source", "destination")
-        // Check for unknown parameters
-        for (key in input.keys) {
-            if (key !in validKeys) {
-                validationErrors.add("Unknown parameter: '$key'")
-            }
-        }
+        addUnknownParameterErrors(input, validKeys, validationErrors)
 
-        val source = input["source"]?.jsonPrimitive?.content
-        if (source == null) {
-            validationErrors.add("Missing required argument: source")
-        }
-        val destination = input["destination"]?.jsonPrimitive?.content
-        if (destination == null) {
-            validationErrors.add("Missing required argument: destination")
-        }
+        val source = parseRequiredString(input, "source", validationErrors)
+        val destination = parseRequiredString(input, "destination", validationErrors)
 
         if (validationErrors.isNotEmpty()) {
-            return errorResult(
-                BuiltInToolExecutionError.INVALID_INPUT,
-                "Input validation failed with ${validationErrors.size} error(s):",
-                errorDetails = buildJsonObject {
-                    putJsonArray("validationErrors") {
-                        validationErrors.forEach { error -> add(error) }
-                    }
-                }.toString()
-            )
+            return invalidInputResult(validationErrors)
         }
 
         val sourcePath = try {
             WorkspacePathValidator.requireInside(context.workspace, source!!)
         } catch (e: Exception) {
-            return errorResult(
+            return builtInToolErrorResult(
                 BuiltInToolExecutionError.WORKSPACE_VIOLATION,
                 "source: ${e.message}"
             )
@@ -66,7 +51,7 @@ class MoveFileTool : BuiltInTool {
         val destinationPath = try {
             WorkspacePathValidator.requireInside(context.workspace, destination!!)
         } catch (e: Exception) {
-            return errorResult(
+            return builtInToolErrorResult(
                 BuiltInToolExecutionError.WORKSPACE_VIOLATION,
                 "destination: ${e.message}"
             )
@@ -74,10 +59,10 @@ class MoveFileTool : BuiltInTool {
 
         return withContext(context.ioDispatcher) {
             if (!Files.exists(sourcePath)) {
-                return@withContext errorResult(BuiltInToolExecutionError.NOT_FOUND, "Source does not exist: $source")
+                return@withContext builtInToolErrorResult(BuiltInToolExecutionError.NOT_FOUND, "Source does not exist: $source")
             }
             if (Files.exists(destinationPath)) {
-                return@withContext errorResult(
+                return@withContext builtInToolErrorResult(
                     BuiltInToolExecutionError.ALREADY_EXISTS,
                     "Destination already exists: $destination"
                 )
@@ -87,11 +72,8 @@ class MoveFileTool : BuiltInTool {
                 Files.move(sourcePath, destinationPath)
                 BuiltInToolExecutionResult(output = "Moved $source to $destination")
             } catch (e: Exception) {
-                errorResult(BuiltInToolExecutionError.EXECUTION_FAILED, "Failed to move: ${e.message}")
+                builtInToolErrorResult(BuiltInToolExecutionError.EXECUTION_FAILED, "Failed to move: ${e.message}")
             }
         }
     }
-
-    private fun errorResult(code: String, message: String, errorDetails: String? = null): BuiltInToolExecutionResult =
-        BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code, errorDetails = errorDetails)
 }

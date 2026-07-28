@@ -6,6 +6,12 @@ import eu.torvian.chatbot.worker.builtin.BuiltInTool
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
 import eu.torvian.chatbot.worker.builtin.WorkspacePathValidator
+import eu.torvian.chatbot.worker.builtin.validation.addUnknownParameterErrors
+import eu.torvian.chatbot.worker.builtin.validation.builtInToolErrorResult
+import eu.torvian.chatbot.worker.builtin.validation.invalidInputResult
+import eu.torvian.chatbot.worker.builtin.validation.parseOptionalString
+import eu.torvian.chatbot.worker.builtin.validation.parseRequiredString
+import eu.torvian.chatbot.worker.builtin.validation.parseStringOrStringArray
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
 import java.nio.file.FileSystems
@@ -38,41 +44,20 @@ class SearchFilesTool : BuiltInTool {
 
         // Define the set of known/valid parameter names for this tool
         val validKeys = setOf("path", "pattern", "excludePatterns")
-        // Check for unknown parameters
-        for (key in input.keys) {
-            if (key !in validKeys) {
-                validationErrors.add("Unknown parameter: '$key'")
-            }
-        }
+        addUnknownParameterErrors(input, validKeys, validationErrors)
 
-        val pattern = input["pattern"]?.jsonPrimitive?.content
-        if (pattern == null) {
-            validationErrors.add("Missing required argument: pattern")
-        }
+        val pattern = parseRequiredString(input, "pattern", validationErrors)
+        val path = parseOptionalString(input, "path", validationErrors) ?: "."
+        val exclude = parseStringOrStringArray(input, "excludePatterns", validationErrors)
 
         if (validationErrors.isNotEmpty()) {
-            return errorResult(
-                BuiltInToolExecutionError.INVALID_INPUT,
-                "Input validation failed with ${validationErrors.size} error(s):",
-                errorDetails = buildJsonObject {
-                    putJsonArray("validationErrors") {
-                        validationErrors.forEach { error -> add(error) }
-                    }
-                }.toString()
-            )
-        }
-
-        val path = input["path"]?.jsonPrimitive?.content ?: "."
-        val exclude = when (val excludeInput = input["excludePatterns"]) {
-            is JsonArray -> excludeInput.mapNotNull { it.jsonPrimitive.contentOrNull }
-            is JsonPrimitive -> excludeInput.contentOrNull?.let { listOf(it) } ?: emptyList()
-            else -> emptyList()
+            return invalidInputResult(validationErrors)
         }
 
         val root = try {
             WorkspacePathValidator.requireInside(context.workspace, path)
         } catch (e: Exception) {
-            return errorResult(
+            return builtInToolErrorResult(
                 BuiltInToolExecutionError.WORKSPACE_VIOLATION,
                 e.message ?: "Path rejected by workspace validator"
             )
@@ -80,7 +65,7 @@ class SearchFilesTool : BuiltInTool {
 
         return withContext(context.ioDispatcher) {
             if (!Files.exists(root)) {
-                return@withContext errorResult(BuiltInToolExecutionError.NOT_FOUND, "Starting path not found: $path")
+                return@withContext builtInToolErrorResult(BuiltInToolExecutionError.NOT_FOUND, "Starting path not found: $path")
             }
 
             val matcher: PathMatcher = FileSystems.getDefault().getPathMatcher("glob:$pattern")
@@ -108,7 +93,4 @@ class SearchFilesTool : BuiltInTool {
             )
         }
     }
-
-    private fun errorResult(code: String, message: String, errorDetails: String? = null): BuiltInToolExecutionResult =
-        BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code, errorDetails = errorDetails)
 }

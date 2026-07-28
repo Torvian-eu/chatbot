@@ -8,6 +8,13 @@ import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
 import eu.torvian.chatbot.worker.builtin.net.WebFetchRequest
 import eu.torvian.chatbot.worker.builtin.net.WebFetchService
 import eu.torvian.chatbot.worker.builtin.net.mapWebFetchErrorToToolResult
+import eu.torvian.chatbot.worker.builtin.validation.addUnknownParameterErrors
+import eu.torvian.chatbot.worker.builtin.validation.builtInToolErrorResult
+import eu.torvian.chatbot.worker.builtin.validation.invalidInputResult
+import eu.torvian.chatbot.worker.builtin.validation.parseOptionalBoolean
+import eu.torvian.chatbot.worker.builtin.validation.parseOptionalIntOrNull
+import eu.torvian.chatbot.worker.builtin.validation.parseOptionalString
+import eu.torvian.chatbot.worker.builtin.validation.parseRequiredString
 import arrow.core.Either
 import kotlinx.serialization.json.*
 import java.nio.ByteBuffer
@@ -44,53 +51,32 @@ class FetchWebContentTool(
 
         // Define the set of known/valid parameter names for this tool
         val validKeys = setOf("url", "timeoutSeconds", "maxBytes", "followRedirects", "returnMode")
-        // Check for unknown parameters
-        for (key in input.keys) {
-            if (key !in validKeys) {
-                validationErrors.add("Unknown parameter: '$key'")
-            }
-        }
+        addUnknownParameterErrors(input, validKeys, validationErrors)
 
-        val url = input["url"]?.jsonPrimitive?.content
-        if (url == null) {
-            validationErrors.add("Missing required argument: url")
-        } else if (url.isBlank()) {
+        val url = parseRequiredString(input, "url", validationErrors)
+        if (url != null && url.isBlank()) {
             validationErrors.add("Argument 'url' must not be blank")
         }
 
-        val timeoutSeconds = input["timeoutSeconds"]?.jsonPrimitive?.content?.toIntOrNull()
+        val timeoutSeconds = parseOptionalIntOrNull(input, "timeoutSeconds", validationErrors)
         if (timeoutSeconds != null && timeoutSeconds <= 0) {
             validationErrors.add("Argument 'timeoutSeconds' must be > 0")
         }
 
-        val maxBytes = input["maxBytes"]?.jsonPrimitive?.content?.toIntOrNull()
+        val maxBytes = parseOptionalIntOrNull(input, "maxBytes", validationErrors)
         if (maxBytes != null && maxBytes <= 0) {
             validationErrors.add("Argument 'maxBytes' must be > 0")
         }
 
-        val followRedirects = when (val raw = input["followRedirects"]?.jsonPrimitive?.content) {
-            null -> true
-            else -> raw.toBooleanStrictOrNull()
-        }
-        if (input["followRedirects"]?.jsonPrimitive?.content != null && followRedirects == null) {
-            validationErrors.add("Argument 'followRedirects' must be a boolean (true/false)")
-        }
+        val followRedirects = parseOptionalBoolean(input, "followRedirects", defaultValue = true, validationErrors)
 
-        val returnMode = input["returnMode"]?.jsonPrimitive?.content ?: "auto"
+        val returnMode = parseOptionalString(input, "returnMode", validationErrors) ?: "auto"
         if (returnMode !in setOf("auto", "text", "html")) {
             validationErrors.add("Invalid 'returnMode' value: $returnMode (expected 'auto', 'text', or 'html')")
         }
 
         if (validationErrors.isNotEmpty()) {
-            return errorResult(
-                BuiltInToolExecutionError.INVALID_INPUT,
-                "Input validation failed with ${validationErrors.size} error(s):",
-                errorDetails = buildJsonObject {
-                    putJsonArray("validationErrors") {
-                        validationErrors.forEach { error -> add(error) }
-                    }
-                }.toString()
-            )
+            return invalidInputResult(validationErrors)
         }
 
         // --- Delegate to the shared web foundation (no URL/HTTP logic here) -----------------------
@@ -98,7 +84,7 @@ class FetchWebContentTool(
             url = url!!,
             timeoutSeconds = timeoutSeconds,
             maxBytes = maxBytes,
-            followRedirects = followRedirects!!,
+            followRedirects = followRedirects,
         )
 
         val result = when (val fetched = fetchService.fetch(request)) {
@@ -110,7 +96,7 @@ class FetchWebContentTool(
         val parsed = parseContentType(result.contentType)
         val (mediaType, charsetName) = parsed
         if (!isTextualContentType(mediaType)) {
-            return errorResult(
+            return builtInToolErrorResult(
                 BuiltInToolExecutionError.EXECUTION_FAILED,
                 "Response content type '${result.contentType ?: "<none>"}' is not textual; refusing to emit binary content."
             )
@@ -118,7 +104,7 @@ class FetchWebContentTool(
 
         val charset = resolveCharset(charsetName)
         val text = decodeText(result.bodyBytes, charset)
-            ?: return errorResult(
+            ?: return builtInToolErrorResult(
                 BuiltInToolExecutionError.EXECUTION_FAILED,
                 "Response body could not be decoded as text using charset '${charset.name()}'."
             )
@@ -209,9 +195,6 @@ class FetchWebContentTool(
             .onUnmappableCharacter(CodingErrorAction.REPORT)
         decoder.decode(ByteBuffer.wrap(bytes)).toString()
     }.getOrNull()
-
-    private fun errorResult(code: String, message: String, errorDetails: String? = null): BuiltInToolExecutionResult =
-        BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code, errorDetails = errorDetails)
 
     private companion object {
         /** Application media types that are reliably textual and safe to emit as text. */

@@ -6,6 +6,10 @@ import eu.torvian.chatbot.worker.builtin.BuiltInTool
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
 import eu.torvian.chatbot.worker.builtin.WorkspacePathValidator
+import eu.torvian.chatbot.worker.builtin.validation.addUnknownParameterErrors
+import eu.torvian.chatbot.worker.builtin.validation.builtInToolErrorResult
+import eu.torvian.chatbot.worker.builtin.validation.invalidInputResult
+import eu.torvian.chatbot.worker.builtin.validation.parseRequiredString
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
 import java.nio.file.Files
@@ -31,28 +35,37 @@ class ReadTextFileTool : BuiltInTool {
 
         // Define the set of known/valid parameter names for this tool
         val validKeys = setOf("path", "range")
-        // Check for unknown parameters
-        for (key in input.keys) {
-            if (key !in validKeys) {
-                validationErrors.add("Unknown parameter: '$key'")
-            }
-        }
+        addUnknownParameterErrors(input, validKeys, validationErrors)
 
-        val path = input["path"]?.jsonPrimitive?.contentOrNull()
-        if (path == null) {
-            validationErrors.add("Missing required argument: path")
-        }
+        val path = parseRequiredString(input, "path", validationErrors)
 
         // Parse the optional [start, end) range. Each element is either an integer or null
         // (open-ended), matching the JSON Schema's "type": ["integer", "null"] items.
         val range = input["range"]?.let { element ->
-            val array = element.jsonArray
-            if (array.size != 2) {
+            val array = element as? JsonArray
+            if (array == null) {
+                validationErrors.add("Argument 'range' must be an array [start, end)")
+                null
+            } else if (array.size != 2) {
                 validationErrors.add("Argument 'range' must contain exactly two elements [start, end)")
                 null
             } else {
-                val start = array[0].intOrNull()
-                val end = array[1].intOrNull()
+                val parseBound = { item: JsonElement, label: String ->
+                    when (item) {
+                        JsonNull -> null
+                        !is JsonPrimitive -> {
+                            validationErrors.add("Argument '$label' must be an integer or null")
+                            null
+                        }
+
+                        else -> item.content.toIntOrNull() ?: run {
+                            validationErrors.add("Argument '$label' must be an integer or null")
+                            null
+                        }
+                    }
+                }
+                val start = parseBound(array[0], "range[0]")
+                val end = parseBound(array[1], "range[1]")
                 if (start == null && end == null) {
                     validationErrors.add("Argument 'range' must specify at least a start or an end")
                     null
@@ -63,21 +76,13 @@ class ReadTextFileTool : BuiltInTool {
         }
 
         if (validationErrors.isNotEmpty()) {
-            return errorResult(
-                BuiltInToolExecutionError.INVALID_INPUT,
-                "Input validation failed with ${validationErrors.size} error(s):",
-                errorDetails = buildJsonObject {
-                    putJsonArray("validationErrors") {
-                        validationErrors.forEach { error -> add(error) }
-                    }
-                }.toString()
-            )
+            return invalidInputResult(validationErrors)
         }
 
         val target = try {
             WorkspacePathValidator.requireInside(context.workspace, path!!)
         } catch (e: Exception) {
-            return errorResult(
+            return builtInToolErrorResult(
                 BuiltInToolExecutionError.WORKSPACE_VIOLATION,
                 e.message ?: "Path rejected by workspace validator"
             )
@@ -101,9 +106,9 @@ class ReadTextFileTool : BuiltInTool {
                     output = if (body.isEmpty()) header else "$header\n$body",
                 )
             } catch (_: NoSuchFileException) {
-                errorResult(BuiltInToolExecutionError.NOT_FOUND, "File not found: $path")
+                builtInToolErrorResult(BuiltInToolExecutionError.NOT_FOUND, "File not found: $path")
             } catch (e: Exception) {
-                errorResult(BuiltInToolExecutionError.EXECUTION_FAILED, "Failed to read file: ${e.message}")
+                builtInToolErrorResult(BuiltInToolExecutionError.EXECUTION_FAILED, "Failed to read file: ${e.message}")
             }
         }
     }
@@ -133,10 +138,6 @@ class ReadTextFileTool : BuiltInTool {
         return start to maxOf(start, end)
     }
 
-    private fun JsonPrimitive.contentOrNull(): String? = if (isString) content else null
-
-    private fun JsonElement.intOrNull(): Int? = jsonPrimitive.content.toIntOrNull()
-
     /**
      * Builds a single concise header line describing which 1-based lines were read from [path].
      *
@@ -160,7 +161,4 @@ class ReadTextFileTool : BuiltInTool {
         }
         return "=== $path (lines:$range of $total) ==="
     }
-
-    private fun errorResult(code: String, message: String, errorDetails: String? = null): BuiltInToolExecutionResult =
-        BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code, errorDetails = errorDetails)
 }

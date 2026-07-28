@@ -5,6 +5,12 @@ import eu.torvian.chatbot.common.models.tool.BuiltInToolCatalog
 import eu.torvian.chatbot.worker.builtin.BuiltInTool
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
+import eu.torvian.chatbot.worker.builtin.validation.addUnknownParameterErrors
+import eu.torvian.chatbot.worker.builtin.validation.builtInToolErrorResult
+import eu.torvian.chatbot.worker.builtin.validation.invalidInputResult
+import eu.torvian.chatbot.worker.builtin.validation.parseOptionalLong
+import eu.torvian.chatbot.worker.builtin.validation.parseRequiredString
+import eu.torvian.chatbot.worker.builtin.validation.parseStringOrStringArray
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
 import java.util.concurrent.TimeUnit
@@ -28,17 +34,10 @@ class RunCommandTool : BuiltInTool {
 
         // Define the set of known/valid parameter names for this tool
         val validKeys = setOf("command", "args", "timeout")
-        // Check for unknown parameters
-        for (key in input.keys) {
-            if (key !in validKeys) {
-                validationErrors.add("Unknown parameter: '$key'")
-            }
-        }
+        addUnknownParameterErrors(input, validKeys, validationErrors)
 
-        val command = input["command"]?.jsonPrimitive?.content
-        if (command == null) {
-            validationErrors.add("Missing required argument: command")
-        } else {
+        val command = parseRequiredString(input, "command", validationErrors)
+        if (command != null) {
             // Detect common LLM misuse: the full command line (with arguments) was placed
             // in the `command` field instead of being split into `command` + `args`.
             // Valid executable names passed to ProcessBuilder (which does not invoke a shell)
@@ -55,29 +54,20 @@ class RunCommandTool : BuiltInTool {
             }
         }
 
-        val timeoutSeconds = input["timeout"]?.jsonPrimitive?.content?.toLongOrNull()
-            ?: context.defaultCommandTimeoutSeconds
+        val timeoutSeconds = parseOptionalLong(
+            input,
+            "timeout",
+            defaultValue = context.defaultCommandTimeoutSeconds,
+            validationErrors = validationErrors,
+        )
+        val args = parseStringOrStringArray(input, "args", validationErrors)
 
         if (timeoutSeconds <= 0) {
             validationErrors.add("timeout must be > 0 seconds")
         }
 
         if (validationErrors.isNotEmpty()) {
-            return errorResult(
-                BuiltInToolExecutionError.INVALID_INPUT,
-                "Input validation failed with ${validationErrors.size} error(s):",
-                errorDetails = buildJsonObject {
-                    putJsonArray("validationErrors") {
-                        validationErrors.forEach { error -> add(error) }
-                    }
-                }.toString()
-            )
-        }
-
-        val args = when (val argsInput = input["args"]) {
-            is JsonArray -> argsInput.mapNotNull { it.jsonPrimitive.contentOrNull }
-            is JsonPrimitive -> argsInput.contentOrNull?.let { listOf(it) } ?: emptyList()
-            else -> emptyList()
+            return invalidInputResult(validationErrors)
         }
 
         return withContext(context.ioDispatcher) {
@@ -89,7 +79,7 @@ class RunCommandTool : BuiltInTool {
                 val finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS)
                 if (!finished) {
                     process.destroyForcibly()
-                    return@withContext errorResult(
+                    return@withContext builtInToolErrorResult(
                         BuiltInToolExecutionError.TIMEOUT,
                         "Command exceeded timeout of $timeoutSeconds seconds"
                     )
@@ -117,11 +107,8 @@ class RunCommandTool : BuiltInTool {
                     details = details,
                 )
             } catch (e: Exception) {
-                errorResult(BuiltInToolExecutionError.EXECUTION_FAILED, "Failed to run command: ${e.message}")
+                builtInToolErrorResult(BuiltInToolExecutionError.EXECUTION_FAILED, "Failed to run command: ${e.message}")
             }
         }
     }
-
-    private fun errorResult(code: String, message: String, errorDetails: String? = null): BuiltInToolExecutionResult =
-        BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code, errorDetails = errorDetails)
 }

@@ -225,6 +225,182 @@ class SearchTextToolValidationTest {
     }
 
     @Test
+    fun `query array is rejected as invalid input`() = runTest {
+        val dir = createTempDirectory("search-text-test")
+        try {
+            val result = tool.execute(
+                buildJsonObject {
+                    putJsonArray("query") { add("hello") }
+                },
+                context(dir)
+            )
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            assertTrue(result.errorDetails!!.contains("Argument 'query' must be a string"))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `path object is rejected as invalid input`() = runTest {
+        val dir = createTempDirectory("search-text-test")
+        try {
+            val result = tool.execute(
+                buildJsonObject {
+                    put("query", "hello")
+                    put("path", buildJsonObject { put("nested", "value") })
+                },
+                context(dir)
+            )
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            assertTrue(result.errorDetails!!.contains("Argument 'path' must be a string"))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `mode array is rejected as invalid input`() = runTest {
+        val dir = createTempDirectory("search-text-test")
+        try {
+            val result = tool.execute(
+                buildJsonObject {
+                    put("query", "hello")
+                    putJsonArray("mode") { add("plain") }
+                },
+                context(dir)
+            )
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            assertTrue(result.errorDetails!!.contains("Argument 'mode' must be a string"))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `filePattern object is rejected as invalid input`() = runTest {
+        val dir = createTempDirectory("search-text-test")
+        try {
+            val result = tool.execute(
+                buildJsonObject {
+                    put("query", "hello")
+                    put("filePattern", buildJsonObject { put("nested", "value") })
+                },
+                context(dir)
+            )
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            assertTrue(result.errorDetails!!.contains("Argument 'filePattern' must be a string"))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `excludePatterns object is rejected as invalid input`() = runTest {
+        val dir = createTempDirectory("search-text-test")
+        try {
+            val result = tool.execute(
+                buildJsonObject {
+                    put("query", "hello")
+                    put("excludePatterns", buildJsonObject { put("nested", "value") })
+                },
+                context(dir)
+            )
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            assertTrue(result.errorDetails!!.contains("Argument 'excludePatterns' must be a string or array of strings"))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `excludePatterns array with a non-string element is rejected as invalid input`() = runTest {
+        val dir = createTempDirectory("search-text-test")
+        try {
+            val result = tool.execute(
+                buildJsonObject {
+                    put("query", "hello")
+                    putJsonArray("excludePatterns") {
+                        add("*.tmp")
+                        add(buildJsonObject { put("nested", "value") })
+                    }
+                },
+                context(dir)
+            )
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            assertTrue(result.errorDetails!!.contains("Argument 'excludePatterns[1]' must be a string"))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `caseSensitive array is rejected as invalid input`() = runTest {
+        val dir = createTempDirectory("search-text-test")
+        try {
+            val result = tool.execute(
+                buildJsonObject {
+                    put("query", "hello")
+                    putJsonArray("caseSensitive") { add(true) }
+                },
+                context(dir)
+            )
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            assertTrue(result.errorDetails!!.contains("Argument 'caseSensitive' must be a boolean"))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `contextBefore array and contextAfter object are rejected together as invalid input`() = runTest {
+        val dir = createTempDirectory("search-text-test")
+        try {
+            val result = tool.execute(
+                buildJsonObject {
+                    put("query", "hello")
+                    putJsonArray("contextBefore") { add(1) }
+                    put("contextAfter", buildJsonObject { put("nested", "value") })
+                },
+                context(dir)
+            )
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            assertTrue(result.errorDetails!!.contains("Argument 'contextBefore' must be an integer"))
+            assertTrue(result.errorDetails!!.contains("Argument 'contextAfter' must be an integer"))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `multiple malformed fields accumulate validation errors`() = runTest {
+        val dir = createTempDirectory("search-text-test")
+        try {
+            val result = tool.execute(
+                buildJsonObject {
+                    putJsonArray("query") { add("hello") }
+                    put("path", buildJsonObject { put("nested", "value") })
+                    putJsonArray("mode") { add("plain") }
+                    put("filePattern", buildJsonObject { put("nested", "value") })
+                    put("excludePatterns", buildJsonObject { put("nested", "value") })
+                    putJsonArray("caseSensitive") { add(true) }
+                },
+                context(dir)
+            )
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            val details = result.errorDetails!!
+            assertTrue(details.contains("Argument 'query' must be a string"))
+            assertTrue(details.contains("Argument 'path' must be a string"))
+            assertTrue(details.contains("Argument 'mode' must be a string"))
+            assertTrue(details.contains("Argument 'filePattern' must be a string"))
+            assertTrue(details.contains("Argument 'excludePatterns' must be a string or array of strings"))
+            assertTrue(details.contains("Argument 'caseSensitive' must be a boolean"))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun `searching from a file path reports a non-empty file path in output and details`() = runTest {
         val dir = createTempDirectory("search-text-test")
         try {

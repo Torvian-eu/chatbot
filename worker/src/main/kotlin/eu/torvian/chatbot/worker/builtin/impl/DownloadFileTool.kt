@@ -9,6 +9,12 @@ import eu.torvian.chatbot.worker.builtin.WorkspacePathValidator
 import eu.torvian.chatbot.worker.builtin.net.WebFetchRequest
 import eu.torvian.chatbot.worker.builtin.net.WebFetchService
 import eu.torvian.chatbot.worker.builtin.net.mapWebFetchErrorToToolResult
+import eu.torvian.chatbot.worker.builtin.validation.addUnknownParameterErrors
+import eu.torvian.chatbot.worker.builtin.validation.builtInToolErrorResult
+import eu.torvian.chatbot.worker.builtin.validation.invalidInputResult
+import eu.torvian.chatbot.worker.builtin.validation.parseOptionalBoolean
+import eu.torvian.chatbot.worker.builtin.validation.parseOptionalIntOrNull
+import eu.torvian.chatbot.worker.builtin.validation.parseRequiredString
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
 import java.nio.file.Files
@@ -45,70 +51,41 @@ class DownloadFileTool(
 
         // Define the set of known/valid parameter names for this tool
         val validKeys = setOf("url", "path", "overwrite", "timeoutSeconds", "maxBytes", "followRedirects")
-        // Check for unknown parameters
-        for (key in input.keys) {
-            if (key !in validKeys) {
-                validationErrors.add("Unknown parameter: '$key'")
-            }
-        }
+        addUnknownParameterErrors(input, validKeys, validationErrors)
 
-        val url = input["url"]?.jsonPrimitive?.content
-        if (url == null) {
-            validationErrors.add("Missing required argument: url")
-        } else if (url.isBlank()) {
+        val url = parseRequiredString(input, "url", validationErrors)
+        if (url != null && url.isBlank()) {
             validationErrors.add("Argument 'url' must not be blank")
         }
 
-        val path = input["path"]?.jsonPrimitive?.content
-        if (path == null) {
-            validationErrors.add("Missing required argument: path")
-        } else if (path.isBlank()) {
+        val path = parseRequiredString(input, "path", validationErrors)
+        if (path != null && path.isBlank()) {
             validationErrors.add("Argument 'path' must not be blank")
         }
 
-        val overwrite = when (val raw = input["overwrite"]?.jsonPrimitive?.content) {
-            null -> false
-            else -> raw.toBooleanStrictOrNull() ?: run {
-                validationErrors.add("Argument 'overwrite' must be a boolean (true/false)")
-                null
-            }
-        }
+        val overwrite = parseOptionalBoolean(input, "overwrite", defaultValue = false, validationErrors)
 
-        val timeoutSeconds = input["timeoutSeconds"]?.jsonPrimitive?.content?.toIntOrNull()
+        val timeoutSeconds = parseOptionalIntOrNull(input, "timeoutSeconds", validationErrors)
         if (timeoutSeconds != null && timeoutSeconds <= 0) {
             validationErrors.add("Argument 'timeoutSeconds' must be > 0")
         }
 
-        val maxBytes = input["maxBytes"]?.jsonPrimitive?.content?.toIntOrNull()
+        val maxBytes = parseOptionalIntOrNull(input, "maxBytes", validationErrors)
         if (maxBytes != null && maxBytes <= 0) {
             validationErrors.add("Argument 'maxBytes' must be > 0")
         }
 
-        val followRedirects = when (val raw = input["followRedirects"]?.jsonPrimitive?.content) {
-            null -> true
-            else -> raw.toBooleanStrictOrNull() ?: run {
-                validationErrors.add("Argument 'followRedirects' must be a boolean (true/false)")
-                null
-            }
-        }
+        val followRedirects = parseOptionalBoolean(input, "followRedirects", defaultValue = true, validationErrors)
 
         if (validationErrors.isNotEmpty()) {
-            return errorResult(
-                BuiltInToolExecutionError.INVALID_INPUT,
-                "Input validation failed with ${validationErrors.size} error(s):",
-                errorDetails = buildJsonObject {
-                    putJsonArray("validationErrors") {
-                        validationErrors.forEach { error -> add(error) }
-                    }
-                }.toString()
-            )
+            return invalidInputResult(validationErrors)
         }
 
         // --- Resolve & validate the destination through the shared workspace model -----------------
         val target = try {
             WorkspacePathValidator.requireInside(context.workspace, path!!)
         } catch (e: Exception) {
-            return errorResult(
+            return builtInToolErrorResult(
                 BuiltInToolExecutionError.WORKSPACE_VIOLATION,
                 e.message ?: "Path rejected by workspace validator"
             )
@@ -119,7 +96,7 @@ class DownloadFileTool(
             url = url!!,
             timeoutSeconds = timeoutSeconds,
             maxBytes = maxBytes,
-            followRedirects = followRedirects!!,
+            followRedirects = followRedirects,
         )
 
         val result = when (val fetched = fetchService.fetch(request)) {
@@ -132,14 +109,14 @@ class DownloadFileTool(
                 // Reject writing onto an existing directory; a regular file is only overwritten when
                 // explicitly requested, otherwise it is a conflict (ALREADY_EXISTS).
                 if (target.exists() && target.isDirectory()) {
-                    return@withContext errorResult(
+                    return@withContext builtInToolErrorResult(
                         BuiltInToolExecutionError.EXECUTION_FAILED,
                         "Destination '$path' is a directory, not a file"
                     )
                 }
                 val alreadyExisted = target.exists()
-                if (alreadyExisted && !overwrite!!) {
-                    return@withContext errorResult(
+                if (alreadyExisted && !overwrite) {
+                    return@withContext builtInToolErrorResult(
                         BuiltInToolExecutionError.ALREADY_EXISTS,
                         "Destination '$path' already exists and overwrite is false"
                     )
@@ -164,11 +141,8 @@ class DownloadFileTool(
                     details = details,
                 )
             } catch (e: Exception) {
-                errorResult(BuiltInToolExecutionError.EXECUTION_FAILED, "Failed to write file: ${e.message}")
+                builtInToolErrorResult(BuiltInToolExecutionError.EXECUTION_FAILED, "Failed to write file: ${e.message}")
             }
         }
     }
-
-    private fun errorResult(code: String, message: String, errorDetails: String? = null): BuiltInToolExecutionResult =
-        BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code, errorDetails = errorDetails)
 }

@@ -276,6 +276,33 @@ class RunCommandToolTest {
     }
 
     @Test
+    fun `malformed command and args values are rejected as invalid input`() = runTest {
+        val dir = createTempDirectory("run-command-test")
+        try {
+            val result = tool.execute(
+                buildJsonObject {
+                    put("command", buildJsonObject { put("nested", "value") })
+                    put("args", buildJsonObject { put("nested", "value") })
+                },
+                context(dir)
+            )
+
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            val errorDetailsJson = result.errorDetails
+                ?: throw AssertionError("expected errorDetails with validation errors")
+            val errorDetails = Json.parseToJsonElement(errorDetailsJson).jsonObject
+            val errorsArray = errorDetails["validationErrors"]?.jsonArray
+                ?: throw AssertionError("expected validationErrors array in errorDetails")
+            assertEquals(2, errorsArray.size, "should have accumulated 2 validation errors")
+            val errorTexts = errorsArray.map { it.jsonPrimitive.content }
+            assertTrue(errorTexts.any { it.contains("command") && it.contains("string") })
+            assertTrue(errorTexts.any { it.contains("args") && it.contains("string or array of strings") })
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun `unknown parameter returns invalid input error`() = runTest {
         val dir = createTempDirectory("run-command-test")
         try {

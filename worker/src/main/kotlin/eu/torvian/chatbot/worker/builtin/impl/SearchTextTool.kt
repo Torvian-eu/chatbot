@@ -6,6 +6,15 @@ import eu.torvian.chatbot.worker.builtin.BuiltInTool
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
 import eu.torvian.chatbot.worker.builtin.WorkspacePathValidator
+import eu.torvian.chatbot.worker.builtin.validation.addUnknownParameterErrors
+import eu.torvian.chatbot.worker.builtin.validation.builtInToolErrorResult
+import eu.torvian.chatbot.worker.builtin.validation.invalidInputResult
+import eu.torvian.chatbot.worker.builtin.validation.parseOptionalBoolean
+import eu.torvian.chatbot.worker.builtin.validation.parseOptionalInt
+import eu.torvian.chatbot.worker.builtin.validation.parseOptionalIntOrNull
+import eu.torvian.chatbot.worker.builtin.validation.parseOptionalString
+import eu.torvian.chatbot.worker.builtin.validation.parseRequiredString
+import eu.torvian.chatbot.worker.builtin.validation.parseStringOrStringArray
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
 import java.nio.ByteBuffer
@@ -66,70 +75,53 @@ class SearchTextTool : BuiltInTool {
             "path", "query", "mode", "caseSensitive", "wholeWord",
             "filePattern", "excludePatterns", "contextBefore", "contextAfter", "maxResults"
         )
-        // Check for unknown parameters
-        for (key in input.keys) {
-            if (key !in validKeys) {
-                validationErrors.add("Unknown parameter: '$key'")
-            }
-        }
+        addUnknownParameterErrors(input, validKeys, validationErrors)
 
-        val query = input["query"]?.jsonPrimitive?.content
-        if (query == null) {
-            validationErrors.add("Missing required argument: query")
-        } else if (query.isBlank()) {
+        val query = parseRequiredString(input, "query", validationErrors)
+        if (query != null && query.isBlank()) {
             validationErrors.add("Argument 'query' must not be blank")
         }
 
         // Default mode is "regex"
-        val mode = input["mode"]?.jsonPrimitive?.content ?: "regex"
+        val mode = parseOptionalString(input, "mode", validationErrors) ?: "regex"
         if (mode !in setOf("plain", "regex")) {
             validationErrors.add("Invalid 'mode' value: $mode (expected 'plain' or 'regex')")
         }
 
-        val caseSensitive = input["caseSensitive"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
-        val wholeWord = input["wholeWord"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
+        // Optional boolean fields: validate if present, otherwise use defaults
+        val caseSensitive = parseOptionalBoolean(input, "caseSensitive", defaultValue = false, validationErrors)
+        val wholeWord = parseOptionalBoolean(input, "wholeWord", defaultValue = false, validationErrors)
         if (mode == "regex" && wholeWord) {
             validationErrors.add("Argument 'wholeWord' is not supported in 'regex' mode")
         }
 
-        val contextBefore = input["contextBefore"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
+        // Optional integer fields: validate if present, otherwise use defaults
+        val contextBefore = parseOptionalInt(input, "contextBefore", defaultValue = 0, validationErrors)
         if (contextBefore < 0) {
             validationErrors.add("Argument 'contextBefore' must be >= 0")
         }
-        val contextAfter = input["contextAfter"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
+        val contextAfter = parseOptionalInt(input, "contextAfter", defaultValue = 0, validationErrors)
         if (contextAfter < 0) {
             validationErrors.add("Argument 'contextAfter' must be >= 0")
         }
 
-        val maxResults = input["maxResults"]?.jsonPrimitive?.content?.toIntOrNull()
+        val maxResults = parseOptionalIntOrNull(input, "maxResults", validationErrors)
         if (maxResults != null && maxResults < 1) {
             validationErrors.add("Argument 'maxResults' must be >= 1")
         }
 
-        if (validationErrors.isNotEmpty()) {
-            return errorResult(
-                BuiltInToolExecutionError.INVALID_INPUT,
-                "Input validation failed with ${validationErrors.size} error(s):",
-                errorDetails = buildJsonObject {
-                    putJsonArray("validationErrors") {
-                        validationErrors.forEach { error -> add(error) }
-                    }
-                }.toString()
-            )
-        }
+        val path = parseOptionalString(input, "path", validationErrors) ?: "."
+        val filePattern = parseOptionalString(input, "filePattern", validationErrors)
+        val excludePatterns = parseStringOrStringArray(input, "excludePatterns", validationErrors)
 
-        val path = input["path"]?.jsonPrimitive?.content ?: "."
-        val filePattern = input["filePattern"]?.jsonPrimitive?.content
-        val excludePatterns = when (val excludeInput = input["excludePatterns"]) {
-            is JsonArray -> excludeInput.mapNotNull { it.jsonPrimitive.contentOrNull }
-            is JsonPrimitive -> excludeInput.contentOrNull?.let { listOf(it) } ?: emptyList()
-            else -> emptyList()
+        if (validationErrors.isNotEmpty()) {
+            return invalidInputResult(validationErrors)
         }
 
         val root = try {
             WorkspacePathValidator.requireInside(context.workspace, path)
         } catch (e: Exception) {
-            return errorResult(
+            return builtInToolErrorResult(
                 BuiltInToolExecutionError.WORKSPACE_VIOLATION,
                 e.message ?: "Path rejected by workspace validator"
             )
@@ -139,7 +131,7 @@ class SearchTextTool : BuiltInTool {
         val regex = try {
             compileRegex(query!!, mode, caseSensitive, wholeWord)
         } catch (e: Exception) {
-            return errorResult(
+            return builtInToolErrorResult(
                 BuiltInToolExecutionError.INVALID_INPUT,
                 "Invalid ${if (mode == "regex") "regular expression" else "pattern"}: ${e.message}"
             )
@@ -150,7 +142,7 @@ class SearchTextTool : BuiltInTool {
 
         return withContext(context.ioDispatcher) {
             if (!Files.exists(root)) {
-                return@withContext errorResult(BuiltInToolExecutionError.NOT_FOUND, "Path not found: $path")
+                return@withContext builtInToolErrorResult(BuiltInToolExecutionError.NOT_FOUND, "Path not found: $path")
             }
 
             // A file is searched directly; a directory is walked recursively for regular files.
@@ -362,9 +354,6 @@ class SearchTextTool : BuiltInTool {
         // single terminator (no stray '\r' left behind); lone CR or LF are handled uniformly.
         return text.split(Regex("\r\n|\r|\n"))
     }
-
-    private fun errorResult(code: String, message: String, errorDetails: String? = null): BuiltInToolExecutionResult =
-        BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code, errorDetails = errorDetails)
 }
 
 /**

@@ -149,6 +149,33 @@ class WriteFileToolTest {
     }
 
     @Test
+    fun `path and content objects are rejected as invalid input`() = runTest {
+        val dir = createTempDirectory("write-file-test")
+        try {
+            val result = tool.execute(
+                buildJsonObject {
+                    put("path", buildJsonObject { put("nested", "value") })
+                    put("content", buildJsonObject { put("nested", "value") })
+                },
+                context(dir)
+            )
+
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            val errorDetailsJson = result.errorDetails
+                ?: throw AssertionError("expected errorDetails with validation errors")
+            val errorDetails = Json.parseToJsonElement(errorDetailsJson).jsonObject
+            val errorsArray = errorDetails["validationErrors"]?.jsonArray
+                ?: throw AssertionError("expected validationErrors array in errorDetails")
+            assertEquals(2, errorsArray.size, "should have accumulated 2 validation errors")
+            val errorTexts = errorsArray.map { it.jsonPrimitive.content }
+            assertTrue(errorTexts.any { it.contains("path") && it.contains("string") })
+            assertTrue(errorTexts.any { it.contains("content") && it.contains("string") })
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun `missing path and unknown parameter are accumulated in validation errors`() = runTest {
         val dir = createTempDirectory("write-file-test")
         try {

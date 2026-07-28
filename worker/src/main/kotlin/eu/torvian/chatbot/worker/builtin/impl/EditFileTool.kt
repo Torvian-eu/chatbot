@@ -7,13 +7,15 @@ import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
 import eu.torvian.chatbot.worker.builtin.LineDiff
 import eu.torvian.chatbot.worker.builtin.WorkspacePathValidator
+import eu.torvian.chatbot.worker.builtin.validation.addUnknownParameterErrors
+import eu.torvian.chatbot.worker.builtin.validation.builtInToolErrorResult
+import eu.torvian.chatbot.worker.builtin.validation.invalidInputResult
+import eu.torvian.chatbot.worker.builtin.validation.parseOptionalBoolean
+import eu.torvian.chatbot.worker.builtin.validation.parseRequiredString
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.putJsonArray
-import kotlinx.serialization.json.jsonPrimitive
 import java.nio.file.Files
 import java.nio.file.NoSuchFileException
 
@@ -67,61 +69,55 @@ class EditFileTool : BuiltInTool {
 
         // Define the set of known/valid parameter names for this tool
         val validKeys = setOf("path", "edits", "dryRun")
-        // Check for unknown parameters
-        for (key in input.keys) {
-            if (key !in validKeys) {
-                validationErrors.add("Unknown parameter: '$key'")
-            }
-        }
+        addUnknownParameterErrors(input, validKeys, validationErrors)
 
-        val path = input["path"]?.jsonPrimitive?.content
-        if (path == null) {
-            validationErrors.add("Missing required argument: path")
-        }
+        val path = parseRequiredString(input, "path", validationErrors)
+        val dryRun = parseOptionalBoolean(input, "dryRun", defaultValue = false, validationErrors)
 
-        val editsJson = input["edits"] as? JsonArray
-        if (input["edits"] != null && editsJson == null) {
+        val editsJson = input["edits"]
+        val edits = if (editsJson == null) {
+            validationErrors.add("Missing required argument: edits")
+            emptyList()
+        } else if (editsJson !is JsonArray) {
             validationErrors.add("Argument 'edits' must be an array")
+            emptyList()
+        } else {
+            editsJson.mapIndexed { index, element ->
+                val obj = element as? JsonObject
+                if (obj == null) {
+                    validationErrors.add("Edit at index $index is not an object")
+                    return@mapIndexed null
+                }
+                val oldText = obj["oldText"]?.let { it as? JsonPrimitive }?.let { if (it.isString) it.content else null }
+                if (oldText == null) {
+                    validationErrors.add("Edit at index $index missing 'oldText'")
+                    return@mapIndexed null
+                }
+                if (oldText.isBlank()) {
+                    validationErrors.add("Edit at index $index has empty or whitespace-only 'oldText'")
+                    return@mapIndexed null
+                }
+                val newText = obj["newText"]?.let { it as? JsonPrimitive }?.let { if (it.isString) it.content else null }
+                if (newText == null) {
+                    validationErrors.add("Edit at index $index missing 'newText'")
+                    return@mapIndexed null
+                }
+                EditSpec(oldText, newText)
+            }.filterNotNull()
+        }
+
+        if (edits.isEmpty() && editsJson is JsonArray && editsJson.isEmpty()) {
+            validationErrors.add("At least one edit is required")
         }
 
         if (validationErrors.isNotEmpty()) {
-            return errorResult(
-                BuiltInToolExecutionError.INVALID_INPUT,
-                "Input validation failed with ${validationErrors.size} error(s):",
-                errorDetails = buildJsonObject {
-                    putJsonArray("validationErrors") {
-                        validationErrors.forEach { error -> add(JsonPrimitive(error)) }
-                    }
-                }.toString()
-            )
-        }
-
-        val dryRun = input["dryRun"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
-
-        val edits = (editsJson ?: emptyList()).mapIndexed { index, element ->
-            val obj = element as? JsonObject
-                ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Edit at index $index is not an object")
-            val oldText = obj["oldText"]?.jsonPrimitive?.content
-                ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Edit at index $index missing 'oldText'")
-            if (oldText.isBlank()) {
-                return errorResult(
-                    BuiltInToolExecutionError.INVALID_INPUT,
-                    "Edit at index $index has empty or whitespace-only 'oldText'"
-                )
-            }
-            val newText = obj["newText"]?.jsonPrimitive?.content
-                ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Edit at index $index missing 'newText'")
-            EditSpec(oldText, newText)
-        }
-
-        if (edits.isEmpty()) {
-            return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "At least one edit is required")
+            return invalidInputResult(validationErrors)
         }
 
         val target = try {
             WorkspacePathValidator.requireInside(context.workspace, path!!)
         } catch (e: Exception) {
-            return errorResult(
+            return builtInToolErrorResult(
                 BuiltInToolExecutionError.WORKSPACE_VIOLATION,
                 e.message ?: "Path rejected by workspace validator"
             )
@@ -131,9 +127,9 @@ class EditFileTool : BuiltInTool {
             val original = try {
                 Files.readString(target, Charsets.UTF_8)
             } catch (_: NoSuchFileException) {
-                return@withContext errorResult(BuiltInToolExecutionError.NOT_FOUND, "File not found: $path")
+                return@withContext builtInToolErrorResult(BuiltInToolExecutionError.NOT_FOUND, "File not found: $path")
             } catch (e: Exception) {
-                return@withContext errorResult(
+                return@withContext builtInToolErrorResult(
                     BuiltInToolExecutionError.EXECUTION_FAILED,
                     "Failed to read file: ${e.message}"
                 )
@@ -142,7 +138,7 @@ class EditFileTool : BuiltInTool {
             // Plan + resolve conflicts against the original text (no mutation yet).
             val plan = planAndResolve(original, edits)
             if (plan is PlanResult.Failure) {
-                return@withContext errorResult(BuiltInToolExecutionError.EXECUTION_FAILED, plan.message)
+                return@withContext builtInToolErrorResult(BuiltInToolExecutionError.EXECUTION_FAILED, plan.message)
             }
             val success = plan as PlanResult.Success
 
@@ -157,7 +153,7 @@ class EditFileTool : BuiltInTool {
                     Files.writeString(target, modified, Charsets.UTF_8)
                     BuiltInToolExecutionResult(output = report)
                 } catch (e: Exception) {
-                    return@withContext errorResult(
+                    return@withContext builtInToolErrorResult(
                         BuiltInToolExecutionError.EXECUTION_FAILED,
                         "Failed to write file: ${e.message}"
                     )
@@ -505,7 +501,4 @@ class EditFileTool : BuiltInTool {
         while (i < text.length && text[i].isWhitespace()) i++
         return i
     }
-
-    private fun errorResult(code: String, message: String, errorDetails: String? = null): BuiltInToolExecutionResult =
-        BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code, errorDetails = errorDetails)
 }
