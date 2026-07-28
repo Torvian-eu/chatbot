@@ -10,6 +10,7 @@ import eu.torvian.chatbot.worker.builtin.validation.addUnknownParameterErrors
 import eu.torvian.chatbot.worker.builtin.validation.builtInToolErrorResult
 import eu.torvian.chatbot.worker.builtin.validation.invalidInputResult
 import eu.torvian.chatbot.worker.builtin.validation.parseOptionalBoolean
+import eu.torvian.chatbot.worker.builtin.validation.parseOptionalInt
 import eu.torvian.chatbot.worker.builtin.validation.parseOptionalString
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
@@ -35,7 +36,7 @@ class ListDirectoryTool : BuiltInTool {
         val validationErrors = mutableListOf<String>()
 
         // Define the set of known/valid parameter names for this tool
-        val validKeys = setOf("path", "sortBy", "includeSizes", "recursive")
+        val validKeys = setOf("path", "sortBy", "includeSizes", "recursive", "maxEntries")
         addUnknownParameterErrors(input, validKeys, validationErrors)
 
         val sortBy = parseOptionalString(input, "sortBy", validationErrors) ?: "name"
@@ -46,6 +47,10 @@ class ListDirectoryTool : BuiltInTool {
         val path = parseOptionalString(input, "path", validationErrors) ?: "."
         val includeSizes = parseOptionalBoolean(input, "includeSizes", defaultValue = false, validationErrors)
         val recursive = parseOptionalBoolean(input, "recursive", defaultValue = false, validationErrors)
+        val maxEntries = parseOptionalInt(input, "maxEntries", defaultValue = 25, validationErrors)
+        if (maxEntries < 1) {
+            validationErrors.add("Argument 'maxEntries' must be >= 1")
+        }
 
         if (validationErrors.isNotEmpty()) {
             return invalidInputResult(validationErrors)
@@ -65,21 +70,33 @@ class ListDirectoryTool : BuiltInTool {
                 return@withContext builtInToolErrorResult(BuiltInToolExecutionError.NOT_FOUND, "Directory not found: $path")
             }
 
-            val listing = if (recursive) {
-                renderRecursive(root, includeSizes, sortBy)
+            val (listing, truncated) = if (recursive) {
+                renderRecursive(root, includeSizes, sortBy, maxEntries)
             } else {
-                renderFlat(root, includeSizes, sortBy)
+                renderFlat(root, includeSizes, sortBy, maxEntries)
             }
 
-            BuiltInToolExecutionResult(output = listing)
+            val summary = if (truncated) "\n\nShowing first $maxEntries entries (truncated)." else ""
+            val output = if (listing.isEmpty() && !truncated) "" else listing + summary
+
+            val details = buildJsonObject {
+                put("truncated", truncated)
+            }
+
+            BuiltInToolExecutionResult(
+                output = output,
+                details = details,
+            )
         }
     }
 
-    private fun renderFlat(root: Path, includeSizes: Boolean, sortBy: String): String {
+    private fun renderFlat(root: Path, includeSizes: Boolean, sortBy: String, maxEntries: Int): Pair<String, Boolean> {
         val entries = Files.list(root).use { stream -> stream.toList() }
         val sorted = sortEntries(entries, sortBy)
-        return buildString {
-            sorted.forEach { entry ->
+        val limited = sorted.take(maxEntries)
+        val truncated = sorted.size > maxEntries
+        val listing = buildString {
+            limited.forEach { entry ->
                 append(if (entry.isDirectory()) "[DIR] " else "[FILE] ")
                 append(entry.fileName.toString())
                 if (includeSizes && entry.isRegularFile()) {
@@ -88,31 +105,39 @@ class ListDirectoryTool : BuiltInTool {
                 append('\n')
             }
         }.trimEnd()
+        return listing to truncated
     }
 
-    private fun renderRecursive(root: Path, includeSizes: Boolean, sortBy: String): String {
+    private fun renderRecursive(root: Path, includeSizes: Boolean, sortBy: String, maxEntries: Int): Pair<String, Boolean> {
         val sb = StringBuilder()
-        renderRecursiveInto(root, 0, includeSizes, sortBy, sb)
-        return sb.toString().trimEnd()
-    }
-
-    private fun renderRecursiveInto(dir: Path, depth: Int, includeSizes: Boolean, sortBy: String, sb: StringBuilder) {
-        val indent = "  ".repeat(depth)
-        Files.list(dir).use { stream ->
-            val entries = sortEntries(stream.toList(), sortBy)
-            entries.forEach { entry ->
-                sb.append(indent)
-                sb.append(if (entry.isDirectory()) "[DIR] " else "[FILE] ")
-                sb.append(entry.fileName.toString())
-                if (includeSizes && entry.isRegularFile()) {
-                    sb.append("  (${Files.size(entry)} bytes)")
-                }
-                sb.append('\n')
-                if (entry.isDirectory()) {
-                    renderRecursiveInto(entry, depth + 1, includeSizes, sortBy, sb)
+        var count = 0
+        var truncated = false
+        fun renderRecursiveInto(dir: Path, depth: Int) {
+            if (truncated) return
+            val indent = "  ".repeat(depth)
+            Files.list(dir).use { stream ->
+                val entries = sortEntries(stream.toList(), sortBy)
+                for (entry in entries) {
+                    if (count >= maxEntries) {
+                        truncated = true
+                        return
+                    }
+                    count++
+                    sb.append(indent)
+                    sb.append(if (entry.isDirectory()) "[DIR] " else "[FILE] ")
+                    sb.append(entry.fileName.toString())
+                    if (includeSizes && entry.isRegularFile()) {
+                        sb.append("  (${Files.size(entry)} bytes)")
+                    }
+                    sb.append('\n')
+                    if (entry.isDirectory()) {
+                        renderRecursiveInto(entry, depth + 1)
+                    }
                 }
             }
         }
+        renderRecursiveInto(root, 0)
+        return sb.toString().trimEnd() to truncated
     }
 
     private fun sortEntries(entries: List<Path>, sortBy: String): List<Path> {

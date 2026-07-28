@@ -42,11 +42,17 @@ class ListDirectoryToolTest {
         sortBy: String? = null,
         includeSizes: Boolean? = null,
         recursive: Boolean? = null,
+        maxEntries: Any? = null,
     ): JsonObject = buildJsonObject {
         if (path != null) put("path", path)
         if (sortBy != null) put("sortBy", sortBy)
         if (includeSizes != null) put("includeSizes", includeSizes)
         if (recursive != null) put("recursive", recursive)
+        when (maxEntries) {
+            is Int -> put("maxEntries", maxEntries)
+            is String -> put("maxEntries", maxEntries)
+            is JsonElement -> put("maxEntries", maxEntries)
+        }
     }
 
     /**
@@ -200,6 +206,78 @@ class ListDirectoryToolTest {
             val result = tool.execute(buildInput("../escaped"), context(dir))
 
             assertError(result, BuiltInToolExecutionError.WORKSPACE_VIOLATION)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `explicit smaller maxEntries truncates results and shows truncation note and details`() = runTest {
+        val dir = createTempDirectory("list-dir-test")
+        try {
+            dir.resolve("a.txt").writeText("x", Charsets.UTF_8)
+            dir.resolve("b.txt").writeText("x", Charsets.UTF_8)
+            dir.resolve("c.txt").writeText("x", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput(".", maxEntries = 2), context(dir))
+
+            val output = assertSuccess(result)
+            assertTrue(output.contains("Showing first 2 entries (truncated)."), "expected truncation notice; got:\n$output")
+            val details = result.details
+            assertEquals(true, details?.jsonObject?.get("truncated")?.jsonPrimitive?.boolean)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `explicit maxEntries larger than available results does not truncate`() = runTest {
+        val dir = createTempDirectory("list-dir-test")
+        try {
+            dir.resolve("a.txt").writeText("x", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput(".", maxEntries = 10), context(dir))
+
+            val output = assertSuccess(result)
+            assertTrue(!output.contains("truncated"), "did not expect truncation notice; got:\n$output")
+            val details = result.details
+            assertEquals(false, details?.jsonObject?.get("truncated")?.jsonPrimitive?.boolean)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `invalid maxEntries returns INVALID_INPUT`() = runTest {
+        val dir = createTempDirectory("list-dir-test")
+        try {
+            val resultZero = tool.execute(buildInput(".", maxEntries = 0), context(dir))
+            assertError(resultZero, BuiltInToolExecutionError.INVALID_INPUT)
+
+            val resultNegative = tool.execute(buildInput(".", maxEntries = -1), context(dir))
+            assertError(resultNegative, BuiltInToolExecutionError.INVALID_INPUT)
+
+            val resultInvalidString = tool.execute(buildInput(".", maxEntries = "abc"), context(dir))
+            assertError(resultInvalidString, BuiltInToolExecutionError.INVALID_INPUT)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `omitted maxEntries defaults to 25 and truncates when entries exceed 25`() = runTest {
+        val dir = createTempDirectory("list-dir-test")
+        try {
+            for (i in 1..26) {
+                dir.resolve("file$i.txt").writeText("x", Charsets.UTF_8)
+            }
+
+            val result = tool.execute(buildInput("."), context(dir))
+
+            val output = assertSuccess(result)
+            assertTrue(output.contains("Showing first 25 entries (truncated)."), "expected truncation notice; got:\n$output")
+            val details = result.details
+            assertEquals(true, details?.jsonObject?.get("truncated")?.jsonPrimitive?.boolean)
         } finally {
             dir.toFile().deleteRecursively()
         }

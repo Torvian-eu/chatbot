@@ -481,4 +481,28 @@ class SearchTextToolValidationTest {
             dir.toFile().deleteRecursively()
         }
     }
+
+    @Test
+    fun `invalid maxResults is rejected as invalid input`() = runTest {
+        val dir = createTempDirectory("search-text-test")
+        try {
+            val resultZero = tool.execute(buildInput("query", maxResults = 0), context(dir))
+            assertError(resultZero, BuiltInToolExecutionError.INVALID_INPUT)
+
+            val resultNegative = tool.execute(buildInput("query", maxResults = -1), context(dir))
+            assertError(resultNegative, BuiltInToolExecutionError.INVALID_INPUT)
+
+            val resultInvalid = tool.execute(
+                buildJsonObject {
+                    put("query", "query")
+                    put("maxResults", "abc")
+                },
+                context(dir)
+            )
+            assertError(resultInvalid, BuiltInToolExecutionError.INVALID_INPUT)
+            assertTrue(resultInvalid.errorDetails!!.contains("Argument 'maxResults' must be an integer"))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
 }

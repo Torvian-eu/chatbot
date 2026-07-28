@@ -46,6 +46,7 @@ class SearchFilesToolTest {
         pattern: String,
         path: String? = null,
         excludePatterns: Any? = null,
+        maxResults: Any? = null,
     ): JsonObject = buildJsonObject {
         put("pattern", pattern)
         if (path != null) put("path", path)
@@ -54,6 +55,11 @@ class SearchFilesToolTest {
             is List<*> -> putJsonArray("excludePatterns") {
                 for (p in excludePatterns) add(p as String)
             }
+        }
+        when (maxResults) {
+            is Int -> put("maxResults", maxResults)
+            is String -> put("maxResults", maxResults)
+            is JsonElement -> put("maxResults", maxResults)
         }
     }
 
@@ -461,6 +467,78 @@ class SearchFilesToolTest {
 
             val output = assertSuccess(result)
             assertEquals("", output)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `explicit smaller maxResults truncates results and shows truncation note and details`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            dir.resolve("a.kt").writeText("x", Charsets.UTF_8)
+            dir.resolve("b.kt").writeText("x", Charsets.UTF_8)
+            dir.resolve("c.kt").writeText("x", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("**.kt", maxResults = 2), context(dir))
+
+            val output = assertSuccess(result)
+            assertTrue(output.contains("result(s) shown — truncated to 2 result(s)"), "expected truncation notice; got:\n$output")
+            val details = result.details
+            assertEquals(true, details?.jsonObject?.get("truncated")?.jsonPrimitive?.boolean)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `explicit maxResults larger than available results does not truncate`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            dir.resolve("a.kt").writeText("x", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("**.kt", maxResults = 10), context(dir))
+
+            val output = assertSuccess(result)
+            assertTrue(!output.contains("truncated"), "did not expect truncation notice; got:\n$output")
+            val details = result.details
+            assertEquals(false, details?.jsonObject?.get("truncated")?.jsonPrimitive?.boolean)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `invalid maxResults returns INVALID_INPUT`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            val resultZero = tool.execute(buildInput("**.kt", maxResults = 0), context(dir))
+            assertError(resultZero, BuiltInToolExecutionError.INVALID_INPUT)
+
+            val resultNegative = tool.execute(buildInput("**.kt", maxResults = -1), context(dir))
+            assertError(resultNegative, BuiltInToolExecutionError.INVALID_INPUT)
+
+            val resultInvalidString = tool.execute(buildInput("**.kt", maxResults = "abc"), context(dir))
+            assertError(resultInvalidString, BuiltInToolExecutionError.INVALID_INPUT)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `omitted maxResults defaults to 25 and truncates when matches exceed 25`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            for (i in 1..26) {
+                dir.resolve("file$i.kt").writeText("x", Charsets.UTF_8)
+            }
+
+            val result = tool.execute(buildInput("**.kt"), context(dir))
+
+            val output = assertSuccess(result)
+            assertTrue(output.contains("result(s) shown — truncated to 25 result(s)"), "expected truncation notice; got:\n$output")
+            val details = result.details
+            assertEquals(true, details?.jsonObject?.get("truncated")?.jsonPrimitive?.boolean)
         } finally {
             dir.toFile().deleteRecursively()
         }

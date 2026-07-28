@@ -158,6 +158,12 @@ object BuiltInToolCatalog {
                         put("description", "Recursively list subdirectories with indentation.")
                         put("default", false)
                     })
+                    put("maxEntries", buildJsonObject {
+                        put("type", "integer")
+                        put("minimum", 1)
+                        put("default", 25)
+                        put("description", "Maximum number of directory entries to return.")
+                    })
                 })
             }
         ),
@@ -207,6 +213,12 @@ object BuiltInToolCatalog {
                             })
                         })
                         put("description", "Optional glob pattern(s) to exclude. Supports both string and array formats.")
+                    })
+                    put("maxResults", buildJsonObject {
+                        put("type", "integer")
+                        put("minimum", 1)
+                        put("default", 25)
+                        put("description", "Maximum number of matching files/directories to return.")
                     })
                 })
                 put("required", buildJsonArray { add("pattern") })
@@ -312,6 +324,7 @@ object BuiltInToolCatalog {
                     put("maxResults", buildJsonObject {
                         put("type", "integer")
                         put("minimum", 1)
+                        put("default", 50)
                         put("description", "Maximum number of matched lines to return across all files.")
                     })
                 })

@@ -451,4 +451,23 @@ class SearchTextToolScenariosTest {
             dir.toFile().deleteRecursively()
         }
     }
+
+    @Test
+    fun `omitted maxResults defaults to 50 and truncates when matches exceed 50`() = runTest {
+        val dir = createTempDirectory("search-text-test")
+        try {
+            val lines = (1..60).joinToString("\n") { "match $it" }
+            dir.resolve("sample.txt").writeText(lines, Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("match"), context(dir))
+
+            val success = assertSuccess(result)
+            val details = success.details!!
+            assertEquals(50, details["totalMatches"]?.jsonPrimitive?.int)
+            assertEquals(true, details["truncated"]?.jsonPrimitive?.boolean)
+            assertTrue(success.output!!.contains("truncated to 50 result(s)"))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
 }

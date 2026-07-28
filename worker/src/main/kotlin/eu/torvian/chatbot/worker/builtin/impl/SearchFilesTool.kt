@@ -8,7 +8,7 @@ import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
 import eu.torvian.chatbot.worker.builtin.WorkspacePathValidator
 import eu.torvian.chatbot.worker.builtin.validation.*
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.*
 import java.nio.file.FileSystems
 import java.nio.file.Files
 import java.nio.file.Path
@@ -38,12 +38,16 @@ class SearchFilesTool : BuiltInTool {
         val validationErrors = mutableListOf<String>()
 
         // Define the set of known/valid parameter names for this tool
-        val validKeys = setOf("path", "pattern", "excludePatterns")
+        val validKeys = setOf("path", "pattern", "excludePatterns", "maxResults")
         addUnknownParameterErrors(input, validKeys, validationErrors)
 
         val pattern = parseRequiredString(input, "pattern", validationErrors)
         val path = parseOptionalString(input, "path", validationErrors) ?: "."
         val exclude = parseStringOrStringArray(input, "excludePatterns", validationErrors)
+        val maxResults = parseOptionalInt(input, "maxResults", defaultValue = 25, validationErrors)
+        if (maxResults < 1) {
+            validationErrors.add("Argument 'maxResults' must be >= 1")
+        }
 
         if (validationErrors.isNotEmpty()) {
             return invalidInputResult(validationErrors)
@@ -69,9 +73,10 @@ class SearchFilesTool : BuiltInTool {
             val matcher: PathMatcher = FileSystems.getDefault().getPathMatcher("glob:$pattern")
             val excludeMatchers: List<PathMatcher> = exclude.map { FileSystems.getDefault().getPathMatcher("glob:$it") }
             val matches = mutableListOf<String>()
+            var truncated = false
 
             val candidates: List<Path> = Files.walk(root).use { stream -> stream.toList() }
-            candidates.forEach { candidate ->
+            searchLoop@ for (candidate in candidates) {
                 // Relativize once against the starting directory (root) and reuse for both matching and
                 // the final output, so glob patterns behave intuitively (e.g. "**.kt" or "src/**.kt")
                 // regardless of the absolute filesystem location. The relative path is also exactly what
@@ -80,8 +85,12 @@ class SearchFilesTool : BuiltInTool {
                 // forward slashes so output and matching are platform-independent (glob matchers expect
                 // '/' separators), keeping results consistent across operating systems.
                 val relativeCandidate = root.relativize(candidate).toString().replace('\\', '/')
-                if (excludeMatchers.any { it.matches(Path.of(relativeCandidate)) }) return@forEach
+                if (excludeMatchers.any { it.matches(Path.of(relativeCandidate)) }) continue
                 if (matcher.matches(Path.of(relativeCandidate))) {
+                    if (matches.size >= maxResults) {
+                        truncated = true
+                        break@searchLoop
+                    }
                     matches.add(relativeCandidate)
                 }
             }
@@ -96,12 +105,21 @@ class SearchFilesTool : BuiltInTool {
                     ""
                 }
 
+            val summary = if (truncated) "\n\n${matches.size} result(s) shown — truncated to $maxResults result(s)" else ""
+
+            val details = buildJsonObject {
+                putJsonArray("matches") { matches.forEach { add(it) } }
+                put("totalMatches", matches.size)
+                put("truncated", truncated)
+            }
+
             BuiltInToolExecutionResult(
                 output = if (matches.isEmpty()) {
                     if (hint.isNotEmpty()) "No matches found$hint" else ""
                 } else {
-                    matches.joinToString(separator = "\n")
+                    matches.joinToString(separator = "\n") + summary
                 },
+                details = details,
             )
         }
     }

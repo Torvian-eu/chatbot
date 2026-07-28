@@ -11,7 +11,6 @@ import eu.torvian.chatbot.worker.builtin.validation.builtInToolErrorResult
 import eu.torvian.chatbot.worker.builtin.validation.invalidInputResult
 import eu.torvian.chatbot.worker.builtin.validation.parseOptionalBoolean
 import eu.torvian.chatbot.worker.builtin.validation.parseOptionalInt
-import eu.torvian.chatbot.worker.builtin.validation.parseOptionalIntOrNull
 import eu.torvian.chatbot.worker.builtin.validation.parseOptionalString
 import eu.torvian.chatbot.worker.builtin.validation.parseRequiredString
 import eu.torvian.chatbot.worker.builtin.validation.parseStringOrStringArray
@@ -105,8 +104,8 @@ class SearchTextTool : BuiltInTool {
             validationErrors.add("Argument 'contextAfter' must be >= 0")
         }
 
-        val maxResults = parseOptionalIntOrNull(input, "maxResults", validationErrors)
-        if (maxResults != null && maxResults < 1) {
+        val maxResults = parseOptionalInt(input, "maxResults", defaultValue = 50, validationErrors)
+        if (maxResults < 1) {
             validationErrors.add("Argument 'maxResults' must be >= 1")
         }
 
@@ -198,7 +197,7 @@ class SearchTextTool : BuiltInTool {
                     // Line-based match: a line contributes at most one result, even when the pattern
                     // occurs multiple times within it.
                     if (!regex.containsMatchIn(line)) continue
-                    if (matchObjects.size >= (maxResults ?: Int.MAX_VALUE)) {
+                    if (matchObjects.size >= maxResults) {
                         truncated = true
                         break@searchLoop
                     }
