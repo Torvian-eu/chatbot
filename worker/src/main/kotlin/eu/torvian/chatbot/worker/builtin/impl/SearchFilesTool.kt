@@ -6,6 +6,7 @@ import eu.torvian.chatbot.worker.builtin.BuiltInTool
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
 import eu.torvian.chatbot.worker.builtin.WorkspacePathValidator
+import eu.torvian.chatbot.worker.builtin.validation.*
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
 import java.nio.file.FileSystems
@@ -32,19 +33,30 @@ class SearchFilesTool : BuiltInTool {
     override val inputSchema: JsonObject = BuiltInToolCatalog.specFor(name)!!.inputSchema
 
     override suspend fun execute(input: JsonObject, context: BuiltInToolExecutionContext): BuiltInToolExecutionResult {
-        val pattern = input["pattern"]?.jsonPrimitive?.content
-            ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Missing required argument: pattern")
-        val path = input["path"]?.jsonPrimitive?.content ?: "."
-        val exclude = when (val excludeInput = input["excludePatterns"]) {
-            is JsonArray -> excludeInput.mapNotNull { it.jsonPrimitive.contentOrNull }
-            is JsonPrimitive -> excludeInput.contentOrNull?.let { listOf(it) } ?: emptyList()
-            else -> emptyList()
+        // Accumulate all INVALID_INPUT validation errors before failing, so the LLM can see
+        // every issue at once instead of fixing them one at a time.
+        val validationErrors = mutableListOf<String>()
+
+        // Define the set of known/valid parameter names for this tool
+        val validKeys = setOf("path", "pattern", "excludePatterns", "maxResults")
+        addUnknownParameterErrors(input, validKeys, validationErrors)
+
+        val pattern = parseRequiredString(input, "pattern", validationErrors)
+        val path = parseOptionalString(input, "path", validationErrors) ?: "."
+        val exclude = parseStringOrStringArray(input, "excludePatterns", validationErrors)
+        val maxResults = parseOptionalInt(input, "maxResults", defaultValue = 25, validationErrors)
+        if (maxResults < 1) {
+            validationErrors.add("Argument 'maxResults' must be >= 1")
+        }
+
+        if (validationErrors.isNotEmpty()) {
+            return invalidInputResult(validationErrors)
         }
 
         val root = try {
             WorkspacePathValidator.requireInside(context.workspace, path)
         } catch (e: Exception) {
-            return errorResult(
+            return builtInToolErrorResult(
                 BuiltInToolExecutionError.WORKSPACE_VIOLATION,
                 e.message ?: "Path rejected by workspace validator"
             )
@@ -52,15 +64,19 @@ class SearchFilesTool : BuiltInTool {
 
         return withContext(context.ioDispatcher) {
             if (!Files.exists(root)) {
-                return@withContext errorResult(BuiltInToolExecutionError.NOT_FOUND, "Starting path not found: $path")
+                return@withContext builtInToolErrorResult(
+                    BuiltInToolExecutionError.NOT_FOUND,
+                    "Starting path not found: $path"
+                )
             }
 
             val matcher: PathMatcher = FileSystems.getDefault().getPathMatcher("glob:$pattern")
             val excludeMatchers: List<PathMatcher> = exclude.map { FileSystems.getDefault().getPathMatcher("glob:$it") }
             val matches = mutableListOf<String>()
+            var truncated = false
 
             val candidates: List<Path> = Files.walk(root).use { stream -> stream.toList() }
-            candidates.forEach { candidate ->
+            searchLoop@ for (candidate in candidates) {
                 // Relativize once against the starting directory (root) and reuse for both matching and
                 // the final output, so glob patterns behave intuitively (e.g. "**.kt" or "src/**.kt")
                 // regardless of the absolute filesystem location. The relative path is also exactly what
@@ -69,18 +85,52 @@ class SearchFilesTool : BuiltInTool {
                 // forward slashes so output and matching are platform-independent (glob matchers expect
                 // '/' separators), keeping results consistent across operating systems.
                 val relativeCandidate = root.relativize(candidate).toString().replace('\\', '/')
-                if (excludeMatchers.any { it.matches(Path.of(relativeCandidate)) }) return@forEach
+                if (excludeMatchers.any { it.matches(Path.of(relativeCandidate)) }) continue
                 if (matcher.matches(Path.of(relativeCandidate))) {
+                    if (matches.size >= maxResults) {
+                        truncated = true
+                        break@searchLoop
+                    }
                     matches.add(relativeCandidate)
                 }
             }
 
+            val hints = mutableListOf<String>()
+
+            if (pattern != null && isUnintentionalLeadingSlashStarStar(pattern)) {
+                hints += "Hint: '$pattern' excludes files directly in the starting directory because '**/ '" +
+                        " requires a directory separator. To include files in the starting directory as well" +
+                        ", use '${fixLeadingSlashStarStar(pattern)}'."
+            }
+
+            if (matches.isEmpty() && Files.isDirectory(root) && pattern != null
+                && looksLikeNonRecursiveTopLevelPattern(pattern) && hasSubdirectories(root)
+            ) {
+                val suggested = toRecursiveHintPattern(pattern)
+                hints += "Hint: '$pattern' only matches entries in the starting directory." +
+                        " If you intended a recursive search, use '$suggested'."
+            }
+
+            val hintSuffix = if (hints.isEmpty()) "" else "\n\n" + hints.joinToString("\n\n")
+
+            val summary =
+                if (truncated) "\n\n${matches.size} result(s) shown — truncated to $maxResults result(s)" else ""
+
+            val details = buildJsonObject {
+                putJsonArray("matches") { matches.forEach { add(it) } }
+                put("totalMatches", matches.size)
+                put("truncated", truncated)
+            }
+
             BuiltInToolExecutionResult(
-                output = if (matches.isEmpty()) "" else matches.joinToString(separator = "\n"),
+                output = if (matches.isEmpty()) {
+                    if (hints.isNotEmpty()) "No matches found" + hintSuffix else ""
+                } else {
+                    matches.joinToString(separator = "\n") + summary + hintSuffix
+                },
+                details = details,
             )
         }
     }
 
-    private fun errorResult(code: String, message: String): BuiltInToolExecutionResult =
-        BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code)
 }

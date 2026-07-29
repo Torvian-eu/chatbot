@@ -7,10 +7,15 @@ import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
 import eu.torvian.chatbot.worker.builtin.LineDiff
 import eu.torvian.chatbot.worker.builtin.WorkspacePathValidator
+import eu.torvian.chatbot.worker.builtin.validation.addUnknownParameterErrors
+import eu.torvian.chatbot.worker.builtin.validation.builtInToolErrorResult
+import eu.torvian.chatbot.worker.builtin.validation.invalidInputResult
+import eu.torvian.chatbot.worker.builtin.validation.parseOptionalBoolean
+import eu.torvian.chatbot.worker.builtin.validation.parseRequiredString
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.JsonPrimitive
 import java.nio.file.Files
 import java.nio.file.NoSuchFileException
 
@@ -58,38 +63,61 @@ class EditFileTool : BuiltInTool {
      *   result carrying [BuiltInToolExecutionError] details on failure.
      */
     override suspend fun execute(input: JsonObject, context: BuiltInToolExecutionContext): BuiltInToolExecutionResult {
-        val path = input["path"]?.jsonPrimitive?.content
-            ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Missing required argument: path")
+        // Accumulate all INVALID_INPUT validation errors before failing, so the LLM can see
+        // every issue at once instead of fixing them one at a time.
+        val validationErrors = mutableListOf<String>()
 
-        @Suppress("UNCHECKED_CAST")
-        val editsJson = input["edits"] as? JsonArray
-            ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Missing or invalid 'edits' array")
-        val dryRun = input["dryRun"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
+        // Define the set of known/valid parameter names for this tool
+        val validKeys = setOf("path", "edits", "dryRun")
+        addUnknownParameterErrors(input, validKeys, validationErrors)
 
-        val edits = editsJson.mapIndexed { index, element ->
-            val obj = element as? JsonObject
-                ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Edit at index $index is not an object")
-            val oldText = obj["oldText"]?.jsonPrimitive?.content
-                ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Edit at index $index missing 'oldText'")
-            if (oldText.isBlank()) {
-                return errorResult(
-                    BuiltInToolExecutionError.INVALID_INPUT,
-                    "Edit at index $index has empty or whitespace-only 'oldText'"
-                )
-            }
-            val newText = obj["newText"]?.jsonPrimitive?.content
-                ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Edit at index $index missing 'newText'")
-            EditSpec(oldText, newText)
+        val path = parseRequiredString(input, "path", validationErrors)
+        val dryRun = parseOptionalBoolean(input, "dryRun", defaultValue = false, validationErrors)
+
+        val editsJson = input["edits"]
+        val edits = if (editsJson == null) {
+            validationErrors.add("Missing required argument: edits")
+            emptyList()
+        } else if (editsJson !is JsonArray) {
+            validationErrors.add("Argument 'edits' must be an array")
+            emptyList()
+        } else {
+            editsJson.mapIndexed { index, element ->
+                val obj = element as? JsonObject
+                if (obj == null) {
+                    validationErrors.add("Edit at index $index is not an object")
+                    return@mapIndexed null
+                }
+                val oldText = obj["oldText"]?.let { it as? JsonPrimitive }?.let { if (it.isString) it.content else null }
+                if (oldText == null) {
+                    validationErrors.add("Edit at index $index missing 'oldText'")
+                    return@mapIndexed null
+                }
+                if (oldText.isBlank()) {
+                    validationErrors.add("Edit at index $index has empty or whitespace-only 'oldText'")
+                    return@mapIndexed null
+                }
+                val newText = obj["newText"]?.let { it as? JsonPrimitive }?.let { if (it.isString) it.content else null }
+                if (newText == null) {
+                    validationErrors.add("Edit at index $index missing 'newText'")
+                    return@mapIndexed null
+                }
+                EditSpec(oldText, newText)
+            }.filterNotNull()
         }
 
-        if (edits.isEmpty()) {
-            return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "At least one edit is required")
+        if (edits.isEmpty() && editsJson is JsonArray && editsJson.isEmpty()) {
+            validationErrors.add("At least one edit is required")
+        }
+
+        if (validationErrors.isNotEmpty()) {
+            return invalidInputResult(validationErrors)
         }
 
         val target = try {
-            WorkspacePathValidator.requireInside(context.workspace, path)
+            WorkspacePathValidator.requireInside(context.workspace, path!!)
         } catch (e: Exception) {
-            return errorResult(
+            return builtInToolErrorResult(
                 BuiltInToolExecutionError.WORKSPACE_VIOLATION,
                 e.message ?: "Path rejected by workspace validator"
             )
@@ -99,9 +127,9 @@ class EditFileTool : BuiltInTool {
             val original = try {
                 Files.readString(target, Charsets.UTF_8)
             } catch (_: NoSuchFileException) {
-                return@withContext errorResult(BuiltInToolExecutionError.NOT_FOUND, "File not found: $path")
+                return@withContext builtInToolErrorResult(BuiltInToolExecutionError.NOT_FOUND, "File not found: $path")
             } catch (e: Exception) {
-                return@withContext errorResult(
+                return@withContext builtInToolErrorResult(
                     BuiltInToolExecutionError.EXECUTION_FAILED,
                     "Failed to read file: ${e.message}"
                 )
@@ -110,7 +138,7 @@ class EditFileTool : BuiltInTool {
             // Plan + resolve conflicts against the original text (no mutation yet).
             val plan = planAndResolve(original, edits)
             if (plan is PlanResult.Failure) {
-                return@withContext errorResult(BuiltInToolExecutionError.EXECUTION_FAILED, plan.message)
+                return@withContext builtInToolErrorResult(BuiltInToolExecutionError.EXECUTION_FAILED, plan.message)
             }
             val success = plan as PlanResult.Success
 
@@ -125,7 +153,7 @@ class EditFileTool : BuiltInTool {
                     Files.writeString(target, modified, Charsets.UTF_8)
                     BuiltInToolExecutionResult(output = report)
                 } catch (e: Exception) {
-                    return@withContext errorResult(
+                    return@withContext builtInToolErrorResult(
                         BuiltInToolExecutionError.EXECUTION_FAILED,
                         "Failed to write file: ${e.message}"
                     )
@@ -213,8 +241,8 @@ class EditFileTool : BuiltInTool {
      *
      * Overlap policy: when two planned occurrences overlap, the **more specific** occurrence wins —
      * the one with the longer matched original span. Ties (equal span length) are broken first by
-     * the lower original edit spec index, then by the earlier start index, for full determinism.
-     * The lower-priority overlapping occurrence is rejected (kept in the result summary) rather than
+     * the lower original edit index, then by the earlier start index, for full determinism. The
+     * lower-priority overlapping occurrence is rejected (kept in the result summary) rather than
      * silently dropped, and the higher-priority occurrence is applied.
      *
      * @param text Original file content (unmodified).
@@ -346,16 +374,6 @@ class EditFileTool : BuiltInTool {
         }
         return sb.toString()
     }
-
-    /**
-     * Builds an error [BuiltInToolExecutionResult] from a logical [code] and message.
-     *
-     * @param code Machine-readable error code (one of [BuiltInToolExecutionError]).
-     * @param message Human-readable explanation of the failure.
-     * @return An error result with [BuiltInToolExecutionResult.isError] set to `true`.
-     */
-    private fun errorResult(code: String, message: String): BuiltInToolExecutionResult =
-        BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code)
 
     /**
      * Returns `true` when two original-space ranges overlap (share at least one character).

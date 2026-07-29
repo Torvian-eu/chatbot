@@ -425,7 +425,8 @@ class DownloadFileToolTest {
         )
         assertTrue(result.isError)
         assertEquals(BuiltInToolExecutionError.EXECUTION_FAILED, result.errorCode)
-        assertEquals(403, result.errorDetails!!["statusCode"]?.jsonPrimitive?.int)
+        val errorDetails = Json.parseToJsonElement(result.errorDetails!!).jsonObject
+        assertEquals(403, errorDetails["statusCode"]?.jsonPrimitive?.int)
     }
 
     @Test

@@ -6,10 +6,10 @@ import eu.torvian.chatbot.worker.builtin.BuiltInTool
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
 import eu.torvian.chatbot.worker.builtin.WorkspacePathValidator
+import eu.torvian.chatbot.worker.builtin.validation.*
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
 import java.nio.ByteBuffer
-import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
 import java.nio.file.FileSystems
 import java.nio.file.Files
@@ -41,15 +41,21 @@ import kotlin.io.path.isRegularFile
  */
 class SearchTextTool : BuiltInTool {
 
-    /**
-     * Maximum file size (in bytes) loaded into memory for searching.
-     *
-     * The v1 implementation reads each candidate file fully into memory (see [readUtf8Lines]); files
-     * larger than this budget are skipped to avoid memory pressure. Streaming/constant-memory search
-     * is intentionally out of scope for this step.
-     */
     private companion object {
+        /**
+         * Maximum file size (in bytes) loaded into memory for searching.
+         *
+         * The v1 implementation reads each candidate file fully into memory (see [readUtf8Lines]); files
+         * larger than this budget are skipped to avoid memory pressure. Streaming/constant-memory search
+         * is intentionally out of scope for this step.
+         */
         const val MAX_FILE_BYTES: Long = 1_048_576L // 1 MB
+
+        /**
+         * Maximum number of characters allowed per line in search output.
+         */
+        const val MAX_LINE_CHARS = 200
+
     }
 
     override val name: String = "search_text"
@@ -57,53 +63,67 @@ class SearchTextTool : BuiltInTool {
     override val inputSchema: JsonObject = BuiltInToolCatalog.specFor(name)!!.inputSchema
 
     override suspend fun execute(input: JsonObject, context: BuiltInToolExecutionContext): BuiltInToolExecutionResult {
-        val query = input["query"]?.jsonPrimitive?.content
-            ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Missing required argument: query")
-        if (query.isBlank()) {
-            return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Argument 'query' must not be blank")
-        }
-        val path = input["path"]?.jsonPrimitive?.content ?: "."
-        val mode = input["mode"]?.jsonPrimitive?.content ?: "plain"
-        val caseSensitive = input["caseSensitive"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
-        val wholeWord = input["wholeWord"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
-        val filePattern = input["filePattern"]?.jsonPrimitive?.content
-        val excludePatterns = when (val excludeInput = input["excludePatterns"]) {
-            is JsonArray -> excludeInput.mapNotNull { it.jsonPrimitive.contentOrNull }
-            is JsonPrimitive -> excludeInput.contentOrNull?.let { listOf(it) } ?: emptyList()
-            else -> emptyList()
-        }
-        val contextBefore = input["contextBefore"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
-        val contextAfter = input["contextAfter"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0
-        val maxResults = input["maxResults"]?.jsonPrimitive?.content?.toIntOrNull()
+        // Accumulate all INVALID_INPUT validation errors before failing, so the LLM can see
+        // every issue at once instead of fixing them one at a time.
+        val validationErrors = mutableListOf<String>()
 
+        // Define the set of known/valid parameter names for this tool
+        val validKeys = setOf(
+            "path", "query", "mode", "caseSensitive", "wholeWord",
+            "filePattern", "excludePatterns", "contextBefore", "contextAfter", "maxResults", "maxBytes"
+        )
+        addUnknownParameterErrors(input, validKeys, validationErrors)
+
+        val query = parseRequiredString(input, "query", validationErrors)
+        if (query != null && query.isBlank()) {
+            validationErrors.add("Argument 'query' must not be blank")
+        }
+
+        // Default mode is "regex"
+        val mode = parseOptionalString(input, "mode", validationErrors) ?: "regex"
         if (mode !in setOf("plain", "regex")) {
-            return errorResult(
-                BuiltInToolExecutionError.INVALID_INPUT,
-                "Invalid 'mode' value: $mode (expected 'plain' or 'regex')"
-            )
+            validationErrors.add("Invalid 'mode' value: $mode (expected 'plain' or 'regex')")
         }
-        if (contextBefore < 0) {
-            return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Argument 'contextBefore' must be >= 0")
-        }
-        if (contextAfter < 0) {
-            return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Argument 'contextAfter' must be >= 0")
-        }
-        if (maxResults != null && maxResults < 1) {
-            return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Argument 'maxResults' must be >= 1")
-        }
-        // wholeWord is only meaningful in plain mode; reject the ambiguous combination in regex mode
-        // rather than silently ignoring it, so callers get deterministic feedback.
+
+        // Optional boolean fields: validate if present, otherwise use defaults
+        val caseSensitive = parseOptionalBoolean(input, "caseSensitive", defaultValue = false, validationErrors)
+        val wholeWord = parseOptionalBoolean(input, "wholeWord", defaultValue = false, validationErrors)
         if (mode == "regex" && wholeWord) {
-            return errorResult(
-                BuiltInToolExecutionError.INVALID_INPUT,
-                "Argument 'wholeWord' is not supported in 'regex' mode"
-            )
+            validationErrors.add("Argument 'wholeWord' is not supported in 'regex' mode")
+        }
+
+        // Optional integer fields: validate if present, otherwise use defaults
+        val contextBefore = parseOptionalInt(input, "contextBefore", defaultValue = 0, validationErrors)
+        if (contextBefore < 0) {
+            validationErrors.add("Argument 'contextBefore' must be >= 0")
+        }
+        val contextAfter = parseOptionalInt(input, "contextAfter", defaultValue = 0, validationErrors)
+        if (contextAfter < 0) {
+            validationErrors.add("Argument 'contextAfter' must be >= 0")
+        }
+
+        val maxResults = parseOptionalInt(input, "maxResults", defaultValue = 10, validationErrors)
+        if (maxResults < 1) {
+            validationErrors.add("Argument 'maxResults' must be >= 1")
+        }
+
+        val maxBytes = parseOptionalInt(input, "maxBytes", defaultValue = 1200, validationErrors)
+        if (maxBytes <= 0) {
+            validationErrors.add("Argument 'maxBytes' must be > 0")
+        }
+
+        val path = parseOptionalString(input, "path", validationErrors) ?: "."
+        val filePattern = parseOptionalString(input, "filePattern", validationErrors)
+        val excludePatterns = parseStringOrStringArray(input, "excludePatterns", validationErrors)
+
+        if (validationErrors.isNotEmpty()) {
+            return invalidInputResult(validationErrors)
         }
 
         val root = try {
             WorkspacePathValidator.requireInside(context.workspace, path)
         } catch (e: Exception) {
-            return errorResult(
+            return builtInToolErrorResult(
                 BuiltInToolExecutionError.WORKSPACE_VIOLATION,
                 e.message ?: "Path rejected by workspace validator"
             )
@@ -111,9 +131,9 @@ class SearchTextTool : BuiltInTool {
 
         // Compile the matcher once for the whole search to avoid recompiling per line/file.
         val regex = try {
-            compileRegex(query, mode, caseSensitive, wholeWord)
+            compileRegex(query!!, mode, caseSensitive, wholeWord)
         } catch (e: Exception) {
-            return errorResult(
+            return builtInToolErrorResult(
                 BuiltInToolExecutionError.INVALID_INPUT,
                 "Invalid ${if (mode == "regex") "regular expression" else "pattern"}: ${e.message}"
             )
@@ -124,7 +144,7 @@ class SearchTextTool : BuiltInTool {
 
         return withContext(context.ioDispatcher) {
             if (!Files.exists(root)) {
-                return@withContext errorResult(BuiltInToolExecutionError.NOT_FOUND, "Path not found: $path")
+                return@withContext builtInToolErrorResult(BuiltInToolExecutionError.NOT_FOUND, "Path not found: $path")
             }
 
             // A file is searched directly; a directory is walked recursively for regular files.
@@ -141,16 +161,16 @@ class SearchTextTool : BuiltInTool {
             val matchesByFile = LinkedHashMap<String, MutableList<MatchRender>>()
             var searchedFiles = 0
             var skippedFiles = 0
-            var truncated = false
+            var truncatedByMaxResults = false
 
             searchLoop@ for (file in candidates) {
-                // Relativize against the starting directory (root) — not the workspace root — so the
-                // reported path and the exclude-pattern matching behave intuitively regardless of the
-                // absolute filesystem location (e.g. a search rooted at "website/css" reports
-                // "style.css" rather than "website/css/style.css"). Normalize to forward slashes so
-                // output and exclude-pattern matching are platform-independent (glob matchers expect
-                // '/' separators), keeping results consistent across operating systems.
-                val relative = root.relativize(file).toString().replace('\\', '/')
+                // Use paths relative to the search root, normalize separators to /, and fall back to the file name
+                // when the root is a single file so results stay consistent and meaningful across platforms.
+                val relative = if (root.isRegularFile()) {
+                    root.fileName.toString().replace('\\', '/')
+                } else {
+                    root.relativize(file).toString().replace('\\', '/')
+                }
                 // filePattern filters by the relative path (consistent with SearchFilesTool, which
                 // matches the whole start-relative path); excludePatterns also filter by that path.
                 if (fileMatcher != null && !fileMatcher.matches(Path.of(relative))) continue@searchLoop
@@ -179,34 +199,38 @@ class SearchTextTool : BuiltInTool {
                 for ((index, line) in lines.withIndex()) {
                     // Line-based match: a line contributes at most one result, even when the pattern
                     // occurs multiple times within it.
-                    if (!regex.containsMatchIn(line)) continue
-                    if (matchObjects.size >= (maxResults ?: Int.MAX_VALUE)) {
-                        truncated = true
+                    val matchResult = regex.find(line) ?: continue
+                    if (matchObjects.size >= maxResults) {
+                        truncatedByMaxResults = true
                         break@searchLoop
                     }
+                    val matchRange = matchResult.range
                     val lineNumber = index + 1
                     val beforeStart = maxOf(0, index - contextBefore)
                     val afterEnd = minOf(lines.size, index + 1 + contextAfter)
                     val before = lines.subList(beforeStart, index)
                     val after = lines.subList(index + 1, afterEnd)
 
+                    val trimmedBeforeList = before.map { trimContext(it) }
+                    val trimmedAfterList = after.map { trimContext(it) }
+                    val windowedLine = windowLineAroundMatch(line, matchRange)
+
                     matchObjects.add(buildJsonObject {
                         put("path", relative)
                         put("lineNumber", lineNumber)
-                        put("line", line)
-                        putJsonArray("before") { before.forEach { add(it) } }
-                        putJsonArray("after") { after.forEach { add(it) } }
+                        put("line", windowedLine)
+                        putJsonArray("before") { trimmedBeforeList.forEach { add(it) } }
+                        putJsonArray("after") { trimmedAfterList.forEach { add(it) } }
                     })
 
                     // Collect the match for the grouped readable output. The path is emitted once as
                     // a per-file header during rendering (below) rather than repeated on every line,
-                    // keeping the output compact and token-friendly. Context lines are paired with
-                    // their 1-based line numbers so they can be rendered as "<n>: <content>".
+                    // keeping the textual output compact and token-friendly for the consuming model.
                     val render = MatchRender(
                         lineNumber = lineNumber,
-                        line = line,
-                        before = before.mapIndexed { bIdx, ctx -> (beforeStart + bIdx + 1) to ctx },
-                        after = after.mapIndexed { aIdx, ctx -> (index + 2 + aIdx) to ctx },
+                        line = windowedLine,
+                        before = before.mapIndexed { bIdx, ctx -> (beforeStart + bIdx + 1) to trimContext(ctx) },
+                        after = after.mapIndexed { aIdx, ctx -> (index + 2 + aIdx) to trimContext(ctx) },
                     )
                     matchesByFile.getOrPut(relative) { mutableListOf() }.add(render)
                 }
@@ -231,6 +255,13 @@ class SearchTextTool : BuiltInTool {
                 }
             }
 
+            val rawOutput = if (outputLines.isEmpty()) "" else outputLines.joinToString("\n")
+            val truncationResult = truncateLinesAndBytes(rawOutput, maxLines = Int.MAX_VALUE, maxBytes = maxBytes)
+            val truncatedOutput = truncationResult.text
+            val linesShown = truncationResult.linesShown
+            val bytesShown = truncationResult.bytesShown
+            val truncated = truncatedByMaxResults || truncationResult.isTruncated
+
             val totalMatches = matchObjects.size
             val details = buildJsonObject {
                 putJsonArray("matches") { matchObjects.forEach { add(it) } }
@@ -239,18 +270,84 @@ class SearchTextTool : BuiltInTool {
                 put("searchedFiles", searchedFiles)
                 put("skippedFiles", skippedFiles)
             }
+
+            // Build the summary and hints
             val summary = buildString {
                 append("\n\n")
                 append("$totalMatches match(es) across $searchedFiles file(s)")
                 if (skippedFiles > 0) append(" ($skippedFiles skipped)")
-                if (truncated) append(" — truncated to $maxResults result(s)")
+                if (truncatedByMaxResults) append(" — truncated to $maxResults result(s)")
             }
 
+            val truncationNotice = if (truncated) {
+                formatTruncationNotice(linesShown, bytesShown, "Increase 'maxResults'/'maxBytes' to read further.")
+            } else {
+                ""
+            }
+
+            val hints = mutableListOf<String>()
+
+            // Add hint when no matches found in plain mode but query looks like regex
+            if (totalMatches == 0 && mode == "plain" && looksLikeRegex(query)) {
+                hints += "Hint: Your query appears to be a regular expression. If you want to use regex matching, set mode='regex'."
+            }
+
+            // Add hint when no matches found and filePattern looks like a non-recursive top-level pattern with subdirectories present
+            if (totalMatches == 0 && filePattern != null && Files.isDirectory(root)
+                && looksLikeNonRecursiveTopLevelPattern(filePattern) && hasSubdirectories(root)
+            ) {
+                val suggested = toRecursiveHintPattern(filePattern)
+                hints += "Hint: filePattern='$filePattern' only matches files in the starting directory." +
+                        " If you intended to search recursively, use filePattern='$suggested'."
+            }
+
+            // Add hint when filePattern starts with **/ (regardless of whether matches were found or not)
+            if (filePattern != null && isUnintentionalLeadingSlashStarStar(filePattern)) {
+                hints += "Hint: filePattern='$filePattern' excludes files directly in the starting directory" +
+                        " because '**/ ' requires a directory separator. To include files in the starting" +
+                        " directory as well, use filePattern='${fixLeadingSlashStarStar(filePattern)}'."
+            }
+
+            val hintSuffix = if (hints.isEmpty()) "" else "\n\n" + hints.joinToString("\n\n")
+
             BuiltInToolExecutionResult(
-                output = if (outputLines.isEmpty()) "No matches found" else outputLines.joinToString("\n") + summary,
+                output = if (outputLines.isEmpty()) {
+                    "No matches found$hintSuffix"
+                } else {
+                    truncatedOutput + summary + truncationNotice + hintSuffix
+                },
                 details = details,
             )
         }
+    }
+
+    /**
+     * Checks if the query appears to be a regular expression pattern.
+     *
+     * This is an intentionally coarse heuristic used only for deciding whether to show
+     * a helpful hint when a plain-text search finds no matches. It is not a regex parser
+     * and does not try to classify every edge case perfectly.
+     *
+     * @param query The search query to analyze.
+     * @return True if the query looks like it contains regex patterns.
+     */
+    private fun looksLikeRegex(query: String): Boolean {
+        if (query.isBlank()) return false
+
+        // Check for common regex escape sequences that are unlikely to be used in plain text.
+        val regexEscapes = listOf("\\d", "\\D", "\\w", "\\W", "\\s", "\\S", "\\b", "\\B")
+        if (regexEscapes.any(query::contains)) return true
+
+        // Check for anchors and alternation
+        if (query.startsWith("^") || query.endsWith("$") || "|" in query) return true
+
+        // Check for character classes like [a-z] or [^0-9]
+        if (Regex("""(?<!\\)\[[^]]+]""").containsMatchIn(query)) return true
+
+        // Check for quantifiers like *, +, ?, {n}, {n,}, {n,m}
+        if (Regex("""(?<!\\)[\w)\]](?:[+*?]|\{\d+(,\d*)?})""").containsMatchIn(query)) return true
+
+        return false
     }
 
     /**
@@ -282,7 +379,7 @@ class SearchTextTool : BuiltInTool {
      *
      * Uses a strict decoder that reports (rather than silently replaces) malformed input, so files
      * that are not valid UTF-8 text (for example binaries) throw and are skipped by the caller
-     * instead of producing garbage matches. Line terminators (LF, CRLF, and CR) are stripped, so
+     * instead of producing mojibake output. Line terminators (LF, CRLF, and CR) are stripped, so
      * matched lines never contain a trailing carriage return.
      *
      * @param file Regular file to read.
@@ -300,8 +397,45 @@ class SearchTextTool : BuiltInTool {
         return text.split(Regex("\r\n|\r|\n"))
     }
 
-    private fun errorResult(code: String, message: String): BuiltInToolExecutionResult =
-        BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code)
+    /**
+     * Windows a matching line around [matchRange] if it exceeds [maxChars], ensuring the match is visible.
+     *
+     * @param line The raw line string to be windowed.
+     * @param matchRange The character index range where the match was found.
+     * @param maxChars Maximum character limit for the windowed line.
+     * @return The windowed line snippet with ellipsis markers where truncated.
+     */
+    private fun windowLineAroundMatch(
+        line: String,
+        matchRange: IntRange,
+        maxChars: Int = MAX_LINE_CHARS,
+    ): String {
+        if (line.length <= maxChars) return line
+
+        val matchLength = (matchRange.last - matchRange.first + 1).coerceAtLeast(1)
+        val margin = ((maxChars - matchLength) / 2).coerceAtLeast(20)
+
+        var winStart = maxOf(0, matchRange.first - margin)
+        val winEnd = minOf(line.length, winStart + maxChars)
+        if (winEnd == line.length) {
+            winStart = maxOf(0, winEnd - maxChars)
+        }
+
+        val snippet = line.substring(winStart, winEnd)
+        val prefix = if (winStart > 0) "..." else ""
+        val suffix = if (winEnd < line.length) "..." else ""
+        return "$prefix$snippet$suffix"
+    }
+
+    /**
+     * Trims a context line if it exceeds [MAX_LINE_CHARS], appending an ellipsis suffix.
+     *
+     * @param ctx The context line string.
+     * @return The trimmed context line if too long, or the original line otherwise.
+     */
+    private fun trimContext(ctx: String): String =
+        if (ctx.length > MAX_LINE_CHARS) ctx.take(MAX_LINE_CHARS) + "..." else ctx
+
 }
 
 /**

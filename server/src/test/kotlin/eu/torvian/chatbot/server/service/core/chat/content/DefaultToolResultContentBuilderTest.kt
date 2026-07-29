@@ -126,9 +126,7 @@ class DefaultToolResultContentBuilderTest {
         )
 
         assertEquals(
-            "{\"error\":\"Command exited with code 2\"," +
-                "\"output\":\"exitCode: 2\\n--- stdout ---\\n\\n--- stderr ---\\nNo such file or directory\"," +
-                "\"errorCode\":\"EXECUTION_FAILED\"}",
+            "{\"error\":\"Command exited with code 2\",\"output\":\"exitCode: 2\\n--- stdout ---\\n\\n--- stderr ---\\nNo such file or directory\",\"errorCode\":\"EXECUTION_FAILED\"}",
             result
         )
     }
@@ -157,5 +155,91 @@ class DefaultToolResultContentBuilderTest {
         )
 
         assertEquals("{\"error\":\"Command exited with code 1\"}", result)
+    }
+
+    /**
+     * Verifies an error tool call with accumulated validation errors surfaces
+     * the errorDetails field so the LLM can see all validation issues at once.
+     */
+    @Test
+    fun `build includes errorDetails for errored tool calls with validation errors`() {
+        val builder = DefaultToolResultContentBuilder()
+
+        val result = builder.build(
+            ToolCall(
+                id = 5L,
+                messageId = 10L,
+                toolDefinitionId = 2L,
+                toolName = "run_command",
+                toolCallId = "call-5",
+                input = null,
+                output = null,
+                status = ToolCallStatus.ERROR,
+                errorMessage = "Input validation failed with 2 error(s):",
+                errorCode = "invalid_input",
+                errorDetails = "{\"validationErrors\":[\"The 'command' field must be a single executable name without spaces. Arguments should be provided in the 'args' field. Received: \\\"echo hello world\\\".\",\"timeout must be > 0 seconds\"]}",
+                executedAt = Instant.fromEpochMilliseconds(1234L)
+            )
+        )
+
+        assertEquals(
+            "{\"error\":\"Input validation failed with 2 error(s):\",\"errorCode\":\"invalid_input\",\"errorDetails\":{\"validationErrors\":[\"The 'command' field must be a single executable name without spaces. Arguments should be provided in the 'args' field. Received: \\\"echo hello world\\\".\",\"timeout must be > 0 seconds\"]}}",
+            result
+        )
+    }
+
+    /**
+     * Verifies that tool output is preserved as a structured JSON object when it is valid JSON,
+     * enabling the LLM to parse it programmatically.
+     */
+    @Test
+    fun `build parses valid JSON output as structured object`() {
+        val builder = DefaultToolResultContentBuilder()
+
+        val result = builder.build(
+            ToolCall(
+                id = 6L,
+                messageId = 10L,
+                toolDefinitionId = 2L,
+                toolName = "read_text_file",
+                toolCallId = "call-6",
+                input = "{\"path\":\"test.kt\"}",
+                output = "{\"content\":\"fun main() {}\",\"length\":12}",
+                status = ToolCallStatus.SUCCESS,
+                executedAt = Instant.fromEpochMilliseconds(1234L)
+            )
+        )
+
+        // Output should be preserved as-is for successful calls
+        assertEquals("{\"content\":\"fun main() {}\",\"length\":12}", result)
+    }
+
+    /**
+     * Verifies that error output is preserved as a structured JSON object when it is valid JSON.
+     */
+    @Test
+    fun `build parses valid JSON output as structured object in error case`() {
+        val builder = DefaultToolResultContentBuilder()
+
+        val result = builder.build(
+            ToolCall(
+                id = 7L,
+                messageId = 10L,
+                toolDefinitionId = 2L,
+                toolName = "some_tool",
+                toolCallId = "call-7",
+                input = null,
+                output = "{\"structured\":\"error output\",\"details\":[\"a\",\"b\"]}",
+                status = ToolCallStatus.ERROR,
+                errorMessage = "Tool failed",
+                executedAt = Instant.fromEpochMilliseconds(1234L)
+            )
+        )
+
+        // Output should be parsed as JSON object when valid
+        assertEquals(
+            "{\"error\":\"Tool failed\",\"output\":{\"structured\":\"error output\",\"details\":[\"a\",\"b\"]}}",
+            result
+        )
     }
 }

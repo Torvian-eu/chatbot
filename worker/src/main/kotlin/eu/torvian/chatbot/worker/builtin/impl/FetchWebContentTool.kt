@@ -8,6 +8,19 @@ import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
 import eu.torvian.chatbot.worker.builtin.net.WebFetchRequest
 import eu.torvian.chatbot.worker.builtin.net.WebFetchService
 import eu.torvian.chatbot.worker.builtin.net.mapWebFetchErrorToToolResult
+import eu.torvian.chatbot.worker.builtin.validation.addUnknownParameterErrors
+import eu.torvian.chatbot.worker.builtin.validation.builtInToolErrorResult
+import eu.torvian.chatbot.worker.builtin.validation.invalidInputResult
+import eu.torvian.chatbot.worker.builtin.validation.formatTruncationNotice
+import eu.torvian.chatbot.worker.builtin.validation.buildRangeHeader
+import eu.torvian.chatbot.worker.builtin.validation.parseOptionalBoolean
+import eu.torvian.chatbot.worker.builtin.validation.parseOptionalInt
+import eu.torvian.chatbot.worker.builtin.validation.parseOptionalIntOrNull
+import eu.torvian.chatbot.worker.builtin.validation.parseOptionalLineRange
+import eu.torvian.chatbot.worker.builtin.validation.parseOptionalString
+import eu.torvian.chatbot.worker.builtin.validation.parseRequiredString
+import eu.torvian.chatbot.worker.builtin.validation.resolveSlice
+import eu.torvian.chatbot.worker.builtin.validation.truncateLinesAndBytes
 import arrow.core.Either
 import kotlinx.serialization.json.*
 import java.nio.ByteBuffer
@@ -38,83 +51,116 @@ class FetchWebContentTool(
     override val inputSchema: JsonObject = BuiltInToolCatalog.specFor(name)!!.inputSchema
 
     override suspend fun execute(input: JsonObject, context: BuiltInToolExecutionContext): BuiltInToolExecutionResult {
-        // --- Input parsing & validation (tool-local concerns only) -------------------------------
-        val url = input["url"]?.jsonPrimitive?.content
-            ?: return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Missing required argument: url")
-        if (url.isBlank()) {
-            return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Argument 'url' must not be blank")
+        // Accumulate all INVALID_INPUT validation errors before failing, so the LLM can see
+        // every issue at once instead of fixing them one at a time.
+        val validationErrors = mutableListOf<String>()
+
+        // Define the set of known/valid parameter names for this tool
+        val validKeys = setOf("url", "timeoutSeconds", "maxDownloadBytes", "maxBytes", "maxLines", "followRedirects", "returnMode", "range")
+        addUnknownParameterErrors(input, validKeys, validationErrors)
+
+        val url = parseRequiredString(input, "url", validationErrors)
+        if (url != null && url.isBlank()) {
+            validationErrors.add("Argument 'url' must not be blank")
         }
 
-        val timeoutSeconds = input["timeoutSeconds"]?.jsonPrimitive?.content?.toIntOrNull()
+        val timeoutSeconds = parseOptionalIntOrNull(input, "timeoutSeconds", validationErrors)
         if (timeoutSeconds != null && timeoutSeconds <= 0) {
-            return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Argument 'timeoutSeconds' must be > 0")
+            validationErrors.add("Argument 'timeoutSeconds' must be > 0")
         }
 
-        val maxBytes = input["maxBytes"]?.jsonPrimitive?.content?.toIntOrNull()
-        if (maxBytes != null && maxBytes <= 0) {
-            return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Argument 'maxBytes' must be > 0")
+        val maxDownloadBytes = parseOptionalInt(input, "maxDownloadBytes", defaultValue = 100000, validationErrors)
+        if (maxDownloadBytes <= 0) {
+            validationErrors.add("Argument 'maxDownloadBytes' must be > 0")
         }
 
-        // followRedirects defaults to true; a present but non-boolean value is rejected as invalid input.
-        val followRedirects = when (val raw = input["followRedirects"]?.jsonPrimitive?.content) {
-            null -> true
-            else -> raw.toBooleanStrictOrNull()
-                ?: return errorResult(
-                    BuiltInToolExecutionError.INVALID_INPUT,
-                    "Argument 'followRedirects' must be a boolean (true/false)"
-                )
+        val maxBytes = parseOptionalInt(input, "maxBytes", defaultValue = 20000, validationErrors)
+        if (maxBytes <= 0) {
+            validationErrors.add("Argument 'maxBytes' must be > 0")
         }
 
-        val returnMode = input["returnMode"]?.jsonPrimitive?.content ?: "auto"
+        val maxLines = parseOptionalInt(input, "maxLines", defaultValue = 500, validationErrors)
+        if (maxLines <= 0) {
+            validationErrors.add("Argument 'maxLines' must be > 0")
+        }
+
+        val followRedirects = parseOptionalBoolean(input, "followRedirects", defaultValue = true, validationErrors)
+
+        val returnMode = parseOptionalString(input, "returnMode", validationErrors) ?: "auto"
         if (returnMode !in setOf("auto", "text", "html")) {
-            return errorResult(
-                BuiltInToolExecutionError.INVALID_INPUT,
-                "Invalid 'returnMode' value: $returnMode (expected 'auto', 'text', or 'html')"
-            )
+            validationErrors.add("Invalid 'returnMode' value: $returnMode (expected 'auto', 'text', or 'html')")
+        }
+
+        val range = parseOptionalLineRange(input, "range", validationErrors)
+
+        if (validationErrors.isNotEmpty()) {
+            return invalidInputResult(validationErrors)
         }
 
         // --- Delegate to the shared web foundation (no URL/HTTP logic here) -----------------------
         val request = WebFetchRequest(
-            url = url,
+            url = url!!,
             timeoutSeconds = timeoutSeconds,
-            maxBytes = maxBytes,
+            maxBytes = maxDownloadBytes,
             followRedirects = followRedirects,
         )
 
-        val result = when (val fetched = fetchService.fetch(request)) {
+        val fetchedResult = when (val fetched = fetchService.fetch(request)) {
             is Either.Left -> return mapWebFetchErrorToToolResult(fetched.value)
             is Either.Right -> fetched.value
         }
 
         // --- Textual gating: never emit binary garbage -------------------------------------------
-        val parsed = parseContentType(result.contentType)
+        val parsed = parseContentType(fetchedResult.contentType)
         val (mediaType, charsetName) = parsed
         if (!isTextualContentType(mediaType)) {
-            return errorResult(
+            return builtInToolErrorResult(
                 BuiltInToolExecutionError.EXECUTION_FAILED,
-                "Response content type '${result.contentType ?: "<none>"}' is not textual; refusing to emit binary content."
+                "Response content type '${fetchedResult.contentType ?: "<none>"}' is not textual; refusing to emit binary content."
             )
         }
 
         val charset = resolveCharset(charsetName)
-        val text = decodeText(result.bodyBytes, charset)
-            ?: return errorResult(
+        val text = decodeText(fetchedResult.bodyBytes, charset)
+            ?: return builtInToolErrorResult(
                 BuiltInToolExecutionError.EXECUTION_FAILED,
                 "Response body could not be decoded as text using charset '${charset.name()}'."
             )
 
         // --- Shape the result (output + structured details) --------------------------------------
+        val allLines = text.lines()
+        val (startIdx, endIdx) = resolveSlice(range, allLines.size)
+        val selected = allLines.subList(startIdx, endIdx)
+        val rawBody = selected.joinToString("\n")
+        val truncationResult = truncateLinesAndBytes(rawBody, maxLines, maxBytes)
+        val body = truncationResult.text
+        val linesShown = truncationResult.linesShown
+        val bytesShown = truncationResult.bytesShown
+        val truncated = truncationResult.isTruncated
+
+        val notice = if (truncated) {
+            formatTruncationNotice(linesShown, bytesShown, "Use 'range' or increase 'maxLines'/'maxBytes' to read further.")
+        } else {
+            ""
+        }
+        val actualEndIdx = startIdx + linesShown
+        val header = buildRangeHeader(fetchedResult.finalUrl, startIdx, actualEndIdx, allLines.size)
+        val content = if (body.isEmpty()) header else "$header\n$body"
+        val output = content + notice
+
         val details = buildJsonObject {
-            put("finalUrl", result.finalUrl)
-            put("statusCode", result.statusCode)
-            put("contentType", result.contentType)
-            put("contentLength", result.contentLength)
-            put("bytesRead", result.bodyBytes.size)
+            put("finalUrl", fetchedResult.finalUrl)
+            put("statusCode", fetchedResult.statusCode)
+            put("contentType", fetchedResult.contentType)
+            put("contentLength", fetchedResult.contentLength)
+            put("bytesRead", fetchedResult.bodyBytes.size)
             put("returnMode", returnMode)
+            put("totalLines", allLines.size)
+            put("truncated", truncated)
         }
 
         return BuiltInToolExecutionResult(
-            output = text,
+            output = output,
             details = details,
         )
     }
@@ -189,9 +235,6 @@ class FetchWebContentTool(
             .onUnmappableCharacter(CodingErrorAction.REPORT)
         decoder.decode(ByteBuffer.wrap(bytes)).toString()
     }.getOrNull()
-
-    private fun errorResult(code: String, message: String): BuiltInToolExecutionResult =
-        BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code)
 
     private companion object {
         /** Application media types that are reliably textual and safe to emit as text. */

@@ -199,6 +199,33 @@ class ReadTextFileToolTest {
     }
 
     @Test
+    fun `path and range objects are rejected as invalid input`() = runTest {
+        val dir = createTempDirectory("read-text-file-test")
+        try {
+            val result = tool.execute(
+                buildJsonObject {
+                    put("path", buildJsonObject { put("nested", "value") })
+                    put("range", buildJsonObject { put("nested", "value") })
+                },
+                context(dir)
+            )
+
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            val errorDetailsJson = result.errorDetails
+                ?: throw AssertionError("expected errorDetails with validation errors")
+            val errorDetails = Json.parseToJsonElement(errorDetailsJson).jsonObject
+            val errorsArray = errorDetails["validationErrors"]?.jsonArray
+                ?: throw AssertionError("expected validationErrors array in errorDetails")
+            assertEquals(2, errorsArray.size, "should have accumulated 2 validation errors")
+            val errorTexts = errorsArray.map { it.jsonPrimitive.content }
+            assertTrue(errorTexts.any { it.contains("path") && it.contains("string") })
+            assertTrue(errorTexts.any { it.contains("range") && it.contains("array") })
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun `requesting a non-existent file returns not found`() = runTest {
         val dir = createTempDirectory("read-text-file-test")
         try {
@@ -217,6 +244,170 @@ class ReadTextFileToolTest {
             val result = tool.execute(buildInput("../escaped.txt"), context(dir))
 
             assertError(result, BuiltInToolExecutionError.WORKSPACE_VIOLATION)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `unknown parameter returns invalid input error`() = runTest {
+        val dir = createTempDirectory("read-text-file-test")
+        try {
+            val result = tool.execute(
+                buildJsonObject {
+                    put("path", "sample.txt")
+                    put("unknownParam", "someValue")
+                },
+                context(dir)
+            )
+
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            val errorDetailsJson = result.errorDetails
+                ?: throw AssertionError("expected errorDetails with validation errors")
+            val errorDetails = Json.parseToJsonElement(errorDetailsJson).jsonObject
+            val errorsArray = errorDetails["validationErrors"]?.jsonArray
+                ?: throw AssertionError("expected validationErrors array in errorDetails")
+            assertEquals(1, errorsArray.size, "should have 1 validation error")
+            val errorText = errorsArray.first().jsonPrimitive.content
+            assertTrue(
+                errorText.contains("unknownParam"),
+                "error message should mention the unknown parameter; got: $errorText"
+            )
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `multiple unknown parameters are accumulated in validation errors`() = runTest {
+        val dir = createTempDirectory("read-text-file-test")
+        try {
+            val result = tool.execute(
+                buildJsonObject {
+                    put("path", "sample.txt")
+                    put("unknownParam1", "value1")
+                    put("unknownParam2", "value2")
+                },
+                context(dir)
+            )
+
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            val errorDetailsJson = result.errorDetails
+                ?: throw AssertionError("expected errorDetails with accumulated validation errors")
+            val errorDetails = Json.parseToJsonElement(errorDetailsJson).jsonObject
+            val errorsArray = errorDetails["validationErrors"]?.jsonArray
+                ?: throw AssertionError("expected validationErrors array in errorDetails")
+            assertEquals(2, errorsArray.size, "should have accumulated 2 unknown parameter errors")
+            val errorTexts = errorsArray.map { it.jsonPrimitive.content }
+            assertTrue(
+                errorTexts.any { it.contains("unknownParam1") },
+                "should contain unknownParam1 error; got: $errorTexts"
+            )
+            assertTrue(
+                errorTexts.any { it.contains("unknownParam2") },
+                "should contain unknownParam2 error; got: $errorTexts"
+            )
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `unknown parameter combined with other validation errors are all accumulated`() = runTest {
+        val dir = createTempDirectory("read-text-file-test")
+        try {
+            val result = tool.execute(
+                buildJsonObject {
+                    put("path", "sample.txt")
+                    put("unknownParam", "someValue")
+                    put("range", buildJsonArray { add(0) }) // wrong arity
+                },
+                context(dir)
+            )
+
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            val errorDetailsJson = result.errorDetails
+                ?: throw AssertionError("expected errorDetails with accumulated validation errors")
+            val errorDetails = Json.parseToJsonElement(errorDetailsJson).jsonObject
+            val errorsArray = errorDetails["validationErrors"]?.jsonArray
+                ?: throw AssertionError("expected validationErrors array in errorDetails")
+            assertEquals(2, errorsArray.size, "should have accumulated 2 validation errors")
+            val errorTexts = errorsArray.map { it.jsonPrimitive.content }
+            assertTrue(
+                errorTexts.any { it.contains("unknownParam") },
+                "should contain unknownParam error; got: $errorTexts"
+            )
+            assertTrue(
+                errorTexts.any { it.contains("range") },
+                "should contain range error; got: $errorTexts"
+            )
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `read_text_file respects maxLines and maxBytes overrides and truncates with notice`() = runTest {
+        val dir = createTempDirectory("read-text-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            file.writeText("line1\nline2\nline3\nline4\nline5", Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildJsonObject {
+                    put("path", "sample.txt")
+                    put("maxLines", 2)
+                },
+                context(dir)
+            )
+
+            val success = assertSuccess(result)
+            assertTrue(success.contains("[Output truncated:"), "Expected truncation notice; got: $success")
+            assertEquals(true, result.details?.jsonObject?.get("truncated")?.jsonPrimitive?.boolean)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `read_text_file range header reflects actual returned lines when maxLines truncates content`() = runTest {
+        val dir = createTempDirectory("read-text-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            file.writeText("line1\nline2\nline3\nline4\nline5", Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildJsonObject {
+                    put("path", "sample.txt")
+                    put("maxLines", 2)
+                },
+                context(dir)
+            )
+
+            val success = assertSuccess(result)
+            assertTrue(success.startsWith("=== sample.txt (lines:1-2 of 5) ==="), "Header should reflect returned lines 1-2; got: $success")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `read_text_file with invalid maxLines or maxBytes returns invalid input error`() = runTest {
+        val dir = createTempDirectory("read-text-file-test")
+        try {
+            val file = dir.resolve("sample.txt")
+            file.writeText("line1", Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildJsonObject {
+                    put("path", "sample.txt")
+                    put("maxLines", 0)
+                    put("maxBytes", -5)
+                },
+                context(dir)
+            )
+
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
         } finally {
             dir.toFile().deleteRecursively()
         }

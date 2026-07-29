@@ -12,6 +12,7 @@ import kotlin.io.path.createTempDirectory
 import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -45,6 +46,7 @@ class SearchFilesToolTest {
         pattern: String,
         path: String? = null,
         excludePatterns: Any? = null,
+        maxResults: Any? = null,
     ): JsonObject = buildJsonObject {
         put("pattern", pattern)
         if (path != null) put("path", path)
@@ -53,6 +55,11 @@ class SearchFilesToolTest {
             is List<*> -> putJsonArray("excludePatterns") {
                 for (p in excludePatterns) add(p as String)
             }
+        }
+        when (maxResults) {
+            is Int -> put("maxResults", maxResults)
+            is String -> put("maxResults", maxResults)
+            is JsonElement -> put("maxResults", maxResults)
         }
     }
 
@@ -135,8 +142,10 @@ class SearchFilesToolTest {
             // `**/*.kt` matches files in subdirectories only (the root file "a.kt" has no slash).
             val result = tool.execute(buildInput("**/*.kt"), context(dir))
 
-            val matches = assertSuccess(result).lines().map { it.replace('\\', '/') }.toSet()
+            val output = assertSuccess(result)
+            val matches = result.details?.jsonObject?.get("matches")?.jsonArray?.map { it.jsonPrimitive.content }?.toSet()
             assertEquals(setOf("sub/b.kt"), matches)
+            assertTrue(output.contains("Hint: '**/*.kt' excludes files directly in the starting directory"))
         } finally {
             dir.toFile().deleteRecursively()
         }
@@ -361,6 +370,247 @@ class SearchFilesToolTest {
 
             val matches = assertSuccess(result).lines().map { it.replace('\\', '/') }.toSet()
             assertEquals(setOf("src/Main.kt"), matches)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `no matches with non-recursive pattern and subdirectories shows hint for star pattern`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            dir.resolve("sub").toFile().mkdirs()
+            dir.resolve("sub/b.kt").writeText("x", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("*.kt"), context(dir))
+
+            val output = assertSuccess(result)
+            assertTrue(output.contains("No matches found"))
+            assertTrue(output.contains("Hint: '*.kt' only matches entries in the starting directory. If you intended a recursive search, use '**.kt'."))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `no matches with non-recursive pattern and subdirectories shows hint for plain filename`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            dir.resolve("sub").toFile().mkdirs()
+            dir.resolve("sub/README.md").writeText("x", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("README.md"), context(dir))
+
+            val output = assertSuccess(result)
+            assertTrue(output.contains("No matches found"))
+            assertTrue(output.contains("Hint: 'README.md' only matches entries in the starting directory. If you intended a recursive search, use '**README.md'."))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `no matches with double star pattern shows no hint`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            dir.resolve("sub").toFile().mkdirs()
+            dir.resolve("sub/b.kt").writeText("x", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("**.java"), context(dir))
+
+            val output = assertSuccess(result)
+            assertEquals("", output)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `no matches with path-aware pattern shows no hint`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            dir.resolve("src").toFile().mkdirs()
+            dir.resolve("src/Main.kt").writeText("x", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("src/*.java"), context(dir))
+
+            val output = assertSuccess(result)
+            assertEquals("", output)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `matches found in top directory shows no hint`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            dir.resolve("a.kt").writeText("x", Charsets.UTF_8)
+            dir.resolve("sub").toFile().mkdirs()
+            dir.resolve("sub/b.kt").writeText("x", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("*.kt"), context(dir))
+
+            val output = assertSuccess(result)
+            assertEquals("a.kt", output.replace('\\', '/'))
+            assertFalse(output.contains("Hint:"))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `no matches in flat directory with no subdirectories shows no hint`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            dir.resolve("a.txt").writeText("x", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("*.kt"), context(dir))
+
+            val output = assertSuccess(result)
+            assertEquals("", output)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `explicit smaller maxResults truncates results and shows truncation note and details`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            dir.resolve("a.kt").writeText("x", Charsets.UTF_8)
+            dir.resolve("b.kt").writeText("x", Charsets.UTF_8)
+            dir.resolve("c.kt").writeText("x", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("**.kt", maxResults = 2), context(dir))
+
+            val output = assertSuccess(result)
+            assertTrue(output.contains("result(s) shown — truncated to 2 result(s)"), "expected truncation notice; got:\n$output")
+            val details = result.details
+            assertEquals(true, details?.jsonObject?.get("truncated")?.jsonPrimitive?.boolean)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `explicit maxResults larger than available results does not truncate`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            dir.resolve("a.kt").writeText("x", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("**.kt", maxResults = 10), context(dir))
+
+            val output = assertSuccess(result)
+            assertTrue(!output.contains("truncated"), "did not expect truncation notice; got:\n$output")
+            val details = result.details
+            assertEquals(false, details?.jsonObject?.get("truncated")?.jsonPrimitive?.boolean)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `invalid maxResults returns INVALID_INPUT`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            val resultZero = tool.execute(buildInput("**.kt", maxResults = 0), context(dir))
+            assertError(resultZero, BuiltInToolExecutionError.INVALID_INPUT)
+
+            val resultNegative = tool.execute(buildInput("**.kt", maxResults = -1), context(dir))
+            assertError(resultNegative, BuiltInToolExecutionError.INVALID_INPUT)
+
+            val resultInvalidString = tool.execute(buildInput("**.kt", maxResults = "abc"), context(dir))
+            assertError(resultInvalidString, BuiltInToolExecutionError.INVALID_INPUT)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `omitted maxResults defaults to 25 and truncates when matches exceed 25`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            for (i in 1..26) {
+                dir.resolve("file$i.kt").writeText("x", Charsets.UTF_8)
+            }
+
+            val result = tool.execute(buildInput("**.kt"), context(dir))
+
+            val output = assertSuccess(result)
+            assertTrue(output.contains("result(s) shown — truncated to 25 result(s)"), "expected truncation notice; got:\n$output")
+            val details = result.details
+            assertEquals(true, details?.jsonObject?.get("truncated")?.jsonPrimitive?.boolean)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `leading slash star star pattern shows warning hint even when matches found and suggests fix without triple stars`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            dir.resolve("a.kt").writeText("x", Charsets.UTF_8)
+            val sub = dir.resolve("sub").toFile()
+            sub.mkdirs()
+            dir.resolve("sub/b.kt").writeText("x", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("**/*.kt"), context(dir))
+            val output = assertSuccess(result)
+            assertTrue(output.contains("Hint: '**/*.kt' excludes files directly in the starting directory"), "output=$output")
+            assertTrue(output.contains("use '**.kt'"), "output=$output")
+            assertFalse(output.contains("***"), "output=$output")
+            // Also verify that top-level file a.kt was excluded by **/*.kt (glob semantics unchanged)
+            assertFalse(output.contains("a.kt"), "output=$output")
+            assertTrue(output.contains("sub/b.kt"), "output=$output")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `leading slash star star pattern like README md shows warning hint`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            val sub = dir.resolve("sub").toFile()
+            sub.mkdirs()
+            dir.resolve("sub/README.md").writeText("x", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("**/README.md"), context(dir))
+            val output = assertSuccess(result)
+            assertTrue(output.contains("Hint: '**/README.md' excludes files directly in the starting directory"), "output=$output")
+            assertTrue(output.contains("use '**README.md'"), "output=$output")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `pattern starting with double star without slash does not show leading slash warning hint`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            dir.resolve("a.kt").writeText("x", Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("**.kt"), context(dir))
+            val output = assertSuccess(result)
+            assertFalse(output.contains("excludes files directly in the starting directory"), "output=$output")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `intentional or nested slash star star patterns do not show leading slash warning hint`() = runTest {
+        val dir = createTempDirectory("search-files-test")
+        try {
+            dir.resolve("src").toFile().mkdirs()
+            dir.resolve("src/a.kt").writeText("x", Charsets.UTF_8)
+
+            for (p in listOf("**/**.kt", "**/src/*.kt", "**/*/*.kt")) {
+                val result = tool.execute(buildInput(p), context(dir))
+                val output = assertSuccess(result)
+                assertFalse(output.contains("excludes files directly in the starting directory"), "pattern $p should not trigger hint; output=$output")
+            }
         } finally {
             dir.toFile().deleteRecursively()
         }

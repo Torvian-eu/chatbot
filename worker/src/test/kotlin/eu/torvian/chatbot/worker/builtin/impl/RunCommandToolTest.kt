@@ -8,8 +8,10 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.*
 import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
+import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -214,5 +216,327 @@ class RunCommandToolTest {
             dir.toFile().deleteRecursively()
         }
     }
-}
 
+    @Test
+    fun `command field containing spaces returns invalid input error with guidance`() = runTest {
+        val dir = createTempDirectory("run-command-test")
+        try {
+            // Simulate LLM misuse: full command line placed in the `command` field.
+            val result = tool.execute(buildInput("echo hello world"), context(dir))
+
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            val errorDetailsJson = result.errorDetails
+                ?: throw AssertionError("expected errorDetails with validation errors")
+            // Parse the errorDetails string as JSON
+            val errorDetails = Json.parseToJsonElement(errorDetailsJson).jsonObject
+            val errorsArray = errorDetails["validationErrors"]?.jsonArray
+                ?: throw AssertionError("expected validationErrors array in errorDetails")
+            assertEquals(1, errorsArray.size, "should have 1 validation error")
+            val errorText = errorsArray.first().jsonPrimitive.content
+            assertEquals(
+                true,
+                errorText.contains("args"),
+                "error message should mention the 'args' field; got: $errorText"
+            )
+            assertEquals(
+                true,
+                errorText.contains("echo hello world"),
+                "error message should echo back the received command; got: $errorText"
+            )
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `multiple validation errors are accumulated instead of failing on first`() = runTest {
+        val dir = createTempDirectory("run-command-test")
+        try {
+            // Both command has spaces AND timeout is invalid (<= 0).
+            val result = tool.execute(buildInput("echo hello world", timeout = 0), context(dir))
+
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            val errorDetailsJson = result.errorDetails
+                ?: throw AssertionError("expected errorDetails with accumulated validation errors")
+            // Parse the errorDetails string as JSON
+            val errorDetails = Json.parseToJsonElement(errorDetailsJson).jsonObject
+            val errorsArray = errorDetails["validationErrors"]?.jsonArray
+                ?: throw AssertionError("expected validationErrors array in errorDetails")
+            assertEquals(2, errorsArray.size, "should have accumulated 2 validation errors")
+            val errorTexts = errorsArray.map { it.jsonPrimitive.content }
+            assertTrue(
+                errorTexts.any { it.contains("command") && it.contains("spaces") },
+                "should contain command whitespace error; got: $errorTexts"
+            )
+            assertTrue(
+                errorTexts.any { it.contains("timeout") },
+                "should contain timeout error; got: $errorTexts"
+            )
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `malformed command and args values are rejected as invalid input`() = runTest {
+        val dir = createTempDirectory("run-command-test")
+        try {
+            val result = tool.execute(
+                buildJsonObject {
+                    put("command", buildJsonObject { put("nested", "value") })
+                    put("args", buildJsonObject { put("nested", "value") })
+                },
+                context(dir)
+            )
+
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            val errorDetailsJson = result.errorDetails
+                ?: throw AssertionError("expected errorDetails with validation errors")
+            val errorDetails = Json.parseToJsonElement(errorDetailsJson).jsonObject
+            val errorsArray = errorDetails["validationErrors"]?.jsonArray
+                ?: throw AssertionError("expected validationErrors array in errorDetails")
+            assertEquals(2, errorsArray.size, "should have accumulated 2 validation errors")
+            val errorTexts = errorsArray.map { it.jsonPrimitive.content }
+            assertTrue(errorTexts.any { it.contains("command") && it.contains("string") })
+            assertTrue(errorTexts.any { it.contains("args") && it.contains("string or array of strings") })
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `unknown parameter returns invalid input error`() = runTest {
+        val dir = createTempDirectory("run-command-test")
+        try {
+            // Build an input with an unknown parameter "unknownParam"
+            val result = tool.execute(
+                buildJsonObject {
+                    put("command", "echo")
+                    put("unknownParam", "someValue")
+                },
+                context(dir)
+            )
+
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            val errorDetailsJson = result.errorDetails
+                ?: throw AssertionError("expected errorDetails with validation errors")
+            // Parse the errorDetails string as JSON
+            val errorDetails = Json.parseToJsonElement(errorDetailsJson).jsonObject
+            val errorsArray = errorDetails["validationErrors"]?.jsonArray
+                ?: throw AssertionError("expected validationErrors array in errorDetails")
+            assertEquals(1, errorsArray.size, "should have 1 validation error")
+            val errorText = errorsArray.first().jsonPrimitive.content
+            assertTrue(
+                errorText.contains("unknownParam"),
+                "error message should mention the unknown parameter; got: $errorText"
+            )
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `multiple unknown parameters are accumulated in validation errors`() = runTest {
+        val dir = createTempDirectory("run-command-test")
+        try {
+            // Build an input with multiple unknown parameters
+            val result = tool.execute(
+                buildJsonObject {
+                    put("command", "echo")
+                    put("unknownParam1", "value1")
+                    put("unknownParam2", "value2")
+                },
+                context(dir)
+            )
+
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            val errorDetailsJson = result.errorDetails
+                ?: throw AssertionError("expected errorDetails with accumulated validation errors")
+            // Parse the errorDetails string as JSON
+            val errorDetails = Json.parseToJsonElement(errorDetailsJson).jsonObject
+            val errorsArray = errorDetails["validationErrors"]?.jsonArray
+                ?: throw AssertionError("expected validationErrors array in errorDetails")
+            assertEquals(2, errorsArray.size, "should have accumulated 2 unknown parameter errors")
+            val errorTexts = errorsArray.map { it.jsonPrimitive.content }
+            assertTrue(
+                errorTexts.any { it.contains("unknownParam1") },
+                "should contain unknownParam1 error; got: $errorTexts"
+            )
+            assertTrue(
+                errorTexts.any { it.contains("unknownParam2") },
+                "should contain unknownParam2 error; got: $errorTexts"
+            )
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `unknown parameter combined with other validation errors are all accumulated`() = runTest {
+        val dir = createTempDirectory("run-command-test")
+        try {
+            // Build an input with unknown parameter, command with spaces, and invalid timeout
+            val result = tool.execute(
+                buildJsonObject {
+                    put("command", "echo hello world")
+                    put("timeout", 0)
+                    put("unknownParam", "someValue")
+                },
+                context(dir)
+            )
+
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            val errorDetailsJson = result.errorDetails
+                ?: throw AssertionError("expected errorDetails with accumulated validation errors")
+            // Parse the errorDetails string as JSON
+            val errorDetails = Json.parseToJsonElement(errorDetailsJson).jsonObject
+            val errorsArray = errorDetails["validationErrors"]?.jsonArray
+                ?: throw AssertionError("expected validationErrors array in errorDetails")
+            assertEquals(3, errorsArray.size, "should have accumulated 3 validation errors")
+            val errorTexts = errorsArray.map { it.jsonPrimitive.content }
+            assertTrue(
+                errorTexts.any { it.contains("unknownParam") },
+                "should contain unknownParam error; got: $errorTexts"
+            )
+            assertTrue(
+                errorTexts.any { it.contains("spaces") },
+                "should contain command whitespace error; got: $errorTexts"
+            )
+            assertTrue(
+                errorTexts.any { it.contains("timeout") },
+                "should contain timeout error; got: $errorTexts"
+            )
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `run_command respects maxLines and maxBytes overrides and truncates with notice`() = runTest {
+        val dir = createTempDirectory("run-command-test")
+        try {
+            val file = dir.resolve("multiline.txt")
+            file.writeText("line1\nline2\nline3\nline4\nline5", Charsets.UTF_8)
+            val (cmd, argsList) = if (isWindows) {
+                "cmd" to listOf("/c", "type", "multiline.txt")
+            } else {
+                "cat" to listOf("multiline.txt")
+            }
+            val result = tool.execute(
+                buildJsonObject {
+                    put("command", cmd)
+                    putJsonArray("args") { argsList.forEach { add(it) } }
+                    put("maxLines", 2)
+                },
+                context(dir)
+            )
+
+            val success = assertSuccess(result)
+            assertTrue(success.contains("[Output truncated:"), "Expected truncation notice; got: $success")
+            assertEquals(true, result.details?.jsonObject?.get("truncated")?.jsonPrimitive?.boolean)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `run_command with invalid maxLines or maxBytes returns invalid input error`() = runTest {
+        val dir = createTempDirectory("run-command-test")
+        try {
+            val (cmd, argsList) = echoCommand("hello")
+            val result = tool.execute(
+                buildJsonObject {
+                    put("command", cmd)
+                    putJsonArray("args") { argsList.forEach { add(it) } }
+                    put("maxLines", 0)
+                },
+                context(dir)
+            )
+
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `run_command joint stdout and stderr output does not exceed maxLines when both produce output`() = runTest {
+        val dir = createTempDirectory("run-command-test")
+        try {
+            val (cmd, argsList) = if (isWindows) {
+                "cmd" to listOf("/c", "echo out1 & echo err1 >&2 & echo out2 & echo err2 >&2")
+            } else {
+                "sh" to listOf("-c", "echo 'out1'; echo 'err1' >&2; echo 'out2'; echo 'err2' >&2")
+            }
+            val result = tool.execute(
+                buildJsonObject {
+                    put("command", cmd)
+                    putJsonArray("args") { argsList.forEach { add(it) } }
+                    put("maxLines", 3)
+                },
+                context(dir)
+            )
+
+            val success = assertSuccess(result)
+            val lines = success.lines()
+            assertTrue(lines.size <= 6, "Output lines should respect maxLines jointly; got ${lines.size}:\n$success")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `run_command with empty stdout and stderr does not report extra lines in truncation notice`() = runTest {
+        val dir = createTempDirectory("run-command-test")
+        try {
+            val (cmd, argsList) = if (isWindows) {
+                "cmd" to listOf("/c", "rem")
+            } else {
+                "true" to emptyList()
+            }
+            val result = tool.execute(
+                buildJsonObject {
+                    put("command", cmd)
+                    putJsonArray("args") { argsList.forEach { add(it) } }
+                },
+                context(dir)
+            )
+
+            val success = assertSuccess(result)
+            assertFalse(success.contains("[Output truncated:"), "Empty command output should not be truncated; got: $success")
+            assertTrue(success.contains("exitCode: 0"), "Should report exit code 0; got: $success")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `run_command details JSON contains capped stdout and stderr when output is large`() = runTest {
+        val dir = createTempDirectory("run-command-test")
+        try {
+            val file = dir.resolve("multiline.txt")
+            file.writeText("line1\nline2\nline3\nline4\nline5", Charsets.UTF_8)
+            val (cmd, argsList) = if (isWindows) {
+                "cmd" to listOf("/c", "type", "multiline.txt")
+            } else {
+                "cat" to listOf("multiline.txt")
+            }
+            val result = tool.execute(
+                buildJsonObject {
+                    put("command", cmd)
+                    putJsonArray("args") { argsList.forEach { add(it) } }
+                    put("maxLines", 2)
+                },
+                context(dir)
+            )
+
+            assertSuccess(result)
+            val details = result.details ?: throw AssertionError("expected details")
+            val stdout = details["stdout"]?.jsonPrimitive?.content ?: ""
+            val stdoutLines = stdout.lines().filter { it.isNotEmpty() }
+            assertTrue(stdoutLines.size <= 2, "details stdout should be capped to maxLines; got: $stdout")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+}

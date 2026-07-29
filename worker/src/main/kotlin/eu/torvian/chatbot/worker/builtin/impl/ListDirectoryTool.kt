@@ -6,6 +6,12 @@ import eu.torvian.chatbot.worker.builtin.BuiltInTool
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
 import eu.torvian.chatbot.worker.builtin.WorkspacePathValidator
+import eu.torvian.chatbot.worker.builtin.validation.addUnknownParameterErrors
+import eu.torvian.chatbot.worker.builtin.validation.builtInToolErrorResult
+import eu.torvian.chatbot.worker.builtin.validation.invalidInputResult
+import eu.torvian.chatbot.worker.builtin.validation.parseOptionalBoolean
+import eu.torvian.chatbot.worker.builtin.validation.parseOptionalInt
+import eu.torvian.chatbot.worker.builtin.validation.parseOptionalString
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
 import java.nio.file.Files
@@ -25,19 +31,35 @@ class ListDirectoryTool : BuiltInTool {
     override val inputSchema: JsonObject = BuiltInToolCatalog.specFor(name)!!.inputSchema
 
     override suspend fun execute(input: JsonObject, context: BuiltInToolExecutionContext): BuiltInToolExecutionResult {
-        val path = input["path"]?.jsonPrimitive?.content ?: "."
-        val sortBy = input["sortBy"]?.jsonPrimitive?.content ?: "name"
-        val includeSizes = input["includeSizes"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
-        val recursive = input["recursive"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
+        // Accumulate all INVALID_INPUT validation errors before failing, so the LLM can see
+        // every issue at once instead of fixing them one at a time.
+        val validationErrors = mutableListOf<String>()
 
+        // Define the set of known/valid parameter names for this tool
+        val validKeys = setOf("path", "sortBy", "includeSizes", "recursive", "maxEntries")
+        addUnknownParameterErrors(input, validKeys, validationErrors)
+
+        val sortBy = parseOptionalString(input, "sortBy", validationErrors) ?: "name"
         if (sortBy !in setOf("name", "size")) {
-            return errorResult(BuiltInToolExecutionError.INVALID_INPUT, "Invalid 'sortBy' value: $sortBy")
+            validationErrors.add("Invalid 'sortBy' value: $sortBy (expected 'name' or 'size')")
+        }
+
+        val path = parseOptionalString(input, "path", validationErrors) ?: "."
+        val includeSizes = parseOptionalBoolean(input, "includeSizes", defaultValue = false, validationErrors)
+        val recursive = parseOptionalBoolean(input, "recursive", defaultValue = false, validationErrors)
+        val maxEntries = parseOptionalInt(input, "maxEntries", defaultValue = 25, validationErrors)
+        if (maxEntries < 1) {
+            validationErrors.add("Argument 'maxEntries' must be >= 1")
+        }
+
+        if (validationErrors.isNotEmpty()) {
+            return invalidInputResult(validationErrors)
         }
 
         val root = try {
             WorkspacePathValidator.requireInside(context.workspace, path)
         } catch (e: Exception) {
-            return errorResult(
+            return builtInToolErrorResult(
                 BuiltInToolExecutionError.WORKSPACE_VIOLATION,
                 e.message ?: "Path rejected by workspace validator"
             )
@@ -45,24 +67,36 @@ class ListDirectoryTool : BuiltInTool {
 
         return withContext(context.ioDispatcher) {
             if (!Files.exists(root) || !root.isDirectory()) {
-                return@withContext errorResult(BuiltInToolExecutionError.NOT_FOUND, "Directory not found: $path")
+                return@withContext builtInToolErrorResult(BuiltInToolExecutionError.NOT_FOUND, "Directory not found: $path")
             }
 
-            val listing = if (recursive) {
-                renderRecursive(root, includeSizes, sortBy)
+            val (listing, truncated) = if (recursive) {
+                renderRecursive(root, includeSizes, sortBy, maxEntries)
             } else {
-                renderFlat(root, includeSizes, sortBy)
+                renderFlat(root, includeSizes, sortBy, maxEntries)
             }
 
-            BuiltInToolExecutionResult(output = listing)
+            val summary = if (truncated) "\n\nShowing first $maxEntries entries (truncated)." else ""
+            val output = if (listing.isEmpty() && !truncated) "" else listing + summary
+
+            val details = buildJsonObject {
+                put("truncated", truncated)
+            }
+
+            BuiltInToolExecutionResult(
+                output = output,
+                details = details,
+            )
         }
     }
 
-    private fun renderFlat(root: Path, includeSizes: Boolean, sortBy: String): String {
+    private fun renderFlat(root: Path, includeSizes: Boolean, sortBy: String, maxEntries: Int): Pair<String, Boolean> {
         val entries = Files.list(root).use { stream -> stream.toList() }
         val sorted = sortEntries(entries, sortBy)
-        return buildString {
-            sorted.forEach { entry ->
+        val limited = sorted.take(maxEntries)
+        val truncated = sorted.size > maxEntries
+        val listing = buildString {
+            limited.forEach { entry ->
                 append(if (entry.isDirectory()) "[DIR] " else "[FILE] ")
                 append(entry.fileName.toString())
                 if (includeSizes && entry.isRegularFile()) {
@@ -71,31 +105,39 @@ class ListDirectoryTool : BuiltInTool {
                 append('\n')
             }
         }.trimEnd()
+        return listing to truncated
     }
 
-    private fun renderRecursive(root: Path, includeSizes: Boolean, sortBy: String): String {
+    private fun renderRecursive(root: Path, includeSizes: Boolean, sortBy: String, maxEntries: Int): Pair<String, Boolean> {
         val sb = StringBuilder()
-        renderRecursiveInto(root, 0, includeSizes, sortBy, sb)
-        return sb.toString().trimEnd()
-    }
-
-    private fun renderRecursiveInto(dir: Path, depth: Int, includeSizes: Boolean, sortBy: String, sb: StringBuilder) {
-        val indent = "  ".repeat(depth)
-        Files.list(dir).use { stream ->
-            val entries = sortEntries(stream.toList(), sortBy)
-            entries.forEach { entry ->
-                sb.append(indent)
-                sb.append(if (entry.isDirectory()) "[DIR] " else "[FILE] ")
-                sb.append(entry.fileName.toString())
-                if (includeSizes && entry.isRegularFile()) {
-                    sb.append("  (${Files.size(entry)} bytes)")
-                }
-                sb.append('\n')
-                if (entry.isDirectory()) {
-                    renderRecursiveInto(entry, depth + 1, includeSizes, sortBy, sb)
+        var count = 0
+        var truncated = false
+        fun renderRecursiveInto(dir: Path, depth: Int) {
+            if (truncated) return
+            val indent = "  ".repeat(depth)
+            Files.list(dir).use { stream ->
+                val entries = sortEntries(stream.toList(), sortBy)
+                for (entry in entries) {
+                    if (count >= maxEntries) {
+                        truncated = true
+                        return
+                    }
+                    count++
+                    sb.append(indent)
+                    sb.append(if (entry.isDirectory()) "[DIR] " else "[FILE] ")
+                    sb.append(entry.fileName.toString())
+                    if (includeSizes && entry.isRegularFile()) {
+                        sb.append("  (${Files.size(entry)} bytes)")
+                    }
+                    sb.append('\n')
+                    if (entry.isDirectory()) {
+                        renderRecursiveInto(entry, depth + 1)
+                    }
                 }
             }
         }
+        renderRecursiveInto(root, 0)
+        return sb.toString().trimEnd() to truncated
     }
 
     private fun sortEntries(entries: List<Path>, sortBy: String): List<Path> {
@@ -110,7 +152,4 @@ class ListDirectoryTool : BuiltInTool {
         }.thenBy { it.fileName.toString().lowercase() }
         return entries.sortedWith(comparator)
     }
-
-    private fun errorResult(code: String, message: String): BuiltInToolExecutionResult =
-        BuiltInToolExecutionResult(isError = true, errorMessage = message, errorCode = code)
 }

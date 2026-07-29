@@ -85,7 +85,7 @@ class FetchWebContentToolTest {
         )
 
         val success = assertSuccess(result)
-        assertEquals("hello world", success.output)
+        assertEquals("=== https://example.com/ (lines:1 of 1) ===\nhello world", success.output)
         assertEquals("https://example.com/", success.details!!["finalUrl"]?.jsonPrimitive?.content)
         assertEquals(200, success.details!!["statusCode"]?.jsonPrimitive?.int)
         assertEquals("text/plain", success.details!!["contentType"]?.jsonPrimitive?.content)
@@ -105,7 +105,7 @@ class FetchWebContentToolTest {
             input(
                 "url" to JsonPrimitive("https://example.com/"),
                 "timeoutSeconds" to JsonPrimitive(15),
-                "maxBytes" to JsonPrimitive(2048),
+                "maxDownloadBytes" to JsonPrimitive(2048),
                 "followRedirects" to JsonPrimitive(false),
                 "returnMode" to JsonPrimitive("text"),
             ),
@@ -246,7 +246,8 @@ class FetchWebContentToolTest {
         )
         assertTrue(result.isError)
         assertEquals(BuiltInToolExecutionError.EXECUTION_FAILED, result.errorCode)
-        assertEquals(404, result.errorDetails!!["statusCode"]?.jsonPrimitive?.int)
+        val errorDetails = Json.parseToJsonElement(result.errorDetails!!).jsonObject
+        assertEquals(404, errorDetails["statusCode"]?.jsonPrimitive?.int)
     }
 
     @Test
@@ -289,7 +290,7 @@ class FetchWebContentToolTest {
             context(),
         )
         val success = assertSuccess(result)
-        assertEquals("{\"a\":1}", success.output)
+        assertEquals("=== https://example.com/a.json (lines:1 of 1) ===\n{\"a\":1}", success.output)
     }
 
     @Test
@@ -313,7 +314,7 @@ class FetchWebContentToolTest {
         )
         val success = assertSuccess(result)
         // Decoded with the declared charset, the 0xE9 byte becomes 'é'.
-        assertEquals("hello é", success.output)
+        assertEquals("=== https://example.com/ (lines:1 of 1) ===\nhello é", success.output)
     }
 
     @Test
@@ -327,7 +328,7 @@ class FetchWebContentToolTest {
             context(),
         )
         val success = assertSuccess(result)
-        assertEquals(body, success.output)
+        assertEquals("=== https://example.com/ (lines:1 of 1) ===\n$body", success.output)
     }
 
     @Test
@@ -364,7 +365,7 @@ class FetchWebContentToolTest {
             context(),
         )
         val success = assertSuccess(result)
-        assertEquals(html, success.output)
+        assertEquals("=== https://example.com/ (lines:1 of 1) ===\n$html", success.output)
         assertEquals("html", success.details!!["returnMode"]?.jsonPrimitive?.content)
     }
 
@@ -387,5 +388,137 @@ class FetchWebContentToolTest {
         )
         assertTrue(result.isError)
         assertEquals(BuiltInToolExecutionError.EXECUTION_FAILED, result.errorCode)
+    }
+
+    @Test
+    fun `fetch_web_content enforces maxDownloadBytes and presentation maxBytes maxLines truncation`() = runTest {
+        val longBody = "line1\nline2\nline3\nline4\nline5"
+        val fake = FakeWebFetchService(
+            mutableListOf(okResult("https://example.com/", longBody))
+        )
+        val result = toolWith(fake).execute(
+            input(
+                "url" to JsonPrimitive("https://example.com/"),
+                "maxDownloadBytes" to JsonPrimitive(50000),
+                "maxLines" to JsonPrimitive(2),
+            ),
+            context(),
+        )
+        val success = assertSuccess(result)
+        assertTrue(success.output!!.startsWith("=== https://example.com/ (lines:1-2 of 5) ==="), "Expected range header; got: ${success.output}")
+        assertTrue(success.output!!.contains("[Output truncated:"), "Expected truncation notice; got: ${success.output}")
+        assertEquals(true, success.details?.jsonObject?.get("truncated")?.jsonPrimitive?.boolean)
+        assertEquals(50000, fake.requests.first().maxBytes)
+    }
+
+    @Test
+    fun `fetch_web_content with invalid maxDownloadBytes maxBytes or maxLines returns invalid input`() = runTest {
+        val fake = FakeWebFetchService(mutableListOf())
+        val result = toolWith(fake).execute(
+            input(
+                "url" to JsonPrimitive("https://example.com/"),
+                "maxDownloadBytes" to JsonPrimitive(0),
+            ),
+            context(),
+        )
+        assertTrue(result.isError)
+        assertEquals(BuiltInToolExecutionError.INVALID_INPUT, result.errorCode)
+    }
+
+    @Test
+    fun `fetch page with range 0 to 5 returns first 5 lines`() = runTest {
+        val lines = (1..20).joinToString("\n") { "line$it" }
+        val fake = FakeWebFetchService(
+            mutableListOf(okResult("https://example.com/", lines))
+        )
+        val result = toolWith(fake).execute(
+            input(
+                "url" to JsonPrimitive("https://example.com/"),
+                "range" to buildJsonArray { add(0); add(5) }
+            ),
+            context(),
+        )
+        val success = assertSuccess(result)
+        assertEquals("=== https://example.com/ (lines:1-5 of 20) ===\nline1\nline2\nline3\nline4\nline5", success.output)
+        assertEquals(20, success.details!!["totalLines"]?.jsonPrimitive?.int)
+    }
+
+    @Test
+    fun `fetch page with range 10 to null returns lines starting from index 10`() = runTest {
+        val lines = (1..15).joinToString("\n") { "line$it" }
+        val fake = FakeWebFetchService(
+            mutableListOf(okResult("https://example.com/", lines))
+        )
+        val result = toolWith(fake).execute(
+            input(
+                "url" to JsonPrimitive("https://example.com/"),
+                "range" to buildJsonArray { add(10); add(JsonNull) }
+            ),
+            context(),
+        )
+        val success = assertSuccess(result)
+        assertEquals("=== https://example.com/ (lines:11-15 of 15) ===\nline11\nline12\nline13\nline14\nline15", success.output)
+    }
+
+    @Test
+    fun `fetch page with negative bounds range minus 10 to null returns last 10 lines`() = runTest {
+        val lines = (1..20).joinToString("\n") { "line$it" }
+        val fake = FakeWebFetchService(
+            mutableListOf(okResult("https://example.com/", lines))
+        )
+        val result = toolWith(fake).execute(
+            input(
+                "url" to JsonPrimitive("https://example.com/"),
+                "range" to buildJsonArray { add(-10); add(JsonNull) }
+            ),
+            context(),
+        )
+        val success = assertSuccess(result)
+        val expectedBody = (11..20).joinToString("\n") { "line$it" }
+        assertEquals("=== https://example.com/ (lines:11-20 of 20) ===\n$expectedBody", success.output)
+    }
+
+    @Test
+    fun `invalid range shapes return invalid input`() = runTest {
+        val fake = FakeWebFetchService(mutableListOf())
+        // range is a string instead of array
+        val result1 = toolWith(fake).execute(
+            input(
+                "url" to JsonPrimitive("https://example.com/"),
+                "range" to JsonPrimitive("abc")
+            ),
+            context(),
+        )
+        assertTrue(result1.isError)
+        assertEquals(BuiltInToolExecutionError.INVALID_INPUT, result1.errorCode)
+
+        // range has only 1 element
+        val result2 = toolWith(FakeWebFetchService()).execute(
+            input(
+                "url" to JsonPrimitive("https://example.com/"),
+                "range" to buildJsonArray { add(1) }
+            ),
+            context(),
+        )
+        assertTrue(result2.isError)
+        assertEquals(BuiltInToolExecutionError.INVALID_INPUT, result2.errorCode)
+    }
+
+    @Test
+    fun `fetch page with range 10 to 20 displays lines 11 to 20 in header`() = runTest {
+        val lines = (1..30).joinToString("\n") { "line$it" }
+        val fake = FakeWebFetchService(
+            mutableListOf(okResult("https://example.com/", lines))
+        )
+        val result = toolWith(fake).execute(
+            input(
+                "url" to JsonPrimitive("https://example.com/"),
+                "range" to buildJsonArray { add(10); add(20) }
+            ),
+            context(),
+        )
+        val success = assertSuccess(result)
+        val expectedBody = (11..20).joinToString("\n") { "line$it" }
+        assertEquals("=== https://example.com/ (lines:11-20 of 30) ===\n$expectedBody", success.output)
     }
 }
