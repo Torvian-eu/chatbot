@@ -17,8 +17,12 @@ import eu.torvian.chatbot.common.models.llm.LLMModel
 import eu.torvian.chatbot.common.models.llm.LLMModelType
 import eu.torvian.chatbot.common.models.tool.ToolDefinition
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.withContext
+
+import eu.torvian.chatbot.app.chat.search.MIN_QUERY_LENGTH
 
 /**
  * Reactive implementation of ChatState that derives all state from repository flows.
@@ -39,7 +43,6 @@ class ChatStateImpl(
     private val threadBuilder: ThreadBuilder,
     backgroundScope: CoroutineScope
 ) : ChatState {
-
     companion object {
         /** Content length above which a message is collapsible. */
         private const val COLLAPSE_THRESHOLD = 500
@@ -277,10 +280,23 @@ class ChatStateImpl(
             }
             .launchIn(backgroundScope)
 
-        // Derive search results from displayed messages and search query
-        searchQuery
-            .map { query ->
-                findSearchMatches(displayedMessages.value, query)
+        // Derive search results from displayed messages and search query. The pipeline
+        // reacts to changes in either input, runs the expensive matching off the main thread
+        // via mapLatest (which cancels stale work), and immediately clears results for blank
+        // or too-short queries. Typing-rate limiting is handled by the UI-level debounce in
+        // SearchBar, keeping the state layer straightforward.
+        combine(displayedMessages, searchQuery) { messages, query ->
+            messages to query
+        }
+            .mapLatest { (messages, query) ->
+                // Blank or too-short queries clear immediately without background work.
+                if (query.isBlank() || query.length < MIN_QUERY_LENGTH) {
+                    emptyList()
+                } else {
+                    withContext(Dispatchers.Default) {
+                        findSearchMatches(messages, query)
+                    }
+                }
             }
             .combine(_pendingSearchMessageTarget) { results, pendingTarget ->
                 results to pendingTarget

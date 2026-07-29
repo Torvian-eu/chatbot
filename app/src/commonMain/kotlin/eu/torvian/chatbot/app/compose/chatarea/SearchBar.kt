@@ -65,7 +65,7 @@ fun SearchBar(
             // Snappier experience when clearing query
             onQueryChange("")
         } else if (localQuery != query) {
-            delay(250.milliseconds) // 250ms debounce
+            delay(350.milliseconds) // 350ms debounce
             onQueryChange(localQuery)
         }
     }
