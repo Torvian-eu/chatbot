@@ -453,19 +453,93 @@ class SearchTextToolScenariosTest {
     }
 
     @Test
-    fun `omitted maxResults defaults to 50 and truncates when matches exceed 50`() = runTest {
+    fun `omitted maxResults defaults to 10 and truncates when matches exceed 10`() = runTest {
         val dir = createTempDirectory("search-text-test")
         try {
-            val lines = (1..60).joinToString("\n") { "match $it" }
+            val lines = (1..20).joinToString("\n") { "match $it" }
             dir.resolve("sample.txt").writeText(lines, Charsets.UTF_8)
 
             val result = tool.execute(buildInput("match"), context(dir))
 
             val success = assertSuccess(result)
             val details = success.details!!
-            assertEquals(50, details["totalMatches"]?.jsonPrimitive?.int)
+            assertEquals(10, details["totalMatches"]?.jsonPrimitive?.int)
             assertEquals(true, details["truncated"]?.jsonPrimitive?.boolean)
-            assertTrue(success.output!!.contains("truncated to 50 result(s)"))
+            assertTrue(success.output!!.contains("truncated to 10 result(s)"))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `long line match-centering windows line and adds ellipsis when exceeding 200 chars`() = runTest {
+        val dir = createTempDirectory("search-text-test")
+        try {
+            val paddingBefore = "a".repeat(4200)
+            val line = "$paddingBefore TARGET $paddingBefore"
+            dir.resolve("sample.txt").writeText(line, Charsets.UTF_8)
+
+            val result = tool.execute(buildInput("TARGET", mode = "plain"), context(dir))
+
+            val success = assertSuccess(result)
+            val output = success.output!!
+            assertTrue(output.contains("..."), "Output should contain prefix/suffix ellipsis: $output")
+            assertTrue(output.contains("TARGET"), "Output should contain the matching keyword: $output")
+
+            val matchesArray = success.details!!["matches"]!!.jsonArray
+            assertEquals(1, matchesArray.size)
+            val detailLine = matchesArray[0].jsonObject["line"]!!.jsonPrimitive.content
+            assertTrue(detailLine.contains("..."), "Details line should be windowed with ellipsis: $detailLine")
+            assertTrue(detailLine.length < 300, "Details line should not leak the raw 8400+ char line: length=${detailLine.length}")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `explicit maxResults and maxBytes overrides work and set truncated true when capped`() = runTest {
+        val dir = createTempDirectory("search-text-test")
+        try {
+            val lines = (1..5).joinToString("\n") { "very long line result number $it with lots of padding content to test maxBytes capping" }
+            dir.resolve("sample.txt").writeText(lines, Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildJsonObject {
+                    put("query", "result")
+                    put("maxResults", 5)
+                    put("maxBytes", 100)
+                },
+                context(dir)
+            )
+
+            val success = assertSuccess(result)
+            val details = success.details!!
+            assertEquals(true, details["truncated"]?.jsonPrimitive?.boolean)
+            assertTrue(success.output!!.contains("Output truncated:"))
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `truncation notice does not contain four consecutive newlines`() = runTest {
+        val dir = createTempDirectory("search-text-test")
+        try {
+            val lines = (1..5).joinToString("\n") { "very long line result number $it with lots of padding content to test maxBytes capping" }
+            dir.resolve("sample.txt").writeText(lines, Charsets.UTF_8)
+
+            val result = tool.execute(
+                buildJsonObject {
+                    put("query", "result")
+                    put("maxResults", 5)
+                    put("maxBytes", 100)
+                },
+                context(dir)
+            )
+
+            val success = assertSuccess(result)
+            val output = success.output!!
+            assertFalse(output.contains("\n\n\n\n"), "Output should not contain four consecutive newlines: $output")
         } finally {
             dir.toFile().deleteRecursively()
         }

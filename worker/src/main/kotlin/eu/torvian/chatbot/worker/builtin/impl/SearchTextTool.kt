@@ -50,6 +50,12 @@ class SearchTextTool : BuiltInTool {
          * is intentionally out of scope for this step.
          */
         const val MAX_FILE_BYTES: Long = 1_048_576L // 1 MB
+
+        /**
+         * Maximum number of characters allowed per line in search output.
+         */
+        const val MAX_LINE_CHARS = 200
+
     }
 
     override val name: String = "search_text"
@@ -64,7 +70,7 @@ class SearchTextTool : BuiltInTool {
         // Define the set of known/valid parameter names for this tool
         val validKeys = setOf(
             "path", "query", "mode", "caseSensitive", "wholeWord",
-            "filePattern", "excludePatterns", "contextBefore", "contextAfter", "maxResults"
+            "filePattern", "excludePatterns", "contextBefore", "contextAfter", "maxResults", "maxBytes"
         )
         addUnknownParameterErrors(input, validKeys, validationErrors)
 
@@ -96,9 +102,14 @@ class SearchTextTool : BuiltInTool {
             validationErrors.add("Argument 'contextAfter' must be >= 0")
         }
 
-        val maxResults = parseOptionalInt(input, "maxResults", defaultValue = 50, validationErrors)
+        val maxResults = parseOptionalInt(input, "maxResults", defaultValue = 10, validationErrors)
         if (maxResults < 1) {
             validationErrors.add("Argument 'maxResults' must be >= 1")
+        }
+
+        val maxBytes = parseOptionalInt(input, "maxBytes", defaultValue = 1200, validationErrors)
+        if (maxBytes <= 0) {
+            validationErrors.add("Argument 'maxBytes' must be > 0")
         }
 
         val path = parseOptionalString(input, "path", validationErrors) ?: "."
@@ -150,7 +161,7 @@ class SearchTextTool : BuiltInTool {
             val matchesByFile = LinkedHashMap<String, MutableList<MatchRender>>()
             var searchedFiles = 0
             var skippedFiles = 0
-            var truncated = false
+            var truncatedByMaxResults = false
 
             searchLoop@ for (file in candidates) {
                 // Use paths relative to the search root, normalize separators to /, and fall back to the file name
@@ -188,23 +199,28 @@ class SearchTextTool : BuiltInTool {
                 for ((index, line) in lines.withIndex()) {
                     // Line-based match: a line contributes at most one result, even when the pattern
                     // occurs multiple times within it.
-                    if (!regex.containsMatchIn(line)) continue
+                    val matchResult = regex.find(line) ?: continue
                     if (matchObjects.size >= maxResults) {
-                        truncated = true
+                        truncatedByMaxResults = true
                         break@searchLoop
                     }
+                    val matchRange = matchResult.range
                     val lineNumber = index + 1
                     val beforeStart = maxOf(0, index - contextBefore)
                     val afterEnd = minOf(lines.size, index + 1 + contextAfter)
                     val before = lines.subList(beforeStart, index)
                     val after = lines.subList(index + 1, afterEnd)
 
+                    val trimmedBeforeList = before.map { trimContext(it) }
+                    val trimmedAfterList = after.map { trimContext(it) }
+                    val windowedLine = windowLineAroundMatch(line, matchRange)
+
                     matchObjects.add(buildJsonObject {
                         put("path", relative)
                         put("lineNumber", lineNumber)
-                        put("line", line)
-                        putJsonArray("before") { before.forEach { add(it) } }
-                        putJsonArray("after") { after.forEach { add(it) } }
+                        put("line", windowedLine)
+                        putJsonArray("before") { trimmedBeforeList.forEach { add(it) } }
+                        putJsonArray("after") { trimmedAfterList.forEach { add(it) } }
                     })
 
                     // Collect the match for the grouped readable output. The path is emitted once as
@@ -212,9 +228,9 @@ class SearchTextTool : BuiltInTool {
                     // keeping the textual output compact and token-friendly for the consuming model.
                     val render = MatchRender(
                         lineNumber = lineNumber,
-                        line = line,
-                        before = before.mapIndexed { bIdx, ctx -> (beforeStart + bIdx + 1) to ctx },
-                        after = after.mapIndexed { aIdx, ctx -> (index + 2 + aIdx) to ctx },
+                        line = windowedLine,
+                        before = before.mapIndexed { bIdx, ctx -> (beforeStart + bIdx + 1) to trimContext(ctx) },
+                        after = after.mapIndexed { aIdx, ctx -> (index + 2 + aIdx) to trimContext(ctx) },
                     )
                     matchesByFile.getOrPut(relative) { mutableListOf() }.add(render)
                 }
@@ -239,6 +255,13 @@ class SearchTextTool : BuiltInTool {
                 }
             }
 
+            val rawOutput = if (outputLines.isEmpty()) "" else outputLines.joinToString("\n")
+            val truncationResult = truncateLinesAndBytes(rawOutput, maxLines = Int.MAX_VALUE, maxBytes = maxBytes)
+            val truncatedOutput = truncationResult.text
+            val linesShown = truncationResult.linesShown
+            val bytesShown = truncationResult.bytesShown
+            val truncated = truncatedByMaxResults || truncationResult.isTruncated
+
             val totalMatches = matchObjects.size
             val details = buildJsonObject {
                 putJsonArray("matches") { matchObjects.forEach { add(it) } }
@@ -253,7 +276,13 @@ class SearchTextTool : BuiltInTool {
                 append("\n\n")
                 append("$totalMatches match(es) across $searchedFiles file(s)")
                 if (skippedFiles > 0) append(" ($skippedFiles skipped)")
-                if (truncated) append(" — truncated to $maxResults result(s)")
+                if (truncatedByMaxResults) append(" — truncated to $maxResults result(s)")
+            }
+
+            val truncationNotice = if (truncated) {
+                formatTruncationNotice(linesShown, bytesShown, "Increase 'maxResults'/'maxBytes' to read further.")
+            } else {
+                ""
             }
 
             val hints = mutableListOf<String>()
@@ -282,7 +311,11 @@ class SearchTextTool : BuiltInTool {
             val hintSuffix = if (hints.isEmpty()) "" else "\n\n" + hints.joinToString("\n\n")
 
             BuiltInToolExecutionResult(
-                output = if (outputLines.isEmpty()) "No matches found" + hintSuffix else outputLines.joinToString("\n") + summary + hintSuffix,
+                output = if (outputLines.isEmpty()) {
+                    "No matches found$hintSuffix"
+                } else {
+                    truncatedOutput + summary + truncationNotice + hintSuffix
+                },
                 details = details,
             )
         }
@@ -363,6 +396,46 @@ class SearchTextTool : BuiltInTool {
         // single terminator (no stray '\r' left behind); lone CR or LF are handled uniformly.
         return text.split(Regex("\r\n|\r|\n"))
     }
+
+    /**
+     * Windows a matching line around [matchRange] if it exceeds [maxChars], ensuring the match is visible.
+     *
+     * @param line The raw line string to be windowed.
+     * @param matchRange The character index range where the match was found.
+     * @param maxChars Maximum character limit for the windowed line.
+     * @return The windowed line snippet with ellipsis markers where truncated.
+     */
+    private fun windowLineAroundMatch(
+        line: String,
+        matchRange: IntRange,
+        maxChars: Int = MAX_LINE_CHARS,
+    ): String {
+        if (line.length <= maxChars) return line
+
+        val matchLength = (matchRange.last - matchRange.first + 1).coerceAtLeast(1)
+        val margin = ((maxChars - matchLength) / 2).coerceAtLeast(20)
+
+        var winStart = maxOf(0, matchRange.first - margin)
+        val winEnd = minOf(line.length, winStart + maxChars)
+        if (winEnd == line.length) {
+            winStart = maxOf(0, winEnd - maxChars)
+        }
+
+        val snippet = line.substring(winStart, winEnd)
+        val prefix = if (winStart > 0) "..." else ""
+        val suffix = if (winEnd < line.length) "..." else ""
+        return "$prefix$snippet$suffix"
+    }
+
+    /**
+     * Trims a context line if it exceeds [MAX_LINE_CHARS], appending an ellipsis suffix.
+     *
+     * @param ctx The context line string.
+     * @return The trimmed context line if too long, or the original line otherwise.
+     */
+    private fun trimContext(ctx: String): String =
+        if (ctx.length > MAX_LINE_CHARS) ctx.take(MAX_LINE_CHARS) + "..." else ctx
+
 }
 
 /**

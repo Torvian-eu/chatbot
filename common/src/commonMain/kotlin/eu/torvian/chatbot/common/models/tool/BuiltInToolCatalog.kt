@@ -348,8 +348,14 @@ object BuiltInToolCatalog {
                     put("maxResults", buildJsonObject {
                         put("type", "integer")
                         put("minimum", 1)
-                        put("default", 50)
+                        put("default", 10)
                         put("description", "Maximum number of matched lines to return across all files.")
+                    })
+                    put("maxBytes", buildJsonObject {
+                        put("type", "integer")
+                        put("minimum", 1)
+                        put("default", 1200)
+                        put("description", "Maximum number of text bytes returned in the tool output.")
                     })
                 })
                 put("required", buildJsonArray { add("query") })
