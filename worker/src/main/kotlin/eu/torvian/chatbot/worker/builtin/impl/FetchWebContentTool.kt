@@ -139,7 +139,7 @@ class FetchWebContentTool(
         val truncated = truncationResult.isTruncated
 
         val notice = if (truncated) {
-            formatTruncationNotice(linesShown, bytesShown, "Use 'range' or")
+            formatTruncationNotice(linesShown, bytesShown, "Use 'range' or increase 'maxLines'/'maxBytes' to read further.")
         } else {
             ""
         }

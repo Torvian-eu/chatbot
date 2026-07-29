@@ -47,30 +47,19 @@ class TextTruncationTest {
     }
 
     /**
-     * Verifies formatting of truncation notice with and without extra hints.
+     * Verifies formatting of truncation notice with default and custom instructions.
      */
     @Test
-    fun `formats truncation notice with or without extra hint`() {
+    fun `formats truncation notice with default and custom instruction`() {
         val notice1 = formatTruncationNotice(5, 100)
         assertTrue(notice1.contains("showing first 5 lines / 100 bytes"))
         assertTrue(notice1.contains("Increase 'maxLines'/'maxBytes' to read further."))
 
-        val notice2 = formatTruncationNotice(3, 50, "Use 'range' or")
-        assertTrue(notice2.contains("showing first 3 lines / 50 bytes. Use 'range' or"))
-    }
+        val notice2 = formatTruncationNotice(3, 50, "Use 'range' or increase 'maxLines'/'maxBytes' to read further.")
+        assertTrue(notice2.contains("showing first 3 lines / 50 bytes. Use 'range' or increase 'maxLines'/'maxBytes' to read further."))
 
-    @Test
-    fun `formatTruncationNotice does not contain double space when extraHint is null or blank`() {
-        val notice1 = formatTruncationNotice(10, 500, null)
-        assertFalse(notice1.contains("  "), "Notice should not contain double spaces: $notice1")
-        assertTrue(notice1.contains("bytes. Increase"), "Notice should have single space between bytes. and Increase: $notice1")
-
-        val notice2 = formatTruncationNotice(10, 500, "   ")
-        assertFalse(notice2.contains("  "), "Notice with blank extraHint should not contain double spaces: $notice2")
-        assertTrue(notice2.contains("bytes. Increase"), "Notice with blank extraHint should have single space: $notice2")
-
-        val notice3 = formatTruncationNotice(10, 500, "Use 'range' or")
-        assertFalse(notice3.contains("  "), "Notice with extraHint should not contain double spaces: $notice3")
-        assertTrue(notice3.contains("bytes. Use 'range' or"), "Notice with extraHint should have proper spacing: $notice3")
+        val notice3 = formatTruncationNotice(2, 20, "Increase 'maxResults'/'maxBytes' to read further.")
+        assertTrue(notice3.contains("showing first 2 lines / 20 bytes. Increase 'maxResults'/'maxBytes' to read further."))
+        assertFalse(notice3.contains("maxLines"))
     }
 }

@@ -90,7 +90,7 @@ class ReadTextFileTool : BuiltInTool {
                 val header = buildRangeHeader(path, startIdx, actualEndIdx, allLines.size)
                 val content = if (body.isEmpty()) header else "$header\n$body"
                 val notice = if (truncated) {
-                    formatTruncationNotice(linesShown, bytesShown, "Use 'range' or")
+                    formatTruncationNotice(linesShown, bytesShown, "Use 'range' or increase 'maxLines'/'maxBytes' to read further.")
                 } else {
                     ""
                 }

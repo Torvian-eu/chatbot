@@ -57,20 +57,19 @@ internal fun truncateLinesAndBytes(
 }
 
 /**
- * Formats a standard truncation notice string indicating how much content was shown.
+ * Formats a standard truncation notice string indicating how much content was shown and how to request more.
  *
  * @param linesShown Number of lines shown in the output.
  * @param bytesShown Number of bytes shown in the output.
- * @param extraHint Optional extra hint text to include in the notice before instructions.
+ * @param instruction The guidance text explaining how to request more content.
  * @return The formatted truncation notice string.
  */
 internal fun formatTruncationNotice(
     linesShown: Int,
     bytesShown: Int,
-    extraHint: String? = null,
+    instruction: String = "Increase 'maxLines'/'maxBytes' to read further.",
 ): String {
-    val hintSuffix = if (!extraHint.isNullOrBlank()) " ${extraHint.trim()}" else ""
-    return "\n\n[Output truncated: showing first $linesShown lines / $bytesShown bytes.$hintSuffix Increase 'maxLines'/'maxBytes' to read further.]"
+    return "\n\n[Output truncated: showing first $linesShown lines / $bytesShown bytes. ${instruction.trim()}]"
 }
 
 /**
