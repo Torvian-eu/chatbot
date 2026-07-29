@@ -46,6 +46,82 @@ class MessageSearchSupportTest {
     }
 
     /**
+     * Confirms queries shorter than [MIN_QUERY_LENGTH] produce no results.
+     */
+    @Test
+    fun findSearchMatches_returnsEmptyListForVeryShortQuery() {
+        val result = findSearchMatches(
+            messages = listOf(userMessage(id = 1, sessionId = 1, content = "a b c d e f g")),
+            query = "a",
+        )
+
+        assertEquals(emptyList(), result)
+    }
+
+    /**
+     * Confirms case-insensitive matching and non-overlapping results via [findSearchMatches].
+     */
+    @Test
+    fun findSearchMatches_returnsCaseInsensitiveNonOverlappingMatches() {
+        val messages = listOf(
+            userMessage(id = 1, sessionId = 1, content = "Alpha alpha alphabet"),
+        )
+
+        val result = findSearchMatches(messages, "ALPHA")
+
+        assertEquals(
+            listOf(
+                MessageSearchMatch(messageId = 1L, occurrenceIndexInMessage = 0, startIndex = 0, endExclusive = 5),
+                MessageSearchMatch(messageId = 1L, occurrenceIndexInMessage = 1, startIndex = 6, endExclusive = 11),
+                MessageSearchMatch(messageId = 1L, occurrenceIndexInMessage = 2, startIndex = 12, endExclusive = 17),
+            ),
+            result,
+        )
+    }
+
+    /**
+     * Confirms [occurrenceIndexInMessage] increments correctly within each message
+     * and resets between messages.
+     */
+    @Test
+    fun findSearchMatches_occurrenceIndexIsPerMessage() {
+        val messages = listOf(
+            userMessage(id = 1, sessionId = 1, content = "foo foo"),
+            assistantMessage(id = 2, sessionId = 1, content = "foo"),
+        )
+
+        val result = findSearchMatches(messages, "foo")
+
+        assertEquals(
+            listOf(
+                MessageSearchMatch(messageId = 1L, occurrenceIndexInMessage = 0, startIndex = 0, endExclusive = 3),
+                MessageSearchMatch(messageId = 1L, occurrenceIndexInMessage = 1, startIndex = 4, endExclusive = 7),
+                MessageSearchMatch(messageId = 2L, occurrenceIndexInMessage = 0, startIndex = 0, endExclusive = 3),
+            ),
+            result,
+        )
+    }
+
+    /**
+     * Confirms [DEFAULT_MAX_MATCHES] stops collecting additional results.
+     */
+    @Test
+    fun findSearchMatches_respectsMaxMatchesCap() {
+        val content = "x " + "y ".repeat(200)
+        val messages = listOf(
+            userMessage(id = 1, sessionId = 1, content = content),
+        )
+
+        val result = findSearchMatches(messages, "y ", maxMatches = 5)
+
+        assertEquals(5, result.size)
+        result.forEachIndexed { index, match ->
+            assertEquals(index.toLong(), match.occurrenceIndexInMessage.toLong())
+            assertEquals(1, match.messageId)
+        }
+    }
+
+    /**
      * Confirms search index normalization falls back to the first result when needed.
      */
     @Test
@@ -76,15 +152,5 @@ class MessageSearchSupportTest {
 
         assertEquals(0, forward)
         assertEquals(2, backward)
-    }
-
-    /**
-     * Ensures match ranges are case-insensitive and non-overlapping.
-     */
-    @Test
-    fun findSearchMatchRanges_returnsCaseInsensitiveNonOverlappingRanges() {
-        val result = findSearchMatchRanges("Alpha alpha alphabet", "ALPHA")
-
-        assertEquals(listOf(0..4, 6..10, 12..16), result)
     }
 }
