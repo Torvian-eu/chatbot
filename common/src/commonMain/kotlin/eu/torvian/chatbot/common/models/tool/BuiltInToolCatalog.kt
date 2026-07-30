@@ -151,8 +151,7 @@ object BuiltInToolCatalog {
                 put("properties", buildJsonObject {
                     put("path", buildJsonObject {
                         put("type", "string")
-                        put("description", "Directory path relative to the workspace (defaults to the workspace root).")
-                        put("default", ".")
+                        put("description", "Directory path relative to the workspace.")
                     })
                     put("sortBy", buildJsonObject {
                         put("type", "string")
@@ -177,6 +176,7 @@ object BuiltInToolCatalog {
                         put("description", "Maximum number of directory entries to return.")
                     })
                 })
+                put("required", buildJsonArray { add("path") })
             }
         ),
         BuiltInToolSpec(
@@ -205,8 +205,7 @@ object BuiltInToolCatalog {
                 put("properties", buildJsonObject {
                     put("path", buildJsonObject {
                         put("type", "string")
-                        put("description", "Starting directory relative to the workspace (defaults to the workspace root).")
-                        put("default", ".")
+                        put("description", "Starting directory relative to the workspace.")
                     })
                     put("pattern", buildJsonObject {
                         put("type", "string")
@@ -233,7 +232,7 @@ object BuiltInToolCatalog {
                         put("description", "Maximum number of matching files/directories to return.")
                     })
                 })
-                put("required", buildJsonArray { add("pattern") })
+                put("required", buildJsonArray { add("pattern"); add("path") })
             }
         ),
         BuiltInToolSpec(

@@ -44,12 +44,12 @@ class SearchFilesToolTest {
      */
     private fun buildInput(
         pattern: String,
-        path: String? = null,
+        path: String = ".",
         excludePatterns: Any? = null,
         maxResults: Any? = null,
     ): JsonObject = buildJsonObject {
         put("pattern", pattern)
-        if (path != null) put("path", path)
+        put("path", path)
         when (excludePatterns) {
             is String -> put("excludePatterns", excludePatterns)
             is List<*> -> putJsonArray("excludePatterns") {
