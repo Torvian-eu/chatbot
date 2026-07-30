@@ -261,6 +261,47 @@ internal fun parseStringOrStringArray(
 }
 
 /**
+ * Parses a required or optional array-of-strings parameter.
+ *
+ * Accepts only a JSON array of strings. Unlike [parseStringOrStringArray], a single string value
+ * is rejected with a validation error — the caller must use an explicit array.
+ *
+ * @param input The raw tool input object.
+ * @param key The parameter name to read.
+ * @param validationErrors The accumulated validation error list.
+ * @return The parsed string values, or an empty list when the parameter is absent.
+ */
+internal fun parseStringArray(
+    input: JsonObject,
+    key: String,
+    validationErrors: MutableList<String>,
+): List<String> {
+    val element = input[key] ?: return emptyList()
+    return when (element) {
+        is JsonArray -> buildList {
+            element.forEachIndexed { index, item ->
+                if (item is JsonPrimitive && item.isString) {
+                    add(item.content)
+                } else {
+                    validationErrors.add("Argument '$key[$index]' must be a string")
+                }
+            }
+        }
+
+        is JsonPrimitive -> {
+            validationErrors.add("Argument '$key' must be an array of strings, got a string. " +
+                    "Use array syntax, e.g. $key=[\"$element\"]")
+            emptyList()
+        }
+
+        else -> {
+            validationErrors.add("Argument '$key' must be an array of strings")
+            emptyList()
+        }
+    }
+}
+
+/**
  * Truncates [text] to at most [maxBytes] UTF-8 bytes without splitting multi-byte characters.
  *
  * Runs in O(maxBytes) time with zero temporary byte array allocations. Stops scanning as soon
