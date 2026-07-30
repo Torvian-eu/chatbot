@@ -106,7 +106,8 @@ class RunCommandToolTest {
     }
 
     /**
-     * Builds an input payload where `args` is intentionally a single JSON string.
+     * Builds an input payload where `args` is intentionally a single JSON string,
+     * which should be rejected as invalid input.
      *
      * The command must still be valid on each platform: on Windows `cmd` expects `/c <command>`
      * as one command-line string, while Linux can execute `echo` with a plain single argument.
@@ -187,15 +188,33 @@ class RunCommandToolTest {
     }
 
     @Test
-    fun `single string args are treated as a single argument and execute successfully`() = runTest {
+    fun `single string args are rejected with invalid input error and helpful message`() = runTest {
         val dir = createTempDirectory("run-command-test")
         try {
-            // Keep `args` as a JsonPrimitive string while still producing a valid command line on each OS.
+            // Keep `args` as a JsonPrimitive string which should now be rejected.
             val input = singleStringArgsInput("hello")
             val result = tool.execute(input, context(dir))
 
-            val output = assertSuccess(result)
-            assertTrue(output.contains("hello"), "output should contain echoed text; got:\n$output")
+            assertError(result, BuiltInToolExecutionError.INVALID_INPUT)
+            val errorDetailsJson = result.errorDetails
+                ?: throw AssertionError("expected errorDetails with validation errors")
+            val errorDetails = Json.parseToJsonElement(errorDetailsJson).jsonObject
+            val errorsArray = errorDetails["validationErrors"]?.jsonArray
+                ?: throw AssertionError("expected validationErrors array in errorDetails")
+            assertEquals(1, errorsArray.size, "should have 1 validation error")
+            val errorText = errorsArray.first().jsonPrimitive.content
+            assertTrue(
+                errorText.contains("array of strings"),
+                "error message should mention array syntax; got: $errorText"
+            )
+            assertTrue(
+                errorText.contains("args"),
+                "error message should mention the args field; got: $errorText"
+            )
+            assertTrue(
+                errorText.contains("Use array syntax"),
+                "error message should suggest array syntax; got: $errorText"
+            )
         } finally {
             dir.toFile().deleteRecursively()
         }
@@ -298,7 +317,7 @@ class RunCommandToolTest {
             assertEquals(2, errorsArray.size, "should have accumulated 2 validation errors")
             val errorTexts = errorsArray.map { it.jsonPrimitive.content }
             assertTrue(errorTexts.any { it.contains("command") && it.contains("string") })
-            assertTrue(errorTexts.any { it.contains("args") && it.contains("string or array of strings") })
+            assertTrue(errorTexts.any { it.contains("args") && it.contains("array of strings") })
         } finally {
             dir.toFile().deleteRecursively()
         }

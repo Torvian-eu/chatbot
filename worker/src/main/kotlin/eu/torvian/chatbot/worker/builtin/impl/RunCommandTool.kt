@@ -57,7 +57,7 @@ class RunCommandTool : BuiltInTool {
             defaultValue = context.defaultCommandTimeoutSeconds,
             validationErrors = validationErrors,
         )
-        val args = parseStringOrStringArray(input, "args", validationErrors)
+        val args = parseStringArray(input, "args", validationErrors)
         val maxLines = parseOptionalInt(input, "maxLines", defaultValue = 50, validationErrors)
         if (maxLines <= 0) {
             validationErrors.add("Argument 'maxLines' must be > 0")
