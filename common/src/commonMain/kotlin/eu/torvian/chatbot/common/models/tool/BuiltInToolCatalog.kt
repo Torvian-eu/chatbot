@@ -255,10 +255,8 @@ object BuiltInToolCatalog {
                     put("timeout", buildJsonObject {
                         put("type", "integer")
                         put("minimum", 1)
-                        put(
-                            "description",
-                            "Timeout in seconds. Defaults to the worker's builtInTools.defaultCommandTimeoutSeconds."
-                        )
+                        put("default", 600)
+                        put("description", "Timeout in seconds.")
                     })
                     put("maxLines", buildJsonObject {
                         put("type", "integer")
