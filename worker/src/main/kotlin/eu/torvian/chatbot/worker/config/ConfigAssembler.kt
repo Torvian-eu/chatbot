@@ -49,6 +49,7 @@ fun AppConfigDto.toDomain(configDir: Path): Either<WorkerConfigError, Configurat
     val workspacePath = required("worker.workspace.path", workspaceDto.path)
     val builtInToolsEnabled = builtInToolsDto.enabled ?: emptyList()
     val defaultCommandTimeoutSeconds = builtInToolsDto.defaultCommandTimeoutSeconds ?: 600L
+    val defaultSearchTimeoutSeconds = builtInToolsDto.defaultSearchTimeoutSeconds ?: 5L
     val trustedSigners = worker.trustedSigners.orEmpty().mapIndexed { index, signerDto ->
         trustedSignerToDomain(signerDto, index)
     }
@@ -113,7 +114,8 @@ fun AppConfigDto.toDomain(configDir: Path): Either<WorkerConfigError, Configurat
             ),
             builtInTools = BuiltInToolsConfig(
                 enabled = builtInToolsEnabled,
-                defaultCommandTimeoutSeconds = defaultCommandTimeoutSeconds
+                defaultCommandTimeoutSeconds = defaultCommandTimeoutSeconds,
+                defaultSearchTimeoutSeconds = defaultSearchTimeoutSeconds
             ),
             trustedSigners = trustedSigners
         )

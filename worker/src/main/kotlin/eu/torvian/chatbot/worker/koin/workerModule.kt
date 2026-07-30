@@ -262,12 +262,12 @@ fun workerModule(
             mcpClientService = get()
         )
     }
-
     single<BuiltInToolExecutionContext> {
         val cfg = get<RuntimeConfig>()
         BuiltInToolExecutionContext(
             workspace = Paths.get(cfg.workspace.path),
             defaultCommandTimeoutSeconds = cfg.builtInTools.defaultCommandTimeoutSeconds,
+            defaultSearchTimeoutSeconds = cfg.builtInTools.defaultSearchTimeoutSeconds,
         )
     }
 

@@ -12,6 +12,7 @@ import eu.torvian.chatbot.worker.builtin.validation.invalidInputResult
 import eu.torvian.chatbot.worker.builtin.validation.parseOptionalBoolean
 import eu.torvian.chatbot.worker.builtin.validation.parseOptionalInt
 import eu.torvian.chatbot.worker.builtin.validation.parseOptionalString
+import eu.torvian.chatbot.worker.builtin.validation.parseRequiredString
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
 import java.nio.file.Files
@@ -44,7 +45,7 @@ class ListDirectoryTool : BuiltInTool {
             validationErrors.add("Invalid 'sortBy' value: $sortBy (expected 'name' or 'size')")
         }
 
-        val path = parseOptionalString(input, "path", validationErrors) ?: "."
+        val path = parseRequiredString(input, "path", validationErrors)
         val includeSizes = parseOptionalBoolean(input, "includeSizes", defaultValue = false, validationErrors)
         val recursive = parseOptionalBoolean(input, "recursive", defaultValue = false, validationErrors)
         val maxEntries = parseOptionalInt(input, "maxEntries", defaultValue = 25, validationErrors)
@@ -57,7 +58,7 @@ class ListDirectoryTool : BuiltInTool {
         }
 
         val root = try {
-            WorkspacePathValidator.requireInside(context.workspace, path)
+            WorkspacePathValidator.requireInside(context.workspace, path!!)
         } catch (e: Exception) {
             return builtInToolErrorResult(
                 BuiltInToolExecutionError.WORKSPACE_VIOLATION,

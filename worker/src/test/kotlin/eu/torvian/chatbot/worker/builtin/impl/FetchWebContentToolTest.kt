@@ -60,6 +60,7 @@ class FetchWebContentToolTest {
     private fun context() = BuiltInToolExecutionContext(
         workspace = createTempDirectory("fetch-test"),
         defaultCommandTimeoutSeconds = 60,
+        defaultSearchTimeoutSeconds = 5,
         ioDispatcher = Dispatchers.IO,
     )
 

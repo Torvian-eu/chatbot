@@ -28,10 +28,9 @@ class SearchTextToolHintTest {
     // -----------------------------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------------------------
-
     private fun buildInput(
         query: String,
-        path: String? = null,
+        path: String = ".",
         mode: String? = null,
         caseSensitive: Boolean? = null,
         wholeWord: Boolean? = null,
@@ -42,7 +41,7 @@ class SearchTextToolHintTest {
         maxResults: Int? = null,
     ): JsonObject = buildJsonObject {
         put("query", query)
-        if (path != null) put("path", path)
+        put("path", path)
         if (mode != null) put("mode", mode)
         if (caseSensitive != null) put("caseSensitive", caseSensitive)
         if (wholeWord != null) put("wholeWord", wholeWord)
@@ -57,6 +56,7 @@ class SearchTextToolHintTest {
         BuiltInToolExecutionContext(
             workspace = workspace,
             defaultCommandTimeoutSeconds = 60,
+            defaultSearchTimeoutSeconds = 5,
             ioDispatcher = Dispatchers.IO,
         )
 

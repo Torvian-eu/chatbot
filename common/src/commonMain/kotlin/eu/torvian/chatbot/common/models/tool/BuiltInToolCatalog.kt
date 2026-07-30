@@ -151,8 +151,7 @@ object BuiltInToolCatalog {
                 put("properties", buildJsonObject {
                     put("path", buildJsonObject {
                         put("type", "string")
-                        put("description", "Directory path relative to the workspace (defaults to the workspace root).")
-                        put("default", ".")
+                        put("description", "Directory path relative to the workspace.")
                     })
                     put("sortBy", buildJsonObject {
                         put("type", "string")
@@ -177,6 +176,7 @@ object BuiltInToolCatalog {
                         put("description", "Maximum number of directory entries to return.")
                     })
                 })
+                put("required", buildJsonArray { add("path") })
             }
         ),
         BuiltInToolSpec(
@@ -205,8 +205,7 @@ object BuiltInToolCatalog {
                 put("properties", buildJsonObject {
                     put("path", buildJsonObject {
                         put("type", "string")
-                        put("description", "Starting directory relative to the workspace (defaults to the workspace root).")
-                        put("default", ".")
+                        put("description", "Starting directory relative to the workspace.")
                     })
                     put("pattern", buildJsonObject {
                         put("type", "string")
@@ -233,7 +232,7 @@ object BuiltInToolCatalog {
                         put("description", "Maximum number of matching files/directories to return.")
                     })
                 })
-                put("required", buildJsonArray { add("pattern") })
+                put("required", buildJsonArray { add("pattern"); add("path") })
             }
         ),
         BuiltInToolSpec(
@@ -256,10 +255,8 @@ object BuiltInToolCatalog {
                     put("timeout", buildJsonObject {
                         put("type", "integer")
                         put("minimum", 1)
-                        put(
-                            "description",
-                            "Timeout in seconds. Defaults to the worker's builtInTools.defaultCommandTimeoutSeconds."
-                        )
+                        put("default", 600)
+                        put("description", "Timeout in seconds.")
                     })
                     put("maxLines", buildJsonObject {
                         put("type", "integer")
@@ -285,8 +282,7 @@ object BuiltInToolCatalog {
                 put("properties", buildJsonObject {
                     put("path", buildJsonObject {
                         put("type", "string")
-                        put("description", "Starting directory or file path relative to the workspace. Defaults to the workspace root.")
-                        put("default", ".")
+                        put("description", "Starting directory or file path relative to the workspace.")
                     })
                     put("query", buildJsonObject {
                         put("type", "string")
@@ -326,6 +322,12 @@ object BuiltInToolCatalog {
                         })
                         put("description", "Optional glob pattern(s) to exclude. Supports both string and array formats.")
                     })
+                    put("timeout", buildJsonObject {
+                        put("type", "integer")
+                        put("minimum", 1)
+                        put("default", 5)
+                        put("description", "Maximum search time in seconds.")
+                    })
                     put("contextBefore", buildJsonObject {
                         put("type", "integer")
                         put("minimum", 0)
@@ -351,7 +353,7 @@ object BuiltInToolCatalog {
                         put("description", "Maximum number of text bytes returned in the tool output.")
                     })
                 })
-                put("required", buildJsonArray { add("query") })
+                put("required", buildJsonArray { add("query"); add("path") })
             }
         ),
         BuiltInToolSpec(

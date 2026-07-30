@@ -40,9 +40,8 @@ class SearchFilesTool : BuiltInTool {
         // Define the set of known/valid parameter names for this tool
         val validKeys = setOf("path", "pattern", "excludePatterns", "maxResults")
         addUnknownParameterErrors(input, validKeys, validationErrors)
-
         val pattern = parseRequiredString(input, "pattern", validationErrors)
-        val path = parseOptionalString(input, "path", validationErrors) ?: "."
+        val path = parseRequiredString(input, "path", validationErrors)
         val exclude = parseStringOrStringArray(input, "excludePatterns", validationErrors)
         val maxResults = parseOptionalInt(input, "maxResults", defaultValue = 25, validationErrors)
         if (maxResults < 1) {
@@ -54,7 +53,7 @@ class SearchFilesTool : BuiltInTool {
         }
 
         val root = try {
-            WorkspacePathValidator.requireInside(context.workspace, path)
+            WorkspacePathValidator.requireInside(context.workspace, path!!)
         } catch (e: Exception) {
             return builtInToolErrorResult(
                 BuiltInToolExecutionError.WORKSPACE_VIOLATION,

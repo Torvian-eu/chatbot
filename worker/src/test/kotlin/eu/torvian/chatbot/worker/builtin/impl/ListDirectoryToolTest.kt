@@ -38,13 +38,13 @@ class ListDirectoryToolTest {
      * @return The input [kotlinx.serialization.json.JsonObject] for the tool.
      */
     private fun buildInput(
-        path: String? = null,
+        path: String = ".",
         sortBy: String? = null,
         includeSizes: Boolean? = null,
         recursive: Boolean? = null,
         maxEntries: Any? = null,
     ): JsonObject = buildJsonObject {
-        if (path != null) put("path", path)
+        put("path", path)
         if (sortBy != null) put("sortBy", sortBy)
         if (includeSizes != null) put("includeSizes", includeSizes)
         if (recursive != null) put("recursive", recursive)
@@ -62,6 +62,7 @@ class ListDirectoryToolTest {
         BuiltInToolExecutionContext(
             workspace = workspace,
             defaultCommandTimeoutSeconds = 60,
+            defaultSearchTimeoutSeconds = 5,
             ioDispatcher = Dispatchers.IO,
         )
 
