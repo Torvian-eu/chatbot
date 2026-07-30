@@ -7,7 +7,10 @@ import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionContext
 import eu.torvian.chatbot.worker.builtin.BuiltInToolExecutionError
 import eu.torvian.chatbot.worker.builtin.WorkspacePathValidator
 import eu.torvian.chatbot.worker.builtin.validation.*
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
 import kotlinx.serialization.json.*
 import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
@@ -15,6 +18,7 @@ import java.nio.file.FileSystems
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.isRegularFile
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Searches UTF-8 text content inside the worker workspace for matching text or regex patterns.
@@ -38,6 +42,11 @@ import kotlin.io.path.isRegularFile
  * Matching is **line-based**: a file line contributes at most one result, regardless of how many
  * individual occurrences of the pattern it contains. The result count therefore reflects the number
  * of matching lines, not the number of occurrences.
+ *
+ * The search is bounded by a configurable `timeout` (defaulting to [BuiltInToolExecutionContext.defaultSearchTimeoutSeconds]).
+ * When the timeout fires, partial results found so far are returned with a timeout notice rather
+ * than failing with an error. The elapsed search time is always reported in the output to help the
+ * LLM self-correct on subsequent calls.
  */
 class SearchTextTool : BuiltInTool {
 
@@ -70,7 +79,7 @@ class SearchTextTool : BuiltInTool {
         // Define the set of known/valid parameter names for this tool
         val validKeys = setOf(
             "path", "query", "mode", "caseSensitive", "wholeWord",
-            "filePattern", "excludePatterns", "contextBefore", "contextAfter", "maxResults", "maxBytes"
+            "filePattern", "excludePatterns", "timeout", "contextBefore", "contextAfter", "maxResults", "maxBytes"
         )
         addUnknownParameterErrors(input, validKeys, validationErrors)
 
@@ -111,17 +120,20 @@ class SearchTextTool : BuiltInTool {
         if (maxBytes <= 0) {
             validationErrors.add("Argument 'maxBytes' must be > 0")
         }
-
-        val path = parseOptionalString(input, "path", validationErrors) ?: "."
+        val path = parseRequiredString(input, "path", validationErrors)
         val filePattern = parseOptionalString(input, "filePattern", validationErrors)
         val excludePatterns = parseStringOrStringArray(input, "excludePatterns", validationErrors)
-
+        val timeoutSeconds = parseOptionalLong(
+            input, "timeout",
+            defaultValue = context.defaultSearchTimeoutSeconds,
+            validationErrors
+        )
         if (validationErrors.isNotEmpty()) {
             return invalidInputResult(validationErrors)
         }
 
         val root = try {
-            WorkspacePathValidator.requireInside(context.workspace, path)
+            WorkspacePathValidator.requireInside(context.workspace, path!!)
         } catch (e: Exception) {
             return builtInToolErrorResult(
                 BuiltInToolExecutionError.WORKSPACE_VIOLATION,
@@ -147,12 +159,7 @@ class SearchTextTool : BuiltInTool {
                 return@withContext builtInToolErrorResult(BuiltInToolExecutionError.NOT_FOUND, "Path not found: $path")
             }
 
-            // A file is searched directly; a directory is walked recursively for regular files.
-            val candidates: List<Path> = if (root.isRegularFile()) {
-                listOf(root)
-            } else {
-                Files.walk(root).use { stream -> stream.filter { it.isRegularFile() }.toList() }
-            }
+            val startNanos = System.nanoTime()
 
             val matchObjects = mutableListOf<JsonObject>()
             // Matches grouped by their start-relative path, preserving first-seen file order so the
@@ -162,79 +169,99 @@ class SearchTextTool : BuiltInTool {
             var searchedFiles = 0
             var skippedFiles = 0
             var truncatedByMaxResults = false
-
-            searchLoop@ for (file in candidates) {
-                // Use paths relative to the search root, normalize separators to /, and fall back to the file name
-                // when the root is a single file so results stay consistent and meaningful across platforms.
-                val relative = if (root.isRegularFile()) {
-                    root.fileName.toString().replace('\\', '/')
-                } else {
-                    root.relativize(file).toString().replace('\\', '/')
-                }
-                // filePattern filters by the relative path (consistent with SearchFilesTool, which
-                // matches the whole start-relative path); excludePatterns also filter by that path.
-                if (fileMatcher != null && !fileMatcher.matches(Path.of(relative))) continue@searchLoop
-                if (excludeMatchers.any { it.matches(Path.of(relative)) }) continue@searchLoop
-
-                // Skip files that exceed the in-memory budget to avoid memory pressure.
-                val size = try {
-                    Files.size(file)
-                } catch (_: Exception) {
-                    -1L
-                }
-                if (size > MAX_FILE_BYTES) {
-                    skippedFiles++
-                    continue@searchLoop
-                }
-
-                val lines = try {
-                    readUtf8Lines(file)
-                } catch (_: Exception) {
-                    // Conservatively skip files that cannot be read as UTF-8 text (binary, unreadable, etc.).
-                    skippedFiles++
-                    continue@searchLoop
-                }
-                searchedFiles++
-
-                for ((index, line) in lines.withIndex()) {
-                    // Line-based match: a line contributes at most one result, even when the pattern
-                    // occurs multiple times within it.
-                    val matchResult = regex.find(line) ?: continue
-                    if (matchObjects.size >= maxResults) {
-                        truncatedByMaxResults = true
-                        break@searchLoop
+            var truncatedByTimeout = false
+            try {
+                withTimeout((timeoutSeconds * 1000L).milliseconds) {
+                    // A file is searched directly; a directory is walked recursively for regular files.
+                    // Collect candidate files first (fast walk), then iterate with yield() between files
+                    // so that withTimeout can cancel the search when it exceeds the time budget.
+                    val candidates: List<Path> = if (root.isRegularFile()) {
+                        listOf(root)
+                    } else {
+                        Files.walk(root).use { stream -> stream.filter { it.isRegularFile() }.toList() }
                     }
-                    val matchRange = matchResult.range
-                    val lineNumber = index + 1
-                    val beforeStart = maxOf(0, index - contextBefore)
-                    val afterEnd = minOf(lines.size, index + 1 + contextAfter)
-                    val before = lines.subList(beforeStart, index)
-                    val after = lines.subList(index + 1, afterEnd)
 
-                    val trimmedBeforeList = before.map { trimContext(it) }
-                    val trimmedAfterList = after.map { trimContext(it) }
-                    val windowedLine = windowLineAroundMatch(line, matchRange)
+                    for (file in candidates) {
+                        yield() // allow coroutine cancellation for timeout
+                        // Use paths relative to the search root, normalize separators to /, and fall back to the file name
+                        // when the root is a single file so results stay consistent and meaningful across platforms.
+                        val relative = if (root.isRegularFile()) {
+                            root.fileName.toString().replace('\\', '/')
+                        } else {
+                            root.relativize(file).toString().replace('\\', '/')
+                        }
+                        // filePattern filters by the relative path (consistent with SearchFilesTool, which
+                        // matches the whole start-relative path); excludePatterns also filter by that path.
+                        if (fileMatcher != null && !fileMatcher.matches(Path.of(relative))) continue
+                        if (excludeMatchers.any { it.matches(Path.of(relative)) }) continue
 
-                    matchObjects.add(buildJsonObject {
-                        put("path", relative)
-                        put("lineNumber", lineNumber)
-                        put("line", windowedLine)
-                        putJsonArray("before") { trimmedBeforeList.forEach { add(it) } }
-                        putJsonArray("after") { trimmedAfterList.forEach { add(it) } }
-                    })
+                        // Skip files that exceed the in-memory budget to avoid memory pressure.
+                        val size = try {
+                            Files.size(file)
+                        } catch (_: Exception) {
+                            -1L
+                        }
+                        if (size > MAX_FILE_BYTES) {
+                            skippedFiles++
+                            continue
+                        }
 
-                    // Collect the match for the grouped readable output. The path is emitted once as
-                    // a per-file header during rendering (below) rather than repeated on every line,
-                    // keeping the textual output compact and token-friendly for the consuming model.
-                    val render = MatchRender(
-                        lineNumber = lineNumber,
-                        line = windowedLine,
-                        before = before.mapIndexed { bIdx, ctx -> (beforeStart + bIdx + 1) to trimContext(ctx) },
-                        after = after.mapIndexed { aIdx, ctx -> (index + 2 + aIdx) to trimContext(ctx) },
-                    )
-                    matchesByFile.getOrPut(relative) { mutableListOf() }.add(render)
+                        val lines = try {
+                            readUtf8Lines(file)
+                        } catch (_: Exception) {
+                            // Conservatively skip files that cannot be read as UTF-8 text (binary, unreadable, etc.).
+                            skippedFiles++
+                            continue
+                        }
+                        searchedFiles++
+
+                        for ((index, line) in lines.withIndex()) {
+                            // Line-based match: a line contributes at most one result, even when the pattern
+                            // occurs multiple times within it.
+                            val matchResult = regex.find(line) ?: continue
+                            if (matchObjects.size >= maxResults) {
+                                truncatedByMaxResults = true
+                                break
+                            }
+                            val matchRange = matchResult.range
+                            val lineNumber = index + 1
+                            val beforeStart = maxOf(0, index - contextBefore)
+                            val afterEnd = minOf(lines.size, index + 1 + contextAfter)
+                            val before = lines.subList(beforeStart, index)
+                            val after = lines.subList(index + 1, afterEnd)
+
+                            val trimmedBeforeList = before.map { trimContext(it) }
+                            val trimmedAfterList = after.map { trimContext(it) }
+                            val windowedLine = windowLineAroundMatch(line, matchRange)
+
+                            matchObjects.add(buildJsonObject {
+                                put("path", relative)
+                                put("lineNumber", lineNumber)
+                                put("line", windowedLine)
+                                putJsonArray("before") { trimmedBeforeList.forEach { add(it) } }
+                                putJsonArray("after") { trimmedAfterList.forEach { add(it) } }
+                            })
+
+                            // Collect the match for the grouped readable output. The path is emitted once as
+                            // a per-file header during rendering (below) rather than repeated on every line,
+                            // keeping the textual output compact and token-friendly for the consuming model.
+                            val render = MatchRender(
+                                lineNumber = lineNumber,
+                                line = windowedLine,
+                                before = before.mapIndexed { bIdx, ctx -> (beforeStart + bIdx + 1) to trimContext(ctx) },
+                                after = after.mapIndexed { aIdx, ctx -> (index + 2 + aIdx) to trimContext(ctx) },
+                            )
+                            matchesByFile.getOrPut(relative) { mutableListOf() }.add(render)
+                        }
+                        // Check if we need to break due to maxResults before walking the next file
+                        if (truncatedByMaxResults) break
+                    }
                 }
+            } catch (_: TimeoutCancellationException) {
+                truncatedByTimeout = true
             }
+
+            val elapsedMs = (System.nanoTime() - startNanos) / 1_000_000
 
             // Render the grouped readable output: one distinctive header line per file, then each
             // match rendered as "<lineNumber>: <content>" (context lines prefixed with their own line
@@ -260,7 +287,7 @@ class SearchTextTool : BuiltInTool {
             val truncatedOutput = truncationResult.text
             val linesShown = truncationResult.linesShown
             val bytesShown = truncationResult.bytesShown
-            val truncated = truncatedByMaxResults || truncationResult.isTruncated
+            val truncated = truncatedByMaxResults || truncatedByTimeout || truncationResult.isTruncated
 
             val totalMatches = matchObjects.size
             val details = buildJsonObject {
@@ -279,13 +306,29 @@ class SearchTextTool : BuiltInTool {
                 if (truncatedByMaxResults) append(" — truncated to $maxResults result(s)")
             }
 
-            val truncationNotice = if (truncated) {
+            val timeoutNotice = if (truncatedByTimeout) {
+                "\n\n[Search timed out after ${elapsedMs}ms — showing $totalMatches match(es) from $searchedFiles file(s). " +
+                        "Use a more specific 'path' or increase 'timeout' to search further.]"
+            } else {
+                ""
+            }
+
+            val truncationNotice = if (truncated && !truncatedByTimeout) {
                 formatTruncationNotice(linesShown, bytesShown, "Increase 'maxResults'/'maxBytes' to read further.")
             } else {
                 ""
             }
 
             val hints = mutableListOf<String>()
+            // Add duration feedback or slow-search hint, never both
+            if (elapsedMs > 1000) {
+                hints += if (elapsedMs > 3000) {
+                    "Hint: This search took ${elapsedMs}ms. To speed up future searches, " +
+                            "specify a more specific 'path' to narrow the search scope."
+                } else {
+                    "[Search completed in ${elapsedMs}ms]"
+                }
+            }
 
             // Add hint when no matches found in plain mode but query looks like regex
             if (totalMatches == 0 && mode == "plain" && looksLikeRegex(query)) {
@@ -312,9 +355,9 @@ class SearchTextTool : BuiltInTool {
 
             BuiltInToolExecutionResult(
                 output = if (outputLines.isEmpty()) {
-                    "No matches found$hintSuffix"
+                    "No matches found$timeoutNotice$hintSuffix"
                 } else {
-                    truncatedOutput + summary + truncationNotice + hintSuffix
+                    truncatedOutput + summary + timeoutNotice + truncationNotice + hintSuffix
                 },
                 details = details,
             )

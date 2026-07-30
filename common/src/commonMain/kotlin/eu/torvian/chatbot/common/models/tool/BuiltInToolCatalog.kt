@@ -285,8 +285,7 @@ object BuiltInToolCatalog {
                 put("properties", buildJsonObject {
                     put("path", buildJsonObject {
                         put("type", "string")
-                        put("description", "Starting directory or file path relative to the workspace. Defaults to the workspace root.")
-                        put("default", ".")
+                        put("description", "Starting directory or file path relative to the workspace.")
                     })
                     put("query", buildJsonObject {
                         put("type", "string")
@@ -326,6 +325,12 @@ object BuiltInToolCatalog {
                         })
                         put("description", "Optional glob pattern(s) to exclude. Supports both string and array formats.")
                     })
+                    put("timeout", buildJsonObject {
+                        put("type", "integer")
+                        put("minimum", 1)
+                        put("default", 5)
+                        put("description", "Maximum search time in seconds.")
+                    })
                     put("contextBefore", buildJsonObject {
                         put("type", "integer")
                         put("minimum", 0)
@@ -351,7 +356,7 @@ object BuiltInToolCatalog {
                         put("description", "Maximum number of text bytes returned in the tool output.")
                     })
                 })
-                put("required", buildJsonArray { add("query") })
+                put("required", buildJsonArray { add("query"); add("path") })
             }
         ),
         BuiltInToolSpec(

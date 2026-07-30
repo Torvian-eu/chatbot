@@ -54,10 +54,12 @@ data class WorkspaceConfig(
  * @property enabled List of unprefixed built-in tool names to enable. Empty list enables none.
  *   The sentinel value containing a single `*` enables all registered tools.
  * @property defaultCommandTimeoutSeconds Default timeout in seconds for the `run_command` tool.
+ * @property defaultSearchTimeoutSeconds Default timeout in seconds for the `search_text` tool.
  */
 data class BuiltInToolsConfig(
     val enabled: List<String> = emptyList(),
-    val defaultCommandTimeoutSeconds: Long = 600
+    val defaultCommandTimeoutSeconds: Long = 600,
+    val defaultSearchTimeoutSeconds: Long = 5
 )
 
 /**

@@ -11,11 +11,14 @@ import java.nio.file.Path
  *   resolve their arguments against this directory and reject any path that escapes it.
  * @property defaultCommandTimeoutSeconds Default timeout (in seconds) for the `run_command` tool
  *   when the call does not specify its own timeout.
+ * @property defaultSearchTimeoutSeconds Default timeout (in seconds) for the `search_text` tool
+ *   when the call does not specify its own timeout.
  * @property ioDispatcher [CoroutineDispatcher] used for blocking filesystem and process operations.
  *   Defaults to [Dispatchers.IO].
  */
 data class BuiltInToolExecutionContext(
     val workspace: Path,
     val defaultCommandTimeoutSeconds: Long,
+    val defaultSearchTimeoutSeconds: Long,
     val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 )

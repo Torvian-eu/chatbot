@@ -135,9 +135,11 @@ data class WorkspaceConfigDto(
  *
  * @property enabled List of unprefixed built-in tool names to enable. Use a single `*` to enable all.
  * @property defaultCommandTimeoutSeconds Default timeout in seconds for the `run_command` tool.
+ * @property defaultSearchTimeoutSeconds Default timeout in seconds for the `search_text` tool.
  */
 @Serializable
 data class BuiltInToolsConfigDto(
     val enabled: List<String>? = null,
-    val defaultCommandTimeoutSeconds: Long? = null
+    val defaultCommandTimeoutSeconds: Long? = null,
+    val defaultSearchTimeoutSeconds: Long? = null
 )

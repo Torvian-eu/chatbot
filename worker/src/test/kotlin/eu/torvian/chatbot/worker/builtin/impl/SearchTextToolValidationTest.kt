@@ -26,7 +26,7 @@ class SearchTextToolValidationTest {
 
     private fun buildInput(
         query: String? = null,
-        path: String? = null,
+        path: String = ".",
         mode: String? = null,
         caseSensitive: Boolean? = null,
         wholeWord: Boolean? = null,
@@ -37,7 +37,7 @@ class SearchTextToolValidationTest {
         maxResults: Int? = null,
     ): JsonObject = buildJsonObject {
         if (query != null) put("query", query)
-        if (path != null) put("path", path)
+        put("path", path)
         if (mode != null) put("mode", mode)
         if (caseSensitive != null) put("caseSensitive", caseSensitive)
         if (wholeWord != null) put("wholeWord", wholeWord)
@@ -52,6 +52,7 @@ class SearchTextToolValidationTest {
         BuiltInToolExecutionContext(
             workspace = workspace,
             defaultCommandTimeoutSeconds = 60,
+            defaultSearchTimeoutSeconds = 5,
             ioDispatcher = Dispatchers.IO,
         )
 
@@ -141,6 +142,7 @@ class SearchTextToolValidationTest {
             val result = tool.execute(
                 buildJsonObject {
                     put("query", "hello")
+                    put("path", ".")
                     put("caseSensitive", "maybe")
                 },
                 context(dir)
@@ -159,6 +161,7 @@ class SearchTextToolValidationTest {
             val result = tool.execute(
                 buildJsonObject {
                     put("query", "hello")
+                    put("path", ".")
                     put("wholeWord", "notabool")
                 },
                 context(dir)
@@ -177,6 +180,7 @@ class SearchTextToolValidationTest {
             val result = tool.execute(
                 buildJsonObject {
                     put("query", "hello")
+                    put("path", ".")
                     put("contextBefore", "abc")
                 },
                 context(dir)
@@ -195,6 +199,7 @@ class SearchTextToolValidationTest {
             val result = tool.execute(
                 buildJsonObject {
                     put("query", "hello")
+                    put("path", ".")
                     put("contextAfter", "abc")
                 },
                 context(dir)
@@ -213,6 +218,7 @@ class SearchTextToolValidationTest {
             val result = tool.execute(
                 buildJsonObject {
                     put("query", "hello")
+                    put("path", ".")
                     put("maxResults", "notanint")
                 },
                 context(dir)
@@ -230,6 +236,7 @@ class SearchTextToolValidationTest {
         try {
             val result = tool.execute(
                 buildJsonObject {
+                    put("path", ".")
                     putJsonArray("query") { add("hello") }
                 },
                 context(dir)
@@ -266,6 +273,7 @@ class SearchTextToolValidationTest {
             val result = tool.execute(
                 buildJsonObject {
                     put("query", "hello")
+                    put("path", ".")
                     putJsonArray("mode") { add("plain") }
                 },
                 context(dir)
@@ -284,6 +292,7 @@ class SearchTextToolValidationTest {
             val result = tool.execute(
                 buildJsonObject {
                     put("query", "hello")
+                    put("path", ".")
                     put("filePattern", buildJsonObject { put("nested", "value") })
                 },
                 context(dir)
@@ -302,6 +311,7 @@ class SearchTextToolValidationTest {
             val result = tool.execute(
                 buildJsonObject {
                     put("query", "hello")
+                    put("path", ".")
                     put("excludePatterns", buildJsonObject { put("nested", "value") })
                 },
                 context(dir)
@@ -320,6 +330,7 @@ class SearchTextToolValidationTest {
             val result = tool.execute(
                 buildJsonObject {
                     put("query", "hello")
+                    put("path", ".")
                     putJsonArray("excludePatterns") {
                         add("*.tmp")
                         add(buildJsonObject { put("nested", "value") })
@@ -341,6 +352,7 @@ class SearchTextToolValidationTest {
             val result = tool.execute(
                 buildJsonObject {
                     put("query", "hello")
+                    put("path", ".")
                     putJsonArray("caseSensitive") { add(true) }
                 },
                 context(dir)
@@ -359,6 +371,7 @@ class SearchTextToolValidationTest {
             val result = tool.execute(
                 buildJsonObject {
                     put("query", "hello")
+                    put("path", ".")
                     putJsonArray("contextBefore") { add(1) }
                     put("contextAfter", buildJsonObject { put("nested", "value") })
                 },
@@ -432,6 +445,7 @@ class SearchTextToolValidationTest {
             val result = tool.execute(
                 buildJsonObject {
                     put("query", "hello")
+                    put("path", ".")
                     put("unknownParam", "value")
                 },
                 context(dir)
@@ -450,6 +464,7 @@ class SearchTextToolValidationTest {
             val result = tool.execute(
                 buildJsonObject {
                     put("query", "hello")
+                    put("path", ".")
                     put("badParam1", "value1")
                     put("badParam2", "value2")
                 },
@@ -471,6 +486,7 @@ class SearchTextToolValidationTest {
                 buildJsonObject {
                     put("badParam", "value")
                     put("caseSensitive", "notabool")
+                    put("path", ".")
                 },
                 context(dir)
             )
@@ -495,6 +511,7 @@ class SearchTextToolValidationTest {
             val resultInvalid = tool.execute(
                 buildJsonObject {
                     put("query", "query")
+                    put("path", ".")
                     put("maxResults", "abc")
                 },
                 context(dir)

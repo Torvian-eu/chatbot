@@ -47,6 +47,7 @@ class WriteFileToolTest {
         BuiltInToolExecutionContext(
             workspace = workspace,
             defaultCommandTimeoutSeconds = 60,
+            defaultSearchTimeoutSeconds = 5,
             ioDispatcher = Dispatchers.IO,
         )
 

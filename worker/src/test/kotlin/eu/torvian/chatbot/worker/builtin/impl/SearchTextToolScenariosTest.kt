@@ -47,7 +47,7 @@ class SearchTextToolScenariosTest {
      */
     private fun buildInput(
         query: String,
-        path: String? = null,
+        path: String = ".",
         mode: String? = null,
         caseSensitive: Boolean? = null,
         wholeWord: Boolean? = null,
@@ -58,7 +58,7 @@ class SearchTextToolScenariosTest {
         maxResults: Int? = null,
     ): JsonObject = buildJsonObject {
         put("query", query)
-        if (path != null) put("path", path)
+        put("path", path)
         if (mode != null) put("mode", mode)
         if (caseSensitive != null) put("caseSensitive", caseSensitive)
         if (wholeWord != null) put("wholeWord", wholeWord)
@@ -76,6 +76,7 @@ class SearchTextToolScenariosTest {
         BuiltInToolExecutionContext(
             workspace = workspace,
             defaultCommandTimeoutSeconds = 60,
+            defaultSearchTimeoutSeconds = 5,
             ioDispatcher = Dispatchers.IO,
         )
 
@@ -422,6 +423,7 @@ class SearchTextToolScenariosTest {
             val result = tool.execute(
                 buildJsonObject {
                     put("query", "token")
+                    put("path", ".")
                     put("excludePatterns", "vendor/*")
                 },
                 context(dir)
@@ -506,6 +508,7 @@ class SearchTextToolScenariosTest {
             val result = tool.execute(
                 buildJsonObject {
                     put("query", "result")
+                    put("path", ".")
                     put("maxResults", 5)
                     put("maxBytes", 100)
                 },
@@ -531,6 +534,7 @@ class SearchTextToolScenariosTest {
             val result = tool.execute(
                 buildJsonObject {
                     put("query", "result")
+                    put("path", ".")
                     put("maxResults", 5)
                     put("maxBytes", 100)
                 },
